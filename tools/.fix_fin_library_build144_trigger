@@ -1,2 +1,1 @@
-Trigger the validated Fin sync and Library import-only build 144 workflow.
-Retry: 3
+Trigger final branch pruning after validated NeoStation iOS build 144.
