@@ -12,15 +12,16 @@ jobs:
   prune:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete every non-main non-backup branch
+      - name: Keep only main and final backup branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          keep_backup="backup/final-main-20260823"
           mapfile -t refs < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/heads/" --jq '.[].ref')
           for ref in "${refs[@]}"; do
             branch="${ref#refs/heads/}"
-            if [ "$branch" = "main" ] || [[ "$branch" == backup/* ]]; then
+            if [ "$branch" = "main" ] || [ "$branch" = "$keep_backup" ]; then
               echo "keep: $branch"
               continue
             fi
