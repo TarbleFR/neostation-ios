@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/manifest.plist", "destination": "/api/manifest" },
+    { "source": "/app.ipa", "destination": "/api/ipa" },
+    { "source": "/", "destination": "/api/index" }
+  ]
+}
