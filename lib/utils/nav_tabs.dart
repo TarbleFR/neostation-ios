@@ -9,7 +9,7 @@ import 'package:neostation/models/config_model.dart';
 /// (`_selectedTabIndex`, `_buildCurrentTabContent`, the secondary-display tab
 /// names). Append new tabs at the end — inserting one renumbers every existing
 /// tab and silently repoints all of that dispatch.
-enum NavTab { systems, search, sync, achievements, scraper, settings }
+enum NavTab { systems, search, sync, achievements, scraper, settings, library }
 
 /// Static description of one navigation tab: how it is drawn, whether the user
 /// may hide it, and how that preference is read and written.
@@ -18,6 +18,7 @@ class NavTabSpec {
     required this.icon,
     required this.labelKey,
     this.iconData,
+    this.tintIcon = true,
     this.hidden,
     this.withHidden,
     this.settingsTitleKey,
@@ -29,6 +30,9 @@ class NavTabSpec {
 
   /// Material symbol fallback for tabs with no webp asset.
   final IconData? iconData;
+
+  /// Whether the asset should inherit the active foreground color.
+  final bool tintIcon;
 
   /// [AppLocale] key for the tab's display name.
   final String labelKey;
@@ -102,6 +106,11 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
   NavTab.settings: NavTabSpec(
     icon: 'assets/images/icons/setting.webp',
     labelKey: AppLocale.settings,
+  ),
+  NavTab.library: NavTabSpec(
+    icon: '',
+    labelKey: AppLocale.library,
+    iconData: Symbols.menu_book_rounded,
   ),
 };
 

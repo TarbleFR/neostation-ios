@@ -23,6 +23,13 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     private var audioSessionObservers: [NSObjectProtocol] = []
     private var audioSessionKnownActive = false
 
+    /// Security-scoped URLs that must remain active while NeoStation is
+    /// running. The document picker callback used to stop access as soon
+    /// as it returned the path to Dart, which meant a service could see
+    /// the selected directory but fail as soon as it tried to enumerate
+    /// or open its files. Keep one balanced access grant per bookmark key.
+    private var activeSecurityScopedURLs: [String: URL] = [:]
+
     /// Bookmarks are stored per-emulator so several external folders can be
     /// linked side by side (RetroArch's, ARMSX2's, ...) instead of the one
     /// global slot this plugin originally had. The historical key is reused
@@ -96,6 +103,8 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             pickFolder(key: Self.bookmarkKey(from: call), result: result)
         case "resolveBookmarkedFolder":
             resolveBookmarkedFolder(key: Self.bookmarkKey(from: call), result: result)
+        case "listBookmarkedFiles":
+            listBookmarkedFiles(call: call, result: result)
         case "clearBookmark":
             clearBookmark(key: Self.bookmarkKey(from: call), result: result)
         case "openInMenu":
@@ -153,13 +162,12 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             return
         }
 
-        // Bookmark creation itself needs the resource to be accessible;
-        // wrap it in a matched start/stop pair even though the picker's
-        // returned URL is already scoped for this immediate callback.
+        // Keep the selected folder's security scope alive for the remainder
+        // of this app session. Dart starts enumerating the folder only after this
+        // callback returns, so stopping the scope here makes external app folders
+        // (such as Fin/Games) appear selected but unreadable.
+        let key = pendingBookmarkKey
         let didStart = url.startAccessingSecurityScopedResource()
-        defer {
-            if didStart { url.stopAccessingSecurityScopedResource() }
-        }
 
         do {
             let bookmarkData = try url.bookmarkData(
@@ -169,10 +177,20 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             )
             UserDefaults.standard.set(
                 bookmarkData,
-                forKey: Self.bookmarkDefaultsKey(for: pendingBookmarkKey)
+                forKey: Self.bookmarkDefaultsKey(for: key)
             )
+
+            if let previous = activeSecurityScopedURLs.removeValue(forKey: key),
+                previous != url
+            {
+                previous.stopAccessingSecurityScopedResource()
+            }
+            if didStart {
+                activeSecurityScopedURLs[key] = url
+            }
             pendingResult?(url.path)
         } catch {
+            if didStart { url.stopAccessingSecurityScopedResource() }
             pendingResult?(
                 FlutterError(
                     code: "BOOKMARK_FAILED",
@@ -197,6 +215,11 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     /// NeoStation needs the folder readable for as long as the app runs, and
     /// iOS releases the scope automatically when the process exits.
     private func resolveBookmarkedFolder(key: String, result: @escaping FlutterResult) {
+        if let active = activeSecurityScopedURLs[key] {
+            result(active.path)
+            return
+        }
+
         guard
             let bookmarkData = UserDefaults.standard.data(
                 forKey: Self.bookmarkDefaultsKey(for: key)
@@ -224,6 +247,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                 )
                 return
             }
+            activeSecurityScopedURLs[key] = url
 
             // Sideload updates/re-signing can make an otherwise resolvable
             // bookmark stale. Refresh it immediately while the security scope
@@ -258,7 +282,185 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         }
     }
 
+    /// Resolves a bookmark for native file operations. Unlike the Dart side,
+    /// this keeps the URL object that owns the active security scope, so listing
+    /// children cannot lose access between path resolution and enumeration.
+    private func bookmarkedURLForNativeAccess(key: String) throws -> URL? {
+        if let active = activeSecurityScopedURLs[key] {
+            return active
+        }
+
+        guard
+            let bookmarkData = UserDefaults.standard.data(
+                forKey: Self.bookmarkDefaultsKey(for: key)
+            )
+        else {
+            return nil
+        }
+
+        var isStale = false
+        let url = try URL(
+            resolvingBookmarkData: bookmarkData,
+            options: [],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+        guard url.startAccessingSecurityScopedResource() else {
+            throw NSError(
+                domain: "ExternalFolderAccess",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "startAccessingSecurityScopedResource returned false"
+                ]
+            )
+        }
+        activeSecurityScopedURLs[key] = url
+
+        if isStale {
+            if let refreshed = try? url.bookmarkData(
+                options: [],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ) {
+                UserDefaults.standard.set(
+                    refreshed,
+                    forKey: Self.bookmarkDefaultsKey(for: key)
+                )
+            }
+        }
+        return url
+    }
+
+    /// Lists files from a bookmarked folder without handing the traversal back
+    /// to Dart. This is intentionally generic; Fin uses it for RVZ/WIA headers,
+    /// but other iOS integrations can reuse it for Files-visible app folders.
+    private func listBookmarkedFiles(
+        call: FlutterMethodCall,
+        result: @escaping FlutterResult
+    ) {
+        let args = call.arguments as? [String: Any] ?? [:]
+        let key = (args["key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? Self.defaultBookmarkKey
+        let recursive = (args["recursive"] as? Bool) ?? true
+        let requestedPrefix = (args["prefixBytes"] as? NSNumber)?.intValue ?? 0
+        let prefixBytes = min(max(requestedPrefix, 0), 4096)
+        let extensions = Set(
+            ((args["extensions"] as? [String]) ?? []).map {
+                $0.lowercased().trimmingCharacters(
+                    in: CharacterSet(charactersIn: ".")
+                )
+            }
+        )
+
+        do {
+            guard let bookmarkedRoot = try bookmarkedURLForNativeAccess(key: key) else {
+                result(nil)
+                return
+            }
+
+            let canonicalBookmark = bookmarkedRoot.standardizedFileURL
+            var root = canonicalBookmark
+            if let rawSubdirectory = args["subdirectory"] as? String,
+                !rawSubdirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                let subdirectory = rawSubdirectory
+                    .replacingOccurrences(of: "\\", with: "/")
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                let candidate = canonicalBookmark
+                    .appendingPathComponent(subdirectory, isDirectory: true)
+                    .standardizedFileURL
+                let bookmarkPath = canonicalBookmark.path
+                let candidatePath = candidate.path
+                guard candidatePath == bookmarkPath ||
+                    candidatePath.hasPrefix(bookmarkPath + "/")
+                else {
+                    result(
+                        FlutterError(
+                            code: "INVALID_SUBDIRECTORY",
+                            message: "Subdirectory escapes bookmarked root",
+                            details: nil
+                        )
+                    )
+                    return
+                }
+                root = candidate
+            }
+
+            let manager = FileManager.default
+            let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
+            var urls: [URL] = []
+
+            if recursive {
+                guard let enumerator = manager.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: resourceKeys,
+                    options: [.skipsHiddenFiles],
+                    errorHandler: { _, _ in true }
+                ) else {
+                    result([])
+                    return
+                }
+                for case let url as URL in enumerator {
+                    urls.append(url)
+                }
+            } else {
+                urls = try manager.contentsOfDirectory(
+                    at: root,
+                    includingPropertiesForKeys: resourceKeys,
+                    options: [.skipsHiddenFiles]
+                )
+            }
+
+            var entries: [[String: Any]] = []
+            let rootPath = root.standardizedFileURL.path
+            for url in urls {
+                let values = try? url.resourceValues(forKeys: Set(resourceKeys))
+                guard values?.isRegularFile == true else { continue }
+
+                let ext = url.pathExtension.lowercased()
+                if !extensions.isEmpty && !extensions.contains(ext) { continue }
+
+                let canonicalFile = url.standardizedFileURL
+                let filePath = canonicalFile.path
+                guard filePath.hasPrefix(rootPath) else { continue }
+
+                var relative = String(filePath.dropFirst(rootPath.count))
+                while relative.hasPrefix("/") { relative.removeFirst() }
+                if relative.isEmpty { continue }
+
+                var prefix = Data()
+                if prefixBytes > 0,
+                    let handle = try? FileHandle(forReadingFrom: canonicalFile)
+                {
+                    defer { try? handle.close() }
+                    prefix = (try? handle.read(upToCount: prefixBytes)) ?? Data()
+                }
+
+                entries.append([
+                    "relativePath": relative,
+                    "fileName": canonicalFile.lastPathComponent,
+                    "size": values?.fileSize ?? 0,
+                    "prefix": FlutterStandardTypedData(bytes: prefix),
+                ])
+            }
+
+            result(entries)
+        } catch {
+            result(
+                FlutterError(
+                    code: "LIST_BOOKMARKED_FILES_FAILED",
+                    message: error.localizedDescription,
+                    details: nil
+                )
+            )
+        }
+    }
+
     private func clearBookmark(key: String, result: @escaping FlutterResult) {
+        if let active = activeSecurityScopedURLs.removeValue(forKey: key) {
+            active.stopAccessingSecurityScopedResource()
+        }
         UserDefaults.standard.removeObject(forKey: Self.bookmarkDefaultsKey(for: key))
         result(nil)
     }

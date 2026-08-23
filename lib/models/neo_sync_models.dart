@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'dart:io';
 
 /// Configuration settings for the NeoSync cloud synchronization service.
@@ -20,12 +21,16 @@ class NeoSyncConfig {
   /// List of monitored save directories on macOS devices.
   final List<String> macosSyncFolder;
 
+  /// List of monitored save directories on iOS devices.
+  final List<String> iosSyncFolder;
+
   const NeoSyncConfig({
     required this.sync,
     required this.androidSyncFolder,
     required this.windowsSyncFolder,
     required this.linuxSyncFolder,
     required this.macosSyncFolder,
+    required this.iosSyncFolder,
   });
 
   /// Creates a [NeoSyncConfig] from a JSON-compatible map.
@@ -38,6 +43,7 @@ class NeoSyncConfig {
       windowsSyncFolder: _parseList(json['windows_sync_folder']),
       linuxSyncFolder: _parseList(json['linux_sync_folder']),
       macosSyncFolder: _parseList(json['macos_sync_folder']),
+      iosSyncFolder: _parseList(json['ios_sync_folder']),
     );
   }
 
@@ -57,6 +63,7 @@ class NeoSyncConfig {
       'windows_sync_folder': windowsSyncFolder,
       'linux_sync_folder': linuxSyncFolder,
       'macos_sync_folder': macosSyncFolder,
+      'ios_sync_folder': iosSyncFolder,
     };
   }
 
@@ -66,6 +73,7 @@ class NeoSyncConfig {
     if (Platform.isWindows) return windowsSyncFolder;
     if (Platform.isLinux) return linuxSyncFolder;
     if (Platform.isMacOS) return macosSyncFolder;
+    if (Platform.isIOS) return iosSyncFolder;
     return [];
   }
 
@@ -76,6 +84,7 @@ class NeoSyncConfig {
     windowsSyncFolder: [],
     linuxSyncFolder: [],
     macosSyncFolder: [],
+    iosSyncFolder: [],
   );
 }
 

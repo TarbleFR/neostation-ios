@@ -51,6 +51,7 @@ import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
+import 'package:neostation/services/fin_library_service.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -309,6 +310,7 @@ void main() async {
     await RetroArchLibraryService.loadCachedLibrary();
     await Armsx2LibraryService.loadCachedLibrary();
     await MelonxLibraryService.loadCachedLibrary();
+    await FinLibraryService.initialize();
     await Rpcs3LibraryService.initialize();
     await Rpcs3LaunchService.initialize();
 
@@ -462,6 +464,10 @@ void main() async {
 
     if (Platform.isIOS) {
       await Rpcs3LibraryService.restoreAfterDatabaseReady(
+        configProvider: sqliteConfigProvider,
+        databaseProvider: sqliteDatabaseProvider,
+      );
+      await FinLibraryService.restoreAfterDatabaseReady(
         configProvider: sqliteConfigProvider,
         databaseProvider: sqliteDatabaseProvider,
       );

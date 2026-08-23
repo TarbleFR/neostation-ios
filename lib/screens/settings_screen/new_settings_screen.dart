@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -408,6 +411,12 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final safePadding = MediaQuery.viewPaddingOf(context);
+    // Keep the settings body clear of any iPhone notch / Dynamic Island in
+    // landscape without moving the global header/tab strip. viewPadding tracks
+    // whichever side owns the cutout after rotation, so this is device-agnostic.
+    final iosSafeLeft = !kIsWeb && Platform.isIOS ? safePadding.left : 0.0;
+    final iosSafeRight = !kIsWeb && Platform.isIOS ? safePadding.right : 0.0;
 
     // Rebuild the side menu when the secondary connection changes so the
     // Secondary Display category appears/disappears with it. Clamp the menu
@@ -422,7 +431,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
 
     return Container(
       color: Colors.transparent,
-      padding: EdgeInsets.only(top: 46.r),
+      padding: EdgeInsets.fromLTRB(iosSafeLeft, 46.r, iosSafeRight, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

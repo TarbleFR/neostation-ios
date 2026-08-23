@@ -372,6 +372,10 @@ extension NeoSyncCore on NeoSyncProvider {
   /// Detecta automáticamente archivos de guardado para un juego específico
   /// y realiza sincronización automática cuando es apropiado
   Future<void> detectGameSaveFiles(GameModel game) async {
+    // A shared PS2/DC card may have changed since the previous game session.
+    // Never carry the processed marker across independent detections.
+    _processedMultiEmulatorFilesInSession.clear();
+
     if (!isNeoSyncAuthenticated) {
       return;
     }
@@ -688,6 +692,36 @@ extension NeoSyncCore on NeoSyncProvider {
         return false;
       }
 
+      final rpcs3Root = Rpcs3LibraryService.linkedDataPath;
+      if (Platform.isIOS &&
+          system.folderName.toLowerCase() == 'ps3' &&
+          rpcs3Root != null &&
+          rpcs3Root.isNotEmpty &&
+          path.isWithin(rpcs3Root, file.path)) {
+        return await _uploadRpcs3File(file, rpcs3Root, preferredGame: game);
+      }
+
+      final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+      if (Platform.isIOS &&
+          system.folderName.toLowerCase() == 'ps2' &&
+          armsx2Root != null &&
+          armsx2Root.isNotEmpty &&
+          path.isWithin(armsx2Root, file.path)) {
+        return await _uploadArmsx2File(file, armsx2Root, preferredGame: game);
+      }
+
+      // MeloNX on iOS stores saves below a Title-ID directory. Use that ID
+      // only for local matching, while the cloud keeps the readable game name.
+      final melonxRoot = ConfigService.linkedMelonxSaveFolderPath;
+      if (Platform.isIOS &&
+          system.folderName.toLowerCase() == 'switch' &&
+          melonxRoot != null &&
+          melonxRoot.isNotEmpty &&
+          (path.isWithin(melonxRoot, file.path) ||
+              path.equals(file.parent.path, melonxRoot))) {
+        return await _uploadMeloNXFile(file, melonxRoot, preferredGame: game);
+      }
+
       // 2. Determinar la ruta relativa de manera universal
       final savesPath = await _getRetroArchSavesPath();
       final statesPath = await _getRetroArchStatesPath();
@@ -798,6 +832,14 @@ extension NeoSyncCore on NeoSyncProvider {
       // 3. Escanear archivos en esas rutas pero en un Isolate para no bloquear la UI
       final List<File> allFiles = [];
       const int maxFileSize = 10 * 1024 * 1024; // 10MB
+      final armsx2ScanRoot =
+          Platform.isIOS && system.folderName.toLowerCase() == 'ps2'
+          ? ConfigService.linkedArmsx2SaveFolderPath
+          : null;
+      final rpcs3ScanRoot =
+          Platform.isIOS && system.folderName.toLowerCase() == 'ps3'
+          ? Rpcs3LibraryService.linkedDataPath
+          : null;
 
       // Execute heavy listing and filtering in background
       final List<String> filePaths = await Isolate.run(() {
@@ -809,7 +851,15 @@ extension NeoSyncCore on NeoSyncProvider {
               (file) {
                 try {
                   final size = file.lengthSync();
-                  return size <= maxFileSize;
+                  final inArmsx2Root =
+                      armsx2ScanRoot != null &&
+                      (path.isWithin(armsx2ScanRoot, file.path) ||
+                          path.equals(armsx2ScanRoot, file.parent.path));
+                  final inRpcs3Root =
+                      rpcs3ScanRoot != null &&
+                      (path.isWithin(rpcs3ScanRoot, file.path) ||
+                          path.equals(rpcs3ScanRoot, file.parent.path));
+                  return inArmsx2Root || inRpcs3Root || size <= maxFileSize;
                 } catch (e) {
                   return false;
                 }
@@ -840,10 +890,29 @@ extension NeoSyncCore on NeoSyncProvider {
           final fileName = path.basename(file.path).toLowerCase();
           bool isMatch = false;
 
-          if (isSharedSystem) {
-            // Para sistemas compartidos, cualquier archivo de save/state válido es un match
-            // PS2: .ps2, DC: vmu_save
-            if (system.folderName == 'ps2' && fileName.endsWith('.ps2')) {
+          final rpcs3Root = Rpcs3LibraryService.linkedDataPath;
+          if (Platform.isIOS &&
+              system.folderName.toLowerCase() == 'ps3' &&
+              rpcs3Root != null &&
+              rpcs3Root.isNotEmpty &&
+              path.isWithin(rpcs3Root, file.path)) {
+            final rpcs3 = await _resolveRpcs3FileForCloud(
+              file,
+              rpcs3Root,
+              preferredGame: game,
+            );
+            isMatch = rpcs3 != null;
+          } else if (isSharedSystem) {
+            final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+            if (Platform.isIOS &&
+                system.folderName.toLowerCase() == 'ps2' &&
+                armsx2Root != null &&
+                armsx2Root.isNotEmpty &&
+                path.isWithin(armsx2Root, file.path) &&
+                _resolveArmsx2FileForCloud(file, armsx2Root) != null) {
+              isMatch = true;
+            } else if (system.folderName == 'ps2' &&
+                fileName.endsWith('.ps2')) {
               isMatch = true;
             } else if (system.folderName == 'dc' &&
                 fileName.startsWith('vmu_save') &&
@@ -897,11 +966,51 @@ extension NeoSyncCore on NeoSyncProvider {
               isState = false;
             }
 
-            final relativePath = _calculateRelativePath(
-              file,
-              basePath,
-              isState: isState,
-            );
+            String relativePath;
+            final rpcs3Root = Rpcs3LibraryService.linkedDataPath;
+            final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+            if (Platform.isIOS &&
+                system.folderName.toLowerCase() == 'ps3' &&
+                rpcs3Root != null &&
+                rpcs3Root.isNotEmpty &&
+                path.isWithin(rpcs3Root, file.path)) {
+              final rpcs3 = await _resolveRpcs3FileForCloud(
+                file,
+                rpcs3Root,
+                preferredGame: game,
+              );
+              if (rpcs3 == null) continue;
+              relativePath = rpcs3.cloudPath;
+            } else if (Platform.isIOS &&
+                system.folderName.toLowerCase() == 'ps2' &&
+                armsx2Root != null &&
+                armsx2Root.isNotEmpty &&
+                path.isWithin(armsx2Root, file.path)) {
+              final armsx2 = _resolveArmsx2FileForCloud(file, armsx2Root);
+              if (armsx2 == null) continue;
+              relativePath = armsx2.cloudPath;
+            } else {
+              final melonxRoot = ConfigService.linkedMelonxSaveFolderPath;
+              if (Platform.isIOS &&
+                  system.folderName.toLowerCase() == 'switch' &&
+                  melonxRoot != null &&
+                  melonxRoot.isNotEmpty &&
+                  path.isWithin(melonxRoot, file.path)) {
+                final melonx = await _resolveMeloNXFileForCloud(
+                  file,
+                  melonxRoot,
+                  preferredGame: game,
+                );
+                if (melonx == null) continue;
+                relativePath = melonx.cloudPath;
+              } else {
+                relativePath = _calculateRelativePath(
+                  file,
+                  basePath,
+                  isState: isState,
+                );
+              }
+            }
 
             matchingFiles.add(
               LocalSaveFile(
@@ -917,10 +1026,8 @@ extension NeoSyncCore on NeoSyncProvider {
               ),
             );
 
-            // Marcar como procesado si es compartido para evitar re-comprobación en esta sesión
-            if (isSharedSystem) {
-              _processedMultiEmulatorFilesInSession.add(file.path);
-            }
+            // Do not mark shared cards as processed while merely discovering them.
+            // The upload/check loop owns that marker after a real sync decision.
           }
         } catch (e) {
           NeoSyncProvider._log.e('Error matching file: $e');
@@ -974,7 +1081,12 @@ extension NeoSyncCore on NeoSyncProvider {
 
         if (isSharedSystem) {
           // Para sistemas compartidos, filtrar estrictamente por sistema
-          if (system.folderName == 'ps2' && fileName.endsWith('.ps2')) {
+          final parsed = CloudPathBuilder.parse(cloudFile.fileName);
+          if (system.folderName.toLowerCase() == 'ps2' &&
+              parsed?.emulatorSlug == 'armsx2' &&
+              parsed?.isShared == true) {
+            isMatch = true;
+          } else if (system.folderName == 'ps2' && fileName.endsWith('.ps2')) {
             isMatch = true;
           } else if (system.folderName == 'dc' &&
               fileName.startsWith('vmu_save') &&
@@ -982,14 +1094,63 @@ extension NeoSyncCore on NeoSyncProvider {
             isMatch = true;
           }
         } else {
-          // Para sistemas estándar, filtrar por romname
-          // Usamos la ruta completa del cloudFile por si está en carpetas (ej. Switch)
+          final parsed = CloudPathBuilder.parse(cloudFile.fileName);
+          if (system.folderName.toLowerCase() == 'ps3' &&
+              parsed?.emulatorSlug == 'rpcs3' &&
+              parsed?.gameName != null) {
+            var expectedTitleId = game.titleId?.trim().toUpperCase();
+            if (expectedTitleId == null || expectedTitleId.isEmpty) {
+              expectedTitleId = (await GameRepository.getTitleIdForGame(
+                game.romname,
+                game.name,
+              ))?.trim().toUpperCase();
+            }
+            final parts = parsed!.filePath.split('/');
+            final cloudSaveDirectory = parts.length >= 2 ? parts[1] : '';
+            final cloudTitleId = _rpcs3TitleIdFromSaveDirectory(
+              cloudSaveDirectory,
+            );
+            final expectedNames = <String>{
+              CloudPathBuilder.sanitizeGameName(game.name).toLowerCase(),
+              if (game.titleName != null && game.titleName!.trim().isNotEmpty)
+                CloudPathBuilder.sanitizeGameName(game.titleName!)
+                    .toLowerCase(),
+            };
+            final cloudGameName = parsed.gameName!.toLowerCase();
+            if ((expectedTitleId != null &&
+                    expectedTitleId.isNotEmpty &&
+                    cloudTitleId == expectedTitleId) ||
+                expectedNames.contains(cloudGameName)) {
+              isMatch = true;
+            }
+          }
+
+          if (!isMatch &&
+              system.folderName.toLowerCase() == 'switch' &&
+              parsed?.emulatorSlug == 'melonx' &&
+              parsed?.gameName != null) {
+            final expectedNames = <String>{
+              CloudPathBuilder.sanitizeGameName(game.name).toLowerCase(),
+              if (game.titleName != null && game.titleName!.trim().isNotEmpty)
+                CloudPathBuilder.sanitizeGameName(game.titleName!)
+                    .toLowerCase(),
+            };
+            final cloudGameName = parsed!.gameName!.toLowerCase();
+            if (expectedNames.contains(cloudGameName) ||
+                cloudFile.gameName.toLowerCase() == game.name.toLowerCase()) {
+              isMatch = true;
+            }
+          }
+
+          // Para sistemas estándar, filtrar por romname cuando no haya match v2.
+          // Usamos la ruta completa del cloudFile por si está en carpetas.
           final fullCloudPathLower = cloudFile.fileName.toLowerCase();
 
-          if (fileName.contains(gameRomName) ||
-              fullCloudPathLower.contains(gameRomName)) {
+          if (!isMatch &&
+              (fileName.contains(gameRomName) ||
+                  fullCloudPathLower.contains(gameRomName))) {
             isMatch = true;
-          } else {
+          } else if (!isMatch) {
             // Comparación flexible en toda la ruta
             final normalizedCloudPath = fullCloudPathLower.replaceAll(
               RegExp(r'[^\w\s\/]'),
@@ -1058,8 +1219,24 @@ extension NeoSyncCore on NeoSyncProvider {
       final localBytes = await localFile.readAsBytes();
       final localHash = _neoSyncService.calculateFileHash(localBytes);
 
-      // Comparar hashes si están disponibles
+      // ARMSX2 memory cards are cloud-compressed. Compare the exact gzip payload
+      // hash, and when it differs always prefer the existing local card. Its
+      // filesystem timestamp can legitimately remain years old on iOS.
       final cloudHash = cloudSave!.checksum;
+      final isArmsx2CompressedCard =
+          cloudSave.fileName.toLowerCase().contains('/ps2/armsx2/') &&
+          cloudSave.fileName.toLowerCase().endsWith('.ps2.neosync.gz');
+      if (isArmsx2CompressedCard) {
+        final compressedHash = _neoSyncService.calculateFileHash(
+          gzip.encode(localBytes),
+        );
+        if (cloudHash != null && compressedHash == cloudHash) {
+          return neo_sync.GameSyncStatus.upToDate;
+        }
+        return neo_sync.GameSyncStatus.localOnly;
+      }
+
+      // Comparar hashes si están disponibles
       final hashesMatch = cloudHash != null && localHash == cloudHash;
 
       // 1. Si los hashes coinciden → Contenido idéntico

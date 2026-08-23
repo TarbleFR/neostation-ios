@@ -1,3 +1,9 @@
+import 'dart:io';
+
+import 'package:archive/archive_io.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -43,6 +49,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
   final GlobalKey<OnlineSavesListViewState> _onlineSavesListKey =
       GlobalKey<OnlineSavesListViewState>();
   bool _isNavigatingFast = false;
+  bool _isExportingSaves = false;
 
   // Throttling para evitar eventos duplicados muy rápidos
   DateTime? _lastSelectTime;
@@ -722,6 +729,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
         _navigateSavesDown();
       },
       onSelectItem: _selectSaveItem,
+      onXButton: _exportSelectedSaveGroup,
       onPreviousTab: () {
         // Ignorar LB cuando estamos en un dialog modal
         if (_isDialogMode) return;
@@ -795,6 +803,63 @@ class NeoSyncContentState extends State<NeoSyncContent>
     super.dispose();
   }
 
+  List<_OnlineSaveGroup> _groupedOnlineSaves(NeoSyncProvider provider) {
+    final buckets = <String, List<NeoSyncFile>>{};
+    final labels = <String, String>{};
+
+    for (final file in provider.onlineFiles) {
+      final lowerPath = file.fileName.toLowerCase();
+      final isMeloNX =
+          lowerPath.startsWith('v2/saves/switch/melonx/game/') ||
+          lowerPath.startsWith('v2/states/switch/melonx/game/');
+      final isArmsx2Save = lowerPath.startsWith('v2/saves/ps2/armsx2/');
+      final isArmsx2State = lowerPath.startsWith('v2/states/ps2/armsx2/');
+      final isRpcs3 =
+          lowerPath.startsWith('v2/saves/ps3/rpcs3/game/') ||
+          lowerPath.startsWith('v2/states/ps3/rpcs3/game/');
+
+      String key;
+      String label;
+      if (isMeloNX) {
+        label = file.gameName.trim().isNotEmpty
+            ? file.gameName.trim()
+            : _readableGameNameFromV2Path(file.fileName);
+        key = 'melonx:${label.toLowerCase()}';
+      } else if (isRpcs3) {
+        // RPCS3 saves are made of many constituent files. The backend's
+        // gameName metadata can vary between those files, so grouping must
+        // use the canonical game segment embedded in the v2 cloud path.
+        final pathGameName = _readableGameNameFromV2Path(file.fileName);
+        label = pathGameName;
+        key = 'rpcs3:${pathGameName.toLowerCase()}';
+      } else if (isArmsx2Save || isArmsx2State) {
+        label = file.gameName.trim().isNotEmpty
+            ? file.gameName.trim()
+            : (isArmsx2State ? 'ARMSX2 Save States' : 'ARMSX2 Memory Cards');
+        key =
+            'armsx2:${isArmsx2State ? 'states' : 'saves'}:${label.toLowerCase()}';
+      } else {
+        label = file.id.startsWith('v1:')
+            ? '[V1] ${file.fileName}'
+            : file.fileName;
+        key = 'file:${file.id}';
+      }
+
+      buckets.putIfAbsent(key, () => <NeoSyncFile>[]).add(file);
+      labels[key] = label;
+    }
+
+    return [
+      for (final entry in buckets.entries)
+        _OnlineSaveGroup(files: entry.value, displayName: labels[entry.key]!),
+    ];
+  }
+
+  String _readableGameNameFromV2Path(String cloudPath) {
+    final parts = cloudPath.split('/');
+    return parts.length > 5 ? parts[5] : cloudPath;
+  }
+
   void _resetSelection() {
     if (!mounted) return;
 
@@ -808,10 +873,11 @@ class NeoSyncContentState extends State<NeoSyncContent>
       context,
       listen: false,
     );
-    if (neoSyncProvider.onlineFiles.isNotEmpty) {
+    final groups = _groupedOnlineSaves(neoSyncProvider);
+    if (groups.isNotEmpty) {
       final newIndex = _selectedSaveIndex > 0
           ? _selectedSaveIndex - 1
-          : neoSyncProvider.onlineFiles.length - 1;
+          : groups.length - 1;
       _updateSelectionIndex(newIndex);
     }
   }
@@ -821,9 +887,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
       context,
       listen: false,
     );
-    if (neoSyncProvider.onlineFiles.isNotEmpty) {
-      final newIndex =
-          (_selectedSaveIndex + 1) % neoSyncProvider.onlineFiles.length;
+    final groups = _groupedOnlineSaves(neoSyncProvider);
+    if (groups.isNotEmpty) {
+      final newIndex = (_selectedSaveIndex + 1) % groups.length;
       _updateSelectionIndex(newIndex);
     }
   }
@@ -834,6 +900,178 @@ class NeoSyncContentState extends State<NeoSyncContent>
     setState(() {
       _selectedSaveIndex = newIndex;
     });
+  }
+
+  Future<void> _exportSelectedSaveGroup() async {
+    if (_isDialogMode || _isExportingSaves) return;
+    final neoSyncProvider = Provider.of<NeoSyncProvider>(context, listen: false);
+    final groups = _groupedOnlineSaves(neoSyncProvider);
+    if (groups.isEmpty || _selectedSaveIndex < 0 || _selectedSaveIndex >= groups.length) {
+      return;
+    }
+    await _exportSaveGroups(
+      <_OnlineSaveGroup>[groups[_selectedSaveIndex]],
+      label: groups[_selectedSaveIndex].displayName,
+    );
+  }
+
+  Future<void> _exportAllCloudSaves() async {
+    if (_isExportingSaves) return;
+    final neoSyncProvider = Provider.of<NeoSyncProvider>(context, listen: false);
+    final groups = _groupedOnlineSaves(neoSyncProvider);
+    if (groups.isEmpty) return;
+    await _exportSaveGroups(groups, label: 'NeoSync-All-Saves');
+  }
+
+  String _safeExportComponent(String value) {
+    var result = value.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+    result = result.replaceAll(RegExp(r'_+'), '_');
+    result = result.replaceAll(RegExp(r'^[_\.]+|[_\.]+$'), '');
+    return result.isEmpty ? 'save' : result;
+  }
+
+  List<String> _safeCloudPathSegments(String cloudPath) {
+    var value = cloudPath.replaceAll('\\', '/').trim();
+    if (value.toLowerCase().endsWith('.neosync.gz')) {
+      value = value.substring(0, value.length - '.neosync.gz'.length);
+    }
+    final result = <String>[];
+    for (final segment in value.split('/')) {
+      final trimmed = segment.trim();
+      if (trimmed.isEmpty || trimmed == '.' || trimmed == '..') continue;
+      result.add(_safeExportComponent(trimmed));
+    }
+    return result.isEmpty ? <String>['save.bin'] : result;
+  }
+
+  File _uniqueExportFile(Directory root, List<String> segments) {
+    final directorySegments = segments.length > 1
+        ? segments.sublist(0, segments.length - 1)
+        : const <String>[];
+    final baseName = segments.last;
+    final dot = baseName.lastIndexOf('.');
+    final stem = dot > 0 ? baseName.substring(0, dot) : baseName;
+    final extension = dot > 0 ? baseName.substring(dot) : '';
+    var candidate = File(p.joinAll(<String>[root.path, ...directorySegments, baseName]));
+    var suffix = 2;
+    while (candidate.existsSync()) {
+      candidate = File(
+        p.joinAll(<String>[root.path, ...directorySegments, '$stem-$suffix$extension']),
+      );
+      suffix++;
+    }
+    return candidate;
+  }
+
+  Rect _neoSyncShareOrigin() {
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    }
+    return const Rect.fromLTWH(0, 0, 1, 1);
+  }
+
+  Future<void> _exportSaveGroups(
+    List<_OnlineSaveGroup> groups, {
+    required String label,
+  }) async {
+    if (_isExportingSaves || groups.isEmpty) return;
+    final fr = Localizations.localeOf(context).languageCode == 'fr';
+    final neoSyncProvider = Provider.of<NeoSyncProvider>(context, listen: false);
+    Directory? exportRoot;
+    File? zipFile;
+
+    setState(() => _isExportingSaves = true);
+    _savesGamepadNav.deactivate();
+    custom.AppNotification.showNotification(
+      context,
+      fr ? 'Préparation de l’archive NeoSync…' : 'Preparing NeoSync archive…',
+      type: custom.NotificationType.info,
+    );
+
+    try {
+      final temp = await getTemporaryDirectory();
+      final stamp = DateTime.now().microsecondsSinceEpoch;
+      exportRoot = Directory(p.join(temp.path, 'neosync_export_$stamp'));
+      await exportRoot.create(recursive: true);
+
+      var exportedFiles = 0;
+      for (final group in groups) {
+        for (final cloudFile in group.files) {
+          final bytes = await neoSyncProvider.downloadOnlineFileBytes(cloudFile);
+          final target = _uniqueExportFile(
+            exportRoot,
+            _safeCloudPathSegments(cloudFile.fileName),
+          );
+          await target.parent.create(recursive: true);
+          await target.writeAsBytes(bytes, flush: true);
+          exportedFiles++;
+        }
+      }
+
+      if (exportedFiles == 0) {
+        throw StateError('No NeoSync files were exported');
+      }
+
+      final safeLabel = _safeExportComponent(label);
+      zipFile = File(p.join(temp.path, 'NeoSync-$safeLabel-$stamp.zip'));
+      final encoder = ZipFileEncoder();
+      encoder.create(zipFile.path);
+      await encoder.addDirectory(exportRoot, includeDirName: false);
+      await encoder.close();
+
+      if (await exportRoot.exists()) {
+        await exportRoot.delete(recursive: true);
+        exportRoot = null;
+      }
+
+      if (!mounted) return;
+      custom.AppNotification.showNotification(
+        context,
+        fr
+            ? 'Archive prête — choisissez « Enregistrer dans Fichiers » pour la conserver sur l’iPhone.'
+            : 'Archive ready — choose “Save to Files” to keep it on this iPhone.',
+        type: custom.NotificationType.success,
+      );
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: <XFile>[
+            XFile(zipFile.path, mimeType: 'application/zip'),
+          ],
+          subject: 'NeoSync backup - $label',
+          sharePositionOrigin: _neoSyncShareOrigin(),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        custom.AppNotification.showNotification(
+          context,
+          fr
+              ? 'Impossible d’exporter les sauvegardes NeoSync : $e'
+              : 'Could not export NeoSync saves: $e',
+          type: custom.NotificationType.error,
+        );
+      }
+    } finally {
+      try {
+        if (exportRoot != null && await exportRoot.exists()) {
+          await exportRoot.delete(recursive: true);
+        }
+      } catch (_) {}
+      // The native share sheet has finished using the temp file when the await
+      // above returns. Keeping no stale backups in the app cache avoids storage
+      // growth across repeated exports.
+      try {
+        if (zipFile != null && await zipFile.exists()) {
+          await zipFile.delete();
+        }
+      } catch (_) {}
+      if (mounted) {
+        setState(() => _isExportingSaves = false);
+        _savesGamepadNav.activate();
+      }
+    }
   }
 
   void _selectSaveItem() async {
@@ -856,21 +1094,19 @@ class NeoSyncContentState extends State<NeoSyncContent>
       context,
       listen: false,
     );
-    if (neoSyncProvider.onlineFiles.isNotEmpty &&
-        _selectedSaveIndex < neoSyncProvider.onlineFiles.length) {
-      final selectedFile = neoSyncProvider.onlineFiles[_selectedSaveIndex];
+    final groups = _groupedOnlineSaves(neoSyncProvider);
+    if (groups.isNotEmpty && _selectedSaveIndex < groups.length) {
+      final selectedGroup = groups[_selectedSaveIndex];
+      final selectedFile = selectedGroup.primaryFile;
 
-      bool disableNeoSync = false; // Estado del checkbox, por defecto false
-
-      final confirmed = await _showDeleteDialog(selectedFile, (value) {
+      bool disableNeoSync = false;
+      final confirmed = await _showDeleteDialog(selectedGroup, (value) {
         disableNeoSync = value;
       });
 
       if (confirmed == true) {
-        // Si el usuario marcó el checkbox, desactivar NeoSync para este juego
         if (disableNeoSync) {
           try {
-            // Buscar el sistema y filename del juego usando el gameName
             final systemFolderName =
                 await GameRepository.getSystemFolderForGame(
                   selectedFile.gameName,
@@ -883,7 +1119,6 @@ class NeoSyncContentState extends State<NeoSyncContent>
               );
             }
           } catch (e) {
-            // Mostrar error pero continuar con la eliminación
             if (!mounted) return;
             custom.AppNotification.showNotification(
               context,
@@ -893,23 +1128,25 @@ class NeoSyncContentState extends State<NeoSyncContent>
           }
         }
 
-        final success = await neoSyncProvider.deleteOnlineFile(selectedFile.id);
+        var success = true;
+        for (final file in selectedGroup.files) {
+          final deleted = await neoSyncProvider.deleteOnlineFile(file.id);
+          if (!deleted) success = false;
+        }
+
         if (success) {
-          // Ajustar índice seleccionado si es necesario después de eliminar
-          final remainingFiles = neoSyncProvider.onlineFiles.length - 1;
-          if (_selectedSaveIndex >= remainingFiles && remainingFiles > 0) {
+          final remainingGroups = _groupedOnlineSaves(neoSyncProvider).length;
+          if (mounted) {
             setState(() {
-              _selectedSaveIndex = remainingFiles - 1;
-            });
-          } else if (remainingFiles == 0) {
-            setState(() {
-              _selectedSaveIndex = 0;
+              if (remainingGroups == 0) {
+                _selectedSaveIndex = 0;
+              } else if (_selectedSaveIndex >= remainingGroups) {
+                _selectedSaveIndex = remainingGroups - 1;
+              }
             });
           }
 
-          // Actualizar el quota después de eliminar el archivo
           await neoSyncProvider.loadQuota();
-          // Show success message
           if (!mounted) return;
           custom.AppNotification.showNotification(
             context,
@@ -917,7 +1154,6 @@ class NeoSyncContentState extends State<NeoSyncContent>
             type: custom.NotificationType.success,
           );
         } else {
-          // Show error message
           if (!mounted) return;
           custom.AppNotification.showNotification(
             context,
@@ -926,11 +1162,11 @@ class NeoSyncContentState extends State<NeoSyncContent>
           );
         }
       }
-    } else {}
+    }
   }
 
   Future<bool?> _showDeleteDialog(
-    NeoSyncFile file,
+    _OnlineSaveGroup group,
     Function(bool) onDisableNeoSyncChanged,
   ) async {
     // Desactivar navegación principal antes de mostrar el dialog
@@ -941,7 +1177,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
       barrierDismissible: false,
       builder: (BuildContext context) {
         return _DeleteCloudSaveDialog(
-          file: file,
+          file: group.displayFile,
           onDisableNeoSyncChanged: onDisableNeoSyncChanged,
         );
       },
@@ -1108,6 +1344,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
 
     return Consumer<AuthService>(
       builder: (context, authService, child) {
+        final safePadding = MediaQuery.viewPaddingOf(context);
+        final safeLeft = Platform.isIOS ? safePadding.left : 0.0;
+        final safeRight = Platform.isIOS ? safePadding.right : 0.0;
         // Load initial data when user logs in (only once per app session)
         if (authService.isLoggedIn &&
             !_dataLoadedThisSession &&
@@ -1124,7 +1363,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.r),
+                  padding: EdgeInsets.fromLTRB(16.r + safeLeft, 0, 16.r + safeRight, 0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1155,11 +1394,14 @@ class NeoSyncContentState extends State<NeoSyncContent>
   Widget _buildDesktopLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final safePadding = MediaQuery.viewPaddingOf(context);
+        final safeLeft = Platform.isIOS ? safePadding.left : 0.0;
+        final safeRight = Platform.isIOS ? safePadding.right : 0.0;
         return Padding(
           padding: EdgeInsets.only(
             top: 52.r,
-            left: 8.r,
-            right: 8.r,
+            left: 8.r + safeLeft,
+            right: 8.r + safeRight,
             bottom: 8.r,
           ),
           child: Row(
@@ -1193,6 +1435,7 @@ class NeoSyncContentState extends State<NeoSyncContent>
   Widget _buildOnlineSavesColumn() {
     return Consumer<NeoSyncProvider>(
       builder: (context, neoSyncProvider, child) {
+        final groups = _groupedOnlineSaves(neoSyncProvider);
         return Container(
           padding: EdgeInsets.all(6.r),
           decoration: BoxDecoration(
@@ -1226,6 +1469,21 @@ class NeoSyncContentState extends State<NeoSyncContent>
                     ),
                   ),
                   Spacer(),
+                  IconButton(
+                    onPressed: (groups.isEmpty || _isExportingSaves)
+                        ? null
+                        : _exportAllCloudSaves,
+                    icon: _isExportingSaves
+                        ? SizedBox(
+                            width: 12.r,
+                            height: 12.r,
+                            child: CircularProgressIndicator(strokeWidth: 2.r),
+                          )
+                        : Icon(Symbols.download_rounded, size: 16.r),
+                    tooltip: Localizations.localeOf(context).languageCode == 'fr'
+                        ? 'Exporter toutes les sauvegardes vers Fichiers'
+                        : 'Export all saves to Files',
+                  ),
                   IconButton(
                     onPressed: (_isRefreshingOnlineFiles || _refreshCompleted)
                         ? null
@@ -1263,16 +1521,21 @@ class NeoSyncContentState extends State<NeoSyncContent>
               Expanded(
                 child: neoSyncProvider.isLoadingOnlineFiles
                     ? const Center(child: CircularProgressIndicator())
-                    : neoSyncProvider.onlineFiles.isEmpty
+                    : groups.isEmpty
                     ? _buildEmptyState(context)
                     : OnlineSavesListView(
                         key: _onlineSavesListKey,
-                        files: neoSyncProvider.onlineFiles,
+                        groups: groups,
                         selectedIndex: _selectedSaveIndex,
                         isNavigatingFast: _isNavigatingFast,
-                        onDeleteRequest: (file, index) async {
-                          // This logic can be simplified but essentially it's the same
-                          // we can trigger the deletion logic here or move it to a method
+                        onExportRequest: (group, index) async {
+                          setState(() => _selectedSaveIndex = index);
+                          await _exportSaveGroups(
+                            <_OnlineSaveGroup>[group],
+                            label: group.displayName,
+                          );
+                        },
+                        onDeleteRequest: (group, index) async {
                           setState(() => _selectedSaveIndex = index);
                           _selectSaveItem();
                         },
@@ -2856,17 +3119,62 @@ class _ErrorDialogState extends State<_ErrorDialog> {
   }
 }
 
-class OnlineSavesListView extends StatefulWidget {
+class _OnlineSaveGroup {
   final List<NeoSyncFile> files;
+  final String displayName;
+
+  const _OnlineSaveGroup({required this.files, required this.displayName});
+
+  NeoSyncFile get primaryFile => files.first;
+  int get totalBytes => files.fold(0, (sum, file) => sum + file.fileSize);
+  DateTime get newestAt => files
+      .map((file) => file.uploadedAt)
+      .reduce((a, b) => a.isAfter(b) ? a : b);
+
+  String get sizeFormatted {
+    final bytes = totalBytes;
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  String get subtitle {
+    final date = newestAt.toLocal().toString().split(' ')[0];
+    return files.length > 1
+        ? '${files.length}× • $sizeFormatted • $date'
+        : '$sizeFormatted • $date';
+  }
+
+  NeoSyncFile get displayFile => NeoSyncFile(
+    id: primaryFile.id,
+    fileName: displayName,
+    filePath: primaryFile.filePath,
+    fileSize: totalBytes,
+    gameName: primaryFile.gameName,
+    uploadedAt: newestAt,
+    fileModifiedAt: primaryFile.fileModifiedAt,
+    fileModifiedAtTimestamp: primaryFile.fileModifiedAtTimestamp,
+    userId: primaryFile.userId,
+    checksum: primaryFile.checksum,
+  );
+}
+
+class OnlineSavesListView extends StatefulWidget {
+  final List<_OnlineSaveGroup> groups;
   final int selectedIndex;
-  final Function(NeoSyncFile, int) onDeleteRequest;
+  final Function(_OnlineSaveGroup, int) onExportRequest;
+  final Function(_OnlineSaveGroup, int) onDeleteRequest;
   final Function(int) onSelectionChanged;
   final bool isNavigatingFast;
 
   const OnlineSavesListView({
     super.key,
-    required this.files,
+    required this.groups,
     required this.selectedIndex,
+    required this.onExportRequest,
     required this.onDeleteRequest,
     required this.onSelectionChanged,
     this.isNavigatingFast = false,
@@ -2902,7 +3210,7 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
         _centeredScrollController.initialize(
           context: context,
           initialIndex: widget.selectedIndex,
-          totalItems: widget.files.length,
+          totalItems: widget.groups.length,
         );
         // Force scroll to index 0 on initial load to ensure highlight appears
         _centeredScrollController.scrollToIndex(
@@ -2917,8 +3225,8 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
   void didUpdateWidget(OnlineSavesListView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.files.length != widget.files.length) {
-      _centeredScrollController.updateTotalItems(widget.files.length);
+    if (oldWidget.groups.length != widget.groups.length) {
+      _centeredScrollController.updateTotalItems(widget.groups.length);
     }
 
     if (oldWidget.selectedIndex != widget.selectedIndex) {
@@ -3017,7 +3325,7 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
               key: ValueKey('online_saves_list_$rebuildCount'),
               controller: _centeredScrollController.scrollController,
               padding: EdgeInsets.symmetric(vertical: 4.r, horizontal: 4.w),
-              itemCount: widget.files.length,
+              itemCount: widget.groups.length,
               itemBuilder: (context, index) {
                 return GestureDetector(
                   onTap: () {
@@ -3026,7 +3334,7 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
                   },
                   child: _buildOnlineSaveItem(
                     context,
-                    widget.files[index],
+                    widget.groups[index],
                     index,
                   ),
                 );
@@ -3040,7 +3348,7 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
 
   Widget _buildOnlineSaveItem(
     BuildContext context,
-    NeoSyncFile file,
+    _OnlineSaveGroup group,
     int index,
   ) {
     final isSelected = index == widget.selectedIndex;
@@ -3102,9 +3410,7 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
                         ?.fontFamily,
                   ),
                   child: Text(
-                    file.id.startsWith('v1:')
-                        ? '[V1] ${file.fileName}'
-                        : file.fileName,
+                    group.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -3125,17 +3431,33 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
                         .bodySmall
                         ?.fontFamily,
                   ),
-                  child: Text(
-                    '${file.fileSizeFormatted} • ${file.uploadedAt.toLocal().toString().split(' ')[0]}',
-                  ),
+                  child: Text(group.subtitle),
                 ),
               ],
             ),
           ),
           IconButton(
-            onPressed: () => widget.onDeleteRequest(file, index),
+            constraints: BoxConstraints.tightFor(width: 30.r, height: 30.r),
+            padding: EdgeInsets.zero,
+            onPressed: () => widget.onExportRequest(group, index),
+            icon: Icon(
+              Symbols.download_rounded,
+              size: 17.r,
+              color: isSelected
+                  ? Theme.of(context).colorScheme.onSecondary
+                  : Theme.of(context).colorScheme.primary,
+            ),
+            tooltip: Localizations.localeOf(context).languageCode == 'fr'
+                ? 'Exporter vers Fichiers'
+                : 'Export to Files',
+          ),
+          IconButton(
+            constraints: BoxConstraints.tightFor(width: 30.r, height: 30.r),
+            padding: EdgeInsets.zero,
+            onPressed: () => widget.onDeleteRequest(group, index),
             icon: Icon(
               Symbols.delete_rounded,
+              size: 17.r,
               color: isSelected
                   ? Theme.of(context).colorScheme.onSecondary
                   : Theme.of(context).colorScheme.error,

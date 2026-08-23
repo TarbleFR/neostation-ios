@@ -779,6 +779,9 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final safePadding = MediaQuery.viewPaddingOf(context);
+    final safeLeft = Platform.isIOS ? safePadding.left : 0.0;
+    final safeRight = Platform.isIOS ? safePadding.right : 0.0;
     // Tab content sits under the global header, so it carries no Scaffold or
     // AppBar of its own — the leading SizedBox clears the header the same way
     // the other tabs do (32.r tab strip + margin).
@@ -787,7 +790,7 @@ class _SearchScreenState extends State<SearchScreen> {
         : Stack(
             children: [
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12.r),
+                padding: EdgeInsets.fromLTRB(12.r + safeLeft, 0, 12.r + safeRight, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

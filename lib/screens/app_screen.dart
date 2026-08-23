@@ -18,6 +18,7 @@ import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
 import 'neo_sync_screen/neo_sync_tab.dart';
+import 'library_screen/library_screen.dart';
 import '../widgets/scraper_content.dart';
 
 import 'package:neostation/services/game_service.dart';
@@ -52,9 +53,10 @@ abstract final class AppTabs {
   static const int achievements = 3;
   static const int scraper = 4;
   static const int settings = 5;
+  static const int library = 6;
 
   /// Total number of tabs, used for wrap-around when cycling with the bumpers.
-  static const int count = 6;
+  static const int count = 7;
 }
 
 /// Bridge class providing static access to the main application navigation state.
@@ -201,7 +203,10 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     unawaited(_fixRetroarchAndroidDefault());
 
     // App update check (network) — runs alongside the scan, no longer blocking it.
-    if (configProvider.config.autoUpdateApp) {
+    // The iOS fork is sideloaded and owns its platform integrations. Desktop
+    // update manifests must never prompt, download, or replace iOS assets, even
+    // when a legacy config migrated from PC still has these booleans enabled.
+    if (!Platform.isIOS && configProvider.config.autoUpdateApp) {
       final appUpdateResult = await _checkAndShowAppUpdate();
       if (appUpdateResult == true) {
         // User chose Update Now and will restart; nothing more to do here.
@@ -210,7 +215,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     }
 
     // Systems/emulator config update check (network).
-    if (configProvider.config.autoUpdateSystems) {
+    if (!Platform.isIOS && configProvider.config.autoUpdateSystems) {
       final systemsUpdated = await _checkAndShowSystemsUpdate(configProvider);
       if (systemsUpdated && mounted) {
         // New definitions were applied — re-scan to reflect them. Wait for the
@@ -389,6 +394,10 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
       NewSettingsScreen.navigateRight();
       return;
     }
+    if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.navigateRight();
+      return;
+    }
   }
 
   void _navigateContentLeft() {
@@ -399,6 +408,10 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     }
     if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.navigateLeft();
+      return;
+    }
+    if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.navigateLeft();
       return;
     }
   }
@@ -419,6 +432,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     if (_selectedTabIndex == AppTabs.settings) {
       return NewSettingsScreen.navigateDown();
     }
+    if (_selectedTabIndex == AppTabs.library) {
+      return LibraryScreen.navigateDown();
+    }
     return true;
   }
 
@@ -430,6 +446,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     }
     if (_selectedTabIndex == AppTabs.settings) {
       return NewSettingsScreen.navigateUp();
+    }
+    if (_selectedTabIndex == AppTabs.library) {
+      return LibraryScreen.navigateUp();
     }
     return true;
   }
@@ -443,6 +462,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   void _handleBackNavigation() {
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.backCurrent();
+    } else if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.backCurrent();
     }
   }
 
@@ -453,6 +474,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
       NewScraperOptionsScreen.selectCurrent();
     } else if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.selectCurrent();
+    } else if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.selectCurrent();
     }
   }
 
@@ -461,6 +484,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   void _handleXButton() {
     if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.deleteCurrent();
+    } else if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.deleteCurrent();
     }
   }
 
@@ -532,6 +557,9 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
           break;
         case AppTabs.settings:
           tabName = 'Settings';
+          break;
+        case AppTabs.library:
+          tabName = 'Library';
           break;
       }
 
@@ -697,6 +725,8 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         return ScraperContent();
       case AppTabs.settings:
         return NewSettingsScreen();
+      case AppTabs.library:
+        return const LibraryScreen();
       default:
         return SystemContent(
           selectedIndex: _selectedSystemIndex,

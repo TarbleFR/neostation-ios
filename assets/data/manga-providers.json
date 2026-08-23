@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "name": "NeoStation Manga Metadata Providers",
+  "contentPolicy": "metadata-only",
+  "providers": [
+    {
+      "id": "bnf",
+      "name": "Bibliothèque nationale de France",
+      "kind": "books_metadata",
+      "transport": "sru",
+      "responseFormat": "xml",
+      "directJSON": false,
+      "requiresAdapter": true,
+      "baseURL": "https://catalogue.bnf.fr/api/SRU",
+      "search": {
+        "method": "GET",
+        "queryItems": {
+          "version": "1.2",
+          "operation": "searchRetrieve",
+          "recordSchema": "dublincore",
+          "query": "(bib.anywhere all \"{query}\") and (bib.recordtype any \"mon\")",
+          "startRecord": "{startRecord}",
+          "maximumRecords": "{limit}"
+        }
+      },
+      "searchByISBN": {
+        "method": "GET",
+        "queryItems": {
+          "version": "1.2",
+          "operation": "searchRetrieve",
+          "recordSchema": "dublincore",
+          "query": "bib.isbn all \"{isbn}\"",
+          "startRecord": "1",
+          "maximumRecords": "20"
+        }
+      },
+      "cover": {
+        "method": "GET",
+        "baseURL": "https://openapi.bnf.fr/couverture/image/image/recupererImage",
+        "queryItems": {
+          "idArk": "{ark}",
+          "couverture": "1"
+        }
+      },
+      "documentation": "https://api.bnf.fr/api-sru-catalogue-general"
+    },
+    {
+      "id": "anilist",
+      "name": "AniList",
+      "kind": "manga_database",
+      "transport": "graphql",
+      "responseFormat": "json",
+      "directJSON": false,
+      "requiresAdapter": true,
+      "endpoint": "https://graphql.anilist.co",
+      "search": {
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "body": {
+          "query": "query ($search: String, $page: Int, $perPage: Int) { Page(page: $page, perPage: $perPage) { pageInfo { total currentPage lastPage hasNextPage } media(search: $search, type: MANGA, sort: SEARCH_MATCH) { id idMal title { romaji english native userPreferred } description(asHtml: false) format status chapters volumes countryOfOrigin startDate { year month day } endDate { year month day } genres synonyms averageScore popularity isAdult coverImage { extraLarge large medium } bannerImage siteUrl staff(sort: RELEVANCE, perPage: 10) { edges { role node { id name { full native } } } } } } }",
+          "variables": {
+            "search": "{query}",
+            "page": "{page}",
+            "perPage": "{limit}"
+          }
+        }
+      },
+      "documentation": "https://docs.anilist.co/"
+    },
+    {
+      "id": "mangaupdates",
+      "name": "MangaUpdates",
+      "kind": "manga_database",
+      "transport": "rest",
+      "responseFormat": "json",
+      "directJSON": false,
+      "requiresAdapter": true,
+      "baseURL": "https://api.mangaupdates.com/v1",
+      "search": {
+        "method": "POST",
+        "path": "/series/search",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "body": {
+          "search": "{query}",
+          "stype": "title",
+          "page": "{page}",
+          "perpage": "{limit}"
+        }
+      },
+      "details": {
+        "method": "GET",
+        "path": "/series/{id}"
+      },
+      "metadataOnlyRecommendation": [
+        "title",
+        "description",
+        "year",
+        "type",
+        "genres",
+        "categories",
+        "authors",
+        "publishers",
+        "image",
+        "url",
+        "bayesian_rating"
+      ],
+      "excludeForNeoStation": [
+        "scanlation_groups",
+        "release_downloads"
+      ],
+      "documentation": "https://api.mangaupdates.com/"
+    },
+    {
+      "id": "kitsu",
+      "name": "Kitsu",
+      "kind": "manga_database",
+      "transport": "rest-jsonapi",
+      "responseFormat": "json",
+      "directJSON": true,
+      "requiresAdapter": false,
+      "baseURL": "https://kitsu.io/api/edge",
+      "search": {
+        "method": "GET",
+        "path": "/manga",
+        "queryItems": {
+          "filter[text]": "{query}",
+          "page[limit]": "{limit}",
+          "page[offset]": "{offset}"
+        }
+      },
+      "details": {
+        "method": "GET",
+        "path": "/manga/{id}"
+      },
+      "documentation": "https://hummingbird-me.github.io/api-docs/"
+    },
+    {
+      "id": "openlibrary",
+      "name": "Open Library",
+      "kind": "books_metadata",
+      "transport": "rest",
+      "responseFormat": "json",
+      "directJSON": true,
+      "requiresAdapter": false,
+      "baseURL": "https://openlibrary.org",
+      "search": {
+        "method": "GET",
+        "path": "/search.json",
+        "queryItems": {
+          "q": "{query}",
+          "page": "{page}",
+          "limit": "{limit}",
+          "fields": "key,title,subtitle,author_name,author_key,first_publish_year,publish_date,publisher,isbn,language,subject,cover_i,edition_key"
+        },
+        "headers": {
+          "User-Agent": "NeoStation/1.0 (replace-with-contact-email)"
+        }
+      },
+      "detailsWork": {
+        "method": "GET",
+        "path": "/works/{workId}.json"
+      },
+      "detailsEdition": {
+        "method": "GET",
+        "path": "/books/{editionId}.json"
+      },
+      "coverById": "https://covers.openlibrary.org/b/id/{coverId}-L.jpg",
+      "coverByISBN": "https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
+      "documentation": "https://openlibrary.org/developers/api"
+    },
+    {
+      "id": "jikan",
+      "name": "Jikan",
+      "kind": "manga_database",
+      "transport": "rest",
+      "responseFormat": "json",
+      "directJSON": true,
+      "requiresAdapter": false,
+      "baseURL": "https://api.jikan.moe/v4",
+      "search": {
+        "method": "GET",
+        "path": "/manga",
+        "queryItems": {
+          "q": "{query}",
+          "page": "{page}",
+          "limit": "{limit}",
+          "sfw": "true"
+        }
+      },
+      "details": {
+        "method": "GET",
+        "path": "/manga/{id}/full"
+      },
+      "top": {
+        "method": "GET",
+        "path": "/top/manga",
+        "queryItems": {
+          "page": "{page}",
+          "limit": "{limit}"
+        }
+      },
+      "documentation": "https://docs.api.jikan.moe/"
+    },
+    {
+      "id": "googlebooks",
+      "name": "Google Books",
+      "kind": "books_metadata",
+      "transport": "rest",
+      "responseFormat": "json",
+      "directJSON": true,
+      "requiresAdapter": false,
+      "requiresAPIKeyForProduction": true,
+      "baseURL": "https://www.googleapis.com/books/v1",
+      "search": {
+        "method": "GET",
+        "path": "/volumes",
+        "queryItems": {
+          "q": "{query}",
+          "startIndex": "{offset}",
+          "maxResults": "{limit}",
+          "printType": "books",
+          "projection": "full",
+          "key": "{GOOGLE_BOOKS_API_KEY}"
+        }
+      },
+      "searchByISBN": {
+        "method": "GET",
+        "path": "/volumes",
+        "queryItems": {
+          "q": "isbn:{isbn}",
+          "maxResults": "10",
+          "printType": "books",
+          "key": "{GOOGLE_BOOKS_API_KEY}"
+        }
+      },
+      "details": {
+        "method": "GET",
+        "path": "/volumes/{id}",
+        "queryItems": {
+          "key": "{GOOGLE_BOOKS_API_KEY}"
+        }
+      },
+      "documentation": "https://developers.google.com/books/docs/v1/using"
+    }
+  ]
+}

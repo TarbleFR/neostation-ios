@@ -60,6 +60,45 @@ class ExternalFolderAccess {
     }
   }
 
+  /// Enumerates files directly on the native iOS side while the security-
+  /// scoped bookmark is active. This avoids relying on Dart `Directory.list`
+  /// for app-owned folders exposed through Files, which can resolve a picked
+  /// path successfully yet still fail to enumerate its children.
+  ///
+  /// [extensions] are supplied without a leading dot. [subdirectory] is
+  /// relative to the bookmarked root. A small prefix of every matching file
+  /// can be returned so callers can identify container formats without copying
+  /// the full ROM into NeoStation's sandbox.
+  static Future<List<Map<String, dynamic>>?> listBookmarkedFiles({
+    String key = defaultBookmarkKey,
+    String? subdirectory,
+    List<String> extensions = const <String>[],
+    bool recursive = true,
+    int prefixBytes = 0,
+  }) async {
+    if (!Platform.isIOS) return null;
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'listBookmarkedFiles',
+        <String, dynamic>{
+          'key': key,
+          if (subdirectory != null && subdirectory.trim().isNotEmpty)
+            'subdirectory': subdirectory,
+          'extensions': extensions,
+          'recursive': recursive,
+          'prefixBytes': prefixBytes,
+        },
+      );
+      if (raw == null) return null;
+      return raw
+          .whereType<Map>()
+          .map((entry) => Map<String, dynamic>.from(entry))
+          .toList(growable: false);
+    } on PlatformException {
+      return null;
+    }
+  }
+
   /// Forgets the folder linked under [key]. The next call to
   /// [resolveBookmarkedFolder] with the same key returns `null` until a new
   /// folder is picked via [pickAndBookmarkFolder]. Other keys are

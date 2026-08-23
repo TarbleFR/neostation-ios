@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../services/notification_service.dart';
 import '../services/neosync/auth_service.dart';
@@ -113,6 +114,12 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      // iOS can keep the system IME visible across app switches even when
+      // NeoStation has no active text field. Clear Flutter focus and explicitly
+      // dismiss the text-input channel before restoring the rest of the app.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+
       await GameService.handleAppResumed();
 
       if (!mounted) return;

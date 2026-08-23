@@ -18,8 +18,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.download: 'Unduh',
   AppLocale.stop: 'Berhenti',
   AppLocale.reset: 'Atur Ulang',
-  AppLocale.startupStorageUnavailable:
-      'NeoStation tidak dapat mengakses folder tempat data Anda disimpan. Pastikan kartu SD atau drive terpasang.',
+  AppLocale.startupStorageUnavailable: 'NeoStation tidak dapat mengakses folder tempat data Anda disimpan. Pastikan kartu SD atau drive terpasang.',
   AppLocale.startupStorageRetry: 'Coba lagi',
   AppLocale.startupStorageUseDefault: 'Lanjutkan tanpa itu',
   AppLocale.startupLoading:
@@ -38,6 +37,38 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.closingGame: 'Menutup game...',
 
   AppLocale.settings: 'Pengaturan',
+  AppLocale.library: 'Perpustakaan',
+  AppLocale.libraryIntro:
+      'Tambahkan sumber dan kumpulkan semua konten bacaan di satu tempat.',
+  AppLocale.libraryAddons: 'Add-on',
+  AppLocale.libraryAddonsSubtitle:
+      'Tambahkan sumber eksternal untuk memperluas perpustakaan.',
+  AppLocale.libraryLocal: 'Perpustakaan lokal',
+  AppLocale.libraryLocalSubtitle: 'PDF, CBZ, dan konten lokal lainnya.',
+  AppLocale.libraryEmptyTitle: 'Belum ada sumber terpasang',
+  AppLocale.libraryEmptySubtitle:
+      'Tambahkan add-on atau sumber lokal untuk memulai.',
+  AppLocale.libraryNextStep:
+      'Bagian ini akan diaktifkan pada tahap berikutnya.',
+  AppLocale.libraryAddonAddUrl: 'Tambah lewat URL',
+  AppLocale.libraryAddonAddUrlSubtitle:
+      'Pasang manifes NeoStation yang dihosting melalui HTTPS.',
+  AppLocale.libraryAddonImportFile: 'Impor manifes',
+  AppLocale.libraryAddonImportFileSubtitle:
+      'Pasang add-on NeoStation dari berkas JSON lokal.',
+  AppLocale.libraryAddonUrlTitle: 'Tambah sumber Perpustakaan',
+  AppLocale.libraryAddonUrlHelp:
+      'URL manifes HTTPS (skema neostation.library.v1).',
+  AppLocale.libraryAddonInstall: 'Pasang',
+  AppLocale.libraryAddonInstalling: 'Memasang sumber…',
+  AppLocale.libraryAddonInstalled: '{name} terpasang',
+  AppLocale.libraryAddonUpdated: '{name} diperbarui',
+  AppLocale.libraryAddonError: 'Tidak dapat memasang sumber: {error}',
+  AppLocale.libraryAddonInstalledSources: 'Sumber terpasang',
+  AppLocale.libraryAddonRemoveTitle: 'Hapus sumber?',
+  AppLocale.libraryAddonRemoveBody: 'Hapus {name} dari sumber Perpustakaan?',
+  AppLocale.libraryAddonRemoved: '{name} dihapus',
+  AppLocale.libraryAddonCount: '{count} sumber terpasang',
   AppLocale.general: 'Umum',
   AppLocale.secondaryDisplay: 'Layar Sekunder',
   AppLocale.directories: 'Direktori',
@@ -50,8 +81,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemArtLoading: 'Memuat System Art...',
   AppLocale.systemArtError: 'Tidak dapat memuat System Art',
   AppLocale.systemArtApplyTitle: 'Terapkan System Art?',
-  AppLocale.systemArtApplyBody:
-      'Paket System Art akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
+  AppLocale.systemArtApplyBody: 'Paket System Art akan diunduh untuk semua sistem. Ini mungkin memerlukan beberapa saat.',
   AppLocale.systemArtDownloading: 'Mengunduh paket System Art...',
   AppLocale.about: 'Tentang',
   AppLocale.emulators: 'Emulator',
@@ -125,14 +155,12 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Berapa banyak slot aplikasi yang ditampilkan dock (1-5)',
   AppLocale.nowPlayingFanartDim: 'Redupkan fanart',
-  AppLocale.nowPlayingFanartDimSubtitle:
-      'Gelapkan seni latar belakang di belakang logo agar fanart yang ramai tidak bertabrakan',
+  AppLocale.nowPlayingFanartDimSubtitle: 'Gelapkan seni latar belakang di belakang logo agar fanart yang ramai tidak bertabrakan',
   AppLocale.nowPlayingDimOff: 'Mati',
   AppLocale.secondarySectionNowPlaying: 'Panel Now Playing',
   AppLocale.secondarySectionDock: 'Dock aplikasi',
   AppLocale.screenshotAccess: 'Screen return & screenshots',
-  AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+  AppLocale.screenshotAccessSubtitle: 'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle:
       'Pindai folder ROM secara otomatis saat membuka aplikasi',
   AppLocale.ignoreHiddenFiles: 'Abaikan item tersembunyi',
@@ -180,7 +208,8 @@ const Map<String, dynamic> appLocaleId = {
 
   AppLocale.configureDirectories: 'Konfigurasi Direktori',
   AppLocale.configureLaunch: 'Konfigurasikan peluncuran',
-  AppLocale.shortcutSetupOpenError: 'Tidak dapat membuka konfigurasi peluncuran.',
+  AppLocale.shortcutSetupOpenError:
+      'Tidak dapat membuka konfigurasi peluncuran.',
   AppLocale.configureRomsFolder: 'Konfigurasi Folder ROM',
   AppLocale.cannotAccessFolder: 'Tidak dapat mengakses folder',
   AppLocale.backgroundImage: 'Gambar Latar Belakang',
@@ -193,25 +222,21 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rescanAllFolders: 'Pindai ulang semua folder ROM',
   AppLocale.rescanAllFoldersSubtitle: 'Cari sistem dan ROM baru secara manual',
   AppLocale.organizeMultiDiscGames: 'Atur game multi-disk',
-  AppLocale.organizeMultiDiscGamesSubtitle:
-      'Secara otomatis membuat file .m3u untuk game multi-disk dan mengaturnya ke dalam folder',
+  AppLocale.organizeMultiDiscGamesSubtitle: 'Secara otomatis membuat file .m3u untuk game multi-disk dan mengaturnya ke dalam folder',
   AppLocale.organizeMultiDiscScanning:
       'Memindai folder ROM untuk game multi-disk...',
   AppLocale.organizeMultiDiscNoRomFoldersConfigured:
       'Belum ada folder ROM yang dikonfigurasi.',
   AppLocale.organizeMultiDiscSkippedSuffix: ' ({count} jalur folder dilewati)',
-  AppLocale.organizeMultiDiscDone:
-      'Selesai: {groups} set diatur, {files} file dipindahkan, {playlists} playlist dibuat{skipped}.',
+  AppLocale.organizeMultiDiscDone: 'Selesai: {groups} set diatur, {files} file dipindahkan, {playlists} playlist dibuat{skipped}.',
   AppLocale.organizeMultiDiscNoSetsFound:
       'Tidak ada set multi-disk yang ditemukan untuk diatur{skipped}.',
   AppLocale.organizeMultiDiscFailed: 'Gagal mengatur game multi-disk: {error}',
-  AppLocale.organizeMultiDiscWarning:
-      'Ini akan memindahkan file ROM yang cocok ke folder game baru dan membuat playlist .m3u di penyimpanan Anda. Tindakan ini tidak dapat dibatalkan secara otomatis.',
+  AppLocale.organizeMultiDiscWarning: 'Ini akan memindahkan file ROM yang cocok ke folder game baru dan membuat playlist .m3u di penyimpanan Anda. Tindakan ini tidak dapat dibatalkan secara otomatis.',
   AppLocale.cleanOrphanedMetadata: 'Bersihkan Metadata Yatim',
   AppLocale.cleanOrphanedMetadataSubtitle:
       'Hapus metadata dan media yang tertinggal dari ROM yang dihapus',
-  AppLocale.cleanOrphanedMetadataWarning:
-      'Ini akan menghapus permanen baris metadata dan file media untuk ROM yang tidak lagi ada di perpustakaan Anda. Entri yang diimpor dari ES-DE tidak akan dihapus.',
+  AppLocale.cleanOrphanedMetadataWarning: 'Ini akan menghapus permanen baris metadata dan file media untuk ROM yang tidak lagi ada di perpustakaan Anda. Entri yang diimpor dari ES-DE tidak akan dihapus.',
   AppLocale.cleanOrphanedMetadataScanning: 'Membersihkan metadata yatim...',
   AppLocale.cleanOrphanedMetadataCleaningItem: 'Membersihkan {filename}...',
   AppLocale.cleanOrphanedMetadataNothingFound:
@@ -317,8 +342,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.atLeast8Characters: 'Minimal 8 karakter',
 
   AppLocale.storageQuotaExceeded: 'Kuota Penyimpanan Terlampaui',
-  AppLocale.storageQuotaDesc:
-      'Ruang penyimpanan Anda habis. Kosongkan ruang untuk terus menyinkronkan simpanan cloud.',
+  AppLocale.storageQuotaDesc: 'Ruang penyimpanan Anda habis. Kosongkan ruang untuk terus menyinkronkan simpanan cloud.',
   AppLocale.currentStorageUsage: 'Penggunaan penyimpanan saat ini:',
   AppLocale.recommendedSolutions: 'Solusi yang disarankan:',
   AppLocale.upgradePlan: 'Tingkatkan Paket',
@@ -338,8 +362,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.neoSyncDescription:
       'NeoSync adalah mitra cloud terpadu untuk NeoStation Anda.',
   AppLocale.crossPlatform: 'Lintas platform',
-  AppLocale.crossPlatformDesc:
-      'Lanjutkan dari tempat terakhir Anda berhenti di perangkat NeoStation mana pun.',
+  AppLocale.crossPlatformDesc: 'Lanjutkan dari tempat terakhir Anda berhenti di perangkat NeoStation mana pun.',
   AppLocale.securePrivate: 'Aman dan Pribadi',
   AppLocale.securePrivateDesc:
       'Data Anda dienkripsi dan hanya dapat diakses oleh Anda.',
@@ -360,8 +383,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.endSubscription: 'Akhiri Langganan',
   AppLocale.backWithB: 'Kembali (B)',
   AppLocale.cancelSubscription: 'Batalkan Langganan',
-  AppLocale.cancelSubscriptionConfirm:
-      'Apakah Anda yakin ingin membatalkan? Anda akan tetap memiliki akses hingga akhir periode.',
+  AppLocale.cancelSubscriptionConfirm: 'Apakah Anda yakin ingin membatalkan? Anda akan tetap memiliki akses hingga akhir periode.',
   AppLocale.keepSubscription: 'Tetap Berlangganan',
   AppLocale.deleteCloudSave: 'Hapus Simpanan Cloud',
   AppLocale.deleteCloudSaveConfirm:
@@ -403,8 +425,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.region: 'Wilayah',
   AppLocale.regionSub: 'Atur prioritas wilayah untuk scraping',
   AppLocale.regionPriority: 'Prioritas Wilayah',
-  AppLocale.regionPrioritySub:
-      'Wilayah dengan prioritas lebih tinggi lebih disukai untuk nama, tanggal, dan media. Tekan A untuk mengambil, Atas/Bawah untuk memindahkan, B untuk meletakkan.',
+  AppLocale.regionPrioritySub: 'Wilayah dengan prioritas lebih tinggi lebih disukai untuk nama, tanggal, dan media. Tekan A untuk mengambil, Atas/Bawah untuk memindahkan, B untuk meletakkan.',
   AppLocale.regionUpdated: 'Prioritas wilayah diperbarui',
   AppLocale.regionError: 'Kesalahan saat memperbarui prioritas wilayah',
   AppLocale.systems: 'Sistem',
@@ -530,8 +551,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.noEmulator: 'Emulator tidak dikonfigurasi',
   AppLocale.incompleteMetadata: 'Metadata tidak lengkap',
   AppLocale.noDescription: 'Tidak ada deskripsi tersedia.',
-  AppLocale.scrapeToDownload:
-      'Game ini belum memiliki metadata. Scrape untuk mengunduh deskripsi, genre, sampul, dan video.',
+  AppLocale.scrapeToDownload: 'Game ini belum memiliki metadata. Scrape untuk mengunduh deskripsi, genre, sampul, dan video.',
   AppLocale.loginToScrape:
       'Masuk ke ScreenScraper di pengaturan untuk mengaktifkan unduhan.',
   AppLocale.noAchievementsFound:
@@ -547,19 +567,24 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scrapeManualDesc: 'Unduh manual game PDF jika tersedia.',
   AppLocale.manualReady: 'Manual telah diunduh',
   AppLocale.manualNotDownloaded: 'Belum ada manual yang diunduh',
-  AppLocale.manualDownloadHint: 'Unduh manual game dari ScreenScraper jika tersedia.',
+  AppLocale.manualDownloadHint:
+      'Unduh manual game dari ScreenScraper jika tersedia.',
   AppLocale.downloadManual: 'Unduh manual',
-  AppLocale.downloadManualDesc: 'Unduh PDF terbaik yang tersedia untuk bahasa dan wilayah Anda.',
+  AppLocale.downloadManualDesc:
+      'Unduh PDF terbaik yang tersedia untuk bahasa dan wilayah Anda.',
   AppLocale.readManual: 'Baca manual',
   AppLocale.readManualDesc: 'Buka PDF tersimpan di pembaca bawaan NeoStation.',
   AppLocale.redownloadManual: 'Unduh ulang manual',
-  AppLocale.redownloadManualDesc: 'Ganti salinan lokal dengan versi terbaik yang tersedia.',
+  AppLocale.redownloadManualDesc:
+      'Ganti salinan lokal dengan versi terbaik yang tersedia.',
   AppLocale.deleteManual: 'Hapus manual',
   AppLocale.deleteManualDesc: 'Hapus PDF tersimpan dari perangkat ini.',
-  AppLocale.deleteManualConfirmation: 'Hapus manual yang telah diunduh untuk game ini?',
+  AppLocale.deleteManualConfirmation:
+      'Hapus manual yang telah diunduh untuk game ini?',
   AppLocale.manualDownloaded: 'Manual telah diunduh',
   AppLocale.manualDownloadFailed: 'Gagal mengunduh manual',
-  AppLocale.manualNotAvailable: 'Tidak ada manual untuk game ini di ScreenScraper.',
+  AppLocale.manualNotAvailable:
+      'Tidak ada manual untuk game ini di ScreenScraper.',
   AppLocale.manualDeleted: 'Manual dihapus',
   AppLocale.downloadingManual: 'Mengunduh manual...',
   AppLocale.pinchToZoom: 'Cubit untuk memperbesar',
@@ -591,8 +616,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.progress: 'Kemajuan',
   AppLocale.raLogin: 'Login RetroAchievements',
   AppLocale.raWhatIs: 'Apa itu RetroAchievements?',
-  AppLocale.raDescription:
-      'RetroAchievements adalah komunitas yang menawarkan pencapaian untuk game klasik melalui emulasi.',
+  AppLocale.raDescription: 'RetroAchievements adalah komunitas yang menawarkan pencapaian untuk game klasik melalui emulasi.',
   AppLocale.raEarnPoints: 'Dapatkan poin Hardcore dan tampilkan',
   AppLocale.raGlobalLeaderboards: 'Papan peringkat global',
   AppLocale.raGameplayHistory: 'Riwayat permainan dan kemajuan mendetail',
@@ -628,8 +652,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.invalidCredentials: 'Kredensial yang diberikan tidak valid',
   AppLocale.loginError: 'Kesalahan masuk: {error}',
   AppLocale.whatIsScreenScraper: 'Apa itu ScreenScraper?',
-  AppLocale.screenScraperDescription:
-      'ScreenScraper adalah database kolaboratif yang menyediakan metadata, sampul, dan video berkualitas tinggi untuk game Anda.',
+  AppLocale.screenScraperDescription: 'ScreenScraper adalah database kolaboratif yang menyediakan metadata, sampul, dan video berkualitas tinggi untuk game Anda.',
   AppLocale.automaticMetadataMedia: 'Metadata dan media otomatis',
   AppLocale.massiveDatabase: 'Database komunitas yang sangat besar',
   AppLocale.requiresFreeAccount: 'Memerlukan akun gratis',
@@ -643,16 +666,13 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.welcomeNeoStation: 'Selamat datang di NeoStation!',
   AppLocale.letsGetSetup: 'Mari kita lakukan penyiapan Anda',
   AppLocale.storagePermission: 'Izin Penyimpanan',
-  AppLocale.storagePermissionDesc:
-      'NeoStation memerlukan "Akses Semua File" untuk mengelola konfigurasi RetroArch dan menyinkronkan simpanan Anda dengan benar.\n\nHarap berikan izin ini di layar berikutnya.',
+  AppLocale.storagePermissionDesc: 'NeoStation memerlukan "Akses Semua File" untuk mengelola konfigurasi RetroArch dan menyinkronkan simpanan Anda dengan benar.\n\nHarap berikan izin ini di layar berikutnya.',
   AppLocale.screenReturnAccess: 'Screen Return Access',
-  AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessDesc: 'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
   AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'Pilih Folder ROM',
   AppLocale.romFolderSelected: 'Folder ROM dipilih!',
-  AppLocale.chooseRomFolderDesc:
-      'Pilih folder tempat file ROM Anda disimpan.\n\nNeoStation akan memindai folder ini untuk mencari game.',
+  AppLocale.chooseRomFolderDesc: 'Pilih folder tempat file ROM Anda disimpan.\n\nNeoStation akan memindai folder ini untuk mencari game.',
   AppLocale.setupComplete: 'Penyiapan selesai!',
   AppLocale.scanningRoms: 'Memindai ROM',
   AppLocale.foundSystemsWithGames: '{count} sistem dengan game ditemukan!',
@@ -664,8 +684,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.next: 'Berikutnya',
   AppLocale.romsFolderTitle: 'Folder ROM',
   AppLocale.romFolderUpdated: 'Folder ROM diperbarui, pemindaian selesai',
-  AppLocale.ensureValidFolderDesc:
-      'Pastikan bahwa: 1. Folder ROM ada; 2. Anda telah memilih folder yang valid.',
+  AppLocale.ensureValidFolderDesc: 'Pastikan bahwa: 1. Folder ROM ada; 2. Anda telah memilih folder yang valid.',
   AppLocale.scanningComplete: 'Pemindaian selesai',
   AppLocale.applyingInitialConfig: 'Menerapkan konfigurasi awal...',
   AppLocale.recentBadge: 'BARU',
@@ -681,8 +700,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.allSystems: 'Semua Sistem',
   AppLocale.noSystemsFound: 'Tidak ada sistem ditemukan',
   AppLocale.setupLibrary: 'Siapkan Pustaka',
-  AppLocale.chooseRomFolderOrganize:
-      'Pilih folder ROM Anda untuk mendeteksi sistem dan mengatur koleksi Anda secara otomatis.',
+  AppLocale.chooseRomFolderOrganize: 'Pilih folder ROM Anda untuk mendeteksi sistem dan mengatur koleksi Anda secara otomatis.',
   AppLocale.scanningButton: 'Memindai...',
   AppLocale.changeFolder: 'Ubah Folder',
   AppLocale.selectRomFolderButton: 'Pilih Folder ROM',
@@ -694,8 +712,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.step1SelectFolder: '1. Pilih Folder ROM Anda',
   AppLocale.step1Desc: 'Pilih folder utama yang berisi koleksi Anda.',
   AppLocale.step2AutoDetection: '2. Deteksi Otomatis',
-  AppLocale.step2Desc:
-      'Aplikasi akan mencari sistem yang didukung seperti "snes", "psx", "gba", dll.',
+  AppLocale.step2Desc: 'Aplikasi akan mencari sistem yang didukung seperti "snes", "psx", "gba", dll.',
   AppLocale.step3CountGames: '3. Hitung Game Anda',
   AppLocale.step3Desc:
       'Setiap folder sistem akan dianalisis untuk menghitung file ROM Anda.',
@@ -793,8 +810,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.loadingGames: 'Memuat game',
   AppLocale.preparingLibrary: 'Menyiapkan pustaka Anda...',
   AppLocale.noGamesFoundFor: 'Tidak ada game ditemukan untuk {name}',
-  AppLocale.checkRomFiles:
-      'Periksa apakah file berada di folder yang benar dan dalam format yang didukung.',
+  AppLocale.checkRomFiles: 'Periksa apakah file berada di folder yang benar dan dalam format yang didukung.',
   AppLocale.failedToSaveSetting: 'Gagal menyimpan pengaturan',
   AppLocale.scanningSystemOf: 'Memindai sistem {current} dari {total}',
   AppLocale.selectAGame: 'Pilih game',
@@ -879,22 +895,18 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.userDataLocationDefault: 'Lokasi default',
   AppLocale.selectUserDataFolder: 'Pilih Folder Data',
   AppLocale.folderNotEmptyTitle: 'Folder Tidak Kosong',
-  AppLocale.folderNotEmptyBody:
-      'Folder ini sudah berisi {count} item. NeoStation akan menyimpan datanya sendiri di sini, bersama konten yang sudah ada.',
+  AppLocale.folderNotEmptyBody: 'Folder ini sudah berisi {count} item. NeoStation akan menyimpan datanya sendiri di sini, bersama konten yang sudah ada.',
   AppLocale.folderNotEmptyUseAnyway: 'Tetap Gunakan',
   AppLocale.moveUserDataTitle: 'Pindahkan Data Pengguna?',
-  AppLocale.moveUserDataBody:
-      'NeoStation akan memindahkan datanya sendiri — basis data, media hasil scrape, dan pengaturan — dari folder saat ini ke folder baru. Berkas yang tidak dibuat oleh NeoStation tidak akan diubah.',
-  AppLocale.moveUserDataDestNotEmpty:
-      'Folder baru sudah berisi {count} item. Data NeoStation akan ditambahkan di sampingnya.',
+  AppLocale.moveUserDataBody: 'NeoStation akan memindahkan datanya sendiri — basis data, media hasil scrape, dan pengaturan — dari folder saat ini ke folder baru. Berkas yang tidak dibuat oleh NeoStation tidak akan diubah.',
+  AppLocale.moveUserDataDestNotEmpty: 'Folder baru sudah berisi {count} item. Data NeoStation akan ditambahkan di sampingnya.',
   AppLocale.moveUserDataConfirm: 'Pindahkan Data',
   AppLocale.migratingUserData: 'Memindahkan Data',
   AppLocale.migratingUserDataComplete: 'Migrasi selesai',
   AppLocale.migratingUserDataError: 'Migrasi gagal',
   AppLocale.migratingFiles: 'Menyalin {current} dari {total} file...',
   AppLocale.restartRequired: 'Restart Diperlukan',
-  AppLocale.restartRequiredBody:
-      'NeoStation akan ditutup sekarang. Buka kembali untuk menggunakan lokasi baru.',
+  AppLocale.restartRequiredBody: 'NeoStation akan ditutup sekarang. Buka kembali untuk menggunakan lokasi baru.',
   AppLocale.userDataLocationUpdated: 'Lokasi data diperbarui',
   AppLocale.resetToDefault: 'Setel Ulang ke Default',
   AppLocale.romDirectories: 'Direktori ROM',
@@ -918,20 +930,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.filterYear: 'Tahun',
   AppLocale.filterAny: 'Semua',
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',
-  AppLocale.resetPlayTimeConfirmBody:
-      'Ini akan mengatur ulang waktu bermain yang tercatat untuk game ini menjadi nol secara permanen. Tindakan ini tidak dapat dibatalkan.',
-  AppLocale.removeRomFolderConfirmBody:
-      'Ini akan menghapus folder ROM ini dari sumber pustaka Anda. File Anda di disk tidak akan dihapus.',
+  AppLocale.resetPlayTimeConfirmBody: 'Ini akan mengatur ulang waktu bermain yang tercatat untuk game ini menjadi nol secara permanen. Tindakan ini tidak dapat dibatalkan.',
+  AppLocale.removeRomFolderConfirmBody: 'Ini akan menghapus folder ROM ini dari sumber pustaka Anda. File Anda di disk tidak akan dihapus.',
   AppLocale.disconnectRaConfirm: 'Putuskan RetroAchievements',
-  AppLocale.disconnectRaConfirmBody:
-      'Ini akan mengeluarkan Anda dan menghapus kredensial RetroAchievements yang tersimpan dari perangkat ini.',
+  AppLocale.disconnectRaConfirmBody: 'Ini akan mengeluarkan Anda dan menghapus kredensial RetroAchievements yang tersimpan dari perangkat ini.',
   AppLocale.neoSyncLogoutConfirmBody:
       'Ini akan mengeluarkan Anda dari akun NeoSync di perangkat ini.',
 
   AppLocale.deleteGame: 'Hapus Game',
   AppLocale.deleteGameConfirm: 'Hapus Secara Permanen',
-  AppLocale.deleteGameConfirmBody:
-      'Ini akan menghapus permanen ROM game, data scraping, dan file media. Tindakan ini tidak dapat dibatalkan.',
+  AppLocale.deleteGameConfirmBody: 'Ini akan menghapus permanen ROM game, data scraping, dan file media. Tindakan ini tidak dapat dibatalkan.',
   AppLocale.deleteGameSubtitle: 'Menghapus permanen file ROM dari disk',
 
   AppLocale.raCompletionsLabel: 'Penyelesaian',
@@ -957,13 +965,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.raNoCommentsYet: 'Belum ada komentar.',
   AppLocale.raOlderCommentsAvailable: 'Komentar lama tersedia.',
   AppLocale.raLoadMore: 'MUAT LEBIH BANYAK',
-  AppLocale.raRateLimited:
-      'RetroAchievements sedang sibuk saat ini. Tunggu sebentar lalu coba lagi.',
+  AppLocale.raRateLimited: 'RetroAchievements sedang sibuk saat ini. Tunggu sebentar lalu coba lagi.',
   AppLocale.raApiKey: 'Kunci API',
   AppLocale.raEnterApiKey: 'Masukkan kunci API Anda',
   AppLocale.raGetApiKey: 'Dapatkan Kunci API',
-  AppLocale.raApiKeyHelp:
-      'Buka panel kontrol RetroAchievements untuk menyalin kunci API Web pribadi Anda.',
+  AppLocale.raApiKeyHelp: 'Buka panel kontrol RetroAchievements untuk menyalin kunci API Web pribadi Anda.',
   AppLocale.raNoRecentUnlocks:
       'Tidak ada pembukaan baru dalam 30 hari terakhir',
   AppLocale.raRecentlyPlayedTitle: 'Baru Dimainkan',
@@ -985,8 +991,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
-  AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeResetConfirmBody: 'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1026,11 +1031,14 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.iosEmuChangeFolder: "Ubah folder",
   AppLocale.iosEmuLinkingFailed: "Gagal menautkan: {error}",
   AppLocale.iosRetroarchSyncRequested: "Sinkronisasi pustaka RetroArch diminta. Proses berjalan di latar belakang; tunggu beberapa detik.",
-  AppLocale.iosRetroarchUnavailable: "Tidak dapat mengakses RetroArch. Apakah sudah terpasang?",
+  AppLocale.iosRetroarchUnavailable:
+      "Tidak dapat mengakses RetroArch. Apakah sudah terpasang?",
   AppLocale.iosArmsx2SyncRequested: "Sinkronisasi pustaka ARMSX2 diminta. ARMSX2 akan kembali ke NeoStation secara otomatis saat ekspor siap.",
-  AppLocale.iosArmsx2Unavailable: "Tidak dapat mengakses ARMSX2. Apakah sudah terpasang?",
+  AppLocale.iosArmsx2Unavailable:
+      "Tidak dapat mengakses ARMSX2. Apakah sudah terpasang?",
   AppLocale.iosMelonxSyncRequested: "Sinkronisasi pustaka Nintendo Switch MeloNX diminta. MeloNX akan kembali ke NeoStation secara otomatis saat ekspor siap.",
-  AppLocale.iosMelonxUnavailable: "Tidak dapat mengakses MeloNX. Apakah sudah terpasang?",
+  AppLocale.iosMelonxUnavailable:
+      "Tidak dapat mengakses MeloNX. Apakah sudah terpasang?",
   AppLocale.iosRetroarchStatusNeedsLink: "Tautkan folder RetroArch agar NeoStation dapat mengakses game langsung tanpa menyalinnya.",
   AppLocale.iosRetroarchStatusNeedsSync: "Folder sudah ditautkan. Sinkronkan pustaka agar game dapat dibuka langsung di RetroArch dengan satu ketukan.",
   AppLocale.iosRetroarchStatusSynced: "Folder dan pustaka sudah tersinkron — game dibuka langsung di RetroArch.",
@@ -1051,18 +1059,23 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemTechnicalDetails: 'Detail teknis',
   AppLocale.systemGamesDetected: 'Game terdeteksi',
   AppLocale.systemInfoDetailedIntro: '{name} adalah sistem jenis {type} yang dirilis oleh {manufacturer} pada {year}.',
-  AppLocale.systemInfoDetailedIntroNoManufacturer: '{name} adalah sistem jenis {type} yang diperkenalkan pada {year}.',
-  AppLocale.systemInfoArchitectureSentence: 'Arsitektur perangkat kerasnya adalah {architecture}.',
-  AppLocale.systemInfoGenerationSentence: 'Sistem ini termasuk generasi {generation}.',
+  AppLocale.systemInfoDetailedIntroNoManufacturer:
+      '{name} adalah sistem jenis {type} yang diperkenalkan pada {year}.',
+  AppLocale.systemInfoArchitectureSentence:
+      'Arsitektur perangkat kerasnya adalah {architecture}.',
+  AppLocale.systemInfoGenerationSentence:
+      'Sistem ini termasuk generasi {generation}.',
   AppLocale.systemInfoProcessorSentence: 'Prosesor utamanya adalah {cpu}.',
-  AppLocale.systemInfoMediaSentence: 'Game dan perangkat lunak terutama didistribusikan melalui {media}.',
+  AppLocale.systemInfoMediaSentence:
+      'Game dan perangkat lunak terutama didistribusikan melalui {media}.',
   AppLocale.systemInfoCollectionRomHacks: 'Entri ini mengelompokkan ROM hack dan varian buatan komunitas untuk sistem asli.',
   AppLocale.systemInfoCollectionAllSystems: 'Koleksi virtual ini menggabungkan game dari semua sistem yang terdeteksi.',
   AppLocale.systemInfoCollectionFavorites: 'Koleksi virtual ini berisi game yang ditandai sebagai favorit oleh pengguna.',
   AppLocale.systemInfoCollectionDigitalStore: 'Entri ini mewakili toko game PC digital; katalog dan kebutuhan perangkat keras berbeda untuk setiap judul.',
   AppLocale.systemInfoCollectionEmulationPlatform: 'Entri ini mewakili platform emulasi atau kompatibilitas yang mencakup beberapa keluarga perangkat keras asli.',
   AppLocale.systemInfoCollectionFantasyConsole: 'Ini adalah fantasy console dengan perangkat keras virtual yang sengaja dibatasi untuk game dan demo kecil.',
-  AppLocale.systemInfoCollectionMediaCollection: 'Ini adalah koleksi media, bukan platform perangkat keras game tetap.',
+  AppLocale.systemInfoCollectionMediaCollection:
+      'Ini adalah koleksi media, bukan platform perangkat keras game tetap.',
   AppLocale.systemInfoCollectionGameEngine: 'Entri ini mewakili engine atau runtime game yang judulnya dapat mencakup beberapa generasi perangkat keras.',
   AppLocale.systemInfoCollectionSoftwarePlatform: 'Platform perangkat lunak ini mencakup banyak konfigurasi perangkat keras, sehingga arsitektur berbeda menurut perangkat atau era.',
   AppLocale.mediaCartridge: 'Kartrid',

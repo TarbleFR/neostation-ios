@@ -18,8 +18,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.download: 'Télécharger',
   AppLocale.stop: 'Arrêter',
   AppLocale.reset: 'Réinitialiser',
-  AppLocale.startupStorageUnavailable:
-      'NeoStation n\'a pas pu accéder au dossier où vos données sont enregistrées. Vérifiez que la carte SD ou le lecteur est connecté.',
+  AppLocale.startupStorageUnavailable: 'NeoStation n\'a pas pu accéder au dossier où vos données sont enregistrées. Vérifiez que la carte SD ou le lecteur est connecté.',
   AppLocale.startupStorageRetry: 'Réessayer',
   AppLocale.startupStorageUseDefault: 'Continuer sans',
   AppLocale.startupLoading:
@@ -38,20 +37,49 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.closingGame: 'Fermeture du jeu...',
 
   AppLocale.settings: 'Paramètres',
+  AppLocale.library: 'Bibliothèque',
+  AppLocale.libraryIntro: 'Ajoutez des sources et rassemblez tous vos contenus de lecture au même endroit.',
+  AppLocale.libraryAddons: 'Répertoire',
+  AppLocale.libraryAddonsSubtitle:
+      'Parcourez et ajoutez des dépôts ou des sources externes.',
+  AppLocale.libraryLocal: 'Bibliothèque locale',
+  AppLocale.libraryLocalSubtitle: 'Vos PDF, CBZ et autres contenus locaux.',
+  AppLocale.libraryEmptyTitle: 'Aucune source installée pour le moment',
+  AppLocale.libraryEmptySubtitle:
+      'Ajoutez un add-on ou une source locale pour commencer.',
+  AppLocale.libraryNextStep: 'Cette section sera activée à la prochaine étape.',
+  AppLocale.libraryAddonAddUrl: 'Ajouter par URL',
+  AppLocale.libraryAddonAddUrlSubtitle:
+      'Installez un manifeste NeoStation hébergé en HTTPS.',
+  AppLocale.libraryAddonImportFile: 'Importer un manifeste',
+  AppLocale.libraryAddonImportFileSubtitle:
+      'Installez un add-on NeoStation depuis un fichier JSON local.',
+  AppLocale.libraryAddonUrlTitle: 'Ajouter une source Bibliothèque',
+  AppLocale.libraryAddonUrlHelp:
+      'URL HTTPS d’un manifeste NeoStation ou d’un dépôt Tachiyomi/Mihon.',
+  AppLocale.libraryAddonInstall: 'Installer',
+  AppLocale.libraryAddonInstalling: 'Installation de la source…',
+  AppLocale.libraryAddonInstalled: '{name} installé',
+  AppLocale.libraryAddonUpdated: '{name} mis à jour',
+  AppLocale.libraryAddonError: 'Impossible d’installer la source : {error}',
+  AppLocale.libraryAddonInstalledSources: 'Sources installées',
+  AppLocale.libraryAddonRemoveTitle: 'Supprimer la source ?',
+  AppLocale.libraryAddonRemoveBody:
+      'Supprimer {name} des sources de la Bibliothèque ?',
+  AppLocale.libraryAddonRemoved: '{name} supprimé',
+  AppLocale.libraryAddonCount: '{count} source(s) installée(s)',
   AppLocale.general: 'Général',
   AppLocale.secondaryDisplay: 'Écran secondaire',
   AppLocale.directories: 'Répertoires',
   AppLocale.themes: 'Thèmes',
   AppLocale.systemArt: 'System Art',
-  AppLocale.systemArtSubtitle:
-      'Personnalisez les arrière-plans et logos des cartes de systèmes avec des packs System Art',
+  AppLocale.systemArtSubtitle: 'Personnalisez les arrière-plans et logos des cartes de systèmes avec des packs System Art',
   AppLocale.systemArtNone: 'Aucun',
   AppLocale.systemArtNoneSubtitle: 'Apparence par défaut',
   AppLocale.systemArtLoading: 'Chargement de System Art...',
   AppLocale.systemArtError: 'Impossible de charger System Art',
   AppLocale.systemArtApplyTitle: 'Appliquer System Art ?',
-  AppLocale.systemArtApplyBody:
-      'Le pack System Art sera téléchargé pour tous les systèmes. Cela peut prendre quelques instants.',
+  AppLocale.systemArtApplyBody: 'Le pack System Art sera téléchargé pour tous les systèmes. Cela peut prendre quelques instants.',
   AppLocale.systemArtDownloading: 'Téléchargement du pack System Art...',
   AppLocale.about: 'À propos',
   AppLocale.emulators: 'Émulateurs',
@@ -84,14 +112,10 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.recursiveScan: 'Analyse récursive des ROMs',
   AppLocale.recursiveScanSubtitle:
       'Analyser les ROMs dans les sous-répertoires',
-  AppLocale.alwaysShowRomNameSubtitle:
-      'Utiliser le nom du fichier ROM dans la liste (ignore les titres scrapés)',
-  AppLocale.hideExtensionSubtitle:
-      'Masque les extensions comme .iso ou .zip quand la liste utilise des noms de fichier',
-  AppLocale.hideParenthesesSubtitle:
-      'Supprime le texte entre parenthèses () quand la liste utilise des noms de fichier',
-  AppLocale.hideBracketsSubtitle:
-      'Supprime le texte entre crochets [] quand la liste utilise des noms de fichier',
+  AppLocale.alwaysShowRomNameSubtitle: 'Utiliser le nom du fichier ROM dans la liste (ignore les titres scrapés)',
+  AppLocale.hideExtensionSubtitle: 'Masque les extensions comme .iso ou .zip quand la liste utilise des noms de fichier',
+  AppLocale.hideParenthesesSubtitle: 'Supprime le texte entre parenthèses () quand la liste utilise des noms de fichier',
+  AppLocale.hideBracketsSubtitle: 'Supprime le texte entre crochets [] quand la liste utilise des noms de fichier',
   AppLocale.recursiveScanEnabled:
       'Analyse récursive activée. Analyse de {name}...',
   AppLocale.recursiveScanDisabled:
@@ -132,22 +156,18 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.nowPlayingDockSlotsSubtitle:
       'Combien d\'emplacements le dock affiche (1-5)',
   AppLocale.nowPlayingFanartDim: 'Atténuer le fanart',
-  AppLocale.nowPlayingFanartDimSubtitle:
-      'Assombrir l\'arrière-plan derrière le logo pour éviter les conflits visuels',
+  AppLocale.nowPlayingFanartDimSubtitle: 'Assombrir l\'arrière-plan derrière le logo pour éviter les conflits visuels',
   AppLocale.nowPlayingDimOff: 'Désactivé',
   AppLocale.secondarySectionNowPlaying: 'Panneau Now Playing',
   AppLocale.secondarySectionDock: 'Dock d\'applications',
   AppLocale.screenshotAccess: 'Screen return & screenshots',
-  AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
-  AppLocale.scanOnStartupSubtitle:
-      'Analyse automatiquement les dossiers de ROMs à l’ouverture de l’application',
+  AppLocale.screenshotAccessSubtitle: 'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+  AppLocale.scanOnStartupSubtitle: 'Analyse automatiquement les dossiers de ROMs à l’ouverture de l’application',
   AppLocale.ignoreHiddenFiles: 'Ignorer les éléments cachés',
   AppLocale.ignoreHiddenFilesSubtitle:
       'Masquer les fichiers et dossiers cachés lors des analyses de ROMs',
   AppLocale.autoUpdateApp: 'Mise à jour auto - App',
-  AppLocale.autoUpdateAppSubtitle:
-      'Vérifier les nouvelles versions au démarrage et proposer une mise à jour',
+  AppLocale.autoUpdateAppSubtitle: 'Vérifier les nouvelles versions au démarrage et proposer une mise à jour',
   AppLocale.autoUpdateSystems: 'Mise à jour Systèmes & Émulateurs',
   AppLocale.autoUpdateSystemsSubtitle:
       'Vérifier les mises à jour des systèmes et émulateurs au démarrage',
@@ -162,8 +182,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.allFilesAccess: 'Accès à Tous les Fichiers',
   AppLocale.permissionGranted: 'Autorisation Accordée',
   AppLocale.permissionDisabled: 'Autorisation Désactivée',
-  AppLocale.allFilesAccessSubtitle:
-      'Requis pour les configurations de RetroArch et la synchronisation des sauvegardes',
+  AppLocale.allFilesAccessSubtitle: 'Requis pour les configurations de RetroArch et la synchronisation des sauvegardes',
   AppLocale.defaultLauncherSubtitle: 'NeoStation est votre lanceur par défaut',
   AppLocale.isDefaultLauncher: 'NeoStation est votre lanceur par défaut',
   AppLocale.setAsDefaultLauncher: 'Définir NeoStation comme écran d’accueil',
@@ -189,7 +208,8 @@ const Map<String, dynamic> appLocaleFr = {
 
   AppLocale.configureDirectories: 'Configurer les Répertoires',
   AppLocale.configureLaunch: 'Configurer le lancement',
-  AppLocale.shortcutSetupOpenError: 'Impossible d’ouvrir la configuration du lancement.',
+  AppLocale.shortcutSetupOpenError:
+      'Impossible d’ouvrir la configuration du lancement.',
   AppLocale.configureRomsFolder: 'Configurer le Dossier des ROMs',
   AppLocale.cannotAccessFolder: 'Impossible d’accéder au dossier',
   AppLocale.backgroundImage: 'Image de Fond',
@@ -203,34 +223,29 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rescanAllFoldersSubtitle:
       'Rechercher manuellement de nouveaux systèmes et ROMs',
   AppLocale.organizeMultiDiscGames: 'Organiser les jeux multi-disques',
-  AppLocale.organizeMultiDiscGamesSubtitle:
-      'Crée automatiquement des fichiers .m3u pour les jeux multi-disques et les organise dans des dossiers',
+  AppLocale.organizeMultiDiscGamesSubtitle: 'Crée automatiquement des fichiers .m3u pour les jeux multi-disques et les organise dans des dossiers',
   AppLocale.organizeMultiDiscScanning:
       'Analyse des dossiers ROM à la recherche de jeux multi-disques...',
   AppLocale.organizeMultiDiscNoRomFoldersConfigured:
       'Aucun dossier ROM configuré.',
   AppLocale.organizeMultiDiscSkippedSuffix:
       ' ({count} chemin(s) de dossier ignoré(s))',
-  AppLocale.organizeMultiDiscDone:
-      'Terminé : {groups} lot(s) organisé(s), {files} fichier(s) déplacé(s), {playlists} playlist(s) créée(s){skipped}.',
+  AppLocale.organizeMultiDiscDone: 'Terminé : {groups} lot(s) organisé(s), {files} fichier(s) déplacé(s), {playlists} playlist(s) créée(s){skipped}.',
   AppLocale.organizeMultiDiscNoSetsFound:
       'Aucun lot multi-disques à organiser{skipped}.',
   AppLocale.organizeMultiDiscFailed:
       'Échec de l’organisation des jeux multi-disques : {error}',
-  AppLocale.organizeMultiDiscWarning:
-      'Cette opération déplacera les ROM correspondantes dans de nouveaux dossiers de jeux et créera des listes .m3u sur votre stockage. Elle ne peut pas être annulée automatiquement.',
+  AppLocale.organizeMultiDiscWarning: 'Cette opération déplacera les ROM correspondantes dans de nouveaux dossiers de jeux et créera des listes .m3u sur votre stockage. Elle ne peut pas être annulée automatiquement.',
   AppLocale.cleanOrphanedMetadata: 'Nettoyer les métadonnées orphelines',
   AppLocale.cleanOrphanedMetadataSubtitle:
       'Supprime les métadonnées et les médias laissés par les ROMs supprimés',
-  AppLocale.cleanOrphanedMetadataWarning:
-      'Cela supprime définitivement les lignes de métadonnées et les fichiers média des ROMs qui ne sont plus dans votre bibliothèque. Les entrées importées depuis ES-DE ne seront pas supprimées.',
+  AppLocale.cleanOrphanedMetadataWarning: 'Cela supprime définitivement les lignes de métadonnées et les fichiers média des ROMs qui ne sont plus dans votre bibliothèque. Les entrées importées depuis ES-DE ne seront pas supprimées.',
   AppLocale.cleanOrphanedMetadataScanning:
       'Nettoyage des métadonnées orphelines...',
   AppLocale.cleanOrphanedMetadataCleaningItem: 'Nettoyage de {filename}...',
   AppLocale.cleanOrphanedMetadataNothingFound:
       'Aucune métadonnée orpheline trouvée.',
-  AppLocale.cleanOrphanedMetadataDone:
-      'Nettoyé {entries} entrée(s) de métadonnées et {files} fichier(s) multimédia.',
+  AppLocale.cleanOrphanedMetadataDone: 'Nettoyé {entries} entrée(s) de métadonnées et {files} fichier(s) multimédia.',
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
       ' {count} entrée(s) importée(s) depuis ES-DE ont été laissées intactes.',
   AppLocale.cleanOrphanedMetadataFailed:
@@ -320,8 +335,7 @@ const Map<String, dynamic> appLocaleFr = {
       'E-mail non vérifié. Veuillez vérifier votre boîte de réception.',
   AppLocale.registrationSuccessCheckEmail:
       'Inscription réussie ! Vérifiez votre e-mail pour activer le compte.',
-  AppLocale.passwordResetSuccess:
-      'Mot de passe réinitialisé avec succès ! Connectez-vous avec votre nouveau mot de passe.',
+  AppLocale.passwordResetSuccess: 'Mot de passe réinitialisé avec succès ! Connectez-vous avec votre nouveau mot de passe.',
   AppLocale.pleaseEnterTokenAndPassword:
       'Entrez le jeton et le nouveau mot de passe',
   AppLocale.enterTokenFromEmailShort: 'Entrez le jeton de l’e-mail',
@@ -336,8 +350,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.atLeast8Characters: 'Au moins 8 caractères',
 
   AppLocale.storageQuotaExceeded: 'Quota de Stockage Dépassé',
-  AppLocale.storageQuotaDesc:
-      'Votre stockage est plein. Liberez de l’espace pour continuer à synchroniser vos sauvegardes cloud.',
+  AppLocale.storageQuotaDesc: 'Votre stockage est plein. Liberez de l’espace pour continuer à synchroniser vos sauvegardes cloud.',
   AppLocale.currentStorageUsage: 'Utilisation actuelle du stockage :',
   AppLocale.recommendedSolutions: 'Solutions recommandées :',
   AppLocale.upgradePlan: 'Mettre à niveau le Plan',
@@ -358,8 +371,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.neoSyncDescription:
       'NeoSync est le partenaire cloud unifié de votre NeoStation.',
   AppLocale.crossPlatform: 'Multiplateforme',
-  AppLocale.crossPlatformDesc:
-      'Continuez là où vous vous étiez arrêté sur n’importe quel appareil NeoStation.',
+  AppLocale.crossPlatformDesc: 'Continuez là où vous vous étiez arrêté sur n’importe quel appareil NeoStation.',
   AppLocale.securePrivate: 'Sécurisé et Privé',
   AppLocale.securePrivateDesc:
       'Vos données sont cryptées et accessibles uniquement par vous.',
@@ -380,8 +392,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.endSubscription: 'Terminer l’Abonnement',
   AppLocale.backWithB: 'Retour (B)',
   AppLocale.cancelSubscription: 'Annuler l’Abonnement',
-  AppLocale.cancelSubscriptionConfirm:
-      'Êtes-vous sûr de vouloir annuler ? Vous garderez l’accès jusqu’à la fin de la période.',
+  AppLocale.cancelSubscriptionConfirm: 'Êtes-vous sûr de vouloir annuler ? Vous garderez l’accès jusqu’à la fin de la période.',
   AppLocale.keepSubscription: 'Garder l’Abonnement',
   AppLocale.deleteCloudSave: 'Supprimer la Sauvegarde Cloud',
   AppLocale.deleteCloudSaveConfirm:
@@ -424,8 +435,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.region: 'Région',
   AppLocale.regionSub: 'Définir la priorité de région pour le scraping',
   AppLocale.regionPriority: 'Priorité de Région',
-  AppLocale.regionPrioritySub:
-      'Les régions prioritaires sont préférées pour les noms, dates et médias. Appuyez sur A pour saisir, Haut/Bas pour déplacer, B pour déposer.',
+  AppLocale.regionPrioritySub: 'Les régions prioritaires sont préférées pour les noms, dates et médias. Appuyez sur A pour saisir, Haut/Bas pour déplacer, B pour déposer.',
   AppLocale.regionUpdated: 'Priorité de région mise à jour',
   AppLocale.regionError:
       'Erreur lors de la mise à jour de la priorité de région',
@@ -555,10 +565,8 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.noEmulator: 'Émulateur non configuré',
   AppLocale.incompleteMetadata: 'Métadonnées incomplètes',
   AppLocale.noDescription: 'Aucune description disponible.',
-  AppLocale.scrapeToDownload:
-      'Ce jeu n’a pas encore de métadonnées. Scrapez pour télécharger description, genre, couvertures et vidéos.',
-  AppLocale.loginToScrape:
-      'Connectez-vous à ScreenScraper dans les paramètres pour activer les téléchargements.',
+  AppLocale.scrapeToDownload: 'Ce jeu n’a pas encore de métadonnées. Scrapez pour télécharger description, genre, couvertures et vidéos.',
+  AppLocale.loginToScrape: 'Connectez-vous à ScreenScraper dans les paramètres pour activer les téléchargements.',
   AppLocale.noAchievementsFound: 'Aucun succès trouvé pour ce jeu.',
   AppLocale.scrapingGameData: 'Recherche des données du jeu...',
   AppLocale.addFav: 'Favoris',
@@ -568,22 +576,27 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.gameInfo: 'Info du Jeu',
   AppLocale.manage: 'Gérer',
   AppLocale.manual: 'Notice',
-  AppLocale.scrapeManualDesc: 'Télécharger les notices de jeu en PDF lorsqu’elles sont disponibles.',
+  AppLocale.scrapeManualDesc:
+      'Télécharger les notices de jeu en PDF lorsqu’elles sont disponibles.',
   AppLocale.manualReady: 'Notice téléchargée',
   AppLocale.manualNotDownloaded: 'Aucune notice téléchargée',
   AppLocale.manualDownloadHint: 'Téléchargez la notice du jeu depuis ScreenScraper lorsqu’elle est disponible.',
   AppLocale.downloadManual: 'Télécharger la notice',
   AppLocale.downloadManualDesc: 'Télécharger le meilleur PDF disponible pour votre langue et votre région.',
   AppLocale.readManual: 'Lire la notice',
-  AppLocale.readManualDesc: 'Ouvrir le PDF enregistré dans le lecteur intégré de NeoStation.',
+  AppLocale.readManualDesc:
+      'Ouvrir le PDF enregistré dans le lecteur intégré de NeoStation.',
   AppLocale.redownloadManual: 'Retélécharger la notice',
-  AppLocale.redownloadManualDesc: 'Remplacer la copie locale par la meilleure version disponible.',
+  AppLocale.redownloadManualDesc:
+      'Remplacer la copie locale par la meilleure version disponible.',
   AppLocale.deleteManual: 'Supprimer la notice',
   AppLocale.deleteManualDesc: 'Supprimer le PDF enregistré de cet appareil.',
-  AppLocale.deleteManualConfirmation: 'Supprimer la notice téléchargée pour ce jeu ?',
+  AppLocale.deleteManualConfirmation:
+      'Supprimer la notice téléchargée pour ce jeu ?',
   AppLocale.manualDownloaded: 'Notice téléchargée',
   AppLocale.manualDownloadFailed: 'Échec du téléchargement de la notice',
-  AppLocale.manualNotAvailable: 'Aucune notice n’est disponible pour ce jeu sur ScreenScraper.',
+  AppLocale.manualNotAvailable:
+      'Aucune notice n’est disponible pour ce jeu sur ScreenScraper.',
   AppLocale.manualDeleted: 'Notice supprimée',
   AppLocale.downloadingManual: 'Téléchargement de la notice...',
   AppLocale.pinchToZoom: 'Pincez pour zoomer',
@@ -614,8 +627,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.progress: 'Progression',
   AppLocale.raLogin: 'Connexion RetroAchievements',
   AppLocale.raWhatIs: 'Qu’est-ce que RetroAchievements ?',
-  AppLocale.raDescription:
-      'RetroAchievements est une communauté qui propose des succès pour les jeux classiques via l’émulation.',
+  AppLocale.raDescription: 'RetroAchievements est une communauté qui propose des succès pour les jeux classiques via l’émulation.',
   AppLocale.raEarnPoints: 'Gagnez des points Hardcore et affichez-les',
   AppLocale.raGlobalLeaderboards: 'Classements et scores mondiaux',
   AppLocale.raGameplayHistory: 'Historique de jeu et progression détaillés',
@@ -653,8 +665,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.invalidCredentials: 'Les identifiants fournis sont invalides',
   AppLocale.loginError: 'Erreur de connexion : {error}',
   AppLocale.whatIsScreenScraper: 'Qu’est-ce que ScreenScraper ?',
-  AppLocale.screenScraperDescription:
-      'ScreenScraper est une base de données collaborative qui fournit des métadonnées, couvertures et vidéos de haute qualité pour vos jeux.',
+  AppLocale.screenScraperDescription: 'ScreenScraper est une base de données collaborative qui fournit des métadonnées, couvertures et vidéos de haute qualité pour vos jeux.',
   AppLocale.automaticMetadataMedia: 'Métadonnées et médias automatiques',
   AppLocale.massiveDatabase: 'Énorme base de données communautaire',
   AppLocale.requiresFreeAccount: 'Nécessite un compte gratuit',
@@ -668,16 +679,13 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.welcomeNeoStation: 'Bienvenue sur NeoStation !',
   AppLocale.letsGetSetup: 'Faisons votre configuration',
   AppLocale.storagePermission: 'Autorisation de Stockage',
-  AppLocale.storagePermissionDesc:
-      'NeoStation a besoin de "l’Accès à Tous les Fichiers" pour gérer vos configurations RetroArch et synchroniser vos sauvegardes correctement.\n\nVeuillez accorder cette autorisation sur l’écran suivant.',
+  AppLocale.storagePermissionDesc: 'NeoStation a besoin de "l’Accès à Tous les Fichiers" pour gérer vos configurations RetroArch et synchroniser vos sauvegardes correctement.\n\nVeuillez accorder cette autorisation sur l’écran suivant.',
   AppLocale.screenReturnAccess: 'Screen Return Access',
-  AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessDesc: 'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
   AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'Sélectionner le Dossier des ROMs',
   AppLocale.romFolderSelected: 'Dossier des ROMs sélectionné !',
-  AppLocale.chooseRomFolderDesc:
-      'Choisissez le dossier où vos fichiers ROM sont stockés. NeoStation analysera ce dossier pour trouver des jeux.',
+  AppLocale.chooseRomFolderDesc: 'Choisissez le dossier où vos fichiers ROM sont stockés. NeoStation analysera ce dossier pour trouver des jeux.',
   AppLocale.setupComplete: 'Configuration terminée !',
   AppLocale.scanningRoms: 'Analyse des ROMs',
   AppLocale.foundSystemsWithGames: '{count} systèmes avec des jeux trouvés !',
@@ -689,8 +697,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.next: 'Suivant',
   AppLocale.romsFolderTitle: 'Dossier des ROMs',
   AppLocale.romFolderUpdated: 'Dossier des ROMs mis à jour, analyse terminée',
-  AppLocale.ensureValidFolderDesc:
-      'Assurez-vous que : 1. Le dossier des ROMs existe ; 2. Vous avez sélectionné un dossier valide.',
+  AppLocale.ensureValidFolderDesc: 'Assurez-vous que : 1. Le dossier des ROMs existe ; 2. Vous avez sélectionné un dossier valide.',
   AppLocale.scanningComplete: 'Analyse terminée',
   AppLocale.applyingInitialConfig:
       'Application de la configuration initiale...',
@@ -706,8 +713,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.allSystems: 'Tous les Systèmes',
   AppLocale.noSystemsFound: 'Aucun système trouvé',
   AppLocale.setupLibrary: 'Configurez votre Bibliothèque',
-  AppLocale.chooseRomFolderOrganize:
-      'Sélectionnez votre dossier de ROMs pour détecter les systèmes et organiser votre collection automatiquement.',
+  AppLocale.chooseRomFolderOrganize: 'Sélectionnez votre dossier de ROMs pour détecter les systèmes et organiser votre collection automatiquement.',
   AppLocale.scanningButton: 'Analyse...',
   AppLocale.changeFolder: 'Modifier le Dossier',
   AppLocale.selectRomFolderButton: 'Sélectionner le Dossier des ROMs',
@@ -720,8 +726,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.step1Desc:
       'Choisissez le dossier principal contenant votre collection.',
   AppLocale.step2AutoDetection: '2. Détection Automatique',
-  AppLocale.step2Desc:
-      'L’app recherchera les systèmes supportés comme "snes", "psx", "gba", etc.',
+  AppLocale.step2Desc: 'L’app recherchera les systèmes supportés comme "snes", "psx", "gba", etc.',
   AppLocale.step3CountGames: '3. Comptez vos Jeux',
   AppLocale.step3Desc:
       'Chaque dossier de système sera analysé pour compter vos fichiers ROM.',
@@ -743,10 +748,8 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.settingUpLibrary: 'Configuration de votre bibliothèque',
   AppLocale.detectingSystems: 'Détection et configuration des systèmes...',
   AppLocale.noSystemsFoundTitle: 'Aucun système trouvé',
-  AppLocale.noSystemsFoundDesc:
-      'Aucun système supporté n’a été trouvé. Vérifiez l’organisation des fichiers.',
-  AppLocale.selectRomFolderDescShort:
-      'Sélectionnez un dossier de ROMs pour démarrer l’analyse de la bibliothèque.',
+  AppLocale.noSystemsFoundDesc: 'Aucun système supporté n’a été trouvé. Vérifiez l’organisation des fichiers.',
+  AppLocale.selectRomFolderDescShort: 'Sélectionnez un dossier de ROMs pour démarrer l’analyse de la bibliothèque.',
   AppLocale.systemSettingsNotAvailable: 'Paramètres système indisponibles',
   AppLocale.systemSettings: 'Paramètres du Système',
   AppLocale.systemInfo: 'Infos Système',
@@ -812,16 +815,14 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.launchGameFailed: 'Échec du lancement du jeu',
   AppLocale.launchError: 'Erreur de Lancement',
   AppLocale.unableToLaunch: 'Impossible de lancer "{name}"',
-  AppLocale.unexpectedLaunchError:
-      'Une erreur inattendue est survenue lors de la tentative de lancement de "{name}"',
+  AppLocale.unexpectedLaunchError: 'Une erreur inattendue est survenue lors de la tentative de lancement de "{name}"',
   AppLocale.technicalDetails: 'Détails Techniques :',
   AppLocale.tryAgainGameConfig: 'Réessayez ou vérifiez la configuration.',
   AppLocale.unknownError: 'Erreur inconnue',
   AppLocale.loadingGames: 'Chargement des jeux',
   AppLocale.preparingLibrary: 'Préparation de votre bibliothèque...',
   AppLocale.noGamesFoundFor: 'Aucun jeu trouvé pour {name}',
-  AppLocale.checkRomFiles:
-      'Vérifiez si les fichiers sont dans le bon dossier et au format supporté.',
+  AppLocale.checkRomFiles: 'Vérifiez si les fichiers sont dans le bon dossier et au format supporté.',
   AppLocale.failedToSaveSetting:
       'Échec de l’enregistrement de la configuration',
   AppLocale.scanningSystemOf: 'Analyse du système {current} sur {total}',
@@ -895,35 +896,29 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.scrapeGameNotFound: 'Jeu non trouvé sur ScreenScraper.',
   AppLocale.scrapeFailedSaveMetadata:
       'Échec de l’enregistrement des métadonnées du jeu.',
-  AppLocale.scrapeMediaDownloadsFailed:
-      'Métadonnées enregistrées, mais échec du téléchargement de certains médias.',
+  AppLocale.scrapeMediaDownloadsFailed: 'Métadonnées enregistrées, mais échec du téléchargement de certains médias.',
   AppLocale.scrapeUnexpectedError:
       'Une erreur inattendue est survenue pendant le scraping.',
   AppLocale.scrapeSuccessful: 'Scraping réalisé avec succès !',
   AppLocale.scrapeErrorGame: 'Erreur lors de la recherche des données du jeu.',
 
   AppLocale.userDataLocation: 'Emplacement des données',
-  AppLocale.userDataLocationSubtitle:
-      'Choisissez où sont stockés les médias, les packs System Art et données de l\'application',
+  AppLocale.userDataLocationSubtitle: 'Choisissez où sont stockés les médias, les packs System Art et données de l\'application',
   AppLocale.userDataLocationDefault: 'Emplacement par défaut',
   AppLocale.selectUserDataFolder: 'Sélectionner le dossier de données',
   AppLocale.folderNotEmptyTitle: 'Dossier non vide',
-  AppLocale.folderNotEmptyBody:
-      'Ce dossier contient déjà {count} élément(s). NeoStation y stockera ses propres données, aux côtés du contenu existant.',
+  AppLocale.folderNotEmptyBody: 'Ce dossier contient déjà {count} élément(s). NeoStation y stockera ses propres données, aux côtés du contenu existant.',
   AppLocale.folderNotEmptyUseAnyway: 'Utiliser quand même',
   AppLocale.moveUserDataTitle: 'Déplacer les données ?',
-  AppLocale.moveUserDataBody:
-      'NeoStation déplacera ses propres données (base de données, médias récupérés et paramètres) du dossier actuel vers le nouveau. Les fichiers non créés par NeoStation restent intacts.',
-  AppLocale.moveUserDataDestNotEmpty:
-      'Le nouveau dossier contient déjà {count} élément(s). Les données de NeoStation seront ajoutées à côté.',
+  AppLocale.moveUserDataBody: 'NeoStation déplacera ses propres données (base de données, médias récupérés et paramètres) du dossier actuel vers le nouveau. Les fichiers non créés par NeoStation restent intacts.',
+  AppLocale.moveUserDataDestNotEmpty: 'Le nouveau dossier contient déjà {count} élément(s). Les données de NeoStation seront ajoutées à côté.',
   AppLocale.moveUserDataConfirm: 'Déplacer',
   AppLocale.migratingUserData: 'Déplacement des données',
   AppLocale.migratingUserDataComplete: 'Migration terminée',
   AppLocale.migratingUserDataError: 'Échec de la migration',
   AppLocale.migratingFiles: 'Copie de {current} sur {total} fichiers...',
   AppLocale.restartRequired: 'Redémarrage requis',
-  AppLocale.restartRequiredBody:
-      'NeoStation va se fermer. Veuillez le rouvrir pour utiliser le nouvel emplacement.',
+  AppLocale.restartRequiredBody: 'NeoStation va se fermer. Veuillez le rouvrir pour utiliser le nouvel emplacement.',
   AppLocale.userDataLocationUpdated: 'Emplacement des données mis à jour',
   AppLocale.resetToDefault: 'Rétablir par défaut',
   AppLocale.romDirectories: 'Répertoires ROM',
@@ -947,20 +942,16 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.filterYear: 'Année',
   AppLocale.filterAny: 'Tous',
   AppLocale.resetPlayTimeConfirm: 'Réinitialiser le temps de jeu',
-  AppLocale.resetPlayTimeConfirmBody:
-      'Cela réinitialisera définitivement à zéro le temps de jeu enregistré pour ce jeu. Cette action est irréversible.',
-  AppLocale.removeRomFolderConfirmBody:
-      'Cela supprimera ce dossier de ROM des sources de votre bibliothèque. Vos fichiers sur le disque ne sont pas supprimés.',
+  AppLocale.resetPlayTimeConfirmBody: 'Cela réinitialisera définitivement à zéro le temps de jeu enregistré pour ce jeu. Cette action est irréversible.',
+  AppLocale.removeRomFolderConfirmBody: 'Cela supprimera ce dossier de ROM des sources de votre bibliothèque. Vos fichiers sur le disque ne sont pas supprimés.',
   AppLocale.disconnectRaConfirm: 'Déconnecter RetroAchievements',
-  AppLocale.disconnectRaConfirmBody:
-      'Cela vous déconnectera et supprimera vos identifiants RetroAchievements enregistrés de cet appareil.',
+  AppLocale.disconnectRaConfirmBody: 'Cela vous déconnectera et supprimera vos identifiants RetroAchievements enregistrés de cet appareil.',
   AppLocale.neoSyncLogoutConfirmBody:
       'Cela vous déconnectera de votre compte NeoSync sur cet appareil.',
 
   AppLocale.deleteGame: 'Supprimer le jeu',
   AppLocale.deleteGameConfirm: 'Supprimer définitivement',
-  AppLocale.deleteGameConfirmBody:
-      'Le fichier ROM, les données et médias scrapés seront définitivement supprimés. Cette action est irréversible.',
+  AppLocale.deleteGameConfirmBody: 'Le fichier ROM, les données et médias scrapés seront définitivement supprimés. Cette action est irréversible.',
   AppLocale.deleteGameSubtitle:
       'Supprime définitivement le fichier ROM du disque',
 
@@ -989,13 +980,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.raOlderCommentsAvailable:
       'D\'anciens commentaires sont disponibles.',
   AppLocale.raLoadMore: 'CHARGER PLUS',
-  AppLocale.raRateLimited:
-      'RetroAchievements est occupé pour le moment. Veuillez patienter un instant et réessayer.',
+  AppLocale.raRateLimited: 'RetroAchievements est occupé pour le moment. Veuillez patienter un instant et réessayer.',
   AppLocale.raApiKey: 'Clé API',
   AppLocale.raEnterApiKey: 'Entrez votre clé API',
   AppLocale.raGetApiKey: 'Obtenir la clé API',
-  AppLocale.raApiKeyHelp:
-      'Ouvrez votre panneau de contrôle RetroAchievements pour copier votre clé API Web personnelle.',
+  AppLocale.raApiKeyHelp: 'Ouvrez votre panneau de contrôle RetroAchievements pour copier votre clé API Web personnelle.',
   AppLocale.raNoRecentUnlocks:
       'Aucun déblocage récent au cours des 30 derniers jours',
   AppLocale.raRecentlyPlayedTitle: 'Joués Récemment',
@@ -1017,8 +1006,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
-  AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeResetConfirmBody: 'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1059,11 +1047,14 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.iosEmuChangeFolder: "Changer de dossier",
   AppLocale.iosEmuLinkingFailed: "Échec de la liaison : {error}",
   AppLocale.iosRetroarchSyncRequested: "Synchronisation de la bibliothèque RetroArch demandée. Elle s’effectue en arrière-plan ; patientez quelques secondes.",
-  AppLocale.iosRetroarchUnavailable: "Impossible de joindre RetroArch. Est-il installé ?",
+  AppLocale.iosRetroarchUnavailable:
+      "Impossible de joindre RetroArch. Est-il installé ?",
   AppLocale.iosArmsx2SyncRequested: "Synchronisation de la bibliothèque ARMSX2 demandée. ARMSX2 reviendra automatiquement dans NeoStation lorsque l’export sera prêt.",
-  AppLocale.iosArmsx2Unavailable: "Impossible de joindre ARMSX2. Est-il installé ?",
+  AppLocale.iosArmsx2Unavailable:
+      "Impossible de joindre ARMSX2. Est-il installé ?",
   AppLocale.iosMelonxSyncRequested: "Synchronisation de la bibliothèque Nintendo Switch de MeloNX demandée. MeloNX reviendra automatiquement dans NeoStation lorsque l’export sera prêt.",
-  AppLocale.iosMelonxUnavailable: "Impossible de joindre MeloNX. Est-il installé ?",
+  AppLocale.iosMelonxUnavailable:
+      "Impossible de joindre MeloNX. Est-il installé ?",
   AppLocale.iosRetroarchStatusNeedsLink: "Liez le dossier de RetroArch afin que NeoStation accède directement à vos jeux, sans copie.",
   AppLocale.iosRetroarchStatusNeedsSync: "Dossier lié. Synchronisez la bibliothèque pour lancer les jeux directement dans RetroArch en un appui.",
   AppLocale.iosRetroarchStatusSynced: "Dossier lié et bibliothèque synchronisée — les jeux se lancent directement dans RetroArch.",
@@ -1084,11 +1075,15 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.systemTechnicalDetails: 'Détails techniques',
   AppLocale.systemGamesDetected: 'Jeux détectés',
   AppLocale.systemInfoDetailedIntro: '{name} est un système de type {type}, commercialisé par {manufacturer} en {year}.',
-  AppLocale.systemInfoDetailedIntroNoManufacturer: '{name} est un système de type {type}, apparu en {year}.',
-  AppLocale.systemInfoArchitectureSentence: 'Son architecture matérielle est de type {architecture}.',
-  AppLocale.systemInfoGenerationSentence: 'Il appartient à la génération {generation}.',
+  AppLocale.systemInfoDetailedIntroNoManufacturer:
+      '{name} est un système de type {type}, apparu en {year}.',
+  AppLocale.systemInfoArchitectureSentence:
+      'Son architecture matérielle est de type {architecture}.',
+  AppLocale.systemInfoGenerationSentence:
+      'Il appartient à la génération {generation}.',
   AppLocale.systemInfoProcessorSentence: 'Son processeur principal est {cpu}.',
-  AppLocale.systemInfoMediaSentence: 'Les jeux et logiciels étaient principalement distribués sur {media}.',
+  AppLocale.systemInfoMediaSentence:
+      'Les jeux et logiciels étaient principalement distribués sur {media}.',
   AppLocale.systemInfoCollectionRomHacks: 'Cette entrée regroupe les ROM hacks et variantes créées par la communauté pour le système d’origine.',
   AppLocale.systemInfoCollectionAllSystems: 'Cette collection virtuelle réunit les jeux de tous les systèmes détectés.',
   AppLocale.systemInfoCollectionFavorites: 'Cette collection virtuelle contient les jeux marqués comme favoris par l’utilisateur.',

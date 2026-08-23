@@ -66,7 +66,38 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       return paths;
     }
 
-    // 2. Placeholder {NETHERSX2_MEMCARDS} (AetherSX2/NetherSX2 memcards)
+    // 2. iOS ARMSX2 NeoSync root. This never falls back to Android paths.
+    if (pathStr == '{ARMSX2_IOS_SAVES}' && Platform.isIOS) {
+      final root = ConfigService.linkedArmsx2SaveFolderPath;
+      if (root != null && root.isNotEmpty) {
+        if (!ensureExists || Directory(root).existsSync()) return [root];
+      }
+      return [];
+    }
+
+    // RPCS3 iOS native PS3 save-data roots. Reuse the existing security-
+    // scoped bookmark for RPCS3 > Data; no second folder picker is required.
+    if (pathStr == '{RPCS3_IOS_SAVEDATA}' && Platform.isIOS) {
+      final dataRoot = Rpcs3LibraryService.linkedDataPath;
+      if (dataRoot == null || dataRoot.isEmpty) return [];
+      final home = Directory(path.join(dataRoot, 'dev_hdd0', 'home'));
+      if (!home.existsSync()) return [];
+      final paths = <String>[];
+      try {
+        for (final userDir
+            in home.listSync(followLinks: false).whereType<Directory>()) {
+          final savedata = path.join(userDir.path, 'savedata');
+          if (Directory(savedata).existsSync()) paths.add(savedata);
+        }
+      } catch (e) {
+        NeoSyncProvider._log.w(
+          'Could not enumerate RPCS3 savedata profiles: $e',
+        );
+      }
+      return paths;
+    }
+
+    // 3. Placeholder {NETHERSX2_MEMCARDS} (AetherSX2/NetherSX2 memcards)
     if (pathStr == '{NETHERSX2_MEMCARDS}' && Platform.isAndroid) {
       final possiblePaths = [
         '/storage/emulated/0/Android/data/xyz.aethersx2.android/files/memcards',
@@ -195,6 +226,397 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     }
 
     return [];
+  }
+
+  ({String cloudPath, String gameName, bool isState, String category})?
+  _resolveArmsx2FileForCloud(File file, String root) {
+    const categories = <String>['memcards', 'savestates', 'sstates'];
+    final relative = path.relative(file.path, from: root).replaceAll('\\', '/');
+    if (relative == '..' || relative.startsWith('../')) return null;
+
+    final rootName = path.basename(root).toLowerCase();
+    final segments = relative
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (segments.isEmpty) return null;
+
+    late final String category;
+    late final String internalPath;
+    if (categories.contains(rootName)) {
+      category = rootName;
+      internalPath = segments.join('/');
+    } else {
+      final candidate = segments.first.toLowerCase();
+      if (!categories.contains(candidate) || segments.length < 2) return null;
+      category = candidate;
+      internalPath = segments.sublist(1).join('/');
+    }
+
+    final isState = category != 'memcards';
+    final gameName = isState ? 'ARMSX2 Save States' : 'ARMSX2 Memory Cards';
+    final isMemoryCardContainer =
+        category == 'memcards' && internalPath.toLowerCase().endsWith('.ps2');
+    final cloudInternalPath = isMemoryCardContainer
+        ? '$category/$internalPath.neosync.gz'
+        : '$category/$internalPath';
+    final cloudPath = CloudPathBuilder.build(
+      system: 'ps2',
+      emulatorSlug: 'armsx2',
+      scope: 'shared',
+      filePath: cloudInternalPath,
+      isState: isState,
+    );
+    return (
+      cloudPath: cloudPath,
+      gameName: gameName,
+      isState: isState,
+      category: category,
+    );
+  }
+
+  String? _resolveArmsx2CloudFileToLocal(String root, String cloudFilePath) {
+    const categories = <String>['memcards', 'savestates', 'sstates'];
+    var localCloudPath = cloudFilePath;
+    if (localCloudPath.toLowerCase().endsWith('.neosync.gz')) {
+      localCloudPath = localCloudPath.substring(
+        0,
+        localCloudPath.length - '.neosync.gz'.length,
+      );
+    }
+    final segments = localCloudPath
+        .replaceAll('\\', '/')
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (segments.isEmpty) return null;
+
+    final rootName = path.basename(root).toLowerCase();
+    final category = segments.first.toLowerCase();
+    if (!categories.contains(category)) {
+      // Compatibility with the first iOS preview which stored paths relative
+      // to the chosen folder without a category prefix.
+      return path.join(root, localCloudPath);
+    }
+
+    final internalPath = segments.length > 1
+        ? segments.sublist(1).join(Platform.pathSeparator)
+        : '';
+    if (internalPath.isEmpty) return null;
+
+    if (categories.contains(rootName)) {
+      if (rootName != category) return null;
+      return path.join(root, internalPath);
+    }
+    return path.join(root, category, internalPath);
+  }
+
+  ({String profileId, String saveDirectory, String internalPath})?
+  _parseRpcs3SaveLocation(File file, String dataRoot) {
+    final relative = path
+        .relative(file.path, from: dataRoot)
+        .replaceAll('\\', '/');
+    if (relative == '..' || relative.startsWith('../')) return null;
+    final segments = relative
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (segments.length < 6 ||
+        segments[0].toLowerCase() != 'dev_hdd0' ||
+        segments[1].toLowerCase() != 'home' ||
+        segments[3].toLowerCase() != 'savedata') {
+      return null;
+    }
+    if (segments.any((part) => part == '.' || part == '..')) return null;
+    return (
+      profileId: segments[2],
+      saveDirectory: segments[4],
+      internalPath: segments.sublist(5).join('/'),
+    );
+  }
+
+  String? _rpcs3TitleIdFromSaveDirectory(String value) {
+    final match = RegExp(r'^([A-Za-z]{4}[0-9]{5})').firstMatch(value.trim());
+    return match?.group(1)?.toUpperCase();
+  }
+
+  Future<({String cloudPath, String gameName, String titleId})?>
+  _resolveRpcs3FileForCloud(
+    File file,
+    String dataRoot, {
+    GameModel? preferredGame,
+  }) async {
+    final location = _parseRpcs3SaveLocation(file, dataRoot);
+    if (location == null) return null;
+
+    var saveTitleId = _rpcs3TitleIdFromSaveDirectory(location.saveDirectory);
+    String? sfoTitle;
+    final sfo = File(
+      path.join(
+        dataRoot,
+        'dev_hdd0',
+        'home',
+        location.profileId,
+        'savedata',
+        location.saveDirectory,
+        'PARAM.SFO',
+      ),
+    );
+    if (sfo.existsSync()) {
+      try {
+        // ignore: invalid_use_of_visible_for_testing_member
+        final values = Rpcs3LibraryService.parseParamSfoBytes(
+          await sfo.readAsBytes(),
+        );
+        final sfoId = values['TITLE_ID']?.toString().trim() ?? '';
+        if ((saveTitleId == null || saveTitleId.isEmpty) && sfoId.isNotEmpty) {
+          saveTitleId = sfoId.toUpperCase();
+        }
+        sfoTitle = values['TITLE']?.toString().trim();
+      } catch (e) {
+        NeoSyncProvider._log.w('Could not parse RPCS3 save PARAM.SFO: $e');
+      }
+    }
+
+    String? preferredTitleId = preferredGame?.titleId?.trim().toUpperCase();
+    if (preferredGame != null &&
+        (preferredTitleId == null || preferredTitleId.isEmpty)) {
+      final dbId = await GameRepository.getTitleIdForGame(
+        preferredGame.romname,
+        preferredGame.name,
+      );
+      preferredTitleId = dbId?.trim().toUpperCase();
+      preferredTitleId ??= _rpcs3TitleIdFromSaveDirectory(
+        preferredGame.romname,
+      );
+    }
+
+    if (preferredGame != null &&
+        preferredTitleId != null &&
+        preferredTitleId.isNotEmpty &&
+        saveTitleId != null &&
+        saveTitleId.isNotEmpty &&
+        preferredTitleId != saveTitleId) {
+      return null;
+    }
+
+    final cached = Rpcs3LibraryService.cachedGameForTitleId(saveTitleId);
+    var canonicalName = cached?.title.trim() ?? '';
+    if (canonicalName.isEmpty) {
+      canonicalName = sfoTitle ?? '';
+    }
+    if (canonicalName.isEmpty) {
+      canonicalName = saveTitleId ?? location.saveDirectory;
+    }
+
+    if (preferredGame != null &&
+        (preferredTitleId == null || preferredTitleId.isEmpty)) {
+      final expected = <String>{
+        CloudPathBuilder.sanitizeGameName(preferredGame.name).toLowerCase(),
+        if (preferredGame.titleName != null &&
+            preferredGame.titleName!.trim().isNotEmpty)
+          CloudPathBuilder.sanitizeGameName(preferredGame.titleName!)
+              .toLowerCase(),
+      };
+      final actual = CloudPathBuilder.sanitizeGameName(canonicalName)
+          .toLowerCase();
+      if (!expected.contains(actual)) return null;
+    }
+
+    final gameName = preferredGame?.name.trim().isNotEmpty == true
+        ? preferredGame!.name.trim()
+        : canonicalName;
+    final cloudPath = CloudPathBuilder.build(
+      system: 'ps3',
+      emulatorSlug: 'rpcs3',
+      scope: 'game',
+      gameName: gameName,
+      filePath:
+          '${location.profileId}/${location.saveDirectory}/${location.internalPath}',
+      isState: false,
+    );
+    return (
+      cloudPath: cloudPath,
+      gameName: gameName,
+      titleId: saveTitleId ?? '',
+    );
+  }
+
+  String? _resolveRpcs3CloudFileToLocal(String dataRoot, String cloudFilePath) {
+    final segments = cloudFilePath
+        .replaceAll('\\', '/')
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (segments.length < 3 ||
+        segments.any((part) => part == '.' || part == '..')) {
+      return null;
+    }
+    final profileId = segments[0];
+    final saveDirectory = segments[1];
+    final internal = segments.sublist(2).join(Platform.pathSeparator);
+    return path.join(
+      dataRoot,
+      'dev_hdd0',
+      'home',
+      profileId,
+      'savedata',
+      saveDirectory,
+      internal,
+    );
+  }
+
+  bool _isMeloNXTitleId(String value) {
+    final normalized = value.trim();
+    return normalized.toLowerCase() != '0000000000000000' &&
+        RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(normalized);
+  }
+
+  /// Extracts the Switch Title ID from a MeloNX save path while preserving the
+  /// path *inside* that game's save directory. The Title ID is a local lookup
+  /// key only and is never used as the NeoSync-visible game name.
+  ({String titleId, String internalPath})? _parseMeloNXSaveLocation(
+    File file,
+    String root,
+  ) {
+    final relative = path.relative(file.path, from: root).replaceAll('\\', '/');
+    if (relative == '..' || relative.startsWith('../')) return null;
+
+    final segments = relative
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (segments.isEmpty) return null;
+
+    var titleIndex = -1;
+    final saveIndex = segments.indexWhere(
+      (part) => part.toLowerCase() == 'save',
+    );
+    if (saveIndex >= 0) {
+      for (var i = saveIndex + 1; i < segments.length; i++) {
+        if (_isMeloNXTitleId(segments[i])) {
+          titleIndex = i;
+          break;
+        }
+      }
+    }
+    if (titleIndex < 0) {
+      titleIndex = segments.indexWhere(_isMeloNXTitleId);
+    }
+    if (titleIndex < 0 || titleIndex + 1 >= segments.length) return null;
+
+    return (
+      titleId: segments[titleIndex],
+      internalPath: segments.sublist(titleIndex + 1).join('/'),
+    );
+  }
+
+  Future<String?> _meloNXTitleIdForGame(GameModel game) async {
+    var titleId = game.titleId?.trim();
+    if (titleId == null || titleId.isEmpty) {
+      titleId = await GameRepository.getTitleIdForGame(game.romname, game.name);
+    }
+    if (titleId == null || !_isMeloNXTitleId(titleId)) return null;
+    return titleId;
+  }
+
+  /// Builds the canonical NeoSync v2 path for a MeloNX file. The Title ID is
+  /// deliberately removed from the cloud path; NeoSync shows the game title.
+  Future<({String cloudPath, String gameName, String titleId})?>
+  _resolveMeloNXFileForCloud(
+    File file,
+    String root, {
+    GameModel? preferredGame,
+  }) async {
+    final location = _parseMeloNXSaveLocation(file, root);
+    if (location == null) return null;
+
+    String? gameName;
+    String? preferredTitleId;
+    if (preferredGame != null) {
+      preferredTitleId = await _meloNXTitleIdForGame(preferredGame);
+    }
+    if (preferredGame != null &&
+        preferredTitleId != null &&
+        preferredTitleId.toLowerCase() == location.titleId.toLowerCase()) {
+      gameName = preferredGame.name.trim();
+    }
+
+    if (gameName == null || gameName.isEmpty) {
+      final row = await GameRepository.findSwitchGameByTitleId(
+        location.titleId,
+      );
+      if (row == null) return null;
+      final title = row['title_name']?.toString().trim() ?? '';
+      final filename = row['filename']?.toString().trim() ?? '';
+      gameName = title.isNotEmpty
+          ? title
+          : path.basenameWithoutExtension(filename);
+    }
+    if (gameName.isEmpty) return null;
+
+    final cloudPath = CloudPathBuilder.build(
+      system: 'switch',
+      emulatorSlug: 'melonx',
+      scope: 'game',
+      gameName: gameName,
+      filePath: location.internalPath,
+      isState: false,
+    );
+    return (
+      cloudPath: cloudPath,
+      gameName: gameName,
+      titleId: location.titleId,
+    );
+  }
+
+  /// Finds the local MeloNX save directory for a game. Existing Title-ID
+  /// directories are preferred. If the game directory does not exist yet, use
+  /// the standard bis/user/save/... structure only when its user root already
+  /// exists, avoiding creation of guessed account directories.
+  String? _resolveMeloNXGameSaveDirectory(
+    String root,
+    String titleId, {
+    bool allowCreate = false,
+  }) {
+    final rootDir = Directory(root);
+    if (!rootDir.existsSync()) return null;
+
+    try {
+      for (final entity in rootDir.listSync(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is Directory &&
+            path.basename(entity.path).toLowerCase() == titleId.toLowerCase()) {
+          return entity.path;
+        }
+      }
+    } catch (e) {
+      NeoSyncProvider._log.w('Could not scan MeloNX save tree: $e');
+    }
+
+    if (!allowCreate) return null;
+
+    var bisRoot = root;
+    if (path.basename(root).toLowerCase() != 'bis') {
+      final nestedBis = path.join(root, 'bis');
+      if (Directory(nestedBis).existsSync()) bisRoot = nestedBis;
+    }
+
+    final saveBase = path.join(bisRoot, 'user', 'save', '0000000000000000');
+    final saveBaseDir = Directory(saveBase);
+    if (!saveBaseDir.existsSync()) return null;
+
+    try {
+      final userDirs = saveBaseDir
+          .listSync(followLinks: false)
+          .whereType<Directory>();
+      if (userDirs.isEmpty) return null;
+      return path.join(userDirs.first.path, titleId);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Resolves a local save file back to its library game.
@@ -356,12 +778,27 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       if (v2Path.emulatorSlug == 'armsx2') {
         final root = ConfigService.linkedArmsx2SaveFolderPath;
         if (root != null && root.isNotEmpty) {
-          return [path.join(root, v2Path.filePath)];
+          final local = _resolveArmsx2CloudFileToLocal(root, v2Path.filePath);
+          return local == null ? [] : [local];
+        }
+      } else if (v2Path.emulatorSlug == 'rpcs3') {
+        final root = Rpcs3LibraryService.linkedDataPath;
+        if (root != null && root.isNotEmpty) {
+          final local = _resolveRpcs3CloudFileToLocal(root, v2Path.filePath);
+          return local == null ? [] : [local];
         }
       } else if (v2Path.emulatorSlug == 'melonx') {
         final root = ConfigService.linkedMelonxSaveFolderPath;
         if (root != null && root.isNotEmpty) {
-          return [path.join(root, v2Path.filePath)];
+          final titleId = await _meloNXTitleIdForGame(game);
+          if (titleId == null) return [];
+          final gameSaveRoot = _resolveMeloNXGameSaveDirectory(
+            root,
+            titleId,
+            allowCreate: true,
+          );
+          if (gameSaveRoot == null) return [];
+          return [path.join(gameSaveRoot, v2Path.filePath)];
         }
       }
     }

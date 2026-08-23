@@ -37,17 +37,44 @@ extension NeoSyncUpload on NeoSyncProvider {
       }
 
       final customSaveFiles =
-          <({File file, String root, String system, String emulatorSlug})>[];
+          <
+            ({
+              File file,
+              String root,
+              String system,
+              String emulatorSlug,
+              bool isState,
+            })
+          >[];
       if (Platform.isIOS) {
         final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
         if (armsx2Root != null && Directory(armsx2Root).existsSync()) {
-          for (final file in await _getSaveFiles(armsx2Root)) {
-            customSaveFiles.add((
-              file: file,
-              root: armsx2Root,
-              system: 'ps2',
-              emulatorSlug: 'armsx2',
-            ));
+          const categories = <String>['memcards', 'savestates', 'sstates'];
+          final selectedName = path.basename(armsx2Root).toLowerCase();
+          final roots = <({String folder, String category})>[];
+
+          if (categories.contains(selectedName)) {
+            roots.add((folder: armsx2Root, category: selectedName));
+          } else {
+            for (final category in categories) {
+              final folder = path.join(armsx2Root, category);
+              if (Directory(folder).existsSync()) {
+                roots.add((folder: folder, category: category));
+              }
+            }
+          }
+
+          for (final rootInfo in roots) {
+            final isState = rootInfo.category != 'memcards';
+            for (final file in await _getSaveFiles(rootInfo.folder)) {
+              customSaveFiles.add((
+                file: file,
+                root: armsx2Root,
+                system: 'ps2',
+                emulatorSlug: 'armsx2',
+                isState: isState,
+              ));
+            }
           }
         }
         final melonxRoot = ConfigService.linkedMelonxSaveFolderPath;
@@ -58,7 +85,29 @@ extension NeoSyncUpload on NeoSyncProvider {
               root: melonxRoot,
               system: 'switch',
               emulatorSlug: 'melonx',
+              isState: false,
             ));
+          }
+        }
+
+        final rpcs3Root = Rpcs3LibraryService.linkedDataPath;
+        if (rpcs3Root != null && Directory(rpcs3Root).existsSync()) {
+          final home = Directory(path.join(rpcs3Root, 'dev_hdd0', 'home'));
+          if (home.existsSync()) {
+            for (final userDir
+                in home.listSync(followLinks: false).whereType<Directory>()) {
+              final savedata = Directory(path.join(userDir.path, 'savedata'));
+              if (!savedata.existsSync()) continue;
+              for (final file in await _getSaveFiles(savedata.path)) {
+                customSaveFiles.add((
+                  file: file,
+                  root: rpcs3Root,
+                  system: 'ps3',
+                  emulatorSlug: 'rpcs3',
+                  isState: false,
+                ));
+              }
+            }
           }
         }
       }
@@ -198,7 +247,7 @@ extension NeoSyncUpload on NeoSyncProvider {
         await _processAutoUploadFile(
           entry.file,
           entry.root,
-          isState: false,
+          isState: entry.isState,
           customSystem: entry.system,
           customEmulatorSlug: entry.emulatorSlug,
         );
@@ -282,6 +331,21 @@ extension NeoSyncUpload on NeoSyncProvider {
 
       if (isNandFile) {
         await _handleSwitchNandAutoUpload(file);
+        return;
+      }
+
+      if (customSystem == 'ps2' && customEmulatorSlug == 'armsx2') {
+        await _uploadArmsx2File(file, basePath);
+        return;
+      }
+
+      if (customSystem == 'switch' && customEmulatorSlug == 'melonx') {
+        await _uploadMeloNXFile(file, basePath);
+        return;
+      }
+
+      if (customSystem == 'ps3' && customEmulatorSlug == 'rpcs3') {
+        await _uploadRpcs3File(file, basePath);
         return;
       }
 
@@ -384,6 +448,180 @@ extension NeoSyncUpload on NeoSyncProvider {
         rethrow;
       }
     }
+  }
+
+  /// Uploads ARMSX2 memory cards and states from the three supported iOS
+  /// folders. The rest of the ARMSX2 root (BIOS, cache, covers, logs, etc.) is
+  /// deliberately excluded from NeoSync.
+  Future<bool> _uploadArmsx2File(
+    File file,
+    String root, {
+    GameModel? preferredGame,
+  }) async {
+    final resolved = _resolveArmsx2FileForCloud(file, root);
+    if (resolved == null) {
+      _skippedFiles++;
+      return false;
+    }
+
+    final preferredGameName = preferredGame?.name.trim();
+    final displayGameName =
+        preferredGameName != null && preferredGameName.isNotEmpty
+        ? '$preferredGameName — ${resolved.isState ? 'Save State' : 'Memory Card'}'
+        : resolved.gameName;
+
+    final isMemoryCard =
+        resolved.category == 'memcards' &&
+        file.path.toLowerCase().endsWith('.ps2');
+    File uploadFile = file;
+    Directory? tempDir;
+
+    try {
+      if (isMemoryCard) {
+        final rawBytes = await file.readAsBytes();
+        final compressedBytes = gzip.encode(rawBytes);
+        tempDir = await Directory.systemTemp.createTemp('neosync-armsx2-card-');
+        uploadFile = File(
+          path.join(tempDir.path, '${path.basename(file.path)}.neosync.gz'),
+        );
+        await uploadFile.writeAsBytes(compressedBytes, flush: true);
+        _processedItems.add(
+          'ARMSX2 memory card detected: ${path.basename(file.path)} '
+          '(${rawBytes.length} B → ${compressedBytes.length} B)',
+        );
+      }
+
+      final result = await _neoSyncService.syncFile(
+        uploadFile,
+        displayGameName,
+        customFilename: resolved.cloudPath,
+        systemId: 'ps2',
+        emulatorId: 'armsx2',
+        isState: resolved.isState,
+        scope: 'shared',
+        contentHashOnly: isMemoryCard,
+      );
+
+      if (result['success'] == true) {
+        if (result['skipped'] == true) {
+          _skippedFiles++;
+        } else {
+          _uploadedFiles++;
+          _resetQuotaAttempts();
+        }
+        _processedItems.add('NeoSync: $displayGameName');
+        return true;
+      }
+
+      final errorMessage = result['message']?.toString() ?? '';
+      _processedItems.add('Failed to upload $displayGameName: $errorMessage');
+      if (_checkQuotaExceeded(errorMessage)) {
+        _quotaExceededActive = true;
+        throw QuotaExceededException(errorMessage, _quotaExceededAttempts);
+      }
+      return false;
+    } finally {
+      if (tempDir != null) {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// Uploads one constituent file from a native RPCS3 PS3 save-data folder.
+  /// The technical PS3 profile/save directory is preserved in the cloud path,
+  /// while NeoSync exposes the human-readable game title.
+  Future<bool> _uploadRpcs3File(
+    File file,
+    String dataRoot, {
+    GameModel? preferredGame,
+  }) async {
+    final resolved = await _resolveRpcs3FileForCloud(
+      file,
+      dataRoot,
+      preferredGame: preferredGame,
+    );
+    if (resolved == null) {
+      _skippedFiles++;
+      return false;
+    }
+
+    final result = await _neoSyncService.syncFile(
+      file,
+      resolved.gameName,
+      customFilename: resolved.cloudPath,
+      systemId: 'ps3',
+      emulatorId: 'rpcs3',
+      isState: false,
+      scope: 'game',
+    );
+
+    if (result['success'] == true) {
+      if (result['skipped'] == true) {
+        _skippedFiles++;
+      } else {
+        _uploadedFiles++;
+        _resetQuotaAttempts();
+      }
+      _processedItems.add('NeoSync RPCS3: ${resolved.gameName}');
+      return true;
+    }
+
+    final errorMessage = result['message']?.toString() ?? '';
+    _processedItems.add('Failed to upload ${resolved.gameName}: $errorMessage');
+    if (_checkQuotaExceeded(errorMessage)) {
+      _quotaExceededActive = true;
+      throw QuotaExceededException(errorMessage, _quotaExceededAttempts);
+    }
+    return false;
+  }
+
+  /// Uploads one MeloNX file using Title ID only to identify the local game.
+  /// The NeoSync-visible path and game_name use the human-readable game title.
+  Future<bool> _uploadMeloNXFile(
+    File file,
+    String root, {
+    GameModel? preferredGame,
+  }) async {
+    final resolved = await _resolveMeloNXFileForCloud(
+      file,
+      root,
+      preferredGame: preferredGame,
+    );
+    if (resolved == null) {
+      _skippedFiles++;
+      return false;
+    }
+
+    final result = await _neoSyncService.syncFile(
+      file,
+      resolved.gameName,
+      customFilename: resolved.cloudPath,
+      systemId: 'switch',
+      emulatorId: 'melonx',
+      isState: false,
+      scope: 'game',
+    );
+
+    if (result['success'] == true) {
+      if (result['skipped'] == true) {
+        _skippedFiles++;
+      } else {
+        _uploadedFiles++;
+        _resetQuotaAttempts();
+      }
+      _processedItems.add('NeoSync: ${resolved.gameName}');
+      return true;
+    }
+
+    final errorMessage = result['message']?.toString() ?? '';
+    _processedItems.add('Failed to upload ${resolved.gameName}: $errorMessage');
+    if (_checkQuotaExceeded(errorMessage)) {
+      _quotaExceededActive = true;
+      throw QuotaExceededException(errorMessage, _quotaExceededAttempts);
+    }
+    return false;
   }
 
   /// Maneja la subida automática de archivos de Switch NAND

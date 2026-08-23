@@ -37,6 +37,33 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.closingGame: 'ゲームを終了中...',
 
   AppLocale.settings: '設定',
+  AppLocale.library: 'ライブラリ',
+  AppLocale.libraryIntro: 'ソースを追加して、すべての読書コンテンツを1か所にまとめます。',
+  AppLocale.libraryAddons: 'アドオン',
+  AppLocale.libraryAddonsSubtitle: '外部ソースを追加してライブラリを拡張します。',
+  AppLocale.libraryLocal: 'ローカルライブラリ',
+  AppLocale.libraryLocalSubtitle: 'PDF、CBZなどのローカルコンテンツです。',
+  AppLocale.libraryEmptyTitle: 'まだソースがありません',
+  AppLocale.libraryEmptySubtitle: 'アドオンまたはローカルソースを追加して開始してください。',
+  AppLocale.libraryNextStep: 'このセクションは次のステップで有効になります。',
+  AppLocale.libraryAddonAddUrl: 'URLから追加',
+  AppLocale.libraryAddonAddUrlSubtitle:
+      'HTTPSで公開されたNeoStationマニフェストをインストールします。',
+  AppLocale.libraryAddonImportFile: 'マニフェストを読み込む',
+  AppLocale.libraryAddonImportFileSubtitle:
+      'ローカルJSONファイルからNeoStationアドオンをインストールします。',
+  AppLocale.libraryAddonUrlTitle: 'ライブラリソースを追加',
+  AppLocale.libraryAddonUrlHelp: 'HTTPSマニフェストURL（スキーマ neostation.library.v1）。',
+  AppLocale.libraryAddonInstall: 'インストール',
+  AppLocale.libraryAddonInstalling: 'ソースをインストール中…',
+  AppLocale.libraryAddonInstalled: '{name} をインストールしました',
+  AppLocale.libraryAddonUpdated: '{name} を更新しました',
+  AppLocale.libraryAddonError: 'ソースをインストールできません: {error}',
+  AppLocale.libraryAddonInstalledSources: 'インストール済みソース',
+  AppLocale.libraryAddonRemoveTitle: 'ソースを削除しますか？',
+  AppLocale.libraryAddonRemoveBody: '{name} をライブラリソースから削除しますか？',
+  AppLocale.libraryAddonRemoved: '{name} を削除しました',
+  AppLocale.libraryAddonCount: '{count} 件のソースをインストール済み',
   AppLocale.general: '全般',
   AppLocale.secondaryDisplay: 'セカンダリ画面',
   AppLocale.directories: 'ディレクトリ',
@@ -115,8 +142,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.secondarySectionNowPlaying: 'Now Playingパネル',
   AppLocale.secondarySectionDock: 'アプリドック',
   AppLocale.screenshotAccess: 'Screen return & screenshots',
-  AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+  AppLocale.screenshotAccessSubtitle: 'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle: 'アプリ起動時にROMフォルダを自動的にスキャン',
   AppLocale.ignoreHiddenFiles: '隠しアイテムを無視',
   AppLocale.ignoreHiddenFilesSubtitle: 'ROMスキャン中に隠しファイルとフォルダを非表示にする',
@@ -174,8 +200,7 @@ const Map<String, dynamic> appLocaleJa = {
       '完了: {groups} セットを整理、{files} ファイルを移動、{playlists} プレイリストを作成{skipped}。',
   AppLocale.organizeMultiDiscNoSetsFound: '整理するマルチディスクセットは見つかりませんでした{skipped}。',
   AppLocale.organizeMultiDiscFailed: 'マルチディスクゲームの整理に失敗しました: {error}',
-  AppLocale.organizeMultiDiscWarning:
-      '一致するROMファイルを新しいゲームフォルダへ移動し、ストレージに.m3uプレイリストを作成します。この操作を自動的に元に戻すことはできません。',
+  AppLocale.organizeMultiDiscWarning: '一致するROMファイルを新しいゲームフォルダへ移動し、ストレージに.m3uプレイリストを作成します。この操作を自動的に元に戻すことはできません。',
   AppLocale.cleanOrphanedMetadata: '孤立したメタデータを削除',
   AppLocale.cleanOrphanedMetadataSubtitle: '削除された ROM が残したメタデータとメディアを削除します',
   AppLocale.cleanOrphanedMetadataWarning:
@@ -584,11 +609,9 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.welcomeNeoStation: 'NeoStationへようこそ！',
   AppLocale.letsGetSetup: 'セットアップを始めましょう',
   AppLocale.storagePermission: 'ストレージの許可',
-  AppLocale.storagePermissionDesc:
-      'NeoStationがRetroArchの設定を管理し、セーブデータを正しく同期するには「すべてのファイルへのアクセス」が必要です。\n\n次の画面でこの許可を与えてください。',
+  AppLocale.storagePermissionDesc: 'NeoStationがRetroArchの設定を管理し、セーブデータを正しく同期するには「すべてのファイルへのアクセス」が必要です。\n\n次の画面でこの許可を与えてください。',
   AppLocale.screenReturnAccess: 'Screen Return Access',
-  AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessDesc: 'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
   AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: 'ROMフォルダを選択',
   AppLocale.romFolderSelected: 'ROMフォルダが選択されました！',
@@ -801,8 +824,7 @@ const Map<String, dynamic> appLocaleJa = {
       'このフォルダには既に {count} 個の項目があります。NeoStation は既存の内容とともに、ここに独自のデータを保存します。',
   AppLocale.folderNotEmptyUseAnyway: 'このまま使用',
   AppLocale.moveUserDataTitle: 'ユーザーデータを移動しますか？',
-  AppLocale.moveUserDataBody:
-      'NeoStation は自身のデータ（データベース、取得したメディア、設定）を現在のフォルダから新しいフォルダへ移動します。NeoStation が作成していないファイルはそのまま残ります。',
+  AppLocale.moveUserDataBody: 'NeoStation は自身のデータ（データベース、取得したメディア、設定）を現在のフォルダから新しいフォルダへ移動します。NeoStation が作成していないファイルはそのまま残ります。',
   AppLocale.moveUserDataDestNotEmpty:
       '新しいフォルダには既に {count} 個の項目があります。NeoStation のデータはそれらと一緒に追加されます。',
   AppLocale.moveUserDataConfirm: 'データを移動',
@@ -897,8 +919,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
-  AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeResetConfirmBody: 'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -936,21 +957,30 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.iosEmuLinkFolder: "フォルダをリンク",
   AppLocale.iosEmuChangeFolder: "フォルダを変更",
   AppLocale.iosEmuLinkingFailed: "リンクに失敗しました: {error}",
-  AppLocale.iosRetroarchSyncRequested: "RetroArch ライブラリの同期を要求しました。バックグラウンドで実行されるため、数秒お待ちください。",
+  AppLocale.iosRetroarchSyncRequested:
+      "RetroArch ライブラリの同期を要求しました。バックグラウンドで実行されるため、数秒お待ちください。",
   AppLocale.iosRetroarchUnavailable: "RetroArch に接続できませんでした。インストールされていますか？",
-  AppLocale.iosArmsx2SyncRequested: "ARMSX2 ライブラリの同期を要求しました。エクスポートの準備が完了すると、ARMSX2 は自動的に NeoStation に戻ります。",
+  AppLocale.iosArmsx2SyncRequested:
+      "ARMSX2 ライブラリの同期を要求しました。エクスポートの準備が完了すると、ARMSX2 は自動的に NeoStation に戻ります。",
   AppLocale.iosArmsx2Unavailable: "ARMSX2 に接続できませんでした。インストールされていますか？",
   AppLocale.iosMelonxSyncRequested: "MeloNX の Nintendo Switch ライブラリの同期を要求しました。エクスポートの準備が完了すると、MeloNX は自動的に NeoStation に戻ります。",
   AppLocale.iosMelonxUnavailable: "MeloNX に接続できませんでした。インストールされていますか？",
-  AppLocale.iosRetroarchStatusNeedsLink: "RetroArch のフォルダをリンクすると、コピーせずに NeoStation からゲームへ直接アクセスできます。",
-  AppLocale.iosRetroarchStatusNeedsSync: "フォルダをリンクしました。ライブラリを同期すると、ワンタップで RetroArch から直接ゲームを起動できます。",
-  AppLocale.iosRetroarchStatusSynced: "フォルダとライブラリを同期済み — ゲームは RetroArch で直接起動します。",
+  AppLocale.iosRetroarchStatusNeedsLink:
+      "RetroArch のフォルダをリンクすると、コピーせずに NeoStation からゲームへ直接アクセスできます。",
+  AppLocale.iosRetroarchStatusNeedsSync:
+      "フォルダをリンクしました。ライブラリを同期すると、ワンタップで RetroArch から直接ゲームを起動できます。",
+  AppLocale.iosRetroarchStatusSynced:
+      "フォルダとライブラリを同期済み — ゲームは RetroArch で直接起動します。",
   AppLocale.iosRetroarchLinkSuccess: "フォルダをリンクしました。NeoStation はコピーせず、その場所を直接スキャンします。ここで見つかったゲームは RetroArch で直接起動します。",
   AppLocale.iosArmsx2StatusNeedsLink: "ARMSX2 は RetroArch と同じ ROM フォルダを使用します。共有 ROM フォルダをリンクしてから、ARMSX2 ライブラリを同期してください。",
-  AppLocale.iosArmsx2StatusNeedsSync: "共有 ROM フォルダをリンクしました。ARMSX2 を同期して PS2 ライブラリを NeoStation にインポートしてください。",
-  AppLocale.iosArmsx2StatusSynced: "共有フォルダと ARMSX2 ライブラリを同期済み — PS2 ゲームは ARMSX2 で直接起動します。",
-  AppLocale.iosArmsx2LinkSuccess: "共有 ROM フォルダをリンクしました。RetroArch と ARMSX2 は同じ NeoStation ROM ソースを使用します。",
-  AppLocale.iosMelonxStatusSynced: "MeloNX ライブラリを同期済み — Nintendo Switch ゲームは MeloNX で直接起動します。",
+  AppLocale.iosArmsx2StatusNeedsSync:
+      "共有 ROM フォルダをリンクしました。ARMSX2 を同期して PS2 ライブラリを NeoStation にインポートしてください。",
+  AppLocale.iosArmsx2StatusSynced:
+      "共有フォルダと ARMSX2 ライブラリを同期済み — PS2 ゲームは ARMSX2 で直接起動します。",
+  AppLocale.iosArmsx2LinkSuccess:
+      "共有 ROM フォルダをリンクしました。RetroArch と ARMSX2 は同じ NeoStation ROM ソースを使用します。",
+  AppLocale.iosMelonxStatusSynced:
+      "MeloNX ライブラリを同期済み — Nintendo Switch ゲームは MeloNX で直接起動します。",
   AppLocale.iosMelonxStatusNeedsSync: "MeloNX を同期して Nintendo Switch ライブラリを NeoStation に直接インポートします。ROM フォルダのスキャンは不要です。",
 
   // Rich System Info
@@ -961,21 +991,32 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.systemNotableGames: '代表的なゲーム',
   AppLocale.systemTechnicalDetails: '技術情報',
   AppLocale.systemGamesDetected: '検出されたゲーム',
-  AppLocale.systemInfoDetailedIntro: '{name} は {manufacturer} が {year} 年に発売した{type}です。',
-  AppLocale.systemInfoDetailedIntroNoManufacturer: '{name} は {year} 年に登場した{type}です。',
+  AppLocale.systemInfoDetailedIntro:
+      '{name} は {manufacturer} が {year} 年に発売した{type}です。',
+  AppLocale.systemInfoDetailedIntroNoManufacturer:
+      '{name} は {year} 年に登場した{type}です。',
   AppLocale.systemInfoArchitectureSentence: 'ハードウェアアーキテクチャは {architecture} です。',
   AppLocale.systemInfoGenerationSentence: '第 {generation} 世代に属します。',
   AppLocale.systemInfoProcessorSentence: '主なプロセッサは {cpu} です。',
   AppLocale.systemInfoMediaSentence: 'ゲームやソフトウェアは主に {media} で提供されました。',
-  AppLocale.systemInfoCollectionRomHacks: 'この項目は元のシステム向けのROMハックやコミュニティ製バリエーションをまとめたものです。',
-  AppLocale.systemInfoCollectionAllSystems: 'この仮想コレクションには、検出されたすべてのシステムのゲームがまとめられます。',
-  AppLocale.systemInfoCollectionFavorites: 'この仮想コレクションには、ユーザーがお気に入りに設定したゲームが含まれます。',
-  AppLocale.systemInfoCollectionDigitalStore: 'この項目はPC向けデジタルゲームストアを表し、カタログや必要ハードウェアはタイトルごとに異なります。',
-  AppLocale.systemInfoCollectionEmulationPlatform: 'この項目は複数の元ハードウェア系統を扱うエミュレーション／互換プラットフォームを表します。',
-  AppLocale.systemInfoCollectionFantasyConsole: '小規模なゲームやデモ向けに、意図的に制約された仮想ハードウェアを持つファンタジーコンソールです。',
-  AppLocale.systemInfoCollectionMediaCollection: '固定のゲームハードウェアではなく、メディアコレクションです。',
-  AppLocale.systemInfoCollectionGameEngine: 'この項目はゲームエンジン／ランタイムを表し、作品は複数のハードウェア世代にまたがる場合があります。',
-  AppLocale.systemInfoCollectionSoftwarePlatform: 'このソフトウェアプラットフォームは複数のハードウェア構成で動作するため、アーキテクチャは端末や時代によって異なります。',
+  AppLocale.systemInfoCollectionRomHacks:
+      'この項目は元のシステム向けのROMハックやコミュニティ製バリエーションをまとめたものです。',
+  AppLocale.systemInfoCollectionAllSystems:
+      'この仮想コレクションには、検出されたすべてのシステムのゲームがまとめられます。',
+  AppLocale.systemInfoCollectionFavorites:
+      'この仮想コレクションには、ユーザーがお気に入りに設定したゲームが含まれます。',
+  AppLocale.systemInfoCollectionDigitalStore:
+      'この項目はPC向けデジタルゲームストアを表し、カタログや必要ハードウェアはタイトルごとに異なります。',
+  AppLocale.systemInfoCollectionEmulationPlatform:
+      'この項目は複数の元ハードウェア系統を扱うエミュレーション／互換プラットフォームを表します。',
+  AppLocale.systemInfoCollectionFantasyConsole:
+      '小規模なゲームやデモ向けに、意図的に制約された仮想ハードウェアを持つファンタジーコンソールです。',
+  AppLocale.systemInfoCollectionMediaCollection:
+      '固定のゲームハードウェアではなく、メディアコレクションです。',
+  AppLocale.systemInfoCollectionGameEngine:
+      'この項目はゲームエンジン／ランタイムを表し、作品は複数のハードウェア世代にまたがる場合があります。',
+  AppLocale.systemInfoCollectionSoftwarePlatform:
+      'このソフトウェアプラットフォームは複数のハードウェア構成で動作するため、アーキテクチャは端末や時代によって異なります。',
   AppLocale.mediaCartridge: 'カートリッジ',
   AppLocale.mediaCdRom: 'CD-ROM',
   AppLocale.mediaDvd: 'DVD',

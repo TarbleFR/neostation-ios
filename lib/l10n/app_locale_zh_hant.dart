@@ -37,6 +37,31 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.closingGame: '正在關閉遊戲...',
 
   AppLocale.settings: '設定',
+  AppLocale.library: '資料庫',
+  AppLocale.libraryIntro: '加入來源，將所有閱讀內容集中在同一處。',
+  AppLocale.libraryAddons: '擴充來源',
+  AppLocale.libraryAddonsSubtitle: '加入外部來源以擴充資料庫。',
+  AppLocale.libraryLocal: '本機資料庫',
+  AppLocale.libraryLocalSubtitle: '你的 PDF、CBZ 與其他本機內容。',
+  AppLocale.libraryEmptyTitle: '尚未安裝來源',
+  AppLocale.libraryEmptySubtitle: '加入擴充來源或本機來源即可開始。',
+  AppLocale.libraryNextStep: '此功能將在下一階段啟用。',
+  AppLocale.libraryAddonAddUrl: '透過 URL 新增',
+  AppLocale.libraryAddonAddUrlSubtitle: '安裝透過 HTTPS 託管的 NeoStation 清單。',
+  AppLocale.libraryAddonImportFile: '匯入清單',
+  AppLocale.libraryAddonImportFileSubtitle: '從本機 JSON 檔案安裝 NeoStation 外掛。',
+  AppLocale.libraryAddonUrlTitle: '新增資料庫來源',
+  AppLocale.libraryAddonUrlHelp: 'HTTPS 清單 URL（架構 neostation.library.v1）。',
+  AppLocale.libraryAddonInstall: '安裝',
+  AppLocale.libraryAddonInstalling: '正在安裝來源…',
+  AppLocale.libraryAddonInstalled: '已安裝 {name}',
+  AppLocale.libraryAddonUpdated: '已更新 {name}',
+  AppLocale.libraryAddonError: '無法安裝來源：{error}',
+  AppLocale.libraryAddonInstalledSources: '已安裝來源',
+  AppLocale.libraryAddonRemoveTitle: '刪除來源？',
+  AppLocale.libraryAddonRemoveBody: '從資料庫來源中刪除 {name}？',
+  AppLocale.libraryAddonRemoved: '已刪除 {name}',
+  AppLocale.libraryAddonCount: '已安裝 {count} 個來源',
   AppLocale.general: '一般',
   AppLocale.secondaryDisplay: '副螢幕',
   AppLocale.directories: '目錄',
@@ -113,8 +138,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.secondarySectionNowPlaying: 'Now Playing 面板',
   AppLocale.secondarySectionDock: '應用程式塢',
   AppLocale.screenshotAccess: 'Screen return & screenshots',
-  AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+  AppLocale.screenshotAccessSubtitle: 'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
   AppLocale.scanOnStartupSubtitle: '應用程式啟動時自動掃描 ROM 資料夾',
   AppLocale.ignoreHiddenFiles: '忽略隱藏項目',
   AppLocale.ignoreHiddenFilesSubtitle: 'ROM 掃描期間隱藏隱藏檔案和資料夾',
@@ -580,8 +604,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.storagePermissionDesc:
       'NeoStation 需要「所有檔案存取權限」來管理 RetroArch 設定並同步遊戲存檔。',
   AppLocale.screenReturnAccess: 'Screen Return Access',
-  AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
+  AppLocale.screenReturnAccessDesc: 'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
   AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
   AppLocale.selectRomFolder: '選擇 ROM 資料夾',
   AppLocale.romFolderSelected: 'ROM 資料夾已選擇！',
@@ -650,7 +673,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.systemType: '類型',
   AppLocale.supportedFormats: '支援格式',
   AppLocale.systemInfoSummary: '{name} 是由 {manufacturer} 於 {year} 年推出的{type}。NeoStation 目前偵測到此系統共有 {count} 款遊戲。',
-  AppLocale.systemInfoSummaryNoManufacturer: '{name} 是於 {year} 年推出的{type}。NeoStation 目前偵測到此系統共有 {count} 款遊戲。',
+  AppLocale.systemInfoSummaryNoManufacturer:
+      '{name} 是於 {year} 年推出的{type}。NeoStation 目前偵測到此系統共有 {count} 款遊戲。',
   AppLocale.systemTypeConsole: '家用遊戲機',
   AppLocale.systemTypeHandheld: '掌上遊戲機',
   AppLocale.systemTypeComputer: '電腦系統',
@@ -790,8 +814,7 @@ const Map<String, dynamic> appLocaleZhHant = {
       '此資料夾已包含 {count} 個項目。NeoStation 會將自己的資料儲存在此處，與現有內容放在一起。',
   AppLocale.folderNotEmptyUseAnyway: '仍然使用',
   AppLocale.moveUserDataTitle: '移動使用者資料？',
-  AppLocale.moveUserDataBody:
-      'NeoStation 會將自己的資料（資料庫、抓取的媒體和設定）從目前的資料夾移動到新的資料夾。非 NeoStation 建立的檔案不會被更動。',
+  AppLocale.moveUserDataBody: 'NeoStation 會將自己的資料（資料庫、抓取的媒體和設定）從目前的資料夾移動到新的資料夾。非 NeoStation 建立的檔案不會被更動。',
   AppLocale.moveUserDataDestNotEmpty:
       '新資料夾已包含 {count} 個項目。NeoStation 的資料將新增在它們旁邊。',
   AppLocale.moveUserDataConfirm: '移動資料',
@@ -883,8 +906,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
-  AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+  AppLocale.esdeResetConfirmBody: 'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -919,20 +941,31 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.iosEmuLinkingFailed: "連結失敗：{error}",
   AppLocale.iosRetroarchSyncRequested: "已要求同步 RetroArch 遊戲庫。同步會在背景執行，請稍候幾秒。",
   AppLocale.iosRetroarchUnavailable: "無法連線到 RetroArch。是否已安裝？",
-  AppLocale.iosArmsx2SyncRequested: "已要求同步 ARMSX2 遊戲庫。匯出準備完成後，ARMSX2 會自動返回 NeoStation。",
+  AppLocale.iosArmsx2SyncRequested:
+      "已要求同步 ARMSX2 遊戲庫。匯出準備完成後，ARMSX2 會自動返回 NeoStation。",
   AppLocale.iosArmsx2Unavailable: "無法連線到 ARMSX2。是否已安裝？",
-  AppLocale.iosMelonxSyncRequested: "已要求同步 MeloNX 的 Nintendo Switch 遊戲庫。匯出準備完成後，MeloNX 會自動返回 NeoStation。",
+  AppLocale.iosMelonxSyncRequested:
+      "已要求同步 MeloNX 的 Nintendo Switch 遊戲庫。匯出準備完成後，MeloNX 會自動返回 NeoStation。",
   AppLocale.iosMelonxUnavailable: "無法連線到 MeloNX。是否已安裝？",
-  AppLocale.iosRetroarchStatusNeedsLink: "連結 RetroArch 資料夾，讓 NeoStation 直接存取遊戲，無需複製。",
-  AppLocale.iosRetroarchStatusNeedsSync: "資料夾已連結。同步遊戲庫後，即可一鍵直接在 RetroArch 中啟動遊戲。",
+  AppLocale.iosRetroarchStatusNeedsLink:
+      "連結 RetroArch 資料夾，讓 NeoStation 直接存取遊戲，無需複製。",
+  AppLocale.iosRetroarchStatusNeedsSync:
+      "資料夾已連結。同步遊戲庫後，即可一鍵直接在 RetroArch 中啟動遊戲。",
   AppLocale.iosRetroarchStatusSynced: "資料夾已連結且遊戲庫已同步——遊戲可直接在 RetroArch 中啟動。",
-  AppLocale.iosRetroarchLinkSuccess: "資料夾已連結。NeoStation 會直接掃描此資料夾，無需複製。在此找到的遊戲將直接在 RetroArch 中啟動。",
-  AppLocale.iosArmsx2StatusNeedsLink: "ARMSX2 與 RetroArch 使用相同的 ROM 資料夾。先連結共用 ROM 資料夾，再同步 ARMSX2 遊戲庫。",
-  AppLocale.iosArmsx2StatusNeedsSync: "共用 ROM 資料夾已連結。同步 ARMSX2，將 PS2 遊戲庫匯入 NeoStation。",
-  AppLocale.iosArmsx2StatusSynced: "共用資料夾與 ARMSX2 遊戲庫已同步——PS2 遊戲可直接在 ARMSX2 中啟動。",
-  AppLocale.iosArmsx2LinkSuccess: "共用 ROM 資料夾已連結。RetroArch 與 ARMSX2 現在使用相同的 NeoStation ROM 來源。",
-  AppLocale.iosMelonxStatusSynced: "MeloNX 遊戲庫已同步——Nintendo Switch 遊戲可直接在 MeloNX 中啟動。",
-  AppLocale.iosMelonxStatusNeedsSync: "同步 MeloNX，將其 Nintendo Switch 遊戲庫直接匯入 NeoStation。無需掃描 ROM 資料夾。",
+  AppLocale.iosRetroarchLinkSuccess:
+      "資料夾已連結。NeoStation 會直接掃描此資料夾，無需複製。在此找到的遊戲將直接在 RetroArch 中啟動。",
+  AppLocale.iosArmsx2StatusNeedsLink:
+      "ARMSX2 與 RetroArch 使用相同的 ROM 資料夾。先連結共用 ROM 資料夾，再同步 ARMSX2 遊戲庫。",
+  AppLocale.iosArmsx2StatusNeedsSync:
+      "共用 ROM 資料夾已連結。同步 ARMSX2，將 PS2 遊戲庫匯入 NeoStation。",
+  AppLocale.iosArmsx2StatusSynced:
+      "共用資料夾與 ARMSX2 遊戲庫已同步——PS2 遊戲可直接在 ARMSX2 中啟動。",
+  AppLocale.iosArmsx2LinkSuccess:
+      "共用 ROM 資料夾已連結。RetroArch 與 ARMSX2 現在使用相同的 NeoStation ROM 來源。",
+  AppLocale.iosMelonxStatusSynced:
+      "MeloNX 遊戲庫已同步——Nintendo Switch 遊戲可直接在 MeloNX 中啟動。",
+  AppLocale.iosMelonxStatusNeedsSync:
+      "同步 MeloNX，將其 Nintendo Switch 遊戲庫直接匯入 NeoStation。無需掃描 ROM 資料夾。",
 
   // Rich System Info
   AppLocale.systemArchitecture: '架構',
@@ -942,8 +975,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.systemNotableGames: '代表遊戲',
   AppLocale.systemTechnicalDetails: '技術資訊',
   AppLocale.systemGamesDetected: '已偵測遊戲',
-  AppLocale.systemInfoDetailedIntro: '{name} 是由 {manufacturer} 於 {year} 年推出的{type}。',
-  AppLocale.systemInfoDetailedIntroNoManufacturer: '{name} 是於 {year} 年推出的{type}。',
+  AppLocale.systemInfoDetailedIntro:
+      '{name} 是由 {manufacturer} 於 {year} 年推出的{type}。',
+  AppLocale.systemInfoDetailedIntroNoManufacturer:
+      '{name} 是於 {year} 年推出的{type}。',
   AppLocale.systemInfoArchitectureSentence: '其硬體架構為 {architecture}。',
   AppLocale.systemInfoGenerationSentence: '它屬於第 {generation} 世代。',
   AppLocale.systemInfoProcessorSentence: '主要處理器為 {cpu}。',
@@ -951,12 +986,15 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.systemInfoCollectionRomHacks: '此項目彙整原系統的 ROM Hack 與玩家自製變體。',
   AppLocale.systemInfoCollectionAllSystems: '此虛擬合集彙整所有已偵測系統中的遊戲。',
   AppLocale.systemInfoCollectionFavorites: '此虛擬合集包含使用者標記為最愛的遊戲。',
-  AppLocale.systemInfoCollectionDigitalStore: '此項目代表 PC 數位遊戲商店；遊戲目錄與硬體需求會依作品而異。',
+  AppLocale.systemInfoCollectionDigitalStore:
+      '此項目代表 PC 數位遊戲商店；遊戲目錄與硬體需求會依作品而異。',
   AppLocale.systemInfoCollectionEmulationPlatform: '此項目代表涵蓋多種原始硬體系列的模擬或相容平台。',
-  AppLocale.systemInfoCollectionFantasyConsole: '這是一種使用刻意受限虛擬硬體的幻想主機，適合小型遊戲與展示作品。',
+  AppLocale.systemInfoCollectionFantasyConsole:
+      '這是一種使用刻意受限虛擬硬體的幻想主機，適合小型遊戲與展示作品。',
   AppLocale.systemInfoCollectionMediaCollection: '這是媒體合集，而不是固定的遊戲硬體平台。',
   AppLocale.systemInfoCollectionGameEngine: '此項目代表遊戲引擎或執行環境，其作品可能橫跨多個硬體世代。',
-  AppLocale.systemInfoCollectionSoftwarePlatform: '此軟體平台涵蓋多種硬體配置，因此架構會隨裝置或時代而變化。',
+  AppLocale.systemInfoCollectionSoftwarePlatform:
+      '此軟體平台涵蓋多種硬體配置，因此架構會隨裝置或時代而變化。',
   AppLocale.mediaCartridge: '卡匣',
   AppLocale.mediaCdRom: 'CD-ROM',
   AppLocale.mediaDvd: 'DVD',

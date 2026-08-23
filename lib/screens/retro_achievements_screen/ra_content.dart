@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
@@ -279,9 +280,13 @@ class _RAContentState extends State<RAContent>
     RetroAchievementsProvider raProvider,
   ) {
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final safePadding = MediaQuery.viewPaddingOf(context);
+    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+    final safeLeft = isIOS ? safePadding.left : 0.0;
+    final safeRight = isIOS ? safePadding.right : 0.0;
 
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12.r),
+      padding: EdgeInsets.fromLTRB(12.r + safeLeft, 0, 12.r + safeRight, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

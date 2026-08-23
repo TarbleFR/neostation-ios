@@ -107,6 +107,7 @@ class NeoSyncService extends ChangeNotifier {
     String? gameHash,
     bool? isState,
     String? scope,
+    bool contentHashOnly = false,
   }) async {
     _isLoading = true;
     _lastError = null;
@@ -124,7 +125,7 @@ class NeoSyncService extends ChangeNotifier {
         filename,
         fileHash,
         fileBytes.length,
-        localModifiedAt: localModifiedAt,
+        localModifiedAt: contentHashOnly ? null : localModifiedAt,
       );
 
       if (!checkResult['needs_sync']) {
@@ -148,7 +149,7 @@ class NeoSyncService extends ChangeNotifier {
         };
       }
 
-      if (checkResult['remote_newer']) {
+      if (checkResult['remote_newer'] && !contentHashOnly) {
         return {
           'success': true,
           'skipped': true,
@@ -171,7 +172,9 @@ class NeoSyncService extends ChangeNotifier {
         http.MultipartFile.fromBytes('file', fileBytes, filename: filename),
       );
 
-      final fileModifiedAtTimestamp = localModifiedAt.millisecondsSinceEpoch;
+      final fileModifiedAtTimestamp = contentHashOnly
+          ? DateTime.now().millisecondsSinceEpoch
+          : localModifiedAt.millisecondsSinceEpoch;
 
       request.fields['file_name'] = filename;
       request.fields['game_name'] = gameName;
@@ -197,7 +200,13 @@ class NeoSyncService extends ChangeNotifier {
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
-      final data = jsonDecode(responseBody);
+      Map<String, dynamic> data = <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(responseBody);
+        if (decoded is Map<String, dynamic>) data = decoded;
+      } catch (_) {
+        // Some proxies return plain text/HTML for transport errors such as 413.
+      }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         int cloudTime = fileModifiedAtTimestamp;
@@ -215,7 +224,16 @@ class NeoSyncService extends ChangeNotifier {
         );
         return {'success': true, 'data': data};
       } else {
-        final error = data['error'] ?? 'Upload failed';
+        final body = responseBody.trim();
+        final bodyPreview = body.length > 240
+            ? '${body.substring(0, 240)}…'
+            : body;
+        final error =
+            data['error'] ??
+            data['message'] ??
+            (bodyPreview.isNotEmpty
+                ? 'HTTP ${response.statusCode}: $bodyPreview'
+                : 'Upload failed (HTTP ${response.statusCode})');
         _log.e('Upload failed: $error');
         return {'success': false, 'message': error};
       }

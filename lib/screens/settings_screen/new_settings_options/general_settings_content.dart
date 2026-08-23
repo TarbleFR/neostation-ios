@@ -172,8 +172,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     int count = 0;
     count++; // Scan on Startup
     count++; // Ignore hidden files in scan
-    count++; // Auto-update App
-    count++; // Auto-update Systems
     count++; // SFX Sounds
     count++; // 12-Hour Clock
     count += hidableNavTabs().length; // Navigation tab visibility
@@ -210,22 +208,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     if (index == currentItemIndex) {
       final ignoreHiddenFiles = configProvider.config.ignoreHiddenFiles;
       configProvider.updateIgnoreHiddenFiles(!ignoreHiddenFiles);
-      return;
-    }
-    currentItemIndex++;
-
-    // Protocol: Auto-update App.
-    if (index == currentItemIndex) {
-      configProvider.updateAutoUpdateApp(!configProvider.config.autoUpdateApp);
-      return;
-    }
-    currentItemIndex++;
-
-    // Protocol: Auto-update Systems.
-    if (index == currentItemIndex) {
-      configProvider.updateAutoUpdateSystems(
-        !configProvider.config.autoUpdateSystems,
-      );
       return;
     }
     currentItemIndex++;
@@ -387,56 +369,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                         context
                             .read<SqliteConfigProvider>()
                             .updateIgnoreHiddenFiles(value);
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  );
-                }(),
-
-                // Setting: Auto-update App.
-                SizedBox(height: 12.r),
-                () {
-                  final index = currentItemIdx++;
-                  return SettingRow(
-                    key: _itemKeys[index],
-                    focused:
-                        widget.isContentFocused &&
-                        widget.selectedContentIndex == index,
-                    title: AppLocale.autoUpdateApp.getString(context),
-                    subtitle: AppLocale.autoUpdateAppSubtitle.getString(
-                      context,
-                    ),
-                    trailing: CustomToggleSwitch(
-                      value: config.autoUpdateApp,
-                      onChanged: (value) {
-                        context
-                            .read<SqliteConfigProvider>()
-                            .updateAutoUpdateApp(value);
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  );
-                }(),
-
-                // Setting: Auto-update Systems & Emulators.
-                SizedBox(height: 12.r),
-                () {
-                  final index = currentItemIdx++;
-                  return SettingRow(
-                    key: _itemKeys[index],
-                    focused:
-                        widget.isContentFocused &&
-                        widget.selectedContentIndex == index,
-                    title: AppLocale.autoUpdateSystems.getString(context),
-                    subtitle: AppLocale.autoUpdateSystemsSubtitle.getString(
-                      context,
-                    ),
-                    trailing: CustomToggleSwitch(
-                      value: config.autoUpdateSystems,
-                      onChanged: (value) {
-                        context
-                            .read<SqliteConfigProvider>()
-                            .updateAutoUpdateSystems(value);
                       },
                       activeColor: theme.colorScheme.primary,
                     ),

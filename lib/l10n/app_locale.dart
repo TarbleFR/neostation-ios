@@ -60,6 +60,34 @@ mixin AppLocale {
   // Settings menu
   // ---------------------------------------------------------------------------
   static const String settings = 'settings';
+  static const String library = 'library';
+  static const String libraryIntro = 'library_intro';
+  static const String libraryAddons = 'library_addons';
+  static const String libraryAddonsSubtitle = 'library_addons_subtitle';
+  static const String libraryLocal = 'library_local';
+  static const String libraryLocalSubtitle = 'library_local_subtitle';
+  static const String libraryEmptyTitle = 'library_empty_title';
+  static const String libraryEmptySubtitle = 'library_empty_subtitle';
+  static const String libraryNextStep = 'library_next_step';
+  static const String libraryAddonAddUrl = 'library_addon_add_url';
+  static const String libraryAddonAddUrlSubtitle =
+      'library_addon_add_url_subtitle';
+  static const String libraryAddonImportFile = 'library_addon_import_file';
+  static const String libraryAddonImportFileSubtitle =
+      'library_addon_import_file_subtitle';
+  static const String libraryAddonUrlTitle = 'library_addon_url_title';
+  static const String libraryAddonUrlHelp = 'library_addon_url_help';
+  static const String libraryAddonInstall = 'library_addon_install';
+  static const String libraryAddonInstalling = 'library_addon_installing';
+  static const String libraryAddonInstalled = 'library_addon_installed';
+  static const String libraryAddonUpdated = 'library_addon_updated';
+  static const String libraryAddonError = 'library_addon_error';
+  static const String libraryAddonInstalledSources =
+      'library_addon_installed_sources';
+  static const String libraryAddonRemoveTitle = 'library_addon_remove_title';
+  static const String libraryAddonRemoveBody = 'library_addon_remove_body';
+  static const String libraryAddonRemoved = 'library_addon_removed';
+  static const String libraryAddonCount = 'library_addon_count';
   static const String general = 'general';
   static const String secondaryDisplay = 'secondary_display';
   static const String directories = 'directories';
@@ -707,7 +735,8 @@ mixin AppLocale {
   static const String systemType = 'system_type';
   static const String supportedFormats = 'supported_formats';
   static const String systemInfoSummary = 'system_info_summary';
-  static const String systemInfoSummaryNoManufacturer = 'system_info_summary_no_manufacturer';
+  static const String systemInfoSummaryNoManufacturer =
+      'system_info_summary_no_manufacturer';
   static const String systemTypeConsole = 'system_type_console';
   static const String systemTypeHandheld = 'system_type_handheld';
   static const String systemTypeComputer = 'system_type_computer';
@@ -721,20 +750,33 @@ mixin AppLocale {
   static const String systemTechnicalDetails = 'system_technical_details';
   static const String systemGamesDetected = 'system_games_detected';
   static const String systemInfoDetailedIntro = 'system_info_detailed_intro';
-  static const String systemInfoDetailedIntroNoManufacturer = 'system_info_detailed_intro_no_manufacturer';
-  static const String systemInfoArchitectureSentence = 'system_info_architecture_sentence';
-  static const String systemInfoGenerationSentence = 'system_info_generation_sentence';
-  static const String systemInfoProcessorSentence = 'system_info_processor_sentence';
+  static const String systemInfoDetailedIntroNoManufacturer =
+      'system_info_detailed_intro_no_manufacturer';
+  static const String systemInfoArchitectureSentence =
+      'system_info_architecture_sentence';
+  static const String systemInfoGenerationSentence =
+      'system_info_generation_sentence';
+  static const String systemInfoProcessorSentence =
+      'system_info_processor_sentence';
   static const String systemInfoMediaSentence = 'system_info_media_sentence';
-  static const String systemInfoCollectionRomHacks = 'system_info_collection_rom_hacks';
-  static const String systemInfoCollectionAllSystems = 'system_info_collection_all_systems';
-  static const String systemInfoCollectionFavorites = 'system_info_collection_favorites';
-  static const String systemInfoCollectionDigitalStore = 'system_info_collection_digital_store';
-  static const String systemInfoCollectionEmulationPlatform = 'system_info_collection_emulation_platform';
-  static const String systemInfoCollectionFantasyConsole = 'system_info_collection_fantasy_console';
-  static const String systemInfoCollectionMediaCollection = 'system_info_collection_media_collection';
-  static const String systemInfoCollectionGameEngine = 'system_info_collection_game_engine';
-  static const String systemInfoCollectionSoftwarePlatform = 'system_info_collection_software_platform';
+  static const String systemInfoCollectionRomHacks =
+      'system_info_collection_rom_hacks';
+  static const String systemInfoCollectionAllSystems =
+      'system_info_collection_all_systems';
+  static const String systemInfoCollectionFavorites =
+      'system_info_collection_favorites';
+  static const String systemInfoCollectionDigitalStore =
+      'system_info_collection_digital_store';
+  static const String systemInfoCollectionEmulationPlatform =
+      'system_info_collection_emulation_platform';
+  static const String systemInfoCollectionFantasyConsole =
+      'system_info_collection_fantasy_console';
+  static const String systemInfoCollectionMediaCollection =
+      'system_info_collection_media_collection';
+  static const String systemInfoCollectionGameEngine =
+      'system_info_collection_game_engine';
+  static const String systemInfoCollectionSoftwarePlatform =
+      'system_info_collection_software_platform';
   static const String mediaCartridge = 'media_cartridge';
   static const String mediaCdRom = 'media_cd_rom';
   static const String mediaDvd = 'media_dvd';
@@ -1011,14 +1053,17 @@ mixin AppLocale {
   static const String iosEmuLinkFolder = 'ios_emu_link_folder';
   static const String iosEmuChangeFolder = 'ios_emu_change_folder';
   static const String iosEmuLinkingFailed = 'ios_emu_linking_failed';
-  static const String iosRetroarchSyncRequested = 'ios_retroarch_sync_requested';
+  static const String iosRetroarchSyncRequested =
+      'ios_retroarch_sync_requested';
   static const String iosRetroarchUnavailable = 'ios_retroarch_unavailable';
   static const String iosArmsx2SyncRequested = 'ios_armsx2_sync_requested';
   static const String iosArmsx2Unavailable = 'ios_armsx2_unavailable';
   static const String iosMelonxSyncRequested = 'ios_melonx_sync_requested';
   static const String iosMelonxUnavailable = 'ios_melonx_unavailable';
-  static const String iosRetroarchStatusNeedsLink = 'ios_retroarch_status_needs_link';
-  static const String iosRetroarchStatusNeedsSync = 'ios_retroarch_status_needs_sync';
+  static const String iosRetroarchStatusNeedsLink =
+      'ios_retroarch_status_needs_link';
+  static const String iosRetroarchStatusNeedsSync =
+      'ios_retroarch_status_needs_sync';
   static const String iosRetroarchStatusSynced = 'ios_retroarch_status_synced';
   static const String iosRetroarchLinkSuccess = 'ios_retroarch_link_success';
   static const String iosArmsx2StatusNeedsLink = 'ios_armsx2_status_needs_link';

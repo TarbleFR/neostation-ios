@@ -37,6 +37,32 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.closingGame: '게임 종료 중...',
 
   AppLocale.settings: '설정',
+  AppLocale.library: '라이브러리',
+  AppLocale.libraryIntro: '소스를 추가하고 모든 읽기 콘텐츠를 한곳에 모아 보세요.',
+  AppLocale.libraryAddons: '애드온',
+  AppLocale.libraryAddonsSubtitle: '외부 소스를 추가해 라이브러리를 확장합니다.',
+  AppLocale.libraryLocal: '로컬 라이브러리',
+  AppLocale.libraryLocalSubtitle: 'PDF, CBZ 및 기타 로컬 콘텐츠입니다.',
+  AppLocale.libraryEmptyTitle: '아직 설치된 소스가 없습니다',
+  AppLocale.libraryEmptySubtitle: '애드온 또는 로컬 소스를 추가해 시작하세요.',
+  AppLocale.libraryNextStep: '이 섹션은 다음 단계에서 활성화됩니다.',
+  AppLocale.libraryAddonAddUrl: 'URL로 추가',
+  AppLocale.libraryAddonAddUrlSubtitle: 'HTTPS로 호스팅된 NeoStation 매니페스트를 설치합니다.',
+  AppLocale.libraryAddonImportFile: '매니페스트 가져오기',
+  AppLocale.libraryAddonImportFileSubtitle:
+      '로컬 JSON 파일에서 NeoStation 애드온을 설치합니다.',
+  AppLocale.libraryAddonUrlTitle: '라이브러리 소스 추가',
+  AppLocale.libraryAddonUrlHelp: 'HTTPS 매니페스트 URL (스키마 neostation.library.v1).',
+  AppLocale.libraryAddonInstall: '설치',
+  AppLocale.libraryAddonInstalling: '소스 설치 중…',
+  AppLocale.libraryAddonInstalled: '{name} 설치됨',
+  AppLocale.libraryAddonUpdated: '{name} 업데이트됨',
+  AppLocale.libraryAddonError: '소스를 설치할 수 없습니다: {error}',
+  AppLocale.libraryAddonInstalledSources: '설치된 소스',
+  AppLocale.libraryAddonRemoveTitle: '소스를 삭제할까요?',
+  AppLocale.libraryAddonRemoveBody: '라이브러리 소스에서 {name}을(를) 삭제할까요?',
+  AppLocale.libraryAddonRemoved: '{name} 삭제됨',
+  AppLocale.libraryAddonCount: '{count}개 소스 설치됨',
   AppLocale.general: '일반',
   AppLocale.secondaryDisplay: '보조 화면',
   AppLocale.directories: '폴더',
@@ -114,8 +140,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.secondarySectionNowPlaying: '플레이 중 패널',
   AppLocale.secondarySectionDock: '앱 Dock',
   AppLocale.screenshotAccess: '화면 복귀 & 스크린샷',
-  AppLocale.screenshotAccessSubtitle:
-      'Dock에서 실행한 앱을 닫으면 플레이 중 화면으로 돌아오며, 스크린샷 버튼으로 화면을 캡처할 수 있습니다(Android 접근성 설정이 열립니다)',
+  AppLocale.screenshotAccessSubtitle: 'Dock에서 실행한 앱을 닫으면 플레이 중 화면으로 돌아오며, 스크린샷 버튼으로 화면을 캡처할 수 있습니다(Android 접근성 설정이 열립니다)',
   AppLocale.scanOnStartupSubtitle: '앱을 시작할 때 ROM 폴더를 자동으로 검색합니다',
   AppLocale.ignoreHiddenFiles: '숨겨진 항목 무시',
   AppLocale.ignoreHiddenFilesSubtitle: 'ROM 검색 중 숨김 파일과 폴더를 제외합니다',
@@ -177,8 +202,7 @@ const Map<String, dynamic> appLocaleKo = {
       '일치하는 ROM 파일을 새 게임 폴더로 옮기고 저장소에 .m3u 재생목록을 만듭니다. 이 작업은 자동으로 되돌릴 수 없습니다.',
   AppLocale.cleanOrphanedMetadata: '고아 메타데이터 정리',
   AppLocale.cleanOrphanedMetadataSubtitle: '삭제된 ROM 이 남긴 메타데이터와 미디어를 제거합니다',
-  AppLocale.cleanOrphanedMetadataWarning:
-      '라이브러리에 더 이상 없는 ROM 의 메타데이터 행과 미디어 파일을 영구적으로 삭제합니다. ES-DE 에서 가져온 항목은 삭제되지 않습니다.',
+  AppLocale.cleanOrphanedMetadataWarning: '라이브러리에 더 이상 없는 ROM 의 메타데이터 행과 미디어 파일을 영구적으로 삭제합니다. ES-DE 에서 가져온 항목은 삭제되지 않습니다.',
   AppLocale.cleanOrphanedMetadataScanning: '고아 메타데이터 정리 중...',
   AppLocale.cleanOrphanedMetadataCleaningItem: '{filename} 정리 중...',
   AppLocale.cleanOrphanedMetadataNothingFound: '고아 메타데이터를 찾을 수 없습니다.',
@@ -296,8 +320,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.onlineSaves: '클라우드 세이브',
   AppLocale.noOnlineSavesFound: '클라우드 세이브가 없습니다',
   AppLocale.whatIsNeoSync: 'NeoSync Cloud란?',
-  AppLocale.neoSyncDescription:
-      'NeoSync는 NeoStation용 통합 클라우드 서비스입니다. 여러 기기에서 게임 세이브와 세이브 상태를 안전하게 동기화해 진행 상황을 보호합니다.',
+  AppLocale.neoSyncDescription: 'NeoSync는 NeoStation용 통합 클라우드 서비스입니다. 여러 기기에서 게임 세이브와 세이브 상태를 안전하게 동기화해 진행 상황을 보호합니다.',
   AppLocale.crossPlatform: '크로스 플랫폼',
   AppLocale.crossPlatformDesc:
       'NeoStation이 설치된 어느 기기에서든 마지막으로 플레이한 지점부터 이어서 할 수 있습니다.',
@@ -359,8 +382,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.region: '지역',
   AppLocale.regionSub: '게임 정보를 가져올 때의 지역 우선순위를 설정합니다',
   AppLocale.regionPriority: '지역 우선순위',
-  AppLocale.regionPrioritySub:
-      '게임명, 출시일, 미디어를 선택할 때 우선순위가 높은 지역을 먼저 사용합니다. A로 항목을 들고, 위/아래로 이동한 뒤 B로 놓습니다.',
+  AppLocale.regionPrioritySub: '게임명, 출시일, 미디어를 선택할 때 우선순위가 높은 지역을 먼저 사용합니다. A로 항목을 들고, 위/아래로 이동한 뒤 B로 놓습니다.',
   AppLocale.regionUpdated: '지역 우선순위가 업데이트되었습니다',
   AppLocale.regionError: '지역 우선순위를 업데이트하는 중에 오류가 발생했습니다',
   AppLocale.systems: '시스템',
@@ -591,11 +613,9 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.welcomeNeoStation: 'NeoStation에 오신 것을 환영합니다!',
   AppLocale.letsGetSetup: '설정을 시작해 보세요',
   AppLocale.storagePermission: '저장소 권한',
-  AppLocale.storagePermissionDesc:
-      'NeoStation은 RetroArch 구성을 관리하고 게임 저장을 올바르게 동기화하려면 "모든 파일 액세스"가 필요합니다.\n\n다음 화면에서 이 권한을 부여해 주세요.',
+  AppLocale.storagePermissionDesc: 'NeoStation은 RetroArch 구성을 관리하고 게임 저장을 올바르게 동기화하려면 "모든 파일 액세스"가 필요합니다.\n\n다음 화면에서 이 권한을 부여해 주세요.',
   AppLocale.screenReturnAccess: '화면 복귀 권한',
-  AppLocale.screenReturnAccessDesc:
-      '독에서 실행한 앱을 닫으면 플레이 중 화면으로 돌아오고 시스템 스크린샷을 사용할 수 있습니다. 현재 실행 중인 앱 이름만 읽으며 화면 내용은 수집하지 않습니다.',
+  AppLocale.screenReturnAccessDesc: '독에서 실행한 앱을 닫으면 플레이 중 화면으로 돌아오고 시스템 스크린샷을 사용할 수 있습니다. 현재 실행 중인 앱 이름만 읽으며 화면 내용은 수집하지 않습니다.',
   AppLocale.screenReturnAccessHint: 'NeoStation을 켠 뒤 허용을 누르세요',
   AppLocale.selectRomFolder: 'ROM 폴더 선택',
   AppLocale.romFolderSelected: 'ROM 폴더가 선택되었습니다!',
@@ -807,12 +827,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.userDataLocationDefault: '기본 위치',
   AppLocale.selectUserDataFolder: '사용자 데이터 폴더 선택',
   AppLocale.folderNotEmptyTitle: '폴더가 비어 있지 않음',
-  AppLocale.folderNotEmptyBody:
-      '이 폴더에는 이미 {count}개의 항목이 포함되어 있습니다. NeoStation은 기존 콘텐츠와 함께 여기에 자체 데이터를 저장합니다.',
+  AppLocale.folderNotEmptyBody: '이 폴더에는 이미 {count}개의 항목이 포함되어 있습니다. NeoStation은 기존 콘텐츠와 함께 여기에 자체 데이터를 저장합니다.',
   AppLocale.folderNotEmptyUseAnyway: '그래도 사용',
   AppLocale.moveUserDataTitle: '사용자 데이터를 이동하시겠습니까?',
-  AppLocale.moveUserDataBody:
-      'NeoStation은 자체 데이터(데이터베이스, 스크랩한 미디어, 설정)를 현재 폴더에서 새 폴더로 이동합니다. NeoStation에서 생성되지 않은 파일은 그대로 유지됩니다.',
+  AppLocale.moveUserDataBody: 'NeoStation은 자체 데이터(데이터베이스, 스크랩한 미디어, 설정)를 현재 폴더에서 새 폴더로 이동합니다. NeoStation에서 생성되지 않은 파일은 그대로 유지됩니다.',
   AppLocale.moveUserDataDestNotEmpty:
       '새 폴더에는 이미 {count}개의 항목이 포함되어 있습니다. NeoStation 데이터도 함께 추가됩니다.',
   AppLocale.moveUserDataConfirm: '데이터 이동',
@@ -889,8 +907,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.esdeReset: 'ES-DE 가져오기 재설정',
   AppLocale.esdeResetSubtitle: '다시 가져올 수 있도록 가져온 메타데이터와 미디어 연결을 제거합니다',
   AppLocale.esdeResetComplete: 'ES-DE 가져오기 재설정',
-  AppLocale.esdeResetConfirmBody:
-      '가져온 모든 ES-DE 메타데이터와 미디어 링크를 제거하고, 선택한 폴더 설정을 초기화합니다. 게임과 ROM 파일에는 영향을 주지 않습니다.',
+  AppLocale.esdeResetConfirmBody: '가져온 모든 ES-DE 메타데이터와 미디어 링크를 제거하고, 선택한 폴더 설정을 초기화합니다. 게임과 ROM 파일에는 영향을 주지 않습니다.',
   AppLocale.esdeImportNotEsdeFolder: '이 폴더는 ES-DE 설치 폴더가 아닙니다(gamelists 없음)',
   AppLocale.esdeImportNothingFound: '가져올 일치하는 시스템이나 게임이 없습니다',
   AppLocale.esdeSummarySystemsMatched: '일치한 시스템',
@@ -943,21 +960,30 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.iosEmuLinkFolder: "폴더 연결",
   AppLocale.iosEmuChangeFolder: "폴더 변경",
   AppLocale.iosEmuLinkingFailed: "연결 실패: {error}",
-  AppLocale.iosRetroarchSyncRequested: "RetroArch 라이브러리 동기화를 요청했습니다. 백그라운드에서 진행되므로 몇 초 기다려 주세요.",
+  AppLocale.iosRetroarchSyncRequested:
+      "RetroArch 라이브러리 동기화를 요청했습니다. 백그라운드에서 진행되므로 몇 초 기다려 주세요.",
   AppLocale.iosRetroarchUnavailable: "RetroArch에 연결할 수 없습니다. 설치되어 있나요?",
-  AppLocale.iosArmsx2SyncRequested: "ARMSX2 라이브러리 동기화를 요청했습니다. 내보내기가 준비되면 ARMSX2가 자동으로 NeoStation으로 돌아옵니다.",
+  AppLocale.iosArmsx2SyncRequested:
+      "ARMSX2 라이브러리 동기화를 요청했습니다. 내보내기가 준비되면 ARMSX2가 자동으로 NeoStation으로 돌아옵니다.",
   AppLocale.iosArmsx2Unavailable: "ARMSX2에 연결할 수 없습니다. 설치되어 있나요?",
   AppLocale.iosMelonxSyncRequested: "MeloNX Nintendo Switch 라이브러리 동기화를 요청했습니다. 내보내기가 준비되면 MeloNX가 자동으로 NeoStation으로 돌아옵니다.",
   AppLocale.iosMelonxUnavailable: "MeloNX에 연결할 수 없습니다. 설치되어 있나요?",
-  AppLocale.iosRetroarchStatusNeedsLink: "RetroArch 폴더를 연결하면 복사 없이 NeoStation에서 게임에 직접 접근할 수 있습니다.",
-  AppLocale.iosRetroarchStatusNeedsSync: "폴더가 연결되었습니다. 라이브러리를 동기화하면 한 번의 탭으로 RetroArch에서 게임을 바로 실행할 수 있습니다.",
-  AppLocale.iosRetroarchStatusSynced: "폴더와 라이브러리가 동기화되었습니다 — 게임이 RetroArch에서 바로 실행됩니다.",
+  AppLocale.iosRetroarchStatusNeedsLink:
+      "RetroArch 폴더를 연결하면 복사 없이 NeoStation에서 게임에 직접 접근할 수 있습니다.",
+  AppLocale.iosRetroarchStatusNeedsSync:
+      "폴더가 연결되었습니다. 라이브러리를 동기화하면 한 번의 탭으로 RetroArch에서 게임을 바로 실행할 수 있습니다.",
+  AppLocale.iosRetroarchStatusSynced:
+      "폴더와 라이브러리가 동기화되었습니다 — 게임이 RetroArch에서 바로 실행됩니다.",
   AppLocale.iosRetroarchLinkSuccess: "폴더가 연결되었습니다. NeoStation이 복사 없이 해당 위치를 직접 스캔합니다. 여기서 찾은 게임은 RetroArch에서 바로 실행됩니다.",
   AppLocale.iosArmsx2StatusNeedsLink: "ARMSX2는 RetroArch와 같은 ROM 폴더를 사용합니다. 공유 ROM 폴더를 연결한 뒤 ARMSX2 라이브러리를 동기화하세요.",
-  AppLocale.iosArmsx2StatusNeedsSync: "공유 ROM 폴더가 연결되었습니다. ARMSX2를 동기화하여 PS2 라이브러리를 NeoStation으로 가져오세요.",
-  AppLocale.iosArmsx2StatusSynced: "공유 폴더와 ARMSX2 라이브러리가 동기화되었습니다 — PS2 게임이 ARMSX2에서 바로 실행됩니다.",
-  AppLocale.iosArmsx2LinkSuccess: "공유 ROM 폴더가 연결되었습니다. RetroArch와 ARMSX2가 이제 동일한 NeoStation ROM 소스를 사용합니다.",
-  AppLocale.iosMelonxStatusSynced: "MeloNX 라이브러리가 동기화되었습니다 — Nintendo Switch 게임이 MeloNX에서 바로 실행됩니다.",
+  AppLocale.iosArmsx2StatusNeedsSync:
+      "공유 ROM 폴더가 연결되었습니다. ARMSX2를 동기화하여 PS2 라이브러리를 NeoStation으로 가져오세요.",
+  AppLocale.iosArmsx2StatusSynced:
+      "공유 폴더와 ARMSX2 라이브러리가 동기화되었습니다 — PS2 게임이 ARMSX2에서 바로 실행됩니다.",
+  AppLocale.iosArmsx2LinkSuccess:
+      "공유 ROM 폴더가 연결되었습니다. RetroArch와 ARMSX2가 이제 동일한 NeoStation ROM 소스를 사용합니다.",
+  AppLocale.iosMelonxStatusSynced:
+      "MeloNX 라이브러리가 동기화되었습니다 — Nintendo Switch 게임이 MeloNX에서 바로 실행됩니다.",
   AppLocale.iosMelonxStatusNeedsSync: "MeloNX를 동기화하여 Nintendo Switch 라이브러리를 NeoStation으로 직접 가져옵니다. ROM 폴더 스캔은 필요하지 않습니다.",
 
   // Rich System Info
@@ -968,21 +994,32 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.systemNotableGames: '대표 게임',
   AppLocale.systemTechnicalDetails: '기술 정보',
   AppLocale.systemGamesDetected: '감지된 게임',
-  AppLocale.systemInfoDetailedIntro: '{name}은(는) {manufacturer}가 {year}년에 출시한 {type} 시스템입니다.',
-  AppLocale.systemInfoDetailedIntroNoManufacturer: '{name}은(는) {year}년에 등장한 {type} 시스템입니다.',
+  AppLocale.systemInfoDetailedIntro:
+      '{name}은(는) {manufacturer}가 {year}년에 출시한 {type} 시스템입니다.',
+  AppLocale.systemInfoDetailedIntroNoManufacturer:
+      '{name}은(는) {year}년에 등장한 {type} 시스템입니다.',
   AppLocale.systemInfoArchitectureSentence: '하드웨어 아키텍처는 {architecture}입니다.',
   AppLocale.systemInfoGenerationSentence: '{generation}세대에 속합니다.',
   AppLocale.systemInfoProcessorSentence: '주요 프로세서는 {cpu}입니다.',
   AppLocale.systemInfoMediaSentence: '게임과 소프트웨어는 주로 {media} 매체로 배포되었습니다.',
-  AppLocale.systemInfoCollectionRomHacks: '이 항목은 원본 시스템용 ROM 해킹과 커뮤니티 제작 변형을 모아 둔 컬렉션입니다.',
-  AppLocale.systemInfoCollectionAllSystems: '이 가상 컬렉션은 감지된 모든 시스템의 게임을 한곳에 모읍니다.',
-  AppLocale.systemInfoCollectionFavorites: '이 가상 컬렉션에는 사용자가 즐겨찾기로 표시한 게임이 포함됩니다.',
-  AppLocale.systemInfoCollectionDigitalStore: '이 항목은 PC 디지털 게임 스토어를 나타내며 카탈로그와 하드웨어 요구 사항은 게임마다 다릅니다.',
-  AppLocale.systemInfoCollectionEmulationPlatform: '이 항목은 여러 원본 하드웨어 계열을 다루는 에뮬레이션 또는 호환성 플랫폼을 나타냅니다.',
-  AppLocale.systemInfoCollectionFantasyConsole: '작은 게임과 데모를 위해 의도적으로 제한된 가상 하드웨어를 사용하는 판타지 콘솔입니다.',
-  AppLocale.systemInfoCollectionMediaCollection: '고정된 게임 하드웨어 플랫폼이 아니라 미디어 컬렉션입니다.',
-  AppLocale.systemInfoCollectionGameEngine: '이 항목은 게임 엔진 또는 런타임을 나타내며 타이틀이 여러 하드웨어 세대에 걸칠 수 있습니다.',
-  AppLocale.systemInfoCollectionSoftwarePlatform: '이 소프트웨어 플랫폼은 여러 하드웨어 구성에서 동작하므로 아키텍처가 장치나 시대에 따라 달라집니다.',
+  AppLocale.systemInfoCollectionRomHacks:
+      '이 항목은 원본 시스템용 ROM 해킹과 커뮤니티 제작 변형을 모아 둔 컬렉션입니다.',
+  AppLocale.systemInfoCollectionAllSystems:
+      '이 가상 컬렉션은 감지된 모든 시스템의 게임을 한곳에 모읍니다.',
+  AppLocale.systemInfoCollectionFavorites:
+      '이 가상 컬렉션에는 사용자가 즐겨찾기로 표시한 게임이 포함됩니다.',
+  AppLocale.systemInfoCollectionDigitalStore:
+      '이 항목은 PC 디지털 게임 스토어를 나타내며 카탈로그와 하드웨어 요구 사항은 게임마다 다릅니다.',
+  AppLocale.systemInfoCollectionEmulationPlatform:
+      '이 항목은 여러 원본 하드웨어 계열을 다루는 에뮬레이션 또는 호환성 플랫폼을 나타냅니다.',
+  AppLocale.systemInfoCollectionFantasyConsole:
+      '작은 게임과 데모를 위해 의도적으로 제한된 가상 하드웨어를 사용하는 판타지 콘솔입니다.',
+  AppLocale.systemInfoCollectionMediaCollection:
+      '고정된 게임 하드웨어 플랫폼이 아니라 미디어 컬렉션입니다.',
+  AppLocale.systemInfoCollectionGameEngine:
+      '이 항목은 게임 엔진 또는 런타임을 나타내며 타이틀이 여러 하드웨어 세대에 걸칠 수 있습니다.',
+  AppLocale.systemInfoCollectionSoftwarePlatform:
+      '이 소프트웨어 플랫폼은 여러 하드웨어 구성에서 동작하므로 아키텍처가 장치나 시대에 따라 달라집니다.',
   AppLocale.mediaCartridge: '카트리지',
   AppLocale.mediaCdRom: 'CD-ROM',
   AppLocale.mediaDvd: 'DVD',

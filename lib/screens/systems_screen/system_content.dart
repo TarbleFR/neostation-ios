@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -91,6 +92,10 @@ class _SystemContentState extends State<SystemContent> {
 
         final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
         _syncHomeMusic(showContent && routeIsCurrent);
+        final safePadding = MediaQuery.viewPaddingOf(context);
+        final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+        final safeLeft = isIOS ? safePadding.left : 0.0;
+        final safeRight = isIOS ? safePadding.right : 0.0;
 
         final Widget phase;
         if (showSplash) {
@@ -124,7 +129,12 @@ class _SystemContentState extends State<SystemContent> {
         // top-level tab changes. During splash/setup phases, cover that
         // persistent layer with the normal theme background. The actual
         // Systems content remains transparent so the custom image shows through.
-        if (showContent) return content;
+        if (showContent) {
+          return Padding(
+            padding: EdgeInsets.only(left: safeLeft, right: safeRight),
+            child: content,
+          );
+        }
         return ColoredBox(
           color: Theme.of(context).scaffoldBackgroundColor,
           child: content,

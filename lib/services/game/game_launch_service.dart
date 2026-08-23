@@ -15,6 +15,7 @@ import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
+import 'package:neostation/services/fin_library_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
 import '../../models/game_model.dart';
@@ -116,10 +117,19 @@ class GameLaunchService {
           system.folderName.toLowerCase() == 'ps3' &&
           game.romPath != null &&
           Rpcs3LibraryService.isVirtualLibraryPath(game.romPath!);
+      final isFinVirtualRom =
+          Platform.isIOS &&
+          (system.folderName.toLowerCase() == 'gc' ||
+              system.folderName.toLowerCase() == 'wii') &&
+          game.romPath != null &&
+          FinLibraryService.isVirtualLibraryPath(game.romPath!);
 
       bool romExists = false;
       if (game.romPath != null) {
-        if (isArmsx2VirtualRom || isMeloNXVirtualRom || isRpcs3VirtualRom) {
+        if (isArmsx2VirtualRom ||
+            isMeloNXVirtualRom ||
+            isRpcs3VirtualRom ||
+            isFinVirtualRom) {
           // External iOS library imports are represented by direct-launch URLs
           // rather than filesystem paths. They remain launchable even when
           // NeoStation cannot see the underlying ROM file itself.
@@ -188,6 +198,30 @@ class GameLaunchService {
           'ios_direct_launch',
         );
         await FavoritesService.recordGamePlayed(game);
+
+        // Nintendo GameCube / Wii: Fin exposes its game folder through Files.
+        // When that library has been synced, NeoStation resolves the selected
+        // row to a relative path and hands it to the user-installed
+        // NeoStation+Fin Shortcut. Physical rows still fall through to
+        // RetroArch/Open In if Fin is not configured.
+        final systemFolder = system.folderName.toLowerCase();
+        if (systemFolder == 'gc' || systemFolder == 'wii') {
+          try {
+            final launched = await FinLibraryService.launchGameByRomPath(
+              game.romPath!,
+            );
+            if (launched) return GameLaunchResult.success();
+          } catch (e) {
+            // Physical GameCube/Wii rows can still fall through to RetroArch.
+          }
+
+          if (isFinVirtualRom) {
+            return GameLaunchResult.failure(
+              'Could not launch this ${systemFolder == 'gc' ? 'GameCube' : 'Wii'} game in Fin.',
+              game.romPath,
+            );
+          }
+        }
 
         // Nintendo Switch: MeloNX exposes an alternate-frontend library export
         // and direct-launch URL scheme. Imported virtual rows launch immediately;

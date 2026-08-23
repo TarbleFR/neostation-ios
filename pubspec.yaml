@@ -10,7 +10,7 @@ workspace:
   - packages/gamepads_darwin
   - packages/gamepads_platform_interface
 
-version: 0.9.9+140
+version: 1.0.0+143
 environment:
   sdk: '>=3.9.2'
 
@@ -37,6 +37,7 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.6
   xml: ^6.6.1
+  html: ^0.15.6
   video_player: ^2.13.0
   flutter_secure_storage: ^10.3.1
   shared_preferences: ^2.5.5
