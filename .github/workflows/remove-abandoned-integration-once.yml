@@ -1,0 +1,203 @@
+name: Remove abandoned emulator integration once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-abandoned-integration-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Remove abandoned integration completely
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          PRE = 'bf4322cc13a67685c461d1abc7cd9a3794c34f84'
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, got {count}')
+              return text.replace(old, new, 1)
+
+          def regex_once(text, pattern, repl, label):
+              out, count = re.subn(pattern, repl, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one regex match, got {count}')
+              return out
+
+          # Files created solely for the abandoned integration.
+          for file_name in (
+              'lib/services/fin_library_service.dart',
+              'test/fin_library_service_test.dart',
+              'test/fin_persistence_regression_test.dart',
+          ):
+              Path(file_name).unlink(missing_ok=True)
+
+          # Restore the generic iOS folder bridge and Shortcut helper exactly
+          # to their state immediately before this integration was introduced.
+          for file_name in (
+              'packages/external_folder_access/lib/external_folder_access.dart',
+              'packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift',
+              'lib/services/ios_shortcut_jit_launch_service.dart',
+          ):
+              data = subprocess.check_output(['git', 'show', f'{PRE}:{file_name}'])
+              Path(file_name).write_bytes(data)
+
+          # App startup: remove import, cache/bootstrap and DB restore hook.
+          p = 'lib/main.dart'
+          s = read(p)
+          s = replace_once(
+              s,
+              "import 'package:neostation/services/fin_library_service.dart';\n",
+              '',
+              'main import',
+          )
+          s = replace_once(
+              s,
+              '    await FinLibraryService.initialize();\n',
+              '',
+              'main initialize',
+          )
+          s = regex_once(
+              s,
+              r"\n      await FinLibraryService\.restoreAfterDatabaseReady\(\n        configProvider: sqliteConfigProvider,\n        databaseProvider: sqliteDatabaseProvider,\n      \);",
+              '',
+              'main DB restore',
+          )
+          write(p, s)
+
+          # Settings UI: remove import, actions and both cards.
+          p = 'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart'
+          s = read(p)
+          s = replace_once(
+              s,
+              "import 'package:neostation/services/fin_library_service.dart';\n",
+              '',
+              'settings import',
+          )
+          s = regex_once(
+              s,
+              r"\n  Future<void> _linkFinGamesFolder\(\) async \{.*?\n  Future<void> _linkRpcs3DataFolder\(\) async \{",
+              '\n  Future<void> _linkRpcs3DataFolder() async {',
+              'settings actions',
+          )
+          s = replace_once(s, '      _buildIOSFinLibrarySection(theme),\n', '', 'settings library card list')
+          s = replace_once(s, '      _buildIOSFinShortcutSection(theme),\n', '', 'settings shortcut card list')
+          s = regex_once(
+              s,
+              r"\n  Widget _buildIOSFinLibrarySection\(ThemeData theme\) \{.*?\n  Widget _buildIOSEmulatorCard\(\{",
+              '\n  Widget _buildIOSEmulatorCard({',
+              'settings card implementations',
+          )
+          write(p, s)
+
+          # Launch path: remove virtual-row detection and all direct-launch logic.
+          p = 'lib/services/game/game_launch_service.dart'
+          s = read(p)
+          s = replace_once(
+              s,
+              "import 'package:neostation/services/fin_library_service.dart';\n",
+              '',
+              'launch import',
+          )
+          s = regex_once(
+              s,
+              r"\n      final isFinVirtualRom =\n          Platform\.isIOS &&\n          \(system\.folderName\.toLowerCase\(\) == 'gc' \|\|\n              system\.folderName\.toLowerCase\(\) == 'wii'\) &&\n          game\.romPath != null &&\n          FinLibraryService\.isVirtualLibraryPath\(game\.romPath!\);",
+              '',
+              'launch virtual flag',
+          )
+          s = replace_once(
+              s,
+              '            isRpcs3VirtualRom ||\n            isFinVirtualRom) {',
+              '            isRpcs3VirtualRom) {',
+              'launch virtual existence condition',
+          )
+          s = regex_once(
+              s,
+              r"\n        // Nintendo GameCube / Wii: Fin exposes its game folder through Files\..*?\n        // Nintendo Switch: MeloNX exposes an alternate-frontend library export",
+              '\n        // Nintendo Switch: MeloNX exposes an alternate-frontend library export',
+              'launch direct block',
+          )
+          write(p, s)
+
+          # Normal ROM scanning must no longer preserve the removed URI scheme.
+          p = 'lib/data/datasources/sqlite_database_service.dart'
+          s = read(p)
+          s = replace_once(
+              s,
+              "        lowerPath.startsWith('rpcs3-library://') ||\n        lowerPath.startsWith('fin://');",
+              "        lowerPath.startsWith('rpcs3-library://');",
+              'database virtual scheme',
+          )
+          write(p, s)
+
+          # The workflow is one-shot and must not remain in the repository.
+          Path('.github/workflows/remove-abandoned-integration-once.yml').unlink(missing_ok=True)
+          PY
+
+          dart format \
+            lib/main.dart \
+            lib/services/game/game_launch_service.dart \
+            lib/services/ios_shortcut_jit_launch_service.dart \
+            lib/screens/settings_screen/new_settings_options/directories_settings_content.dart \
+            lib/data/datasources/sqlite_database_service.dart \
+            packages/external_folder_access/lib/external_folder_access.dart
+
+          git diff --check
+
+          # Fail hard if any source-level residue of this integration remains.
+          if grep -RniE \
+            --exclude-dir=.git \
+            --exclude='*.lock' \
+            'FinLibraryService|fin_library_service|NeoStation\+Fin|finShortcutName|hasFinShortcutInstaller|openFinShortcutInstaller|fin://|fin-games|fin_sync_debug|fin_launch_debug|_linkFin|_syncWithFin|_configureFin|_testFin|_buildIOSFin|listBookmarkedFiles|bookmarkedURLForNativeAccess|Native iOS folder scan failed' \
+            lib packages test .github 2>/dev/null; then
+            echo 'Abandoned integration residue remains.' >&2
+            exit 1
+          fi
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Validate project
+        run: |
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+          flutter test test/library_no_native_sources_test.dart
+
+      - name: Commit clean tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: remove abandoned emulator integration'
+          git push origin HEAD:main
