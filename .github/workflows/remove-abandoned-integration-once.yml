@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -14,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout main
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Set up Flutter
@@ -43,22 +42,12 @@ jobs:
           def write(path, text):
               Path(path).write_text(text, encoding='utf-8')
 
-          def replace_once(text, old, new, label):
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected exactly one match, got {count}')
-              return text.replace(old, new, 1)
-
-          def regex_once(text, pattern, repl, label):
-              out, count = re.subn(pattern, repl, text, count=1, flags=re.S)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected exactly one regex match, got {count}')
-              return out
-
           for file_name in (
               'lib/services/fin_library_service.dart',
               'test/fin_library_service_test.dart',
               'test/fin_persistence_regression_test.dart',
+              'tools/.cleanup_trigger',
+              'tools/.cleanup_trigger_2',
           ):
               Path(file_name).unlink(missing_ok=True)
 
@@ -72,65 +61,52 @@ jobs:
 
           p = 'lib/main.dart'
           s = read(p)
-          s = replace_once(s, "import 'package:neostation/services/fin_library_service.dart';\n", '', 'main import')
-          s = replace_once(s, '    await FinLibraryService.initialize();\n', '', 'main initialize')
-          s = regex_once(
-              s,
+          s = s.replace("import 'package:neostation/services/fin_library_service.dart';\n", '')
+          s = s.replace('    await FinLibraryService.initialize();\n', '')
+          s = re.sub(
               r"\n      await FinLibraryService\.restoreAfterDatabaseReady\(\n        configProvider: sqliteConfigProvider,\n        databaseProvider: sqliteDatabaseProvider,\n      \);",
-              '',
-              'main DB restore',
+              '', s, count=1, flags=re.S,
           )
           write(p, s)
 
           p = 'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart'
           s = read(p)
-          s = replace_once(s, "import 'package:neostation/services/fin_library_service.dart';\n", '', 'settings import')
-          s = regex_once(
-              s,
+          s = s.replace("import 'package:neostation/services/fin_library_service.dart';\n", '')
+          s = re.sub(
               r"\n  Future<void> _linkFinGamesFolder\(\) async \{.*?\n  Future<void> _linkRpcs3DataFolder\(\) async \{",
-              '\n  Future<void> _linkRpcs3DataFolder() async {',
-              'settings actions',
+              '\n  Future<void> _linkRpcs3DataFolder() async {', s, count=1, flags=re.S,
           )
-          s = replace_once(s, '      _buildIOSFinLibrarySection(theme),\n', '', 'settings library card list')
-          s = replace_once(s, '      _buildIOSFinShortcutSection(theme),\n', '', 'settings shortcut card list')
-          s = regex_once(
-              s,
+          s = s.replace('      _buildIOSFinLibrarySection(theme),\n', '')
+          s = s.replace('      _buildIOSFinShortcutSection(theme),\n', '')
+          s = re.sub(
               r"\n  Widget _buildIOSFinLibrarySection\(ThemeData theme\) \{.*?\n  Widget _buildIOSEmulatorCard\(\{",
-              '\n  Widget _buildIOSEmulatorCard({',
-              'settings card implementations',
+              '\n  Widget _buildIOSEmulatorCard({', s, count=1, flags=re.S,
           )
           write(p, s)
 
           p = 'lib/services/game/game_launch_service.dart'
           s = read(p)
-          s = replace_once(s, "import 'package:neostation/services/fin_library_service.dart';\n", '', 'launch import')
-          s = regex_once(
-              s,
+          s = s.replace("import 'package:neostation/services/fin_library_service.dart';\n", '')
+          s = re.sub(
               r"\n      final isFinVirtualRom =\n          Platform\.isIOS &&\n          \(system\.folderName\.toLowerCase\(\) == 'gc' \|\|\n              system\.folderName\.toLowerCase\(\) == 'wii'\) &&\n          game\.romPath != null &&\n          FinLibraryService\.isVirtualLibraryPath\(game\.romPath!\);",
-              '',
-              'launch virtual flag',
+              '', s, count=1, flags=re.S,
           )
-          s = replace_once(
-              s,
+          s = s.replace(
               '            isRpcs3VirtualRom ||\n            isFinVirtualRom) {',
               '            isRpcs3VirtualRom) {',
-              'launch virtual existence condition',
           )
-          s = regex_once(
-              s,
+          s = re.sub(
               r"\n        // Nintendo GameCube / Wii: Fin exposes its game folder through Files\..*?\n        // Nintendo Switch: MeloNX exposes an alternate-frontend library export",
               '\n        // Nintendo Switch: MeloNX exposes an alternate-frontend library export',
-              'launch direct block',
+              s, count=1, flags=re.S,
           )
           write(p, s)
 
           p = 'lib/data/datasources/sqlite_database_service.dart'
           s = read(p)
-          s = replace_once(
-              s,
+          s = s.replace(
               "        lowerPath.startsWith('rpcs3-library://') ||\n        lowerPath.startsWith('fin://');",
               "        lowerPath.startsWith('rpcs3-library://');",
-              'database virtual scheme',
           )
           write(p, s)
 
@@ -164,12 +140,18 @@ jobs:
           flutter analyze --no-fatal-warnings --no-fatal-infos
           flutter test test/library_no_native_sources_test.dart
 
-      - name: Commit clean tree
+      - name: Commit cleanup to PR branch when needed
         shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
+          if git diff --cached --quiet; then
+            echo 'Cleanup already applied.'
+            exit 0
+          fi
           git commit -m 'chore: remove abandoned emulator integration'
-          git push origin HEAD:main
+          git push origin HEAD:"$TARGET_BRANCH"
