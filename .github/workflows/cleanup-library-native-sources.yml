@@ -1,0 +1,79 @@
+name: Remove Built-in Library Sources
+
+on:
+  push:
+    branches:
+      - feature/library-native
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: library-source-cleanup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    name: Remove native sources and cleanup repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/library-native
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Apply Library source cleanup
+        run: |
+          set -euo pipefail
+          python3 tools/cleanup_library_native_sources.py
+          dart format \
+            lib/screens/library_screen/library_screen.dart \
+            lib/services/library_addon_service.dart \
+            lib/services/library_catalog_service.dart \
+            lib/services/library_metadata_provider_service.dart \
+            test/library_addon_service_test.dart \
+            test/library_catalog_service_test.dart \
+            test/library_metadata_provider_service_test.dart \
+            test/library_no_native_sources_test.dart
+          git diff --check
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Run Library source regression tests
+        run: |
+          set -o pipefail
+          flutter test test/library_addon_service_test.dart
+          flutter test test/library_catalog_service_test.dart
+          flutter test test/library_aidoku_native_service_test.dart
+          flutter test test/library_metadata_provider_service_test.dart
+          flutter test test/library_acquisition_service_test.dart
+          flutter test test/library_no_native_sources_test.dart
+          flutter test test/fin_library_service_test.dart
+          flutter test test/fin_persistence_regression_test.dart
+
+      - name: Analyze Flutter sources
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Commit cleaned repository
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Repository already clean."
+            exit 0
+          fi
+          git commit -m "refactor: remove built-in Library sources and cleanup CI"
+          git push origin HEAD:feature/library-native
