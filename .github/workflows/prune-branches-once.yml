@@ -1,0 +1,30 @@
+name: Prune obsolete branches once
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete every non-main non-backup branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t refs < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/heads/" --jq '.[].ref')
+          for ref in "${refs[@]}"; do
+            branch="${ref#refs/heads/}"
+            if [ "$branch" = "main" ] || [[ "$branch" == backup/* ]]; then
+              echo "keep: $branch"
+              continue
+            fi
+            echo "delete: $branch"
+            encoded=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$branch")
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${encoded}" || true
+          done
