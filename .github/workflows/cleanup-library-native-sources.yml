@@ -1,9 +1,6 @@
-name: Remove Built-in Library Sources
+name: Apply Gallica Import-Only Library Policy
 
 on:
-  push:
-    branches:
-      - feature/library-native
   pull_request:
     branches:
       - feature/library-native
@@ -13,14 +10,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: library-source-cleanup-${{ github.ref }}
+  group: library-gallica-import-only-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   cleanup:
-    name: Remove native sources and cleanup repository
+    name: Apply Gallica import-only policy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout feature branch
@@ -35,74 +32,42 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply Library source cleanup
+      - name: Apply source policy and repository cleanup
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          addon_path = Path('lib/services/library_addon_service.dart')
-          addon = addon_path.read_text(encoding='utf-8')
-          addon = addon.replace(
-              """    if (_addons.indexWhere((item) => item.id == gallicaAddonId) < 0) {
-                _addons.add(_builtInGallicaAddon());
-                needsPersist = true;
-              }
-
-          """,
-              "",
-          )
-          addon_path.write_text(addon, encoding='utf-8')
-
-          screen_path = Path('lib/screens/library_screen/library_screen.dart')
-          screen = screen_path.read_text(encoding='utf-8')
-          screen = screen.replace(
-              """    // Gallica's public-domain OPDS feed is primarily French. Keep its books
-              // filterable even when an individual Atom entry omits dc:language.
-              if (result.isEmpty && entry.source?.isGallicaSource == true) {
-                result.add('fr');
-              }
-
-          """,
-              "",
-          )
-          screen_path.write_text(screen, encoding='utf-8')
-          PY
-
-          set +e
-          python3 tools/cleanup_library_native_sources.py 2>&1 | tee /tmp/library-cleanup.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -ne 0 ]; then
-            cp /tmp/library-cleanup.log cleanup-library-error.log
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -f cleanup-library-error.log
-            git commit -m "[skip ci] diagnose Library source cleanup failure" || true
-            git push origin HEAD:feature/library-native || true
-            exit "$status"
-          fi
-
+          python3 tools/apply_gallica_import_only_cleanup.py
           dart format \
             lib/screens/library_screen/library_screen.dart \
             lib/services/library_addon_service.dart \
-            lib/services/library_catalog_service.dart \
-            lib/services/library_metadata_provider_service.dart \
             test/library_addon_service_test.dart \
-            test/library_catalog_service_test.dart \
-            test/library_metadata_provider_service_test.dart \
             test/library_no_native_sources_test.dart
           git diff --check
 
-      - name: Commit cleaned repository
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Validate Library compatibility
+        run: |
+          set -o pipefail
+          flutter test test/library_addon_service_test.dart
+          flutter test test/library_catalog_service_test.dart
+          flutter test test/library_metadata_provider_service_test.dart
+          flutter test test/library_no_native_sources_test.dart
+          flutter test test/fin_library_service_test.dart
+          flutter test test/fin_persistence_regression_test.dart
+
+      - name: Analyze changed Library sources
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Commit validated cleanup
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
-            echo "Repository already clean."
+            echo "Library policy already applied."
             exit 0
           fi
-          git commit -m "refactor: remove built-in Library sources and cleanup CI"
+          git commit -m "refactor: make Gallica import-only in Library"
           git push origin HEAD:feature/library-native
