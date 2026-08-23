@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/library-native
+  pull_request:
+    branches:
+      - feature/library-native
   workflow_dispatch: {}
 
 permissions:
