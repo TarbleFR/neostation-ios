@@ -2320,8 +2320,8 @@ class LibraryScreenState extends State<LibraryScreen> {
             ),
             content: Text(
               locale == 'fr'
-                  ? 'Les $count sources importées depuis ce dépôt seront supprimées. Les autres dépôts et Gallica ne seront pas modifiés.'
-                  : 'All $count sources imported from this repository will be removed. Other repositories and Gallica will not be changed.',
+                  ? 'Les $count sources importées depuis ce dépôt seront supprimées. Les autres dépôts ne seront pas modifiés.'
+                  : 'All $count sources imported from this repository will be removed. Other repositories will not be changed.',
             ),
             actions: [
               TextButton(
@@ -3150,8 +3150,8 @@ class LibraryScreenState extends State<LibraryScreen> {
                       SizedBox(height: 5.r),
                       Text(
                         locale == 'fr'
-                            ? 'Chaque source ajoutée peut être retirée individuellement. Les sources natives sont conservées.'
-                            : 'Every added source can be removed individually. Built-in sources are kept.',
+                            ? 'Chaque source affichée ici a été ajoutée par l’utilisateur et peut être retirée individuellement.'
+                            : 'Every source shown here was added by the user and can be removed individually.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurface.withValues(
                             alpha: 0.62,

@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/home/runner/work/neostation-ios/neostation-ios/tools/cleanup_library_native_sources.py", line 214, in <module>
-    raise RuntimeError(f"Add-on service still contains built-in source reference: {forbidden}")
-RuntimeError: Add-on service still contains built-in source reference: gallicaAddonId

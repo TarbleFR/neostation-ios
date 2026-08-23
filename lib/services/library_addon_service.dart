@@ -4,11 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum LibrarySourceKind {
-  catalog,
-  localLibrary,
-  metadataOnly,
-}
+enum LibrarySourceKind { catalog, localLibrary, metadataOnly }
 
 class LibraryAddon {
   const LibraryAddon({
@@ -190,8 +186,9 @@ class LibraryAddon {
         rawKind == 'locallibrary';
 
     final baseUrlValue = manifest['baseUrl']?.toString().trim();
-    final baseUrl =
-        baseUrlValue == null || baseUrlValue.isEmpty ? null : baseUrlValue;
+    final baseUrl = baseUrlValue == null || baseUrlValue.isEmpty
+        ? null
+        : baseUrlValue;
     if (!isLocal && baseUrl == null) {
       throw const LibraryAddonException(
         'Missing required manifest field: baseUrl',
@@ -235,10 +232,10 @@ class LibraryAddon {
   }
 
   Map<String, dynamic> toJson() => {
-        'origin': origin,
-        'installedAt': installedAt.toIso8601String(),
-        'manifest': manifest,
-      };
+    'origin': origin,
+    'installedAt': installedAt.toIso8601String(),
+    'manifest': manifest,
+  };
 
   factory LibraryAddon.fromJson(Map<String, dynamic> value) {
     final rawManifest = value['manifest'];
@@ -260,10 +257,7 @@ enum LibraryAddonDocumentFormat {
 }
 
 class LibraryAddonInstallResult {
-  const LibraryAddonInstallResult({
-    required this.addon,
-    required this.updated,
-  });
+  const LibraryAddonInstallResult({required this.addon, required this.updated});
 
   final LibraryAddon addon;
   final bool updated;
@@ -300,7 +294,6 @@ class LibraryAddonService {
   static final LibraryAddonService instance = LibraryAddonService._();
 
   static const String _prefsKey = 'neostation_library_addons_v1';
-  static const String gallicaAddonId = 'native.gallica.bnf';
 
   static const int _maxDocumentBytes = 20 * 1024 * 1024;
   static const int _maxRepositorySources = 10000;
@@ -328,6 +321,12 @@ class LibraryAddonService {
               final addon = LibraryAddon.fromJson(
                 Map<String, dynamic>.from(item),
               );
+              if (addon.isBuiltIn || addon.origin.startsWith('builtin:')) {
+                // Migration from older builds: bundled Library sources are
+                // removed. Every visible source must now come from an import.
+                needsPersist = true;
+                continue;
+              }
               if (addon.isRepositoryDeprecationStub) {
                 needsPersist = true;
                 continue;
@@ -343,40 +342,10 @@ class LibraryAddonService {
       }
     }
 
-    if (_addons.indexWhere((item) => item.id == gallicaAddonId) < 0) {
-      _addons.add(_builtInGallicaAddon());
-      needsPersist = true;
-    }
-
     _sortAddons();
     _loaded = true;
     if (needsPersist) await _persist();
     return addons;
-  }
-
-  LibraryAddon _builtInGallicaAddon() {
-    return LibraryAddon.fromManifest(
-      <String, dynamic>{
-        'schema': LibraryAddon.schemaV1,
-        'id': gallicaAddonId,
-        'name': 'Gallica / BnF',
-        'version': '1',
-        'baseUrl': 'https://gallica.bnf.fr/',
-        'description':
-            'Livres numériques EPUB du domaine public proposés par Gallica (BnF).',
-        'builtIn': true,
-        'provider': <String, dynamic>{
-          'type': LibraryAddon.gallicaProviderType,
-          'source': 'Bibliothèque nationale de France / Gallica',
-        },
-        'endpoints': <String, dynamic>{
-          'catalog':
-              'services/engine/search/opds?operation=searchRetrieve&version=1.2&exactSearch=false&query=dc.formatspecific%20all%20%22epub%22&filter=provenance%20all%20%22bnf.fr%22&maximumRecords=50',
-        },
-      },
-      origin: 'builtin:gallica-bnf',
-      installedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-    );
   }
 
   Future<LibraryAddonBatchInstallResult> installDocumentFromUrl(
@@ -395,7 +364,8 @@ class LibraryAddonService {
 
         if (_looksLikeKeiyoushiDeprecationStub(response.bodyBytes) &&
             candidate.path.endsWith('/index.min.json')) {
-          final fullPath = candidate.path.substring(
+          final fullPath =
+              candidate.path.substring(
                 0,
                 candidate.path.length - 'index.min.json'.length,
               ) +
@@ -419,7 +389,9 @@ class LibraryAddonService {
       } on LibraryAddonException catch (error) {
         lastError = error;
       } on FormatException catch (error) {
-        lastError = LibraryAddonException('Invalid repository document: $error');
+        lastError = LibraryAddonException(
+          'Invalid repository document: $error',
+        );
       }
     }
 
@@ -532,9 +504,7 @@ class LibraryAddonService {
       final package = rawEntry['pkg']?.toString().trim();
       if (package != null && package.isNotEmpty) packages.add(package);
     }
-    return packages.contains(
-          'eu.kanade.tachiyomi.extension.all.keiyoushi',
-        ) &&
+    return packages.contains('eu.kanade.tachiyomi.extension.all.keiyoushi') &&
         packages.contains('eu.kanade.tachiyomi.extension.all.mihon');
   }
 
@@ -551,6 +521,7 @@ class LibraryAddonService {
 
     if (decoded is Map) {
       final object = Map<String, dynamic>.from(decoded);
+      object.remove('builtIn');
       final aidokuEntries = _extractAidokuEntries(object);
       if (aidokuEntries != null) {
         final parsed = _parseAidokuRepository(aidokuEntries, origin: origin);
@@ -562,10 +533,7 @@ class LibraryAddonService {
 
       final modernEntries = _extractModernKeiyoushiEntries(object);
       if (modernEntries != null) {
-        final parsed = _parseTachiyomiRepository(
-          modernEntries,
-          origin: origin,
-        );
+        final parsed = _parseTachiyomiRepository(modernEntries, origin: origin);
         return _upsertMany(
           parsed,
           format: LibraryAddonDocumentFormat.tachiyomiRepository,
@@ -573,15 +541,11 @@ class LibraryAddonService {
       }
 
       _rejectKnownExternalManifest(object);
-      final addon = LibraryAddon.fromManifest(
-        object,
-        origin: origin,
-      );
+      final addon = LibraryAddon.fromManifest(object, origin: origin);
       await _validateMinimumAppVersion(addon);
-      return _upsertMany(
-        [addon],
-        format: LibraryAddonDocumentFormat.neoStationManifest,
-      );
+      return _upsertMany([
+        addon,
+      ], format: LibraryAddonDocumentFormat.neoStationManifest);
     }
 
     if (decoded is List) {
@@ -604,9 +568,7 @@ class LibraryAddonService {
     );
   }
 
-  static List<dynamic>? _extractAidokuEntries(
-    Map<String, dynamic> document,
-  ) {
+  static List<dynamic>? _extractAidokuEntries(Map<String, dynamic> document) {
     final sources = document['sources'];
     if (sources is List && _looksLikeAidokuEntries(sources)) return sources;
     return null;
@@ -641,7 +603,9 @@ class LibraryAddonService {
     if (originUri == null ||
         originUri.scheme != 'https' ||
         originUri.host.isEmpty) {
-      throw const LibraryAddonException('Aidoku repository origin must use HTTPS.');
+      throw const LibraryAddonException(
+        'Aidoku repository origin must use HTTPS.',
+      );
     }
 
     final result = <LibraryAddon>[];
@@ -677,13 +641,12 @@ class LibraryAddonService {
       final version = entry['version']?.toString().trim().isNotEmpty == true
           ? entry['version'].toString().trim()
           : '0';
-      final sourceLang =
-          entry['lang']?.toString().trim().isNotEmpty == true
-              ? entry['lang'].toString().trim()
-              : ((entry['languages'] is List &&
-                      (entry['languages'] as List).isNotEmpty)
-                  ? (entry['languages'] as List).first.toString()
-                  : 'all');
+      final sourceLang = entry['lang']?.toString().trim().isNotEmpty == true
+          ? entry['lang'].toString().trim()
+          : ((entry['languages'] is List &&
+                    (entry['languages'] as List).isNotEmpty)
+                ? (entry['languages'] as List).first.toString()
+                : 'all');
       final downloadUrl =
           resolveOptional(entry['downloadURL'] ?? entry['downloadUrl']) ??
           resolveOptional(entry['file'], legacyFolder: 'sources');
@@ -695,7 +658,8 @@ class LibraryAddonService {
       final parsedBase = explicitBase == null
           ? null
           : Uri.tryParse(explicitBase.toString().trim());
-      final baseUrl = parsedBase != null &&
+      final baseUrl =
+          parsedBase != null &&
               parsedBase.scheme == 'https' &&
               parsedBase.host.isNotEmpty
           ? parsedBase.toString()
@@ -788,8 +752,8 @@ class LibraryAddonService {
         'version': extension['versionName'] ?? extension['extensionLib'] ?? '0',
         'nsfw':
             extension['contentWarning']?.toString() == 'CONTENT_WARNING_NSFW'
-                ? 1
-                : 0,
+            ? 1
+            : 0,
         'sources': convertedSources,
       });
     }
@@ -922,9 +886,11 @@ class LibraryAddonService {
       final rawSources = entry['sources'];
       if (rawSources is! List) continue;
 
-      for (var sourceIndex = 0;
-          sourceIndex < rawSources.length;
-          sourceIndex++) {
+      for (
+        var sourceIndex = 0;
+        sourceIndex < rawSources.length;
+        sourceIndex++
+      ) {
         if (result.length >= _maxRepositorySources) {
           throw const LibraryAddonException(
             'Repository contains more than 10000 sources.',
@@ -1058,7 +1024,6 @@ class LibraryAddonService {
 
   Future<bool> remove(String id) async {
     await load();
-    if (id == gallicaAddonId) return false;
     final before = _addons.length;
     _addons.removeWhere((addon) => addon.id == id);
     if (_addons.length == before) return false;
