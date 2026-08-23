@@ -175,20 +175,28 @@ class FinLibraryService {
     if (!Platform.isIOS) return;
 
     final root = await _resolveLinkedGamesRoot();
-    if (root != null && await Directory(root).exists()) {
+    if (root != null) {
       try {
-        final discovery =
-            await _discoverLibraryNatively(root, allowTitleLookup: false) ??
-            await discoverLibrary(root);
-        await _importIntoNeoStation(discovery.games);
-        await _replaceCache(discovery.games, skipped: discovery.skipped);
-        await configProvider.refreshDetectedSystems();
-        await databaseProvider.loadDatabase();
-        _log.i(
-          'FinLibraryService: reconciled ${discovery.games.length} live game(s) '
-          'after database initialization.',
+        final nativeDiscovery = await _discoverLibraryNatively(
+          root,
+          allowTitleLookup: false,
         );
-        return;
+        final discovery =
+            nativeDiscovery ??
+            (await Directory(root).exists()
+                ? await discoverLibrary(root)
+                : null);
+        if (discovery != null) {
+          await _importIntoNeoStation(discovery.games);
+          await _replaceCache(discovery.games, skipped: discovery.skipped);
+          await configProvider.refreshDetectedSystems();
+          await databaseProvider.loadDatabase();
+          _log.i(
+            'FinLibraryService: reconciled ${discovery.games.length} live game(s) '
+            'after database initialization.',
+          );
+          return;
+        }
       } catch (error) {
         _log.w('FinLibraryService: live startup reconcile failed: $error');
       }
@@ -863,12 +871,31 @@ class FinLibraryService {
       return false;
     }
 
+    await _writeLaunchDebugFile(
+      'ROM path: $romPath\n'
+      'Relative path: ${relativePath ?? '-'}\n'
+      'Shortcut input (Nintendo Game ID): $input',
+    );
+
     try {
-      return await IosShortcutJitLaunchService.run(
+      final launched = await IosShortcutJitLaunchService.run(
         shortcutName: IosShortcutJitLaunchService.finShortcutName,
         input: input,
       );
+      await _writeLaunchDebugFile(
+        'ROM path: $romPath\n'
+        'Relative path: ${relativePath ?? '-'}\n'
+        'Shortcut input (Nintendo Game ID): $input\n'
+        'Shortcuts handoff opened: $launched',
+      );
+      return launched;
     } catch (error) {
+      await _writeLaunchDebugFile(
+        'ROM path: $romPath\n'
+        'Relative path: ${relativePath ?? '-'}\n'
+        'Shortcut input (Nintendo Game ID): $input\n'
+        'Shortcut launch error: $error',
+      );
       _log.e('FinLibraryService: Shortcut launch failed: $error');
       return false;
     }
@@ -926,6 +953,18 @@ class FinLibraryService {
       }
     } catch (_) {}
     return null;
+  }
+
+  static Future<void> _writeLaunchDebugFile(String content) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final file = File(path.join(docs.path, 'fin_launch_debug.txt'));
+      await file.writeAsString(
+        '--- ${DateTime.now().toIso8601String()} ---\n$content',
+      );
+    } catch (error) {
+      _log.w('FinLibraryService: could not write launch diagnostics: $error');
+    }
   }
 
   static Future<void> _writeDebugFile(String content) async {
