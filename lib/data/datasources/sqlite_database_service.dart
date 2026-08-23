@@ -756,8 +756,7 @@ class SqliteDatabaseService {
     final lowerPath = romPath.toLowerCase();
     return lowerPath.startsWith('armsx2://') ||
         lowerPath.startsWith('melonx://') ||
-        lowerPath.startsWith('rpcs3-library://') ||
-        lowerPath.startsWith('fin://');
+        lowerPath.startsWith('rpcs3-library://');
   }
 
   static Future<({int removed, Set<String> knownPaths})>

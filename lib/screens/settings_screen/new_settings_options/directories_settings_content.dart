@@ -11,7 +11,6 @@ import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
-import 'package:neostation/services/fin_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
@@ -676,115 +675,6 @@ class DirectoriesSettingsContentState
     );
   }
 
-  Future<void> _linkFinGamesFolder() async {
-    if (_linkingFolderKey != null) return;
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
-    setState(() => _linkingFolderKey = FinLibraryService.bookmarkKey);
-    try {
-      final result = await FinLibraryService.linkAndSync();
-      if (result == null || !mounted) return;
-      setState(() {});
-      AppNotification.showNotification(
-        context,
-        fr
-            ? '${result.discoveredGames} jeu(x) Fin synchronisé(s) • '
-                  '${result.gameCubeGames} GameCube • ${result.wiiGames} Wii'
-            : '${result.discoveredGames} Fin game(s) synced • '
-                  '${result.gameCubeGames} GameCube • ${result.wiiGames} Wii',
-        type: NotificationType.success,
-      );
-    } on FormatException {
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          fr
-              ? 'Sélectionne le dossier Fin/Games (ou le dossier Fin qui contient Games).'
-              : 'Select Fin/Games (or the Fin folder that contains Games).',
-          type: NotificationType.error,
-        );
-      }
-    } catch (e) {
-      _log.e('Fin folder link/sync failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          fr ? 'Synchronisation Fin impossible : $e' : 'Fin sync failed: $e',
-          type: NotificationType.error,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _linkingFolderKey = null);
-    }
-  }
-
-  Future<void> _syncWithFin() async {
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
-    try {
-      final result = await FinLibraryService.syncLinkedLibrary();
-      if (!mounted) return;
-      setState(() {});
-      AppNotification.showNotification(
-        context,
-        fr
-            ? '${result.discoveredGames} jeu(x) Fin synchronisé(s) • '
-                  '${result.gameCubeGames} GameCube • ${result.wiiGames} Wii'
-            : '${result.discoveredGames} Fin game(s) synced • '
-                  '${result.gameCubeGames} GameCube • ${result.wiiGames} Wii',
-        type: NotificationType.success,
-      );
-    } catch (e) {
-      _log.e('Fin library sync failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          fr ? 'Synchronisation Fin impossible : $e' : 'Fin sync failed: $e',
-          type: NotificationType.error,
-        );
-      }
-    }
-  }
-
-  Future<void> _configureFinLaunch() async {
-    final opened = await IosShortcutJitLaunchService.openFinShortcutInstaller();
-    if (!mounted || opened) return;
-    AppNotification.showNotification(
-      context,
-      AppLocale.shortcutSetupOpenError.getString(context),
-      type: NotificationType.error,
-    );
-  }
-
-  Future<void> _testFinLaunch() async {
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
-    await FinLibraryService.loadCachedLibrary();
-    final input = FinLibraryService.firstLaunchableGameId;
-    if (input == null || input.isEmpty) {
-      if (!mounted) return;
-      AppNotification.showNotification(
-        context,
-        fr
-            ? 'Synchronise d’abord Fin : aucun Game ID Nintendo n’est disponible.'
-            : 'Sync Fin first: no Nintendo Game ID is available.',
-        type: NotificationType.error,
-      );
-      return;
-    }
-    final opened = await IosShortcutJitLaunchService.run(
-      shortcutName: IosShortcutJitLaunchService.finShortcutName,
-      input: input,
-    );
-    if (!mounted) return;
-    AppNotification.showNotification(
-      context,
-      opened
-          ? (fr ? 'Test Fin envoyé avec le Game ID $input.' : 'Fin test sent with Game ID $input.')
-          : (fr
-                ? 'Le raccourci NeoStation+Fin n’a pas pu être lancé.'
-                : 'NeoStation+Fin Shortcut could not be launched.'),
-      type: opened ? NotificationType.info : NotificationType.error,
-    );
-  }
-
   Future<void> _linkRpcs3DataFolder() async {
     if (_linkingFolderKey != null) return;
 
@@ -861,8 +751,6 @@ class DirectoriesSettingsContentState
       _buildIOSRpcs3Section(theme),
       _buildIOSArmsx2Section(theme),
       _buildIOSMeloNXSection(theme),
-      _buildIOSFinLibrarySection(theme),
-      _buildIOSFinShortcutSection(theme),
     ];
   }
 
@@ -1052,101 +940,6 @@ class DirectoriesSettingsContentState
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 13.r),
                 ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIOSFinLibrarySection(ThemeData theme) {
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
-    final isLinked = FinLibraryService.isLinked;
-    final hasSynced = FinLibraryService.hasSyncedLibrary;
-    final count = FinLibraryService.syncedGameCount;
-    final gcCount = FinLibraryService.gameCubeCount;
-    final wiiCount = FinLibraryService.wiiCount;
-    final skipped = FinLibraryService.skippedGameCount;
-
-    final String statusText;
-    if (!isLinked) {
-      statusText = fr
-          ? 'Sélectionne Fin/Games pour importer les jeux GameCube et Wii.'
-          : 'Select Fin/Games to import GameCube and Wii games.';
-    } else if (!hasSynced) {
-      statusText = fr
-          ? 'Dossier Fin lié • synchronisation requise.'
-          : 'Fin folder linked • sync required.';
-    } else {
-      statusText = '$count ${fr ? 'jeu(x)' : 'game(s)'} • '
-          '$gcCount GameCube • $wiiCount Wii'
-          '${skipped > 0 ? ' • $skipped ${fr ? 'non classé(s)' : 'unclassified'}' : ''}';
-    }
-
-    return _buildIOSEmulatorCard(
-      theme: theme,
-      name: 'Fin — GameCube & Wii',
-      icon: Symbols.sports_esports_rounded,
-      statusText: statusText,
-      isLinked: isLinked,
-      bookmarkKey: FinLibraryService.bookmarkKey,
-      successMessage: '',
-      onLinkPressed: _linkFinGamesFolder,
-      trailingAction: SizedBox(
-        height: 48.r,
-        child: FilledButton.icon(
-          onPressed: isLinked && _linkingFolderKey == null ? _syncWithFin : null,
-          icon: Icon(Symbols.sync_rounded, size: 20.r),
-          label: Text(
-            hasSynced
-                ? AppLocale.iosEmuResync.getString(context)
-                : AppLocale.iosEmuSync.getString(context),
-            style: TextStyle(fontSize: 14.r),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIOSFinShortcutSection(ThemeData theme) {
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
-    return _buildIOSEmulatorCard(
-      theme: theme,
-      name: 'Fin Shortcut',
-      icon: Symbols.rocket_launch_rounded,
-      statusText: fr
-          ? 'Raccourci attendu : NeoStation+Fin. NeoStation lui transmet le Game ID Nintendo du jeu.'
-          : 'Expected Shortcut: NeoStation+Fin. NeoStation passes the Nintendo Game ID.',
-      isLinked: true,
-      bookmarkKey: 'fin-shortcut',
-      successMessage: '',
-      showLinkButton: false,
-      trailingAction: Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 48.r,
-              child: FilledButton.icon(
-                onPressed: _configureFinLaunch,
-                icon: Icon(Symbols.add_rounded, size: 20.r),
-                label: Text(
-                  IosShortcutJitLaunchService.hasFinShortcutInstaller
-                      ? (fr ? 'Installer' : 'Install')
-                      : (fr ? 'Créer' : 'Create'),
-                  style: TextStyle(fontSize: 14.r),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 10.r),
-          Expanded(
-            child: SizedBox(
-              height: 48.r,
-              child: OutlinedButton.icon(
-                onPressed: _testFinLaunch,
-                icon: Icon(Symbols.play_arrow_rounded, size: 20.r),
-                label: Text(fr ? 'Tester' : 'Test'),
               ),
             ),
           ),
