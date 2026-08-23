@@ -20,16 +20,21 @@ void main() {
       );
     });
 
-    test('Fin startup restore is native-first on iOS', () {
+    test('Fin startup restore is native-only on iOS', () {
       final source = File('lib/services/fin_library_service.dart')
           .readAsStringSync();
       expect(
         source,
-        contains('final nativeDiscovery = await _discoverLibraryNatively('),
+        contains('final discovery = await _discoverLibraryNatively('),
       );
+      expect(source, isNot(contains('nativeDiscovery ??')));
       expect(
         source,
         isNot(contains('if (root != null && await Directory(root).exists())')),
+      );
+      expect(
+        source,
+        contains("final discoveryMode = Platform.isIOS ? 'native-ios' : 'dart'"),
       );
     });
 
@@ -38,6 +43,8 @@ void main() {
           .readAsStringSync();
       expect(source, contains('fin_launch_debug.txt'));
       expect(source, contains('Shortcut input (Nintendo Game ID)'));
+      expect(source, contains('Native candidates:'));
+      expect(source, contains('Unreadable prefixes:'));
     });
   });
 }
