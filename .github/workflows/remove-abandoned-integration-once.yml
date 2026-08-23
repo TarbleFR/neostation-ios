@@ -1,9 +1,10 @@
 name: Remove abandoned emulator integration once
 
 on:
-  push:
-    paths:
-      - '.github/workflows/remove-abandoned-integration-once.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -54,7 +55,6 @@ jobs:
                   raise SystemExit(f'{label}: expected exactly one regex match, got {count}')
               return out
 
-          # Files created solely for the abandoned integration.
           for file_name in (
               'lib/services/fin_library_service.dart',
               'test/fin_library_service_test.dart',
@@ -62,8 +62,6 @@ jobs:
           ):
               Path(file_name).unlink(missing_ok=True)
 
-          # Restore the generic iOS folder bridge and Shortcut helper exactly
-          # to their state immediately before this integration was introduced.
           for file_name in (
               'packages/external_folder_access/lib/external_folder_access.dart',
               'packages/external_folder_access/ios/Classes/ExternalFolderAccessPlugin.swift',
@@ -72,21 +70,10 @@ jobs:
               data = subprocess.check_output(['git', 'show', f'{PRE}:{file_name}'])
               Path(file_name).write_bytes(data)
 
-          # App startup: remove import, cache/bootstrap and DB restore hook.
           p = 'lib/main.dart'
           s = read(p)
-          s = replace_once(
-              s,
-              "import 'package:neostation/services/fin_library_service.dart';\n",
-              '',
-              'main import',
-          )
-          s = replace_once(
-              s,
-              '    await FinLibraryService.initialize();\n',
-              '',
-              'main initialize',
-          )
+          s = replace_once(s, "import 'package:neostation/services/fin_library_service.dart';\n", '', 'main import')
+          s = replace_once(s, '    await FinLibraryService.initialize();\n', '', 'main initialize')
           s = regex_once(
               s,
               r"\n      await FinLibraryService\.restoreAfterDatabaseReady\(\n        configProvider: sqliteConfigProvider,\n        databaseProvider: sqliteDatabaseProvider,\n      \);",
@@ -95,15 +82,9 @@ jobs:
           )
           write(p, s)
 
-          # Settings UI: remove import, actions and both cards.
           p = 'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart'
           s = read(p)
-          s = replace_once(
-              s,
-              "import 'package:neostation/services/fin_library_service.dart';\n",
-              '',
-              'settings import',
-          )
+          s = replace_once(s, "import 'package:neostation/services/fin_library_service.dart';\n", '', 'settings import')
           s = regex_once(
               s,
               r"\n  Future<void> _linkFinGamesFolder\(\) async \{.*?\n  Future<void> _linkRpcs3DataFolder\(\) async \{",
@@ -120,15 +101,9 @@ jobs:
           )
           write(p, s)
 
-          # Launch path: remove virtual-row detection and all direct-launch logic.
           p = 'lib/services/game/game_launch_service.dart'
           s = read(p)
-          s = replace_once(
-              s,
-              "import 'package:neostation/services/fin_library_service.dart';\n",
-              '',
-              'launch import',
-          )
+          s = replace_once(s, "import 'package:neostation/services/fin_library_service.dart';\n", '', 'launch import')
           s = regex_once(
               s,
               r"\n      final isFinVirtualRom =\n          Platform\.isIOS &&\n          \(system\.folderName\.toLowerCase\(\) == 'gc' \|\|\n              system\.folderName\.toLowerCase\(\) == 'wii'\) &&\n          game\.romPath != null &&\n          FinLibraryService\.isVirtualLibraryPath\(game\.romPath!\);",
@@ -149,7 +124,6 @@ jobs:
           )
           write(p, s)
 
-          # Normal ROM scanning must no longer preserve the removed URI scheme.
           p = 'lib/data/datasources/sqlite_database_service.dart'
           s = read(p)
           s = replace_once(
@@ -160,7 +134,6 @@ jobs:
           )
           write(p, s)
 
-          # The workflow is one-shot and must not remain in the repository.
           Path('.github/workflows/remove-abandoned-integration-once.yml').unlink(missing_ok=True)
           PY
 
@@ -174,7 +147,6 @@ jobs:
 
           git diff --check
 
-          # Fail hard if any source-level residue of this integration remains.
           if grep -RniE \
             --exclude-dir=.git \
             --exclude='*.lock' \
