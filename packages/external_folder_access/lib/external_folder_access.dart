@@ -94,8 +94,10 @@ class ExternalFolderAccess {
           .whereType<Map>()
           .map((entry) => Map<String, dynamic>.from(entry))
           .toList(growable: false);
-    } on PlatformException {
-      return null;
+    } on PlatformException catch (error) {
+      throw StateError(
+        'Native iOS folder scan failed (${error.code}): ${error.message ?? 'unknown error'}',
+      );
     }
   }
 

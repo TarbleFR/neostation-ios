@@ -29,6 +29,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     /// the selected directory but fail as soon as it tried to enumerate
     /// or open its files. Keep one balanced access grant per bookmark key.
     private var activeSecurityScopedURLs: [String: URL] = [:]
+    private var startedSecurityScopedKeys = Set<String>()
 
     /// Bookmarks are stored per-emulator so several external folders can be
     /// linked side by side (RetroArch's, ARMSX2's, ...) instead of the one
@@ -181,12 +182,16 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             )
 
             if let previous = activeSecurityScopedURLs.removeValue(forKey: key),
-                previous != url
+                previous != url,
+                startedSecurityScopedKeys.remove(key) != nil
             {
                 previous.stopAccessingSecurityScopedResource()
             }
+            activeSecurityScopedURLs[key] = url
             if didStart {
-                activeSecurityScopedURLs[key] = url
+                startedSecurityScopedKeys.insert(key)
+            } else {
+                startedSecurityScopedKeys.remove(key)
             }
             pendingResult?(url.path)
         } catch {
@@ -237,17 +242,13 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
-            guard url.startAccessingSecurityScopedResource() else {
-                result(
-                    FlutterError(
-                        code: "ACCESS_DENIED",
-                        message: "startAccessingSecurityScopedResource returned false",
-                        details: nil
-                    )
-                )
-                return
-            }
+            let didStart = url.startAccessingSecurityScopedResource()
             activeSecurityScopedURLs[key] = url
+            if didStart {
+                startedSecurityScopedKeys.insert(key)
+            } else {
+                startedSecurityScopedKeys.remove(key)
+            }
 
             // Sideload updates/re-signing can make an otherwise resolvable
             // bookmark stale. Refresh it immediately while the security scope
@@ -305,17 +306,13 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         )
-        guard url.startAccessingSecurityScopedResource() else {
-            throw NSError(
-                domain: "ExternalFolderAccess",
-                code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "startAccessingSecurityScopedResource returned false"
-                ]
-            )
-        }
+        let didStart = url.startAccessingSecurityScopedResource()
         activeSecurityScopedURLs[key] = url
+        if didStart {
+            startedSecurityScopedKeys.insert(key)
+        } else {
+            startedSecurityScopedKeys.remove(key)
+        }
 
         if isStale {
             if let refreshed = try? url.bookmarkData(
@@ -390,16 +387,23 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             let manager = FileManager.default
             let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
             var urls: [URL] = []
+            var enumerationErrors: [String] = []
 
             if recursive {
                 guard let enumerator = manager.enumerator(
                     at: root,
                     includingPropertiesForKeys: resourceKeys,
                     options: [.skipsHiddenFiles],
-                    errorHandler: { _, _ in true }
+                    errorHandler: { url, error in
+                        enumerationErrors.append("\(url.path): \(error.localizedDescription)")
+                        return true
+                    }
                 ) else {
-                    result([])
-                    return
+                    throw NSError(
+                        domain: "ExternalFolderAccess",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Could not enumerate bookmarked folder"]
+                    )
                 }
                 for case let url as URL in enumerator {
                     urls.append(url)
@@ -430,11 +434,15 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                 if relative.isEmpty { continue }
 
                 var prefix = Data()
+                var prefixRead = prefixBytes == 0
                 if prefixBytes > 0,
                     let handle = try? FileHandle(forReadingFrom: canonicalFile)
                 {
                     defer { try? handle.close() }
-                    prefix = (try? handle.read(upToCount: prefixBytes)) ?? Data()
+                    if let data = try? handle.read(upToCount: prefixBytes) {
+                        prefix = data
+                        prefixRead = true
+                    }
                 }
 
                 entries.append([
@@ -442,7 +450,19 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
                     "fileName": canonicalFile.lastPathComponent,
                     "size": values?.fileSize ?? 0,
                     "prefix": FlutterStandardTypedData(bytes: prefix),
+                    "prefixRead": prefixRead,
                 ])
+            }
+
+            if entries.isEmpty && !enumerationErrors.isEmpty {
+                throw NSError(
+                    domain: "ExternalFolderAccess",
+                    code: 3,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Folder enumeration failed: " + enumerationErrors.joined(separator: " | ")
+                    ]
+                )
             }
 
             result(entries)
@@ -458,7 +478,9 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     }
 
     private func clearBookmark(key: String, result: @escaping FlutterResult) {
-        if let active = activeSecurityScopedURLs.removeValue(forKey: key) {
+        if let active = activeSecurityScopedURLs.removeValue(forKey: key),
+            startedSecurityScopedKeys.remove(key) != nil
+        {
             active.stopAccessingSecurityScopedResource()
         }
         UserDefaults.standard.removeObject(forKey: Self.bookmarkDefaultsKey(for: key))

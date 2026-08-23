@@ -756,17 +756,28 @@ class DirectoriesSettingsContentState
 
   Future<void> _testFinLaunch() async {
     final fr = Localizations.localeOf(context).languageCode == 'fr';
+    await FinLibraryService.loadCachedLibrary();
+    final input = FinLibraryService.firstLaunchableGameId;
+    if (input == null || input.isEmpty) {
+      if (!mounted) return;
+      AppNotification.showNotification(
+        context,
+        fr
+            ? 'Synchronise d’abord Fin : aucun Game ID Nintendo n’est disponible.'
+            : 'Sync Fin first: no Nintendo Game ID is available.',
+        type: NotificationType.error,
+      );
+      return;
+    }
     final opened = await IosShortcutJitLaunchService.run(
       shortcutName: IosShortcutJitLaunchService.finShortcutName,
-      input: '__NEOSTATION_TEST__',
+      input: input,
     );
     if (!mounted) return;
     AppNotification.showNotification(
       context,
       opened
-          ? (fr
-                ? 'Test envoyé au raccourci NeoStation+Fin.'
-                : 'Test sent to the NeoStation+Fin Shortcut.')
+          ? (fr ? 'Test Fin envoyé avec le Game ID $input.' : 'Fin test sent with Game ID $input.')
           : (fr
                 ? 'Le raccourci NeoStation+Fin n’a pas pu être lancé.'
                 : 'NeoStation+Fin Shortcut could not be launched.'),
@@ -1105,8 +1116,8 @@ class DirectoriesSettingsContentState
       name: 'Fin Shortcut',
       icon: Symbols.rocket_launch_rounded,
       statusText: fr
-          ? 'Raccourci attendu : NeoStation+Fin. NeoStation lui transmet le chemin relatif du jeu sous Fin/Games.'
-          : 'Expected Shortcut: NeoStation+Fin. NeoStation passes the game path relative to Fin/Games.',
+          ? 'Raccourci attendu : NeoStation+Fin. NeoStation lui transmet le Game ID Nintendo du jeu.'
+          : 'Expected Shortcut: NeoStation+Fin. NeoStation passes the Nintendo Game ID.',
       isLinked: true,
       bookmarkKey: 'fin-shortcut',
       successMessage: '',

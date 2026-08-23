@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/services.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 import 'package:neostation/services/library_catalog_service.dart';
@@ -53,7 +52,6 @@ class LibraryMetadataProviderService {
       LibraryMetadataProviderService._();
 
   static final _log = LoggerService.instance;
-  static const String manifestAsset = 'assets/data/manga-providers.json';
   static const String _importedRegistryPrefsKey =
       'neostation_library_metadata_provider_registry_v1';
   static const Duration _timeout = Duration(seconds: 18);
@@ -85,10 +83,12 @@ class LibraryMetadataProviderService {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
     final imported = prefs.getString(_importedRegistryPrefsKey);
-    final raw = imported?.trim().isNotEmpty == true
-        ? imported!
-        : await rootBundle.loadString(manifestAsset);
-    _providers = _parseRegistry(raw);
+    if (imported?.trim().isNotEmpty != true) {
+      _providers = const <LibraryMetadataProviderDefinition>[];
+      _initialized = true;
+      return;
+    }
+    _providers = _parseRegistry(imported!);
     _initialized = true;
   }
 

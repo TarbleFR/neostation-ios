@@ -26,12 +26,14 @@ void main() {
         File('lib/services/library_mangadex_service.dart').existsSync(),
         isTrue,
       );
-      expect(File('assets/data/manga-providers.json').existsSync(), isTrue);
-      expect(
-        File('lib/services/library_metadata_provider_service.dart')
-            .existsSync(),
-        isTrue,
+      expect(File('assets/data/manga-providers.json').existsSync(), isFalse);
+      final metadata = File(
+        'lib/services/library_metadata_provider_service.dart',
       );
+      expect(metadata.existsSync(), isTrue);
+      final metadataSource = metadata.readAsStringSync();
+      expect(metadataSource, isNot(contains('rootBundle.loadString')));
+      expect(metadataSource, isNot(contains('manifestAsset')));
     });
   });
 }

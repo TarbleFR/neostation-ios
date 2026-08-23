@@ -121,6 +121,8 @@ class FinLibraryService {
   static List<FinLibraryGame>? _cache;
   static bool _syncCompleted = false;
   static int _lastSkippedGames = 0;
+  static int _lastNativeCandidates = 0;
+  static int _lastNativeUnreadablePrefixes = 0;
 
   static String? get linkedGamesPath {
     final value = _linkedGamesPath;
@@ -137,6 +139,14 @@ class FinLibraryService {
   static int get wiiCount =>
       _cache?.where((game) => game.systemFolder == 'wii').length ?? 0;
   static int get skippedGameCount => _lastSkippedGames;
+
+  static String? get firstLaunchableGameId {
+    for (final game in _cache ?? const <FinLibraryGame>[]) {
+      final value = game.gameId?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
 
   static bool isVirtualLibraryPath(String romPath) {
     final uri = Uri.tryParse(romPath);
@@ -177,15 +187,10 @@ class FinLibraryService {
     final root = await _resolveLinkedGamesRoot();
     if (root != null) {
       try {
-        final nativeDiscovery = await _discoverLibraryNatively(
+        final discovery = await _discoverLibraryNatively(
           root,
           allowTitleLookup: false,
         );
-        final discovery =
-            nativeDiscovery ??
-            (await Directory(root).exists()
-                ? await discoverLibrary(root)
-                : null);
         if (discovery != null) {
           await _importIntoNeoStation(discovery.games);
           await _replaceCache(discovery.games, skipped: discovery.skipped);
@@ -251,13 +256,16 @@ class FinLibraryService {
     }
 
     await _writeDebugFile('STATE: SCANNING\nGames root: $root');
-    final nativeDiscovery = await _discoverLibraryNatively(
-      root,
-      allowTitleLookup: true,
-    );
-    final discovery =
-        nativeDiscovery ?? await discoverLibrary(root, allowTitleLookup: true);
-    final discoveryMode = nativeDiscovery == null ? 'dart' : 'native-ios';
+    final discovery = Platform.isIOS
+        ? await _discoverLibraryNatively(root, allowTitleLookup: true)
+        : await discoverLibrary(root, allowTitleLookup: true);
+    if (discovery == null) {
+      await _writeDebugFile(
+        'STATE: NATIVE_SCAN_UNAVAILABLE\nGames root: $root',
+      );
+      throw StateError('Fin native iOS scan is unavailable for the linked folder.');
+    }
+    final discoveryMode = Platform.isIOS ? 'native-ios' : 'dart';
     final importResult = await _importIntoNeoStation(discovery.games);
     await _replaceCache(discovery.games, skipped: discovery.skipped);
     await _refreshNeoStationUi();
@@ -280,6 +288,8 @@ class FinLibraryService {
     await _writeDebugFile(
       'STATE: IMPORTED\nGames root: $root\n'
       'Discovery mode: $discoveryMode\n'
+      'Native candidates: $_lastNativeCandidates\n'
+      'Unreadable prefixes: $_lastNativeUnreadablePrefixes\n'
       'Detected: ${discovery.games.length}\n'
       'GameCube: $gameCubeGames\nWii: $wiiGames\n'
       'Unclassified: ${discovery.skipped}\n'
@@ -341,8 +351,12 @@ class FinLibraryService {
       recursive: true,
       prefixBytes: 0x100,
     );
-    if (entries == null) return null;
+    if (entries == null) {
+      throw StateError('Fin bookmark resolved but native enumeration returned no result.');
+    }
 
+    _lastNativeCandidates = entries.length;
+    _lastNativeUnreadablePrefixes = 0;
     final games = <FinLibraryGame>[];
     var skipped = 0;
     for (final entry in entries) {
@@ -354,6 +368,9 @@ class FinLibraryService {
       final extension = path.extension(fileName).toLowerCase();
       if (!_supportedExtensions.contains(extension)) continue;
 
+      if (entry['prefixRead'] == false) {
+        _lastNativeUnreadablePrefixes++;
+      }
       final rawPrefix = entry['prefix'];
       final Uint8List prefix;
       if (rawPrefix is Uint8List) {
@@ -928,6 +945,10 @@ class FinLibraryService {
     final normalizedPath = path.normalize(selected);
     final base = path.basename(normalizedPath).toLowerCase();
     if (base == 'games' || base == 'software') return normalizedPath;
+
+    // The native recursive scanner can walk a selected parent Fin folder even
+    // when Dart cannot stat/list provider-backed folders returned by Files.
+    if (Platform.isIOS) return normalizedPath;
 
     final root = Directory(normalizedPath);
     if (!await root.exists()) return null;
