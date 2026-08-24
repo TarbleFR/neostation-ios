@@ -197,9 +197,11 @@ class RetroArchLibraryService {
 
   /// Attempts a genuine one-tap launch for [romPath] via RetroArch's
   /// `retroarch://game/<filename>` scheme, matching against the
-  /// last-synced library by filename. Returns `true` only if a match was
-  /// found AND the URL was opened — callers should fall back to another
-  /// launch path otherwise (see GameLaunchService).
+  /// last-synced library by filename. Returns `true` once a matching URL
+  /// has been dispatched without throwing. The App Store build can launch
+  /// the game while reporting `false` from url_launcher; treating that
+  /// boolean as a failure would incorrectly continue into Open In / Share.
+  /// TestFlight still follows its existing successful direct-launch path.
   static Future<bool> launchGameByRomPath(String romPath) async {
     final cache = _cache;
     if (cache == null || cache.isEmpty) {
@@ -236,7 +238,18 @@ class RetroArchLibraryService {
     );
 
     try {
-      return await launchUrl(uri);
+      final reportedOpened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!reportedOpened) {
+        _log.w(
+          'RetroArchLibraryService: $uri was dispatched but url_launcher '
+          'reported false; suppressing Open In / Share because the App Store '
+          'build can still complete the handoff.',
+        );
+      }
+      return true;
     } catch (e) {
       _log.e('RetroArchLibraryService: failed to launch $uri: $e');
       return false;
