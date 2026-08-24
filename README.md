@@ -27,6 +27,7 @@ NeoStation iOS is an **iOS 18+ port** of the upstream [NeoStation](https://githu
 - **RPCS3 iOS** Data-folder synchronization, PARAM.SFO title repair, Title-ID ScreenScraper lookup and a conservative StikDebug Universal JIT launch. NeoStation currently opens RPCS3 normally; the user then presses **Start / Commencer** and selects the game inside RPCS3.
 - Installed-emulator detection in NeoStation settings.
 - iOS-specific document, media and external-folder handling.
+- **Book and manga management** using local files and compatible sources configured by the user, with reading, cover artwork, metadata, search and collection organization.
 - **Custom main-menu backgrounds** using PNG, JPG/JPEG, WebP, GIF, MP4, M4V or MOV files.
 - **Optional main-menu music** using MP3, WAV, OGG or FLAC files, played only while the main Systems menu is active.
 - ScreenScraper metadata and media scraping.
@@ -103,6 +104,12 @@ The current ScreenScraper user-credential path uses the project's established SQ
 The primary Systems screen can use a user-selected custom background. Supported static/animated media are copied into NeoStation's user-data directory so the selection survives file-provider access changes. The background is intentionally limited to the main Systems menu; pushed game playlists and other top-level screens retain their normal theme surfaces.
 
 A user-selected menu-music track is likewise copied into NeoStation user data. Menu music loops only while the primary Systems menu is visible, stops when NeoStation leaves that menu or is backgrounded, and yields to the normal music player.
+
+## Books and manga
+
+NeoStation iOS allows users to import, organize and read books and manga. Users must add their own files or independently find and configure compatible sources.
+
+NeoStation iOS does not provide, host or reference any source of copyrighted content. Content availability depends exclusively on the files and sources added by the user.
 
 ## Project structure
 
