@@ -1,0 +1,43 @@
+{
+  "system": {
+    "id": "music",
+    "multidisc": false,
+    "name": "Music",
+    "short_name": "Music",
+    "details": {
+      "manufacturer": "",
+      "release_date": "2024-01-01",
+      "description": "Music playback and streaming collection.",
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "media_collection"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "music"
+    ],
+    "colors": [
+      "#30d1a1",
+      "#4db6ac"
+    ],
+    "extensions": [
+      "mp3",
+      "wav",
+      "flac",
+      "ogg"
+    ]
+  },
+  "emulators": [],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

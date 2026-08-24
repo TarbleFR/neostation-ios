@@ -1,0 +1,125 @@
+{
+  "system": {
+    "id": "chf",
+    "multidisc": false,
+    "name": "Fairchild Channel F",
+    "short_name": "CHF",
+    "details": {
+      "manufacturer": "Fairchild",
+      "release_date": "1976-11-01",
+      "description": "The first programmable ROM cartridge console and first to use a microprocessor.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Fairchild F8",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Videocart-1: Tic-Tac-Toe",
+        "Alien Invasion",
+        "Space War",
+        "Robot War / Torpedo Alley"
+      ]
+    },
+    "ids": {
+      "screenscraper": 80,
+      "retroachievements": 57
+    },
+    "folders": [
+      "chf",
+      "channelf",
+      "FAIRCHILD",
+      "Fairchild Channel F",
+      "fairchild-channel-f"
+    ],
+    "colors": [
+      "#F5F5F5",
+      "#EF5350"
+    ],
+    "extensions": [
+      "chf",
+      "bin",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 FreeChaF",
+      "default_core": true,
+      "unique_id": "chf.ra64.freechaf",
+      "description": "Supported extensions: chf, bin, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"freechaf\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FreeChaF",
+      "default_core": true,
+      "unique_id": "chf.ra32.freechaf",
+      "description": "Supported extensions: chf, bin, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"freechaf\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FreeChaF",
+      "default_core": true,
+      "unique_id": "chf.ra.freechaf",
+      "description": "Supported extensions: chf, bin, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"freechaf\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L freechaf_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L freechaf_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L freechaf_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "chf.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

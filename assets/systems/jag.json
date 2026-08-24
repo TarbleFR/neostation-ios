@@ -1,0 +1,157 @@
+{
+  "system": {
+    "id": "jag",
+    "multidisc": false,
+    "name": "Atari Jaguar",
+    "short_name": "Jaguar",
+    "details": {
+      "manufacturer": "Atari",
+      "release_date": "1993-11-23",
+      "description": "Atari's 64-bit home console with a controversial controller design.",
+      "type": "console",
+      "architecture": "32/64-bit",
+      "generation": 5,
+      "cpu": "Motorola 68000 + custom RISC processors",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Tempest 2000",
+        "Alien vs Predator",
+        "Rayman",
+        "Doom"
+      ]
+    },
+    "ids": {
+      "screenscraper": 27,
+      "retroachievements": 17
+    },
+    "folders": [
+      "jag",
+      "jaguar",
+      "atarijaguar",
+      "Atari Jaguar"
+    ],
+    "colors": [
+      "#212121",
+      "#BDBDBD"
+    ],
+    "extensions": [
+      "abs",
+      "bin",
+      "cof",
+      "j64",
+      "jag",
+      "prg",
+      "rom",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone IrataJaguar",
+      "unique_id": "jag.ru.vastness.altmer.iratajaguar",
+      "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n ru.vastness.altmer.iratajaguar/ru.vastness.altmer.iratajaguar.MainActivity -e rom \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone BigPEmu",
+      "unique_id": "jag.jaguar.bigpe.bigpemu",
+      "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "bigpemu.exe",
+          "args": "\"{file.path}\""
+        },
+        "linux": {
+          "executable": "bigpemu",
+          "emudeck_launcher": "bigpemu.sh",
+          "args": "\"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Virtual Jaguar",
+      "default_core": true,
+      "unique_id": "jag.ra64.virtualjaguar",
+      "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"virtualjaguar\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Virtual Jaguar",
+      "default_core": true,
+      "unique_id": "jag.ra32.virtualjaguar",
+      "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"virtualjaguar\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Virtual Jaguar",
+      "default_core": true,
+      "unique_id": "jag.ra.virtualjaguar",
+      "description": "Supported extensions: j64, jag, rom, abs, cof, bin, prg, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"virtualjaguar\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L virtualjaguar_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L virtualjaguar_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L virtualjaguar_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "jag.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

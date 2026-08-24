@@ -1,0 +1,179 @@
+{
+  "system": {
+    "id": "zxspectrum",
+    "multidisc": false,
+    "name": "ZX Spectrum",
+    "short_name": "ZXS",
+    "details": {
+      "manufacturer": "Sinclair",
+      "release_date": "1982-04-23",
+      "description": "Sinclair's iconic 8-bit computer with colorful rubber keys and a huge software library.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Manic Miner",
+        "Jet Set Willy",
+        "Knight Lore",
+        "Saboteur!"
+      ]
+    },
+    "ids": {
+      "screenscraper": 76,
+      "retroachievements": null
+    },
+    "folders": [
+      "zxspectrum",
+      "ZX Spectrum",
+      "ZX",
+      "ZXS",
+      "Spectrum",
+      "zxs"
+    ],
+    "colors": [
+      "#212121",
+      "#f44336"
+    ],
+    "extensions": [
+      "dsk",
+      "rzx",
+      "scl",
+      "tap",
+      "trd",
+      "tzx",
+      "z80",
+      "zip",
+      "7z",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 FUSE",
+      "default_core": true,
+      "unique_id": "zxspectrum.ra64.fuse",
+      "description": "Supported extensions: dsk, rzx, scl, tap, trd, tzx, z80, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"fuse\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FUSE",
+      "default_core": true,
+      "unique_id": "zxspectrum.ra32.fuse",
+      "description": "Supported extensions: dsk, rzx, scl, tap, trd, tzx, z80, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"fuse\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FUSE",
+      "default_core": true,
+      "unique_id": "zxspectrum.ra.fuse",
+      "description": "Supported extensions: dsk, rzx, scl, tap, trd, tzx, z80, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"fuse\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fuse_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fuse_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fuse_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "unique_id": "zxspectrum.ra.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBNeo",
+      "unique_id": "zxspectrum.ra64.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "unique_id": "zxspectrum.ra32.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "zxspectrum.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

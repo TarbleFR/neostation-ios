@@ -1,0 +1,83 @@
+{
+  "system": {
+    "id": "wiiu",
+    "multidisc": false,
+    "name": "Nintendo Wii U",
+    "short_name": "Wii U",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "2012-11-18",
+      "description": "Nintendo's HD console with a dual-screen GamePad controller.",
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 8,
+      "cpu": "IBM PowerPC Espresso",
+      "media": [
+        "optical_disc",
+        "digital"
+      ],
+      "notable_games": [
+        "Mario Kart 8",
+        "Splatoon",
+        "Super Mario 3D World",
+        "The Legend of Zelda: The Wind Waker HD"
+      ]
+    },
+    "ids": {
+      "screenscraper": 18,
+      "retroachievements": null
+    },
+    "folders": [
+      "wiiu",
+      "nintendowiiu",
+      "nintendo wiiu",
+      "Wii U",
+      "Wii-U"
+    ],
+    "colors": [
+      "#009AC7",
+      "#FFFFFF"
+    ],
+    "extensions": [
+      "wua",
+      "wud",
+      "wux",
+      "rpx"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone CEMU",
+      "default_standalone": true,
+      "unique_id": "wiiu.info.cemu.cemu",
+      "description": "Supported extensions: wua, wud, wux, rpx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n info.cemu.cemu/.emulation.EmulationActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top"
+        },
+        "windows": {
+          "executable": "cemu.exe",
+          "args": "-g \"{file.path}\" -f"
+        },
+        "linux": {
+          "executable": "cemu",
+          "flatpak": "info.cemu.Cemu",
+          "emudeck_launcher": "cemu.sh",
+          "args": "-g \"{file.path}\" -f"
+        },
+        "macos": {
+          "executable": "Cemu.app",
+          "args": "-g \"{file.path}\" -f"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

@@ -1,0 +1,1739 @@
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/sync/sync_manager.dart';
+import 'package:neostation/providers/theme_provider.dart';
+import 'package:neostation/providers/neo_assets_provider.dart';
+import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/shimmering_logo.dart';
+import 'package:neostation/providers/retro_achievements_provider.dart';
+import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
+
+import 'dart:io';
+import 'dart:async';
+import 'dart:ui';
+
+import '../../services/game_service.dart';
+import '../../utils/game_launch_utils.dart';
+import '../../services/music_player_service.dart';
+import '../../repositories/system_repository.dart';
+import '../../repositories/game_repository.dart';
+import '../../services/screenscraper_service.dart';
+import '../../services/secondary_achievements_controller.dart';
+import '../../services/game_legend_visibility.dart';
+import '../../utils/gamepad_nav.dart';
+import '../../utils/letter_jump.dart';
+import '../../providers/file_provider.dart';
+import '../../providers/sqlite_config_provider.dart';
+import '../../providers/sqlite_database_provider.dart';
+import '../../providers/scraping_provider.dart';
+import '../../models/system_model.dart';
+import '../../models/game_model.dart';
+import 'game_details_card/game_details_card_list.dart';
+import 'game_details_card/random_game_dialog.dart';
+import 'game_settings_dialog/game_settings_dialog.dart';
+import 'my_games_grid.dart';
+import 'my_games_carousel.dart';
+import 'game_list_view.dart';
+import 'music/music_list.dart';
+import 'music/music_player.dart';
+
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+
+import '../../providers/system_background_provider.dart';
+import '../../models/secondary_display_state.dart';
+import '../../widgets/game_view_mode_dropdown.dart';
+import '../../widgets/game_action_buttons.dart';
+import '../../widgets/legend_edge_reshow_zone.dart';
+import '../../widgets/letter_indicator.dart';
+import '../../constants/system_folder_names.dart';
+import '../../utils/artwork_cache.dart';
+import '../../utils/game_list_update.dart';
+
+import 'package:neostation/themes/chrome_surface.dart';
+
+import '../../themes/corner_radii.dart';
+
+part 'my_games_list/gamepad_nav.dart';
+part 'my_games_list/favorites_reorder.dart';
+part 'my_games_list/data_loading.dart';
+part 'my_games_list/secondary_display.dart';
+part 'my_games_list/launch_flow.dart';
+
+/// A high-fidelity list component for browsing games within a specific system.
+///
+/// Handles complex navigation, media previews (video/audio), secondary display
+/// synchronization, and game metadata orchestration.
+class SystemGamesList extends StatefulWidget {
+  final SystemModel system;
+  final FileProvider fileProvider;
+
+  /// When set, the list opens with this game selected and scrolled into view
+  /// instead of defaulting to the first entry. Used by the RetroAchievements
+  /// dashboard and by the library-wide search "Go to game" action to reveal a
+  /// specific game in the normal browsing view.
+  final String? initialRomPath;
+
+  const SystemGamesList({
+    super.key,
+    required this.system,
+    required this.fileProvider,
+    this.initialRomPath,
+  });
+
+  @override
+  State<SystemGamesList> createState() => _SystemGamesListState();
+}
+
+class _SystemGamesListState extends State<SystemGamesList> {
+  static final _log = LoggerService.instance;
+
+  // Dataset management.
+  List<GameModel> _games = [];
+  Map<GameModel, int> _gameIndexMap = {};
+  GameModel? _selectedGame;
+
+  // Navigation & State orchestration.
+  bool _isLoading = true;
+  bool _isLoadingGames = false; // Prevents redundant reload triggers.
+  int _selectedGameIndex = 0;
+  late GamepadNavigation
+  _gamepadNav; // Unified controller/keyboard input handler.
+
+  // Integration callbacks for GameDetailsCardList.
+  VoidCallback? _refreshAchievementsCallback;
+
+  // Overlay interaction delegates.
+  bool Function()? _isAchievementsOpen;
+  VoidCallback? _moveAchievementUp;
+  VoidCallback? _moveAchievementDown;
+  VoidCallback? _moveAchievementLeft;
+  VoidCallback? _moveAchievementRight;
+  VoidCallback? _triggerOverlayAction;
+  VoidCallback? _secondaryOverlayAction; // Maps to RB (Scrape/Refresh).
+  VoidCallback? _selectButtonAction; // Maps to Select (View) for mute/refresh.
+  VoidCallback? _scrapeAction; // Maps to Select + A (scrape highlighted game).
+  bool Function(bool isRight)?
+  _tabNavigationAction; // Facilitates tab switching via bumpers.
+  bool Function()? _isPlayingGameBlocked; // Validation for launch readiness.
+
+  // Secondary display hardware management (OEM support).
+  SecondaryDisplayState? _secondaryDisplayState;
+
+  /// Drives the live RetroAchievements panel on the secondary display for the
+  /// duration of a launched game (push at launch, poll during play, stop on
+  /// return). Shared with the systems carousel/grid "Recent Games" launches.
+  final SecondaryAchievementsController _achievementsController =
+      SecondaryAchievementsController();
+
+  bool _canPop = false;
+
+  // View keys for scroll synchronization.
+  final GlobalKey<GameListViewState> _gameListKey =
+      GlobalKey<GameListViewState>();
+
+  // Multimedia preview orchestration.
+  Timer? _videoTimer;
+  bool _showVideo = false;
+  bool _isVideoLoading = false;
+  int _videoGeneration = 0;
+  Future<void> _videoTransition = Future<void>.value();
+  static const Duration _videoStartDelay = Duration(seconds: 2);
+  bool _lastShowInfo = false; // Memoizes 'showGameInfo' config state.
+  String? _lastGameViewMode; // Memoizes 'gameViewMode' config state.
+  bool _isGameLaunching =
+      false; // Critical flag to suppress media tasks during transitions.
+
+  // Task orchestration timers.
+  Timer? _saveDetectionTimer;
+  Timer? _musicExtractionTimer;
+  Timer? _fastNavEndTimer; // Detects the end of rapid scrolling.
+
+  // Rapid navigation state.
+  bool _isNavigatingFast = false;
+
+  // True only while a held direction is skipping letter-to-letter. The letter
+  // overlay is tied to this rather than to _isNavigatingFast: an ordinary fast
+  // scroll shows the game names themselves, so throwing a big letter over them
+  // the moment the scroll speeds up is just noise.
+  bool _isLetterJumping = false;
+  String? _currentLetter;
+  DateTime? _lastNavTime;
+  static const Duration _fastNavThreshold = Duration(milliseconds: 150);
+
+  // How long after the last move a rapid-scroll burst is considered over. The
+  // letter-jump variant must exceed the dwell between two jumps (see
+  // GamepadNavigation) so a held direction reads as one continuous burst.
+  static const Duration _fastNavEndDelay = Duration(milliseconds: 300);
+  static const Duration _letterJumpEndDelay = Duration(milliseconds: 600);
+
+  // Media controllers.
+  VideoPlayerController? _videoController;
+
+  // Scraping state.
+  final Set<String> _scrapingGameRomnames = {};
+  final Map<String, double> _scrapeProgress = {};
+
+  // Guards against re-entrant Select + A scrapes of the selected game (grid /
+  // carousel views, which have no details card to own the scrape).
+  bool _isScrapingSelectedGame = false;
+
+  // Localized step of that scrape, forwarded to the details card so its
+  // progress panel reads the same whoever started the scrape.
+  String _selectedScrapeStatus = '';
+
+  // Bumped whenever artwork is replaced so background/detail images rebuild.
+  int _artworkVersion = 0;
+
+  String? _localizedDescription;
+
+  // Resource providers.
+  late FileProvider _fileProvider;
+
+  // UI focus management.
+  late final FocusNode _backButtonFocusNode;
+
+  RetroAchievementsProvider get _retroAchievementsProvider =>
+      context.read<RetroAchievementsProvider>();
+
+  // Memoized providers for lifecycle management.
+  late SqliteConfigProvider _configProvider;
+  late SqliteDatabaseProvider _databaseProvider;
+  late ScrapingProvider _scrapingProvider;
+  int _lastArtworkRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fileProvider = widget.fileProvider;
+    _backButtonFocusNode = FocusNode(skipTraversal: true);
+    _loadGames();
+    _initializeGamepad();
+
+    // Attach persistent listeners to global providers.
+    _databaseProvider = context.read<SqliteDatabaseProvider>();
+    _databaseProvider.addListener(_onDatabaseUpdated);
+
+    _configProvider = context.read<SqliteConfigProvider>();
+    _configProvider.addListener(_onConfigChanged);
+
+    _scrapingProvider = context.read<ScrapingProvider>();
+    _lastArtworkRevision = _scrapingProvider.artworkRevision;
+    _scrapingProvider.addListener(_onScrapingUpdated);
+    _artworkVersion = _lastArtworkRevision;
+    _invalidateArtworkCaches();
+
+    GameLegendVisibility.hidden.addListener(_onLegendVisibilityChanged);
+
+    _lastShowInfo = _configProvider.config.showGameInfo;
+
+    MusicPlayerService().addListener(_onMusicPlayerStateChanged);
+
+    if (Platform.isAndroid) {
+      _secondaryDisplayState = SecondaryDisplayState.instance;
+      _secondaryDisplayState!.addListener(_onSecondaryDisplayChanged);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
+  void _onSecondaryDisplayChanged() {
+    if (mounted) {
+      setState(() {});
+      _updateMusicDucking();
+    }
+  }
+
+  @override
+  void dispose() {
+    // Detach listeners before disposal.
+    _configProvider.removeListener(_onConfigChanged);
+    _databaseProvider.removeListener(_onDatabaseUpdated);
+    _scrapingProvider.removeListener(_onScrapingUpdated);
+    MusicPlayerService().removeListener(_onMusicPlayerStateChanged);
+    GameLegendVisibility.hidden.removeListener(_onLegendVisibilityChanged);
+
+    // Shared singleton — detach our listener, never dispose the instance.
+    _secondaryDisplayState?.removeListener(_onSecondaryDisplayChanged);
+    _achievementsController.dispose();
+
+    _cleanupResources();
+    _backButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _onScrapingUpdated() {
+    final revision = _scrapingProvider.artworkRevision;
+    if (!mounted || revision == _lastArtworkRevision) return;
+    _lastArtworkRevision = revision;
+
+    // Bulk scraping happens outside this route. Reload its metadata and force
+    // image widgets to check the artwork files again.
+    _invalidateArtworkCaches();
+    setState(() => _artworkVersion++);
+    _loadGames();
+  }
+
+  void _invalidateArtworkCaches() {
+    GamesGrid.evictArtworkCaches(const []);
+    GamesCarousel.evictArtworkCaches(const []);
+    final imageCache = PaintingBinding.instance.imageCache;
+    imageCache.clear();
+    imageCache.clearLiveImages();
+  }
+
+  /// Synchronizes UI state with global configuration changes.
+  void _onConfigChanged() {
+    if (!mounted) return;
+    final configProvider = context.read<SqliteConfigProvider>();
+    final newShowInfo = configProvider.config.showGameInfo;
+    final gameViewMode = configProvider.config.gameViewMode;
+
+    // Hand input to whichever layer owns the new view mode — but ONLY on an
+    // actual mode change. Re-asserting this on every config write is not free:
+    // deactivate() resets the shared Select chord-modifier state, so any
+    // setting written while Select is held (the legend toggle persists
+    // `legend_hidden`, for one) would drop the legend back to its default layer
+    // mid-hold, and `SelectTap.reset()` means it can't recover until Select is
+    // released and pressed again.
+    if (gameViewMode != _lastGameViewMode) {
+      _lastGameViewMode = gameViewMode;
+      try {
+        if (gameViewMode == 'grid' || gameViewMode == 'carousel') {
+          _gamepadNav.deactivate();
+        } else {
+          _gamepadNav.activate();
+        }
+      } catch (_) {}
+    }
+
+    if (newShowInfo != _lastShowInfo) {
+      _lastShowInfo = newShowInfo;
+
+      if (newShowInfo) {
+        // Resume media preview if info overlay is enabled.
+        if (_selectedGame != null &&
+            !_showVideo &&
+            _videoTimer == null &&
+            !_isGameLaunching) {
+          _startVideoTimer();
+        }
+      } else {
+        // Immediate termination of media preview if info overlay is hidden.
+        _resetVideoState();
+      }
+
+      if (_selectedGame != null) {
+        _updateSecondaryDisplay(_selectedGame!);
+      }
+    }
+
+    // Refresh audio ducking logic (e.g., when toggling video sound).
+    _updateMusicDucking();
+  }
+
+  /// Triggers UI refresh upon music player state transitions.
+  void _onMusicPlayerStateChanged() {
+    if (!mounted ||
+        widget.system.folderName != 'music' ||
+        _selectedGame == null) {
+      return;
+    }
+
+    _updateSecondaryDisplay(_selectedGame!);
+  }
+
+  /// Responds to SQLite database updates by reloading the game list.
+  void _onDatabaseUpdated() {
+    if (mounted && !_isLoadingGames) {
+      _loadGames();
+    }
+  }
+
+  /// Opens the game settings dialog for the currently selected game.
+  ///
+  /// Reachable from the side action bar (all views) and from gamepad START
+  /// in grid/carousel mode (in list mode START belongs to the details card).
+  void _openGameSettingsDialog() {
+    final game = _selectedGame;
+    if (game == null) return;
+    SfxService().playNavSound();
+    showDialog(
+      context: context,
+      builder: (_) => GameSettingsDialog(
+        game: game,
+        system: widget.system,
+        fileProvider: _fileProvider,
+        syncProvider: context.read<SyncManager>().active,
+        isAllMode:
+            widget.system.folderName == SystemFolderNames.all ||
+            widget.system.folderName == SystemFolderNames.favorites,
+        onGameUpdated: _handleGameUpdated,
+        onGameDeleted: _handleGameDeleted,
+      ),
+    );
+  }
+
+  /// Terminates all active multimedia and background processing tasks.
+  void _cleanupResources() {
+    GamepadNavigationManager.popLayer('system_games_list');
+
+    _videoTimer?.cancel();
+    _saveDetectionTimer?.cancel();
+    _musicExtractionTimer?.cancel();
+
+    if (_videoController != null) {
+      final controller = _videoController!;
+      _videoController = null;
+      try {
+        controller.dispose();
+      } catch (e) {
+        _log.w('Error disposing video controller in cleanup: $e');
+      }
+    }
+
+    _gamepadNav.dispose();
+
+    // Force restore background music volume.
+    MusicPlayerService().setDucked(false);
+  }
+
+  /// Bridge so `part` extension files (e.g. gamepad nav) can request a
+  /// rebuild — [State.setState] is `@protected` and cannot be invoked from an
+  /// extension. Behaviourally identical to calling `setState` directly.
+  void rebuild(VoidCallback fn) => setState(fn);
+
+  /// Select + B — toggles the (session-global) vertical action-button legend.
+  /// When hidden the legend slides off the left edge and the list sidebar +
+  /// details reflow into the reclaimed 72.r gutter.
+  void _toggleLegend() {
+    SfxService().playNavSound();
+    GameLegendVisibility.toggle();
+  }
+
+  void _onLegendVisibilityChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Core logic for updating selection and managing rapid-scrolling UI state.
+  ///
+  /// [forceFast] keeps the rapid-scroll UI (deferred heavy loading) engaged
+  /// regardless of timing, and raises the letter overlay — used by letter
+  /// jumps, whose dwell between hops is deliberately longer than
+  /// [_fastNavThreshold].
+  void _updateSelectedGame(int newIndex, {bool forceFast = false}) {
+    _resetVideoState();
+
+    final now = DateTime.now();
+    bool isFast = forceFast;
+    if (!isFast && _lastNavTime != null) {
+      final delta = now.difference(_lastNavTime!);
+      if (delta < _fastNavThreshold) {
+        isFast = true;
+      }
+    }
+    _lastNavTime = now;
+
+    // Resolve current alphabetical letter for navigation overlays.
+    final game = _games[newIndex];
+    final letter = LetterJump.letterFor(game);
+
+    setState(() {
+      _selectedGameIndex = newIndex;
+      _selectedGame = game;
+      _isNavigatingFast = isFast;
+      _isLetterJumping = forceFast;
+      _currentLetter = letter;
+    });
+
+    // Debounce rapid navigation end to resume heavy resource loading. Letter
+    // jumps dwell longer than this debounce, so they get a window wider than
+    // one hop — otherwise the burst would "end" between every jump and the
+    // letter overlay would flash out and back in on each one.
+    _fastNavEndTimer?.cancel();
+    _fastNavEndTimer = Timer(
+      forceFast ? _letterJumpEndDelay : _fastNavEndDelay,
+      () {
+        if (mounted) {
+          setState(() {
+            _isNavigatingFast = false;
+            _isLetterJumping = false;
+          });
+          _performBackgroundOperationsForSelectedGame(force: true);
+
+          Timer(const Duration(milliseconds: 200), () {
+            if (mounted && !_isNavigatingFast) {
+              setState(() => _currentLetter = null);
+            }
+          });
+        }
+      },
+    );
+
+    _performBackgroundOperationsForSelectedGame();
+  }
+
+  bool _isNavigatingBack = false;
+
+  /// Orchestrates a graceful exit from the game list, synchronizing state with previous screens.
+  Future<void> _goBack() async {
+    if (_isNavigatingBack) {
+      return;
+    }
+
+    _isNavigatingBack = true;
+
+    // Immediate resource termination.
+    _stopVideoAndCleanup();
+
+    // Release current input layers.
+    GamepadNavigationManager.popLayer('games_grid');
+    GamepadNavigationManager.popLayer('system_games_list');
+
+    // Restore secondary display to original system branding. Resolve the logo
+    // and background the same way the systems grid does (custom → active-theme
+    // → bundled asset, themed background when present) so themed systems don't
+    // flash the default logo here before the grid re-asserts its state on pop.
+    final configProvider = context.read<SqliteConfigProvider>();
+    final folder = widget.system.primaryFolderName;
+
+    final String? customLogo = widget.system.customLogoPath?.isNotEmpty == true
+        ? widget.system.customLogoPath
+        : null;
+    final systemLogo = customLogo ?? 'assets/images/logos/$folder.webp';
+    final bool isLogoAsset = customLogo == null;
+
+    final neoAssets = context.read<NeoAssetsProvider>();
+    final String? customBg = widget.system.customBackgroundPath;
+    final bool hasCustomBg = customBg != null && customBg.isNotEmpty;
+    final String? themeBg = hasCustomBg
+        ? null
+        : neoAssets.getBackgroundForSystemSync(folder);
+    final String? systemBackground = hasCustomBg ? customBg : themeBg;
+
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isOled = themeProvider.isOled;
+
+    // ignore: unawaited_futures
+    _secondaryDisplayState?.updateState(
+      systemName: widget.system.realName,
+      isGameSelected: false,
+      isVideoMuted: !configProvider.config.videoSound,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor.toARGB32(),
+      systemLogo: systemLogo,
+      isLogoAsset: isLogoAsset,
+      systemBackground: systemBackground,
+      clearSystemBackground: systemBackground == null,
+      isBackgroundAsset: false,
+      useShader: systemBackground == null,
+      shaderColor1: widget.system.color1AsColor?.toARGB32(),
+      shaderColor2: widget.system.color2AsColor?.toARGB32(),
+      useFluidShader: false,
+      isOled: isOled,
+      clearFanart: true,
+      clearScreenshot: true,
+      clearWheel: true,
+      clearVideo: true,
+      clearImageBytes: true,
+      clearGameId: true,
+    );
+
+    setState(() {
+      _canPop = true;
+    });
+
+    // Defer navigation to the next frame to ensure PopScope validates [_canPop].
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+
+        // CRITICAL: Re-establish input focus for the previous system screen layers.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          GamepadNavigationManager.reactivate();
+
+          if (mounted) {
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                _isNavigatingBack = false;
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  /// Selects a game via interaction (touch or click) and triggers resource resolution.
+  Future<void> _selectGame(GameModel game) async {
+    final index = _gameIndexMap[game] ?? _games.indexOf(game);
+    if (index != -1) {
+      _resetVideoState();
+      setState(() {
+        _selectedGameIndex = index;
+        _selectedGame = game;
+      });
+      _scrollToSelectedItem();
+      _performBackgroundOperationsForSelectedGame();
+    }
+  }
+
+  /// Centers the currently selected item within the viewport.
+  void _scrollToSelectedItem() {
+    _gameListKey.currentState?.scrollToIndex(_selectedGameIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isOled = context.select<ThemeProvider, bool>((t) => t.isOled);
+
+    return PopScope(
+      canPop: _canPop,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        _goBack();
+      },
+      child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: Stack(
+          children: [
+            // Ambient UI Layer: Shared fluid gradient for depth (non-OLED only).
+            if (!isOled)
+              Positioned.fill(
+                child: Builder(
+                  builder: (context) {
+                    final bg = Theme.of(context).scaffoldBackgroundColor;
+                    return Container(decoration: BoxDecoration(color: bg));
+                  },
+                ),
+              ),
+
+            // Content Layer: hide entirely while game dialog is active.
+            if (!_isGameLaunching)
+              SizedBox(
+                child: _isLoading
+                    ? _buildLoadingState()
+                    : _games.isEmpty
+                    ? _buildEmptyState()
+                    : Consumer<SqliteConfigProvider>(
+                        builder: (context, configProvider, child) {
+                          if (widget.system.folderName == 'music') {
+                            return _buildGamesList();
+                          }
+                          if (configProvider.config.gameViewMode == 'grid') {
+                            return _buildGamesGrid();
+                          } else if (configProvider.config.gameViewMode ==
+                              'carousel') {
+                            return _buildGamesCarousel();
+                          }
+                          return _buildGamesList();
+                        },
+                      ),
+              ),
+
+            // Navigation Layer: Visual alphabetical feedback for rapid scrolling.
+            if (_currentLetter != null && !_isGameLaunching)
+              _buildLetterIndicator(),
+            GameViewModeDropdown(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Renders a large, semi-transparent alphabetical indicator for high-speed navigation.
+  Widget _buildLetterIndicator() {
+    return LetterIndicator(letter: _currentLetter!, visible: _isLetterJumping);
+  }
+
+  /// Visual placeholder for initial data hydration. Matches the startup
+  /// splash: shimmering logo with quiet supporting text, no card chrome.
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ShimmeringLogo(width: 200.r),
+          SizedBox(height: 24.r),
+          Text(
+            AppLocale.loadingGames.getString(context),
+            style: TextStyle(
+              fontSize: 20.r,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+              letterSpacing: 0.5,
+            ),
+          ),
+          SizedBox(height: 8.r),
+          Text(
+            AppLocale.preparingLibrary.getString(context),
+            style: TextStyle(
+              fontSize: 14.r,
+              fontWeight: FontWeight.w400,
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.7),
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// specialized view for systems with zero detected media files.
+  /// includes controls for recursive scanning and directory management.
+  Widget _buildEmptyState() {
+    bool currentScanValue = widget.system.recursiveScan;
+
+    return Center(
+      child: Container(
+        constraints: BoxConstraints(maxWidth: 600.r),
+        padding: EdgeInsets.symmetric(horizontal: 24.r, vertical: 16.r),
+        margin: EdgeInsets.all(32.r),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.45),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16.r),
+          boxShadow: [
+            BoxShadow(
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.3),
+              blurRadius: 16.r,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.1),
+              blurRadius: 32.r,
+              offset: const Offset(0, 16),
+            ),
+          ],
+          border: Border.all(
+            color: Theme.of(
+              context,
+            ).colorScheme.outline.withValues(alpha: 0.15),
+            width: 1.r,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              AppLocale.noGamesFoundFor
+                  .getString(context)
+                  .replaceFirst(
+                    '{name}',
+                    widget.system.shortName ?? widget.system.realName,
+                  ),
+              style: TextStyle(
+                fontSize: 16.r,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface,
+                letterSpacing: 0.3,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 4.r),
+            Text(
+              AppLocale.checkRomFiles.getString(context),
+              style: TextStyle(
+                fontSize: 11.r,
+                fontWeight: FontWeight.w400,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.r),
+
+            // Configuration Component: Recursive Library Scanning.
+            StatefulBuilder(
+              builder: (context, setStateBuilder) {
+                return Column(
+                  children: [
+                    Container(
+                      margin: EdgeInsets.only(bottom: 12.r),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12.r,
+                        vertical: 8.r,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12.r),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.05),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Symbols.folder_shared_rounded,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 16.r,
+                          ),
+                          SizedBox(width: 8.r),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                AppLocale.recursiveScan.getString(context),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12.r,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                AppLocale.recursiveScanSubtitle.getString(
+                                  context,
+                                ),
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 10.r,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(width: 16.r),
+                          Switch(
+                            value: currentScanValue,
+                            activeThumbColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            onChanged: (value) async {
+                              final oldSystem = widget.system;
+                              setStateBuilder(() {
+                                currentScanValue = value;
+                              });
+
+                              try {
+                                await SystemRepository.setRecursiveScan(
+                                  oldSystem.id!,
+                                  value,
+                                );
+
+                                if (!context.mounted) return;
+                                final configProvider = context
+                                    .read<SqliteConfigProvider>();
+
+                                await configProvider.scanSystems();
+                                if (!context.mounted) return;
+
+                                await Provider.of<SqliteDatabaseProvider>(
+                                  context,
+                                  listen: false,
+                                ).loadDatabase();
+                                if (!context.mounted) return;
+
+                                await _loadGames();
+                              } catch (e) {
+                                _log.e('Error toggling recursive scan: $e');
+                                if (!context.mounted) return;
+                                AppNotification.showNotification(
+                                  context,
+                                  AppLocale.failedToSaveSetting.getString(
+                                    context,
+                                  ),
+                                  type: NotificationType.error,
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Real-time Scan Progress Feedback.
+                    Consumer<SqliteConfigProvider>(
+                      builder: (context, provider, child) {
+                        if (!provider.isScanning ||
+                            provider.totalSystemsToScan <= 0) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Container(
+                          width: 320.r,
+                          margin: EdgeInsets.only(bottom: 12.r),
+                          padding: EdgeInsets.all(12.r),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12.r),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.2),
+                              width: 1.r,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    provider.scanStatus,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10.r,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                        ),
+                                  ),
+                                  Text(
+                                    '${(provider.scanProgress * 100).toInt()}%',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10.r,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 8.r),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4.r),
+                                child: LinearProgressIndicator(
+                                  value: provider.scanProgress,
+                                  minHeight: 6.r,
+                                  backgroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.1),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 4.r),
+                              Text(
+                                AppLocale.scanningSystemOf
+                                    .getString(context)
+                                    .replaceFirst(
+                                      '{current}',
+                                      provider.scannedSystemsCount.toString(),
+                                    )
+                                    .replaceFirst(
+                                      '{total}',
+                                      provider.totalSystemsToScan.toString(),
+                                    ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      fontSize: 9.r,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            // Navigation Component: Exit Action.
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  SfxService().playBackSound();
+                  _goBack();
+                },
+                borderRadius: BorderRadius.circular(8.r),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      top: 4.r,
+                      bottom: 4.r,
+                      left: 8.r,
+                      right: 12.r,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(8.r),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 8.r,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ColorFiltered(
+                          colorFilter: const ColorFilter.mode(
+                            Colors.white,
+                            BlendMode.srcIn,
+                          ),
+                          child: Image.asset(
+                            'assets/images/gamepad/Xbox_B_button.png',
+                            width: 18.r,
+                            height: 18.r,
+                          ),
+                        ),
+                        SizedBox(width: 6.r),
+                        Text(
+                          AppLocale.back.getString(context),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14.r,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds the game carousel view with letter-based navigation.
+  Widget _buildGamesCarousel() {
+    return GamesCarousel(
+      system: widget.system,
+      games: _games,
+      selectedIndex: _selectedGameIndex,
+      fileProvider: _fileProvider,
+      onGameSelected: (game) {
+        setState(() {
+          _selectedGame = game;
+          _selectedGameIndex = _games.indexOf(game);
+        });
+        _performBackgroundOperationsForSelectedGame();
+      },
+      onBack: _goBack,
+      onPlay: _selectCurrentGame,
+      onFavorite: _toggleFavorite,
+      onRandom: _showRandomGameDialog,
+      onSettings: _openGameSettingsDialog,
+      onScrape: _scrapeSelectedGame,
+      scrapingGameRomnames: _scrapingGameRomnames,
+      scrapeProgress: _scrapeProgress,
+      artworkVersion: _artworkVersion,
+    );
+  }
+
+  /// Builds the game grid view with box-2d images.
+  Widget _buildGamesGrid() {
+    return GamesGrid(
+      system: widget.system,
+      games: _games,
+      selectedIndex: _selectedGameIndex,
+      fileProvider: _fileProvider,
+      onGameSelected: (game) {
+        setState(() {
+          _selectedGame = game;
+          _selectedGameIndex = _games.indexOf(game);
+        });
+        _performBackgroundOperationsForSelectedGame();
+      },
+      onBack: _goBack,
+      onPlay: _selectCurrentGame,
+      onFavorite: _toggleFavorite,
+      onRandom: _showRandomGameDialog,
+      onSettings: _openGameSettingsDialog,
+      onScrape: _scrapeSelectedGame,
+      scrapingGameRomnames: _scrapingGameRomnames,
+      scrapeProgress: _scrapeProgress,
+      artworkVersion: _artworkVersion,
+    );
+  }
+
+  /// Main layout orchestrator.
+  /// Divides the viewport into a specialized browsing panel (left) and a detailed
+  /// info/preview panel (right). The selected game's fanart is rendered behind
+  /// the entire viewport so it peeks through both panels.
+  Widget _buildGamesList() {
+    final availableHeight =
+        MediaQuery.of(context).size.height -
+        MediaQuery.of(context).padding.top -
+        MediaQuery.of(context).padding.bottom;
+    final isMusic = widget.system.folderName == 'music';
+
+    return Stack(
+      children: [
+        // Full-screen ambient fanart + overlay combined in a single layer
+        // to avoid flickering caused by separate Positioned.fill compositing.
+        if (!isMusic && _selectedGame != null)
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildGameFanartBackground(
+                    _selectedGame!,
+                    artworkVersion: _artworkVersion,
+                  ),
+                  Container(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Main content row: list panel + details panel.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sidebar: Interactive list of games or music tracks.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              width: 200.r,
+              height: availableHeight,
+              margin: EdgeInsets.only(
+                left: GameLegendVisibility.hidden.value ? 12.r : 72.r,
+                top: 12.r,
+                bottom: 12.r,
+              ),
+              decoration: BoxDecoration(
+                // A horizontal wash rather than a flat fill: the panel stays
+                // opaque where the row text sits and thins out towards its
+                // right edge, so the fanart bleeds through and it reads as a
+                // pane laid over the artwork instead of a cut-out block.
+                gradient: ChromeSurface.fade(context),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(14.r),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 1.r,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.5),
+                    blurRadius: 3.r,
+                    offset: Offset(2.r, 2.r),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusInternal ??
+                    BorderRadius.circular(9.r),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: ChromeSurface.glassBlur(
+                      context,
+                      GlassSurfaceRole.panel,
+                    ),
+                    sigmaY: ChromeSurface.glassBlur(
+                      context,
+                      GlassSurfaceRole.panel,
+                    ),
+                  ),
+                  child: SizedBox(
+                    width: 200.r,
+                    height: availableHeight,
+                    child: _buildGamesListPanel(),
+                  ),
+                ),
+              ),
+            ),
+            // Main Viewport: Rich metadata, video previews, and launch controls.
+            Expanded(
+              child: SizedBox(
+                height: availableHeight,
+                child: _buildGameDetailsPanel(),
+              ),
+            ),
+          ],
+        ),
+
+        // Floating action buttons on the left side of the game list. Select + B
+        // slides this legend off the left edge (in sync with the sidebar
+        // margin). The column is 40.r wide, so a 10.r inset centres it in the
+        // 72.r gutter — equal air either side of it.
+        if (!isMusic)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            top: 12.r,
+            bottom: 12.r,
+            left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topLeft,
+                  child: Consumer<SyncManager>(
+                    builder: (context, syncManager, child) {
+                      return GameActionButtons(
+                        system: widget.system,
+                        selectedGame: _selectedGame,
+                        syncProvider: syncManager.active,
+                        onBack: _goBack,
+                        onFavorite: _toggleFavorite,
+                        onViewMode: () => GameViewModeDropdown
+                            .globalKey
+                            .currentState
+                            ?.showDropdown(),
+                        onSettings: _openGameSettingsDialog,
+                        onRandom: _showRandomGameDialog,
+                        onScrape: () => _scrapeAction?.call(),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        // Touch: swipe-right from the left edge reveals a hidden legend.
+        const LegendEdgeReshowZone(),
+      ],
+    );
+  }
+
+  /// Renders the selected game's fanart as a full-screen background.
+  Widget _buildGameFanartBackground(
+    GameModel game, {
+    required int artworkVersion,
+  }) {
+    final imageSystemFolder =
+        game.systemFolderName ?? widget.system.primaryFolderName;
+
+    final fanartPath = game.getImagePath(
+      imageSystemFolder,
+      'fanarts',
+      _fileProvider,
+    );
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 512),
+      switchInCurve: Curves.easeOutExpo,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          fit: StackFit.expand,
+          alignment: Alignment.center,
+          children: [...previousChildren, ?currentChild],
+        );
+      },
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 1.0, end: 1.1).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: Builder(
+        key: ValueKey(
+          'list_fanart_${game.romPath ?? game.romname}_v$artworkVersion',
+        ),
+        builder: (context) {
+          final file = File(fanartPath);
+          if (file.existsSync()) {
+            return Image.file(
+              file,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              cacheWidth: 1920,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+
+  Widget _buildGamesListPanel() {
+    return Column(
+      children: [
+        Expanded(
+          child: widget.system.folderName == 'music'
+              ? MusicList(
+                  system: widget.system,
+                  tracks: _games,
+                  selectedIndex: _selectedGameIndex,
+                  onTrackSelected: (track) {
+                    setState(() {
+                      _selectedGame = track;
+                      _selectedGameIndex = _games.indexOf(track);
+                    });
+                    _performBackgroundOperationsForSelectedGame();
+                  },
+                  systemColor: widget.system.colorAsColor,
+                  onBack: _goBack,
+                  onRandom: _showRandomGameDialog,
+                  isNavigatingFast: _isNavigatingFast,
+                )
+              : GameListView(
+                  key: _gameListKey,
+                  system: widget.system,
+                  games: _games,
+                  selectedIndex: _selectedGameIndex,
+                  systemColor: widget.system.colorAsColor,
+                  onGameSelected: _selectGame,
+                  onGameConfirmed: _selectCurrentGame,
+                  isAllMode:
+                      widget.system.folderName == 'all' ||
+                      widget.system.folderName == SystemFolderNames.favorites,
+                  isNavigatingFast: _isNavigatingFast,
+                  onGamepadReactivated: _reactivateGamepadNavigation,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGameDetailsPanel() {
+    if (_selectedGame == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64.r,
+              height: 64.r,
+              decoration: BoxDecoration(
+                color: ChromeSurface.fill(context),
+                borderRadius:
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
+                    BorderRadius.circular(14.r),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 1.r,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.5),
+                    blurRadius: 3.r,
+                    offset: Offset(2.r, 2.r),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Symbols.videogame_asset_rounded,
+                size: 32.r,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+            SizedBox(height: 16.r),
+            Text(
+              AppLocale.selectAGame.getString(context),
+              style: TextStyle(
+                fontSize: 18.r,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.7),
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(height: 8.r),
+            Text(
+              AppLocale.chooseGameFromList.getString(context),
+              style: TextStyle(
+                fontSize: 14.r,
+                fontWeight: FontWeight.w400,
+                color: Colors.white.withValues(alpha: 0.5),
+                letterSpacing: 0.3,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (widget.system.folderName == 'music') {
+      return Padding(
+        padding: EdgeInsets.all(8.r),
+        child: MusicPlayer(
+          systemColor: widget.system.colorAsColor,
+          onFavoriteToggled: () {
+            // Re-sort the collection when favorite status is toggled via touch in MusicPlayer.
+            _reorderGamesListKeepingVisualPosition();
+          },
+          onBack: _goBack,
+        ),
+      );
+    }
+
+    return Consumer<SyncManager>(
+      builder: (context, syncManager, child) => GameDetailsCardList(
+        game: _selectedGame!,
+        system: widget.system,
+        fileProvider: _fileProvider,
+        showVideo: _showVideo,
+        videoController: _videoController,
+        isVideoLoading: _isVideoLoading,
+        isAllMode:
+            widget.system.folderName == 'all' ||
+            widget.system.folderName == SystemFolderNames.favorites,
+        retroAchievementsProvider: _retroAchievementsProvider,
+        syncProvider: syncManager.active!,
+        localizedDescription: _localizedDescription,
+        artworkVersion: _artworkVersion,
+        isExternallyScraping: _scrapingGameRomnames.contains(
+          _selectedGame!.romname,
+        ),
+        externalScrapeProgress: _scrapeProgress[_selectedGame!.romname],
+        externalScrapeStatus: _selectedScrapeStatus,
+        isNavigatingFast: _isNavigatingFast,
+        isSecondaryScreenActive:
+            _secondaryDisplayState?.value?.isSecondaryActive ?? false,
+        onDeactivateNavigation: () => _gamepadNav.deactivate(),
+        onReactivateNavigation: () => _gamepadNav.activate(),
+        onRegisterOverlayState: (isOverlayOpen, isAchievementsOpen) {
+          _isAchievementsOpen = isAchievementsOpen;
+        },
+        onRegisterNavigation:
+            ({
+              required moveUp,
+              required moveDown,
+              required moveLeft,
+              required moveRight,
+            }) {
+              _moveAchievementUp = moveUp;
+              _moveAchievementDown = moveDown;
+              _moveAchievementLeft = moveLeft;
+              _moveAchievementRight = moveRight;
+            },
+        onRegisterCloseOverlays: null,
+        onRegisterTriggerAction: (triggerAction) {
+          _triggerOverlayAction = triggerAction;
+        },
+        onRegisterSecondaryAction: (secondaryAction) {
+          _secondaryOverlayAction = secondaryAction;
+        },
+        onRegisterTabNavigation: (tabNav) {
+          _tabNavigationAction = tabNav;
+        },
+        onRegisterSelectButton: (action) {
+          _selectButtonAction = action;
+        },
+        onRegisterScrapeAction: (action) {
+          _scrapeAction = action;
+        },
+        onRegisterIsPlayingGameBlocked: (isBlocked) {
+          _isPlayingGameBlocked = isBlocked;
+        },
+        onPlayGame: _selectCurrentGame,
+        onShowRandomGame: _showRandomGameDialog,
+        onBack: _goBack,
+        onGameUpdated: _handleGameUpdated, // Sync UI after metadata edits.
+        onFavoriteToggled: _handleFavoriteToggledFromCard,
+        onGameDeleted: _handleGameDeleted,
+      ),
+    );
+  }
+
+  /// Called when the card's touch favorite button is pressed.
+  /// The DB toggle already happened in the card; mirror it into _games then resort.
+  void _handleFavoriteToggledFromCard() {
+    if (_selectedGame == null) return;
+    setState(() {
+      final gameIndex = _games.indexWhere(
+        (g) => g.romname == _selectedGame!.romname,
+      );
+      if (gameIndex != -1) {
+        final currentFavorite = _games[gameIndex].isFavorite ?? false;
+        _games[gameIndex] = _games[gameIndex].copyWith(
+          isFavorite: !currentFavorite,
+        );
+        _selectedGame = _games[gameIndex];
+      }
+    });
+    _reorderGamesListKeepingVisualPosition();
+  }
+
+  /// Called after a game is permanently deleted. Removes it from the list and
+  /// selects the previous game (or the next one if at the start).
+  void _handleGameDeleted(String romname) {
+    if (_games.isEmpty) return;
+
+    _resetVideoState();
+
+    final deletedIndex = _games.indexWhere((g) => g.romname == romname);
+    if (deletedIndex == -1) return;
+
+    final previousIndex = deletedIndex > 0 ? deletedIndex - 1 : 0;
+
+    setState(() {
+      _games.removeWhere((g) => g.romname == romname);
+      _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
+
+      if (_games.isEmpty) {
+        _selectedGame = null;
+        _selectedGameIndex = 0;
+      } else {
+        final newIndex = previousIndex.clamp(0, _games.length - 1);
+        _selectedGame = _games[newIndex];
+        _selectedGameIndex = newIndex;
+      }
+    });
+
+    if (_games.isNotEmpty && _selectedGame != null) {
+      // The list view's didUpdateWidget already recenters the new selection
+      // when [_selectedGameIndex] changes, so an explicit scroll here is
+      // redundant and can cause conflicting animations.
+      _updateSecondaryDisplay(_selectedGame!);
+      _updateBackground(_selectedGame!);
+      _startVideoTimer();
+    }
+  }
+
+  /// Synchronizes the selected game's metadata and refreshes the list sorting.
+  Future<void> _handleGameUpdated() async {
+    if (_selectedGame == null) return;
+
+    try {
+      _resetVideoState();
+
+      // Fetch latest metadata from local storage.
+      final updatedGame = await GameService.getGameDetails(
+        widget.system,
+        _selectedGame!.romname,
+      );
+
+      if (updatedGame != null) {
+        final artworkFolder =
+            updatedGame.systemFolderName ?? widget.system.primaryFolderName;
+        final artworkPaths = scrapedArtworkPaths(
+          updatedGame,
+          artworkFolder,
+          _fileProvider,
+        );
+        GamesGrid.evictArtworkCaches(artworkPaths);
+        GamesCarousel.evictArtworkCaches(artworkPaths);
+        setState(() {
+          _selectedGame = updatedGame;
+          _artworkVersion++;
+
+          // Grid and carousel views use the games-list identity to know when
+          // their cached artwork cards must be rebuilt. Publish a new list
+          // instead of mutating this one in place.
+          _games = replaceGameInList(_games, updatedGame);
+        });
+
+        _loadLocalizedDescription();
+
+        // Re-sort the collection following the edited game (name changes alter its rank).
+        _reorderGamesListFollowingGame(updatedGame.romname);
+
+        if (mounted && _selectedGame != null) {
+          // A re-scrape rewrites the art at the same paths, so the dedup in
+          // the push below would skip it and the secondary engine would keep
+          // showing the bitmap it already decoded.
+          _updateSecondaryDisplay(updatedGame, forceMediaRefresh: true);
+          _updateBackground(updatedGame);
+          _startVideoTimer();
+        }
+      }
+    } catch (e) {
+      _log.e('Error updating game in list: $e');
+    }
+  }
+
+  /// Scrapes metadata/artwork for the currently selected game.
+  ///
+  /// The list view triggers scraping through the details card (which owns rich
+  /// tab/focus UX). Grid and carousel views have no details card, so this
+  /// view-mode-independent path drives the same [ScreenScraperService] flow and
+  /// feeds the [_scrapingGameRomnames]/[_scrapeProgress] overlay maps that those
+  /// grids already render. Bound to the Select + A chord in those views.
+  Future<void> _scrapeSelectedGame() async {
+    final game = _selectedGame;
+    if (game == null || _isScrapingSelectedGame) return;
+
+    final scrapeSystemId = widget.system.id;
+    if (scrapeSystemId == null) return;
+
+    if (!await ScreenScraperService.hasSavedCredentials()) {
+      if (!mounted) return;
+      AppNotification.showNotification(
+        context,
+        'Please log in to ScreenScraper in the Scraping tab first.',
+        type: NotificationType.info,
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    _isScrapingSelectedGame = true;
+
+    // Pause any preview playback to avoid resource contention during scraping.
+    _resetVideoState();
+
+    final isAllMode =
+        widget.system.folderName == SystemFolderNames.all ||
+        widget.system.folderName == SystemFolderNames.favorites;
+    final targetSystemFolder = isAllMode && game.systemFolderName != null
+        ? game.systemFolderName!
+        : widget.system.primaryFolderName;
+
+    final secondaryState = context.read<SecondaryDisplayState?>();
+    final isSecondaryActive =
+        _secondaryDisplayState?.value?.isSecondaryActive ?? false;
+
+    setState(() {
+      _scrapingGameRomnames.add(game.romname);
+      _scrapeProgress[game.romname] = 0.0;
+      _selectedScrapeStatus = AppLocale.scrapingGameData.getString(context);
+    });
+
+    AppNotification.showNotification(
+      context,
+      AppLocale.scrapingGameData.getString(context),
+      type: NotificationType.info,
+    );
+
+    if (secondaryState != null && isSecondaryActive) {
+      secondaryState.updateState(
+        isScraping: true,
+        scrapeStatus: AppLocale.scrapingGameData.getString(context),
+        scrapeProgress: 0.0,
+      );
+    }
+
+    try {
+      // Mirror the card: overwrite existing metadata when a description is
+      // already present, otherwise only fill the gaps.
+      final forceOverwrite = game
+          .getDescriptionForLanguage('en')
+          .trim()
+          .isNotEmpty;
+
+      final result = await ScreenScraperService.scrapeSingleGame(
+        appSystemId: scrapeSystemId,
+        romName: game.romname,
+        systemFolder: targetSystemFolder,
+        romPath: game.romPath ?? '',
+        gameName: game.name,
+        serialNumber: game.titleId,
+        forceOverwrite: forceOverwrite,
+        onProgress: (statusKey, progress) {
+          if (!mounted) return;
+          final localizedStatus = statusKey.getString(context);
+          setState(() {
+            _scrapeProgress[game.romname] = progress;
+            _selectedScrapeStatus = localizedStatus;
+          });
+          if (secondaryState != null && isSecondaryActive) {
+            secondaryState.updateState(
+              scrapeStatus: localizedStatus,
+              scrapeProgress: progress,
+            );
+          }
+        },
+      );
+
+      if (!mounted) return;
+      if (result['success'] == true) {
+        // Drop the decoded copies of every artwork file the scrape may have
+        // rewritten, so the rebuild below reads the new files from disk.
+        await evictScrapedArtwork(
+          scrapedArtworkPaths(game, targetSystemFolder, _fileProvider),
+        );
+        if (!mounted) return;
+
+        await _handleGameUpdated();
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.scrapeSuccessful.getString(context),
+            type: NotificationType.success,
+          );
+        }
+      } else {
+        AppNotification.showNotification(
+          context,
+          result['message'].toString().getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } catch (e) {
+      _log.e('Single game scrape (grid/carousel) failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.scrapeErrorGame.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } finally {
+      _isScrapingSelectedGame = false;
+      if (mounted) {
+        setState(() {
+          _scrapingGameRomnames.remove(game.romname);
+          _scrapeProgress.remove(game.romname);
+          _selectedScrapeStatus = '';
+        });
+        if (secondaryState != null && isSecondaryActive) {
+          // Latency buffer so file descriptors release before the secondary
+          // screen clears its scrape state.
+          await Future.delayed(const Duration(milliseconds: 250));
+          secondaryState.updateState(
+            isScraping: false,
+            clearScrapeProgress: true,
+            clearScrapeStatus: true,
+          );
+        }
+      }
+    }
+  }
+}

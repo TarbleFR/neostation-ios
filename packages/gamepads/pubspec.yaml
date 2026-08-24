@@ -1,0 +1,29 @@
+name: gamepads
+resolution: workspace
+description: A Flutter plugin to handle gamepad input on iOS.
+version: 0.1.8+2
+homepage: https://github.com/flame-engine/gamepads
+repository: https://github.com/flame-engine/gamepads/tree/main/packages/gamepads
+publish_to: none
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        default_package: gamepads_darwin
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  gamepads_darwin:
+    path: ../gamepads_darwin
+  gamepads_platform_interface:
+    path: ../gamepads_platform_interface
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

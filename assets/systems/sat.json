@@ -1,0 +1,278 @@
+{
+  "system": {
+    "id": "sat",
+    "multidisc": true,
+    "name": "Sega Saturn",
+    "short_name": "Saturn",
+    "details": {
+      "manufacturer": "Sega",
+      "release_date": "1994-11-22",
+      "description": "Sega's 32-bit CD-based console with dual-CPU architecture.",
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "2× Hitachi SH-2",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Panzer Dragoon Saga",
+        "NiGHTS into Dreams…",
+        "Virtua Fighter 2",
+        "Sega Rally Championship"
+      ]
+    },
+    "ids": {
+      "screenscraper": 22,
+      "retroachievements": 39
+    },
+    "folders": [
+      "sat",
+      "saturn",
+      "Sega Saturn",
+      "saturnjp"
+    ],
+    "colors": [
+      "#CFD8DC",
+      "#212121"
+    ],
+    "extensions": [
+      "bin",
+      "ccd",
+      "chd",
+      "cue",
+      "iso",
+      "m3u",
+      "mds",
+      "toc",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone YabaSanshiro 2 Pro",
+      "unique_id": "sat.org.devmiyax.yabasanshioro2.pro",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, toc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.devmiyax.yabasanshioro2.pro/org.uoyabause.android.Yabause -a android.intent.action.MAIN -e org.uoyabause.android.FileNameUri \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone YabaSanshiro 2",
+      "unique_id": "sat.org.devmiyax.yabasanshioro2",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, toc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.devmiyax.yabasanshioro2/org.uoyabause.android.Yabause -a android.intent.action.VIEW -e org.uoyabause.android.FileNameUri \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone YabaSanshiro Pro",
+      "unique_id": "sat.org.uoyabause.android.pro",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, toc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.uoyabause.android.pro/org.uoyabause.android.Yabause -a android.intent.action.VIEW -e org.uoyabause.android.FileNameEx \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone YabaSanshiro",
+      "unique_id": "sat.org.uoyabause.android",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, toc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.uoyabause.android/org.uoyabause.android.Yabause -a android.intent.action.VIEW -e org.uoyabause.android.FileNameEx \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Saturn.EMU",
+      "unique_id": "sat.com.explusalpha.SaturnEmu",
+      "description": "Supported extensions: ccd, chd, cue, m3u, toc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.SaturnEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle Saturn",
+      "default_core": true,
+      "unique_id": "sat.ra64.mednafen_saturn",
+      "description": "Supported extensions: ccd, chd, cue, m3u, toc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_saturn\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 YabaSanshiro",
+      "unique_id": "sat.ra64.yabasanshiro",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, mds, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"yabasanshiro\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Yabause",
+      "unique_id": "sat.ra64.yabause",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"yabause\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle Saturn",
+      "default_core": true,
+      "unique_id": "sat.ra32.mednafen_saturn",
+      "description": "Supported extensions: ccd, chd, cue, m3u, toc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_saturn\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 YabaSanshiro",
+      "unique_id": "sat.ra32.yabasanshiro",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, mds, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"yabasanshiro\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Yabause",
+      "unique_id": "sat.ra32.yabause",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"yabause\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle Saturn",
+      "default_core": true,
+      "unique_id": "sat.ra.mednafen_saturn",
+      "description": "Supported extensions: ccd, chd, cue, m3u, toc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_saturn\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_saturn_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_saturn_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_saturn_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch YabaSanshiro",
+      "unique_id": "sat.ra.yabasanshiro",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, mds, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"yabasanshiro\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L yabasanshiro_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L yabasanshiro_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L yabasanshiro_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Yabause",
+      "unique_id": "sat.ra.yabause",
+      "description": "Supported extensions: bin, ccd, chd, cue, iso, m3u, mds, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"yabause\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L yabause_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L yabause_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L yabause_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "sat.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

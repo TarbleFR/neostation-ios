@@ -1,0 +1,241 @@
+{
+  "system": {
+    "id": "msx",
+    "multidisc": false,
+    "name": "MSX",
+    "short_name": "MSX",
+    "details": {
+      "manufacturer": "Microsoft",
+      "release_date": "1983-06-27",
+      "description": "Standardized 8-bit home computer architecture led by Microsoft and ASCII.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80",
+      "media": [
+        "cartridge",
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Metal Gear",
+        "Gradius 2",
+        "The Maze of Galious",
+        "Aleste"
+      ]
+    },
+    "ids": {
+      "screenscraper": 113,
+      "retroachievements": 29
+    },
+    "folders": [
+      "msx",
+      "msx1",
+      "msx2",
+      "msxturbor",
+      "msx-turbo",
+      "msx2plus"
+    ],
+    "colors": [
+      "#30343f",
+      "#d5d0cd"
+    ],
+    "extensions": [
+      "cas",
+      "col",
+      "dsk",
+      "fdi",
+      "m3u",
+      "mx1",
+      "mx2",
+      "ri",
+      "rom",
+      "sc",
+      "sg",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone MsxEmu",
+      "unique_id": "msx.com.explusalpha.MsxEmu",
+      "description": "Supported extensions: cas, col, dsk, fdi, m3u, mx1, mx2, ri, rom, sc, sg.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.MsxEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.path}\" -t application/zip --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 fMSX",
+      "unique_id": "msx.ra64.fmsx",
+      "description": "Supported extensions: cas, dsk, fdi, m3u, mx1, mx2, rom.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fmsx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 blueMSX",
+      "default_core": true,
+      "unique_id": "msx.ra64.bluemsx",
+      "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bluemsx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 fMSX",
+      "unique_id": "msx.ra32.fmsx",
+      "description": "Supported extensions: cas, dsk, fdi, m3u, mx1, mx2, rom.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fmsx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 blueMSX",
+      "default_core": true,
+      "unique_id": "msx.ra32.bluemsx",
+      "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bluemsx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch fMSX",
+      "unique_id": "msx.ra.fmsx",
+      "description": "Supported extensions: cas, dsk, fdi, m3u, mx1, mx2, rom.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fmsx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fmsx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fmsx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fmsx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch blueMSX",
+      "default_core": true,
+      "unique_id": "msx.ra.bluemsx",
+      "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bluemsx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bluemsx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bluemsx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L bluemsx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "unique_id": "msx.ra.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBNeo",
+      "unique_id": "msx.ra64.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "unique_id": "msx.ra32.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "msx.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

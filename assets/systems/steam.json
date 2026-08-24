@@ -1,0 +1,63 @@
+{
+  "system": {
+    "id": "steam",
+    "multidisc": false,
+    "name": "Steam",
+    "neosync": {
+      "sync": false,
+      "sync_folder": null
+    },
+    "short_name": "Steam",
+    "details": {
+      "manufacturer": "Valve",
+      "release_date": "2003-09-12",
+      "description": "Valve's digital distribution platform for PC games.",
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Counter-Strike 2",
+        "Dota 2",
+        "Half-Life 2",
+        "Portal 2"
+      ],
+      "collection_kind": "digital_store"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "steam"
+    ],
+    "colors": [
+      "#1b2838",
+      "#66c0f4"
+    ],
+    "extensions": [
+      "steam"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone GameNative (Steam)",
+      "unique_id": "steam.app.gamenative.steam",
+      "default_standalone": true,
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: steamappid.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-a app.gamenative.LAUNCH_GAME -n app.gamenative/.MainActivity --ei app_id \"{tags.steamappid}\" --es game_source STEAM"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

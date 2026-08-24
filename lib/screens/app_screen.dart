@@ -1,0 +1,737 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/nav_tabs.dart';
+import 'package:neostation/models/config_model.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/services/update_service.dart';
+import 'package:neostation/services/systems_update_service.dart';
+import 'package:neostation/widgets/update_dialog.dart';
+import 'package:neostation/widgets/systems_update_dialog.dart';
+import 'package:neostation/services/logger_service.dart';
+
+import '../widgets/fixed_header.dart';
+import 'systems_screen/system_content.dart';
+import 'systems_screen/custom_main_menu_background.dart';
+import 'search_screen/search_screen.dart';
+import 'retro_achievements_screen/ra_content.dart';
+import 'settings_screen/new_settings_screen.dart';
+import 'scraper_screen/new_scraper_options_screen.dart';
+import 'neo_sync_screen/neo_sync_tab.dart';
+import 'library_screen/library_screen.dart';
+import '../widgets/scraper_content.dart';
+
+import 'package:neostation/services/game_service.dart';
+import 'package:neostation/services/home_music_service.dart';
+import 'package:neostation/providers/theme_provider.dart';
+import 'package:neostation/repositories/emulator_repository.dart';
+
+import 'dart:async';
+import 'dart:io';
+
+/// The root screen of the application, managing high-level navigation tabs.
+///
+/// Coordinates the lifecycle of main features including the System library,
+/// Cloud Sync, Achievements, Metadata Scraper, and Global Settings.
+class AppScreen extends StatefulWidget {
+  const AppScreen({super.key});
+
+  @override
+  AppScreenState createState() => AppScreenState();
+}
+
+/// Top-level navigation tab order.
+///
+/// The header renders tabs in this order and [AppScreenState] delegates input
+/// per tab, so both must agree — these constants are the single definition of
+/// that order. Inserting a tab shifts every later index, which is why the
+/// delegation logic below is written against these names rather than literals.
+abstract final class AppTabs {
+  static const int systems = 0;
+  static const int search = 1;
+  static const int sync = 2;
+  static const int achievements = 3;
+  static const int scraper = 4;
+  static const int settings = 5;
+  static const int library = 6;
+
+  /// Total number of tabs, used for wrap-around when cycling with the bumpers.
+  static const int count = 7;
+}
+
+/// Bridge class providing static access to the main application navigation state.
+///
+/// Facilitates tab switching and navigation lifecycle control from deep within
+/// the component tree without requiring direct context propagation.
+class AppNavigation {
+  /// Switches directly to [index] (see [AppTabs]).
+  static void goToTab(int index) {
+    AppScreenState._selectTabStatic(index);
+  }
+
+  /// Temporarily suspends global gamepad and keyboard navigation.
+  static void deactivate() {
+    AppScreenState.deactivateNavigation();
+  }
+
+  /// Resumes global gamepad and keyboard navigation.
+  static void activate() {
+    AppScreenState.activateNavigation();
+  }
+
+  /// Switches to the next available navigation tab.
+  static void nextTab() {
+    AppScreenState._navigateToNextTabStatic();
+  }
+
+  /// Switches to the previous available navigation tab.
+  static void previousTab() {
+    AppScreenState._navigateToPreviousTabStatic();
+  }
+}
+
+class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
+  static final _log = LoggerService.instance;
+
+  /// Currently active top-level navigation tab index.
+  int _selectedTabIndex = 0;
+
+  /// Internal state tracker for system selection within the System tab.
+  int _selectedSystemIndex = 0;
+
+  /// Input orchestration layer for gamepad and keyboard support.
+  late GamepadNavigation _gamepadNav;
+
+  /// Static reference to the currently active instance for global access.
+  static AppScreenState? _currentInstance;
+
+  ThemeProvider? _themeProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Attach the secondary-display theme sync here (not in initState): the
+    // provider isn't resolvable until didChangeDependencies runs, so an
+    // initState addListener would silently no-op on a null _themeProvider and
+    // the secondary display would never pick up theme changes until an
+    // unrelated re-push. Re-bind if the provider instance ever changes.
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (!identical(themeProvider, _themeProvider)) {
+      _themeProvider?.removeListener(_onThemeChanged);
+      _themeProvider = themeProvider;
+      _themeProvider!.addListener(_onThemeChanged);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentInstance = this;
+    WidgetsBinding.instance.addObserver(this);
+
+    // Initialize the navigation bridge with core application callbacks.
+    _gamepadNav = GamepadNavigation(
+      onNavigateUp: _navigateContentUp,
+      onNavigateDown: _navigateContentDown,
+      onNavigateLeft: _navigateContentLeft,
+      onNavigateRight: _navigateContentRight,
+      onPreviousTab: _navigateToPreviousTab,
+      onNextTab: _navigateToNextTab,
+      onSelectItem: _selectCurrentItem,
+      onSettings: _handleSettings,
+      onBack: _handleBackNavigation,
+      onXButton: _handleXButton,
+    );
+
+    // Asynchronous initialization of navigation and update checking.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _gamepadNav.initialize();
+      _gamepadNav.activate();
+
+      // Register the primary navigation layer at the base of the navigation stack.
+      GamepadNavigationManager.pushLayer(
+        'app_screen',
+        onActivate: () => _gamepadNav.activate(),
+        onDeactivate: () => _gamepadNav.deactivate(),
+      );
+
+      _runUpdateSequence();
+    });
+
+    // Secondary-display theme sync is attached in didChangeDependencies, where
+    // the ThemeProvider is first resolvable (see note there).
+  }
+
+  /// Runs the sequenced update flow: updates first, then one ROM scan.
+  ///
+  /// The initial scan is deferred by SqliteConfigProvider so updates and scan
+  /// happen in a single pass — no double-scan on systems update acceptance.
+  Future<void> _runUpdateSequence() async {
+    if (!mounted) return;
+    try {
+      final configProvider = Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      );
+      _performUpdateSequence(configProvider);
+    } catch (e) {
+      _log.e('AppScreen: Failed to initiate update sequence', error: e);
+    }
+  }
+
+  Future<void> _performUpdateSequence(
+    SqliteConfigProvider configProvider,
+  ) async {
+    // Fire the deferred startup scan IMMEDIATELY — it must never be gated behind
+    // the network update checks below. On a freshly rebooted device the network
+    // is often not up yet, so awaiting those checks (each guarded by ~10s
+    // timeouts) left the Systems tab completely blank until they timed out. The
+    // scan flips isScanning/isLoading, so the user sees a spinner then content.
+    final startupScanPending = configProvider.consumeStartupScan();
+    _log.i(
+      'AppScreen: startupScanPending=$startupScanPending, mounted=$mounted',
+    );
+    Future<void>? initialScan;
+    if (startupScanPending && mounted) {
+      // A default launcher may be started before removable storage has mounted.
+      // Let the startup scan wait for it rather than interpreting an empty SD
+      // card as a library whose ROMs were deleted.
+      initialScan = configProvider.scanSystems(waitForAndroidStorage: true);
+      _log.i('AppScreen: initial startup scan started');
+    }
+
+    unawaited(_fixRetroarchAndroidDefault());
+
+    // App update check (network) — runs alongside the scan, no longer blocking it.
+    // The iOS fork is sideloaded and owns its platform integrations. Desktop
+    // update manifests must never prompt, download, or replace iOS assets, even
+    // when a legacy config migrated from PC still has these booleans enabled.
+    if (!Platform.isIOS && configProvider.config.autoUpdateApp) {
+      final appUpdateResult = await _checkAndShowAppUpdate();
+      if (appUpdateResult == true) {
+        // User chose Update Now and will restart; nothing more to do here.
+        return;
+      }
+    }
+
+    // Systems/emulator config update check (network).
+    if (!Platform.isIOS && configProvider.config.autoUpdateSystems) {
+      final systemsUpdated = await _checkAndShowSystemsUpdate(configProvider);
+      if (systemsUpdated && mounted) {
+        // New definitions were applied — re-scan to reflect them. Wait for the
+        // initial scan to settle first, since scanSystems ignores concurrent calls.
+        await initialScan;
+        if (mounted) configProvider.scanSystems();
+      }
+    }
+  }
+
+  /// Detects which RetroArch variant the user has installed on Android and sets
+  /// it as the default package for all systems. Priority order:
+  ///   com.retroarch.aarch64 > com.retroarch > com.retroarch.ra32
+  ///
+  /// If no RetroArch is installed, clears RetroArch defaults so standalone
+  /// defaults (marked with [default_standalone] in JSON) take effect.
+  Future<void> _fixRetroarchAndroidDefault() async {
+    if (!Platform.isAndroid) return;
+
+    try {
+      // Already filtered to installed variants and ordered best-first, so the
+      // first entry is the one to promote. Only promote a variant that is
+      // actually installed: falling back to an uninstalled package would
+      // silently replace working standalone defaults with a broken core one.
+      final installed =
+          await EmulatorRepository.getInstalledAndroidRetroArchPackages();
+
+      if (installed.isEmpty) {
+        await EmulatorRepository.clearRetroArchDefaultsForAndroid();
+        _log.i(
+          'Android: No RetroArch variant installed; cleared RA defaults so standalone defaults remain active',
+        );
+        return;
+      }
+
+      final chosenPackage = installed.first;
+      await EmulatorRepository.fixRetroArchDefaultForAndroid(chosenPackage);
+      _log.i('Android: Set RetroArch default package to $chosenPackage');
+    } catch (e) {
+      _log.e('Failed to fix RetroArch default package', error: e);
+    }
+  }
+
+  /// Checks for a new app version and shows the update dialog if found.
+  /// Returns true if the dialog was shown.
+  Future<bool?> _checkAndShowAppUpdate() async {
+    try {
+      final updateInfo = await UpdateService.checkForUpdates();
+      if (updateInfo != null && mounted) {
+        return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => UpdateDialog(updateInfo: updateInfo),
+        );
+      }
+    } catch (e) {
+      _log.e('AppScreen: App update check failure', error: e);
+    }
+    return false;
+  }
+
+  /// Checks for systems/emulator config updates and shows the dialog if found.
+  /// Returns true if the update was accepted and applied (caller triggers scan).
+  Future<bool> _checkAndShowSystemsUpdate(
+    SqliteConfigProvider configProvider,
+  ) async {
+    try {
+      final updateInfo = await SystemsUpdateService.checkForUpdate();
+      if (updateInfo == null || !mounted) return false;
+
+      final updated = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => SystemsUpdateDialog(updateInfo: updateInfo),
+      );
+
+      if (updated == true && mounted) {
+        await configProvider.reloadSystemDefinitions();
+        return true;
+      }
+    } catch (e) {
+      _log.e('AppScreen: Systems update check failure', error: e);
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    _currentInstance = null;
+    WidgetsBinding.instance.removeObserver(this);
+    _themeProvider?.removeListener(_onThemeChanged);
+    GamepadNavigationManager.popLayer('app_screen');
+    _gamepadNav.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // When NeoStation's own UI regains focus and no game is actually running,
+    // clear any stale Now Playing state left over from quitting mid-game. Use
+    // isGameLaunchInProgress (not isGameLaunched) so a transient resume during
+    // the launch dialog/handoff window — before _registerGameLaunch flips
+    // isGameLaunched ~2s in — can't clobber the Now Playing state we just
+    // pushed. This was the PSX/GameCube "no Now Playing" race.
+    if (state == AppLifecycleState.resumed &&
+        Platform.isAndroid &&
+        !GameService.isGameLaunchInProgress) {
+      Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      ).resetSecondaryInGameState();
+    }
+  }
+
+  /// Synchronizes visual state with secondary display hardware (Android OEM targets).
+  void _onThemeChanged() {
+    if (!mounted || !Platform.isAndroid || _themeProvider == null) return;
+
+    final themeProvider = _themeProvider!;
+    final secondaryState = Provider.of<SqliteConfigProvider>(
+      context,
+      listen: false,
+    ).secondaryDisplayState;
+    if (secondaryState == null) return;
+
+    secondaryState.updateState(
+      isOled: themeProvider.isOled,
+      backgroundColor: themeProvider.currentTheme.scaffoldBackgroundColor
+          .toARGB32(),
+      themeName: themeProvider.currentThemeName,
+    );
+
+    _log.i(
+      'AppScreen: Syncing theme with secondary display (isOled: ${themeProvider.isOled})',
+    );
+  }
+
+  /// Static hook to suspend global navigation input.
+  static void deactivateNavigation() {
+    _currentInstance?._gamepadNav.deactivate();
+  }
+
+  /// Static hook to resume global navigation input.
+  static void activateNavigation() {
+    _currentInstance?._gamepadNav.activate();
+  }
+
+  static void _navigateToNextTabStatic() {
+    _currentInstance?._navigateToNextTab();
+  }
+
+  static void _navigateToPreviousTabStatic() {
+    _currentInstance?._navigateToPreviousTab();
+  }
+
+  static void _selectTabStatic(int index) {
+    _currentInstance?._onTabSelected(index);
+  }
+
+  // ==========================================
+  // NAVIGATION DELEGATION LOGIC
+  // ==========================================
+  // Directional inputs are delegated to the active tab component
+  // to allow for context-aware navigation patterns (Grid vs List vs Paged).
+
+  void _navigateContentRight() {
+    if (_selectedTabIndex == AppTabs.systems) {
+      return; // Grid navigation delegated to my_systems.dart via provider.
+    }
+    if (_selectedTabIndex == AppTabs.scraper) {
+      NewScraperOptionsScreen.navigateRight();
+      return;
+    }
+    if (_selectedTabIndex == AppTabs.settings) {
+      NewSettingsScreen.navigateRight();
+      return;
+    }
+    if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.navigateRight();
+      return;
+    }
+  }
+
+  void _navigateContentLeft() {
+    if (_selectedTabIndex == AppTabs.systems) return;
+    if (_selectedTabIndex == AppTabs.scraper) {
+      NewScraperOptionsScreen.navigateLeft();
+      return;
+    }
+    if (_selectedTabIndex == AppTabs.settings) {
+      NewSettingsScreen.navigateLeft();
+      return;
+    }
+    if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.navigateLeft();
+      return;
+    }
+  }
+
+  /// Returns whether the selection moved, so the gamepad handler can suppress
+  /// the nav sound when repeating against the start/end of a list.
+  ///
+  /// The achievements tab is absent: `RAContent` pushes its own navigation
+  /// layer unconditionally, so this handler is deactivated whenever that tab is
+  /// mounted. Keeping a second route to the same screen is what caused the
+  /// double-dispatch bug fixed in #255.
+  bool _navigateContentDown() {
+    if (_selectedTabIndex == AppTabs.systems) return true;
+    if (_selectedTabIndex == AppTabs.scraper) {
+      NewScraperOptionsScreen.navigateDown();
+      return true;
+    }
+    if (_selectedTabIndex == AppTabs.settings) {
+      return NewSettingsScreen.navigateDown();
+    }
+    if (_selectedTabIndex == AppTabs.library) {
+      return LibraryScreen.navigateDown();
+    }
+    return true;
+  }
+
+  bool _navigateContentUp() {
+    if (_selectedTabIndex == AppTabs.systems) return true;
+    if (_selectedTabIndex == AppTabs.scraper) {
+      NewScraperOptionsScreen.navigateUp();
+      return true;
+    }
+    if (_selectedTabIndex == AppTabs.settings) {
+      return NewSettingsScreen.navigateUp();
+    }
+    if (_selectedTabIndex == AppTabs.library) {
+      return LibraryScreen.navigateUp();
+    }
+    return true;
+  }
+
+  void _handleSettings() {
+    if (_selectedTabIndex == AppTabs.systems) {
+      return;
+    }
+  }
+
+  void _handleBackNavigation() {
+    if (_selectedTabIndex == AppTabs.scraper) {
+      NewScraperOptionsScreen.backCurrent();
+    } else if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.backCurrent();
+    }
+  }
+
+  void _selectCurrentItem() async {
+    if (_selectedTabIndex == AppTabs.systems) return;
+
+    if (_selectedTabIndex == AppTabs.scraper) {
+      NewScraperOptionsScreen.selectCurrent();
+    } else if (_selectedTabIndex == AppTabs.settings) {
+      NewSettingsScreen.selectCurrent();
+    } else if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.selectCurrent();
+    }
+  }
+
+  /// X button: on the Settings tab this deletes the focused item (used to remove
+  /// imported themes). No-op elsewhere.
+  void _handleXButton() {
+    if (_selectedTabIndex == AppTabs.settings) {
+      NewSettingsScreen.deleteCurrent();
+    } else if (_selectedTabIndex == AppTabs.library) {
+      LibraryScreen.deleteCurrent();
+    }
+  }
+
+  void _onSystemCardTapped(int index) {
+    setState(() {
+      _selectedSystemIndex = index;
+    });
+    _showSystemSelection();
+  }
+
+  void _showSystemSelection() {
+    setState(() {});
+  }
+
+  /// Handles tab selection lifecycle including state updates and UI side-effects.
+  void _onTabSelected(int index) {
+    if (index != AppTabs.systems) {
+      // Stop ambience immediately, before the outgoing Systems widget's
+      // asynchronous dispose/post-frame callbacks can race the destination tab.
+      unawaited(HomeMusicService().setMainMenuActive(false));
+    }
+
+    setState(() {
+      _selectedTabIndex = index;
+      _selectedSystemIndex = 0;
+    });
+
+    _updateSecondaryScreenTab(index);
+
+    // Re-verify navigation focus after tab transition.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // The destination tab may have pushed its own navigation layer during
+      // the rebuild. Reactivate the stack's top layer instead of unconditionally
+      // reactivating AppScreen, which would leave two controllers handling the
+      // same D-pad event (e.g. Username -> API Key -> Connect in one press).
+      GamepadNavigationManager.reactivate();
+    });
+  }
+
+  /// Updates secondary display metadata based on the current active tab.
+  void _updateSecondaryScreenTab(int index) {
+    if (Platform.isAndroid) {
+      final secondaryState = Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      ).secondaryDisplayState;
+      if (secondaryState == null) return;
+
+      final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+      final isOled = themeProvider.isOled;
+
+      if (index == AppTabs.systems) {
+        return; // System tab manages its own secondary display state.
+      }
+
+      String tabName = '';
+      switch (index) {
+        case AppTabs.search:
+          tabName = 'Search';
+          break;
+        case AppTabs.sync:
+          tabName = 'Sync';
+          break;
+        case AppTabs.achievements:
+          tabName = 'Achievements';
+          break;
+        case AppTabs.scraper:
+          tabName = 'Scraper';
+          break;
+        case AppTabs.settings:
+          tabName = 'Settings';
+          break;
+        case AppTabs.library:
+          tabName = 'Library';
+          break;
+      }
+
+      secondaryState.updateState(
+        systemName: tabName,
+        useFluidShader: true,
+        isOled: isOled,
+        backgroundColor: themeProvider.currentTheme.scaffoldBackgroundColor
+            .toARGB32(),
+        themeName: themeProvider.currentThemeName,
+        isGameSelected: false,
+        clearSystemLogo: true,
+        clearSystemBackground: true,
+        clearFanart: true,
+        clearScreenshot: true,
+        clearWheel: true,
+        clearVideo: true,
+        clearImageBytes: true,
+      );
+    }
+  }
+
+  /// Tabs the user hasn't hidden, in canonical order. Never empty — Systems and
+  /// Settings can't be hidden.
+  List<NavTab> get _visibleTabs => visibleNavTabs(
+    Provider.of<SqliteConfigProvider>(context, listen: false).config,
+  );
+
+  /// Steps [step] places through the visible tabs, wrapping at both ends, so a
+  /// hidden tab is skipped rather than selected and immediately bounced.
+  void _cycleTab(int step) {
+    final visible = _visibleTabs;
+    if (visible.isEmpty) return;
+
+    final current = NavTab.values[_selectedTabIndex];
+    final position = visible.indexOf(current);
+    // Currently on a hidden tab (config changed underneath us): step from the
+    // start of the strip rather than off the end of the list.
+    final from = position == -1 ? 0 : position;
+    final next = (from + step + visible.length) % visible.length;
+    _onTabSelected(visible[next].index);
+  }
+
+  void _navigateToNextTab() => _cycleTab(1);
+
+  void _navigateToPreviousTab() => _cycleTab(-1);
+
+  /// Falls back to Systems if the selected tab is no longer visible.
+  ///
+  /// Unreachable in normal use (the toggles live on Settings, which can't be
+  /// hidden), but it keeps an imported or cloud-restored config from stranding
+  /// the user on a tab that has no entry in the strip.
+  void _ensureSelectedTabVisible(ConfigModel config) {
+    if (visibleNavTabs(config).contains(NavTab.values[_selectedTabIndex])) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onTabSelected(NavTab.systems.index);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<SqliteConfigProvider, ThemeProvider>(
+      builder: (context, configProvider, themeProvider, child) {
+        _ensureSelectedTabVisible(configProvider.config);
+        final customBackgroundPath = themeProvider.customBackgroundPath;
+
+        return PopScope(
+          canPop: false, // Intercept hardware back button to maintain app flow.
+          child: Scaffold(
+            body: Stack(
+              children: [
+                // Background Layer.
+                Positioned.fill(
+                  child: Container(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                  ),
+                ),
+
+                // Keep the Systems custom background mounted while switching
+                // top-level tabs. Offstage stops it painting on other tabs, while
+                // retaining the decoded image so returning to Systems cannot
+                // expose the theme background for a frame.
+                if (customBackgroundPath != null)
+                  Positioned.fill(
+                    child: TickerMode(
+                      enabled: _selectedTabIndex == AppTabs.systems,
+                      child: Offstage(
+                        offstage: _selectedTabIndex != AppTabs.systems,
+                        child: CustomMainMenuBackground(
+                          path: customBackgroundPath,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Main Content Layer.
+                Positioned.fill(child: _buildCurrentTabContent()),
+
+                // Global Header: Managed based on app initialization state.
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child:
+                      (configProvider.initialized || !configProvider.isLoading)
+                      ? FixedHeader(
+                          selectedTabIndex: _selectedTabIndex,
+                          onTabSelected: _onTabSelected,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+
+                // Global Footer Placeholder.
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child:
+                      configProvider.hasRomFolder &&
+                          !configProvider.isLoading &&
+                          !configProvider.isScanning
+                      ? _buildFooterForCurrentTab()
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFooterForCurrentTab() {
+    return const SizedBox.shrink();
+  }
+
+  /// Content factory for the currently selected tab.
+  Widget _buildCurrentTabContent() {
+    switch (_selectedTabIndex) {
+      case AppTabs.systems:
+        return SystemContent(
+          selectedIndex: _selectedSystemIndex,
+          onCardTapped: _onSystemCardTapped,
+        );
+      case AppTabs.search:
+        // Search owns its own gamepad layer (text field + filter menus), so the
+        // app-level handler steps aside while it is on screen.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _gamepadNav.deactivate();
+        });
+        return const SearchScreen();
+      case AppTabs.sync:
+        // NeoSync tab manages its own focus lifecycle due to complex login flows.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _gamepadNav.deactivate();
+        });
+        return const NeoSyncTab();
+      case AppTabs.achievements:
+        return RAContent();
+      case AppTabs.scraper:
+        return ScraperContent();
+      case AppTabs.settings:
+        return NewSettingsScreen();
+      case AppTabs.library:
+        return const LibraryScreen();
+      default:
+        return SystemContent(
+          selectedIndex: _selectedSystemIndex,
+          onCardTapped: _onSystemCardTapped,
+        );
+    }
+  }
+}

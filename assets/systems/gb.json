@@ -1,0 +1,572 @@
+{
+  "system": {
+    "id": "gb",
+    "multidisc": false,
+    "name": "Game Boy",
+    "short_name": "GB",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "1989-04-21",
+      "description": "Nintendo's iconic 8-bit handheld with interchangeable cartridges.",
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Sharp LR35902",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Tetris",
+        "Pokémon Red / Blue",
+        "The Legend of Zelda: Link's Awakening",
+        "Super Mario Land 2"
+      ]
+    },
+    "ids": {
+      "screenscraper": 9,
+      "retroachievements": 4
+    },
+    "folders": [
+      "gb",
+      "Game Boy",
+      "Nintendo Game Boy",
+      "gameboy",
+      "sgb"
+    ],
+    "colors": [
+      "#90A4AE",
+      "#CFD8DC"
+    ],
+    "extensions": [
+      "bin",
+      "cgb",
+      "dmg",
+      "gb",
+      "gbc",
+      "gbs",
+      "rom",
+      "sgb",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Pizza Boy C Basic",
+      "unique_id": "gb.it.dbtecno.pizzaboy",
+      "description": "Supported extensions: gb, gbc, gbs.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n it.dbtecno.pizzaboy/it.dbtecno.pizzaboy.MainActivity -e rom_uri \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Pizza Boy C Pro",
+      "unique_id": "gb.it.dbtecno.pizzaboypro",
+      "description": "Supported extensions: gb, gbc, gbs.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n it.dbtecno.pizzaboypro/it.dbtecno.pizzaboypro.MainActivity -e rom_uri \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone SkyEmu",
+      "unique_id": "gb.com.sky.SkyEmu",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.sky.SkyEmu/.EnhancedNativeActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone GBC.emu",
+      "unique_id": "gb.com.explusalpha.GbcEmu",
+      "description": "Support extensions: bin, cgb, dmg, gb, gbc, gbs, rom, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.GbcEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" -t application/zip --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone GBC Emulator",
+      "unique_id": "gb.com.fastemulator.gbc",
+      "description": "Support extensions: bin, cgb, dmg, gb, gbc, gbs, rom, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.fastemulator.gbc/.EmulatorActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Linkboy",
+      "unique_id": "gb.com.pixelrespawn.linkboy",
+      "description": "Support extensions: bin, cgb, dmg, gb, gbc, gbs, rom, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.pixelrespawn.linkboy/.EmulatorActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Gambatte",
+      "default_core": true,
+      "unique_id": "gb.ra64.gambatte",
+      "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gambatte\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Gearboy",
+      "unique_id": "gb.ra64.gearboy",
+      "description": "Supported extensions: cgb, dmg, gb, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gearboy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 SameBoy",
+      "unique_id": "gb.ra64.sameboy",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"sameboy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 TGB Dual",
+      "unique_id": "gb.ra64.tgbdual",
+      "description": "Supported extensions: gb, gbc, sgb, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"tgbdual\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 DoubleCherryGB",
+      "unique_id": "gb.ra64.DoubleCherryGB",
+      "description": "Supported extensions: dmg, cgb, gb, gbc, sgb, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"DoubleCherryGB\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Mesen-S",
+      "unique_id": "gb.ra64.mesen-s",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mesen-s\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 VBA-M",
+      "unique_id": "gb.ra64.vbam",
+      "description": "Supported extensions: cgb, dmg, gb, gba, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vbam\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 mGBA",
+      "unique_id": "gb.ra64.mgba",
+      "description": "Supported extensions: gb, gba, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mgba\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Gambatte",
+      "default_core": true,
+      "unique_id": "gb.ra32.gambatte",
+      "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gambatte\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Gearboy",
+      "unique_id": "gb.ra32.gearboy",
+      "description": "Supported extensions: cgb, dmg, gb, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gearboy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 SameBoy",
+      "unique_id": "gb.ra32.sameboy",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"sameboy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 TGB Dual",
+      "unique_id": "gb.ra32.tgbdual",
+      "description": "Supported extensions: gb, gbc, sgb, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"tgbdual\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 DoubleCherryGB",
+      "unique_id": "gb.ra32.DoubleCherryGB",
+      "description": "Supported extensions: dmg, cgb, gb, gbc, sgb, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"DoubleCherryGB\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Mesen-S",
+      "unique_id": "gb.ra32.mesen-s",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mesen-s\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 VBA-M",
+      "unique_id": "gb.ra32.vbam",
+      "description": "Supported extensions: cgb, dmg, gb, gba, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vbam\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 mGBA",
+      "unique_id": "gb.ra32.mgba",
+      "description": "Supported extensions: gb, gba, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mgba\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Gambatte",
+      "default_core": true,
+      "unique_id": "gb.ra.gambatte",
+      "description": "Supported extensions: dmg, gb, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gambatte\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L gambatte_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L gambatte_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L gambatte_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Gearboy",
+      "unique_id": "gb.ra.gearboy",
+      "description": "Supported extensions: cgb, dmg, gb, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gearboy\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L gearboy_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L gearboy_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L gearboy_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch SameBoy",
+      "unique_id": "gb.ra.sameboy",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"sameboy\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L sameboy_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L sameboy_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L sameboy_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch TGB Dual",
+      "unique_id": "gb.ra.tgbdual",
+      "description": "Supported extensions: gb, gbc, sgb, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"tgbdual\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L tgbdual_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L tgbdual_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L tgbdual_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch DoubleCherryGB",
+      "unique_id": "gb.ra.DoubleCherryGB",
+      "description": "Supported extensions: dmg, cgb, gb, gbc, sgb, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"DoubleCherryGB\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L DoubleCherryGB_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L DoubleCherryGB_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L DoubleCherryGB_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Mesen-S",
+      "unique_id": "gb.ra.mesen-s",
+      "description": "Supported extensions: gb, gbc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mesen-s\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mesen-s_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mesen-s_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mesen-s_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch VBA-M",
+      "unique_id": "gb.ra.vbam",
+      "description": "Supported extensions: cgb, dmg, gb, gba, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vbam\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vbam_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vbam_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L vbam_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch mGBA",
+      "unique_id": "gb.ra.mgba",
+      "description": "Supported extensions: gb, gba, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mgba\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mgba_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mgba_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mgba_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Bsnes",
+      "unique_id": "gb.ra64.bsnes",
+      "description": "Supported extensions: gb, gbc, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Bsnes",
+      "unique_id": "gb.ra32.bsnes",
+      "description": "Supported extensions: gb, gbc, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Bsnes",
+      "unique_id": "gb.ra.bsnes",
+      "description": "Supported extensions: gb, gbc, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L bsnes_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "gb.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

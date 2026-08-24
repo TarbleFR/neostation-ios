@@ -1,0 +1,159 @@
+{
+  "system": {
+    "id": "pc98",
+    "multidisc": false,
+    "name": "NEC PC-9801",
+    "short_name": "PC98",
+    "details": {
+      "manufacturer": "NEC",
+      "release_date": "1982-10-22",
+      "description": "NEC's dominant Japanese 16/32-bit business and gaming computer line.",
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "NEC V30 / Intel x86 family",
+      "media": [
+        "floppy",
+        "cd_rom"
+      ],
+      "notable_games": [
+        "YU-NO",
+        "Touhou: Lotus Land Story",
+        "Rusty",
+        "Brandish"
+      ]
+    },
+    "ids": {
+      "screenscraper": 208,
+      "retroachievements": null
+    },
+    "folders": [
+      "pc98",
+      "NEC PC-98",
+      "PC-98",
+      "pc-9800-series"
+    ],
+    "colors": [
+      "#E0E0E0",
+      "#90A4AE"
+    ],
+    "extensions": [
+      "2hd",
+      "88d",
+      "98d",
+      "cmd",
+      "d88",
+      "d98",
+      "dup",
+      "fdd",
+      "fdi",
+      "hdd",
+      "hdi",
+      "hdm",
+      "hdn",
+      "nhd",
+      "tfd",
+      "thd",
+      "xdf",
+      "zip",
+      "7z",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Retroarch64 NP2kai",
+      "default_core": true,
+      "unique_id": "pc98.ra64.np2kai",
+      "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, hdn, nhd, tfd, thd, xdf, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"np2kai\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch64 Nekop2",
+      "unique_id": "pc98.ra64.nekop2",
+      "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, nhd, tfd, thd, xdf, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"nekop2\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch32 NP2kai",
+      "default_core": true,
+      "unique_id": "pc98.ra32.np2kai",
+      "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, hdn, nhd, tfd, thd, xdf, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"np2kai\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch32 Nekop2",
+      "unique_id": "pc98.ra32.nekop2",
+      "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, nhd, tfd, thd, xdf, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"nekop2\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch NP2kai",
+      "default_core": true,
+      "unique_id": "pc98.ra.np2kai",
+      "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, hdn, nhd, tfd, thd, xdf, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"np2kai\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch Nekop2",
+      "unique_id": "pc98.ra.nekop2",
+      "description": "Supported extensions: 2hd, 88d, 98d, cmd, d88, d98, dup, fdd, fdi, hdd, hdi, hdm, nhd, tfd, thd, xdf, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"nekop2\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "pc98.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

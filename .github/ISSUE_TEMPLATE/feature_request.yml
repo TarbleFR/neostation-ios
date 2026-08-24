@@ -1,0 +1,55 @@
+name: Feature Request
+description: Suggest a new feature or improvement for NeoStation iOS
+title: "[FEATURE] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us what would improve the NeoStation iOS experience. Requests specific to the original non-iOS project belong upstream.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      description: Describe the current limitation or user need.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like to see.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Main menu / UI
+        - RetroArch integration
+        - MeloNX integration
+        - ARMSX2 integration
+        - ScreenScraper
+        - RetroAchievements
+        - NeoSync / saves
+        - Themes / backgrounds / audio
+        - Sideloading / build
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you tried or considered another approach?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add mockups, examples or workflow details if useful.

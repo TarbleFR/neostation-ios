@@ -1,0 +1,131 @@
+{
+  "system": {
+    "id": "scummvm",
+    "multidisc": false,
+    "name": "ScummVM",
+    "short_name": "ScummVM",
+    "details": {
+      "manufacturer": "",
+      "release_date": "2001-06-01",
+      "description": "Interpreter engine for classic point-and-click adventure games.",
+      "type": "virtual",
+      "media": [
+        "various"
+      ],
+      "notable_games": [
+        "Monkey Island 2: LeChuck’s Revenge",
+        "Day of the Tentacle",
+        "Sam & Max Hit the Road",
+        "Broken Sword"
+      ],
+      "collection_kind": "emulation_platform"
+    },
+    "ids": {
+      "screenscraper": 123,
+      "retroachievements": null
+    },
+    "folders": [
+      "scummvm"
+    ],
+    "colors": [
+      "#FFAB91",
+      "#4E342E"
+    ],
+    "extensions": [
+      "dpt",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone ScummVM",
+      "unique_id": "scummvm.org.scummvm.scummvm",
+      "description": "Supported extensions: dpt",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.scummvm.scummvm/org.scummvm.scummvm.SplashActivity  -a android.intent.action.MAIN  -c android.intent.category.LAUNCHER  -d \"{tags.scummvm_id}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone ScummVM Debug Build",
+      "unique_id": "scummvm.org.scummvm.scummvm.debug",
+      "description": "Supported extensions: dpt",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.scummvm.scummvm.debug/org.scummvm.scummvm.SplashActivity  -a android.intent.action.MAIN  -c android.intent.category.LAUNCHER  -d \"{tags.scummvm_id}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 ScummVM",
+      "default_core": true,
+      "unique_id": "scummvm.ra64.scummvm",
+      "description": "Supported extensions: sh, svm, scummvm.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"file.path}\"  --es LIBRETRO \"scummvm\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 ScummVM",
+      "default_core": true,
+      "unique_id": "scummvm.ra32.scummvm",
+      "description": "Supported extensions: sh, svm, scummvm.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"scummvm\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch ScummVM",
+      "default_core": true,
+      "unique_id": "scummvm.ra.scummvm",
+      "description": "Supported extensions: sh, svm, scummvm.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"scummvm\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L scummvm_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L scummvm_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L scummvm_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "scummvm.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

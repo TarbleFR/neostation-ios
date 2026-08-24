@@ -1,0 +1,168 @@
+{
+  "system": {
+    "id": "ngcd",
+    "multidisc": false,
+    "name": "Neo Geo CD",
+    "short_name": "NGCD",
+    "details": {
+      "manufacturer": "SNK",
+      "release_date": "1994-09-09",
+      "description": "SNK's CD-based Neo Geo console with cheaper media and Red Book audio.",
+      "type": "console",
+      "info_inherits": "neogeo",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Metal Slug",
+        "The King of Fighters ’98",
+        "Garou: Mark of the Wolves",
+        "Samurai Shodown II"
+      ]
+    },
+    "ids": {
+      "screenscraper": 70,
+      "retroachievements": 56
+    },
+    "folders": [
+      "ngcd",
+      "neogeocd",
+      "Neo Geo CD",
+      "neogeocdjp",
+      "neo-geo-cd"
+    ],
+    "colors": [
+      "#E0E0E0",
+      "#9E9E9E"
+    ],
+    "extensions": [
+      "chd",
+      "cue"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 NeoCD",
+      "default_core": true,
+      "unique_id": "ngcd.ra64.neocd",
+      "description": "Supported extensions: chd, cue.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"neocd\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 NeoCD",
+      "default_core": true,
+      "unique_id": "ngcd.ra32.neocd",
+      "description": "Supported extensions: chd, cue.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"neocd\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch NeoCD",
+      "default_core": true,
+      "unique_id": "ngcd.ra.neocd",
+      "description": "Supported extensions: chd, cue.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"neocd\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L neocd_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L neocd_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L neocd_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "unique_id": "ngcd.ra.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBNeo",
+      "unique_id": "ngcd.ra64.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "unique_id": "ngcd.ra32.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ngcd.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

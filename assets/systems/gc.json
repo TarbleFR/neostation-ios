@@ -1,0 +1,201 @@
+{
+  "system": {
+    "id": "gc",
+    "multidisc": true,
+    "name": "Nintendo GameCube",
+    "short_name": "GC",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "2001-09-14",
+      "description": "Nintendo's compact 128-bit console with optical mini-discs.",
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 6,
+      "cpu": "IBM PowerPC Gekko",
+      "media": [
+        "optical_disc"
+      ],
+      "notable_games": [
+        "Super Smash Bros. Melee",
+        "Metroid Prime",
+        "The Legend of Zelda: The Wind Waker",
+        "Mario Kart: Double Dash!!"
+      ]
+    },
+    "ids": {
+      "screenscraper": 13,
+      "retroachievements": 16
+    },
+    "folders": [
+      "gc",
+      "GameCube",
+      "Nintendo GameCube",
+      "ngc"
+    ],
+    "colors": [
+      "#7E57C2",
+      "#B0BEC5"
+    ],
+    "extensions": [
+      "ciso",
+      "dff",
+      "dol",
+      "elf",
+      "gcm",
+      "gcz",
+      "iso",
+      "m3u",
+      "rvz",
+      "tgc",
+      "wad",
+      "wbfs",
+      "wia"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Dolphin Handheld",
+      "unique_id": "gc.org.dolphinemu.handheld",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz, m3u.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.dolphinemu.handheld/org.dolphinemu.dolphinemu.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Dolphin MMJR",
+      "unique_id": "gc.org.mm.jr",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.mm.jr/org.dolphinemu.dolphinemu.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Dolphin MMJR2",
+      "unique_id": "gc.org.dolphinemu.mmjr",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.dolphinemu.mmjr/org.dolphinemu.dolphinemu.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Dolphin MMJ",
+      "unique_id": "gc.org.mm.j",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.mm.j/org.dolphinemu.dolphinemu.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Dolphin",
+      "unique_id": "gc.org.dolphinemu.dolphinemu",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz, m3u.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.dolphinemu.dolphinemu/.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        },
+        "windows": {
+          "executable": "dolphin.exe",
+          "args": "-e \"{file.path}\""
+        },
+        "linux": {
+          "executable": "dolphin",
+          "flatpak": "org.DolphinEmu.dolphin-emu",
+          "emudeck_launcher": "dolphin-emu.sh",
+          "args": "-e \"{file.path}\""
+        },
+        "macos": {
+          "executable": "dolphin",
+          "args": "-e \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "Dolphin Ishiiruka",
+      "unique_id": "gc.org.dolphin.ishiirukadark",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, tgc, wad, wbfs, rvz.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.dolphin.ishiirukadark/org.dolphinemu.dolphinemu.ui.main.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Dolphin",
+      "default_core": true,
+      "unique_id": "gc.ra64.dolphin",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, m3u, rvz, tgc, wad, wbfs, wia",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"dolphin\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Dolphin",
+      "default_core": true,
+      "unique_id": "gc.ra.dolphin",
+      "description": "Supported extensions: ciso, dff, dol, elf, gcm, gcz, iso, m3u, rvz, tgc, wad, wbfs, wia",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"dolphin\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L dolphin_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L dolphin_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L dolphin_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "gc.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

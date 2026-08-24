@@ -1,0 +1,89 @@
+{
+  "system": {
+    "id": "ps3",
+    "multidisc": false,
+    "name": "Sony PlayStation 3",
+    "short_name": "PS3",
+    "details": {
+      "manufacturer": "Sony",
+      "release_date": "2006-11-11",
+      "description": "Sony's HD console with Blu-ray, Cell processor and online PlayStation Network.",
+      "type": "console",
+      "architecture": "64-bit",
+      "generation": 7,
+      "cpu": "Cell Broadband Engine",
+      "media": [
+        "blu_ray",
+        "digital"
+      ],
+      "notable_games": [
+        "The Last of Us",
+        "Uncharted 2: Among Thieves",
+        "Metal Gear Solid 4",
+        "LittleBigPlanet"
+      ]
+    },
+    "ids": {
+      "screenscraper": 59,
+      "retroachievements": null
+    },
+    "folders": [
+      "ps3",
+      "PlayStation 3",
+      "Sony PlayStation 3"
+    ],
+    "colors": [
+      "#000000",
+      "#9e9e9e"
+    ],
+    "extensions": [
+      "iso"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone aPS3e",
+      "default_standalone": true,
+      "unique_id": "ps3.aenu.aps3e",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n aenu.aps3e/aenu.aps3e.EmulatorActivity -a aenu.intent.action.APS3E -e iso_uri \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone RPCS3",
+      "unique_id": "ps3.rpcs3",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "rpcs3.exe",
+          "args": "--no-gui bootPath{file.path}\""
+        },
+        "linux": {
+          "executable": "rpcs3",
+          "flatpak": "net.rpcs3.RPCS3",
+          "emudeck_launcher": "rpcs3.sh",
+          "args": "--no-gui \"{file.path}\""
+        },
+        "macos": {
+          "executable": "rpcs3",
+          "args": "--no-gui \"{file.path}\""
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": [],
+    "ios_sync_folder": [
+      "{RPCS3_IOS_SAVEDATA}"
+    ]
+  }
+}

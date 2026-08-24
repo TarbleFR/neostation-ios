@@ -1,0 +1,234 @@
+{
+  "system": {
+    "id": "2600",
+    "multidisc": false,
+    "name": "Atari 2600",
+    "short_name": "A2600",
+    "details": {
+      "manufacturer": "Atari",
+      "release_date": "1977-09-11",
+      "description": "Atari's iconic cartridge-based console that popularized home video gaming.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "MOS Technology 6507",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Space Invaders",
+        "Pitfall!",
+        "Adventure",
+        "Missile Command"
+      ]
+    },
+    "ids": {
+      "screenscraper": 26,
+      "retroachievements": 25
+    },
+    "folders": [
+      "2600",
+      "a2600",
+      "atari2600",
+      "Atari 2600",
+      "ATARI"
+    ],
+    "colors": [
+      "#A67B5B",
+      "#FFB347"
+    ],
+    "extensions": [
+      "a26",
+      "bin",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch Stella",
+      "default_core": true,
+      "unique_id": "2600.ra.stella",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L stella_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L stella_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L stella_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Stella2014",
+      "unique_id": "atari2600.ra.stella2014",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella2014\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Stella2023",
+      "unique_id": "atari2600.ra.stella2023",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella2023\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Stella",
+      "default_core": true,
+      "unique_id": "2600.ra64.stella",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Stella2014",
+      "unique_id": "2600.ra64.stella2014",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella2014\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Stella2023",
+      "unique_id": "2600.ra64.stella2023",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella2023\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Stella",
+      "default_core": true,
+      "unique_id": "2600.ra32.stella",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Stella2014",
+      "unique_id": "atari2600.ra32.stella2014",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella2014\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Stella2023",
+      "unique_id": "2600.ra32.stella2023",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"stella2023\""
+        }
+      }
+    },
+    {
+      "name": "Standalone A2600Emu",
+      "unique_id": "2600.com.explusalpha.A2600Emu",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.A2600Emu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Atari",
+      "unique_id": "2600.com.androidemu.atari",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.androidemu.atari/com.androidemu.atari.EmulatorActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Stella",
+      "unique_id": "2600.com.stella.emulator",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: a26, bin, zip.",
+      "platforms": {
+        "windows": {
+          "executable": "stella.exe",
+          "args": "{file.path}"
+        },
+        "linux": {
+          "executable": "stella",
+          "flatpak": "io.github.stella_emu.Stella",
+          "args": "{file.path}"
+        },
+        "macos": {
+          "executable": "stella",
+          "args": "{file.path}"
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "2600.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

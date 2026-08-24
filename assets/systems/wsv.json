@@ -1,0 +1,123 @@
+{
+  "system": {
+    "id": "wsv",
+    "multidisc": false,
+    "name": "Watara Supervision",
+    "short_name": "WSV",
+    "details": {
+      "manufacturer": "Watara",
+      "release_date": "1992-01-01",
+      "description": "Watara's monochrome handheld with a tiltable screen.",
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "8-bit 65C02-class",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Crystball",
+        "Hash Blocks",
+        "Jaguar Bomber",
+        "Alien"
+      ]
+    },
+    "ids": {
+      "screenscraper": 107,
+      "retroachievements": 63
+    },
+    "folders": [
+      "wsv",
+      "supervision",
+      "Watara Supervision",
+      "watara"
+    ],
+    "colors": [
+      "#9E9E9E",
+      "#616161"
+    ],
+    "extensions": [
+      "bin",
+      "sv",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Potator",
+      "default_core": true,
+      "unique_id": "wsv.ra64.potator",
+      "description": "Supported extensions: bin, sv, zip, 7z",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"potator\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Potator",
+      "default_core": true,
+      "unique_id": "wsv.ra32.potator",
+      "description": "Supported extensions: bin, sv, zip, 7z",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"potator\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Potator",
+      "default_core": true,
+      "unique_id": "wsv.ra.potator",
+      "description": "Supported extensions: bin, sv, zip, 7z",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"potator\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L potator_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L potator_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L potator_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "wsv.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "system": {
+    "id": "32x",
+    "multidisc": false,
+    "name": "Sega 32X",
+    "short_name": "32X",
+    "details": {
+      "manufacturer": "Sega",
+      "release_date": "1994-11-21",
+      "description": "Sega's 32-bit add-on for the Genesis/Mega Drive with enhanced polygon graphics.",
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 4,
+      "cpu": "2× Hitachi SH-2",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Knuckles' Chaotix",
+        "Virtua Racing Deluxe",
+        "Star Wars Arcade",
+        "Doom"
+      ]
+    },
+    "ids": {
+      "screenscraper": 19,
+      "retroachievements": 10
+    },
+    "folders": [
+      "32x",
+      "sega32x",
+      "Sega 32X",
+      "THIRTYTWOX",
+      "sega32xjp",
+      "sega32xna",
+      "sega32"
+    ],
+    "colors": [
+      "#212121",
+      "#f44336"
+    ],
+    "extensions": [
+      "32x",
+      "68k",
+      "bin",
+      "chd",
+      "cue",
+      "gen",
+      "gg",
+      "iso",
+      "m3u",
+      "md",
+      "pco",
+      "sgd",
+      "smd",
+      "sms",
+      "7z",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch PicoDrive",
+      "default_core": true,
+      "unique_id": "32x.ra.picodrive",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: 32x, 68k, bin, chd, cue, gen, gg, iso, m3u, md, pco, sgd, smd, sms, 7z, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"picodrive\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L picodrive_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L picodrive_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L picodrive_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 PicoDrive",
+      "default_core": true,
+      "unique_id": "32x.ra64.picodrive",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: 32x, 68k, bin, chd, cue, gen, gg, iso, m3u, md, pco, sgd, smd, sms, 7z, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"picodrive\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 PicoDrive",
+      "default_core": true,
+      "unique_id": "32x.ra32.picodrive",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: 32x, 68k, bin, chd, cue, gen, gg, iso, m3u, md, pco, sgd, smd, sms, 7z, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"picodrive\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "32x.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

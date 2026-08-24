@@ -1,0 +1,113 @@
+{
+  "system": {
+    "id": "tic80",
+    "multidisc": false,
+    "name": "TIC-80",
+    "short_name": "TIC-80",
+    "details": {
+      "manufacturer": "Nesbox",
+      "release_date": "2016-01-01",
+      "description": "Open-source fantasy console with built-in editors for 8-bit games.",
+      "type": "computer",
+      "architecture": "8-bit VM",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "fantasy_console"
+    },
+    "ids": {
+      "screenscraper": 222,
+      "retroachievements": null
+    },
+    "folders": [
+      "tic80",
+      "TIC",
+      "TIC-80"
+    ],
+    "colors": [
+      "#FFEE58",
+      "#1A1A1A"
+    ],
+    "extensions": [
+      "tic"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 TIC80",
+      "default_core": true,
+      "unique_id": "tic80.ra64.tic80",
+      "description": "Supported extensions: tic.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"tic80\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 TIC80",
+      "default_core": true,
+      "unique_id": "tic80.ra32.tic80",
+      "description": "Supported extensions: tic.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"tic80\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch TIC80",
+      "default_core": true,
+      "unique_id": "tic80.ra.tic80",
+      "description": "Supported extensions: tic.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"tic80\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L tic80_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L tic80_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L tic80_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "tic80.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

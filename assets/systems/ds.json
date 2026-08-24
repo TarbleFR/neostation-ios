@@ -1,0 +1,287 @@
+{
+  "system": {
+    "id": "ds",
+    "multidisc": false,
+    "name": "Nintendo DS",
+    "short_name": "DS",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "2004-11-21",
+      "description": "Nintendo's dual-screen handheld with touch and microphone input.",
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "ARM946E-S + ARM7TDMI",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Mario Kart DS",
+        "New Super Mario Bros.",
+        "Pokémon HeartGold / SoulSilver",
+        "The World Ends with You"
+      ]
+    },
+    "ids": {
+      "screenscraper": 15,
+      "retroachievements": 18
+    },
+    "folders": [
+      "nds",
+      "ds",
+      "Nintendo DS"
+    ],
+    "colors": [
+      "#B0BEC5",
+      "#ECEFF1"
+    ],
+    "extensions": [
+      "nds",
+      "zip",
+      "7z",
+      "bin",
+      "rar"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch MelonDS",
+      "default_core": true,
+      "unique_id": "ds.ra.melonds",
+      "is_retroachievements_compatible": true,
+      "description": "MelonDS core for RetroArch.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"melonds\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L melonds_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L melonds_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L melonds_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch MelonDSDS",
+      "unique_id": "ds.ra.melondsds",
+      "is_retroachievements_compatible": true,
+      "description": "MelonDS core for RetroArch with dual screen support.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"melondsds\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L melondsds_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L melondsds_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L melondsds_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch DeSmuME",
+      "unique_id": "ds.ra.desmume",
+      "is_retroachievements_compatible": true,
+      "description": "DeSmuME core for RetroArch.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"desmume\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L desmume_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L desmume_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L desmume_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 MelonDS",
+      "default_core": true,
+      "unique_id": "ds.ra64.melonds",
+      "is_retroachievements_compatible": true,
+      "description": "MelonDS core for RetroArch 64.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"melonds\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 MelonDSDS",
+      "unique_id": "ds.ra64.melondsds",
+      "is_retroachievements_compatible": true,
+      "description": "MelonDS core for RetroArch 64 with dual screen support.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"melondsds\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 MelonDS",
+      "default_core": true,
+      "unique_id": "ds.ra32.melonds",
+      "is_retroachievements_compatible": true,
+      "description": "MelonDS core for RetroArch 32.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"melonds\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 MelonDSDS",
+      "unique_id": "ds.ra32.melondsds",
+      "is_retroachievements_compatible": true,
+      "description": "MelonDS core for RetroArch 32 with dual screen support.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"melondsds\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 DeSmuME",
+      "unique_id": "ds.ra32.desmume",
+      "is_retroachievements_compatible": true,
+      "description": "DeSmuME core for RetroArch 32.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"desmume\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Drastic",
+      "unique_id": "ds.standalone.drastic",
+      "is_retroachievements_compatible": false,
+      "description": "Premium Nintendo DS emulator for Android.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.dsemu.drastic/.DraSticActivity -d \"{file.localuri}\" --activity-clear-task --activity-clear-top",
+          "keep_saf_uri": true
+        }
+      }
+    },
+    {
+      "name": "Standalone MelonDS",
+      "unique_id": "ds.standalone.melonds",
+      "is_retroachievements_compatible": true,
+      "description": "Free and open-source Nintendo DS emulator.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n me.magnum.melonds/.ui.emulator.EmulatorActivity -a me.magnum.melonds.LAUNCH_ROM -d \"{file.uri}\""
+        },
+        "windows": {
+          "executable": "melonds.exe",
+          "args": "\"{file.path}\""
+        },
+        "linux": {
+          "executable": "melonds.AppImage",
+          "flatpak": "net.kuribo64.melonDS",
+          "emudeck_launcher": "melonds.sh",
+          "args": "\"{file.path}\""
+        },
+        "macos": {
+          "executable": "Melonds.App",
+          "args": "\"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone MelonDS Nightly",
+      "unique_id": "ds.standalone.melonds.nightly",
+      "is_retroachievements_compatible": false,
+      "description": "MelonDS Nightly build.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n me.magnum.melonds.nightly/me.magnum.melonds.ui.emulator.EmulatorActivity -a me.magnum.melonds.nightly.LAUNCH_ROM -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone MelonDS Dev",
+      "unique_id": "ds.standalone.melonds.dev",
+      "is_retroachievements_compatible": false,
+      "description": "MelonDS Dev (Dual Screen Fork).",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n me.magnum.melonds.dev/me.magnum.melonds.ui.emulator.EmulatorActivity -a me.magnum.melonds.dev.LAUNCH_ROM -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone MelonDualDS",
+      "unique_id": "ds.standalone.melonds.dual",
+      "is_retroachievements_compatible": false,
+      "description": "MelonDS (Dual Screen Fork) build.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n me.magnum.melondualds/me.magnum.melonds.ui.emulator.EmulatorActivity -a me.magnum.melonds.dev.LAUNCH_ROM -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone NooDS",
+      "unique_id": "ds.standalone.noods",
+      "is_retroachievements_compatible": false,
+      "description": "NooDS Emulator.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.hydra.noods/.FileBrowser -e LaunchPath \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ds.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

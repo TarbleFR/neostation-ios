@@ -1,0 +1,165 @@
+{
+  "system": {
+    "id": "psp",
+    "multidisc": true,
+    "name": "Sony PlayStation Portable",
+    "short_name": "PSP",
+    "details": {
+      "manufacturer": "Sony",
+      "release_date": "2004-12-12",
+      "description": "Sony's sleek handheld with optical UMD media and multimedia playback.",
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "MIPS R4000-based Allegrex",
+      "media": [
+        "umd",
+        "digital"
+      ],
+      "notable_games": [
+        "Crisis Core: Final Fantasy VII",
+        "God of War: Chains of Olympus",
+        "Monster Hunter Freedom Unite",
+        "Patapon"
+      ]
+    },
+    "ids": {
+      "screenscraper": 61,
+      "retroachievements": 41
+    },
+    "folders": [
+      "psp",
+      "pspminis",
+      "PlayStation Portable",
+      "Sony PlayStation Portable"
+    ],
+    "colors": [
+      "#212121",
+      "#90A4AE"
+    ],
+    "extensions": [
+      "cso",
+      "chd",
+      "elf",
+      "iso",
+      "pbp",
+      "prx"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone PPSSPP",
+      "unique_id": "psp.org.ppsspp.ppsspp",
+      "description": "Supported extensions: cso, chd, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.ppsspp.ppsspp/.PpssppActivity -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d \"{file.uri}\" -t application/octet-stream --activity-clear-task --activity-clear-top --activity-no-history"
+        },
+        "windows": {
+          "executable": "ppsspp.exe",
+          "args": "-f {file.path}"
+        },
+        "linux": {
+          "executable": "ppsspp",
+          "flatpak": "org.ppsspp.PPSSPP",
+          "emudeck_launcher": "ppsspp.sh",
+          "args": "-f {file.path}"
+        },
+        "macos": {
+          "executable": "ppsspp",
+          "args": "-f {file.path}"
+        }
+      }
+    },
+    {
+      "name": "Standalone PPSSPP Gold",
+      "unique_id": "psp.org.ppsspp.ppssppgold",
+      "description": "Supported extensions: cso, chd, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.ppsspp.ppssppgold/org.ppsspp.ppsspp.PpssppActivity -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d \"{file.uri}\" -t application/octet-stream --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone PPSSPP Legacy",
+      "unique_id": "psp.org.ppsspp.ppsspplegacy",
+      "description": "Supported extensions: cso, chd, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.ppsspp.ppsspplegacy/org.ppsspp.ppsspp.PpssppActivity -a android.intent.action.VIEW -c android.intent.category.DEFAULT -d \"{file.uri}\" -t application/octet-stream --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 PPSSPP",
+      "default_core": true,
+      "unique_id": "psp.ra64.ppsspp",
+      "description": "Supported extensions: cso, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"ppsspp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 PPSSPP",
+      "default_core": true,
+      "unique_id": "psp.ra32.ppsspp",
+      "description": "Supported extensions: cso, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"ppsspp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch PPSSPP",
+      "default_core": true,
+      "unique_id": "psp.ra.ppsspp",
+      "description": "Supported extensions: cso, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"ppsspp\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L ppsspp_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L ppsspp_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L ppsspp_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "psp.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

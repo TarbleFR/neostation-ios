@@ -1,0 +1,136 @@
+{
+  "system": {
+    "id": "vb",
+    "multidisc": false,
+    "name": "Virtual Boy",
+    "short_name": "VB",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "1995-07-21",
+      "description": "Nintendo's table-top 32-bit console with stereoscopic 3D graphics.",
+      "type": "handheld",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "NEC V810",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Virtual Boy Wario Land",
+        "Mario's Tennis",
+        "Teleroboxer",
+        "Red Alarm"
+      ]
+    },
+    "ids": {
+      "screenscraper": 11,
+      "retroachievements": 28
+    },
+    "folders": [
+      "vb",
+      "virtualboy",
+      "Virtual Boy",
+      "Nintendo Virtual Boy"
+    ],
+    "colors": [
+      "#D32F2F",
+      "#000000"
+    ],
+    "extensions": [
+      "bin",
+      "vb",
+      "vboy",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone VVS",
+      "unique_id": "vb.com.simongellis.vvb",
+      "description": "Supported extensions: vb, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.simongellis.vvb/com.simongellis.vvb.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle VB",
+      "default_core": true,
+      "unique_id": "vb.ra64.mednafen_vb",
+      "description": "Supported extensions: bin, vb, vboy.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_vb\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle VB",
+      "default_core": true,
+      "unique_id": "vb.ra32.mednafen_vb",
+      "description": "Supported extensions: bin, vb, vboy.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_vb\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle VB",
+      "default_core": true,
+      "unique_id": "vb.ra.mednafen_vb",
+      "description": "Supported extensions: bin, vb, vboy.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_vb\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_vb_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_vb_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_vb_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "vb.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

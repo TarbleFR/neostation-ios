@@ -1,0 +1,121 @@
+{
+  "system": {
+    "id": "vect",
+    "multidisc": false,
+    "name": "Vectrex",
+    "short_name": "Vect",
+    "details": {
+      "manufacturer": "GCE",
+      "release_date": "1982-11-01",
+      "description": "Unique vector-graphics home console with an integrated screen.",
+      "type": "console",
+      "architecture": "8-bit",
+      "cpu": "Motorola 68A09",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Mine Storm",
+        "Scramble",
+        "Armor Attack",
+        "Star Castle"
+      ]
+    },
+    "ids": {
+      "screenscraper": 102,
+      "retroachievements": 46
+    },
+    "folders": [
+      "vect",
+      "vectrex"
+    ],
+    "colors": [
+      "#212121",
+      "#4DB6AC"
+    ],
+    "extensions": [
+      "bin",
+      "vec",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Vecx",
+      "default_core": true,
+      "unique_id": "vect.ra64.vecx",
+      "description": "Supported extensions: bin, vec, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vecx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Vecx",
+      "default_core": true,
+      "unique_id": "vect.ra32.vecx",
+      "description": "Supported extensions: bin, vec, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vecx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Vecx",
+      "default_core": true,
+      "unique_id": "vect.ra.vecx",
+      "description": "Supported extensions: bin, vec, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vecx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vecx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vecx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L vecx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "vect.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

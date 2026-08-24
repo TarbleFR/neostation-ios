@@ -1,0 +1,87 @@
+{
+  "system": {
+    "id": "vita",
+    "multidisc": false,
+    "name": "Sony PS Vita",
+    "short_name": "Vita",
+    "details": {
+      "manufacturer": "Sony",
+      "release_date": "2011-12-17",
+      "description": "Sony's powerful handheld with a 5-inch OLED touchscreen.",
+      "type": "handheld",
+      "architecture": "32-bit",
+      "cpu": "ARM Cortex-A9 MPCore",
+      "media": [
+        "cartridge",
+        "digital"
+      ],
+      "notable_games": [
+        "Persona 4 Golden",
+        "Uncharted: Golden Abyss",
+        "Gravity Rush",
+        "Tearaway"
+      ]
+    },
+    "ids": {
+      "screenscraper": 62,
+      "retroachievements": null
+    },
+    "folders": [
+      "vita",
+      "psvita",
+      "ps vita"
+    ],
+    "colors": [
+      "#007ACC",
+      "#000000"
+    ],
+    "extensions": [
+      "psvita"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Vita3K",
+      "default_standalone": true,
+      "unique_id": "vita.vita3k",
+      "description": "Supported extensions: psvita.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.vita3k.emulator/org.vita3k.emulator.Emulator --esa AppStartParameters \"-r,{tags.vita_game_id}\""
+        },
+        "windows": {
+          "executable": "vita3k.exe",
+          "args": "--fullscreen -r {tags.vita_game_id}"
+        },
+        "linux": {
+          "executable": "vita3k",
+          "emudeck_launcher": "vita3k.sh",
+          "args": "--fullscreen -r {tags.vita_game_id}"
+        },
+        "macos": {
+          "executable": "Vita3K.app",
+          "args": "--fullscreen -r {tags.vita_game_id}"
+        }
+      }
+    },
+    {
+      "name": "Standalone Vita3K ZX",
+      "unique_id": "vita.vita3k.zx",
+      "description": "Supported extensions: dpt.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.vita3k.emulator.ikhoeyZX/org.vita3k.emulator.Emulator --esa AppStartParameters \"-r,{tags.vita_game_id}\""
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

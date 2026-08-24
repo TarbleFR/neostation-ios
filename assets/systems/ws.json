@@ -1,0 +1,136 @@
+{
+  "system": {
+    "id": "ws",
+    "multidisc": false,
+    "name": "WonderSwan",
+    "short_name": "WS",
+    "details": {
+      "manufacturer": "Bandai",
+      "release_date": "1999-03-04",
+      "description": "Bandai's compact monochrome handheld with a unique vertical design.",
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "NEC V30MZ",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Gunpey",
+        "Final Lap Special",
+        "Klonoa: Moonlight Museum",
+        "Beatmania"
+      ]
+    },
+    "ids": {
+      "screenscraper": 45,
+      "retroachievements": 53
+    },
+    "folders": [
+      "ws",
+      "Bandai WonderSwan",
+      "WonderSwan",
+      "wswan",
+      "wonderswan"
+    ],
+    "colors": [
+      "#B0BEC5",
+      "#37474F"
+    ],
+    "extensions": [
+      "ws",
+      "wsc",
+      "pc2",
+      "7z",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone SwanEmu",
+      "unique_id": "ws.com.explusalpha.SwanEmu",
+      "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.SwanEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" -t application/zip"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle Cygne",
+      "default_core": true,
+      "unique_id": "ws.ra64.mednafen_wswan",
+      "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_wswan\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle Cygne",
+      "default_core": true,
+      "unique_id": "ws.ra32.mednafen_wswan",
+      "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_wswan\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle Cygne",
+      "default_core": true,
+      "unique_id": "ws.ra.mednafen_wswan",
+      "description": "Supported extensions: ws, wsc, pc2, 7z, zip",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_wswan\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_wswan_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_wswan_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_wswan_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ws.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

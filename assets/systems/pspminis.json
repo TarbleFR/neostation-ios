@@ -1,0 +1,141 @@
+{
+  "system": {
+    "id": "pspminis",
+    "multidisc": false,
+    "name": "PlayStation Portable Minis",
+    "short_name": "PSPM",
+    "details": {
+      "manufacturer": "Sony",
+      "release_date": "2009-10-01",
+      "description": "Small downloadable games designed for the PlayStation Portable.",
+      "type": "handheld",
+      "info_inherits": "psp",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Velocity",
+        "Age of Zombies",
+        "Where Is My Heart?",
+        "Coconut Dodge"
+      ]
+    },
+    "ids": {
+      "screenscraper": 172,
+      "retroachievements": null
+    },
+    "folders": [
+      "pspminis",
+      "PlayStation Portable Minis"
+    ],
+    "colors": [
+      "#424242",
+      "#CFD8DC"
+    ],
+    "extensions": [
+      "cso",
+      "chd",
+      "elf",
+      "iso",
+      "pbp",
+      "prx"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone PPSSPP",
+      "unique_id": "pspminis.org.ppsspp.ppsspp",
+      "description": "Supported extensions: cso, chd, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.ppsspp.ppsspp/.PpssppActivity   -a android.intent.action.VIEW  -c android.intent.category.DEFAULT  -d \"{file.uri}\"  -t application/octet-stream  --activity-clear-task  --activity-clear-top  --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone PPSSPP Gold",
+      "unique_id": "pspminis.org.ppsspp.ppssppgold",
+      "description": "Supported extensions: cso, chd, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.ppsspp.ppssppgold/org.ppsspp.ppsspp.PpssppActivity   -a android.intent.action.VIEW  -c android.intent.category.DEFAULT  -d \"{file.uri}\"  -t application/octet-stream  --activity-clear-task  --activity-clear-top  --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone PPSSPP Legacy",
+      "unique_id": "pspminis.org.ppsspp.ppsspplegacy",
+      "description": "Supported extensions: cso, chd, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.ppsspp.ppsspplegacy/org.ppsspp.ppsspp.PpssppActivity   -a android.intent.action.VIEW  -c android.intent.category.DEFAULT  -d \"{file.uri}\"  -t application/octet-stream  --activity-clear-task  --activity-clear-top  --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 PPSSPP",
+      "default_core": true,
+      "unique_id": "pspminis.ra64.ppsspp",
+      "description": "Supported extensions: cso, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"ppsspp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 PPSSPP",
+      "default_core": true,
+      "unique_id": "pspminis.ra32.ppsspp",
+      "description": "Supported extensions: cso, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"ppsspp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch PPSSPP",
+      "default_core": true,
+      "unique_id": "pspminis.ra.ppsspp",
+      "description": "Supported extensions: cso, elf, iso, pbp, prx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"ppsspp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "pspminis.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

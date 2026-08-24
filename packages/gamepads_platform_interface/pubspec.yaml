@@ -1,0 +1,18 @@
+name: gamepads_platform_interface
+resolution: workspace
+description: The platform interface for gamepads, a Flutter plugin to handle gamepad input across multiple platforms.
+version: 0.1.2+1
+publish_to: none
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

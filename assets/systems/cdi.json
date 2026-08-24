@@ -1,0 +1,123 @@
+{
+  "system": {
+    "id": "cdi",
+    "multidisc": true,
+    "name": "Philips CD-i",
+    "short_name": "CD-i",
+    "details": {
+      "manufacturer": "Philips",
+      "release_date": "1991-12-03",
+      "description": "Philips' interactive multimedia CD-based console and educational platform.",
+      "type": "console",
+      "architecture": "16/32-bit",
+      "cpu": "Philips 68070",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "The 7th Guest",
+        "Burn:Cycle",
+        "Hotel Mario",
+        "Zelda: The Wand of Gamelon"
+      ]
+    },
+    "ids": {
+      "screenscraper": 133,
+      "retroachievements": null
+    },
+    "folders": [
+      "cdi",
+      "cdimono1",
+      "philipscdi",
+      "Philips CD-i",
+      "philips-cd-i"
+    ],
+    "colors": [
+      "#B0BEC5",
+      "#1976D2"
+    ],
+    "extensions": [
+      "cue",
+      "chd",
+      "iso"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Retroarch 64 same_cdi",
+      "default_core": true,
+      "unique_id": "cdi.ra64.same_cdi",
+      "description": "Supported extensions: cue, chd, iso",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"same_cdi\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch32 same_cdi",
+      "default_core": true,
+      "unique_id": "cdi.ra32.same_cdi",
+      "description": "Supported extensions: cue, chd, iso",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"same_cdi\""
+        }
+      }
+    },
+    {
+      "name": "Retroarch same_cdi",
+      "default_core": true,
+      "unique_id": "cdi.ra.same_cdi",
+      "description": "Supported extensions: cue, chd, iso",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\"  --es LIBRETRO \"same_cdi\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L same_cdi_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L same_cdi_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L same_cdi_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "cdi.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

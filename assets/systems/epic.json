@@ -1,0 +1,57 @@
+{
+  "system": {
+    "id": "epic",
+    "multidisc": false,
+    "name": "Epic Games",
+    "neosync": {
+      "sync": false,
+      "sync_folder": null
+    },
+    "short_name": "Epic",
+    "details": {
+      "manufacturer": "Epic",
+      "release_date": "2018-12-06",
+      "description": "Epic's digital distribution platform for PC games.",
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "digital_store"
+    },
+    "ids": {
+      "screenscraper": 138,
+      "retroachievements": null
+    },
+    "folders": [
+      "epic"
+    ],
+    "colors": [
+      "#2F2D2E",
+      "#FFFFFF"
+    ],
+    "extensions": [
+      "epic"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone GameNative (Epic Games)",
+      "unique_id": "epic.app.gamenative.epic",
+      "default_standalone": true,
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: epicgame.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-a app.gamenative.LAUNCH_GAME -n app.gamenative/.MainActivity --ei app_id \"{tags.epicgame}\" --es game_source EPIC"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

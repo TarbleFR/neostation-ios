@@ -1,0 +1,179 @@
+{
+  "system": {
+    "id": "cpc",
+    "multidisc": false,
+    "name": "Amstrad CPC",
+    "short_name": "CPC",
+    "details": {
+      "manufacturer": "Amstrad",
+      "release_date": "1984-06-21",
+      "description": "Amstrad's series of 8-bit home computers popular in Europe.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Gryzor",
+        "Batman",
+        "Head Over Heels",
+        "Chase H.Q."
+      ]
+    },
+    "ids": {
+      "screenscraper": 65,
+      "retroachievements": 37
+    },
+    "folders": [
+      "cpc",
+      "amstradcpc",
+      "Amstrad CPC",
+      "gx4000",
+      "acpc",
+      "amstrad-gx4000"
+    ],
+    "colors": [
+      "#42A5F5",
+      "#FFF176"
+    ],
+    "extensions": [
+      "dsk",
+      "kcr",
+      "sna",
+      "cdt",
+      "cpr",
+      "m3u",
+      "tap",
+      "voc",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 CrocoDS",
+      "unique_id": "cpc.ra64.crocods",
+      "description": "Supported extensions: dsk, kcr, sna.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"crocods\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Caprice32",
+      "default_core": true,
+      "unique_id": "cpc.ra64.cap32",
+      "description": "Supported extensions: cdt, cpr, dsk, m3u, sna, tap, voc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"cap32\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 CrocoDS",
+      "unique_id": "cpc.ra32.crocods",
+      "description": "Supported extensions: dsk, kcr, sna.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"crocods\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Caprice32",
+      "default_core": true,
+      "unique_id": "cpc.ra32.cap32",
+      "description": "Supported extensions: cdt, cpr, dsk, m3u, sna, tap, voc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"cap32\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch CrocoDS",
+      "unique_id": "cpc.ra.crocods",
+      "description": "Supported extensions: dsk, kcr, sna.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"crocods\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L crocods_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L crocods_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L crocods_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Caprice32",
+      "default_core": true,
+      "unique_id": "cpc.ra.cap32",
+      "description": "Supported extensions: cdt, cpr, dsk, m3u, sna, tap, voc, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"cap32\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L cap32_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L cap32_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L cap32_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "cpc.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

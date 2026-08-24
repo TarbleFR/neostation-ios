@@ -1,0 +1,108 @@
+{
+  "system": {
+    "id": "vc4k",
+    "multidisc": false,
+    "name": "Interton VC 4000",
+    "short_name": "VC4K",
+    "details": {
+      "manufacturer": "Interton",
+      "release_date": "1978-01-01",
+      "description": "Interton's P2000-clone console with interchangeable cartridges.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Signetics 2650A",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Air / Sea Attack",
+        "Chess",
+        "Grand Prix",
+        "Space Laser"
+      ]
+    },
+    "ids": {
+      "screenscraper": 281,
+      "retroachievements": null
+    },
+    "folders": [
+      "vc4k",
+      "Interton VC 4000",
+      "VC 4000",
+      "vc4000",
+      "interton-vc-4000",
+      "vc-4000"
+    ],
+    "colors": [
+      "#FB8C00",
+      "#E0E0E0"
+    ],
+    "extensions": [
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone DroidArcadia",
+      "unique_id": "vc4k.vc4000.com.amigan.droidarcadia",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.amigan.droidarcadia/.MainActivity  -a android.intent.action.VIEW  -d \"{file.uri}\"  -t application/zip   --activity-clear-task   --activity-clear-top"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 MESS",
+      "default_core": true,
+      "unique_id": "vc4k.vc4000.ra64.mess",
+      "description": "Supported extensions: cmd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch MESS",
+      "default_core": true,
+      "unique_id": "vc4k.vc4000.ra.mess",
+      "description": "Supported extensions: cmd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "vc4k.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

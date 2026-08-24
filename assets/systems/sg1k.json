@@ -1,0 +1,325 @@
+{
+  "system": {
+    "id": "sg1k",
+    "multidisc": false,
+    "name": "Sega SG-1000",
+    "short_name": "SG1K",
+    "details": {
+      "manufacturer": "Sega",
+      "release_date": "1983-07-15",
+      "description": "Sega's first home video game console.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Zilog Z80",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Girl's Garden",
+        "Monaco GP",
+        "Congo Bongo",
+        "Flicky"
+      ]
+    },
+    "ids": {
+      "screenscraper": 109,
+      "retroachievements": 33
+    },
+    "folders": [
+      "sg1k",
+      "sg1000",
+      "Sega SG-1000",
+      "SEGASGONE",
+      "sg-1000",
+      "multivision"
+    ],
+    "colors": [
+      "#EEEEEE",
+      "#1E88E5"
+    ],
+    "extensions": [
+      "bin",
+      "cas",
+      "col",
+      "dsk",
+      "gg",
+      "m3u",
+      "mx1",
+      "mx2",
+      "ri",
+      "rom",
+      "sc",
+      "sg",
+      "sms",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Genesis Plus GX",
+      "default_core": true,
+      "unique_id": "sg1k.ra64.genesis_plus_gx",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Genesis Plus GX Wide",
+      "unique_id": "sg1k.ra64.genesis_plus_gx_wide",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx_wide\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 gearsystem",
+      "unique_id": "sg1k.ra64.gearsystem",
+      "description": "Supported extensions: bin, gg, rom, sg, sms, 7z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gearsystem\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bluemsx",
+      "unique_id": "sg1k.ra64.bluemsx",
+      "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bluemsx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Genesis Plus GX",
+      "default_core": true,
+      "unique_id": "sg1k.ra32.genesis_plus_gx",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Genesis Plus GX Wide",
+      "unique_id": "sg1k.ra32.genesis_plus_gx_wide",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx_wide\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 gearsystem",
+      "unique_id": "sg1k.ra32.gearsystem",
+      "description": "Supported extensions: bin, gg, rom, sg, sms, 7z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gearsystem\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bluemsx",
+      "unique_id": "sg1k.ra32.bluemsx",
+      "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bluemsx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Genesis Plus GX",
+      "default_core": true,
+      "unique_id": "sg1k.ra.genesis_plus_gx",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L genesis_plus_gx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L genesis_plus_gx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L genesis_plus_gx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Genesis Plus GX Wide",
+      "unique_id": "sg1k.ra.genesis_plus_gx_wide",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx_wide\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L genesis_plus_gx_wide_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L genesis_plus_gx_wide_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L genesis_plus_gx_wide_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch gearsystem",
+      "unique_id": "sg1k.ra.gearsystem",
+      "description": "Supported extensions: bin, gg, rom, sg, sms, 7z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gearsystem\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L gearsystem_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L gearsystem_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L gearsystem_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bluemsx",
+      "unique_id": "sg1k.ra.bluemsx",
+      "description": "Supported extensions: cas, col, dsk, m3u, mx1, mx2, ri, rom, sc, sg.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bluemsx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bluemsx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bluemsx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L bluemsx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "unique_id": "sg1k.ra.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBNeo",
+      "unique_id": "sg1k.ra64.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "unique_id": "sg1k.ra32.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "sg1k.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "system": {
+    "id": "fds",
+    "multidisc": false,
+    "name": "Famicom Disk System",
+    "short_name": "FDS",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "1986-02-21",
+      "description": "Nintendo's floppy disk add-on for the Family Computer.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Ricoh 2A03/2A07",
+      "media": [
+        "floppy"
+      ],
+      "notable_games": [
+        "The Legend of Zelda",
+        "Metroid",
+        "Castlevania",
+        "Doki Doki Panic"
+      ]
+    },
+    "ids": {
+      "screenscraper": 106,
+      "retroachievements": 7
+    },
+    "folders": [
+      "fds",
+      "Famicom Disk System",
+      "Disk System",
+      "Family Computer Disk",
+      "Family Computer Disk System",
+      "Famicom Disk",
+      "Nintendo Family Computer Disk",
+      "Nintendo FCD",
+      "Nintendo Family Computer Disk System"
+    ],
+    "colors": [
+      "#EF5350",
+      "#FFF176"
+    ],
+    "extensions": [
+      "bin",
+      "fds",
+      "nes",
+      "nsf",
+      "qd",
+      "rom",
+      "unf",
+      "unif",
+      "zip",
+      "7z",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "NesEmu",
+      "unique_id": "fds.com.explusalpha.NesEmu",
+      "description": "Support extensions: bin, fds, nes, nsf, qd, rom, unf, unif.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.NesEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "NES",
+      "unique_id": "fds.com.androidemu.nes",
+      "description": "Support extensions: bin, fds, nes, nsf, qd, rom, unf, unif.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.androidemu.nes/.EmulatorActivity -a android.intent.action.VIEW -d \"{file.uri}\" --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Nestopia",
+      "unique_id": "fds.ra64.nestopia",
+      "description": "Supported extensions: fds, nes, unf, unif, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"nestopia\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FCEUmm",
+      "default_core": true,
+      "unique_id": "fds.ra64.fceumm",
+      "description": "Supported extensions: fds, nes, unf, unif.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"fceumm\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Mesen",
+      "unique_id": "fds.ra64.mesen",
+      "description": "Supported extensions: fds, nes, unf, unif.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mesen\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Nestopia",
+      "unique_id": "fds.ra32.nestopia",
+      "description": "Supported extensions: fds, nes, unf, unif, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"nestopi\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FCEUmm",
+      "default_core": true,
+      "unique_id": "fds.ra32.fceumm",
+      "description": "Supported extensions: fds, nes, unf, unif.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"fceumm\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Mesen",
+      "unique_id": "fds.ra32.mesen",
+      "description": "Supported extensions: fds, nes, unf, unif.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mesen\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Nestopia",
+      "unique_id": "fds.ra.nestopia",
+      "description": "Supported extensions: fds, nes, unf, unif, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"nestopia\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L nestopia_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L nestopia_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L nestopia_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FCEUmm",
+      "default_core": true,
+      "unique_id": "fds.ra.fceumm",
+      "description": "Supported extensions: fds, nes, unf, unif.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"fceumm\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fceumm_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fceumm_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L fceumm_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Mesen",
+      "unique_id": "fds.ra.mesen",
+      "description": "Supported extensions: fds, nes, unf, unif.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mesen\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mesen_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mesen_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L mesen_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "fds.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

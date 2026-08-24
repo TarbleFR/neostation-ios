@@ -1,0 +1,39 @@
+{
+  "system": {
+    "id": "android",
+    "multidisc": false,
+    "name": "Android",
+    "short_name": "Android",
+    "details": {
+      "manufacturer": "Google",
+      "release_date": "2008-09-23",
+      "description": "Google's Linux-based mobile operating system for smartphones and tablets.",
+      "type": "virtual",
+      "architecture": "ARM / x86 / x64",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "software_platform"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "android"
+    ],
+    "colors": [
+      "#C5E1A5",
+      "#455A64"
+    ],
+    "extensions": []
+  },
+  "emulators": [],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

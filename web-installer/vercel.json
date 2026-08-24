@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "buildCommand": "echo \"NeoStation private installer: no build step required\"",
+  "installCommand": "",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/manifest.plist", "destination": "/api/manifest" },
+    { "source": "/app.ipa", "destination": "/api/ipa" },
+    { "source": "/", "destination": "/api/index" }
+  ]
+}

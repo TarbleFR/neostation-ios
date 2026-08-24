@@ -1,0 +1,116 @@
+{
+  "system": {
+    "id": "xbox360",
+    "multidisc": true,
+    "name": "Microsoft - XBox 360",
+    "short_name": "XB360",
+    "details": {
+      "manufacturer": "Microsoft",
+      "release_date": "2005-11-22",
+      "description": "Microsoft's HD console with Xbox Live and a vast multimedia ecosystem.",
+      "type": "console",
+      "architecture": "64-bit PowerPC",
+      "generation": 7,
+      "cpu": "IBM Xenon",
+      "media": [
+        "dvd",
+        "digital"
+      ],
+      "notable_games": [
+        "Halo 3",
+        "Gears of War",
+        "Forza Motorsport 4",
+        "Lost Odyssey"
+      ]
+    },
+    "ids": {
+      "screenscraper": 33,
+      "retroachievements": null
+    },
+    "folders": [
+      "xbox360",
+      "Microsoft Xbox 360",
+      "Xbox 360",
+      "360"
+    ],
+    "colors": [
+      "#91C300",
+      "#FFFFFF"
+    ],
+    "extensions": [
+      "xex",
+      "iso"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "AX360e",
+      "unique_id": "xbox360.aenu.ax360e",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n aenu.ax360e/aenu.ax360e.EmulatorActivity  -a aenu.intent.action.AX360E  -e game_uri \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "AX360e (Free)",
+      "default_standalone": true,
+      "unique_id": "xbox360.aenu.ax360e.free",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n aenu.ax360e.free/aenu.ax360e.EmulatorActivity  -a aenu.intent.action.AX360E  -e game_uri \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Xendroid",
+      "unique_id": "xbox360.xendroid.composee",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n xendroid.compose/.EmulatorHostActivity --es game_uri \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "X360 Mobile",
+      "unique_id": "xbox360.emu.x360.mobile",
+      "description": "Supported extensions: iso, xex.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n emu.x360.mobile/.X360MobileGameLaunchActivity -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Xenia",
+      "unique_id": "xbox360.xenia",
+      "description": "Supported extensions: iso.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "Xenia.exe",
+          "args": "\"{file.path}\""
+        },
+        "linux": {
+          "executable": "Xenia.AppImage",
+          "emudeck_launcher": "xenia.sh",
+          "args": "\"{file.path}\""
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

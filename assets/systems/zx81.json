@@ -1,0 +1,122 @@
+{
+  "system": {
+    "id": "zx81",
+    "multidisc": false,
+    "name": "ZX 81",
+    "short_name": "ZX81",
+    "details": {
+      "manufacturer": "Sinclair",
+      "release_date": "1981-03-01",
+      "description": "Sinclair's minimalist 8-bit home computer that brought computing to the masses.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette"
+      ],
+      "notable_games": [
+        "3D Monster Maze",
+        "Mazogs",
+        "Flight Simulation",
+        "1K ZX Chess"
+      ]
+    },
+    "ids": {
+      "screenscraper": 77,
+      "retroachievements": null
+    },
+    "folders": [
+      "zx81",
+      "Sinclair ZX81"
+    ],
+    "colors": [
+      "#000000",
+      "#FFFFFF"
+    ],
+    "extensions": [
+      "p",
+      "t81",
+      "tzx",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 ZX81",
+      "default_core": true,
+      "unique_id": "zx81.ra64.81",
+      "description": "Supported extensions: p, t81, tzx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"81\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 ZX81",
+      "default_core": true,
+      "unique_id": "zx81.ra32.81",
+      "description": "Supported extensions: p, t81, tzx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"81\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch ZX81",
+      "default_core": true,
+      "unique_id": "zx81.ra.81",
+      "description": "Supported extensions: p, t81, tzx.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"81\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L 81_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L 81_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L 81_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "zx81.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

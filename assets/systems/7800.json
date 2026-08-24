@@ -1,0 +1,125 @@
+{
+  "system": {
+    "id": "7800",
+    "multidisc": false,
+    "name": "Atari 7800",
+    "short_name": "A7800",
+    "details": {
+      "manufacturer": "Atari",
+      "release_date": "1986-05-01",
+      "description": "Atari console backward-compatible with the 2600 and featuring enhanced graphics.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 3,
+      "cpu": "Atari SALLY (6502C)",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Food Fight",
+        "Ballblazer",
+        "Joust",
+        "Ms. Pac-Man"
+      ]
+    },
+    "ids": {
+      "screenscraper": 41,
+      "retroachievements": 51
+    },
+    "folders": [
+      "7800",
+      "a7800",
+      "atari7800",
+      "Atari 7800",
+      "SEVENTYEIGHTHUNDRED"
+    ],
+    "colors": [
+      "#37474F",
+      "#B0BEC5"
+    ],
+    "extensions": [
+      "7z",
+      "a78",
+      "bin",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch ProSystem",
+      "default_core": true,
+      "unique_id": "7800.ra.prosystem",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: a78, bin, zip, 7z.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"prosystem\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L prosystem_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L prosystem_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L prosystem_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 ProSystem",
+      "default_core": true,
+      "unique_id": "7800.ra64.prosystem",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: a78, bin, zip, 7z.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"prosystem\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 ProSystem",
+      "default_core": true,
+      "unique_id": "7800.ra32.prosystem",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: a78, bin, zip, 7z.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"prosystem\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "7800.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

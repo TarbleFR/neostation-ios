@@ -1,0 +1,131 @@
+{
+  "system": {
+    "id": "x1",
+    "multidisc": false,
+    "name": "Sharp X1",
+    "short_name": "X1",
+    "details": {
+      "manufacturer": "Sharp",
+      "release_date": "1982-04-23",
+      "description": "Sharp's Japanese 8-bit home computer with a distinctive red chassis.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "Zilog Z80A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Hydlide",
+        "Xanadu",
+        "Ys I",
+        "Thexder"
+      ]
+    },
+    "ids": {
+      "screenscraper": 220,
+      "retroachievements": null
+    },
+    "folders": [
+      "x1",
+      "Sharp X1"
+    ],
+    "colors": [
+      "#F44336",
+      "#000000"
+    ],
+    "extensions": [
+      "2hd",
+      "88d",
+      "cmd",
+      "d88",
+      "dim",
+      "dup",
+      "hdf",
+      "hdm",
+      "img",
+      "m3u",
+      "xdf",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 X1",
+      "default_core": true,
+      "unique_id": "x1.ra64.x1",
+      "description": "Supported extensions: 2hd, 88d, cmd, d88, dim, dup, hdf, hdm, img, m3u, xdf, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"x1\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 X1",
+      "default_core": true,
+      "unique_id": "x1.ra32.x1",
+      "description": "Supported extensions: 2hd, 88d, cmd, d88, dim, dup, hdf, hdm, img, m3u, xdf, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"x1\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch X1",
+      "default_core": true,
+      "unique_id": "x1.ra.x1",
+      "description": "Supported extensions: 2hd, 88d, cmd, d88, dim, dup, hdf, hdm, img, m3u, xdf, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"x1\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L x1_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L x1_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L x1_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "x1.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

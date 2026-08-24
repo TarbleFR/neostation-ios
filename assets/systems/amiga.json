@@ -1,0 +1,195 @@
+{
+  "system": {
+    "id": "amiga",
+    "multidisc": true,
+    "name": "Commodore Amiga",
+    "short_name": "Amiga",
+    "details": {
+      "manufacturer": "Commodore",
+      "release_date": "1985-07-23",
+      "description": "Commodore's 16/32-bit multimedia home computer with advanced graphics and sound.",
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000 family",
+      "media": [
+        "floppy",
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Lemmings",
+        "The Secret of Monkey Island",
+        "Sensible Soccer",
+        "Shadow of the Beast"
+      ]
+    },
+    "ids": {
+      "screenscraper": 64,
+      "retroachievements": null
+    },
+    "folders": [
+      "amiga",
+      "Commodore Amiga",
+      "amiga600",
+      "amiga1200",
+      "amigacd32",
+      "amiga500",
+      "amiga4000",
+      "amigacdtv",
+      "amiga-cd",
+      "amiga-cd32",
+      "commodore-cdtv"
+    ],
+    "colors": [
+      "#E57373",
+      "#64B5F6"
+    ],
+    "extensions": [
+      "7z",
+      "adf",
+      "adz",
+      "ccd",
+      "chd",
+      "cue",
+      "dms",
+      "fdi",
+      "hdf",
+      "hdz",
+      "info",
+      "ipf",
+      "iso",
+      "lha",
+      "m3u",
+      "mds",
+      "nrg",
+      "rp9",
+      "slave",
+      "uae",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 puae",
+      "default_core": true,
+      "unique_id": "amiga.ra64.puae",
+      "description": "Supported extensions: 7z, adf, adz, ccd, chd, cue, dms, fdi, hdf, hdz, info, ipf, iso, lha, m3u, mds, nrg, rp9, slave, uae, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"puae\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 puae2021",
+      "unique_id": "amiga.ra64.puae2021",
+      "description": "Supported extensions: 7z, adf, adz, ccd, chd, cue, dms, fdi, hdf, hdz, info, ipf, iso, lha, m3u, mds, nrg, rp9, slave, uae, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"puae2021\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 puae",
+      "default_core": true,
+      "unique_id": "amiga.ra32.puae",
+      "description": "Supported extensions: 7z, adf, adz, ccd, chd, cue, dms, fdi, hdf, hdz, info, ipf, iso, lha, m3u, mds, nrg, rp9, slave, uae, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"puae\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 puae2021",
+      "unique_id": "amiga.ra32.puae2021",
+      "description": "Supported extensions: 7z, adf, adz, ccd, chd, cue, dms, fdi, hdf, hdz, info, ipf, iso, lha, m3u, mds, nrg, rp9, slave, uae, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"puae2021\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch puae",
+      "default_core": true,
+      "unique_id": "amiga.ra.puae",
+      "description": "Supported extensions: 7z, adf, adz, ccd, chd, cue, dms, fdi, hdf, hdz, info, ipf, iso, lha, m3u, mds, nrg, rp9, slave, uae, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"puae\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L puae_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L puae_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L puae_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch puae2021",
+      "unique_id": "amiga.ra.puae2021",
+      "description": "Supported extensions: 7z, adf, adz, ccd, chd, cue, dms, fdi, hdf, hdz, info, ipf, iso, lha, m3u, mds, nrg, rp9, slave, uae, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"puae2021\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L puae2021_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L puae2021_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L puae2021_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "amiga.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

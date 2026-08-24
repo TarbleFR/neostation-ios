@@ -1,0 +1,127 @@
+{
+  "system": {
+    "id": "ast",
+    "multidisc": false,
+    "name": "Atari ST",
+    "short_name": "AST",
+    "details": {
+      "manufacturer": "Atari",
+      "release_date": "1985-06-01",
+      "description": "Atari's 16-bit home computer with MIDI support and GEM graphical interface.",
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000",
+      "media": [
+        "floppy"
+      ],
+      "notable_games": [
+        "Dungeon Master",
+        "Another World",
+        "Lemmings",
+        "Sensible Soccer"
+      ]
+    },
+    "ids": {
+      "screenscraper": 42,
+      "retroachievements": null
+    },
+    "folders": [
+      "ast",
+      "atarist",
+      "Atari ST",
+      "atari-st"
+    ],
+    "colors": [
+      "#BDBDBD",
+      "#546E7A"
+    ],
+    "extensions": [
+      "dim",
+      "ipf",
+      "m3u",
+      "msa",
+      "st",
+      "stx",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 hatari",
+      "default_core": true,
+      "unique_id": "ast.atarist.ra64.hatari",
+      "description": "Supported extensions: dim, ipf, m3u, msa, st, stx, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"hatari\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 hatari",
+      "default_core": true,
+      "unique_id": "ast.atarist.ra32.hatari",
+      "description": "Supported extensions: dim, ipf, m3u, msa, st, stx, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"hatari\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch hatari",
+      "default_core": true,
+      "unique_id": "ast.atarist.ra.hatari",
+      "description": "Supported extensions: dim, ipf, m3u, msa, st, stx, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"hatari\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L hatari_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L hatari_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L hatari_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ast.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

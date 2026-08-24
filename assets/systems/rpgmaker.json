@@ -1,0 +1,97 @@
+{
+  "system": {
+    "id": "rpgmaker",
+    "multidisc": false,
+    "name": "RPG Maker",
+    "short_name": "RPGM",
+    "details": {
+      "manufacturer": "",
+      "release_date": "1992-01-01",
+      "description": "Game creation tool and engine for building 2D role-playing games.",
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "To the Moon",
+        "Corpse Party",
+        "Yume Nikki",
+        "OFF"
+      ],
+      "collection_kind": "game_engine"
+    },
+    "ids": {
+      "screenscraper": 231,
+      "retroachievements": null
+    },
+    "folders": [
+      "rpgmaker",
+      "RPG Maker"
+    ],
+    "colors": [
+      "#424242",
+      "#FF9800"
+    ],
+    "extensions": [
+      "easyrpg",
+      "ldb",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 easyRPG",
+      "default_core": true,
+      "unique_id": "rpgmaker.ra64.easyrpg",
+      "description": "Supported extensions: easyrpg, ldb, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"easyrpg\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 easyRPG",
+      "default_core": true,
+      "unique_id": "rpgmaker.ra32.easyrpg",
+      "description": "Supported extensions: easyrpg, ldb, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"easyrpg\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch easyRPG",
+      "default_core": true,
+      "unique_id": "rpgmaker.ra.easyrpg",
+      "description": "Supported extensions: easyrpg, ldb, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"easyrpg\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "rpgmaker.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

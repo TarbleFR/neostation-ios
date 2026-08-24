@@ -1,0 +1,93 @@
+name: Bug Report
+description: Report an error or unexpected behavior in NeoStation iOS
+title: "[BUG] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a NeoStation iOS bug. Please include enough device/build information for the issue to be reproduced.
+
+  - type: input
+    id: version
+    attributes:
+      label: NeoStation version / build
+      description: Check Settings > About.
+      placeholder: "e.g. 0.9.9+129"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Which iPhone or iPad model are you using?
+      placeholder: "e.g. iPhone 15 Pro"
+    validations:
+      required: true
+
+  - type: input
+    id: os_version
+    attributes:
+      label: iOS / iPadOS version
+      placeholder: "e.g. iOS 18.x"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: emulator
+    attributes:
+      label: Related emulator
+      description: Select the emulator involved, if any.
+      options:
+        - Not emulator-specific
+        - RetroArch
+        - MeloNX
+        - ARMSX2
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: Clearly describe what is happening.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Return to ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Logs / screenshots / screen recording
+      description: Attach anything that makes the issue easier to reproduce. Remove private data before posting.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and did not find the same problem.
+          required: true
+        - label: I did not include passwords, API keys, signing data, ROMs or other private content.
+          required: true

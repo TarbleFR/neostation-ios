@@ -1,0 +1,166 @@
+{
+  "system": {
+    "id": "ard",
+    "multidisc": false,
+    "name": "Arduboy",
+    "short_name": "ARD",
+    "details": {
+      "manufacturer": "Arduboy",
+      "release_date": "2014-01-01",
+      "description": "Credit-card sized open-source handheld based on the Arduino platform.",
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "ATmega32U4",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Arduventure",
+        "Circuit Dude",
+        "Mystic Balloon",
+        "Catacombs of the Damned"
+      ]
+    },
+    "ids": {
+      "screenscraper": 263,
+      "retroachievements": 71
+    },
+    "folders": [
+      "ard",
+      "arduboy"
+    ],
+    "colors": [
+      "#424242",
+      "#FAFAFA"
+    ],
+    "extensions": [
+      "hex",
+      "arduboy"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch Arduous",
+      "unique_id": "ard.ra.arduous",
+      "description": "Supported extensions: hex.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"arduous\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L arduous_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L arduous_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L arduous_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Ardens",
+      "default_core": true,
+      "unique_id": "ard.ra.ardens",
+      "description": "Supported extensions: hex, arduboy.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"ardens\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L ardens_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L ardens_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L ardens_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Arduous",
+      "unique_id": "ard.ra64.arduous",
+      "description": "Supported extensions: hex.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"arduous\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Ardens",
+      "default_core": true,
+      "unique_id": "ard.ra64.ardens",
+      "description": "Supported extensions: hex, arduboy.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"ardens\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Arduous",
+      "unique_id": "ard.ra32.arduous",
+      "description": "Supported extensions: hex.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"arduous\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Ardens",
+      "default_core": true,
+      "unique_id": "ard.ra32.ardens",
+      "description": "Supported extensions: hex, arduboy.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"ardens\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ard.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

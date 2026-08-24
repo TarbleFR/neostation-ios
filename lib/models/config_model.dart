@@ -1,0 +1,542 @@
+import 'dart:convert';
+
+import 'emulator_model.dart';
+
+/// Represents the global application configuration and user preferences.
+class ConfigModel {
+  /// Maximum number of storable slots in the secondary "Now Playing" app dock.
+  /// The dock always persists this many slots so assignments in higher slots
+  /// survive when the user shrinks the visible count ([dockSlotCount]).
+  static const int dockMaxSlots = 5;
+
+  /// Smallest and largest number of dock slots the user may choose to show.
+  static const int dockMinSlotCount = 1;
+  static const int dockMaxSlotCount = dockMaxSlots;
+
+  /// Coerces an arbitrary value into a fixed-length [dockMaxSlots] list of
+  /// package-name strings, accepting either a `List` or a JSON-encoded string.
+  static List<String> normalizeDock(dynamic raw) {
+    List<dynamic> list;
+    if (raw is List) {
+      list = raw;
+    } else if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        list = decoded is List ? decoded : const [];
+      } catch (_) {
+        list = const [];
+      }
+    } else {
+      list = const [];
+    }
+    final out = List<String>.filled(dockMaxSlots, '');
+    for (var i = 0; i < dockMaxSlots && i < list.length; i++) {
+      out[i] = list[i]?.toString() ?? '';
+    }
+    return out;
+  }
+
+  /// List of absolute paths to directories containing game ROMs.
+  final List<String> romFolders;
+
+  /// List of platform identifiers for the emulated systems detected during the last scan.
+  final List<String> detectedSystems;
+
+  /// Timestamp of the last successful ROM folder synchronization.
+  final DateTime? lastScan;
+
+  /// Map of emulator configurations, keyed by their unique identifier.
+  final Map<String, EmulatorModel> emulators;
+
+  /// Preferred display mode for the game list (e.g., 'list', 'grid', 'carousel').
+  final String gameViewMode;
+
+  /// Preferred display mode for the system list (e.g., 'grid', 'list').
+  final String systemViewMode;
+
+  /// Identifier of the currently active UI theme.
+  final String themeName;
+
+  /// Whether to display detailed game metadata by default.
+  final bool showGameInfo;
+
+  /// Whether the application should run in exclusive fullscreen mode.
+  final bool isFullscreen;
+
+  /// Whether the device should shut down immediately upon exiting the application (optimized for bartop/cabinets).
+  final bool bartopExitPoweroff;
+
+  /// Whether to automatically trigger a ROM scan when the application starts.
+  final bool scanOnStartup;
+
+  /// Whether hidden files/folders (dot-prefixed) should be ignored during ROM scan.
+  final bool ignoreHiddenFiles;
+
+  /// Whether the initial onboarding/setup process has been finished.
+  final bool setupCompleted;
+
+  /// Whether to hide the secondary screen interface (useful for dual-monitor setups).
+  final bool hideBottomScreen;
+
+  /// Whether to play background audio/music from game preview videos.
+  final bool videoSound;
+
+  /// Whether UI sound effects (navigation, clicks) are enabled.
+  final bool sfxEnabled;
+
+  /// Whether the header clock should use a 12-hour format with AM/PM (false = 24-hour).
+  final bool use12HourClock;
+
+  /// The property used to sort the system list (e.g., 'alphabetical', 'release_year').
+  final String systemSortBy;
+
+  /// The sort direction for the system list ('asc' or 'desc').
+  final String systemSortOrder;
+
+  /// The ISO language code for the application interface (e.g., 'en', 'es').
+  final String appLanguage;
+
+  /// Whether to hide the "Recently Played" card from the main dashboard.
+  final bool hideRecentCard;
+
+  /// Whether the vertical action-button legend is hidden across every game view
+  /// (list, grid, carousel). Toggled by the Select + B chord.
+  final bool legendHidden;
+
+  /// The game details card tab the user last selected with L1/R1, stored as the
+  /// `DetailTab` enum name (e.g. 'wheel', 'box2d', 'screenshotVideo').
+  ///
+  /// Persisting it keeps the choice across games, systems and restarts. A tab
+  /// that is unavailable for the current game (no achievements, for instance)
+  /// falls back to the wheel for display only — the preference is kept so it
+  /// comes back on a game that supports it.
+  final String gameDetailsTab;
+
+  /// Whether the Sync navigation tab is hidden from the header strip and the
+  /// L1/R1 tab cycle.
+  ///
+  /// Stored as "hidden" rather than "shown" so the default (`false`) is
+  /// visible: a tab added in a future version appears for upgrading users
+  /// instead of silently staying hidden. See `NavTab` in utils/nav_tabs.dart.
+  final bool hideTabSync;
+
+  /// Whether the Achievements navigation tab is hidden. See [hideTabSync].
+  final bool hideTabAchievements;
+
+  /// Whether the Scraper navigation tab is hidden. See [hideTabSync].
+  final bool hideTabScraper;
+
+  /// Whether the Search navigation tab is hidden. See [hideTabSync].
+  final bool hideTabSearch;
+
+  /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
+  /// to never dim. Only meaningful when a secondary display is active.
+  final int nowPlayingDimDelay;
+
+  /// How dark the secondary "Now Playing" panel goes when it dims, as a
+  /// percentage 0–100 (0 = no dim, 100 = pure black).
+  final int nowPlayingDimLevel;
+
+  /// How much the game fanart/background art is dimmed behind the logo on the
+  /// secondary screen, as a percentage 0–100 (0 = off/full brightness). Keeps
+  /// the logo at full brightness so it stands out against busy fanart.
+  final int fanartDimLevel;
+
+  /// Package names occupying the secondary "Now Playing" app dock, one entry
+  /// per slot. Always [dockMaxSlots] long; an empty string marks a free slot.
+  final List<String> dockApps;
+
+  /// Whether the secondary "Now Playing" app dock is shown at all.
+  final bool dockEnabled;
+
+  /// How many dock slots are visible, from [dockMinSlotCount] to
+  /// [dockMaxSlotCount]. Slots beyond this stay persisted but hidden.
+  final int dockSlotCount;
+
+  /// ID of the active sync provider (matches [ISyncProvider.providerId]).
+  final String activeSyncProvider;
+
+  /// Whether to automatically check and prompt for new app versions on startup.
+  final bool autoUpdateApp;
+
+  /// Whether to automatically check and prompt for system/emulator config updates on startup.
+  final bool autoUpdateSystems;
+
+  /// Preferred grid column density for the systems grid ('S', 'M', 'L', 'XL').
+  final String systemGridColumns;
+
+  /// Preferred grid column density for the games grid ('S', 'M', 'L', 'XL').
+  final String gameGridColumns;
+
+  /// Preferred card style for the game carousel ('fanart' or 'box').
+  final String gameCarouselCardStyle;
+
+  /// Absolute path to the user's ES-DE application folder (the one containing
+  /// `gamelists/` and `downloaded_media/`), or empty if not configured. Used
+  /// by the ES-DE import and read-time fallback artwork resolution.
+  final String esdeFolderPath;
+
+  const ConfigModel({
+    this.romFolders = const [],
+    this.detectedSystems = const [],
+    this.lastScan,
+    this.emulators = const {},
+    this.gameViewMode = 'list',
+    this.systemViewMode = 'grid',
+    this.themeName = 'system',
+    this.showGameInfo = false,
+    this.isFullscreen = true,
+    this.bartopExitPoweroff = false,
+    this.scanOnStartup = true,
+    this.ignoreHiddenFiles = true,
+    this.setupCompleted = false,
+    this.hideBottomScreen = false,
+    this.videoSound = false,
+    this.sfxEnabled = true,
+    this.use12HourClock = false,
+    this.systemSortBy = 'alphabetical',
+    this.systemSortOrder = 'asc',
+    this.appLanguage = 'es',
+    this.hideRecentCard = false,
+    this.legendHidden = false,
+    this.gameDetailsTab = 'wheel',
+    this.hideTabSync = false,
+    this.hideTabAchievements = false,
+    this.hideTabScraper = false,
+    this.hideTabSearch = false,
+    this.activeSyncProvider = 'neosync',
+    this.autoUpdateApp = true,
+    this.autoUpdateSystems = true,
+    this.systemGridColumns = 'M',
+    this.gameGridColumns = 'M',
+    this.gameCarouselCardStyle = 'fanart',
+    this.nowPlayingDimDelay = 3,
+    this.nowPlayingDimLevel = 100,
+    this.fanartDimLevel = 25,
+    this.dockApps = const ['', '', '', '', ''],
+    this.dockEnabled = true,
+    this.dockSlotCount = 3,
+    this.esdeFolderPath = '',
+  });
+
+  /// Convenience getter that returns the primary ROM folder, if any are configured.
+  String? get romFolder => romFolders.isNotEmpty ? romFolders.first : null;
+
+  /// Creates a [ConfigModel] from a JSON-compatible map.
+  factory ConfigModel.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic> emulatorsJson;
+    if (json['emulators'] is Map) {
+      emulatorsJson = Map<String, dynamic>.from(json['emulators']);
+    } else {
+      emulatorsJson = {};
+    }
+
+    final emulators = <String, EmulatorModel>{};
+
+    for (final entry in emulatorsJson.entries) {
+      if (entry.value is Map) {
+        emulators[entry.key.toString()] = EmulatorModel.fromJson(
+          entry.key.toString(),
+          Map<String, dynamic>.from(entry.value),
+        );
+      }
+    }
+
+    return ConfigModel(
+      romFolders:
+          (json['romFolders'] as List?)?.map((e) => e.toString()).toList() ??
+          [],
+      detectedSystems:
+          (json['detectedSystems'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      lastScan: json['lastScan'] != null
+          ? DateTime.tryParse(json['lastScan'].toString())
+          : null,
+      emulators: emulators,
+      gameViewMode: (json['gameViewMode'] ?? 'list').toString(),
+      systemViewMode: (json['systemViewMode'] ?? 'grid').toString(),
+      themeName: (json['themeName'] ?? 'system').toString(),
+      showGameInfo:
+          (json['showGameInfo'] ?? false).toString().toLowerCase() == 'true',
+      isFullscreen:
+          (json['isFullscreen'] ?? true).toString().toLowerCase() == 'true',
+      bartopExitPoweroff:
+          (json['bartopExitPoweroff'] ?? false).toString().toLowerCase() ==
+          'true',
+      scanOnStartup:
+          (json['scanOnStartup'] ?? true).toString().toLowerCase() == 'true',
+      ignoreHiddenFiles:
+          ((json['ignoreHiddenFiles'] ?? json['ignore_hidden_files'] ?? 1)
+                  .toString() ==
+              '1') ||
+          (json['ignoreHiddenFiles'] ?? true).toString().toLowerCase() ==
+              'true',
+      setupCompleted:
+          (json['setupCompleted'] ?? false).toString().toLowerCase() ==
+              'true' ||
+          (json['setup_completed'] ?? false).toString().toLowerCase() == 'true',
+      hideBottomScreen:
+          (json['hideBottomScreen'] ?? false).toString().toLowerCase() ==
+          'true',
+      videoSound:
+          (json['videoSound'] ?? false).toString().toLowerCase() == 'true' ||
+          (json['video_sound'] ?? 0).toString() == '1' ||
+          (json['video_sound'] ?? 'off').toString() == 'on',
+      sfxEnabled:
+          (json['sfxEnabled'] ?? true).toString().toLowerCase() == 'true' ||
+          (json['sfx_enabled'] ?? 1).toString() == '1',
+      use12HourClock:
+          (json['use12HourClock'] ?? json['use_12_hour_clock'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['use12HourClock'] ?? false).toString().toLowerCase() == 'true',
+      systemSortBy:
+          (json['systemSortBy'] ?? json['system_sort_by'] ?? 'alphabetical')
+              .toString(),
+      systemSortOrder:
+          (json['systemSortOrder'] ?? json['system_sort_order'] ?? 'asc')
+              .toString(),
+      appLanguage: (json['appLanguage'] ?? json['app_language'] ?? 'en')
+          .toString(),
+      hideRecentCard:
+          (json['hideRecentCard'] ?? json['hide_recent_card'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      legendHidden:
+          (json['legendHidden'] ?? json['legend_hidden'] ?? 0).toString() ==
+              '1' ||
+          (json['legendHidden'] ?? false).toString().toLowerCase() == 'true',
+      gameDetailsTab:
+          (json['gameDetailsTab'] ?? json['game_details_tab'] ?? 'wheel')
+              .toString(),
+      // Absent key => false => tab visible. Keeps a config written by an older
+      // build (or restored from cloud sync) from hiding tabs it never knew about.
+      hideTabSync:
+          (json['hideTabSync'] ?? json['hide_tab_sync'] ?? 0).toString() ==
+              '1' ||
+          (json['hideTabSync'] ?? false).toString().toLowerCase() == 'true',
+      hideTabAchievements:
+          (json['hideTabAchievements'] ?? json['hide_tab_achievements'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideTabAchievements'] ?? false).toString().toLowerCase() ==
+              'true',
+      hideTabScraper:
+          (json['hideTabScraper'] ?? json['hide_tab_scraper'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['hideTabScraper'] ?? false).toString().toLowerCase() == 'true',
+      hideTabSearch:
+          (json['hideTabSearch'] ?? json['hide_tab_search'] ?? 0).toString() ==
+              '1' ||
+          (json['hideTabSearch'] ?? false).toString().toLowerCase() == 'true',
+      activeSyncProvider:
+          (json['activeSyncProvider'] ??
+                  json['active_sync_provider'] ??
+                  'neosync')
+              .toString(),
+      autoUpdateApp:
+          (json['autoUpdateApp'] ?? json['auto_update_app'] ?? 1).toString() ==
+              '1' ||
+          (json['autoUpdateApp'] ?? true).toString().toLowerCase() == 'true',
+      autoUpdateSystems:
+          (json['autoUpdateSystems'] ?? json['auto_update_systems'] ?? 1)
+                  .toString() ==
+              '1' ||
+          (json['autoUpdateSystems'] ?? true).toString().toLowerCase() ==
+              'true',
+      systemGridColumns:
+          (json['systemGridColumns'] ?? json['system_grid_columns'] ?? 'M')
+              .toString(),
+      gameGridColumns:
+          (json['gameGridColumns'] ?? json['game_grid_columns'] ?? 'M')
+              .toString(),
+      gameCarouselCardStyle:
+          (json['gameCarouselCardStyle'] ??
+                  json['game_carousel_card_style'] ??
+                  'fanart')
+              .toString(),
+      nowPlayingDimDelay:
+          int.tryParse(
+            (json['nowPlayingDimDelay'] ?? json['now_playing_dim_delay'] ?? 3)
+                .toString(),
+          ) ??
+          3,
+      nowPlayingDimLevel:
+          int.tryParse(
+            (json['nowPlayingDimLevel'] ?? json['now_playing_dim_level'] ?? 100)
+                .toString(),
+          ) ??
+          100,
+      fanartDimLevel:
+          int.tryParse(
+            (json['fanartDimLevel'] ?? json['fanart_dim_level'] ?? 25)
+                .toString(),
+          ) ??
+          25,
+      dockApps: normalizeDock(json['dockApps'] ?? json['dock_apps']),
+      dockEnabled:
+          (json['dockEnabled'] ?? true).toString().toLowerCase() == 'true' ||
+          (json['dock_enabled'] ?? 1).toString() == '1',
+      dockSlotCount:
+          (int.tryParse(
+                    (json['dockSlotCount'] ?? json['dock_slot_count'] ?? 3)
+                        .toString(),
+                  ) ??
+                  3)
+              .clamp(dockMinSlotCount, dockMaxSlotCount),
+      esdeFolderPath: (json['esdeFolderPath'] ?? json['esde_folder_path'] ?? '')
+          .toString(),
+    );
+  }
+
+  /// Converts the configuration model into a JSON-compatible map.
+  Map<String, dynamic> toJson() {
+    final emulatorsJson = <String, dynamic>{};
+    for (final entry in emulators.entries) {
+      emulatorsJson[entry.key] = entry.value.toJson();
+    }
+
+    return {
+      'romFolders': romFolders,
+      'detectedSystems': detectedSystems,
+      if (lastScan != null) 'lastScan': lastScan!.toIso8601String(),
+      'emulators': emulatorsJson,
+      'gameViewMode': gameViewMode,
+      'systemViewMode': systemViewMode,
+      'themeName': themeName,
+      'showGameInfo': showGameInfo,
+      'isFullscreen': isFullscreen,
+      'bartopExitPoweroff': bartopExitPoweroff,
+      'scanOnStartup': scanOnStartup,
+      'ignoreHiddenFiles': ignoreHiddenFiles,
+      'setupCompleted': setupCompleted,
+      'hideBottomScreen': hideBottomScreen,
+      'videoSound': videoSound,
+      'sfxEnabled': sfxEnabled,
+      'use12HourClock': use12HourClock,
+      'systemSortBy': systemSortBy,
+      'systemSortOrder': systemSortOrder,
+      'appLanguage': appLanguage,
+      'hideRecentCard': hideRecentCard,
+      'legendHidden': legendHidden,
+      'gameDetailsTab': gameDetailsTab,
+      'hideTabSync': hideTabSync,
+      'hideTabAchievements': hideTabAchievements,
+      'hideTabScraper': hideTabScraper,
+      'hideTabSearch': hideTabSearch,
+      'activeSyncProvider': activeSyncProvider,
+      'autoUpdateApp': autoUpdateApp,
+      'autoUpdateSystems': autoUpdateSystems,
+      'systemGridColumns': systemGridColumns,
+      'gameGridColumns': gameGridColumns,
+      'gameCarouselCardStyle': gameCarouselCardStyle,
+      'nowPlayingDimDelay': nowPlayingDimDelay,
+      'nowPlayingDimLevel': nowPlayingDimLevel,
+      'fanartDimLevel': fanartDimLevel,
+      'dockApps': dockApps,
+      'dockEnabled': dockEnabled,
+      'dockSlotCount': dockSlotCount,
+      'esdeFolderPath': esdeFolderPath,
+    };
+  }
+
+  /// Returns a new [ConfigModel] with updated fields.
+  ConfigModel copyWith({
+    List<String>? romFolders,
+    List<String>? detectedSystems,
+    DateTime? lastScan,
+    Map<String, EmulatorModel>? emulators,
+    String? gameViewMode,
+    String? systemViewMode,
+    String? themeName,
+    bool? showGameInfo,
+    bool? isFullscreen,
+    bool? bartopExitPoweroff,
+    bool? scanOnStartup,
+    bool? ignoreHiddenFiles,
+    bool? setupCompleted,
+    bool? hideBottomScreen,
+    bool? videoSound,
+    bool? sfxEnabled,
+    bool? use12HourClock,
+    String? systemSortBy,
+    String? systemSortOrder,
+    String? appLanguage,
+    bool? hideRecentCard,
+    bool? legendHidden,
+    String? gameDetailsTab,
+    bool? hideTabSync,
+    bool? hideTabAchievements,
+    bool? hideTabScraper,
+    bool? hideTabSearch,
+    String? activeSyncProvider,
+    bool? autoUpdateApp,
+    bool? autoUpdateSystems,
+    String? systemGridColumns,
+    String? gameGridColumns,
+    String? gameCarouselCardStyle,
+    int? nowPlayingDimDelay,
+    int? nowPlayingDimLevel,
+    int? fanartDimLevel,
+    List<String>? dockApps,
+    bool? dockEnabled,
+    int? dockSlotCount,
+    String? esdeFolderPath,
+  }) {
+    return ConfigModel(
+      romFolders: romFolders ?? this.romFolders,
+      detectedSystems: detectedSystems ?? this.detectedSystems,
+      lastScan: lastScan ?? this.lastScan,
+      emulators: emulators ?? this.emulators,
+      gameViewMode: gameViewMode ?? this.gameViewMode,
+      systemViewMode: systemViewMode ?? this.systemViewMode,
+      themeName: themeName ?? this.themeName,
+      showGameInfo: showGameInfo ?? this.showGameInfo,
+      isFullscreen: isFullscreen ?? this.isFullscreen,
+      bartopExitPoweroff: bartopExitPoweroff ?? this.bartopExitPoweroff,
+      scanOnStartup: scanOnStartup ?? this.scanOnStartup,
+      ignoreHiddenFiles: ignoreHiddenFiles ?? this.ignoreHiddenFiles,
+      setupCompleted: setupCompleted ?? this.setupCompleted,
+      hideBottomScreen: hideBottomScreen ?? this.hideBottomScreen,
+      videoSound: videoSound ?? this.videoSound,
+      sfxEnabled: sfxEnabled ?? this.sfxEnabled,
+      use12HourClock: use12HourClock ?? this.use12HourClock,
+      systemSortBy: systemSortBy ?? this.systemSortBy,
+      systemSortOrder: systemSortOrder ?? this.systemSortOrder,
+      appLanguage: appLanguage ?? this.appLanguage,
+      hideRecentCard: hideRecentCard ?? this.hideRecentCard,
+      legendHidden: legendHidden ?? this.legendHidden,
+      gameDetailsTab: gameDetailsTab ?? this.gameDetailsTab,
+      hideTabSync: hideTabSync ?? this.hideTabSync,
+      hideTabAchievements: hideTabAchievements ?? this.hideTabAchievements,
+      hideTabScraper: hideTabScraper ?? this.hideTabScraper,
+      hideTabSearch: hideTabSearch ?? this.hideTabSearch,
+      activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
+      autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
+      autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,
+      systemGridColumns: systemGridColumns ?? this.systemGridColumns,
+      gameGridColumns: gameGridColumns ?? this.gameGridColumns,
+      gameCarouselCardStyle:
+          gameCarouselCardStyle ?? this.gameCarouselCardStyle,
+      nowPlayingDimDelay: nowPlayingDimDelay ?? this.nowPlayingDimDelay,
+      nowPlayingDimLevel: nowPlayingDimLevel ?? this.nowPlayingDimLevel,
+      fanartDimLevel: fanartDimLevel ?? this.fanartDimLevel,
+      dockApps: dockApps ?? this.dockApps,
+      dockEnabled: dockEnabled ?? this.dockEnabled,
+      dockSlotCount: dockSlotCount ?? this.dockSlotCount,
+      esdeFolderPath: esdeFolderPath ?? this.esdeFolderPath,
+    );
+  }
+
+  /// Static instance representing a default, empty configuration.
+  static const empty = ConfigModel();
+
+  @override
+  String toString() {
+    return 'ConfigModel(romFolders: ${romFolders.length}, detectedSystems: ${detectedSystems.length}, emulators: ${emulators.length}, showGameInfo: $showGameInfo, isFullscreen: $isFullscreen, bartopExitPoweroff: $bartopExitPoweroff, scanOnStartup: $scanOnStartup, ignoreHiddenFiles: $ignoreHiddenFiles, setupCompleted: $setupCompleted, hideBottomScreen: $hideBottomScreen, videoSound: $videoSound)';
+  }
+}

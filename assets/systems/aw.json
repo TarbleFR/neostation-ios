@@ -1,0 +1,158 @@
+{
+  "system": {
+    "id": "aw",
+    "multidisc": false,
+    "name": "Atomiswave",
+    "short_name": "AW",
+    "details": {
+      "manufacturer": "Sammy",
+      "release_date": "2003-01-01",
+      "description": "Sammy's arcade system board based on Dreamcast hardware.",
+      "type": "arcade",
+      "architecture": "32-bit",
+      "cpu": "Hitachi SH-4",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Metal Slug 6",
+        "The King of Fighters XI",
+        "Samurai Shodown VI",
+        "Dolphin Blue"
+      ]
+    },
+    "ids": {
+      "screenscraper": 53,
+      "retroachievements": 27
+    },
+    "folders": [
+      "aw",
+      "Atomiswave"
+    ],
+    "colors": [
+      "#FFAB91",
+      "#1E88E5"
+    ],
+    "extensions": [
+      "zip",
+      "7z",
+      "lst",
+      "bin",
+      "dat",
+      "chd"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Redream",
+      "unique_id": "aw.io.recompiled.redream",
+      "description": "Supported extensions: 7z, bin, cdi, chd, cue, dat, elf, gdi, iso, lst, m3u, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n io.recompiled.redream/.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Reicast",
+      "unique_id": "aw.com.reicast.emulator",
+      "description": "Supported extensions: 7z, chd, dat, lst, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.reicast.emulator/.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Flycast",
+      "unique_id": "aw.com.flycast.emulator",
+      "description": "Supported extensions: 7z, chd, dat, lst, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.flycast.emulator/com.flycast.emulator.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\"",
+          "keep_saf_uri": true
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Flycast",
+      "default_core": true,
+      "unique_id": "aw.ra64.flycast",
+      "description": "Supported extensions: 7z, chd, dat, lst, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"flycast\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Flycast",
+      "default_core": true,
+      "unique_id": "aw.ra32.flycast",
+      "description": "Supported extensions: 7z, chd, dat, lst, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"flycast\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Flycast",
+      "default_core": true,
+      "unique_id": "aw.ra.flycast",
+      "description": "Supported extensions: cdi, gdi, chd, cue, bin, elf, zip, 7z, lst, dat, m3u, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"flycast\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L flycast_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L flycast_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L flycast_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "aw.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "system": {
+    "id": "sharpx68000",
+    "multidisc": false,
+    "name": "Sharp X68000",
+    "short_name": "X68K",
+    "details": {
+      "manufacturer": "Sharp",
+      "release_date": "1987-04-01",
+      "description": "Sharp's high-end 16-bit Japanese computer with arcade-quality graphics.",
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000 family",
+      "media": [
+        "floppy",
+        "hard_disk"
+      ],
+      "notable_games": [
+        "Akumajou Dracula",
+        "Cho Ren Sha 68K",
+        "Gradius II",
+        "Final Fight"
+      ]
+    },
+    "ids": {
+      "screenscraper": 79,
+      "retroachievements": null
+    },
+    "folders": [
+      "sharpx68000",
+      "Sharp X68000",
+      "x68000",
+      "sharp-x68000"
+    ],
+    "colors": [
+      "#212121",
+      "#757575"
+    ],
+    "extensions": [
+      "2hd",
+      "88d",
+      "cmd",
+      "d88",
+      "dim",
+      "dup",
+      "hdf",
+      "hdm",
+      "img",
+      "m3u",
+      "xdf",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 PX68k",
+      "default_core": true,
+      "unique_id": "sharpx68000.x68000.ra64.px68k",
+      "description": "Supported extensions: 2hd, 88d, cmd, d88, dim, dup, hdf, hdm, img, m3u, xdf, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"px68k\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 PX68k",
+      "default_core": true,
+      "unique_id": "sharpx68000.x68000.ra32.px68k",
+      "description": "Supported extensions: 2hd, 88d, cmd, d88, dim, dup, hdf, hdm, img, m3u, xdf, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"px68k\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch PX68k",
+      "default_core": true,
+      "unique_id": "sharpx68000.x68000.ra.px68k",
+      "description": "Supported extensions: 2hd, 88d, cmd, d88, dim, dup, hdf, hdm, img, m3u, xdf, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"px68k\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L px68k_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L px68k_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L px68k_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "sharpx68000.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

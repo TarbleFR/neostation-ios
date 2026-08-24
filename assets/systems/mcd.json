@@ -1,0 +1,244 @@
+{
+  "system": {
+    "id": "mcd",
+    "multidisc": false,
+    "name": "Sega Mega-CD",
+    "short_name": "MCD",
+    "details": {
+      "manufacturer": "Sega",
+      "release_date": "1991-12-12",
+      "description": "Sega's CD-ROM add-on for the Mega Drive with enhanced audio and FMV.",
+      "type": "console",
+      "architecture": "16/32-bit",
+      "generation": 4,
+      "cpu": "Motorola 68000 + Mega Drive 68000/Z80",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Sonic CD",
+        "Lunar: The Silver Star",
+        "Snatcher",
+        "Final Fight CD"
+      ]
+    },
+    "ids": {
+      "screenscraper": 20,
+      "retroachievements": 9
+    },
+    "folders": [
+      "mcd",
+      "megacd",
+      "Mega CD",
+      "megacdjp"
+    ],
+    "colors": [
+      "#424242",
+      "#3949ab"
+    ],
+    "extensions": [
+      "32x",
+      "68k",
+      "bin",
+      "bms",
+      "chd",
+      "cue",
+      "gen",
+      "gg",
+      "iso",
+      "m3u",
+      "md",
+      "mdx",
+      "pco",
+      "sg",
+      "sgd",
+      "smd",
+      "sms",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Md.emu",
+      "unique_id": "mcd.com.explusalpha.MdEmu",
+      "description": "Support extensions: 32x, 68k, bin, bms, chd, cue, gen, gg, iso, m3u, md, mdx, pco, sg, sgd, smd, sms.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.MdEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Genesis Plus GX",
+      "default_core": true,
+      "unique_id": "mcd.ra64.genesis_plus_gx",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Genesis Plus GX Wide",
+      "unique_id": "mcd.ra64.genesis_plus_gx_wide",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx_wide\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 PicoDrive",
+      "unique_id": "mcd.ra64.picodrive",
+      "description": "Supported extensions: 32x, 68k, bin, chd, cue, gen, gg, iso, m3u, md, pco, sgd, smd, sms, 7z, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"picodrive\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Genesis Plus GX",
+      "default_core": true,
+      "unique_id": "mcd.ra32.genesis_plus_gx",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Genesis Plus GX Wide",
+      "unique_id": "mcd.ra32.genesis_plus_gx_wide",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx_wide\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 PicoDrive",
+      "unique_id": "mcd.ra32.picodrive",
+      "description": "Supported extensions: 32x, 68k, bin, chd, cue, gen, gg, iso, m3u, md, pco, sgd, smd, sms, 7z, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"picodrive\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Genesis Plus GX",
+      "default_core": true,
+      "unique_id": "mcd.ra.genesis_plus_gx",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L genesis_plus_gx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L genesis_plus_gx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L genesis_plus_gx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Genesis Plus GX Wide",
+      "unique_id": "mcd.ra.genesis_plus_gx_wide",
+      "description": "Supported extensions: 68k, bin, chd, cue, gen, gg, iso, md, mdx, sg, smd, sms, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"genesis_plus_gx_wide\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L genesis_plus_gx_wide_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L genesis_plus_gx_wide_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L genesis_plus_gx_wide_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch PicoDrive",
+      "unique_id": "mcd.ra.picodrive",
+      "description": "Supported extensions: 32x, 68k, bin, chd, cue, gen, gg, iso, m3u, md, pco, sgd, smd, sms, 7z, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"picodrive\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L picodrive_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L picodrive_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L picodrive_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "mcd.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,249 @@
+{
+  "system": {
+    "id": "c64",
+    "multidisc": false,
+    "name": "Commodore 64",
+    "short_name": "C64",
+    "details": {
+      "manufacturer": "Commodore",
+      "release_date": "1982-08-01",
+      "description": "Commodore's bestselling 8-bit home computer with SID sound and sprites.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6510",
+      "media": [
+        "cassette",
+        "floppy",
+        "cartridge"
+      ],
+      "notable_games": [
+        "The Last Ninja",
+        "Impossible Mission",
+        "International Karate",
+        "Boulder Dash"
+      ]
+    },
+    "ids": {
+      "screenscraper": 66,
+      "retroachievements": null
+    },
+    "folders": [
+      "c64",
+      "Commodore 64"
+    ],
+    "colors": [
+      "#A1887F",
+      "#D7CCC8"
+    ],
+    "extensions": [
+      "bin",
+      "crt",
+      "d64",
+      "d6z",
+      "d71",
+      "d7z",
+      "d80",
+      "d81",
+      "d82",
+      "d8z",
+      "g41",
+      "g4z",
+      "g64",
+      "g6z",
+      "gz",
+      "lnx",
+      "p00",
+      "prg",
+      "t64",
+      "tap",
+      "x64",
+      "x6z",
+      "zip",
+      "7z",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone C64.emu",
+      "unique_id": "c64.com.explusalpha.C64Emu",
+      "description": "Supported extensions: bin, crt, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, lnx, p00, prg, t64, tap, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.C64Emu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" -t application/zip --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 vice_x64sc",
+      "unique_id": "c64.ra64.vice_x64sc",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vice_x64sc\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 vice_x64",
+      "default_core": true,
+      "unique_id": "c64.ra64.vice_x64",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vice_x64\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 frodo",
+      "unique_id": "c64.ra64.frodo",
+      "description": "Supported extensions: d64, lnx, p00, t64, x64, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"frodo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 vice_x64sc",
+      "unique_id": "c64.ra32.vice_x64sc",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vice_x64sc\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 vice_x64",
+      "default_core": true,
+      "unique_id": "c64.ra32.vice_x64",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vice_x64\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 frodo",
+      "unique_id": "c64.ra32.frodo",
+      "description": "Supported extensions: d64, lnx, p00, t64, x64, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"frodo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch vice_x64sc",
+      "unique_id": "c64.ra.vice_x64sc",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vice_x64sc\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vice_x64sc_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vice_x64sc_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L vice_x64sc_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch vice_x64",
+      "default_core": true,
+      "unique_id": "c64.ra.vice_x64",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vice_x64\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vice_x64_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vice_x64_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L vice_x64_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch frodo",
+      "unique_id": "c64.ra.frodo",
+      "description": "Supported extensions: d64, lnx, p00, t64, x64, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"frodo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L frodo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L frodo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L frodo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "c64.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

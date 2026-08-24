@@ -1,0 +1,124 @@
+{
+  "system": {
+    "id": "mo2",
+    "multidisc": false,
+    "name": "Magnavox Odyssey 2",
+    "short_name": "MO2",
+    "details": {
+      "manufacturer": "Magnavox",
+      "release_date": "1978-01-01",
+      "description": "Magnavox's second-generation console with a built-in keyboard.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Intel 8048-compatible",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "K.C. Munchkin!",
+        "Pick Axe Pete!",
+        "Quest for the Rings",
+        "Freedom Fighters"
+      ]
+    },
+    "ids": {
+      "screenscraper": 104,
+      "retroachievements": 23
+    },
+    "folders": [
+      "mo2",
+      "odyssey2",
+      "videopac",
+      "Magnavox Odyssey 2",
+      "odyssey-2"
+    ],
+    "colors": [
+      "#212121",
+      "#F5F5F5"
+    ],
+    "extensions": [
+      "bin",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 O2EM",
+      "default_core": true,
+      "unique_id": "mo2.ra64.o2em",
+      "description": "Supported extensions: bin.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"o2em\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 O2EM",
+      "default_core": true,
+      "unique_id": "mo2.ra32.o2em",
+      "description": "Supported extensions: bin.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"o2em\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch O2EM",
+      "default_core": true,
+      "unique_id": "mo2.ra.o2em",
+      "description": "Supported extensions: bin.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"o2em\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L o2em_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L o2em_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L o2em_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "mo2.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

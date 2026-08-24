@@ -1,0 +1,124 @@
+{
+  "system": {
+    "id": "intv",
+    "multidisc": false,
+    "name": "Intellivision",
+    "short_name": "INTV",
+    "details": {
+      "manufacturer": "Mattel",
+      "release_date": "1979-12-03",
+      "description": "Mattel's 16-bit home console with a numeric keypad and voice synthesis.",
+      "type": "console",
+      "architecture": "16-bit",
+      "generation": 2,
+      "cpu": "GI CP1610",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Astrosmash",
+        "BurgerTime",
+        "Advanced Dungeons & Dragons",
+        "Utopia"
+      ]
+    },
+    "ids": {
+      "screenscraper": 115,
+      "retroachievements": 45
+    },
+    "folders": [
+      "intv",
+      "intellivision",
+      "Mattel Intellivision"
+    ],
+    "colors": [
+      "#8D6E63",
+      "#D7CCC8"
+    ],
+    "extensions": [
+      "bin",
+      "int",
+      "rom",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 FreeIntv",
+      "default_core": true,
+      "unique_id": "intellivision.ra64.freeintv",
+      "description": "Supported extensions: bin, int, rom, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"freeintv\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FreeIntv",
+      "default_core": true,
+      "unique_id": "intellivision.ra32.freeintv",
+      "description": "Supported extensions: bin, int, rom, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"freeintv\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FreeIntv",
+      "default_core": true,
+      "unique_id": "intellivision.ra.freeintv",
+      "description": "Supported extensions: bin, int, rom, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"freeintv\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L freeintv_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L freeintv_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L freeintv_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "intv.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

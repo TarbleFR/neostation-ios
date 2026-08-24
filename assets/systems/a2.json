@@ -1,0 +1,235 @@
+{
+  "system": {
+    "id": "a2",
+    "multidisc": false,
+    "name": "Apple II",
+    "short_name": "A2",
+    "details": {
+      "manufacturer": "Apple",
+      "release_date": "1977-04-01",
+      "description": "Apple's influential 8-bit home computer with color graphics and expansion slots.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502",
+      "media": [
+        "floppy",
+        "cassette"
+      ],
+      "notable_games": [
+        "Prince of Persia",
+        "The Oregon Trail",
+        "Ultima I",
+        "Lode Runner"
+      ]
+    },
+    "ids": {
+      "screenscraper": 86,
+      "retroachievements": 38
+    },
+    "folders": [
+      "a2",
+      "apple2",
+      "appleii",
+      "Apple II"
+    ],
+    "colors": [
+      "#F5F5F5",
+      "#EF5350"
+    ],
+    "extensions": [
+      "dsk",
+      "do",
+      "po",
+      "woz",
+      "nib",
+      "2mg",
+      "2img",
+      "iie",
+      "hdv",
+      "yaml",
+      "m3u",
+      "cmd",
+      "bin",
+      "zip",
+      "apl",
+      "gz"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch AppleWin",
+      "default_core": true,
+      "unique_id": "a2.ra.applewin",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"applewin\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L applewin_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L applewin_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L applewin_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch MAME/MESS",
+      "unique_id": "a2.ra.mess",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mamemess_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mamemess_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mamemess_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 AppleWin",
+      "default_core": true,
+      "unique_id": "a2.ra64.applewin",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"applewin\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L applewin_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L applewin_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L applewin_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 MAME/MESS",
+      "unique_id": "a2.ra64.mess",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 AppleWin",
+      "default_core": true,
+      "unique_id": "a2.ra32.applewin",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"applewin\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L applewin_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L applewin_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L applewin_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 MAME/MESS",
+      "unique_id": "a2.ra32.mess",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: cmd.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "Standalone RAppleWin",
+      "unique_id": "a2.rapplewin",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: bin. do. dsk. nib. po. woz. gz. zip. 2mg. 2img. iie.",
+      "platforms": {
+        "windows": {
+          "executable": "RAppleWin.exe",
+          "args": "-f -d1 \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone AppleWin",
+      "unique_id": "a2.applewin",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: bin. do. dsk. nib. po. woz. gz. zip. 2mg. 2img. iie.",
+      "platforms": {
+        "windows": {
+          "executable": "AppleWin.exe",
+          "args": "-f -d1 \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "a2.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

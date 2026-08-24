@@ -1,0 +1,1419 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as path;
+import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/rpcs3_title_catalog_service.dart';
+
+import '../repositories/scraper_repository.dart';
+import 'screenscraper/region_config.dart';
+import 'screenscraper/rom_hasher.dart';
+import 'screenscraper/media_resolver.dart';
+import 'screenscraper/screenscraper_client.dart';
+import 'screenscraper/media_downloader.dart';
+import 'screenscraper/game_id_media_fallback.dart';
+import 'screenscraper/screenscraper_exceptions.dart';
+import '../providers/scraping_provider.dart';
+import '../l10n/app_locale.dart';
+import '../widgets/scraping_summary_dialog.dart';
+
+/// Service responsible for scraping game metadata and media from the
+/// ScreenScraper.fr API.
+///
+/// Features:
+/// - Multi-threaded scraping with configurable concurrency.
+/// - Support for MD5-based identification.
+/// - Local caching of metadata and media (images, videos, wheels).
+/// - Automatic system mapping between NeoStation and ScreenScraper IDs.
+/// - Daily request quota management and credentials verification.
+class ScreenScraperService {
+  static const String _baseUrl = 'https://api.screenscraper.fr/api2';
+  static final _log = LoggerService.instance;
+
+  // Developer credentials — provided at build time via --dart-define
+  // or at runtime via environment variables.
+  static String get _devId {
+    const compileTime = String.fromEnvironment('SCREENSCRAPER_DEV_ID');
+    if (compileTime.isNotEmpty) return compileTime;
+    return Platform.environment['SCREENSCRAPER_DEV_ID'] ?? '';
+  }
+
+  static String get _devPassword {
+    const compileTime = String.fromEnvironment('SCREENSCRAPER_DEV_PASSWORD');
+    if (compileTime.isNotEmpty) return compileTime;
+    return Platform.environment['SCREENSCRAPER_DEV_PASSWORD'] ?? '';
+  }
+
+  static Map<String, dynamic>? _cachedCredentials;
+  static bool _isMetadataScrapingRunning = false;
+
+  /// Authenticates user credentials against the ScreenScraper API.
+  static Future<Map<String, dynamic>?> verifyCredentials(
+    String username,
+    String password,
+  ) async {
+    try {
+      final softname = await ScreenscraperClient.getSoftname();
+      final url = Uri.parse('$_baseUrl/ssuserInfos.php').replace(
+        queryParameters: {
+          'devid': _devId,
+          'devpassword': _devPassword,
+          'softname': softname,
+          'output': 'json',
+          'ssid': username,
+          'sspassword': password,
+        },
+      );
+
+      final response = await ScreenscraperClient.httpGetWithRetry(
+        url,
+        headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['header']['success'] == 'true') {
+          return data;
+        } else {
+          _log.e('Invalid credentials: ${data['header']['error']}');
+          return null;
+        }
+      } else if (response.statusCode == 403) {
+        _log.e('Error 403: Invalid credentials');
+        return null;
+      } else {
+        _log.e('HTTP Error ${response.statusCode}: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      _log.e('Error verifying credentials: $e');
+      return null;
+    }
+  }
+
+  /// Persists encrypted ScreenScraper credentials and user tier information
+  /// to the local database.
+  static Future<bool> saveCredentials(
+    String username,
+    String password, [
+    Map<String, dynamic>? userInfo,
+    String? preferredLanguage,
+  ]) async {
+    try {
+      return await ScraperRepository.saveCredentials(
+        username,
+        password,
+        userInfo,
+        preferredLanguage,
+      );
+    } catch (e) {
+      _log.e('Error saving credentials: $e');
+      return false;
+    }
+  }
+
+  /// Refreshes local user statistics and account tier from the API.
+  static Future<bool> refreshCredentials() async {
+    try {
+      final credentials = await getSavedCredentials();
+      if (credentials == null) return false;
+
+      final username = credentials['username']!;
+      final password = credentials['password']!;
+
+      final userInfo = await verifyCredentials(username, password);
+      if (userInfo != null) {
+        return await saveCredentials(
+          username,
+          password,
+          userInfo['response']['ssuser'] as Map<String, dynamic>?,
+          credentials['preferred_language'],
+        );
+      }
+      return false;
+    } catch (e) {
+      _log.e('Error refreshing credentials: $e');
+      return false;
+    }
+  }
+
+  /// Retrieves the saved ScreenScraper credentials from the database.
+  static Future<Map<String, String>?> getSavedCredentials() async {
+    try {
+      return await ScraperRepository.getSavedCredentials();
+    } catch (e) {
+      _log.e('Error getting saved credentials: $e');
+      return null;
+    }
+  }
+
+  /// Deletes saved credentials from the local database.
+  static Future<bool> clearCredentials() async {
+    try {
+      return await ScraperRepository.clearCredentials();
+    } catch (e) {
+      _log.e('Error deleting credentials: $e');
+      return false;
+    }
+  }
+
+  /// Checks if credentials have been saved locally.
+  static Future<bool> hasSavedCredentials() async {
+    final credentials = await getSavedCredentials();
+    return credentials != null;
+  }
+
+  /// Retrieves the current scraper configuration (modes and media types to fetch).
+  static Future<Map<String, dynamic>> getScraperConfig() async {
+    try {
+      return await ScraperRepository.getScraperConfig();
+    } catch (e) {
+      _log.e('Error getting scraper configuration: $e');
+      return {
+        'scrape_mode': 'new_only',
+        'scrape_metadata': true,
+        'scrape_images': true,
+        'scrape_videos': true,
+      };
+    }
+  }
+
+  /// Updates the scraper configuration.
+  static Future<bool> saveScraperConfig(Map<String, dynamic> config) async {
+    try {
+      return await ScraperRepository.saveScraperConfig(config);
+    } catch (e) {
+      _log.e('Error saving scraper configuration: $e');
+      return false;
+    }
+  }
+
+  /// Retrieves the internal system mappings for enabled ScreenScraper integration.
+  static Future<List<Map<String, dynamic>>> getSystemMappings() async {
+    try {
+      return await ScraperRepository.getSystemMappings();
+    } catch (e) {
+      _log.e('Error getting system mappings: $e');
+      return [];
+    }
+  }
+
+  /// Fetches the global list of supported systems from ScreenScraper.
+  static Future<List<Map<String, dynamic>>?> getSystemsList() async {
+    try {
+      final credentials = await getSavedCredentials();
+      if (credentials == null) {
+        _log.e('There is no saved credentials to get systems list');
+        return null;
+      }
+
+      final softname = await ScreenscraperClient.getSoftname();
+      final url = Uri.parse('$_baseUrl/systemesListe.php').replace(
+        queryParameters: {
+          'devid': _devId,
+          'devpassword': _devPassword,
+          'softname': softname,
+          'output': 'json',
+          'ssid': credentials['username'],
+          'sspassword': credentials['password'],
+        },
+      );
+
+      final response = await ScreenscraperClient.httpGetWithRetry(
+        url,
+        headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['header']['success'] == 'true') {
+          final systems = data['response']['systemes'] as List;
+          return systems.cast<Map<String, dynamic>>();
+        } else {
+          _log.e('Error getting systems list: ${data['header']['error']}');
+          return null;
+        }
+      } else {
+        _log.e('HTTP Error ${response.statusCode}: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      _log.e('Error getting systems list: $e');
+      return null;
+    }
+  }
+
+  /// Synchronizes local system IDs with ScreenScraper IDs by matching folder names.
+  static Future<bool> syncSystemIds() async {
+    try {
+      final unmappedCount = await ScraperRepository.getUnmappedSystemsCount();
+      if (unmappedCount == 0) {
+        await ScraperRepository.initializeScraperSystemConfig();
+        return true;
+      }
+
+      final detectedSystems =
+          await ScraperRepository.getDetectedSystemsWithScraperIds();
+
+      if (detectedSystems.isEmpty) {
+        _log.w('There is no detected systems to sync');
+        return true;
+      }
+
+      final systemsList = await getSystemsList();
+      if (systemsList == null) {
+        return false;
+      }
+
+      final screenscraperMap = <String, int>{};
+      for (final system in systemsList) {
+        final noms = system['noms'] as Map<String, dynamic>;
+        final nomRecalbox = noms['nom_recalbox']?.toString();
+        if (nomRecalbox != null) {
+          final names = nomRecalbox.split(',');
+          for (final name in names) {
+            final trimmedName = name.trim();
+            if (trimmedName.isNotEmpty) {
+              screenscraperMap[trimmedName] =
+                  int.tryParse(system['id']?.toString() ?? '0') ?? 0;
+            }
+          }
+        }
+      }
+
+      for (final system in detectedSystems) {
+        final appSystemId = system['id'].toString();
+        final folderName = system['folder_name']?.toString();
+        final realName = system['real_name']?.toString();
+
+        if (folderName == null || realName == null) continue;
+
+        if (system['screenscraper_id'] != null) continue;
+
+        final foundScreenscraperId = screenscraperMap[folderName];
+
+        if (foundScreenscraperId != null) {
+          await ScraperRepository.updateSystemScraperId(
+            appSystemId,
+            foundScreenscraperId,
+          );
+        }
+      }
+
+      await ScraperRepository.initializeScraperSystemConfig();
+      return true;
+    } catch (e) {
+      _log.e('Error syncing system IDs: $e');
+      return false;
+    }
+  }
+
+  static void _addSerialLookup(
+    Map<String, String> queryParameters,
+    String? serialNumber,
+  ) {
+    final serial = serialNumber?.trim() ?? '';
+    if (serial.isNotEmpty) queryParameters['serialnum'] = serial;
+  }
+
+  /// Pure lookup parameters used by tests and by [fetchGameInfo].
+  @visibleForTesting
+  static Map<String, String> buildGameLookupParametersForTesting({
+    required String systemId,
+    required String romName,
+    String? serialNumber,
+  }) {
+    final parameters = <String, String>{
+      'systemeid': systemId,
+      'romtype': 'rom',
+      'romnom': romName,
+    };
+    _addSerialLookup(parameters, serialNumber);
+    return parameters;
+  }
+
+  /// Fetches game information from the API using name or hash.
+  ///
+  /// Returns a map containing both `gameInfo` and updated `userInfo` (quota).
+  static Future<Map<String, dynamic>?> fetchGameInfo(
+    String systemId,
+    String romName, {
+    String? appSystemId,
+    String? md5,
+    int? maxDailyRequests,
+    String? gameName,
+    String? serialNumber,
+  }) async {
+    try {
+      final credentials = _cachedCredentials ?? await getSavedCredentials();
+      if (credentials == null) {
+        _log.e('There is no saved credentials to get game information');
+        return null;
+      }
+
+      _cachedCredentials ??= credentials;
+      final softname = await ScreenscraperClient.getSoftname();
+
+      String? targetAppSystemId = appSystemId;
+      if (targetAppSystemId == null) {
+        try {
+          targetAppSystemId = await ScraperRepository.getAppSystemIdByScraperId(
+            systemId,
+          );
+        } catch (_) {}
+      }
+
+      final cleanRomName = await ScreenscraperRomHasher.getCleanRomName(
+        gameName ?? romName,
+        targetAppSystemId,
+      );
+
+      final queryParameters = <String, String>{
+        'devid': _devId,
+        'devpassword': _devPassword,
+        'softname': softname,
+        'output': 'json',
+        'ssid': credentials['username'] ?? '',
+        'sspassword': credentials['password'] ?? '',
+        ...buildGameLookupParametersForTesting(
+          systemId: systemId,
+          romName: cleanRomName,
+          serialNumber: serialNumber,
+        ),
+      };
+
+      final preferredLanguage = credentials['preferred_language'];
+      if (preferredLanguage != null && preferredLanguage.isNotEmpty) {
+        queryParameters['langue'] = preferredLanguage;
+      }
+
+      if (md5 != null && md5.isNotEmpty) {
+        queryParameters['md5'] = md5;
+      }
+
+      final url = Uri.parse('$_baseUrl/jeuInfos.php')
+          .replace(queryParameters: queryParameters);
+
+      final response = await ScreenscraperClient.httpGetWithRetry(
+        url,
+        headers: {'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
+        maxDailyRequests: maxDailyRequests,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['header']['success'] == 'true') {
+          return {
+            'gameInfo': data['response']['jeu'],
+            'userInfo': data['response']['ssuser'],
+          };
+        } else {
+          _log.e('Error getting game information: ${data['header']['error']}');
+          return null;
+        }
+      } else {
+        _log.e('HTTP Error ${response.statusCode}: ${response.body}');
+        return null;
+      }
+    } on ScreenscraperQuotaExceededException {
+      rethrow;
+    } catch (e) {
+      _log.e('Error getting game information: $e');
+      return null;
+    }
+  }
+
+  /// Maps a raw API response to the NeoStation metadata schema.
+  ///
+  /// Handles language localization priority and region-based selection
+  /// using the global priority map (World > US > EU > FR/SP/IT/DE > JP > KR/CN).
+  static Future<Map<String, dynamic>> _mapGameInfoToMetadata(
+    String filename,
+    String romPath,
+    Map<String, dynamic> gameInfo, {
+    String? preferredLanguage,
+  }) async {
+    final regionPriority = await ScreenscraperRegionConfig.getRegionPriority();
+    final metadata = <String, dynamic>{};
+    metadata['filename'] = filename;
+
+    final noms = gameInfo['noms'] as List<dynamic>? ?? [];
+    String? realName;
+    int bestNamePriority = -1;
+    for (final nom in noms) {
+      final region = nom['region']?.toString();
+      final text = nom['text']?.toString();
+      if (text != null && text.isNotEmpty) {
+        final priority = regionPriority[region] ?? 0;
+        if (priority > bestNamePriority) {
+          bestNamePriority = priority;
+          realName = text;
+        }
+      }
+    }
+    metadata['real_name'] = realName ?? filename;
+
+    final synopses = gameInfo['synopsis'] as List<dynamic>? ?? [];
+    String? preferredDescription;
+
+    if (preferredLanguage != null) {
+      for (final synopsis in synopses) {
+        final langue = synopsis['langue']?.toString();
+        final text = synopsis['text']?.toString();
+        if (text != null && langue == preferredLanguage) {
+          preferredDescription = text;
+          break;
+        }
+      }
+    }
+
+    if (preferredDescription == null) {
+      const languagePriority = ['en', 'es', 'fr', 'de', 'it', 'pt'];
+      for (final lang in languagePriority) {
+        for (final synopsis in synopses) {
+          final langue = synopsis['langue']?.toString();
+          final text = synopsis['text']?.toString();
+          if (text != null && langue == lang) {
+            preferredDescription = text;
+            break;
+          }
+        }
+        if (preferredDescription != null) break;
+      }
+    }
+
+    for (final synopsis in synopses) {
+      final langue = synopsis['langue']?.toString();
+      final text = synopsis['text']?.toString();
+      if (text != null) {
+        switch (langue) {
+          case 'en':
+            metadata['description_en'] = text;
+            break;
+          case 'es':
+            metadata['description_es'] = text;
+            break;
+          case 'fr':
+            metadata['description_fr'] = text;
+            break;
+          case 'de':
+            metadata['description_de'] = text;
+            break;
+          case 'it':
+            metadata['description_it'] = text;
+            break;
+          case 'pt':
+            metadata['description_pt'] = text;
+            break;
+        }
+      }
+    }
+
+    final note = gameInfo['note'];
+    if (note != null && note['text'] != null) {
+      final rating = double.tryParse(note['text'].toString());
+      if (rating != null) metadata['rating'] = rating;
+    }
+
+    final dates = gameInfo['dates'] as List<dynamic>? ?? [];
+    DateTime? releaseDate;
+    int bestDatePriority = -1;
+    for (final date in dates) {
+      final region = date['region']?.toString();
+      final dateText = date['text']?.toString();
+      if (dateText != null) {
+        try {
+          final parsedDate = DateTime.parse(dateText);
+          final priority = regionPriority[region] ?? 0;
+          if (priority > bestDatePriority) {
+            bestDatePriority = priority;
+            releaseDate = parsedDate;
+          }
+        } catch (_) {}
+      }
+    }
+    if (releaseDate != null) {
+      metadata['release_date'] = releaseDate.toIso8601String();
+    }
+
+    metadata['developer'] = gameInfo['developpeur']?['text']?.toString();
+    metadata['publisher'] = gameInfo['editeur']?['text']?.toString();
+
+    final genres = gameInfo['genres'] as List<dynamic>? ?? [];
+    if (genres.isNotEmpty) {
+      final genre = genres[0];
+      final genreNoms = genre['noms'] as List<dynamic>? ?? [];
+      String? genreText;
+
+      if (preferredLanguage != null) {
+        for (final nom in genreNoms) {
+          final langue = nom['langue']?.toString();
+          final text = nom['text']?.toString();
+          if (text != null && langue == preferredLanguage) {
+            genreText = text;
+            break;
+          }
+        }
+      }
+
+      if (genreText == null) {
+        for (final nom in genreNoms) {
+          final langue = nom['langue']?.toString();
+          final text = nom['text']?.toString();
+          if (text != null && langue == 'en') {
+            genreText = text;
+            break;
+          }
+        }
+      }
+
+      metadata['genre'] =
+          genreText ?? (genreNoms.isNotEmpty ? genreNoms[0]['text'] : null);
+    }
+
+    metadata['players'] = gameInfo['joueurs']?['text']?.toString();
+
+    return metadata;
+  }
+
+  /// Saves the metadata to the local user_screenscraper_metadata table.
+  static Future<bool> _saveGameMetadata(
+    Map<String, dynamic> metadata,
+    String appSystemId, {
+    bool isFullyScraped = false,
+  }) async {
+    try {
+      return await ScraperRepository.saveGameMetadata(
+        metadata,
+        appSystemId,
+        isFullyScraped: isFullyScraped,
+      );
+    } catch (e) {
+      _log.e('Error saving metadata for ${metadata['filename']}: $e');
+      return false;
+    }
+  }
+
+  static Future<Set<String>> _ensureVirtualMediaByGameId({
+    required bool isMeloNxVirtual,
+    required bool isRpcs3Virtual,
+    required Map<String, dynamic> gameInfo,
+    required int screenScraperSystemId,
+    required String systemFolder,
+    required String romName,
+    required String appSystemId,
+    required List<String> allowedMediaTypes,
+    required Map<String, dynamic> downloadResult,
+    required List<dynamic> sourceMedias,
+    int? maxDailyRequests,
+  }) async {
+    final successfulTypes = <String>{
+      ...(downloadResult['downloadedTypes'] as List<dynamic>? ?? const []).map(
+        (value) => value.toString(),
+      ),
+      ...(downloadResult['existingTypes'] as List<dynamic>? ?? const []).map(
+        (value) => value.toString(),
+      ),
+    };
+    if (!isMeloNxVirtual && !isRpcs3Virtual) return successfulTypes;
+
+    final credentials = await getSavedCredentials();
+    final gameId = gameInfo['id']?.toString() ?? '';
+    if (credentials == null || gameId.isEmpty) return successfulTypes;
+
+    final softname = await ScreenscraperClient.getSoftname();
+    final fallbackResult =
+        await ScreenscraperGameIdMediaFallback.ensureMediaByGameId(
+          gameId: gameId,
+          systemId: screenScraperSystemId.toString(),
+          systemFolder: systemFolder,
+          romName: romName,
+          appSystemId: appSystemId,
+          devId: _devId,
+          devPassword: _devPassword,
+          softname: softname,
+          username: credentials['username']?.toString() ?? '',
+          password: credentials['password']?.toString() ?? '',
+          allowedMediaTypes: allowedMediaTypes,
+          alreadyDownloadedTypes: successfulTypes.toList(),
+          sourceMedias: sourceMedias,
+          debugFileName: isRpcs3Virtual
+              ? 'rpcs3_scraper_media_debug.txt'
+              : 'melonx_scraper_media_debug.txt',
+          maxDailyRequests: maxDailyRequests,
+        );
+    return (fallbackResult['successfulTypes'] as List<dynamic>? ?? const [])
+        .map((value) => value.toString())
+        .toSet();
+  }
+
+  static bool _hasUsefulVirtualMedia(
+    List<String> allowedMediaTypes,
+    Set<String> successfulTypes,
+  ) {
+    const visualTypes = {'fanart', 'ss', 'wheel', 'box2D', 'video'};
+    final requested = allowedMediaTypes.where(visualTypes.contains).toSet();
+    return requested.isEmpty || requested.any(successfulTypes.contains);
+  }
+
+  @visibleForTesting
+  static bool shouldRetryRpcs3ByNameForTesting(
+    String? gameName,
+    String? serialNumber,
+  ) {
+    final name = gameName?.trim() ?? '';
+    final serial = serialNumber?.trim() ?? '';
+    return name.isNotEmpty && name.toUpperCase() != serial.toUpperCase();
+  }
+
+  /// Scrapes a single game by its filename and updates its local state.
+  static Future<Map<String, dynamic>> scrapeSingleGame({
+    required String appSystemId,
+    required String romName,
+    required String systemFolder,
+    required String romPath,
+    String? gameName,
+    String? serialNumber,
+    Function(String status, double progress)? onProgress,
+    bool forceOverwrite = false,
+  }) async {
+    try {
+      onProgress?.call(AppLocale.checkingCredentials, 0.05);
+
+      if (!await hasSavedCredentials()) {
+        return {'success': false, 'message': AppLocale.scrapeNoCredentials};
+      }
+
+      int? screenScraperSystemId =
+          await ScraperRepository.getScreenScraperIdByAppSystemId(appSystemId);
+
+      if (screenScraperSystemId == null) {
+        await syncSystemIds();
+        screenScraperSystemId =
+            await ScraperRepository.getScreenScraperIdByAppSystemId(
+              appSystemId,
+            );
+      }
+
+      if (screenScraperSystemId == null) {
+        return {'success': false, 'message': AppLocale.scrapeSystemNotMapped};
+      }
+
+      onProgress?.call(AppLocale.fetchingMetadata, 0.1);
+
+      final lowerRomPath = romPath.toLowerCase();
+      final isMeloNxVirtual = lowerRomPath.startsWith('melonx://');
+      final isRpcs3Virtual = lowerRomPath.startsWith('rpcs3-library://');
+      var effectiveGameName = gameName;
+      if (isRpcs3Virtual &&
+          !shouldRetryRpcs3ByNameForTesting(effectiveGameName, serialNumber) &&
+          (serialNumber?.trim().isNotEmpty ?? false)) {
+        effectiveGameName =
+            await Rpcs3TitleCatalogService.resolveTitle(serialNumber!) ??
+            effectiveGameName;
+      }
+
+      Map<String, dynamic>? gameInfoResult;
+      int attempts = 0;
+      while (attempts < 3) {
+        if (attempts > 0) await Future.delayed(const Duration(seconds: 2));
+        gameInfoResult = await fetchGameInfo(
+          screenScraperSystemId.toString(),
+          romName,
+          appSystemId: appSystemId,
+          maxDailyRequests: 0,
+          gameName:
+              (systemFolder == 'android' || isMeloNxVirtual || isRpcs3Virtual)
+              ? effectiveGameName
+              : null,
+          serialNumber: isRpcs3Virtual ? serialNumber : null,
+        );
+        if (gameInfoResult != null && gameInfoResult['gameInfo'] != null) break;
+        attempts++;
+      }
+
+      if ((gameInfoResult == null || gameInfoResult['gameInfo'] == null) &&
+          isRpcs3Virtual &&
+          shouldRetryRpcs3ByNameForTesting(effectiveGameName, serialNumber)) {
+        gameInfoResult = await fetchGameInfo(
+          screenScraperSystemId.toString(),
+          romName,
+          appSystemId: appSystemId,
+          maxDailyRequests: 0,
+          gameName: effectiveGameName,
+          serialNumber: null,
+        );
+      }
+
+      if (gameInfoResult == null || gameInfoResult['gameInfo'] == null) {
+        return {'success': false, 'message': AppLocale.scrapeGameNotFound};
+      }
+
+      final gameInfo = gameInfoResult['gameInfo'] as Map<String, dynamic>;
+      final credentials = await getSavedCredentials();
+      final preferredLanguage = credentials?['preferred_language'] ?? 'en';
+      final scraperConfig = await getScraperConfig();
+
+      if (scraperConfig['scrape_metadata'] as bool? ?? true) {
+        final metadata = await _mapGameInfoToMetadata(
+          romName,
+          romPath,
+          gameInfo,
+          preferredLanguage: preferredLanguage,
+        );
+        await _saveGameMetadata(metadata, appSystemId, isFullyScraped: true);
+      }
+
+      onProgress?.call(AppLocale.downloadingImages, 0.2);
+
+      final allowedMediaTypes = await ScraperRepository.getEnabledMediaTypes();
+
+      if (allowedMediaTypes.isEmpty) {
+        return {'success': true, 'message': AppLocale.scrapeSuccessful};
+      }
+
+      final medias = gameInfo['medias'] as List<dynamic>? ?? [];
+      final downloadResult =
+          await ScreenscraperMediaDownloader.downloadGameMedia(
+            systemFolder,
+            romName,
+            medias,
+            1,
+            appSystemId: appSystemId,
+            preferredLanguage: preferredLanguage,
+            allowedMediaTypes: allowedMediaTypes,
+            forceOverwrite: forceOverwrite || isMeloNxVirtual || isRpcs3Virtual,
+            maxDailyRequests: null,
+            onProgress: (p) =>
+                onProgress?.call(AppLocale.downloadingImages, 0.2 + (p * 0.8)),
+          );
+
+      var mediaSuccess = downloadResult['success'] == true;
+      if (isMeloNxVirtual || isRpcs3Virtual) {
+        final successfulTypes = await _ensureVirtualMediaByGameId(
+          isMeloNxVirtual: isMeloNxVirtual,
+          isRpcs3Virtual: isRpcs3Virtual,
+          gameInfo: gameInfo,
+          screenScraperSystemId: screenScraperSystemId,
+          systemFolder: systemFolder,
+          romName: romName,
+          appSystemId: appSystemId,
+          allowedMediaTypes: allowedMediaTypes,
+          downloadResult: downloadResult,
+          sourceMedias: medias,
+          maxDailyRequests: null,
+        );
+        mediaSuccess = _hasUsefulVirtualMedia(
+          allowedMediaTypes,
+          successfulTypes,
+        );
+      }
+
+      return {
+        'success': mediaSuccess,
+        'message': mediaSuccess
+            ? AppLocale.scrapeSuccessful
+            : AppLocale.scrapeMediaDownloadsFailed,
+      };
+    } on ScreenscraperQuotaExceededException {
+      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
+    } catch (e) {
+      _log.e('Error scraping single game: $e');
+      return {'success': false, 'message': AppLocale.scrapeUnexpectedError};
+    }
+  }
+
+  /// Downloads only the PDF manual for a single game.
+  ///
+  /// This deliberately bypasses the user's global media selection: the Manual
+  /// tab is an explicit per-game action, so a user can fetch one manual even
+  /// when batch manual scraping is disabled in ScreenScraper settings.
+  static Future<Map<String, dynamic>> downloadGameManual({
+    required String appSystemId,
+    required String romName,
+    required String systemFolder,
+    required String romPath,
+    String? gameName,
+    String? serialNumber,
+    bool forceOverwrite = false,
+    Function(String status, double progress)? onProgress,
+  }) async {
+    try {
+      onProgress?.call(AppLocale.checkingCredentials, 0.05);
+      if (!await hasSavedCredentials()) {
+        return {'success': false, 'message': AppLocale.scrapeNoCredentials};
+      }
+
+      int? screenScraperSystemId =
+          await ScraperRepository.getScreenScraperIdByAppSystemId(appSystemId);
+      if (screenScraperSystemId == null) {
+        await syncSystemIds();
+        screenScraperSystemId =
+            await ScraperRepository.getScreenScraperIdByAppSystemId(
+              appSystemId,
+            );
+      }
+      if (screenScraperSystemId == null) {
+        return {'success': false, 'message': AppLocale.scrapeSystemNotMapped};
+      }
+
+      onProgress?.call(AppLocale.fetchingMetadata, 0.15);
+      final lowerRomPath = romPath.toLowerCase();
+      final isMeloNxVirtual = lowerRomPath.startsWith('melonx://');
+      final isRpcs3Virtual = lowerRomPath.startsWith('rpcs3-library://');
+
+      Map<String, dynamic>? gameInfoResult;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
+        gameInfoResult = await fetchGameInfo(
+          screenScraperSystemId.toString(),
+          romName,
+          appSystemId: appSystemId,
+          maxDailyRequests: 0,
+          gameName:
+              (systemFolder == 'android' || isMeloNxVirtual || isRpcs3Virtual)
+              ? gameName
+              : null,
+          serialNumber: isRpcs3Virtual ? serialNumber : null,
+        );
+        if (gameInfoResult != null && gameInfoResult['gameInfo'] != null) break;
+      }
+
+      if ((gameInfoResult == null || gameInfoResult['gameInfo'] == null) &&
+          isRpcs3Virtual &&
+          shouldRetryRpcs3ByNameForTesting(gameName, serialNumber)) {
+        gameInfoResult = await fetchGameInfo(
+          screenScraperSystemId.toString(),
+          romName,
+          appSystemId: appSystemId,
+          maxDailyRequests: 0,
+          gameName: gameName,
+          serialNumber: null,
+        );
+      }
+
+      if (gameInfoResult == null || gameInfoResult['gameInfo'] == null) {
+        return {'success': false, 'message': AppLocale.scrapeGameNotFound};
+      }
+
+      final gameInfo = gameInfoResult['gameInfo'] as Map<String, dynamic>;
+      final medias = gameInfo['medias'] as List<dynamic>? ?? const [];
+      final credentials = await getSavedCredentials();
+      final preferredLanguage = credentials?['preferred_language'] ?? 'en';
+      final regionPriority =
+          await ScreenscraperRegionConfig.getRegionPriority();
+      final selectedManual = ScreenscraperMediaResolver.selectBestMedia(
+        medias,
+        'manuel',
+        preferredLanguage: preferredLanguage,
+        regionPriority: regionPriority,
+      );
+
+      if (selectedManual == null) {
+        return {'success': false, 'message': AppLocale.manualNotAvailable};
+      }
+
+      onProgress?.call(AppLocale.downloadingManual, 0.35);
+      final result = await ScreenscraperMediaDownloader.downloadGameMedia(
+        systemFolder,
+        romName,
+        medias,
+        1,
+        appSystemId: appSystemId,
+        preferredLanguage: preferredLanguage,
+        allowedMediaTypes: const ['manuel'],
+        forceOverwrite: forceOverwrite,
+        maxDailyRequests: null,
+        onProgress: (p) =>
+            onProgress?.call(AppLocale.downloadingManual, 0.35 + (p * 0.65)),
+      );
+
+      final cleanRomName = await ScreenscraperRomHasher.getCleanRomName(
+        romName,
+        appSystemId,
+      );
+      final mediaRoot = await ScreenscraperMediaResolver.getMediaDirectory();
+      final format = selectedManual['format']?.toString().toLowerCase();
+      final extension = (format == null || format.isEmpty) ? 'pdf' : format;
+      final manualPath = path.join(
+        mediaRoot,
+        systemFolder,
+        'manuals',
+        '$cleanRomName.$extension',
+      );
+
+      final downloaded =
+          result['success'] == true && await File(manualPath).exists();
+      return {
+        'success': downloaded,
+        'message': downloaded
+            ? AppLocale.manualDownloaded
+            : AppLocale.manualDownloadFailed,
+        if (downloaded) 'path': manualPath,
+      };
+    } on ScreenscraperQuotaExceededException {
+      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
+    } catch (e) {
+      _log.e('Error downloading game manual: $e');
+      return {'success': false, 'message': AppLocale.manualDownloadFailed};
+    }
+  }
+
+  /// Initiates a background scraping process for all detected ROMs.
+  ///
+  /// Coordinates system synchronization, batch processing, and thread-safe
+  /// quota monitoring. Notifies the provided [ScrapingProvider] about progress.
+  static Future<bool> startMetadataScraping(
+    BuildContext context,
+    ScrapingProvider scrapingProvider, {
+    bool Function()? shouldCancel,
+  }) async {
+    try {
+      if (_isMetadataScrapingRunning) return false;
+      _isMetadataScrapingRunning = true;
+
+      final startTime = DateTime.now();
+      final credentials = await getSavedCredentials();
+      if (credentials == null) return false;
+
+      ScreenscraperClient.initializeDailyCounter(0);
+      final maxThreads = int.tryParse(credentials['maxthreads'] ?? '4') ?? 4;
+      ScreenscraperClient.updateRequestSemaphore(maxThreads);
+
+      final preferredLanguage = credentials['preferred_language'] ?? 'en';
+      final scraperConfig = await getScraperConfig();
+      final scrapeMode = scraperConfig['scrape_mode'].toString();
+
+      final systemMappings = await getSystemMappings();
+      if (systemMappings.isEmpty) return false;
+
+      final systemsWithRoms = <Map<String, dynamic>>[];
+      int totalGamesToProcess = 0;
+
+      for (final systemMapping in systemMappings) {
+        final appSystemId = systemMapping['app_system_id'].toString();
+        final count = await ScraperRepository.getRomCountForScraping(
+          appSystemId,
+          scrapeMode,
+        );
+        if (count > 0) {
+          systemsWithRoms.add(systemMapping);
+          totalGamesToProcess += count;
+        }
+      }
+
+      if (systemsWithRoms.isEmpty) {
+        scrapingProvider.stopScraping();
+        return true;
+      }
+
+      scrapingProvider.updateProgress(
+        totalGames: totalGamesToProcess,
+        processedGames: 0,
+        successfulGames: 0,
+        failedGames: 0,
+      );
+
+      final allRomsToProcess = <Map<String, dynamic>>[];
+      for (final systemMapping in systemsWithRoms) {
+        final appSystemId = systemMapping['app_system_id'].toString();
+        final romsQueryResult = await ScraperRepository.getRomsForScraping(
+          appSystemId,
+          scrapeMode,
+        );
+
+        for (final rom in romsQueryResult) {
+          final copy = Map<String, dynamic>.from(rom);
+          copy['system_id'] = appSystemId;
+          copy['screenscraper_system_id'] =
+              systemMapping['screenscraper_system_id'];
+          copy['system_name'] = systemMapping['real_name'];
+          copy['system_folder'] = systemMapping['primary_folder_name'];
+          allRomsToProcess.add(copy);
+        }
+      }
+
+      int totalProcessedGames = 0;
+      int totalSuccessfulGames = 0;
+      int totalFailedGames = 0;
+
+      final batches = <List<Map<String, dynamic>>>[];
+      for (var i = 0; i < allRomsToProcess.length; i += maxThreads) {
+        batches.add(
+          allRomsToProcess.sublist(
+            i,
+            (i + maxThreads < allRomsToProcess.length)
+                ? i + maxThreads
+                : allRomsToProcess.length,
+          ),
+        );
+      }
+
+      for (final batch in batches) {
+        scrapingProvider.clearCompletedThreads();
+        if (shouldCancel != null && shouldCancel()) {
+          scrapingProvider.stopScraping();
+          return false;
+        }
+
+        final batchFutures = <Future<Map<String, dynamic>>>[];
+        for (var threadIndex = 0; threadIndex < batch.length; threadIndex++) {
+          final threadId = threadIndex + 1;
+          batchFutures.add(
+            _processRomInThread(
+              rom: batch[threadIndex],
+              threadId: threadId,
+              systemName: batch[threadIndex]['system_name'],
+              systemFolder: batch[threadIndex]['system_folder'],
+              screenscraperSystemId:
+                  int.tryParse(
+                    batch[threadIndex]['screenscraper_system_id']?.toString() ??
+                        '0',
+                  ) ??
+                  0,
+              appSystemId: batch[threadIndex]['system_id'],
+              maxThreads: maxThreads,
+              maxDailyRequests: 100000,
+              preferredLanguage: preferredLanguage,
+              scrapingProvider: scrapingProvider,
+              shouldCancel: shouldCancel,
+              scraperConfig: scraperConfig,
+            ),
+          );
+        }
+
+        final results = await Future.wait(batchFutures);
+        for (var i = 0; i < results.length; i++) {
+          totalProcessedGames++;
+          if (results[i]['success'] == true) {
+            totalSuccessfulGames++;
+          } else if (results[i]['cancelled'] == true) {
+            return false;
+          } else {
+            totalFailedGames++;
+          }
+
+          scrapingProvider.markThreadCompleted(i + 1);
+          scrapingProvider.updateProgress(
+            totalGames: totalGamesToProcess,
+            processedGames: totalProcessedGames,
+            successfulGames: totalSuccessfulGames,
+            failedGames: totalFailedGames,
+          );
+        }
+        if (batches.length > 1) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
+      }
+
+      if (context.mounted) {
+        _showScrapingSummaryDialog(
+          context,
+          totalGames: totalGamesToProcess,
+          successfulGames: totalSuccessfulGames,
+          failedGames: totalFailedGames,
+          elapsedTime: '${DateTime.now().difference(startTime).inSeconds}s',
+          totalRequests: 0,
+        );
+      }
+
+      scrapingProvider.stopScraping();
+      return true;
+    } on ScreenscraperQuotaExceededException {
+      _log.e('Daily scraping quota exceeded; stopping scraping session.');
+      scrapingProvider.stopScraping();
+      rethrow;
+    } catch (e) {
+      _log.e('Error during scraping process: $e');
+      scrapingProvider.stopScraping();
+      return false;
+    } finally {
+      _cachedCredentials = null;
+      _isMetadataScrapingRunning = false;
+    }
+  }
+
+  /// Internal worker thread processing for a single ROM during a batch operation.
+  static Future<Map<String, dynamic>> _processRomInThread({
+    required Map<String, dynamic> rom,
+    required int threadId,
+    required String systemName,
+    required String systemFolder,
+    required int screenscraperSystemId,
+    required String appSystemId,
+    required int maxThreads,
+    required int maxDailyRequests,
+    required String? preferredLanguage,
+    required ScrapingProvider scrapingProvider,
+    required bool Function()? shouldCancel,
+    required Map<String, dynamic> scraperConfig,
+  }) async {
+    try {
+      final filename = rom['filename'].toString();
+      final romPath = rom['rom_path'].toString();
+      final titleName = rom['title_name']?.toString();
+      final titleId = rom['title_id']?.toString().trim();
+      final lowerRomPath = romPath.toLowerCase();
+      final isMeloNxVirtual = lowerRomPath.startsWith('melonx://');
+      final isRpcs3Virtual = lowerRomPath.startsWith('rpcs3-library://');
+      var effectiveTitleName = titleName;
+      if (isRpcs3Virtual &&
+          !shouldRetryRpcs3ByNameForTesting(effectiveTitleName, titleId) &&
+          (titleId?.isNotEmpty ?? false)) {
+        effectiveTitleName =
+            await Rpcs3TitleCatalogService.resolveTitle(titleId!) ??
+            effectiveTitleName;
+      }
+      final displayName =
+          (isMeloNxVirtual || isRpcs3Virtual) &&
+              (effectiveTitleName?.trim().isNotEmpty ?? false)
+          ? effectiveTitleName!.trim()
+          : filename;
+
+      scrapingProvider.updateThreadProgress(
+        threadId: threadId,
+        gameName: displayName,
+        systemName: systemName,
+        isActive: true,
+        status: ThreadStatus.active,
+        currentStep: ThreadProcessingStep.fetchingMetadata,
+        progress: 0.0,
+      );
+
+      if (shouldCancel != null && shouldCancel()) {
+        return {'success': false, 'cancelled': true, 'requests': 0};
+      }
+
+      final gameResult = await fetchGameInfo(
+        screenscraperSystemId.toString(),
+        filename,
+        appSystemId: appSystemId,
+        maxDailyRequests: maxDailyRequests,
+        gameName:
+            (systemFolder == 'android' || isMeloNxVirtual || isRpcs3Virtual)
+            ? effectiveTitleName
+            : null,
+        serialNumber: isRpcs3Virtual ? titleId : null,
+      );
+      var gameInfo = gameResult?['gameInfo'];
+      int requestsMade = 1;
+
+      if (gameInfo == null &&
+          isRpcs3Virtual &&
+          shouldRetryRpcs3ByNameForTesting(effectiveTitleName, titleId)) {
+        final nameResult = await fetchGameInfo(
+          screenscraperSystemId.toString(),
+          filename,
+          appSystemId: appSystemId,
+          maxDailyRequests: maxDailyRequests,
+          gameName: effectiveTitleName,
+          serialNumber: null,
+        );
+        gameInfo = nameResult?['gameInfo'];
+        requestsMade++;
+      }
+
+      if (gameResult?['userInfo'] != null) {
+        final ui = gameResult!['userInfo'];
+        scrapingProvider.updateProgress(
+          totalRequests:
+              int.tryParse(ui['requeststoday']?.toString() ?? '0') ?? 0,
+          maxDailyRequests:
+              int.tryParse(ui['maxrequestsperday']?.toString() ?? '0') ?? 0,
+        );
+      }
+
+      scrapingProvider.updateThreadProgress(
+        threadId: threadId,
+        gameName: displayName,
+        systemName: systemName,
+        isActive: true,
+        status: ThreadStatus.active,
+        currentStep: ThreadProcessingStep.scanningImages,
+        progress: 0.33,
+      );
+
+      if (gameInfo == null &&
+          systemFolder != 'android' &&
+          File(romPath).existsSync()) {
+        final hash = await ScreenscraperRomHasher.calculateMd5InIsolate(
+          romPath,
+        );
+        final resWithHash = await fetchGameInfo(
+          screenscraperSystemId.toString(),
+          filename,
+          appSystemId: appSystemId,
+          md5: hash,
+          maxDailyRequests: maxDailyRequests,
+        );
+        gameInfo = resWithHash?['gameInfo'];
+        requestsMade++;
+      }
+
+      if (gameInfo != null) {
+        if (scraperConfig['scrape_metadata'] as bool? ?? true) {
+          final metadata = await _mapGameInfoToMetadata(
+            filename,
+            romPath,
+            gameInfo,
+            preferredLanguage: preferredLanguage,
+          );
+          await _saveGameMetadata(metadata, appSystemId, isFullyScraped: false);
+        }
+
+        final allowedTypes = await ScraperRepository.getEnabledMediaTypes();
+
+        if (allowedTypes.isNotEmpty) {
+          scrapingProvider.updateThreadProgress(
+            threadId: threadId,
+            gameName: displayName,
+            systemName: systemName,
+            isActive: true,
+            status: ThreadStatus.active,
+            currentStep: ThreadProcessingStep.downloadingImages,
+            progress: 0.66,
+          );
+          final sourceMedias = gameInfo['medias'] as List<dynamic>? ?? [];
+          final res = await ScreenscraperMediaDownloader.downloadGameMedia(
+            systemFolder,
+            filename,
+            sourceMedias,
+            maxThreads,
+            appSystemId: appSystemId,
+            preferredLanguage: preferredLanguage,
+            shouldCancel: shouldCancel,
+            allowedMediaTypes: allowedTypes,
+            maxDailyRequests: maxDailyRequests,
+            forceOverwrite:
+                scraperConfig['scrape_mode'].toString() == 'all' ||
+                isMeloNxVirtual ||
+                isRpcs3Virtual,
+          );
+          if (res['cancelled'] == true) {
+            return {
+              'success': false,
+              'cancelled': true,
+              'requests': requestsMade,
+            };
+          }
+
+          var mediaSucceeded = res['success'] == true;
+          if (isMeloNxVirtual || isRpcs3Virtual) {
+            final successfulTypes = await _ensureVirtualMediaByGameId(
+              isMeloNxVirtual: isMeloNxVirtual,
+              isRpcs3Virtual: isRpcs3Virtual,
+              gameInfo: Map<String, dynamic>.from(gameInfo as Map),
+              screenScraperSystemId: screenscraperSystemId,
+              systemFolder: systemFolder,
+              romName: filename,
+              appSystemId: appSystemId,
+              allowedMediaTypes: allowedTypes,
+              downloadResult: res,
+              sourceMedias: sourceMedias,
+              maxDailyRequests: maxDailyRequests,
+            );
+            mediaSucceeded = _hasUsefulVirtualMedia(
+              allowedTypes,
+              successfulTypes,
+            );
+          }
+
+          if (mediaSucceeded) {
+            await ScraperRepository.markGameFullyScraped(filename);
+          }
+        }
+
+        scrapingProvider.updateThreadProgress(
+          threadId: threadId,
+          gameName: displayName,
+          systemName: systemName,
+          isActive: false,
+          status: ThreadStatus.completed,
+          currentStep: ThreadProcessingStep.completed,
+          progress: 1.0,
+        );
+        return {'success': true, 'cancelled': false, 'requests': requestsMade};
+      }
+      return {'success': false, 'cancelled': false, 'requests': requestsMade};
+    } on ScreenscraperQuotaExceededException {
+      rethrow;
+    } catch (e) {
+      return {'success': false, 'cancelled': false, 'requests': 0};
+    }
+  }
+
+  /// Checks the local availability of required media assets for a given game.
+  static Future<Map<String, dynamic>> checkGameMediaStatus(
+    String appSystemId,
+    String romName,
+  ) async {
+    try {
+      final systemFolder = await ScraperRepository.getSystemFolderNameById(
+        appSystemId,
+      );
+      if (systemFolder == null) {
+        return {'hasAllMedia': false, 'error': 'System not found'};
+      }
+      final userDataDir = await ScreenscraperMediaResolver.getMediaDirectory();
+      const expectedTypes = [
+        'fanarts',
+        'screenshots',
+        'wheels',
+        'box2d',
+        'videos',
+      ];
+      final romBaseName = await ScreenscraperRomHasher.getCleanRomName(
+        romName,
+        appSystemId,
+      );
+      final missing = <String>[];
+      final existing = <String>[];
+
+      for (final type in expectedTypes) {
+        bool found = false;
+        for (final ext in ['.png', '.jpg', '.jpeg', '.mp4', '.webm']) {
+          if (await File(
+            path.join(userDataDir, systemFolder, type, '$romBaseName$ext'),
+          ).exists()) {
+            existing.add(type);
+            found = true;
+            break;
+          }
+        }
+        if (!found) missing.add(type);
+      }
+
+      return {
+        'hasAllMedia': missing.isEmpty,
+        'existingMedia': existing,
+        'missingMedia': missing,
+      };
+    } catch (e) {
+      return {'hasAllMedia': false, 'error': e.toString()};
+    }
+  }
+
+  /// Displays the final results of a scraping session in a localized dialog.
+  static void _showScrapingSummaryDialog(
+    BuildContext context, {
+    required int totalGames,
+    required int successfulGames,
+    required int failedGames,
+    required String elapsedTime,
+    required int totalRequests,
+  }) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) => ScrapingSummaryDialog(
+        totalGames: totalGames,
+        successfulGames: successfulGames,
+        failedGames: failedGames,
+        elapsedTime: elapsedTime,
+      ),
+    );
+  }
+}

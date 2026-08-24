@@ -1,0 +1,57 @@
+{
+  "system": {
+    "id": "amazon",
+    "multidisc": false,
+    "name": "Amazon",
+    "neosync": {
+      "sync": false,
+      "sync_folder": null
+    },
+    "short_name": "Amazon",
+    "details": {
+      "manufacturer": "Amazon Game",
+      "release_date": "2008-10-01",
+      "description": "Amazon's digital distribution platform for PC games.",
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "digital_store"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "amazon"
+    ],
+    "colors": [
+      "#FF9900",
+      "#232F3E"
+    ],
+    "extensions": [
+      "amazon"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone GameNative (Amazon)",
+      "unique_id": "amazon.app.gamenative.amazon",
+      "default_standalone": true,
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: amazon.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-a app.gamenative.LAUNCH_GAME -n app.gamenative/.MainActivity --ei app_id \"{tags.amazon}\" --es game_source AMAZON"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

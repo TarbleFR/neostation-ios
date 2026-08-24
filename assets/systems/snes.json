@@ -1,0 +1,1041 @@
+{
+  "system": {
+    "id": "snes",
+    "multidisc": false,
+    "name": "Super Nintendo Entertainment System",
+    "short_name": "SNES",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "1990-11-21",
+      "description": "Nintendo's 16-bit console with Mode 7 graphics and a rich RPG library.",
+      "type": "console",
+      "architecture": "16-bit",
+      "generation": 4,
+      "cpu": "Ricoh 5A22",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Super Mario World",
+        "Chrono Trigger",
+        "The Legend of Zelda: A Link to the Past",
+        "Super Metroid"
+      ]
+    },
+    "ids": {
+      "screenscraper": 4,
+      "retroachievements": 3
+    },
+    "folders": [
+      "snes",
+      "snesna",
+      "Super Nintendo",
+      "Super Nintendo Entertainment System",
+      "sufami"
+    ],
+    "colors": [
+      "#d1d5db",
+      "#6d28d9"
+    ],
+    "extensions": [
+      "bml",
+      "bs",
+      "bsx",
+      "dx2",
+      "fig",
+      "gb",
+      "gbc",
+      "gd3",
+      "gd7",
+      "rom",
+      "sfc",
+      "smc",
+      "st",
+      "swc",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Snes9x EX+",
+      "unique_id": "snes.com.explusalpha.Snes9xPlus",
+      "description": "Supported extensions: bml, bs, bsx, dx2, fig, gb, gbc, gd3, gd7, rom, sfc, smc, st, swc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.Snes9xPlus/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" -t application/zip"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Snes9x",
+      "default_core": true,
+      "unique_id": "snes.ra64.snes9x",
+      "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 higan",
+      "unique_id": "snes.ra64.higan_sfc",
+      "description": "Supported extensions: bml, gb, gbc, rom, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"higan_sfc\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 higan balanced",
+      "unique_id": "snes.ra64.higan_sfc_balanced",
+      "description": "Supported extensions: bml, gb, gbc, rom, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"higan_sfc_balanced\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle Supafaust",
+      "unique_id": "snes.ra64.mednafen_supafaust",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_supafaust\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle SNES",
+      "unique_id": "snes.ra64.mednafen_snes",
+      "description": "Supported extensions: bs, fig, sfc, smc, st.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_snes\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Snes9x 2002",
+      "unique_id": "snes.ra64.snes9x2002",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2002\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Snes9x 2005 Plus",
+      "unique_id": "snes.ra64.snes9x2005_plus",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2005_plus\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Snes9x 2005",
+      "unique_id": "snes.ra64.snes9x2005",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2005\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Snes9x 2010",
+      "unique_id": "snes.ra64.snes9x2010",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2010\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes 2014 Accuracy",
+      "unique_id": "snes.ra64.bsnes2014_accuracy",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_accuracy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes 2014 Balanced",
+      "unique_id": "snes.ra64.bsnes2014_balanced",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_balanced\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes 2014 Performance",
+      "unique_id": "snes.ra64.bsnes2014_performance",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_performance\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes C++98",
+      "unique_id": "snes.ra64.bsnes_cplusplus98",
+      "description": "Supported extensions: sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_cplusplus98\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes",
+      "unique_id": "snes.ra64.bsnes",
+      "description": "Supported extensions: gb, gbc, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes HD Beta",
+      "unique_id": "snes.ra64.bsnes_hd_beta",
+      "description": "Supported extensions: gb, gbc, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_hd_beta\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes Mercury Accuracy",
+      "unique_id": "snes.ra64.bsnes_mercury_accuracy",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_accuracy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes Mercury Balanced",
+      "unique_id": "snes.ra64.bsnes_mercury_balanced",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_balanced\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 bsnes Mercury Performance",
+      "unique_id": "snes.ra64.bsnes_mercury_performance",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_performance\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Mesen-S",
+      "unique_id": "snes.ra64.mesen-s",
+      "description": "Supported extensions: sfc, smc, fig, swc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mesen-s\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Snes9x",
+      "default_core": true,
+      "unique_id": "snes.ra32.snes9x",
+      "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 higan",
+      "unique_id": "snes.ra32.higan_sfc",
+      "description": "Supported extensions: bml, gb, gbc, rom, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"higan_sfc\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 higan balanced",
+      "unique_id": "snes.ra32.higan_sfc_balanced",
+      "description": "Supported extensions: bml, gb, gbc, rom, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"higan_sfc_balanced\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle Supafaust",
+      "unique_id": "snes.ra32.mednafen_supafaust",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_supafaust\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle SNES",
+      "unique_id": "snes.ra32.mednafen_snes",
+      "description": "Supported extensions: bs, fig, sfc, smc, st.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_snes\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Snes9x 2002",
+      "unique_id": "snes.ra32.snes9x2002",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2002\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Snes9x 2005 Plus",
+      "unique_id": "snes.ra32.snes9x2005_plus",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2005_plus\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Snes9x 2005",
+      "unique_id": "snes.ra32.snes9x2005",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2005\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Snes9x 2010",
+      "unique_id": "snes.ra32.snes9x2010",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2010\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes 2014 Accuracy",
+      "unique_id": "snes.ra32.bsnes2014_accuracy",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_accuracy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes 2014 Balanced",
+      "unique_id": "snes.ra32.bsnes2014_balanced",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_balanced\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes 2014 Performance",
+      "unique_id": "snes.ra32.bsnes2014_performance",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_performance\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes C++98",
+      "unique_id": "snes.ra32.bsnes_cplusplus98",
+      "description": "Supported extensions: sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_cplusplus98\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes",
+      "unique_id": "snes.ra32.bsnes",
+      "description": "Supported extensions: gb, gbc, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes HD Beta",
+      "unique_id": "snes.ra32.bsnes_hd_beta",
+      "description": "Supported extensions: gb, gbc, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_hd_beta\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes Mercury Accuracy",
+      "unique_id": "snes.ra32.bsnes_mercury_accuracy",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_accuracy\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes Mercury Balanced",
+      "unique_id": "snes.ra32.bsnes_mercury_balanced",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_balanced\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 bsnes Mercury Performance",
+      "unique_id": "snes.ra32.bsnes_mercury_performance",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_performance\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Mesen-S",
+      "unique_id": "snes.ra32.mesen-s",
+      "description": "Supported extensions: sfc, smc, fig, swc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mesen-s\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Snes9x",
+      "default_core": true,
+      "unique_id": "snes.ra.snes9x",
+      "description": "Supported extensions: bs, fig, sfc, smc, st, swc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L snes9x_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L snes9x_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L snes9x_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch higan",
+      "unique_id": "snes.ra.higan_sfc",
+      "description": "Supported extensions: bml, gb, gbc, rom, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"higan_sfc\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L higan_sfc_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L higan_sfc_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L higan_sfc_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch higan balanced",
+      "unique_id": "snes.ra.higan_sfc_balanced",
+      "description": "Supported extensions: bml, gb, gbc, rom, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"higan_sfc_balanced\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L higan_sfc_balanced_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L higan_sfc_balanced_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L higan_sfc_balanced_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle Supafaust",
+      "unique_id": "snes.ra.mednafen_supafaust",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_supafaust\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_supafaust_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_supafaust_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L mednafen_supafaust_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle SNES",
+      "unique_id": "snes.ra.mednafen_snes",
+      "description": "Supported extensions: bs, fig, sfc, smc, st.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_snes\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_snes_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_snes_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L mednafen_snes_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Snes9x 2002",
+      "unique_id": "snes.ra.snes9x2002",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2002\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L snes9x2002_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L snes9x2002_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L snes9x2002_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Snes9x 2005 Plus",
+      "unique_id": "snes.ra.snes9x2005_plus",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2005_plus\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L snes9x2005_plus_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L snes9x2005_plus_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L snes9x2005_plus_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Snes9x 2005",
+      "unique_id": "snes.ra.snes9x2005",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2005\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L snes9x2005_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L snes9x2005_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L snes9x2005_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Snes9x 2010",
+      "unique_id": "snes.ra.snes9x2010",
+      "description": "Supported extensions: bsx, dx2, fig, gd3, gd7, sfc, smc, swc, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"snes9x2010\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L snes9x2010_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L snes9x2010_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L snes9x2010_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes 2014 Accuracy",
+      "unique_id": "snes.ra.bsnes2014_accuracy",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_accuracy\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes2014_accuracy_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes2014_accuracy_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes2014_accuracy_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes 2014 Balanced",
+      "unique_id": "snes.ra.bsnes2014_balanced",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_balanced\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes2014_balanced_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes2014_balanced_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes2014_balanced_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes 2014 Performance",
+      "unique_id": "snes.ra.bsnes2014_performance",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes2014_performance\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes2014_performance_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes2014_performance_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes2014_performance_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes C++98",
+      "unique_id": "snes.ra.bsnes_cplusplus98",
+      "description": "Supported extensions: sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_cplusplus98\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_cplusplus98_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_cplusplus98_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes_cplusplus98_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes",
+      "unique_id": "snes.ra.bsnes",
+      "description": "Supported extensions: gb, gbc, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes HD Beta",
+      "unique_id": "snes.ra.bsnes_hd_beta",
+      "description": "Supported extensions: gb, gbc, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_hd_beta\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_hd_beta_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_hd_beta_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes_hd_beta_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes Mercury Accuracy",
+      "unique_id": "snes.ra.bsnes_mercury_accuracy",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_accuracy\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_mercury_accuracy_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_mercury_accuracy_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes_mercury_accuracy_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes Mercury Balanced",
+      "unique_id": "snes.ra.bsnes_mercury_balanced",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_balanced\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_mercury_balanced_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_mercury_balanced_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes_mercury_balanced_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch bsnes Mercury Performance",
+      "unique_id": "snes.ra.bsnes_mercury_performance",
+      "description": "Supported extensions: bml, sfc, smc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"bsnes_mercury_performance\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L bsnes_mercury_performance_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L bsnes_mercury_performance_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L bsnes_mercury_performance_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Mesen-S",
+      "unique_id": "snes.ra.mesen-s",
+      "description": "Supported extensions: sfc, smc, fig, swc.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mesen-s\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mesen-s_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mesen-s_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L mesen-s_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "unique_id": "snes.ra.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBNeo",
+      "unique_id": "snes.ra64.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "unique_id": "snes.ra32.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "snes.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

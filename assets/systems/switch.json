@@ -1,0 +1,253 @@
+{
+  "system": {
+    "id": "switch",
+    "multidisc": false,
+    "name": "Nintendo Switch",
+    "short_name": "Switch",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "2017-03-03",
+      "description": "Nintendo's hybrid console for TV and portable play.",
+      "type": "console",
+      "architecture": "64-bit",
+      "generation": 8,
+      "cpu": "NVIDIA Tegra X1 (ARMv8)",
+      "media": [
+        "cartridge",
+        "digital"
+      ],
+      "notable_games": [
+        "The Legend of Zelda: Breath of the Wild",
+        "Super Mario Odyssey",
+        "Mario Kart 8 Deluxe",
+        "Animal Crossing: New Horizons"
+      ]
+    },
+    "ids": {
+      "screenscraper": 225,
+      "retroachievements": null
+    },
+    "folders": [
+      "switch",
+      "Nintendo Switch"
+    ],
+    "colors": [
+      "#e57373",
+      "#64b5f6"
+    ],
+    "extensions": [
+      "nca",
+      "nro",
+      "nso",
+      "nsp",
+      "xci"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Skyline",
+      "unique_id": "switch.skyline.emu",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n skyline.emu/emu.skyline.EmulationActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Eden",
+      "default_standalone": true,
+      "unique_id": "switch.dev.eden.eden_emulator",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n dev.eden.eden_emulator/org.yuzu.yuzu_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        },
+        "windows": {
+          "executable": "eden.exe",
+          "args": "{file.path}"
+        },
+        "linux": {
+          "executable": "eden",
+          "emudeck_launcher": "eden.sh",
+          "args": "{file.path}"
+        }
+      }
+    },
+    {
+      "name": "Standalone Eden Optimized",
+      "unique_id": "switch.com.miHoYo.Yuanshen",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.miHoYo.Yuanshen/org.yuzu.yuzu_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Eden Legacy",
+      "unique_id": "switch.dev.legacy.eden_emulator",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n dev.legacy.eden_emulator/org.yuzu.yuzu_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Eden Optimized (Nightly)",
+      "unique_id": "switch.com.miHoYo.Yuanshen.nightly",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.miHoYo.Yuanshen.nightly/org.yuzu.yuzu_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Eden Legacy (Nightly)",
+      "unique_id": "switch.dev.legacy.eden_emulator.nightly",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n dev.legacy.eden_emulator.nightly/org.yuzu.yuzu_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Eden (Nightly)",
+      "unique_id": "switch.dev.eden.eden_emulator.nightly",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n dev.eden.eden_emulator.nightly/org.yuzu.yuzu_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Yuzu",
+      "unique_id": "switch.org.yuzu.yuzu_emu",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "yuzu.exe",
+          "args": "{file.path}"
+        },
+        "linux": {
+          "executable": "yuzu",
+          "emudeck_launcher": "yuzu.sh",
+          "args": "{file.path}"
+        }
+      }
+    },
+    {
+      "name": "Standalone Suyu",
+      "unique_id": "switch.dev.suyu.suyu_emu.relWithDebInfo",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n dev.suyu.suyu_emu.relWithDebInfo/dev.suyu.suyu_emu.activities.EmulationActivity -a android.intent.action.VIEW -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Sudachi (Mainline)",
+      "unique_id": "switch.org.sudachi.sudachi_emu",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.sudachi.sudachi_emu/org.sudachi.sudachi_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Sudachi (Early Access)",
+      "unique_id": "switch.org.sudachi.sudachi_emu.ea",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.sudachi.sudachi_emu.ea/org.sudachi.sudachi_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        }
+      }
+    },
+    {
+      "name": "Standalone Citron",
+      "unique_id": "switch.org.citron.citron_emu",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.citron.citron_emu/org.citron.citron_emu.activities.EmulationActivity -a android.nfc.action.TECH_DISCOVERED -d \"{file.uri}\""
+        },
+        "windows": {
+          "executable": "citron.exe",
+          "args": "{file.path}"
+        },
+        "linux": {
+          "executable": "citron",
+          "emudeck_launcher": "citron.sh",
+          "args": "{file.path}"
+        }
+      }
+    },
+    {
+      "name": "Standalone Kenji-NX",
+      "unique_id": "switch.org.kenjinx.android",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.kenjinx.android/.MainActivity -a org.kenjinx.android.LAUNCH_GAME -e bootPath \"{file.path}\"\n"
+        }
+      }
+    },
+    {
+      "name": "Standalone Benji-SC",
+      "unique_id": "switch.org.benjisc.android",
+      "description": "Supported extensions: nro, nso, nca, xci, nsp.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n org.benjisc.android/org.kenjinx.android.MainActivity -a org.kenjinx.android.LAUNCH_GAME -e bootPath \"{file.path}\"\n"
+        }
+      }
+    },
+    {
+      "name": "MeloNX",
+      "unique_id": "switch.ios.melonx",
+      "description": "MeloNX standalone Nintendo Switch emulator for iOS.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "melonx"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SWITCH_NAND}"
+    ],
+    "windows_sync_folder": [
+      "{SWITCH_NAND}"
+    ],
+    "linux_sync_folder": [
+      "{SWITCH_NAND}"
+    ],
+    "macos_sync_folder": [
+      "{SWITCH_NAND}"
+    ]
+  }
+}

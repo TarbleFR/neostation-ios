@@ -1,0 +1,108 @@
+{
+  "system": {
+    "id": "palm",
+    "multidisc": false,
+    "name": "Palm OS",
+    "short_name": "Palm",
+    "details": {
+      "manufacturer": "Palm",
+      "release_date": "1996-04-01",
+      "description": "Palm OS handheld platform for personal digital assistants.",
+      "type": "computer",
+      "architecture": "16/32-bit",
+      "media": [
+        "digital"
+      ],
+      "notable_games": [
+        "Bejeweled",
+        "Space Trader",
+        "Warfare Incorporated",
+        "Zap!2016"
+      ],
+      "collection_kind": "software_platform"
+    },
+    "ids": {
+      "screenscraper": 219,
+      "retroachievements": null
+    },
+    "folders": [
+      "palm",
+      "Palm OS",
+      "palm-os"
+    ],
+    "colors": [
+      "#BDBDBD",
+      "#1976D2"
+    ],
+    "extensions": [
+      "img",
+      "pdb",
+      "pqa",
+      "prc"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 MU",
+      "default_core": true,
+      "unique_id": "palm.ra64.mu",
+      "description": "Supported extensions: img, pdb, pqa, prc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mu\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 MU",
+      "default_core": true,
+      "unique_id": "palm.ra32.mu",
+      "description": "Supported extensions: img, pdb, pqa, prc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mu\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch MU",
+      "default_core": true,
+      "unique_id": "palm.ra.mu",
+      "description": "Supported extensions: img, pdb, pqa, prc.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"mu\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "palm.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

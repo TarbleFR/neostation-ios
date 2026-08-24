@@ -1,0 +1,57 @@
+{
+  "system": {
+    "id": "gog",
+    "multidisc": false,
+    "name": "GOG",
+    "neosync": {
+      "sync": false,
+      "sync_folder": null
+    },
+    "short_name": "GOG",
+    "details": {
+      "manufacturer": "GOG",
+      "release_date": "2008-10-01",
+      "description": "GOG's digital distribution platform for DRM-Free PC games.",
+      "type": "virtual",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "digital_store"
+    },
+    "ids": {
+      "screenscraper": 138,
+      "retroachievements": null
+    },
+    "folders": [
+      "gog"
+    ],
+    "colors": [
+      "#5100DC",
+      "#6B6CFF"
+    ],
+    "extensions": [
+      "gog"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone GameNative (GOG)",
+      "unique_id": "gog.app.gamenative.gog",
+      "default_standalone": true,
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: gog.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-a app.gamenative.LAUNCH_GAME -n app.gamenative/.MainActivity --ei app_id \"{tags.gog}\" --es game_source GOG"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

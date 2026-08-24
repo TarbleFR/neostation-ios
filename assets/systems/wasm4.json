@@ -1,0 +1,104 @@
+{
+  "system": {
+    "id": "wasm4",
+    "multidisc": false,
+    "name": "WASM-4",
+    "short_name": "WASM-4",
+    "details": {
+      "manufacturer": "",
+      "release_date": "2021-11-01",
+      "description": "Low-level fantasy console for building tiny WebAssembly games.",
+      "type": "computer",
+      "architecture": "WebAssembly 32-bit",
+      "media": [
+        "digital"
+      ],
+      "collection_kind": "fantasy_console"
+    },
+    "ids": {
+      "screenscraper": 262,
+      "retroachievements": 72
+    },
+    "folders": [
+      "wasm4",
+      "WASM-4"
+    ],
+    "colors": [
+      "#000000",
+      "#FF0000"
+    ],
+    "extensions": [
+      "wasm"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 WASM-4",
+      "default_core": true,
+      "unique_id": "wasm4.ra64.wasm4",
+      "description": "Supported extensions: wasm.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"wasm4\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 WASM-4",
+      "default_core": true,
+      "unique_id": "wasm4.ra32.wasm4",
+      "description": "Supported extensions: wasm.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"wasm4\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch WASM-4",
+      "default_core": true,
+      "unique_id": "wasm4.ra.wasm4",
+      "description": "Supported extensions: wasm.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"wasm4\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L wasm4_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L wasm4_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L wasm4_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "wasm4.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

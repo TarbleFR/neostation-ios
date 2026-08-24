@@ -1,0 +1,121 @@
+{
+  "system": {
+    "id": "duck",
+    "multidisc": false,
+    "name": "Mega Duck",
+    "short_name": "Duck",
+    "details": {
+      "manufacturer": "Welback",
+      "release_date": "1993-01-01",
+      "description": "Welback's 8-bit monochrome handheld console, also known as Cougar Boy.",
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Sharp SM83-compatible 8-bit CPU",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Snake Roy",
+        "The Brick Wall",
+        "Railway",
+        "Treasure Island"
+      ]
+    },
+    "ids": {
+      "screenscraper": 90,
+      "retroachievements": 69
+    },
+    "folders": [
+      "megaduck",
+      "Mega Duck",
+      "mega-duck-slash-cougar-boy"
+    ],
+    "colors": [
+      "#FFF176",
+      "#424242"
+    ],
+    "extensions": [
+      "bin",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 SameDuck",
+      "default_core": true,
+      "unique_id": "duck.ra64.sameduck",
+      "description": "Supported extensions: bin.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"sameduck\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 SameDuck",
+      "default_core": true,
+      "unique_id": "duck.ra32.sameduck",
+      "description": "Supported extensions: bin.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"sameduck\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch SameDuck",
+      "default_core": true,
+      "unique_id": "duck.ra.sameduck",
+      "description": "Supported extensions: bin.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"sameduck\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L sameduck_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L sameduck_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L sameduck_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "duck.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "system": {
+    "id": "favorites",
+    "multidisc": false,
+    "name": "Favorites",
+    "short_name": "Fav",
+    "details": {
+      "manufacturer": "",
+      "release_date": "1900-01-01",
+      "description": "Collection of favorite games across all systems.",
+      "type": "virtual",
+      "collection_kind": "favorites"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "favorites"
+    ],
+    "colors": [
+      "#ff006a",
+      "#B0BEC5"
+    ],
+    "extensions": []
+  },
+  "emulators": [],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

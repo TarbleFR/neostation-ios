@@ -1,0 +1,71 @@
+{
+  "system": {
+    "id": "jagcd",
+    "multidisc": true,
+    "name": "Atari Jaguar CD",
+    "short_name": "JCD",
+    "details": {
+      "manufacturer": "Atari",
+      "release_date": "1995-09-01",
+      "description": "CD-ROM peripheral for the Atari Jaguar with larger storage capacity.",
+      "type": "console",
+      "architecture": "32/64-bit",
+      "generation": 5,
+      "cpu": "Motorola 68000 + custom RISC processors",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Battlemorph",
+        "Blue Lightning",
+        "Primal Rage",
+        "Myst"
+      ]
+    },
+    "ids": {
+      "screenscraper": 171,
+      "retroachievements": null
+    },
+    "folders": [
+      "jagcd",
+      "atarijaguarcd",
+      "Atari Jaguar CD",
+      "atari-jaguar-cd"
+    ],
+    "colors": [
+      "#424242",
+      "#9E9E9E"
+    ],
+    "extensions": [
+      "cue",
+      "cdi"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone BigPEmu",
+      "default_standalone": true,
+      "unique_id": "jagcd.jaguarcd.bigpe.bigpemu",
+      "description": "Supported extensions: cue, cdi.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "windows": {
+          "executable": "bigpemu.exe",
+          "args": "\"{file.path}\""
+        },
+        "linux": {
+          "executable": "bigpemu",
+          "emudeck_launcher": "bigpemu.sh",
+          "args": "\"{file.path}\""
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

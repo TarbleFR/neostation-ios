@@ -1,0 +1,138 @@
+{
+  "system": {
+    "id": "pc88",
+    "multidisc": false,
+    "name": "NEC PC-8801",
+    "short_name": "PC88",
+    "details": {
+      "manufacturer": "NEC",
+      "release_date": "1981-10-22",
+      "description": "NEC's successful Japanese 8-bit personal computer line.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "NEC μPD780 / Z80-compatible",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Thexder",
+        "Ys I",
+        "Sorcerian",
+        "Dragon Slayer"
+      ]
+    },
+    "ids": {
+      "screenscraper": 221,
+      "retroachievements": 47
+    },
+    "folders": [
+      "pc88",
+      "8088",
+      "pc8000",
+      "pc8800",
+      "NEC PC-8000/8800",
+      "NEC PC-8801",
+      "pc-8800-series"
+    ],
+    "colors": [
+      "#F5F5DC",
+      "#9E9E9E"
+    ],
+    "extensions": [
+      "d88",
+      "m3u",
+      "u88"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch QUASI88",
+      "default_core": true,
+      "unique_id": "8088.ra.quasi88",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: d88, m3u, u88.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"quasi88\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L quasi88_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L quasi88_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L quasi88_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 QUASI88",
+      "default_core": true,
+      "unique_id": "8088.ra64.quasi88",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: d88, m3u, u88.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"quasi88\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 QUASI88",
+      "default_core": true,
+      "unique_id": "8088.ra32.quasi88",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: d88, m3u, u88.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"quasi88\""
+        }
+      }
+    },
+    {
+      "name": "Standalone RAQUASI88",
+      "unique_id": "8088.ra.raquasi88",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: d88, m3u, u88.",
+      "platforms": {
+        "windows": {
+          "executable": "RAQUASI88.exe",
+          "args": "\"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "pc88.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

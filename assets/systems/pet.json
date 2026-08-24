@@ -1,0 +1,143 @@
+{
+  "system": {
+    "id": "pet",
+    "multidisc": false,
+    "name": "Commodore - PET",
+    "short_name": "PET",
+    "details": {
+      "manufacturer": "Commodore",
+      "release_date": "1977-01-01",
+      "description": "Commodore's first all-in-one home computer with a built-in cassette drive.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Dungeon",
+        "Space Invaders",
+        "Star Trek",
+        "Lunar Lander"
+      ]
+    },
+    "ids": {
+      "screenscraper": 240,
+      "retroachievements": null
+    },
+    "folders": [
+      "pet",
+      "Commodore PET",
+      "CommodorePET",
+      "cpet"
+    ],
+    "colors": [
+      "#BDBDBD",
+      "#424242"
+    ],
+    "extensions": [
+      "bin",
+      "crt",
+      "d64",
+      "d6z",
+      "d71",
+      "d7z",
+      "d80",
+      "d81",
+      "d82",
+      "d8z",
+      "g41",
+      "g4z",
+      "g64",
+      "g6z",
+      "gz",
+      "lnx",
+      "p00",
+      "prg",
+      "t64",
+      "tap",
+      "x64",
+      "x6z",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Vice XPet",
+      "default_core": true,
+      "unique_id": "pet.ra64.vice_xpet",
+      "description": "Supported extensions: bin, crt, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, lnx, p00, prg, t64, tap, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"vice_xpet\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Vice XPet",
+      "default_core": true,
+      "unique_id": "pet.ra32.vice_xpet",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"vice_xpet\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Vice XPet",
+      "default_core": true,
+      "unique_id": "pet.ra.vice_xpet",
+      "description": "Supported extensions: bin, cmd, crt, d2m, d4m, d64, d6z, d71, d7z, d80, d81, d82, d8z, g41, g4z, g64, g6z, gz, m3u, nbz, nib, p00, prg, t64, tap, vfl, vsf, x64, x6z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"vice_xpet\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vice_xpet_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vice_xpet_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L vice_xpet_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "pet.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,433 @@
+{
+  "system": {
+    "id": "gba-hacks",
+    "multidisc": false,
+    "name": "Game Boy Advance Hacks",
+    "short_name": "GBAH",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "2001-03-21",
+      "description": "Nintendo's 32-bit handheld with shoulder buttons and backward compatibility.",
+      "type": "handheld",
+      "info_inherits": "gba",
+      "collection_kind": "rom_hacks"
+    },
+    "ids": {
+      "screenscraper": 12,
+      "retroachievements": 5
+    },
+    "folders": [
+      "gbah",
+      "gba-hacks",
+      "Game Boy Advance Hacks",
+      "Nintendo Game Boy Advance Hacks"
+    ],
+    "colors": [
+      "#5e35b1",
+      "#9ccc65"
+    ],
+    "extensions": [
+      "agb",
+      "bin",
+      "cgb",
+      "dmg",
+      "gb",
+      "gba",
+      "gbc",
+      "gbz",
+      "sgb",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Standalone Pizza Boy GBA Basic",
+      "unique_id": "gba-hacks.it.dbtecno.pizzaboygba",
+      "description": "Supported extensions: gba, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n it.dbtecno.pizzaboygba/it.dbtecno.pizzaboygba.MainActivity -e rom_uri {file.path} --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Pizza Boy GBA Pro",
+      "unique_id": "gba-hacks.it.dbtecno.pizzaboygbapro",
+      "description": "Supported extensions: gba, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n it.dbtecno.pizzaboygbapro/it.dbtecno.pizzaboygbapro.MainActivity -e rom_uri {file.uri} --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone SkyEmu",
+      "unique_id": "gba-hacks.com.sky.SkyEmu",
+      "description": "Supported extensions: gba.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.sky.SkyEmu/.EnhancedNativeActivity -a android.intent.action.VIEW -d {file.uri} --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone GBA.emu",
+      "unique_id": "gba-hacks.com.explusalpha.GbaEmu",
+      "description": "Support extensions: agb, bin, cgb, dmg, gb, gba, gbc, gbz, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.GbaEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" -t application/zip --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone GBA Emulator",
+      "unique_id": "gba-hacks.com.fastemulator.gbafree",
+      "description": "Support extensions: agb, bin, cgb, dmg, gb, gba, gbc, gbz, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.fastemulator.gbafree/com.fastemulator.gba.EmulatorActivity -a android.intent.action.VIEW -d {file.uri} --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone GBA Emulator (Paid)",
+      "unique_id": "gba-hacks.com.fastemulator.gba",
+      "description": "Support extensions: agb, bin, cgb, dmg, gb, gba, gbc, gbz, sgb.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.fastemulator.gba/.EmulatorActivity -a android.intent.action.VIEW -d {file.uri} --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "Standalone Linkboy",
+      "unique_id": "gba-hacks.com.pixelrespawn.linkboy",
+      "description": "Support extensions: bin, cgb, dmg, gb, gbc, gbs, rom, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.pixelrespawn.linkboy/.EmulatorActivity -a android.intent.action.VIEW -d {file.uri} --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 VBA Next",
+      "unique_id": "gba-hacks.ra64.vba_next",
+      "description": "Supported extensions: gba, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vba_next\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 VBA-M",
+      "unique_id": "gba-hacks.ra64.vbam",
+      "description": "Supported extensions: cgb, dmg, gb, gba, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vbam\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 mGBA",
+      "default_core": true,
+      "unique_id": "gba-hacks.ra64.mgba",
+      "description": "Supported extensions: gb, gba, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mgba\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle GBA",
+      "unique_id": "gba-hacks.ra64.mednafen_gba",
+      "description": "Supported extensions: agb, bin, gba.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_gba\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Meteor",
+      "unique_id": "gba-hacks.ra64.meteor",
+      "description": "Supported extensions: gba.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"meteor\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 gpSP",
+      "unique_id": "gba-hacks.ra64.gpsp",
+      "description": "Supported extensions: bin, gba, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gpsp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 VBA Next",
+      "unique_id": "gba-hacks.ra32.vba_next",
+      "description": "Supported extensions: gba, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vba_next\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 VBA-M",
+      "unique_id": "gba-hacks.ra32.vbam",
+      "description": "Supported extensions: cgb, dmg, gb, gba, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vbam\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 mGBA",
+      "default_core": true,
+      "unique_id": "gba-hacks.ra32.mgba",
+      "description": "Supported extensions: gb, gba, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mgba\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle GBA",
+      "unique_id": "gba-hacks.ra32.mednafen_gba",
+      "description": "Supported extensions: agb, bin, gba.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_gba\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Meteor",
+      "unique_id": "gba-hacks.ra32.meteor",
+      "description": "Supported extensions: gba.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"meteor\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 gpSP",
+      "unique_id": "gba-hacks.ra32.gpsp",
+      "description": "Supported extensions: bin, gba, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gpsp\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch VBA Next",
+      "unique_id": "gba-hacks.ra.vba_next",
+      "description": "Supported extensions: gba, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vba_next\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vba_next_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vba_next_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L vba_next_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch VBA-M",
+      "unique_id": "gba-hacks.ra.vbam",
+      "description": "Supported extensions: cgb, dmg, gb, gba, gbc, sgb.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"vbam\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L vbam_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L vbam_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L vbam_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch mGBA",
+      "default_core": true,
+      "unique_id": "gba-hacks.ra.mgba",
+      "description": "Supported extensions: gb, gba, gbc, zip, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mgba\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mgba_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mgba_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mgba_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle GBA",
+      "unique_id": "gba-hacks.ra.mednafen_gba",
+      "description": "Supported extensions: agb, bin, gba.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_gba\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_gba_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_gba_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_gba_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch gpsp",
+      "unique_id": "gba-hacks.ra.gpsp",
+      "description": "Supported extensions: bin, gba, zip, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"gpsp\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L gpsp_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L gpsp_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L gpsp_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Meteor",
+      "unique_id": "gba-hacks.ra.meteor",
+      "description": "Supported extensions: gba.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"meteor\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L meteor_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L meteor_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L meteor_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "gba-hacks.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

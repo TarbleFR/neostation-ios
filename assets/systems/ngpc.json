@@ -1,0 +1,230 @@
+{
+  "system": {
+    "id": "ngpc",
+    "multidisc": false,
+    "name": "NeoGeo Pocket Color",
+    "short_name": "NGPC",
+    "details": {
+      "manufacturer": "SNK",
+      "release_date": "1999-10-21",
+      "description": "Color successor to the Neo Geo Pocket with a crisp reflective screen.",
+      "type": "handheld",
+      "architecture": "16-bit",
+      "cpu": "Toshiba TLCS-900/H",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "SNK vs. Capcom: Match of the Millennium",
+        "Metal Slug: 2nd Mission",
+        "Card Fighters’ Clash",
+        "Sonic Pocket Adventure"
+      ]
+    },
+    "ids": {
+      "screenscraper": 82,
+      "retroachievements": 14
+    },
+    "folders": [
+      "ngpc",
+      "Neo Geo Pocket Color",
+      "NeoGeo Pocket Color",
+      "Neo-Geo Pocket Color",
+      "SNK Neo Geo Pocket Color",
+      "neo-geo-pocket-color"
+    ],
+    "colors": [
+      "#455A64",
+      "#78909C"
+    ],
+    "extensions": [
+      "zip",
+      "ngp",
+      "ngc",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "NGP.EMU",
+      "unique_id": "ngpc.com.explusalpha.NgpEmu",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.explusalpha.NgpEmu/com.imagine.BaseActivity -a android.intent.action.VIEW -d \"{file.localuri}\" -t application/zip --activity-clear-task --activity-clear-top --activity-no-history"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Beetle NeoPop",
+      "default_core": true,
+      "unique_id": "ngpc.ra64.mednafen_ngp",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  -e ROM {file.path}  -e LIBRETRO mednafen_ngp  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch.aarch64/files/retroarch.cfg"
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 RACE",
+      "unique_id": "ngpc.ra64.race",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  -e ROM {file.path}  -e LIBRETRO race  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch.aarch64/files/retroarch.cfg"
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle NeoPop",
+      "default_core": true,
+      "unique_id": "ngpc.ra32.mednafen_ngp",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  -e ROM {file.path}  -e LIBRETRO mednafen_ngp  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch.ra32/files/retroarch.cfg"
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 RACE",
+      "unique_id": "ngpc.ra32.race",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  -e ROM {file.path}  -e LIBRETRO race  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch.ra32/files/retroarch.cfg"
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle NeoPop",
+      "default_core": true,
+      "unique_id": "ngpc.ra.mednafen_ngp",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  -e ROM {file.path}  -e LIBRETRO mednafen_ngp  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg"
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_ngp_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_ngp_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_ngp_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch RACE",
+      "unique_id": "ngpc.ra.race",
+      "description": "Supported extensions: zip, ngp, ngc, 7z.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  -e ROM {file.path}  -e LIBRETRO race  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg"
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L race_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L race_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L race_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "unique_id": "ngpc.ra.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBNeo",
+      "unique_id": "ngpc.ra64.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "unique_id": "ngpc.ra32.fbneo",
+      "description": "Supported extensions: 7z, ccd, cue, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "ngpc.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

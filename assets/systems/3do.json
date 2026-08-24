@@ -1,0 +1,125 @@
+{
+  "system": {
+    "id": "3do",
+    "multidisc": true,
+    "name": "Panasonic 3DO",
+    "short_name": "3DO",
+    "details": {
+      "manufacturer": "Panasonic",
+      "release_date": "1993-10-04",
+      "description": "Panasonic's 32-bit CD-based console with advanced multimedia capabilities.",
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "ARM60",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "The Need for Speed",
+        "Road Rash",
+        "Gex",
+        "Star Control II"
+      ]
+    },
+    "ids": {
+      "screenscraper": 29,
+      "retroachievements": 43
+    },
+    "folders": [
+      "3do",
+      "3DO Interactive Multiplayer",
+      "Panasonic 3DO"
+    ],
+    "colors": [
+      "#455a64",
+      "#ffb300"
+    ],
+    "extensions": [
+      "bin",
+      "chd",
+      "cue",
+      "iso",
+      "zip",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch Opera",
+      "default_core": true,
+      "unique_id": "3do.ra.opera",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: bin, chd, cue, iso, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"opera\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L opera_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L opera_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L opera_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 Opera",
+      "default_core": true,
+      "unique_id": "3do.ra64.opera",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: bin, chd, cue, iso, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"opera\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Opera",
+      "default_core": true,
+      "unique_id": "3do.ra32.opera",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: bin, chd, cue, iso, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"opera\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "3do.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

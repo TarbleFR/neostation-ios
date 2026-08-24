@@ -1,0 +1,97 @@
+name: neostation
+description: NeoStation - Emulation Hub
+
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
+
+workspace:
+  - packages/external_folder_access
+  - packages/flutter_7zip
+  - packages/gamepads
+  - packages/gamepads_darwin
+  - packages/gamepads_platform_interface
+
+version: 1.0.0+144
+environment:
+  sdk: '>=3.9.2'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  gamepads:
+    path: packages/gamepads
+  flutter_7zip:
+    path: packages/flutter_7zip
+  external_folder_access:
+    path: packages/external_folder_access
+    
+  file_picker: 12.0.0-beta.3
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.1
+  google_fonts: ^8.1.0
+  material_symbols_icons: ^4.2960.0
+  provider: ^6.1.5+1
+  battery_plus: ^7.1.1
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  xml: ^6.6.1
+  html: ^0.15.6
+  video_player: ^2.13.0
+  flutter_secure_storage: ^10.3.1
+  shared_preferences: ^2.5.5
+  http: ^1.6.0
+  crypto: ^3.0.7
+  archive: ^4.0.9
+  web_socket_channel: ^3.0.3
+  url_launcher: ^6.3.2
+  share_plus: ^13.0.0
+  flutter_screenutil: 5.9.3
+  window_manager: ^0.5.2
+  permission_handler: ^12.0.3
+  pointycastle: ^4.0.0
+  sqlite3: ^3.5.0
+  fullscreen_window: ^1.2.1
+  animated_toggle_switch: ^0.8.7
+  marquee: ^2.3.0
+  logger: ^2.7.0
+  sub_screen: ^0.1.9
+  flutter_soloud: ^4.0.12
+  audio_metadata_reader: ^1.7.1
+  wakelock_plus: ^1.7.0
+  flutter_localization: ^0.4.1
+  pdfrx: ^2.4.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: "^0.14.4"
+
+flutter_launcher_icons:
+  ios: true
+  image_path: "assets/images/logo.png"
+  image_path_ios: "assets/images/fork-icon-valid.jpg"
+
+flutter:
+  config:
+    enable-swift-package-manager: false
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/logos/
+    - assets/images/emulators/
+    - assets/images/gamepad/
+    - assets/images/icons/
+    - assets/images/music/
+    - assets/manifest.json
+    - assets/data/
+    - assets/systems/
+    - assets/sounds/
+  shaders:
+    - assets/shaders/stripes.frag
+    - assets/shaders/fluid.frag
+    - assets/shaders/gif_player.frag
+    - assets/shaders/music_visualizer.frag
+    - assets/shaders/music_card_background.frag

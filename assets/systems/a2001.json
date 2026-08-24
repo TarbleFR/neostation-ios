@@ -1,0 +1,147 @@
+{
+  "system": {
+    "id": "a2001",
+    "multidisc": false,
+    "name": "Emerson Arcadia 2001",
+    "short_name": "A2001",
+    "details": {
+      "manufacturer": "Emerson",
+      "release_date": "1982-05-01",
+      "description": "Emerson's second-generation 8-bit cartridge console.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "Signetics 2650A",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Cat Trax",
+        "Space Attack",
+        "Escape",
+        "Breakaway"
+      ]
+    },
+    "ids": {
+      "screenscraper": 94,
+      "retroachievements": 73
+    },
+    "folders": [
+      "a2001",
+      "arcadia",
+      "Emerson Arcadia 2001",
+      "Arcadia 2001",
+      "arcadia-2001"
+    ],
+    "colors": [
+      "#BDBDBD",
+      "#90A4AE"
+    ],
+    "extensions": [
+      "bin",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch MAME/MESS",
+      "default_core": true,
+      "unique_id": "a2001.ra.mess",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: bin, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mamemess_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mamemess_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mamemess_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 MAME/MESS",
+      "default_core": true,
+      "unique_id": "a2001.ra64.mess",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: bin, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 MAME/MESS",
+      "default_core": true,
+      "unique_id": "a2001.ra32.mess",
+      "is_retroachievements_compatible": false,
+      "description": "Supported extensions: bin, zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mamemess\""
+        }
+      }
+    },
+    {
+      "name": "Standalone DroidArcadia",
+      "unique_id": "a2001.droidarcadia",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: zip.",
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.amigan.droidarcadia/.MainActivity -a android.intent.action.VIEW -d \"{file.uri}\" -t application/zip --activity-clear-task --activity-clear-top"
+        }
+      }
+    },
+    {
+      "name": "StandaloneWinArcadia",
+      "unique_id": "a2001.winarcadia",
+      "is_retroachievements_compatible": true,
+      "description": "Supported extensions: zip.",
+      "platforms": {
+        "windows": {
+          "executable": "WinArcadia.exe",
+          "args": "\"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "a2001.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "system": {
+    "id": "pico",
+    "multidisc": false,
+    "name": "Sega Pico",
+    "short_name": "Pico",
+    "details": {
+      "manufacturer": "Sega",
+      "release_date": "1993-10-01",
+      "description": "Sega's educational console for children with a pen-based tablet.",
+      "type": "console",
+      "architecture": "16-bit",
+      "cpu": "Motorola 68000",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Sonic's Gameworld",
+        "Tails and the Music Maker",
+        "The Lion King: Adventures at Pride Rock",
+        "Ecco Jr. and the Great Ocean Treasure Hunt"
+      ]
+    },
+    "ids": {
+      "screenscraper": 250,
+      "retroachievements": null
+    },
+    "folders": [
+      "pico",
+      "Sega Pico",
+      "sega-pico"
+    ],
+    "colors": [
+      "#FFEB3B",
+      "#42A5F5"
+    ],
+    "extensions": [
+      "md",
+      "7z",
+      "zip"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Picodrive",
+      "default_core": true,
+      "unique_id": "pico.ra64.picodrive",
+      "description": "Supported extensions: md, 7z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"picodrive\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Picodrive",
+      "default_core": true,
+      "unique_id": "pico.ra32.picodrive",
+      "description": "Supported extensions: md, 7z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"picodrive\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Picodrive",
+      "default_core": true,
+      "unique_id": "pico.ra.picodrive",
+      "description": "Supported extensions: md, 7z, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"picodrive\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L picodrive_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L picodrive_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "retroarch",
+          "args": "-L picodrive_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "pico.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

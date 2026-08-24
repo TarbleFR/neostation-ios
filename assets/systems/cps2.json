@@ -1,0 +1,219 @@
+{
+  "system": {
+    "id": "cps2",
+    "multidisc": false,
+    "name": "CP System II",
+    "short_name": "CPSII",
+    "details": {
+      "manufacturer": "Capcom",
+      "release_date": "1993-01-01",
+      "description": "Capcom's second-generation arcade board with enhanced graphics.",
+      "type": "arcade",
+      "architecture": "16/32-bit",
+      "cpu": "Motorola 68000 + Z80",
+      "media": [
+        "arcade_board",
+        "cartridge"
+      ],
+      "notable_games": [
+        "Super Street Fighter II Turbo",
+        "Marvel vs. Capcom",
+        "Alien vs. Predator",
+        "Darkstalkers"
+      ]
+    },
+    "ids": {
+      "screenscraper": 75,
+      "retroachievements": 27
+    },
+    "folders": [
+      "cps2",
+      "Capcom Play System 2",
+      "Capcom Play System II",
+      "CP System II",
+      "Capcom CPS-2",
+      "CPS-2",
+      "CP System 2"
+    ],
+    "colors": [
+      "#0D47A1",
+      "#FFD600"
+    ],
+    "extensions": [
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 FBNeo",
+      "default_core": true,
+      "unique_id": "cps2.ra64.fbneo",
+      "description": "Supported extensions: 7z, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBAlpha2012",
+      "unique_id": "cps2.ra64.fbalpha2012",
+      "description": "Supported extensions: 7z, iso, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbalpha2012\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 FBAlpha2012 CPS2",
+      "unique_id": "cps2.ra64.fbalpha2012_cps2",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbalpha2012_cps2\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBNeo",
+      "default_core": true,
+      "unique_id": "cps2.ra32.fbneo",
+      "description": "Supported extensions: 7z, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBAlpha2012",
+      "unique_id": "cps2.ra32.fbalpha2012",
+      "description": "Supported extensions: 7z, iso, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbalpha2012\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 FBAlpha2012 CPS2",
+      "unique_id": "cps2.ra32.fbalpha2012_cps2",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbalpha2012_cps2\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBNeo",
+      "default_core": true,
+      "unique_id": "cps2.ra.fbneo",
+      "description": "Supported extensions: 7z, zip.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbneo\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbneo_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbneo_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbneo_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBAlpha2012",
+      "unique_id": "cps2.ra.fbalpha2012",
+      "description": "Supported extensions: 7z, iso, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbalpha2012\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbalpha2012_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbalpha2012_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbalpha2012_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch FBAlpha2012 CPS2",
+      "unique_id": "cps2.ra.fbalpha2012_cps2",
+      "description": "Supported extensions: zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"fbalpha2012_cps2\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L fbalpha2012_cps2_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L fbalpha2012_cps2_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L fbalpha2012_cps2_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "cps2.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "system": {
+    "id": "pcfx",
+    "multidisc": false,
+    "name": "NEC PC-FX",
+    "short_name": "PC-FX",
+    "details": {
+      "manufacturer": "NEC",
+      "release_date": "1994-12-23",
+      "description": "NEC's 32-bit CD-based successor to the PC Engine with FMV focus.",
+      "type": "console",
+      "architecture": "32-bit",
+      "generation": 5,
+      "cpu": "NEC V810",
+      "media": [
+        "cd_rom"
+      ],
+      "notable_games": [
+        "Battle Heat",
+        "Chip Chan Kick!",
+        "Team Innocent",
+        "Zenki FX"
+      ]
+    },
+    "ids": {
+      "screenscraper": 72,
+      "retroachievements": 49
+    },
+    "folders": [
+      "pcfx",
+      "NEC PC-FX",
+      "pc-fx"
+    ],
+    "colors": [
+      "#F5F5F5",
+      "#42A5F5"
+    ],
+    "extensions": [
+      "cue",
+      "ccd",
+      "toc",
+      "chd",
+      "m3u"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Beetle PC-FX",
+      "default_core": true,
+      "unique_id": "pcfx.ra64.mednafen_pcfx",
+      "description": "Supported extensions: cue, ccd, toc, chd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_pcfx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Beetle PC-FX",
+      "default_core": true,
+      "unique_id": "pcfx.ra32.mednafen_pcfx",
+      "description": "Supported extensions: cue, ccd, toc, chd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_pcfx\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Beetle PC-FX",
+      "default_core": true,
+      "unique_id": "pcfx.ra.mednafen_pcfx",
+      "description": "Supported extensions: cue, ccd, toc, chd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"mednafen_pcfx\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L mednafen_pcfx_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L mednafen_pcfx_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L mednafen_pcfx_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "pcfx.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

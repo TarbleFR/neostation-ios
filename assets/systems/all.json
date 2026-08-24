@@ -1,0 +1,35 @@
+{
+  "system": {
+    "id": "all",
+    "multidisc": false,
+    "name": "All Systems",
+    "short_name": "All",
+    "details": {
+      "manufacturer": "",
+      "release_date": "2024-01-01",
+      "description": "Combined collection of all supported emulation systems.",
+      "type": "virtual",
+      "collection_kind": "all_systems"
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "all"
+    ],
+    "colors": [
+      "#9575cd",
+      "#B0BEC5"
+    ],
+    "extensions": []
+  },
+  "emulators": [],
+  "neosync": {
+    "sync": false,
+    "android_sync_folder": [],
+    "windows_sync_folder": [],
+    "linux_sync_folder": [],
+    "macos_sync_folder": []
+  }
+}

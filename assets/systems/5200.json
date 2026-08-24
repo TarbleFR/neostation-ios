@@ -1,0 +1,181 @@
+{
+  "system": {
+    "id": "5200",
+    "multidisc": false,
+    "name": "Atari 5200",
+    "short_name": "A5200",
+    "details": {
+      "manufacturer": "Atari",
+      "release_date": "1982-11-01",
+      "description": "Atari's second-generation cartridge console with analog joystick.",
+      "type": "console",
+      "architecture": "8-bit",
+      "generation": 2,
+      "cpu": "MOS Technology 6502C",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Star Raiders",
+        "Pac-Man",
+        "Missile Command",
+        "Centipede"
+      ]
+    },
+    "ids": {
+      "screenscraper": 40,
+      "retroachievements": null
+    },
+    "folders": [
+      "5200",
+      "a5200",
+      "atari5200",
+      "Atari 5200",
+      "FIFTYTWOHUNDRED"
+    ],
+    "colors": [
+      "#B0B0B0",
+      "#455A64"
+    ],
+    "extensions": [
+      "a52",
+      "atr",
+      "atx",
+      "bin",
+      "car",
+      "cas",
+      "cdm",
+      "com",
+      "rom",
+      "xex",
+      "xfd",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 atari800",
+      "unique_id": "5200.atari5200.ra64.atari800",
+      "description": "Supported extensions: a52, atr, atx, bin, car, cas, cdm, com, rom, xex, xfd, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"atari800\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch64 a5200",
+      "default_core": true,
+      "unique_id": "5200.atari5200.ra64.a5200",
+      "description": "Supported extensions: a52, bin.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"a5200\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 atari800",
+      "unique_id": "5200.atari5200.ra32.atari800",
+      "description": "Supported extensions: a52, atr, atx, bin, car, cas, cdm, com, rom, xex, xfd, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"atari800\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 a5200",
+      "default_core": true,
+      "unique_id": "5200.atari5200.ra32.a5200",
+      "description": "Supported extensions: a52, bin.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"a5200\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch atari800",
+      "unique_id": "5200.atari5200.ra.atari800",
+      "description": "Supported extensions: a52, atr, atx, bin, car, cas, cdm, com, rom, xex, xfd, zip.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"atari800\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L atari800_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L atari800_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L atari800_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch a5200",
+      "default_core": true,
+      "unique_id": "5200.atari5200.ra.a5200",
+      "description": "Supported extensions: a52, bin.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"a5200\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L a5200_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L a5200_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L a5200_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "5200.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

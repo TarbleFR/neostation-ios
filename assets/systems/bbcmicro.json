@@ -1,0 +1,121 @@
+{
+  "system": {
+    "id": "bbcmicro",
+    "multidisc": false,
+    "name": "BBC Micro",
+    "short_name": "BBCM",
+    "details": {
+      "manufacturer": "Acorn",
+      "release_date": "1981-12-01",
+      "description": "Acorn's 8-bit educational home computer commissioned by the BBC.",
+      "type": "computer",
+      "architecture": "8-bit",
+      "cpu": "MOS Technology 6502A",
+      "media": [
+        "cassette",
+        "floppy"
+      ],
+      "notable_games": [
+        "Elite",
+        "Repton",
+        "Chuckie Egg",
+        "Exile"
+      ]
+    },
+    "ids": {
+      "screenscraper": 37,
+      "retroachievements": null
+    },
+    "folders": [
+      "bbcmicro",
+      "BBC Micro",
+      "Acorn BBC Micro"
+    ],
+    "colors": [
+      "#424242",
+      "#FAFAFA"
+    ],
+    "extensions": [
+      "ssd",
+      "dsd"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 b2",
+      "default_core": true,
+      "unique_id": "bbcmicro.ra64.b2",
+      "description": "Supported extensions: ssd, dsd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"b2\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 b2",
+      "default_core": true,
+      "unique_id": "bbcmicro.ra32.b2",
+      "description": "Supported extensions: ssd, dsd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"b2\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch b2",
+      "default_core": true,
+      "unique_id": "bbcmicro.ra.b2",
+      "description": "Supported extensions: ssd, dsd.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture  --es ROM \"{file.path}\"  --es LIBRETRO \"b2\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L b2_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L b2_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L b2_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "bbcmicro.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}

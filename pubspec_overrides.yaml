@@ -1,0 +1,5 @@
+# Compatibility override for the FilePickerResult.files API used by the
+# known-working NeoStation iOS port. Keep this isolated from the upstream
+# dependency manifest until the application code is intentionally migrated.
+dependency_overrides:
+  file_picker: 12.0.0-beta.3

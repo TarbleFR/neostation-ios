@@ -1,0 +1,123 @@
+{
+  "system": {
+    "id": "mini",
+    "multidisc": false,
+    "name": "Pokémon Mini",
+    "short_name": "Mini",
+    "details": {
+      "manufacturer": "Nintendo",
+      "release_date": "2001-11-16",
+      "description": "Nintendo's tiny handheld themed around the Pokémon franchise.",
+      "type": "handheld",
+      "architecture": "8-bit",
+      "cpu": "Epson S1C88",
+      "media": [
+        "cartridge"
+      ],
+      "notable_games": [
+        "Pokémon Party mini",
+        "Pokémon Pinball mini",
+        "Pokémon Puzzle Collection",
+        "Togepi's Great Adventure"
+      ]
+    },
+    "ids": {
+      "screenscraper": 211,
+      "retroachievements": 24
+    },
+    "folders": [
+      "mini",
+      "pokemini",
+      "Pokemon Mini",
+      "Pokémon Mini",
+      "poke"
+    ],
+    "colors": [
+      "#9575cd",
+      "#ffccbc"
+    ],
+    "extensions": [
+      "min",
+      "zip",
+      "7z"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "RetroArch64 Pokémini",
+      "default_core": true,
+      "unique_id": "mini.ra64.pokemini",
+      "description": "Supported extensions: min.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"pokemini\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch32 Pokémini",
+      "default_core": true,
+      "unique_id": "mini.ra32.pokemini",
+      "description": "Supported extensions: min.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch.ra32/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"pokemini\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch Pokémini",
+      "default_core": true,
+      "unique_id": "mini.ra.pokemini",
+      "description": "Supported extensions: min.",
+      "is_retroachievements_compatible": true,
+      "platforms": {
+        "android": {
+          "launch_arguments": "-n com.retroarch/com.retroarch.browser.retroactivity.RetroActivityFuture --es ROM \"{file.path}\" --es LIBRETRO \"pokemini\""
+        },
+        "windows": {
+          "executable": "retroarch.exe",
+          "args": "-L pokemini_libretro.dll \"{file.path}\""
+        },
+        "linux": {
+          "executable": "retroarch",
+          "flatpak": "org.libretro.RetroArch",
+          "emudeck_launcher": "retroarch.sh",
+          "args": "-L pokemini_libretro.so \"{file.path}\""
+        },
+        "macos": {
+          "executable": "RetroArch.App",
+          "args": "-L pokemini_libretro.dylib \"{file.path}\""
+        }
+      }
+    },
+    {
+      "name": "RetroArch",
+      "unique_id": "mini.ios.retroarch",
+      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "url_scheme": "retroarch"
+        }
+      }
+    }
+  ],
+  "neosync": {
+    "sync": true,
+    "android_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "windows_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "linux_sync_folder": [
+      "{SYNC_DIR}"
+    ],
+    "macos_sync_folder": [
+      "{SYNC_DIR}"
+    ]
+  }
+}
