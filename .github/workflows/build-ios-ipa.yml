@@ -52,6 +52,7 @@ jobs:
             lib/widgets/ios_emulator_choice_screen.dart \
             lib/widgets/permission_check_wrapper.dart \
             lib/widgets/setup_wizard.dart \
+            test/ios_emulator_choice_screen_test.dart \
             test/manic_emu_launch_service_test.dart \
             test/manic_emu_locale_test.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
@@ -156,16 +157,16 @@ jobs:
           rm -rf build/ipa-package
           mkdir -p build/ipa-package/Payload
           cp -R "$APP_PATH" build/ipa-package/Payload/NeoStation.app
-          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build146.ipa Payload)
-          test -s NeoStation-iOS-Unsigned-Build146.ipa
-          shasum -a 256 NeoStation-iOS-Unsigned-Build146.ipa | tee build/ci/ipa-sha256.txt
+          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build147.ipa Payload)
+          test -s NeoStation-iOS-Unsigned-Build147.ipa
+          shasum -a 256 NeoStation-iOS-Unsigned-Build147.ipa | tee build/ci/ipa-sha256.txt
 
       - name: Upload verified IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Unsigned-Build146
+          name: NeoStation-iOS-Unsigned-Build147
           path: |
-            NeoStation-iOS-Unsigned-Build146.ipa
+            NeoStation-iOS-Unsigned-Build147.ipa
             build/ci/ipa-sha256.txt
           if-no-files-found: error
 

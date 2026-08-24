@@ -15,13 +15,19 @@ class IosEmulatorChoiceScreen extends StatefulWidget {
 
 class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
   IosLibraryEmulator? _selected;
+  bool _isSaving = false;
 
   Future<void> _continue() async {
     final selected = _selected;
-    if (selected == null) return;
-    await IosEmulatorPreferenceService.setPrimary(selected);
-    await IosEmulatorPreferenceService.markUpgradeOfferSeen();
-    widget.onFinished();
+    if (selected == null || _isSaving) return;
+    setState(() => _isSaving = true);
+    try {
+      await IosEmulatorPreferenceService.setPrimary(selected);
+      await IosEmulatorPreferenceService.markUpgradeOfferSeen();
+      if (mounted) widget.onFinished();
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -29,48 +35,68 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    ManicEmuLocale.text(context, 'choiceTitle'),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 620),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            ManicEmuLocale.text(context, 'choiceTitle'),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            ManicEmuLocale.text(context, 'choiceSubtitle'),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 24),
+                          _card(
+                            IosLibraryEmulator.retroArch,
+                            'RetroArch',
+                            ManicEmuLocale.text(context, 'retroDescription'),
+                          ),
+                          const SizedBox(height: 12),
+                          _card(
+                            IosLibraryEmulator.manicEmu,
+                            'Manic EMU',
+                            ManicEmuLocale.text(context, 'manicDescription'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    ManicEmuLocale.text(context, 'choiceSubtitle'),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 28),
-                  _card(
-                    IosLibraryEmulator.retroArch,
-                    'RetroArch',
-                    ManicEmuLocale.text(context, 'retroDescription'),
-                  ),
-                  const SizedBox(height: 12),
-                  _card(
-                    IosLibraryEmulator.manicEmu,
-                    'Manic EMU',
-                    ManicEmuLocale.text(context, 'manicDescription'),
-                  ),
-                  const SizedBox(height: 28),
-                  FilledButton(
-                    onPressed: _selected == null ? null : _continue,
-                    child: Text(ManicEmuLocale.text(context, 'continue')),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 16),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _selected == null || _isSaving
+                        ? null
+                        : _continue,
+                    child: _isSaving
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(ManicEmuLocale.text(context, 'continue')),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
