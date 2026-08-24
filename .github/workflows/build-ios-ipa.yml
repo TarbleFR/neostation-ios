@@ -39,7 +39,7 @@ jobs:
       - name: Validate current fixes
         run: |
           set -euo pipefail
-          dart format --output=none --set-exit-if-changed lib/services/retroarch_library_service.dart
+          dart format lib/services/retroarch_library_service.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
           flutter test
 
