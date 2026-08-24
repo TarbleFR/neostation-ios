@@ -168,6 +168,7 @@ workflows:
           /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:1 string shortcuts" "$PLIST"
           /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:2 string armsx2" "$PLIST"
           /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:3 string melonx" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:4 string manicemu" "$PLIST"
           plutil -lint "$PLIST"
 
       - name: Patch device_info_plus for runner SDK compatibility

@@ -11,6 +11,8 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/ios_emulator_preference_service.dart';
+import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
@@ -2038,9 +2040,20 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         // Settings > Directories for anyone who declines or doesn't use
         // RetroArch — this is only about which one leads during
         // first-run onboarding.
-        final linked = await ExternalFolderAccess.pickAndBookmarkFolder();
+        final primary = await IosEmulatorPreferenceService.primary();
+        final usesManic = primary == IosLibraryEmulator.manicEmu;
+        final bookmarkKey = usesManic
+            ? ManicEmuLaunchService.bookmarkKey
+            : ExternalFolderAccess.defaultBookmarkKey;
+        final linked = await ExternalFolderAccess.pickAndBookmarkFolder(
+          key: bookmarkKey,
+        );
         if (linked != null && mounted) {
-          ConfigService.linkedExternalFolderPath = linked;
+          if (usesManic) {
+            ConfigService.linkedManicEmuFolderPath = linked;
+          } else {
+            ConfigService.linkedExternalFolderPath = linked;
+          }
           await configProvider.addRomFolder(linked, scan: false);
           result = linked;
 
@@ -2050,7 +2063,9 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           // background event the wizard's own state won't necessarily
           // pick up mid-setup. Tell the user a relaunch guarantees they'll
           // see everything, rather than leaving it to chance.
-          await RetroArchLibraryService.requestLibrarySync();
+          if (!usesManic) {
+            await RetroArchLibraryService.requestLibrarySync();
+          }
           if (mounted) {
             AppNotification.showNotification(
               context,

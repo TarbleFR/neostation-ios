@@ -289,6 +289,9 @@ void main() async {
     ConfigService.linkedExternalFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder();
 
+    ConfigService.linkedManicEmuFolderPath =
+        await ExternalFolderAccess.resolveBookmarkedFolder(key: 'manicemu');
+
     // Same again for ARMSX2's folder, which lives under its own bookmark
     // key so linking one emulator never invalidates the other.
     ConfigService.linkedArmsx2FolderPath =

@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/sqlite_config_provider.dart';
 import '../screens/systems_screen/fork_first_run_onboarding.dart';
+import '../services/ios_emulator_preference_service.dart';
+import 'ios_emulator_choice_screen.dart';
 import 'setup_wizard.dart';
 import 'shimmering_logo.dart';
 
@@ -23,6 +27,8 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   bool _needsSetup = false;
   bool _isChecking = true;
   bool _showForkWelcomeGate = false;
+  bool _showEmulatorChoiceGate = false;
+  bool _upgradeOfferScheduled = false;
 
   static final _log = LoggerService.instance;
 
@@ -52,6 +58,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
           _showForkWelcomeGate = false;
           _isChecking = false;
         });
+        _scheduleExistingUserOffer();
         return;
       }
 
@@ -79,6 +86,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
           _showForkWelcomeGate = false;
           _isChecking = false;
         });
+        _scheduleExistingUserOffer();
         return;
       }
 
@@ -87,12 +95,16 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       // NeoStation's normal SetupWizard instead.
       final welcomeGateCompleted =
           prefs.getBool(forkOnboardingCompletedKey) ?? false;
+      final hasEmulatorChoice =
+          !Platform.isIOS ||
+          await IosEmulatorPreferenceService.hasPrimaryChoice();
 
       if (!mounted) return;
       _pushWizardActive(true);
       setState(() {
         _needsSetup = true;
         _showForkWelcomeGate = !welcomeGateCompleted;
+        _showEmulatorChoiceGate = welcomeGateCompleted && !hasEmulatorChoice;
         _isChecking = false;
       });
     } catch (e) {
@@ -124,7 +136,14 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     // intentionally done after the visual transition so tapping Continue never
     // appears to hang on slower iOS storage.
     if (!mounted) return;
-    setState(() => _showForkWelcomeGate = false);
+    final hasChoice =
+        !Platform.isIOS ||
+        await IosEmulatorPreferenceService.hasPrimaryChoice();
+    if (!mounted) return;
+    setState(() {
+      _showForkWelcomeGate = false;
+      _showEmulatorChoiceGate = !hasChoice;
+    });
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -134,6 +153,54 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       // device language has already been applied by the welcome screen.
       _log.w('Could not persist first-run welcome state: $e');
     }
+  }
+
+  void _scheduleExistingUserOffer() {
+    if (!Platform.isIOS || _upgradeOfferScheduled) return;
+    _upgradeOfferScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted ||
+          !await IosEmulatorPreferenceService.shouldShowUpgradeOffer()) {
+        return;
+      }
+      if (!mounted) return;
+      final choice = await showDialog<IosLibraryEmulator>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Manic EMU is now supported'),
+          content: const Text(
+            'NeoStation can now launch games with Manic EMU. You can make it '
+            'your main emulator now, keep RetroArch, or change this later in '
+            'Settings.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Not now'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                IosLibraryEmulator.retroArch,
+              ),
+              child: const Text('Keep RetroArch'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                IosLibraryEmulator.manicEmu,
+              ),
+              child: const Text('Use Manic EMU'),
+            ),
+          ],
+        ),
+      );
+      if (choice != null) {
+        await IosEmulatorPreferenceService.setPrimary(choice);
+      }
+      await IosEmulatorPreferenceService.markUpgradeOfferSeen();
+    });
   }
 
   void _completeSetup() async {
@@ -156,6 +223,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     setState(() {
       _needsSetup = false;
       _showForkWelcomeGate = false;
+      _showEmulatorChoiceGate = false;
     });
   }
 
@@ -173,6 +241,14 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
           body: ForkFirstRunOnboarding(
             onFinished: _completeForkWelcomeGate,
           ),
+        );
+      }
+
+      if (_showEmulatorChoiceGate) {
+        return IosEmulatorChoiceScreen(
+          onFinished: () {
+            if (mounted) setState(() => _showEmulatorChoiceGate = false);
+          },
         );
       }
 

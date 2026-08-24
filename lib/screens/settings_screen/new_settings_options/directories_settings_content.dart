@@ -12,6 +12,8 @@ import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
+import 'package:neostation/services/ios_emulator_preference_service.dart';
+import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
@@ -544,7 +546,11 @@ class DirectoriesSettingsContentState
       final activePath = resolved ?? selected;
       if (!mounted) return;
 
-      ConfigService.linkedExternalFolderPath = activePath;
+      if (bookmarkKey == ManicEmuLaunchService.bookmarkKey) {
+        ConfigService.linkedManicEmuFolderPath = activePath;
+      } else {
+        ConfigService.linkedExternalFolderPath = activePath;
+      }
 
       final configProvider = Provider.of<SqliteConfigProvider>(
         context,
@@ -747,11 +753,67 @@ class DirectoriesSettingsContentState
     if (!Platform.isIOS) return const [];
 
     return [
+      _buildIOSPrimaryEmulatorSection(theme),
       _buildIOSRetroArchSection(theme),
+      _buildIOSManicEmuSection(theme),
       _buildIOSRpcs3Section(theme),
       _buildIOSArmsx2Section(theme),
       _buildIOSMeloNXSection(theme),
     ];
+  }
+
+  Widget _buildIOSPrimaryEmulatorSection(ThemeData theme) {
+    return FutureBuilder<IosLibraryEmulator>(
+      future: IosEmulatorPreferenceService.primary(),
+      builder: (context, snapshot) {
+        final selected = snapshot.data ?? IosLibraryEmulator.retroArch;
+        return Card(
+          margin: EdgeInsets.only(bottom: 12.r),
+          child: ListTile(
+            leading: const Icon(Symbols.swap_horiz_rounded),
+            title: const Text('Primary game emulator'),
+            subtitle: Text(
+              selected == IosLibraryEmulator.manicEmu
+                  ? 'Manic EMU'
+                  : 'RetroArch',
+            ),
+            trailing: DropdownButton<IosLibraryEmulator>(
+              value: selected,
+              items: const [
+                DropdownMenuItem(
+                  value: IosLibraryEmulator.retroArch,
+                  child: Text('RetroArch'),
+                ),
+                DropdownMenuItem(
+                  value: IosLibraryEmulator.manicEmu,
+                  child: Text('Manic EMU'),
+                ),
+              ],
+              onChanged: (value) async {
+                if (value == null) return;
+                await IosEmulatorPreferenceService.setPrimary(value);
+                if (mounted) setState(() {});
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildIOSManicEmuSection(ThemeData theme) {
+    final isLinked = ConfigService.linkedManicEmuFolderPath != null;
+    return _buildIOSEmulatorCard(
+      theme: theme,
+      name: 'Manic EMU',
+      icon: Symbols.sports_esports_rounded,
+      statusText: isLinked
+          ? 'Library folder linked'
+          : 'Link the folder containing the games imported in Manic EMU',
+      isLinked: isLinked,
+      bookmarkKey: ManicEmuLaunchService.bookmarkKey,
+      successMessage: 'Manic EMU library folder linked.',
+    );
   }
 
   Widget _buildIOSRetroArchSection(ThemeData theme) {

@@ -10,7 +10,10 @@ import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/ios_emulator_preference_service.dart';
+import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:neostation/utils/emulator_loader.dart';
 import 'package:neostation/widgets/settings_rows.dart';
 
@@ -44,6 +47,15 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   List<CoreEmulatorModel> _availableEmulators = [];
   int _selectedIndex = 0;
+  IosLibraryEmulator? _iosLibraryChoice;
+  bool _retroArchInstalled = false;
+  bool _manicEmuInstalled = false;
+
+  bool get _usesIosLibraryChoice {
+    if (!Platform.isIOS || widget.game.romPath == null) return false;
+    final folder = widget.system.folderName.toLowerCase();
+    return folder != 'ps2' && folder != 'ps3' && folder != 'switch';
+  }
 
   /// Tracks the active emulator override. Uses a sentinel to differentiate
   /// between 'not yet loaded' and 'explicit null' (system default).
@@ -61,6 +73,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       : _activeEmulatorId as String?;
 
   int get _totalItems {
+    if (_usesIosLibraryChoice) return 2;
     if (_availableEmulators.isEmpty) return 0;
     // iOS exposes exactly one supported external emulator app per system
     // (RetroArch, MeloNX or ARMSX2). Do not add the desktop-style
@@ -83,6 +96,26 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   }
 
   Future<void> _loadEmulators() async {
+    if (_usesIosLibraryChoice) {
+      final savedChoice = await IosEmulatorPreferenceService.choiceForGame(
+        widget.game.romPath!,
+      );
+      final primary = await IosEmulatorPreferenceService.primary();
+      final retroArchInstalled = await canLaunchUrl(
+        Uri.parse('retroarch://'),
+      );
+      final manicEmuInstalled = await ManicEmuLaunchService.isInstalled();
+      if (!mounted) return;
+      setState(() {
+        _iosLibraryChoice = savedChoice ?? primary;
+        _retroArchInstalled = retroArchInstalled;
+        _manicEmuInstalled = manicEmuInstalled;
+        _selectedIndex = _iosLibraryChoice == IosLibraryEmulator.manicEmu
+            ? 1
+            : 0;
+      });
+      return;
+    }
     final emulators = await loadEmulatorsForSystem(widget.system);
     if (mounted) setState(() => _availableEmulators = emulators);
   }
@@ -105,6 +138,18 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   void trigger() {
     if (_totalItems == 0) return;
+
+    if (_usesIosLibraryChoice) {
+      final choice = _selectedIndex == 1
+          ? IosLibraryEmulator.manicEmu
+          : IosLibraryEmulator.retroArch;
+      if ((choice == IosLibraryEmulator.manicEmu && !_manicEmuInstalled) ||
+          (choice == IosLibraryEmulator.retroArch && !_retroArchInstalled)) {
+        return;
+      }
+      _setIosLibraryChoice(choice);
+      return;
+    }
 
     if (Platform.isIOS) {
       final emulator = _availableEmulators[_selectedIndex];
@@ -161,8 +206,59 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
     }
   }
 
+  Future<void> _setIosLibraryChoice(IosLibraryEmulator choice) async {
+    if (widget.game.romPath == null) return;
+    setState(() => _iosLibraryChoice = choice);
+    await IosEmulatorPreferenceService.setChoiceForGame(
+      widget.game.romPath!,
+      choice,
+    );
+    widget.onGameUpdated?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_usesIosLibraryChoice) {
+      return SingleChildScrollView(
+        controller: _scrollController,
+        padding: EdgeInsets.all(12.r),
+        child: Column(
+          children: [
+            EmulatorRow(
+              key: _itemKey(0),
+              isSelected: _selectedIndex == 0,
+              label: _retroArchInstalled
+                  ? 'RetroArch'
+                  : 'RetroArch (not installed)',
+              isActive:
+                  _iosLibraryChoice == IosLibraryEmulator.retroArch,
+              onTap: () {
+                if (!_retroArchInstalled) return;
+                SfxService().playNavSound();
+                setState(() => _selectedIndex = 0);
+                _setIosLibraryChoice(IosLibraryEmulator.retroArch);
+              },
+            ),
+            EmulatorRow(
+              key: _itemKey(1),
+              isSelected: _selectedIndex == 1,
+              label: _manicEmuInstalled
+                  ? 'Manic EMU'
+                  : 'Manic EMU (not installed)',
+              isActive:
+                  _iosLibraryChoice == IosLibraryEmulator.manicEmu,
+              onTap: () {
+                if (!_manicEmuInstalled) return;
+                SfxService().playNavSound();
+                setState(() => _selectedIndex = 1);
+                _setIosLibraryChoice(IosLibraryEmulator.manicEmu);
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
     if (_availableEmulators.isEmpty) {
       return Center(
         child: Text(

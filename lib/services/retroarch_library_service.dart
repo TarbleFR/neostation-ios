@@ -195,6 +195,14 @@ class RetroArchLibraryService {
   /// user to sync if not).
   static bool get hasSyncedLibrary => (_cache?.isNotEmpty ?? false);
 
+  static bool hasGameForRomPath(String romPath) {
+    final cache = _cache;
+    if (cache == null || cache.isEmpty) return false;
+    return cache.containsKey(path.basename(romPath)) ||
+        cache.containsKey(romPath) ||
+        cache.containsKey(path.basenameWithoutExtension(romPath));
+  }
+
   /// Attempts a genuine one-tap launch for [romPath] via RetroArch's
   /// `retroarch://game/<filename>` scheme, matching against the
   /// last-synced library by filename. Returns `true` once a matching URL

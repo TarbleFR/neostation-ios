@@ -15,6 +15,8 @@ import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
+import 'package:neostation/services/manic_emu_launch_service.dart';
+import 'package:neostation/services/ios_emulator_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
 import '../../models/game_model.dart';
@@ -241,6 +243,64 @@ class GameLaunchService {
           }
         }
 
+        // Multi-system iOS libraries: RetroArch and Manic EMU can coexist.
+        // A per-game choice wins; otherwise the user's primary app is used.
+        // When both apps can handle a newly-seen game, ask once and remember.
+        var libraryEmulator =
+            await IosEmulatorPreferenceService.choiceForGame(game.romPath!);
+        final retroArchHasGame =
+            RetroArchLibraryService.hasGameForRomPath(game.romPath!);
+        final manicInstalled = await ManicEmuLaunchService.isInstalled();
+        final manicFolder = ConfigService.linkedManicEmuFolderPath;
+        final manicHasGame =
+            manicInstalled &&
+            manicFolder != null &&
+            (path.equals(manicFolder, game.romPath!) ||
+                path.isWithin(manicFolder, game.romPath!));
+
+        if (libraryEmulator == null && retroArchHasGame && manicHasGame) {
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+          libraryEmulator = await showDialog<IosLibraryEmulator>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('Choose an emulator'),
+              content: Text('How would you like to launch ${game.name}?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    IosLibraryEmulator.retroArch,
+                  ),
+                  child: const Text('RetroArch'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    IosLibraryEmulator.manicEmu,
+                  ),
+                  child: const Text('Manic EMU'),
+                ),
+              ],
+            ),
+          );
+          if (libraryEmulator == null) {
+            return GameLaunchResult.success();
+          }
+          await IosEmulatorPreferenceService.setChoiceForGame(
+            game.romPath!,
+            libraryEmulator,
+          );
+        }
+        libraryEmulator ??= await IosEmulatorPreferenceService.primary();
+
+        if (libraryEmulator == IosLibraryEmulator.manicEmu &&
+            manicHasGame) {
+          final launched = await ManicEmuLaunchService.launchGame(
+            game.romPath!,
+          );
+          if (launched) return GameLaunchResult.success();
+        }
+
         // Genuine one-tap launch via RetroArch's synced library and
         // retroarch://game/<filename>. This remains the general iOS direct
         // launch path for systems RetroArch knows about, and the fallback for
@@ -252,6 +312,15 @@ class GameLaunchService {
           if (launched) return GameLaunchResult.success();
         } catch (e) {
           // Fall through to the playlist/Open In/Share fallbacks below.
+        }
+
+        // If RetroArch does not know this file, give the coexisting Manic EMU
+        // library a chance before presenting iOS's generic Open In fallback.
+        if (libraryEmulator != IosLibraryEmulator.manicEmu && manicHasGame) {
+          final launched = await ManicEmuLaunchService.launchGame(
+            game.romPath!,
+          );
+          if (launched) return GameLaunchResult.success();
         }
 
         // Genuine one-tap launch: if this ROM lives in a folder we've
