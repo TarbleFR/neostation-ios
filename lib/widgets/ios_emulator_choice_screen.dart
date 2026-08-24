@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/manic_emu_locale.dart';
 import '../services/ios_emulator_preference_service.dart';
 
 class IosEmulatorChoiceScreen extends StatefulWidget {
@@ -38,7 +39,7 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Choose your game library',
+                    ManicEmuLocale.text(context, 'choiceTitle'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -46,7 +47,7 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'You can change this choice later in Settings.',
+                    ManicEmuLocale.text(context, 'choiceSubtitle'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium,
                   ),
@@ -54,18 +55,18 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
                   _card(
                     IosLibraryEmulator.retroArch,
                     'RetroArch',
-                    'Use your RetroArch library and direct game launching.',
+                    ManicEmuLocale.text(context, 'retroDescription'),
                   ),
                   const SizedBox(height: 12),
                   _card(
                     IosLibraryEmulator.manicEmu,
                     'Manic EMU',
-                    'Use Manic EMU as your main library and game launcher.',
+                    ManicEmuLocale.text(context, 'manicDescription'),
                   ),
                   const SizedBox(height: 28),
                   FilledButton(
                     onPressed: _selected == null ? null : _continue,
-                    child: const Text('Continue'),
+                    child: Text(ManicEmuLocale.text(context, 'continue')),
                   ),
                 ],
               ),

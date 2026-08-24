@@ -29,6 +29,7 @@ import '../utils/gamepad_nav.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/ios_setup_locale.dart';
+import 'package:neostation/l10n/manic_emu_locale.dart';
 
 import '../widgets/tv_directory_picker.dart';
 import '../widgets/folder_not_empty_dialog.dart';
@@ -2069,8 +2070,10 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           if (mounted) {
             AppNotification.showNotification(
               context,
-              'Linked! If your games don\'t show up in a few seconds, '
-              'relaunch NeoStation to see them.',
+              usesManic
+                  ? ManicEmuLocale.text(context, 'folderLinked')
+                  : 'Linked! If your games don\'t show up in a few seconds, '
+                        'relaunch NeoStation to see them.',
               type: NotificationType.info,
             );
           }

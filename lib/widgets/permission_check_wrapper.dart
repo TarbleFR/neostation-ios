@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/sqlite_config_provider.dart';
+import '../l10n/manic_emu_locale.dart';
 import '../screens/systems_screen/fork_first_run_onboarding.dart';
 import '../services/ios_emulator_preference_service.dart';
 import 'ios_emulator_choice_screen.dart';
@@ -168,30 +169,26 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         context: context,
         barrierDismissible: true,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Manic EMU is now supported'),
-          content: const Text(
-            'NeoStation can now launch games with Manic EMU. You can make it '
-            'your main emulator now, keep RetroArch, or change this later in '
-            'Settings.',
-          ),
+          title: Text(ManicEmuLocale.text(context, 'upgradeTitle')),
+          content: Text(ManicEmuLocale.text(context, 'upgradeBody')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Not now'),
+              child: Text(ManicEmuLocale.text(context, 'notNow')),
             ),
             TextButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
                 IosLibraryEmulator.retroArch,
               ),
-              child: const Text('Keep RetroArch'),
+              child: Text(ManicEmuLocale.text(context, 'keepRetroArch')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
                 IosLibraryEmulator.manicEmu,
               ),
-              child: const Text('Use Manic EMU'),
+              child: Text(ManicEmuLocale.text(context, 'useManic')),
             ),
           ],
         ),

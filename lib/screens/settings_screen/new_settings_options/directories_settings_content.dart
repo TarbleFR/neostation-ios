@@ -16,6 +16,7 @@ import 'package:neostation/services/ios_emulator_preference_service.dart';
 import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
+import 'package:neostation/l10n/manic_emu_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
@@ -771,7 +772,7 @@ class DirectoriesSettingsContentState
           margin: EdgeInsets.only(bottom: 12.r),
           child: ListTile(
             leading: const Icon(Symbols.swap_horiz_rounded),
-            title: const Text('Primary game emulator'),
+            title: Text(ManicEmuLocale.text(context, 'primaryTitle')),
             subtitle: Text(
               selected == IosLibraryEmulator.manicEmu
                   ? 'Manic EMU'
@@ -808,11 +809,11 @@ class DirectoriesSettingsContentState
       name: 'Manic EMU',
       icon: Symbols.sports_esports_rounded,
       statusText: isLinked
-          ? 'Library folder linked'
-          : 'Link the folder containing the games imported in Manic EMU',
+          ? ManicEmuLocale.text(context, 'libraryLinked')
+          : ManicEmuLocale.text(context, 'libraryNeedsLink'),
       isLinked: isLinked,
       bookmarkKey: ManicEmuLaunchService.bookmarkKey,
-      successMessage: 'Manic EMU library folder linked.',
+      successMessage: ManicEmuLocale.text(context, 'libraryLinkSuccess'),
     );
   }
 

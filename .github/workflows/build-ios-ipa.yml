@@ -41,6 +41,7 @@ jobs:
           set -euo pipefail
           dart format \
             lib/main.dart \
+            lib/l10n/manic_emu_locale.dart \
             lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart \
             lib/screens/settings_screen/new_settings_options/directories_settings_content.dart \
             lib/services/config_service.dart \
@@ -51,7 +52,8 @@ jobs:
             lib/widgets/ios_emulator_choice_screen.dart \
             lib/widgets/permission_check_wrapper.dart \
             lib/widgets/setup_wizard.dart \
-            test/manic_emu_launch_service_test.dart
+            test/manic_emu_launch_service_test.dart \
+            test/manic_emu_locale_test.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
           flutter test || echo "::warning::Existing cross-platform test-suite failures do not block the iOS IPA build"
 
@@ -154,16 +156,16 @@ jobs:
           rm -rf build/ipa-package
           mkdir -p build/ipa-package/Payload
           cp -R "$APP_PATH" build/ipa-package/Payload/NeoStation.app
-          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build145.ipa Payload)
-          test -s NeoStation-iOS-Unsigned-Build145.ipa
-          shasum -a 256 NeoStation-iOS-Unsigned-Build145.ipa | tee build/ci/ipa-sha256.txt
+          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build146.ipa Payload)
+          test -s NeoStation-iOS-Unsigned-Build146.ipa
+          shasum -a 256 NeoStation-iOS-Unsigned-Build146.ipa | tee build/ci/ipa-sha256.txt
 
       - name: Upload verified IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Unsigned-Build145
+          name: NeoStation-iOS-Unsigned-Build146
           path: |
-            NeoStation-iOS-Unsigned-Build145.ipa
+            NeoStation-iOS-Unsigned-Build146.ipa
             build/ci/ipa-sha256.txt
           if-no-files-found: error
 

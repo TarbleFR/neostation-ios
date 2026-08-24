@@ -5,6 +5,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/manic_emu_locale.dart';
 import 'package:neostation/models/core_emulator_model.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
@@ -229,7 +230,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
               isSelected: _selectedIndex == 0,
               label: _retroArchInstalled
                   ? 'RetroArch'
-                  : 'RetroArch (not installed)',
+                  : 'RetroArch (${ManicEmuLocale.text(context, 'notInstalled')})',
               isActive:
                   _iosLibraryChoice == IosLibraryEmulator.retroArch,
               onTap: () {
@@ -244,7 +245,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
               isSelected: _selectedIndex == 1,
               label: _manicEmuInstalled
                   ? 'Manic EMU'
-                  : 'Manic EMU (not installed)',
+                  : 'Manic EMU (${ManicEmuLocale.text(context, 'notInstalled')})',
               isActive:
                   _iosLibraryChoice == IosLibraryEmulator.manicEmu,
               onTap: () {

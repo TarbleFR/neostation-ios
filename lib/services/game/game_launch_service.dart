@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
+import 'package:neostation/l10n/manic_emu_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -263,8 +264,8 @@ class GameLaunchService {
           libraryEmulator = await showDialog<IosLibraryEmulator>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: const Text('Choose an emulator'),
-              content: Text('How would you like to launch ${game.name}?'),
+              title: Text(ManicEmuLocale.text(context, 'launchTitle')),
+              content: Text(ManicEmuLocale.launchBody(context, game.name)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(
