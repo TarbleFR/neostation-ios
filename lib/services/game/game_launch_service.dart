@@ -71,6 +71,11 @@ class GameLaunchService {
 
   static final _log = LoggerService.instance;
 
+  static bool shouldAttemptManicDirectLaunch(
+    IosLibraryEmulator emulator, {
+    required bool installed,
+  }) => emulator == IosLibraryEmulator.manicEmu && installed;
+
   /// Core logic for launching a game session across all supported platforms.
   ///
   /// Performs pre-launch validations (ROM existence, system config), resolves the
@@ -294,12 +299,27 @@ class GameLaunchService {
         }
         libraryEmulator ??= await IosEmulatorPreferenceService.primary();
 
-        if (libraryEmulator == IosLibraryEmulator.manicEmu &&
-            manicHasGame) {
+        if (libraryEmulator == IosLibraryEmulator.manicEmu) {
+          if (!shouldAttemptManicDirectLaunch(
+            libraryEmulator,
+            installed: manicInstalled,
+          )) {
+            return GameLaunchResult.failure(
+              '${ManicEmuLocale.text(context, 'useManic')}: '
+              '${AppLocale.notInstalled.getString(context)}',
+              game.romPath,
+            );
+          }
           final launched = await ManicEmuLaunchService.launchGame(
             game.romPath!,
           );
           if (launched) return GameLaunchResult.success();
+          return GameLaunchResult.failure(
+            AppLocale.failedToLaunchStandalone
+                .getString(context)
+                .replaceFirst('{name}', 'Manic EMU'),
+            game.romPath,
+          );
         }
 
         // Genuine one-tap launch via RetroArch's synced library and

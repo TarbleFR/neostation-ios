@@ -54,7 +54,8 @@ jobs:
             lib/widgets/setup_wizard.dart \
             test/ios_emulator_choice_screen_test.dart \
             test/manic_emu_launch_service_test.dart \
-            test/manic_emu_locale_test.dart
+            test/manic_emu_locale_test.dart \
+            test/manic_emu_routing_test.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
           flutter test || echo "::warning::Existing cross-platform test-suite failures do not block the iOS IPA build"
 
@@ -157,16 +158,16 @@ jobs:
           rm -rf build/ipa-package
           mkdir -p build/ipa-package/Payload
           cp -R "$APP_PATH" build/ipa-package/Payload/NeoStation.app
-          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build147.ipa Payload)
-          test -s NeoStation-iOS-Unsigned-Build147.ipa
-          shasum -a 256 NeoStation-iOS-Unsigned-Build147.ipa | tee build/ci/ipa-sha256.txt
+          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build148.ipa Payload)
+          test -s NeoStation-iOS-Unsigned-Build148.ipa
+          shasum -a 256 NeoStation-iOS-Unsigned-Build148.ipa | tee build/ci/ipa-sha256.txt
 
       - name: Upload verified IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Unsigned-Build147
+          name: NeoStation-iOS-Unsigned-Build148
           path: |
-            NeoStation-iOS-Unsigned-Build147.ipa
+            NeoStation-iOS-Unsigned-Build148.ipa
             build/ci/ipa-sha256.txt
           if-no-files-found: error
 
