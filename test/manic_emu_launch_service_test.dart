@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:archive/archive_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/services/manic_emu_launch_service.dart';
 
@@ -8,6 +11,23 @@ void main() {
 
     expect(
       ManicEmuLaunchService.persistentHash(sha256OfAbc),
+      '8957039215404510875',
+    );
+  });
+
+  test('ZIP game identifier is calculated from the extracted ROM', () async {
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'manic_emu_launch_service_test_',
+    );
+    addTearDown(() => tempDirectory.delete(recursive: true));
+
+    final archive = Archive()
+      ..addFile(ArchiveFile('Adventure Island.nes', 3, <int>[97, 98, 99]));
+    final zipPath = '${tempDirectory.path}/Adventure Island.zip';
+    await File(zipPath).writeAsBytes(ZipEncoder().encode(archive));
+
+    expect(
+      await ManicEmuLaunchService.gameIdForPath(zipPath),
       '8957039215404510875',
     );
   });

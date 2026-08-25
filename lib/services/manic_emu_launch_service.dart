@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'logger_service.dart';
@@ -17,8 +19,31 @@ class ManicEmuLaunchService {
     final file = File(romPath);
     if (!await file.exists()) return null;
 
-    final digest = await sha256.bind(file.openRead()).first;
+    final digest = path.extension(romPath).toLowerCase() == '.zip'
+        ? await _sha256OfLargestZipEntry(file)
+        : await sha256.bind(file.openRead()).first;
+    if (digest == null) return null;
     return persistentHash(digest.toString());
+  }
+
+  /// Manic EMU extracts ZIP archives before importing games and builds the
+  /// library identifier from the extracted ROM, not from the ZIP container.
+  static Future<Digest?> _sha256OfLargestZipEntry(File zipFile) async {
+    try {
+      final archive = ZipDecoder().decodeBytes(await zipFile.readAsBytes());
+      ArchiveFile? romEntry;
+      for (final entry in archive) {
+        if (!entry.isFile || entry.name.split('/').last.startsWith('.')) {
+          continue;
+        }
+        if (romEntry == null || entry.size > romEntry.size) romEntry = entry;
+      }
+      if (romEntry == null) return null;
+      return sha256.convert(romEntry.content as List<int>);
+    } catch (e) {
+      _log.e('Unable to calculate Manic EMU ID from ZIP: $e');
+      return null;
+    }
   }
 
   /// Matches Manic EMU's persistent djb2 hash of the ROM's SHA-256 string.
