@@ -10,7 +10,6 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:external_folder_access/external_folder_access.dart';
-import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/ios_emulator_preference_service.dart';
 import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
@@ -2012,7 +2011,6 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       );
 
       String? result;
-      var scanCompletedDuringLink = false;
 
       if (Platform.isAndroid) {
         final isTV = await PermissionService.isTelevision();
@@ -2035,7 +2033,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         }
       } else if (Platform.isIOS) {
         // Lead with linking RetroArch's own folder here — now that
-        // launching found games works (see RetroArchLibraryService), it's
+        // launching found games works, it's
         // the better default for anyone using RetroArch. The plain
         // internal-folder path (ConfigService.getDefaultIOSRomsFolder,
         // via selectRomFolder below) remains available afterwards from
@@ -2059,27 +2057,14 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           await configProvider.addRomFolder(linked, scan: false);
           result = linked;
 
-          // Immediately follow the link with a sync request — RetroArch's
-          // response arrives asynchronously (RetroArchLibraryService
-          // already triggers a rescan when it does), but that's a
-          // background event the wizard's own state won't necessarily
-          // pick up mid-setup. Tell the user a relaunch guarantees they'll
-          // see everything, rather than leaving it to chance.
-          if (!usesManic) {
-            final importedGames =
-                await RetroArchLibraryService.requestLibrarySyncAndWait();
-            scanCompletedDuringLink = importedGames != null;
-          } else {
-            await configProvider.scanSystems();
-            scanCompletedDuringLink = true;
-          }
-          if (mounted) {
+          // Do not open an emulator or wait for an external callback here.
+          // The next wizard page owns the local folder scan and displays its
+          // real progress. Waiting on RetroArch kept this button spinning when
+          // an App Store/TestFlight build did not return a library callback.
+          if (mounted && usesManic) {
             AppNotification.showNotification(
               context,
-              usesManic
-                  ? ManicEmuLocale.text(context, 'folderLinked')
-                  : 'Linked! If your games don\'t show up in a few seconds, '
-                        'relaunch NeoStation to see them.',
+              ManicEmuLocale.text(context, 'folderLinked'),
               type: NotificationType.info,
             );
           }
@@ -2102,7 +2087,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           _currentStep++;
         });
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!scanCompletedDuringLink) configProvider.scanSystems();
+          configProvider.scanSystems();
         });
       } else if (mounted) {
         setState(() {

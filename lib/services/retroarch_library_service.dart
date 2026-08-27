@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:provider/provider.dart';
@@ -43,7 +42,6 @@ class RetroArchLibraryService {
   /// gameId/system/coreName), cached in memory after the first sync or
   /// load from disk this session.
   static Map<String, Map<String, dynamic>>? _cache;
-  static Completer<int>? _pendingLibrarySync;
 
   /// Opens RetroArch and asks it to export its library. The actual data
   /// arrives asynchronously via the `neostation://retroarch?games=...`
@@ -64,25 +62,6 @@ class RetroArchLibraryService {
     } catch (e) {
       _log.e('RetroArchLibraryService: sync request failed: $e');
       return false;
-    }
-  }
-
-  /// Waits for RetroArch to return, import its payload, and finish the rescan.
-  static Future<int?> requestLibrarySyncAndWait({
-    Duration timeout = const Duration(seconds: 45),
-  }) async {
-    final completer = Completer<int>();
-    _pendingLibrarySync = completer;
-    if (!await requestLibrarySync()) {
-      if (identical(_pendingLibrarySync, completer)) _pendingLibrarySync = null;
-      return null;
-    }
-    try {
-      return await completer.future.timeout(timeout);
-    } on TimeoutException {
-      if (identical(_pendingLibrarySync, completer)) _pendingLibrarySync = null;
-      _log.w('RetroArchLibraryService: library callback timed out');
-      return null;
     }
   }
 
@@ -176,12 +155,6 @@ class RetroArchLibraryService {
         }
       } catch (e) {
         _log.e('RetroArchLibraryService: post-sync rescan failed: $e');
-      }
-
-      final pending = _pendingLibrarySync;
-      _pendingLibrarySync = null;
-      if (pending != null && !pending.isCompleted) {
-        pending.complete(decoded.length);
       }
 
       return true;

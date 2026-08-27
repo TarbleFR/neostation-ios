@@ -256,28 +256,38 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           availableSystems: _availableSystems,
         );
 
-        // Manic EMU stores normal imported ROMs directly in Documents/Datas,
-        // rather than in one NeoStation-style subfolder per console. Inject
-        // Nintendo 3DS when that flat directory contains a supported title so
-        // it can be scanned even when the user selected Datas itself.
+        // Manic EMU stores imported ROMs for every supported console directly
+        // in Documents/Datas instead of one subfolder per system. Detect the
+        // systems from file extensions only; do not open or hash ROM contents.
         if (Platform.isIOS) {
           final manicDataFolder =
               await ManicEmuLibraryService.resolveDataFolder(
                 ConfigService.linkedManicEmuFolderPath,
               );
-          if (manicDataFolder != null &&
-              await ManicEmuLibraryService.containsNintendo3dsGames(
-                manicDataFolder,
-              ) &&
-              !detectedSystems.any((system) => system.folderName == '3ds')) {
-            final system3ds = _availableSystems.where(
-              (system) => system.folderName == '3ds',
-            );
-            if (system3ds.isNotEmpty) {
-              detectedSystems = [
-                ...detectedSystems,
-                system3ds.first.copyWith(detected: true),
-              ];
+          if (manicDataFolder != null) {
+            final dataExtensions =
+                await ManicEmuLibraryService.extensionsInDataFolder(
+                  manicDataFolder,
+                );
+            final alreadyDetected = detectedSystems
+                .map((system) => system.id)
+                .toSet();
+            final manicSystems = <SystemModel>[];
+            for (final system in _availableSystems) {
+              if (system.id == null || alreadyDetected.contains(system.id)) {
+                continue;
+              }
+              final supported = await SqliteService.getExtensionsForSystem(
+                system.id!,
+              );
+              if (supported.any(
+                (extension) => dataExtensions.contains(extension.toLowerCase()),
+              )) {
+                manicSystems.add(system.copyWith(detected: true));
+              }
+            }
+            if (manicSystems.isNotEmpty) {
+              detectedSystems = [...detectedSystems, ...manicSystems];
             }
           }
         }
@@ -665,7 +675,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       }
 
       final additionalScanPaths = <String>[];
-      if (Platform.isIOS && system.folderName == '3ds') {
+      if (Platform.isIOS) {
         final dataFolder = await ManicEmuLibraryService.resolveDataFolder(
           ConfigService.linkedManicEmuFolderPath,
         );
@@ -679,25 +689,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         rootFoldersMap: rootFoldersMap,
         additionalScanPaths: additionalScanPaths,
       );
-
-      if (Platform.isIOS && system.folderName == '3ds') {
-        final linkedRoot = ConfigService.linkedManicEmuFolderPath;
-        if (linkedRoot != null && linkedRoot.isNotEmpty) {
-          final normalizedRoot = linkedRoot.replaceAll('\\', '/').toLowerCase();
-          final games = await GameRepository.loadGamesForSystem('3ds');
-          final manicPaths = games.map((game) => game.romPath).where((romPath) {
-            final normalized = romPath.replaceAll('\\', '/').toLowerCase();
-            return normalized.startsWith('$normalizedRoot/') &&
-                (normalized.contains('/datas/') ||
-                    normalized.contains('/title/00040000/'));
-          });
-          if (manicPaths.isNotEmpty) {
-            _scanStatus = 'Preparing Manic EMU launches...';
-            _notify();
-            await ManicEmuLaunchService.prepareGameIds(manicPaths);
-          }
-        }
-      }
 
       // Update ROM count in system
       await refreshSystem(system, rootFoldersMap: rootFoldersMap);

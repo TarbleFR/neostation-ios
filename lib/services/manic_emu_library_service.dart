@@ -42,20 +42,30 @@ class ManicEmuLibraryService {
   }
 
   static Future<bool> containsNintendo3dsGames(String dataFolder) async {
+    final extensions = await extensionsInDataFolder(dataFolder);
+    return extensions.any(nintendo3dsExtensions.contains);
+  }
+
+  /// Reads only directory entries and their extensions. It never opens ROM
+  /// contents, computes hashes, or loads archives into memory, so linking a
+  /// large Manic EMU library remains a cheap and bounded operation.
+  static Future<Set<String>> extensionsInDataFolder(String dataFolder) async {
+    final extensions = <String>{};
     try {
       await for (final entity in Directory(dataFolder).list(
         recursive: false,
         followLinks: false,
       )) {
         if (entity is! File) continue;
-        final extension = path.extension(entity.path).toLowerCase();
-        if (nintendo3dsExtensions.contains(extension.replaceFirst('.', ''))) {
-          return true;
-        }
+        final extension = path
+            .extension(entity.path)
+            .toLowerCase()
+            .replaceFirst('.', '');
+        if (extension.isNotEmpty) extensions.add(extension);
       }
     } catch (_) {
-      return false;
+      return const {};
     }
-    return false;
+    return extensions;
   }
 }

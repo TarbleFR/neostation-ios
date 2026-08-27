@@ -42,6 +42,24 @@ void main() {
     );
   });
 
+  test('reads a large mixed Datas library without opening ROM contents', () async {
+    final data = await Directory.systemTemp.createTemp('manic_mixed_datas_');
+    addTearDown(() async {
+      if (await data.exists()) await data.delete(recursive: true);
+    });
+
+    const extensions = ['nes', 'sfc', 'gba', 'gbc', 'nds', '3ds'];
+    for (var index = 0; index < 60; index++) {
+      final extension = extensions[index % extensions.length];
+      File('${data.path}/Game $index.$extension').writeAsStringSync('rom');
+    }
+
+    expect(
+      await ManicEmuLibraryService.extensionsInDataFolder(data.path),
+      containsAll(extensions),
+    );
+  });
+
   test('imports a 3DS ROM from Manic Datas as an extra scan path', () async {
     final helper = DatabaseTestHelper();
     final db = await helper.setUp();
