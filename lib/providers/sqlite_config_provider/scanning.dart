@@ -156,10 +156,14 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     // Allow scanning even if there are no folders (to clean systems or inject Android Apps)
     // if (_config.romFolders.isEmpty) return;
 
-    // Protection against concurrent calls
+    // A first-run folder can be linked while the empty startup scan is still
+    // active. Dropping that second request leaves the wizard reporting zero
+    // systems until the next app launch, so coalesce concurrent requests into
+    // one guaranteed follow-up scan.
     if (_isScanning) {
+      _rescanRequested = true;
       SqliteConfigProvider._log.w(
-        'Already scanning, ignoring duplicate call...',
+        'Already scanning; queued one follow-up scan.',
       );
       return;
     }
@@ -190,8 +194,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         _error =
             'Storage access required. Please select a ROM folder using the file picker.';
         SqliteConfigProvider._log.e('$_error');
-        _setScanning(false);
-        _notify();
+        _finishSystemScan();
         return;
       }
 
@@ -203,8 +206,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           _error =
               'Cannot access ROM folder: $path. Please check storage permissions.';
           SqliteConfigProvider._log.e('$_error');
-          _setScanning(false);
-          _notify();
+          _finishSystemScan();
           return;
         }
       }
@@ -222,8 +224,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         SqliteConfigProvider._log.w(
           'Startup scan skipped because Android ROM storage never became ready',
         );
-        _setScanning(false);
-        _notify();
+        _finishSystemScan();
         return;
       }
     }
@@ -452,9 +453,24 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       _error = 'Error scanning ROMs: $e';
       SqliteConfigProvider._log.e('$_error');
     } finally {
-      _setScanning(false);
-      _notify();
+      _finishSystemScan();
     }
+  }
+
+  /// Completes the current scan, or immediately starts the single scan that
+  /// arrived while it was running. The pending case deliberately avoids an
+  /// intermediate notification with `scanCompleted == true`: the setup wizard
+  /// must not enable Next until the newly linked folder has actually finished.
+  void _finishSystemScan() {
+    if (_rescanRequested) {
+      _rescanRequested = false;
+      _isScanning = false;
+      unawaited(scanSystems());
+      return;
+    }
+
+    _setScanning(false);
+    _notify();
   }
 
   /// Returns whether the local library contains ROMs that a premature scan

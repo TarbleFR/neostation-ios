@@ -10,7 +10,7 @@ workspace:
   - packages/gamepads_darwin
   - packages/gamepads_platform_interface
 
-version: 1.0.0+154
+version: 1.0.0+155
 environment:
   sdk: '>=3.9.2'
 

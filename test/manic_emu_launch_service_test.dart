@@ -31,4 +31,19 @@ void main() {
       '8957039215404510875',
     );
   });
+
+  test('plain ROM identifier is calculated by the background stream', () async {
+    final tempDirectory = await Directory.systemTemp.createTemp(
+      'manic_emu_plain_launch_test_',
+    );
+    addTearDown(() => tempDirectory.delete(recursive: true));
+
+    final romPath = '${tempDirectory.path}/Adventure Island.nes';
+    await File(romPath).writeAsBytes(<int>[97, 98, 99]);
+
+    expect(
+      await ManicEmuLaunchService.gameIdForPath(romPath),
+      '8957039215404510875',
+    );
+  });
 }

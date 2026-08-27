@@ -46,6 +46,11 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _isLoading = false;
   bool _isScanning = false;
 
+  /// A folder can be linked while the automatic startup scan is still active.
+  /// Keep one follow-up request instead of dropping the scan that owns the new
+  /// folder configuration.
+  bool _rescanRequested = false;
+
   /// Flag to prevent concurrent ROM scanning operations.
   bool _isScanningRoms = false;
   bool _isSilentScanning = false;

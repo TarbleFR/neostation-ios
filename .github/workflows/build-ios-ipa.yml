@@ -46,6 +46,7 @@ jobs:
             lib/l10n/manic_emu_locale.dart \
             lib/providers/sqlite_config_provider.dart \
             lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart \
+            lib/screens/systems_screen/my_systems_section/initial_setup_widget.dart \
             lib/screens/settings_screen/new_settings_options/directories_settings_content.dart \
             lib/services/config_service.dart \
             lib/services/game/game_launch_service.dart \

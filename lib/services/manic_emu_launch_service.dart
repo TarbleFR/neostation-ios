@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
-import 'package:external_folder_access/external_folder_access.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -33,10 +33,9 @@ class ManicEmuLaunchService {
 
     String? digestValue;
     if (path.extension(romPath).toLowerCase() == '.zip') {
-      digestValue = (await _sha256OfLargestZipEntry(file))?.toString();
+      digestValue = await _sha256OfLargestZipEntry(file);
     } else {
-      digestValue = await ExternalFolderAccess.sha256File(romPath);
-      digestValue ??= (await sha256.bind(file.openRead()).first).toString();
+      digestValue = await _sha256FileInBackground(romPath);
     }
     if (digestValue == null) return null;
 
@@ -47,18 +46,6 @@ class ManicEmuLaunchService {
     };
     await _persistCache(cache);
     return gameId;
-  }
-
-  /// Prepares identifiers during the library scan so tapping a large 3DS game
-  /// can immediately hand it to Manic EMU instead of hashing it at launch.
-  static Future<void> prepareGameIds(Iterable<String> romPaths) async {
-    for (final romPath in romPaths.toSet()) {
-      try {
-        await gameIdForPath(romPath);
-      } catch (e) {
-        _log.e('Unable to prepare Manic EMU ID for $romPath: $e');
-      }
-    }
   }
 
   static Future<Map<String, Map<String, String>>> _loadCache() async {
@@ -98,18 +85,79 @@ class ManicEmuLaunchService {
 
   /// Manic EMU extracts ZIP archives before importing games and builds the
   /// library identifier from the extracted ROM, not from the ZIP container.
-  static Future<Digest?> _sha256OfLargestZipEntry(File zipFile) async {
+  static Future<String> _sha256FileInBackground(String filePath) {
+    return Isolate.run(() async {
+      return (await sha256.bind(File(filePath).openRead()).first).toString();
+    });
+  }
+
+  /// Streams the largest ROM from the ZIP straight into SHA-256 in a worker
+  /// isolate. The previous implementation read both the complete archive and
+  /// its extracted multi-gigabyte ROM into RAM, allowing iOS to terminate
+  /// NeoStation during the launch overlay.
+  static Future<String?> _sha256OfLargestZipEntry(File zipFile) async {
     try {
-      final archive = ZipDecoder().decodeBytes(await zipFile.readAsBytes());
-      ArchiveFile? romEntry;
-      for (final entry in archive) {
-        if (!entry.isFile || entry.name.split('/').last.startsWith('.')) {
-          continue;
+      final zipPath = zipFile.path;
+      return await Isolate.run(() {
+        final input = InputFileStream(zipPath);
+        Archive? archive;
+
+        try {
+          archive = ZipDecoder().decodeStream(input);
+          ArchiveFile? romEntry;
+          for (final entry in archive) {
+            if (!entry.isFile ||
+                path.basename(entry.name).startsWith('.')) {
+              continue;
+            }
+            if (romEntry == null || entry.size > romEntry.size) {
+              romEntry = entry;
+            }
+          }
+          if (romEntry == null) return null;
+
+          final rawContent = romEntry.rawContent?.getStream(
+            decompress: false,
+          );
+          if (rawContent == null) return null;
+
+          final collector = _DigestCollector();
+          final hashSink = sha256.startChunkedConversion(collector);
+          late final Sink<List<int>> archiveSink;
+          if (romEntry.compression == CompressionType.deflate) {
+            archiveSink = ZLibCodec(
+              raw: true,
+            ).decoder.startChunkedConversion(hashSink);
+          } else if (romEntry.compression == null ||
+              romEntry.compression == CompressionType.none) {
+            archiveSink = hashSink;
+          } else {
+            // BZip2-compressed ZIP entries are exceptionally rare for ROMs.
+            // Refuse them safely instead of falling back to an unbounded
+            // in-memory decompression.
+            return null;
+          }
+
+          try {
+            const chunkSize = 1024 * 1024;
+            while (!rawContent.isEOS) {
+              final nextSize = rawContent.length < chunkSize
+                  ? rawContent.length
+                  : chunkSize;
+              if (nextSize <= 0) break;
+              archiveSink.add(
+                rawContent.readBytes(nextSize).toUint8List(),
+              );
+            }
+          } finally {
+            archiveSink.close();
+          }
+          return collector.value?.toString();
+        } finally {
+          archive?.clearSync();
+          input.closeSync();
         }
-        if (romEntry == null || entry.size > romEntry.size) romEntry = entry;
-      }
-      if (romEntry == null) return null;
-      return sha256.convert(romEntry.content as List<int>);
+      });
     } catch (e) {
       _log.e('Unable to calculate Manic EMU ID from ZIP: $e');
       return null;
@@ -142,4 +190,14 @@ class ManicEmuLaunchService {
       return false;
     }
   }
+}
+
+class _DigestCollector implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
-import 'package:neostation/l10n/ios_setup_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/responsive.dart';
@@ -15,56 +14,10 @@ import '../../../providers/sqlite_config_provider.dart';
 class InitialSetupWidget extends StatelessWidget {
   const InitialSetupWidget({super.key});
 
-  /// Simple restart message shown on iOS once RetroArch is already linked
-  /// — see the note in [build].
-  Widget _buildIOSRestartMessage(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.refresh_rounded,
-              size: 56,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              IosSetupLocale.restartTitle(context),
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              IosSetupLocale.restartDescription(context),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<SqliteConfigProvider>(
       builder: (context, configProvider, child) {
-        // On iOS, once RetroArch is already linked, an empty library here
-        // just means the scan triggered by the sync callback hasn't
-        // caught up in this session yet — not that setup is actually
-        // needed. Showing the full "pick a folder" onboarding card again
-        // is confusing when the user already did that. A plain restart
-        // message is the honest, simple thing to show instead.
-        if (Platform.isIOS && ConfigService.linkedExternalFolderPath != null) {
-          return _buildIOSRestartMessage(context);
-        }
-
         // SCENARIO A: Compact Handheld Layouts (XS/Small).
         // Prioritizes a single-column ROM selection interface.
         if (Responsive.isHandheldXS(context) ||
