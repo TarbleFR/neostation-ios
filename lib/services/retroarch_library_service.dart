@@ -182,6 +182,23 @@ class RetroArchLibraryService {
     }
   }
 
+  /// Forgets only NeoStation's exported RetroArch library index.
+  ///
+  /// App Store and TestFlight installations use the same URL protocol but can
+  /// expose different document containers and library entries. When the user
+  /// links a different RetroArch folder, keeping the previous index would make
+  /// the new installation look synchronized with stale game identifiers.
+  /// This never changes RetroArch's own playlists, files, or container.
+  static Future<void> clearCachedLibrary() async {
+    _cache = {};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefsKey);
+    } catch (e) {
+      _log.e('RetroArchLibraryService: failed clearing library cache: $e');
+    }
+  }
+
   static Future<void> _persist(Map<String, Map<String, dynamic>> data) async {
     try {
       final prefs = await SharedPreferences.getInstance();

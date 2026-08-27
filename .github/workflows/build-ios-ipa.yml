@@ -48,14 +48,17 @@ jobs:
             lib/services/game/game_launch_service.dart \
             lib/services/ios_emulator_preference_service.dart \
             lib/services/manic_emu_launch_service.dart \
+            lib/providers/sqlite_config_provider/scanning.dart \
             lib/services/retroarch_library_service.dart \
             lib/widgets/ios_emulator_choice_screen.dart \
             lib/widgets/permission_check_wrapper.dart \
             lib/widgets/setup_wizard.dart \
             test/ios_emulator_choice_screen_test.dart \
+            test/ios_linked_library_reassociation_test.dart \
             test/manic_emu_launch_service_test.dart \
             test/manic_emu_locale_test.dart \
-            test/manic_emu_routing_test.dart
+            test/manic_emu_routing_test.dart \
+            test/retroarch_library_variant_cache_test.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
           flutter test || echo "::warning::Existing cross-platform test-suite failures do not block the iOS IPA build"
 
@@ -151,6 +154,12 @@ jobs:
       - name: Package and verify unsigned IPA
         run: |
           set -euo pipefail
+          BETA_VERSION=$(tr -d '[:space:]' < BETA_VERSION)
+          test -n "$BETA_VERSION"
+          ARTIFACT_NAME="NeoStation-iOS-Beta-${BETA_VERSION}"
+          IPA_NAME="${ARTIFACT_NAME}.ipa"
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
+          echo "IPA_NAME=$IPA_NAME" >> "$GITHUB_ENV"
           APP_PATH=$(find build/ios/iphoneos build/ios/Release-iphoneos -maxdepth 2 -type d -name '*.app' -print 2>/dev/null | head -n 1)
           test -n "$APP_PATH"
           test ! -d "$APP_PATH/_CodeSignature"
@@ -158,16 +167,16 @@ jobs:
           rm -rf build/ipa-package
           mkdir -p build/ipa-package/Payload
           cp -R "$APP_PATH" build/ipa-package/Payload/NeoStation.app
-          (cd build/ipa-package && zip -qr ../../NeoStation-iOS-Unsigned-Build149.ipa Payload)
-          test -s NeoStation-iOS-Unsigned-Build149.ipa
-          shasum -a 256 NeoStation-iOS-Unsigned-Build149.ipa | tee build/ci/ipa-sha256.txt
+          (cd build/ipa-package && zip -qr "../../$IPA_NAME" Payload)
+          test -s "$IPA_NAME"
+          shasum -a 256 "$IPA_NAME" | tee build/ci/ipa-sha256.txt
 
       - name: Upload verified IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Unsigned-Build149
+          name: ${{ env.ARTIFACT_NAME }}
           path: |
-            NeoStation-iOS-Unsigned-Build149.ipa
+            ${{ env.IPA_NAME }}
             build/ci/ipa-sha256.txt
           if-no-files-found: error
 

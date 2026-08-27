@@ -537,6 +537,9 @@ class DirectoriesSettingsContentState
 
     setState(() => _linkingFolderKey = bookmarkKey);
     try {
+      final previousPath = bookmarkKey == ManicEmuLaunchService.bookmarkKey
+          ? ConfigService.linkedManicEmuFolderPath
+          : ConfigService.linkedExternalFolderPath;
       final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
         key: bookmarkKey,
       );
@@ -557,7 +560,28 @@ class DirectoriesSettingsContentState
         context,
         listen: false,
       );
-      await configProvider.addRomFolder(activePath, scan: true);
+      // RetroArch App Store/TestFlight and Manic EMU App Store/IPA are
+      // equivalent linked-library providers within their own family. Only
+      // update NeoStation's active source reference; never modify an app
+      // container. Force a scan even when iOS resolves both picks to the same
+      // display path.
+      final previousIsUsedByOtherLibrary =
+          previousPath != null &&
+          ((bookmarkKey == ManicEmuLaunchService.bookmarkKey &&
+                  previousPath == ConfigService.linkedExternalFolderPath) ||
+              (bookmarkKey != ManicEmuLaunchService.bookmarkKey &&
+                  previousPath == ConfigService.linkedManicEmuFolderPath));
+      await configProvider.replaceRomFolder(
+        previousIsUsedByOtherLibrary ? null : previousPath,
+        activePath,
+        scan: true,
+      );
+      if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey &&
+          previousPath != activePath) {
+        // The newly linked App Store/TestFlight instance must provide a fresh
+        // export before NeoStation considers its RetroArch library synced.
+        await RetroArchLibraryService.clearCachedLibrary();
+      }
       if (!mounted) return;
 
       await _loadCurrentPaths();

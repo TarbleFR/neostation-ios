@@ -1,5 +1,29 @@
 part of '../sqlite_config_provider.dart';
 
+List<String> replacedRomFolderPaths(
+  List<String> currentFolders,
+  String? previousPath,
+  String newPath, {
+  int maximumFolders = 5,
+}) {
+  final oldPath = previousPath?.trim();
+  final normalizedNewPath = newPath.trim();
+  final folders = [...currentFolders];
+
+  if (oldPath != null &&
+      oldPath.isNotEmpty &&
+      oldPath != normalizedNewPath) {
+    folders.removeWhere((folder) => folder == oldPath);
+  }
+  if (!folders.contains(normalizedNewPath)) {
+    if (folders.length >= maximumFolders) {
+      throw StateError('Maximum number of ROM folders reached');
+    }
+    folders.add(normalizedNewPath);
+  }
+  return folders;
+}
+
 /// ROM scanning and system detection for [SqliteConfigProvider].
 ///
 /// Owns filesystem ROM scanning (foreground + background), per-system rescans,
@@ -33,6 +57,56 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     } catch (e) {
       _error = 'Error adding ROM folder: $e';
       SqliteConfigProvider._log.e('$_error');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Re-associates a linked ROM source and always performs a real rescan.
+  ///
+  /// The selected folder may belong to either an App Store installation or a
+  /// sideloaded/re-signed IPA. NeoStation never modifies either app container:
+  /// it only updates its own source list and database rows. Re-linking can move
+  /// the same logical library to a new absolute path, while selecting the same
+  /// visible folder must still trigger a scan instead of taking
+  /// [addRomFolder]'s early return.
+  Future<void> replaceRomFolder(
+    String? previousPath,
+    String newPath, {
+    bool scan = true,
+  }) async {
+    if (newPath.isEmpty) return;
+
+    final oldPath = previousPath?.trim();
+    final normalizedNewPath = newPath.trim();
+    final samePath = oldPath == normalizedNewPath;
+
+    try {
+      _setLoading(true);
+
+      final folders = replacedRomFolderPaths(
+        _config.romFolders,
+        oldPath,
+        normalizedNewPath,
+      );
+      if (!samePath && oldPath != null && oldPath.isNotEmpty) {
+        // Database cleanup only. This never deletes ROMs or any file from the
+        // previously linked App Store/IPA container.
+        await GameRepository.deleteRomsByFolderPath(oldPath);
+      }
+
+      _config = _config.copyWith(
+        romFolders: folders,
+        lastScan: DateTime.now(),
+        setupCompleted: true,
+      );
+      await SqliteConfigService.saveConfig(_config);
+      if (scan) await scanSystems();
+      _notify();
+    } catch (e) {
+      _error = 'Error replacing ROM folder: $e';
+      SqliteConfigProvider._log.e('$_error');
+      rethrow;
     } finally {
       _setLoading(false);
     }
