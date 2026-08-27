@@ -255,6 +255,32 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           romFolders: _config.romFolders,
           availableSystems: _availableSystems,
         );
+
+        // Manic EMU stores normal imported ROMs directly in Documents/Datas,
+        // rather than in one NeoStation-style subfolder per console. Inject
+        // Nintendo 3DS when that flat directory contains a supported title so
+        // it can be scanned even when the user selected Datas itself.
+        if (Platform.isIOS) {
+          final manicDataFolder =
+              await ManicEmuLibraryService.resolveDataFolder(
+                ConfigService.linkedManicEmuFolderPath,
+              );
+          if (manicDataFolder != null &&
+              await ManicEmuLibraryService.containsNintendo3dsGames(
+                manicDataFolder,
+              ) &&
+              !detectedSystems.any((system) => system.folderName == '3ds')) {
+            final system3ds = _availableSystems.where(
+              (system) => system.folderName == '3ds',
+            );
+            if (system3ds.isNotEmpty) {
+              detectedSystems = [
+                ...detectedSystems,
+                system3ds.first.copyWith(detected: true),
+              ];
+            }
+          }
+        }
       }
 
       // Determine the systems to use for initial detection
@@ -638,11 +664,20 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         );
       }
 
+      final additionalScanPaths = <String>[];
+      if (Platform.isIOS && system.folderName == '3ds') {
+        final dataFolder = await ManicEmuLibraryService.resolveDataFolder(
+          ConfigService.linkedManicEmuFolderPath,
+        );
+        if (dataFolder != null) additionalScanPaths.add(dataFolder);
+      }
+
       final summary = await SqliteDatabaseService.scanSystemRoms(
         system,
         _config.romFolders,
         ignoreHiddenFiles: _config.ignoreHiddenFiles,
         rootFoldersMap: rootFoldersMap,
+        additionalScanPaths: additionalScanPaths,
       );
 
       // Update ROM count in system

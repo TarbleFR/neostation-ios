@@ -110,6 +110,7 @@ class SqliteDatabaseService {
     List<String> romFolders, {
     bool ignoreHiddenFiles = true,
     Map<String, Map<String, String>>? rootFoldersMap,
+    List<String> additionalScanPaths = const [],
   }) async {
     if (system.id == null) {
       _log.e('System without ID: ${system.realName}');
@@ -138,6 +139,7 @@ class SqliteDatabaseService {
         validExtensionsSet,
         ignoreHiddenFiles: ignoreHiddenFiles,
         rootFoldersMap: rootFoldersMap,
+        additionalScanPaths: additionalScanPaths,
       ),
       Future.delayed(const Duration(minutes: 10), () {
         throw Exception('Timeout scanning ${system.realName}');
@@ -160,6 +162,7 @@ class SqliteDatabaseService {
     Set<String> validExtensionsSet, {
     bool ignoreHiddenFiles = true,
     Map<String, Map<String, String>>? rootFoldersMap,
+    List<String> additionalScanPaths = const [],
   }) async {
     final initialCount = await SqliteService.getRomCountForSystem(system.id!);
 
@@ -223,6 +226,26 @@ class SqliteDatabaseService {
         } catch (e) {
           _log.e('Error resolving folder $folderToScan in $romFolder: $e');
         }
+      }
+    }
+
+    // Emulator-specific libraries can expose a flat game directory instead of
+    // NeoStation's conventional `<root>/<system>` structure. Treat those
+    // explicitly supplied paths as scan targets without changing the normal
+    // folder aliases used by every other platform.
+    for (final additionalPath in additionalScanPaths) {
+      try {
+        if (!await Directory(additionalPath).exists()) continue;
+        scanTargets.add((
+          dirPath: additionalPath,
+          canonicalPath: await _canonicalScanPath(
+            additionalPath,
+            useSaf: false,
+          ),
+          useSaf: false,
+        ));
+      } catch (e) {
+        _log.e('Error resolving additional scan path $additionalPath: $e');
       }
     }
 

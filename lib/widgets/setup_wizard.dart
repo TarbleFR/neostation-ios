@@ -2066,6 +2066,8 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           // see everything, rather than leaving it to chance.
           if (!usesManic) {
             await RetroArchLibraryService.requestLibrarySync();
+          } else {
+            await configProvider.scanSystems();
           }
           if (mounted) {
             AppNotification.showNotification(
