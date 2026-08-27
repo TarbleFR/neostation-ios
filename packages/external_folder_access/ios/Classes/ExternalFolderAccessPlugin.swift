@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import UniformTypeIdentifiers
 import AVFoundation
+import CryptoKit
 
 /// Lets NeoStation pick a folder exposed by another app (e.g. RetroArch,
 /// which shows up under "On My iPhone > RetroArch" in the Files app) via
@@ -106,8 +107,42 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             configureAudioSessionForSilentMode(result: result)
         case "openJitRequest":
             openJitRequest(call: call, result: result)
+        case "sha256File":
+            sha256File(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
+        }
+    }
+
+    /// Hashes large ROM images off the main thread. Doing this in Dart made
+    /// multi-gigabyte 3DS games leave NeoStation on its launch overlay.
+    private func sha256File(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard
+            let args = call.arguments as? [String: Any],
+            let filePath = args["path"] as? String,
+            !filePath.isEmpty
+        else {
+            result(FlutterError(code: "INVALID_PATH", message: "Missing file path", details: nil))
+            return
+        }
+
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
+                defer { handle.closeFile() }
+                var hasher = SHA256()
+                while true {
+                    let data = handle.readData(ofLength: 1024 * 1024)
+                    if data.isEmpty { break }
+                    hasher.update(data: data)
+                }
+                let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+                DispatchQueue.main.async { result(digest) }
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "HASH_FAILED", message: error.localizedDescription, details: nil))
+                }
+            }
         }
     }
 

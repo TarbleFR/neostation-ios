@@ -40,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           dart format \
+            packages/external_folder_access/lib/external_folder_access.dart \
             lib/main.dart \
             lib/data/datasources/sqlite_database_service.dart \
             lib/l10n/manic_emu_locale.dart \

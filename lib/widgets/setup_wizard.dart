@@ -2012,6 +2012,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       );
 
       String? result;
+      var scanCompletedDuringLink = false;
 
       if (Platform.isAndroid) {
         final isTV = await PermissionService.isTelevision();
@@ -2065,9 +2066,12 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           // pick up mid-setup. Tell the user a relaunch guarantees they'll
           // see everything, rather than leaving it to chance.
           if (!usesManic) {
-            await RetroArchLibraryService.requestLibrarySync();
+            final importedGames =
+                await RetroArchLibraryService.requestLibrarySyncAndWait();
+            scanCompletedDuringLink = importedGames != null;
           } else {
             await configProvider.scanSystems();
+            scanCompletedDuringLink = true;
           }
           if (mounted) {
             AppNotification.showNotification(
@@ -2098,7 +2102,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           _currentStep++;
         });
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          configProvider.scanSystems();
+          if (!scanCompletedDuringLink) configProvider.scanSystems();
         });
       } else if (mounted) {
         setState(() {

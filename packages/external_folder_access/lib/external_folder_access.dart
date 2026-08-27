@@ -108,6 +108,19 @@ class ExternalFolderAccess {
     }
   }
 
+  /// Computes a file SHA-256 natively on a background queue. This avoids
+  /// blocking Flutter while Manic EMU identifiers are prepared for large ROMs.
+  static Future<String?> sha256File(String filePath) async {
+    if (!Platform.isIOS) return null;
+    try {
+      return await _channel.invokeMethod<String>('sha256File', {
+        'path': filePath,
+      });
+    } on PlatformException {
+      return null;
+    }
+  }
+
   /// Configures NeoStation's native iOS audio session for UI/game-front-end
   /// sounds: the hardware Ring/Silent switch mutes playback and audio may mix
   /// with other apps. This is called after SoLoud initializes because its

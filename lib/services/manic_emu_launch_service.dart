@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'logger_service.dart';
@@ -11,7 +14,9 @@ class ManicEmuLaunchService {
   ManicEmuLaunchService._();
 
   static const bookmarkKey = 'manicemu';
+  static const _cacheKey = 'manic_emu_game_id_cache_v1';
   static final _log = LoggerService.instance;
+  static Map<String, Map<String, String>>? _idCache;
 
   static Future<bool> isInstalled() => canLaunchUrl(Uri.parse('manicemu://'));
 
@@ -19,11 +24,76 @@ class ManicEmuLaunchService {
     final file = File(romPath);
     if (!await file.exists()) return null;
 
-    final digest = path.extension(romPath).toLowerCase() == '.zip'
-        ? await _sha256OfLargestZipEntry(file)
-        : await sha256.bind(file.openRead()).first;
-    if (digest == null) return null;
-    return persistentHash(digest.toString());
+    final stat = await file.stat();
+    final fingerprint = '${stat.size}:${stat.modified.millisecondsSinceEpoch}';
+    final normalizedPath = path.normalize(romPath);
+    final cache = await _loadCache();
+    final cached = cache[normalizedPath];
+    if (cached?['fingerprint'] == fingerprint) return cached?['gameId'];
+
+    String? digestValue;
+    if (path.extension(romPath).toLowerCase() == '.zip') {
+      digestValue = (await _sha256OfLargestZipEntry(file))?.toString();
+    } else {
+      digestValue = await ExternalFolderAccess.sha256File(romPath);
+      digestValue ??= (await sha256.bind(file.openRead()).first).toString();
+    }
+    if (digestValue == null) return null;
+
+    final gameId = persistentHash(digestValue);
+    cache[normalizedPath] = {
+      'fingerprint': fingerprint,
+      'gameId': gameId,
+    };
+    await _persistCache(cache);
+    return gameId;
+  }
+
+  /// Prepares identifiers during the library scan so tapping a large 3DS game
+  /// can immediately hand it to Manic EMU instead of hashing it at launch.
+  static Future<void> prepareGameIds(Iterable<String> romPaths) async {
+    for (final romPath in romPaths.toSet()) {
+      try {
+        await gameIdForPath(romPath);
+      } catch (e) {
+        _log.e('Unable to prepare Manic EMU ID for $romPath: $e');
+      }
+    }
+  }
+
+  static Future<Map<String, Map<String, String>>> _loadCache() async {
+    if (_idCache != null) return _idCache!;
+    final result = <String, Map<String, String>>{};
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_cacheKey);
+      if (raw != null) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          for (final entry in decoded.entries) {
+            if (entry.value is Map) {
+              result[entry.key.toString()] = Map<String, String>.from(
+                entry.value as Map,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      _log.e('Unable to load Manic EMU launch cache: $e');
+    }
+    _idCache = result;
+    return result;
+  }
+
+  static Future<void> _persistCache(
+    Map<String, Map<String, String>> cache,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode(cache));
+    } catch (e) {
+      _log.e('Unable to persist Manic EMU launch cache: $e');
+    }
   }
 
   /// Manic EMU extracts ZIP archives before importing games and builds the

@@ -680,6 +680,25 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         additionalScanPaths: additionalScanPaths,
       );
 
+      if (Platform.isIOS && system.folderName == '3ds') {
+        final linkedRoot = ConfigService.linkedManicEmuFolderPath;
+        if (linkedRoot != null && linkedRoot.isNotEmpty) {
+          final normalizedRoot = linkedRoot.replaceAll('\\', '/').toLowerCase();
+          final games = await GameRepository.loadGamesForSystem('3ds');
+          final manicPaths = games.map((game) => game.romPath).where((romPath) {
+            final normalized = romPath.replaceAll('\\', '/').toLowerCase();
+            return normalized.startsWith('$normalizedRoot/') &&
+                (normalized.contains('/datas/') ||
+                    normalized.contains('/title/00040000/'));
+          });
+          if (manicPaths.isNotEmpty) {
+            _scanStatus = 'Preparing Manic EMU launches...';
+            _notify();
+            await ManicEmuLaunchService.prepareGameIds(manicPaths);
+          }
+        }
+      }
+
       // Update ROM count in system
       await refreshSystem(system, rootFoldersMap: rootFoldersMap);
 
