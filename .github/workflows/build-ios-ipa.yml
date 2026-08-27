@@ -65,6 +65,8 @@ jobs:
             test/manic_emu_locale_test.dart \
             test/manic_emu_routing_test.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
+          flutter test test/ios_linked_library_reassociation_test.dart
+          flutter test test/manic_emu_launch_service_test.dart
           flutter test || echo "::warning::Existing cross-platform test-suite failures do not block the iOS IPA build"
 
       - name: Prepare build environment

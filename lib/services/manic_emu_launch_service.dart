@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,8 +17,11 @@ class ManicEmuLaunchService {
 
   static const bookmarkKey = 'manicemu';
   static const _cacheKey = 'manic_emu_game_id_cache_v1';
+  static const _hashTimeout = Duration(minutes: 2);
+  static const _handoffTimeout = Duration(seconds: 10);
   static final _log = LoggerService.instance;
   static Map<String, Map<String, String>>? _idCache;
+  static final Map<String, Future<String?>> _pendingGameIds = {};
 
   static Future<bool> isInstalled() => canLaunchUrl(Uri.parse('manicemu://'));
 
@@ -31,9 +36,82 @@ class ManicEmuLaunchService {
     final cached = cache[normalizedPath];
     if (cached?['fingerprint'] == fingerprint) return cached?['gameId'];
 
+    final jobKey = '$normalizedPath::$fingerprint';
+    final computation = _pendingGameIds.putIfAbsent(
+      jobKey,
+      () => _startGameIdComputation(
+        jobKey: jobKey,
+        file: file,
+        romPath: romPath,
+        normalizedPath: normalizedPath,
+        fingerprint: fingerprint,
+        cache: cache,
+        fileSize: stat.size,
+      ),
+    );
+
+    try {
+      return await computation.timeout(_hashTimeout);
+    } on TimeoutException {
+      _log.e(
+        'Manic EMU identifier preparation timed out after '
+        '${_hashTimeout.inSeconds} seconds.',
+      );
+      return null;
+    }
+  }
+
+  /// Deduplicates identifier work for the same immutable file fingerprint.
+  /// If a UI timeout is reached, the single native stream may finish and fill
+  /// the cache in the background; another tap reuses it instead of starting a
+  /// second multi-gigabyte read.
+  static Future<String?> _startGameIdComputation({
+    required String jobKey,
+    required File file,
+    required String romPath,
+    required String normalizedPath,
+    required String fingerprint,
+    required Map<String, Map<String, String>> cache,
+    required int fileSize,
+  }) {
+    late final Future<String?> computation;
+    computation = _computeAndCacheGameId(
+      file: file,
+      romPath: romPath,
+      normalizedPath: normalizedPath,
+      fingerprint: fingerprint,
+      cache: cache,
+      fileSize: fileSize,
+    );
+    computation.whenComplete(() {
+      if (identical(_pendingGameIds[jobKey], computation)) {
+        _pendingGameIds.remove(jobKey);
+      }
+    }).ignore();
+    return computation;
+  }
+
+  static Future<String?> _computeAndCacheGameId({
+    required File file,
+    required String romPath,
+    required String normalizedPath,
+    required String fingerprint,
+    required Map<String, Map<String, String>> cache,
+    required int fileSize,
+  }) async {
+    _log.i(
+      'Preparing Manic EMU identifier '
+      '(extension=${path.extension(romPath)}, bytes=$fileSize).',
+    );
+
     String? digestValue;
     if (path.extension(romPath).toLowerCase() == '.zip') {
+      // Manic extracts ZIP imports before hashing the contained ROM. Keep
+      // matching that established behavior (validated by the ZIP launch
+      // regression test) while ordinary large ROMs use the native streamer.
       digestValue = await _sha256OfLargestZipEntry(file);
+    } else if (Platform.isIOS) {
+      digestValue = await ExternalFolderAccess.sha256File(romPath);
     } else {
       digestValue = await _sha256FileInBackground(romPath);
     }
@@ -177,14 +255,18 @@ class ManicEmuLaunchService {
     try {
       final gameId = await gameIdForPath(romPath);
       if (gameId == null) return false;
-      final reportedOpened = await launchUrl(
-        Uri(scheme: 'manicemu', host: 'launch', pathSegments: [gameId]),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!reportedOpened) {
-        _log.w('Manic EMU handoff was dispatched but reported false.');
-      }
-      return true;
+      final rawUrl = 'manicemu://launch/$gameId';
+      final opened = Platform.isIOS
+          ? await ExternalFolderAccess.openRawUrl(
+                  rawUrl,
+                ).timeout(_handoffTimeout, onTimeout: () => false) ??
+                false
+          : await launchUrl(
+              Uri.parse(rawUrl),
+              mode: LaunchMode.externalApplication,
+            ).timeout(_handoffTimeout, onTimeout: () => false);
+      _log.i('Manic EMU handoff result: opened=$opened, gameId=$gameId.');
+      return opened;
     } catch (e) {
       _log.e('Manic EMU launch failed: $e');
       return false;

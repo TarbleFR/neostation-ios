@@ -297,7 +297,7 @@ class Rpcs3LibraryService {
   static Future<Rpcs3SyncResult?> linkAndSync() async {
     if (!Platform.isIOS) return null;
 
-    final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
+    final selected = await ExternalFolderAccess.pickAndActivateFolder(
       key: bookmarkKey,
     );
     if (selected == null) return null;

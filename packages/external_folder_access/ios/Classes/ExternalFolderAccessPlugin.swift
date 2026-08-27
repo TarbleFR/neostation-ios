@@ -126,16 +126,21 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             return
         }
 
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
                 defer { handle.closeFile() }
                 var hasher = SHA256()
-                while true {
+                // Keep each temporary NSData/Data allocation scoped to one
+                // iteration. Without this pool, multi-gigabyte 3DS images can
+                // accumulate autoreleased chunks until iOS terminates the app.
+                // Manic EMU uses the same bounded streaming pattern.
+                while autoreleasepool(invoking: {
                     let data = handle.readData(ofLength: 1024 * 1024)
-                    if data.isEmpty { break }
+                    if data.isEmpty { return false }
                     hasher.update(data: data)
-                }
+                    return true
+                }) {}
                 let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
                 DispatchQueue.main.async { result(digest) }
             } catch {

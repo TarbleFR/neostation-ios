@@ -47,7 +47,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       _config = _config.copyWith(
         romFolders: newList,
         lastScan: DateTime.now(),
-        setupCompleted: true,
       );
       await SqliteConfigService.saveConfig(_config);
       if (scan) {
@@ -102,7 +101,6 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       _config = _config.copyWith(
         romFolders: folders,
         lastScan: DateTime.now(),
-        setupCompleted: true,
       );
       await SqliteConfigService.saveConfig(_config);
       if (scan) await scanSystems();

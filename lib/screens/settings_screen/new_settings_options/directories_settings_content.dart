@@ -540,15 +540,10 @@ class DirectoriesSettingsContentState
       final previousPath = bookmarkKey == ManicEmuLaunchService.bookmarkKey
           ? ConfigService.linkedManicEmuFolderPath
           : ConfigService.linkedExternalFolderPath;
-      final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
+      final activePath = await ExternalFolderAccess.pickAndActivateFolder(
         key: bookmarkKey,
       );
-      if (selected == null || !mounted) return;
-      final resolved = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: bookmarkKey,
-      );
-      final activePath = resolved ?? selected;
-      if (!mounted) return;
+      if (activePath == null || !mounted) return;
 
       if (bookmarkKey == ManicEmuLaunchService.bookmarkKey) {
         ConfigService.linkedManicEmuFolderPath = activePath;
@@ -614,14 +609,10 @@ class DirectoriesSettingsContentState
     if (_linkingFolderKey != null) return;
     setState(() => _linkingFolderKey = bookmarkKey);
     try {
-      final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
+      final activePath = await ExternalFolderAccess.pickAndActivateFolder(
         key: bookmarkKey,
       );
-      if (selected == null || !mounted) return;
-      final resolved = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: bookmarkKey,
-      );
-      final activePath = resolved ?? selected;
+      if (activePath == null || !mounted) return;
       if (bookmarkKey == ConfigService.armsx2NeoSyncBookmarkKey) {
         ConfigService.linkedArmsx2SaveFolderPath = activePath;
       } else if (bookmarkKey == ConfigService.melonxNeoSyncBookmarkKey) {

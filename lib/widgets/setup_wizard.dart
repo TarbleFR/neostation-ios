@@ -1923,6 +1923,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
 
     if (_currentStep == _stepScanning) {
+      // This wizard already completed the explicit first scan. Do not make the
+      // main screen immediately repeat the deferred startup scan before it can
+      // display the collections that were just found.
+      context.read<SqliteConfigProvider>().consumeStartupScan();
+
       // Scan finished → advance to the optional ES-DE import step, except
       // on iOS: ES-DE import needs picking an arbitrary external folder,
       // which iOS's sandbox doesn't support the way desktop/Android do,
@@ -2045,10 +2050,13 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         final bookmarkKey = usesManic
             ? ManicEmuLaunchService.bookmarkKey
             : ExternalFolderAccess.defaultBookmarkKey;
-        final linked = await ExternalFolderAccess.pickAndBookmarkFolder(
+        final linked = await ExternalFolderAccess.pickAndActivateFolder(
           key: bookmarkKey,
         );
         if (linked != null && mounted) {
+          await _ensureLinkedFolderIsReadable(linked);
+          if (!mounted) return;
+
           if (usesManic) {
             ConfigService.linkedManicEmuFolderPath = linked;
           } else {
@@ -2086,9 +2094,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           _isSelectingFolder = false;
           _currentStep++;
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          configProvider.scanSystems();
-        });
+        // Let the scanning page paint first, then await the exact scan that
+        // owns this newly activated folder. This keeps progress truthful and
+        // guarantees its systems are already in memory when setup completes.
+        await WidgetsBinding.instance.endOfFrame;
+        if (mounted) await configProvider.scanSystems();
       } else if (mounted) {
         setState(() {
           _isSelectingFolder = false;
@@ -2100,9 +2110,44 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         setState(() {
           _isSelectingFolder = false;
         });
+        AppNotification.showNotification(
+          context,
+          AppLocale.cannotReadFolder.getString(context),
+          type: NotificationType.error,
+        );
       }
     } finally {
       _gamepadNav?.activate();
+    }
+  }
+
+  /// Probes the selected security-scoped directory before it is registered as
+  /// a ROM source. iOS often reports an inaccessible path as merely empty;
+  /// treating that as a successful scan produced the misleading green
+  /// "0 systems" result during onboarding.
+  Future<void> _ensureLinkedFolderIsReadable(String folderPath) async {
+    const accessTimeout = Duration(seconds: 15);
+    final directory = Directory(folderPath);
+    if (!await directory.exists().timeout(
+      accessTimeout,
+      onTimeout: () => false,
+    )) {
+      throw FileSystemException('Linked folder does not exist', folderPath);
+    }
+
+    try {
+      await directory
+          .list(recursive: false, followLinks: false)
+          .take(1)
+          .drain<void>()
+          .timeout(accessTimeout);
+    } on FileSystemException {
+      rethrow;
+    } catch (error) {
+      throw FileSystemException(
+        'Linked folder is not readable: $error',
+        folderPath,
+      );
     }
   }
 

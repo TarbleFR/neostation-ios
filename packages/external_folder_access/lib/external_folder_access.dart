@@ -42,6 +42,28 @@ class ExternalFolderAccess {
     }
   }
 
+  /// Picks a folder, stores its bookmark, then immediately re-resolves that
+  /// bookmark so the returned path is security-scoped for the current app
+  /// session.
+  ///
+  /// The document picker only grants access while its native callback is
+  /// running. Callers that scan the returned path must use this method rather
+  /// than [pickAndBookmarkFolder], otherwise the first scan can see an empty
+  /// directory until NeoStation is restarted and the bookmark is resolved at
+  /// startup.
+  static Future<String?> pickAndActivateFolder({
+    String key = defaultBookmarkKey,
+  }) async {
+    final picked = await pickAndBookmarkFolder(key: key);
+    if (picked == null) return null;
+
+    final resolved = await resolveBookmarkedFolder(key: key);
+    if (resolved == null) {
+      throw StateError('The selected folder could not be activated.');
+    }
+    return resolved;
+  }
+
   /// Resolves the folder previously bookmarked under [key] (if any) and
   /// starts security-scoped access to it for this app session.
   ///
