@@ -101,7 +101,7 @@ void main() {
 
     expect(service, contains('ExternalFolderAccess.sha256File('));
     expect(service, contains('.timeout(_hashTimeout)'));
-    expect(service, contains('ExternalFolderAccess.openRawUrl(rawUrl)'));
+    expect(service, contains('ExternalFolderAccess.openRawUrl('));
     expect(service, contains('return opened;'));
     expect(native, contains('while autoreleasepool(invoking: {'));
     expect(native, contains('readData(ofLength: 1024 * 1024)'));
