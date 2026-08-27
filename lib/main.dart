@@ -53,8 +53,36 @@ import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:app_links/app_links.dart';
 
 import 'services/audio_policy_service.dart';
+
+AppLinks? _appLinks;
+String? _lastIncomingEmulatorUri;
+DateTime? _lastIncomingEmulatorUriAt;
+
+/// Routes emulator library callbacks received from iOS.
+///
+/// Both app_links and the historical external_folder_access bridge listen for
+/// custom URLs. Keeping both makes callbacks reliable across AppDelegate and
+/// SceneDelegate based Flutter builds; the short deduplication window prevents
+/// the same export from being imported twice when both bridges receive it.
+Future<void> _handleIncomingEmulatorUri(Uri uri) async {
+  final now = DateTime.now();
+  final value = uri.toString();
+  if (_lastIncomingEmulatorUri == value &&
+      _lastIncomingEmulatorUriAt != null &&
+      now.difference(_lastIncomingEmulatorUriAt!) <
+          const Duration(seconds: 2)) {
+    return;
+  }
+  _lastIncomingEmulatorUri = value;
+  _lastIncomingEmulatorUriAt = now;
+
+  if (await RetroArchLibraryService.handleIncomingUri(uri)) return;
+  if (await Armsx2LibraryService.handleIncomingUri(uri)) return;
+  await MelonxLibraryService.handleIncomingUri(uri);
+}
 
 // Politica personalizada para deshabilitar navegacion por teclado
 class NoFocusTraversalPolicy extends FocusTraversalPolicy {
@@ -316,14 +344,17 @@ void main() async {
     await Rpcs3LaunchService.initialize();
 
     // RetroArch, ARMSX2 and MeloNX return their exported libraries through the
-    // neostation:// callback scheme. external_folder_access forwards every
-    // incoming URL from iOS to this one listener; each service ignores URLs
-    // that do not belong to it.
-    ExternalFolderAccess.setIncomingUrlListener((uri) async {
-      if (await RetroArchLibraryService.handleIncomingUri(uri)) return;
-      if (await Armsx2LibraryService.handleIncomingUri(uri)) return;
-      await MelonxLibraryService.handleIncomingUri(uri);
-    });
+    // neostation:// callback scheme. app_links supports modern iOS scene-based
+    // lifecycle callbacks, while the existing native bridge remains as a
+    // compatibility fallback for older builds.
+    _appLinks = AppLinks();
+    _appLinks!.uriLinkStream.listen(
+      _handleIncomingEmulatorUri,
+      onError: (Object error) {
+        LoggerService.instance.e('Incoming emulator URL failed: $error');
+      },
+    );
+    ExternalFolderAccess.setIncomingUrlListener(_handleIncomingEmulatorUri);
   }
 
   // Inicializar window_manager para desktop con tamano minimo 640x480

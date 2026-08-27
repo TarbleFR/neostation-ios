@@ -66,14 +66,15 @@ extension SqliteConfigScanning on SqliteConfigProvider {
   ///
   /// The selected folder may belong to either an App Store installation or a
   /// sideloaded/re-signed IPA. NeoStation never modifies either app container:
-  /// it only updates its own source list and database rows. Re-linking can move
-  /// the same logical library to a new absolute path, while selecting the same
-  /// visible folder must still trigger a scan instead of taking
-  /// [addRomFolder]'s early return.
+  /// it only updates its own source list and, when [purgePreviousEntries] is
+  /// enabled, its database rows. Re-linking can move the same logical library
+  /// to a new absolute path, while selecting the same visible folder must still
+  /// trigger a scan instead of taking [addRomFolder]'s early return.
   Future<void> replaceRomFolder(
     String? previousPath,
     String newPath, {
     bool scan = true,
+    bool purgePreviousEntries = true,
   }) async {
     if (newPath.isEmpty) return;
 
@@ -89,7 +90,10 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         oldPath,
         normalizedNewPath,
       );
-      if (!samePath && oldPath != null && oldPath.isNotEmpty) {
+      if (purgePreviousEntries &&
+          !samePath &&
+          oldPath != null &&
+          oldPath.isNotEmpty) {
         // Database cleanup only. This never deletes ROMs or any file from the
         // previously linked App Store/IPA container.
         await GameRepository.deleteRomsByFolderPath(oldPath);

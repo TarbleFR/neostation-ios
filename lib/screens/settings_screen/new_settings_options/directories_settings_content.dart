@@ -575,13 +575,12 @@ class DirectoriesSettingsContentState
         previousIsUsedByOtherLibrary ? null : previousPath,
         activePath,
         scan: true,
+        // RetroArch's exported index and existing rows remain usable until a
+        // new App Store/TestFlight callback succeeds. Manic EMU scans directly
+        // from its linked source and can safely discard the former association.
+        purgePreviousEntries:
+            bookmarkKey == ManicEmuLaunchService.bookmarkKey,
       );
-      if (bookmarkKey == ExternalFolderAccess.defaultBookmarkKey &&
-          previousPath != activePath) {
-        // The newly linked App Store/TestFlight instance must provide a fresh
-        // export before NeoStation considers its RetroArch library synced.
-        await RetroArchLibraryService.clearCachedLibrary();
-      }
       if (!mounted) return;
 
       await _loadCurrentPaths();
