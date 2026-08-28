@@ -8,6 +8,7 @@ import '../providers/sqlite_config_provider.dart';
 import '../l10n/manic_emu_locale.dart';
 import '../screens/systems_screen/fork_first_run_onboarding.dart';
 import '../services/ios_emulator_preference_service.dart';
+import '../services/retroarch_distribution_service.dart';
 import 'ios_emulator_choice_screen.dart';
 import 'setup_wizard.dart';
 import 'shimmering_logo.dart';
@@ -32,12 +33,11 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   bool _upgradeOfferScheduled = false;
 
   static final _log = LoggerService.instance;
+  static const _hardSplitMigrationKey = 'retroarch_hard_split_offer_seen_v1';
 
   @override
   void initState() {
     super.initState();
-
-    // Check whether initial configuration is needed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialSetup();
     });
@@ -47,9 +47,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Fast-path: this flag survives SD-card unavailability and early-launcher
-      // boot races. Existing installations must never be interrupted by the
-      // fork's first-run welcome screen.
       if (prefs.getBool(PermissionCheckWrapper.setupCompletedKey) == true) {
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
@@ -77,7 +74,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       final setupCompleted = configProvider.config.setupCompleted;
 
       if (hasRomFolder || setupCompleted) {
-        // Backfill both preferences for users upgrading from an older build.
         await prefs.setBool(PermissionCheckWrapper.setupCompletedKey, true);
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
@@ -91,9 +87,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         return;
       }
 
-      // Genuinely fresh install. Show the fork welcome screen first. If it was
-      // already confirmed before an interrupted setup, resume directly in
-      // NeoStation's normal SetupWizard instead.
       final welcomeGateCompleted =
           prefs.getBool(forkOnboardingCompletedKey) ?? false;
       final hasEmulatorChoice =
@@ -120,10 +113,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     }
   }
 
-  /// Mirrors "the wizard is on screen" to the secondary display, which parks
-  /// its app dock and launcher while setup runs. Pushed from here — the single
-  /// place that decides whether the wizard shows — so a normal boot also clears
-  /// a flag left behind by a run that was killed mid-wizard.
   void _pushWizardActive(bool active) {
     if (!mounted) return;
     Provider.of<SqliteConfigProvider>(
@@ -133,9 +122,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   }
 
   Future<void> _completeForkWelcomeGate() async {
-    // Switch to NeoStation's normal SetupWizard immediately. Preference I/O is
-    // intentionally done after the visual transition so tapping Continue never
-    // appears to hang on slower iOS storage.
     if (!mounted) return;
     final hasChoice =
         !Platform.isIOS ||
@@ -150,52 +136,83 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(forkOnboardingCompletedKey, true);
     } catch (e) {
-      // A preference write failure must not trap the user before setup. The
-      // device language has already been applied by the welcome screen.
       _log.w('Could not persist first-run welcome state: $e');
     }
   }
 
+  /// One-time migration gate for existing users after the RetroArch hard split.
+  /// It deliberately asks for the top-level RetroArch/Manic choice first; only
+  /// RetroArch users are then asked which distribution they actually use.
   void _scheduleExistingUserOffer() {
     if (!Platform.isIOS || _upgradeOfferScheduled) return;
     _upgradeOfferScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted ||
-          !await IosEmulatorPreferenceService.shouldShowUpgradeOffer()) {
-        return;
-      }
-      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_hardSplitMigrationKey) == true || !mounted) return;
+
       final choice = await showDialog<IosLibraryEmulator>(
         context: context,
-        barrierDismissible: true,
+        barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          title: Text(ManicEmuLocale.text(context, 'upgradeTitle')),
-          content: Text(ManicEmuLocale.text(context, 'upgradeBody')),
+          title: const Text('Configuration de l’émulateur iOS'),
+          content: const Text(
+            'NeoStation sépare désormais définitivement RetroArch TestFlight et RetroArch App Store. Choisissez d’abord votre émulateur principal.',
+          ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(ManicEmuLocale.text(context, 'notNow')),
-            ),
             TextButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
                 IosLibraryEmulator.retroArch,
               ),
-              child: Text(ManicEmuLocale.text(context, 'keepRetroArch')),
+              child: const Text('RetroArch'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
                 IosLibraryEmulator.manicEmu,
               ),
-              child: Text(ManicEmuLocale.text(context, 'useManic')),
+              child: const Text('Manic EMU'),
             ),
           ],
         ),
       );
-      if (choice != null) {
-        await IosEmulatorPreferenceService.setPrimary(choice);
+
+      if (choice == null || !mounted) return;
+      await IosEmulatorPreferenceService.setPrimary(choice);
+
+      if (choice == IosLibraryEmulator.retroArch) {
+        final distribution = await showDialog<RetroArchDistribution>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Version de RetroArch'),
+            content: const Text(
+              'Choisissez la version installée. Les bibliothèques, caches et chemins de lancement resteront ensuite totalement indépendants.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  RetroArchDistribution.testFlight,
+                ),
+                child: const Text('TestFlight'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  RetroArchDistribution.appStore,
+                ),
+                child: const Text('App Store'),
+              ),
+            ],
+          ),
+        );
+        if (distribution != null) {
+          await RetroArchDistributionService.set(distribution);
+        }
       }
+
+      await prefs.setBool(_hardSplitMigrationKey, true);
       await IosEmulatorPreferenceService.markUpgradeOfferSeen();
     });
   }
@@ -206,12 +223,8 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       listen: false,
     );
     await configProvider.completeSetup();
-
-    // Setup is done — let the secondary display bring in the dock/launcher.
     configProvider.setSetupWizardActive(false);
 
-    // Persist flag to SharedPreferences so the wizard is never shown again
-    // even if the SQLite DB is temporarily inaccessible (e.g. SD card not ready).
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(PermissionCheckWrapper.setupCompletedKey, true);
     await prefs.setBool(forkOnboardingCompletedKey, true);
@@ -227,8 +240,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
-      // Show loading while checking — same shimmering logo as the rest of the
-      // startup chain, so this gate doesn't read as a separate plain screen.
       return const Scaffold(body: Center(child: ShimmeringLogo()));
     }
 
@@ -249,12 +260,9 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         );
       }
 
-      // Continue with NeoStation's original configuration wizard in the
-      // language automatically selected from the iPhone/iPad locale.
       return SetupWizard(onComplete: _completeSetup);
     }
 
-    // Show the normal app.
     return widget.child;
   }
 }
