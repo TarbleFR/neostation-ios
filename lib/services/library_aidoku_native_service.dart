@@ -77,8 +77,8 @@ class _AidokuWebConfig {
 /// The .aix packages themselves are not executed. Instead, the compatible web
 /// templates used by the source repository (Madara, MangaStream and the two
 /// standalone French sources) are implemented directly in Dart. This keeps the
-/// Library native on iOS while letting imported source titles appear beside
-/// MangaDex and Gallica and participate in the same language/source filters.
+/// Library native on iOS while letting imported source titles participate in
+/// the same language and source filters.
 class LibraryAidokuNativeService {
   LibraryAidokuNativeService._();
 

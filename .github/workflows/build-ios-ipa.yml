@@ -46,11 +46,13 @@ jobs:
             lib/l10n/manic_emu_locale.dart \
             lib/providers/sqlite_config_provider.dart \
             lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart \
+            lib/screens/library_screen/library_screen.dart \
             lib/screens/systems_screen/my_systems_section/initial_setup_widget.dart \
             lib/screens/settings_screen/new_settings_options/directories_settings_content.dart \
             lib/services/config_service.dart \
             lib/services/game/game_launch_service.dart \
             lib/services/ios_emulator_preference_service.dart \
+            lib/services/library_aidoku_native_service.dart \
             lib/services/manic_emu_launch_service.dart \
             lib/services/manic_emu_library_service.dart \
             lib/providers/sqlite_config_provider/scanning.dart \
@@ -58,13 +60,18 @@ jobs:
             lib/widgets/ios_emulator_choice_screen.dart \
             lib/widgets/permission_check_wrapper.dart \
             lib/widgets/setup_wizard.dart \
+            lib/widgets/system_emulator_settings_dialog.dart \
             test/ios_emulator_choice_screen_test.dart \
             test/ios_linked_library_reassociation_test.dart \
+            test/ios_system_emulator_association_test.dart \
+            test/library_no_native_sources_test.dart \
             test/manic_emu_launch_service_test.dart \
             test/manic_emu_library_service_test.dart \
             test/manic_emu_locale_test.dart \
             test/manic_emu_routing_test.dart
           flutter analyze --no-fatal-warnings --no-fatal-infos
+          flutter test test/library_no_native_sources_test.dart
+          flutter test test/ios_system_emulator_association_test.dart
           flutter test test/ios_linked_library_reassociation_test.dart
           flutter test test/manic_emu_launch_service_test.dart
           flutter test || echo "::warning::Existing cross-platform test-suite failures do not block the iOS IPA build"

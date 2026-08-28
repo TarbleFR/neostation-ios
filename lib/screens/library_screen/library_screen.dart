@@ -16,7 +16,6 @@ import 'package:neostation/services/library_addon_service.dart';
 import 'package:neostation/services/library_aidoku_native_service.dart';
 import 'package:neostation/services/library_catalog_service.dart';
 import 'package:neostation/services/library_download_service.dart';
-import 'package:neostation/services/library_mangadex_service.dart';
 import 'package:neostation/services/library_metadata_provider_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/chrome_surface.dart';
@@ -60,8 +59,6 @@ class _NativeLibraryEntry {
   final String providerId;
   final LibraryAddon? source;
   final LibraryCatalogItem item;
-
-  bool get isMangaDex => providerId == LibraryMangaDexService.providerId;
 }
 
 class LibraryScreenState extends State<LibraryScreen> {
@@ -69,8 +66,6 @@ class LibraryScreenState extends State<LibraryScreen> {
   final LibraryAidokuNativeService _aidokuNativeService =
       LibraryAidokuNativeService.instance;
   final LibraryCatalogService _catalogService = LibraryCatalogService.instance;
-  final LibraryMangaDexService _mangaDexService =
-      LibraryMangaDexService.instance;
   final LibraryMetadataProviderService _metadataProviderService =
       LibraryMetadataProviderService.instance;
 
@@ -177,7 +172,6 @@ class LibraryScreenState extends State<LibraryScreen> {
   Map<String, String> get _sourceOptions {
     final options = <String, String>{
       'all': 'all',
-      LibraryMangaDexService.providerId: 'MangaDex',
       ..._metadataProviderService.providerLabels,
     };
     for (final addon in _addons) {
@@ -189,12 +183,11 @@ class LibraryScreenState extends State<LibraryScreen> {
       }
     }
     for (final entry in _libraryItems) {
-      final label = entry.isMangaDex
-          ? 'MangaDex'
-          : (_metadataProviderService.labelFor(entry.providerId) ??
-                (entry.source?.name.trim().isNotEmpty == true
-                    ? entry.source!.name.trim()
-                    : entry.providerId));
+      final label =
+          _metadataProviderService.labelFor(entry.providerId) ??
+          (entry.source?.name.trim().isNotEmpty == true
+              ? entry.source!.name.trim()
+              : entry.providerId);
       options[entry.providerId] = label;
     }
     final pairs = options.entries.where((entry) => entry.key != 'all').toList()
@@ -270,20 +263,6 @@ class LibraryScreenState extends State<LibraryScreen> {
 
     final entries = <_NativeLibraryEntry>[];
     var failures = 0;
-
-    try {
-      final nativeItems = await _mangaDexService.loadPopular();
-      for (final item in nativeItems) {
-        entries.add(
-          _NativeLibraryEntry(
-            providerId: LibraryMangaDexService.providerId,
-            item: item,
-          ),
-        );
-      }
-    } catch (_) {
-      failures++;
-    }
 
     final aidokuAddons = addons
         .where(
@@ -549,21 +528,6 @@ class LibraryScreenState extends State<LibraryScreen> {
     if (query.isEmpty) return;
 
     final futures = <Future<List<_NativeLibraryEntry>>>[
-      () async {
-        try {
-          final items = await _mangaDexService.searchTitles(query);
-          return items
-              .map(
-                (item) => _NativeLibraryEntry(
-                  providerId: LibraryMangaDexService.providerId,
-                  item: item,
-                ),
-              )
-              .toList();
-        } catch (_) {
-          return <_NativeLibraryEntry>[];
-        }
-      }(),
       _searchMetadataProviders(query),
       for (final addon in _addons.where(
         (addon) =>
@@ -1886,11 +1850,6 @@ class LibraryScreenState extends State<LibraryScreen> {
       return;
     }
 
-    if (entry.isMangaDex) {
-      await _openMangaDexTitle(entry.item);
-      return;
-    }
-
     final item = entry.item;
     if (item.pageUrls.isNotEmpty) {
       await _showPageReader(item.title, item.pageUrls, subtitle: item.subtitle);
@@ -2112,151 +2071,6 @@ class LibraryScreenState extends State<LibraryScreen> {
       pages,
       subtitle: '${addon.name} • ${selectedChapter.language.toUpperCase()}',
       imageHeaders: _aidokuNativeService.imageHeaders(addon),
-    );
-  }
-
-  Future<void> _openMangaDexTitle(LibraryCatalogItem item) async {
-    final mangaId = item.raw['mangadexId']?.toString().trim() ?? item.id;
-    final localeLanguage = Localizations.localeOf(context).languageCode;
-    final languages = <String>{
-      if (_languageFilter != 'all') _languageFilter,
-      localeLanguage,
-      'en',
-    }.toList();
-
-    _showMessage(
-      localeLanguage == 'fr'
-          ? 'Chargement des chapitres…'
-          : 'Loading chapters…',
-    );
-    List<LibraryMangaDexChapter> chapters;
-    try {
-      chapters = await _mangaDexService.loadChapters(
-        mangaId,
-        languages: languages,
-      );
-    } on LibraryAddonException catch (error) {
-      _showMessage(error.message);
-      return;
-    }
-    if (!mounted || chapters.isEmpty) {
-      if (mounted) {
-        _showMessage(
-          localeLanguage == 'fr'
-              ? 'Aucun chapitre disponible dans les langues sélectionnées.'
-              : 'No chapters are available in the selected languages.',
-        );
-      }
-      return;
-    }
-
-    const layerId = 'library_mangadex_chapters';
-    GamepadNavigationManager.pushLayer(
-      layerId,
-      onActivate: () {},
-      onDeactivate: () {},
-      modal: true,
-    );
-    LibraryMangaDexChapter? selectedChapter;
-    try {
-      selectedChapter = await showDialog<LibraryMangaDexChapter>(
-        context: context,
-        builder: (dialogContext) {
-          final size = MediaQuery.sizeOf(dialogContext);
-          final theme = Theme.of(dialogContext);
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: EdgeInsets.symmetric(
-              horizontal: 24.r,
-              vertical: 18.r,
-            ),
-            child: NeoGlass(
-              role: GlassSurfaceRole.card,
-              borderRadius: BorderRadius.circular(18.r),
-              enableBackdropBlur: true,
-              showSheen: false,
-              child: SizedBox(
-                width: size.width * 0.92,
-                height: size.height * 0.86,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(18.r, 14.r, 8.r, 8.r),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            icon: const Icon(Symbols.close_rounded),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (item.description.isNotEmpty)
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(18.r, 0, 18.r, 10.r),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            item.description,
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: ListView.separated(
-                        padding: EdgeInsets.fromLTRB(12.r, 4.r, 12.r, 20.r),
-                        itemCount: chapters.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, index) {
-                          final chapter = chapters[index];
-                          final details = <String>[
-                            if (chapter.volume.isNotEmpty)
-                              'Vol. ${chapter.volume}',
-                            if (chapter.chapter.isNotEmpty)
-                              'Ch. ${chapter.chapter}',
-                            if (chapter.language.isNotEmpty)
-                              chapter.language.toUpperCase(),
-                          ].join(' • ');
-                          return ListTile(
-                            title: Text(chapter.displayTitle),
-                            subtitle: details.isEmpty ? null : Text(details),
-                            trailing: const Icon(Symbols.menu_book_rounded),
-                            onTap: () =>
-                                Navigator.of(dialogContext).pop(chapter),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    } finally {
-      GamepadNavigationManager.popLayer(layerId);
-    }
-
-    if (!mounted || selectedChapter == null) return;
-    final pages = await _mangaDexService.loadChapterPages(selectedChapter.id);
-    if (!mounted) return;
-    await _showPageReader(
-      '${item.title} — ${selectedChapter.displayTitle}',
-      pages,
-      subtitle: selectedChapter.language.toUpperCase(),
     );
   }
 

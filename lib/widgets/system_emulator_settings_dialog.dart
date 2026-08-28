@@ -19,7 +19,10 @@ import '../providers/sqlite_config_provider.dart';
 import '../providers/sqlite_database_provider.dart';
 import '../repositories/system_repository.dart';
 import '../repositories/emulator_repository.dart';
+import '../repositories/game_repository.dart';
 import '../services/config_service.dart';
+import '../services/ios_emulator_preference_service.dart';
+import '../services/manic_emu_launch_service.dart';
 import '../services/system_info_catalog.dart';
 
 import 'package:neostation/services/logger_service.dart';
@@ -345,6 +348,11 @@ class _SystemEmulatorSettingsDialogState
   }
 
   void _setSelectedAsDefault() {
+    // The iOS tab only reports which external launcher owns this library.
+    // Never persist the synthetic Manic EMU status row as a database emulator,
+    // even if this method is reached outside the guarded gamepad path.
+    if (Platform.isIOS) return;
+
     if (_totalEmulators == 0 || _selectedIndex >= _totalEmulators) return;
 
     final item = _displayItems[_selectedIndex];
@@ -417,6 +425,23 @@ class _SystemEmulatorSettingsDialogState
           .map((e) => StandaloneEmulatorModel.fromMap(e))
           .toList();
 
+      // The iOS library application is independent from the Libretro core
+      // metadata stored for the console. Resolve it from the persisted
+      // per-game choice and linked-folder ownership instead of labelling every
+      // iOS system as RetroArch.
+      var iosLibraryAssociations = const <IosLibraryEmulator>{
+        IosLibraryEmulator.retroArch,
+      };
+      if (Platform.isIOS) {
+        final games = await GameRepository.getGamesBySystem(widget.system.id!);
+        iosLibraryAssociations =
+            await IosEmulatorPreferenceService.associationsForSystem(
+              romPaths: games.map((game) => game.romPath),
+              manicEmuFolder: ConfigService.linkedManicEmuFolderPath,
+              retroArchFolder: ConfigService.linkedExternalFolderPath,
+            );
+      }
+
       // Setup grouped items for display
       final displayItems = <EmulatorListItem>[];
 
@@ -439,6 +464,13 @@ class _SystemEmulatorSettingsDialogState
       // Group cores by variant (Package name on Android, generic on Desktop)
       final groupedCores = <String, List<CoreEmulatorModel>>{};
       for (final core in cores) {
+        if (Platform.isIOS &&
+            !iosLibraryAssociations.contains(
+              IosLibraryEmulator.retroArch,
+            )) {
+          continue;
+        }
+
         String groupKey;
         if (Platform.isAndroid) {
           groupKey = core.androidPackageName ?? 'com.retroarch';
@@ -492,8 +524,42 @@ class _SystemEmulatorSettingsDialogState
         );
       });
 
+      // Manic EMU is an application-level iOS launcher, not a RetroArch core.
+      // Reuse the informational standalone row already used by this tab on
+      // iOS; it cannot alter emulator defaults or the launch-routing database.
+      final hasSeededManicEntry = standalones.any(
+        (standalone) =>
+            standalone.iosUrlScheme?.trim().toLowerCase() == 'manicemu',
+      );
+      if (Platform.isIOS &&
+          iosLibraryAssociations.contains(IosLibraryEmulator.manicEmu) &&
+          !hasSeededManicEntry) {
+        displayItems.add(
+          EmulatorStandaloneItem(
+            StandaloneEmulatorModel(
+              osId: 5,
+              systemId: widget.system.id!,
+              name: 'Manic EMU',
+              uniqueIdentifier: 'ios.library.manicemu',
+              isStandalone: true,
+              isDefault: false,
+              isretroAchievementsCompatible: false,
+              iosUrlScheme: 'manicemu',
+            ),
+            isInstalled: await ManicEmuLaunchService.isInstalled(),
+          ),
+        );
+      }
+
       // 2. Add Standalone emulators
       for (final standalone in standalones) {
+        if (Platform.isIOS &&
+            !IosEmulatorPreferenceService.shouldShowIosApplication(
+              urlScheme: standalone.iosUrlScheme,
+              associations: iosLibraryAssociations,
+            )) {
+          continue;
+        }
         final isInstalled = await standalone.isInstalled;
         displayItems.add(
           EmulatorStandaloneItem(standalone, isInstalled: isInstalled),
