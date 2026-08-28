@@ -54,6 +54,47 @@ void main() {
     );
   });
 
+  test('App Store ZIP sync maps archive to RetroArch inner content id', () async {
+    final root = await Directory.systemTemp.createTemp('retroarch_zip_');
+    addTearDown(() => root.delete(recursive: true));
+    final roms = Directory(path.join(root.path, 'roms'));
+    final playlists = Directory(path.join(root.path, 'playlists'));
+    await roms.create(recursive: true);
+    await playlists.create(recursive: true);
+
+    final rom = File(path.join(roms.path, '688 Attack Sub (USA, Europe).zip'));
+    await rom.writeAsBytes(const <int>[1, 2, 3]);
+    await File(path.join(playlists.path, 'Atari - 2600.lpl')).writeAsString(
+      jsonEncode({
+        'version': '1.5',
+        'items': [
+          {
+            'path': '${rom.path}#688 Attack Sub (USA, Europe).a26',
+            'label': '688 Attack Sub (USA, Europe)',
+            'core_name': 'Stella',
+            'db_name': 'Atari - 2600.lpl',
+          },
+        ],
+      }),
+    );
+
+    ConfigService.linkedExternalFolderPath = root.path;
+    expect(await RetroArchAppStoreService.syncLinkedLibrary(), isTrue);
+    expect(
+      await RetroArchAppStoreService.launchIdForRomPath(rom.path),
+      '688 Attack Sub (USA, Europe).a26',
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('retroarch_appstore_launch_cache_v1');
+    expect(raw, isNotNull);
+    expect(raw, contains('688 Attack Sub (USA, Europe).a26'));
+    expect(
+      prefs.getString('retroarch_testflight_library_cache_v1'),
+      isNull,
+    );
+  });
+
   test('TestFlight callback keeps using its dedicated cache', () async {
     await RetroArchDistributionService.useTestFlight();
     final payload = base64Url
