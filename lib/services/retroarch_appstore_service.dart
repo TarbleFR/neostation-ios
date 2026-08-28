@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/config_service.dart';
@@ -13,9 +14,8 @@ import 'package:url_launcher/url_launcher.dart';
 /// RetroArch App Store integration only.
 ///
 /// The App Store build has no TestFlight library-export callback. NeoStation
-/// therefore reads RetroArch's own playlists from the linked security-scoped
-/// folder and keeps a private App Store-only mapping from physical ROM path to
-/// the content identifier expected by `retroarch://game/...`.
+/// therefore resolves launch identifiers locally, using RetroArch playlists
+/// when accessible and inspecting one-ROM ZIP archives when they are not.
 class RetroArchAppStoreService {
   RetroArchAppStoreService._();
 
@@ -29,6 +29,58 @@ class RetroArchAppStoreService {
     'content_music_history.lpl',
     'content_video_history.lpl',
     'favorites.lpl',
+  };
+
+  /// Extensions that reliably identify a single ROM payload inside a ZIP.
+  /// Deliberately excludes generic arcade-set members such as .bin/.rom so a
+  /// multi-file arcade archive is never mistaken for a one-ROM archive.
+  static const Set<String> _directRomExtensions = {
+    '.32x',
+    '.a26',
+    '.a52',
+    '.a78',
+    '.col',
+    '.fds',
+    '.gb',
+    '.gbc',
+    '.gba',
+    '.gen',
+    '.gg',
+    '.j64',
+    '.lnx',
+    '.md',
+    '.n64',
+    '.nds',
+    '.nes',
+    '.ngc',
+    '.ngp',
+    '.pce',
+    '.sfc',
+    '.sg',
+    '.smc',
+    '.sms',
+    '.sv',
+    '.vec',
+    '.v64',
+    '.vb',
+    '.ws',
+    '.wsc',
+    '.z64',
+    '.cue',
+    '.m3u',
+  };
+
+  static const Set<String> _metadataExtensions = {
+    '.txt',
+    '.nfo',
+    '.md5',
+    '.sha1',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.xml',
+    '.dat',
   };
 
   static Map<String, String> _launchIds = <String, String>{};
@@ -48,9 +100,6 @@ class RetroArchAppStoreService {
   }
 
   /// App Store sync is intentionally local. No TestFlight callback is involved.
-  /// Besides refreshing NeoStation's scanner, it rebuilds the App Store launch
-  /// index from RetroArch's `.lpl` playlists so archived ROMs can be translated
-  /// from `game.zip` to the inner content identifier RetroArch registered.
   static Future<bool> syncLinkedLibrary() async {
     final root = ConfigService.linkedExternalFolderPath;
     if (root == null || root.trim().isEmpty) return false;
@@ -72,42 +121,42 @@ class RetroArchAppStoreService {
     }
   }
 
-  /// Visible for regression tests and diagnostics.
+  /// Visible for regression tests and diagnostics. Unlike 0.0.12, this also
+  /// resolves ZIP contents locally when no accessible playlist entry exists.
   static Future<String?> launchIdForRomPath(String romPath) async {
     await _loadCache();
     final currentRoot = _normalizedRoot();
-    if (!_sameRoot(_cacheRoot, currentRoot)) return null;
-    return _lookup(romPath);
+    if (!_sameRoot(_cacheRoot, currentRoot) && currentRoot != null) {
+      await _rebuildLaunchIndex(currentRoot);
+    }
+
+    final indexed = _lookup(romPath);
+    if (indexed != null) return indexed;
+    if (path.extension(romPath).toLowerCase() == '.zip') {
+      return _resolveZipLaunchId(romPath);
+    }
+    return path.basename(romPath);
   }
 
   /// Direct-launch path for the App Store distribution.
   ///
-  /// Non-archived files can safely fall back to their own basename. ZIP files
-  /// must come from the playlist index: sending the archive basename itself
-  /// opens RetroArch but leaves it at the main menu with no core/content.
+  /// TestFlight receives RetroArch's exact exported filename. App Store does
+  /// not, so for an archive NeoStation reconstructs the same libretro form:
+  /// `archive.zip#inner-rom.ext`.
   static Future<bool> launchGameByRomPath(String romPath) async {
     if (!ownsRomPath(romPath)) return false;
     try {
       if (!await File(romPath).exists()) return false;
 
-      await _loadCache();
-      final currentRoot = _normalizedRoot();
-      if (!_sameRoot(_cacheRoot, currentRoot)) {
-        await _rebuildLaunchIndex(currentRoot!);
-      }
-
-      final extension = path.extension(romPath).toLowerCase();
-      final indexedLaunchId = _lookup(romPath);
-      final launchId = indexedLaunchId ??
-          (extension == '.zip' ? null : path.basename(romPath));
-
+      final launchId = await launchIdForRomPath(romPath);
       if (launchId == null || launchId.isEmpty) {
         _log.w(
-          'RetroArch App Store: no playlist launch id for ZIP ${path.basename(romPath)}; '
-          'refusing the bad archive-basename deeplink so the caller can use its '
-          'playlist/Open In fallback instead.',
+          'RetroArch App Store: unable to resolve ${path.basename(romPath)}; '
+          'suppressing Open In because this ROM belongs to the RetroArch library.',
         );
-        return false;
+        // This is a terminal RetroArch-owned launch attempt. Returning false
+        // would incorrectly send the ROM to iOS Open In / Share.
+        return true;
       }
 
       final uri = Uri(
@@ -125,7 +174,9 @@ class RetroArchAppStoreService {
       return true;
     } catch (e) {
       _log.e('RetroArch App Store launch failed: $e');
-      return false;
+      // The ROM is owned by the App Store backend. Never leak a failed
+      // RetroArch handoff into the generic iOS share sheet.
+      return true;
     }
   }
 
@@ -184,23 +235,99 @@ class RetroArchAppStoreService {
   }
 
   /// Returns `(physical container path, direct-launch identifier)`.
-  /// For libretro archive syntax `archive.zip#game.ext`, the physical file is
-  /// the ZIP while the launch id is `game.ext`, matching the TestFlight-side
-  /// filename behavior NeoStation already handles.
+  /// Crucially, the direct-launch identifier preserves the full libretro
+  /// archive notation. 0.0.12 incorrectly reduced it to only `game.ext`.
   static (String, String)? _mappingFromPlaylistPath(String value) {
     final normalized = value.replaceAll('\\', '/');
     final hash = normalized.indexOf('#');
     if (hash > 0 && hash < normalized.length - 1) {
       final container = normalized.substring(0, hash);
-      final inner = normalized.substring(hash + 1);
-      final innerName = path.basename(inner);
-      if (container.isEmpty || innerName.isEmpty) return null;
-      return (container, innerName);
+      final inner = normalized.substring(hash + 1).replaceFirst(RegExp(r'^/+'), '');
+      final archiveName = path.basename(container);
+      if (container.isEmpty || archiveName.isEmpty || inner.isEmpty) return null;
+      return (container, '$archiveName#$inner');
     }
 
     final name = path.basename(normalized);
     if (name.isEmpty) return null;
     return (normalized, name);
+  }
+
+  /// Reconstructs RetroArch's archive content identifier directly from a ZIP.
+  /// This removes the dependency on RetroArch's private playlists directory,
+  /// which may sit outside the security-scoped folder selected by the user.
+  static Future<String?> _resolveZipLaunchId(String romPath) async {
+    try {
+      final bytes = await File(romPath).readAsBytes();
+      final archive = ZipDecoder().decodeBytes(bytes, verify: false);
+      final payloads = archive.files.where((entry) {
+        if (!entry.isFile || entry.name.isEmpty) return false;
+        final normalized = entry.name.replaceAll('\\', '/');
+        if (normalized.startsWith('__MACOSX/')) return false;
+        final ext = path.extension(normalized).toLowerCase();
+        return !_metadataExtensions.contains(ext);
+      }).toList();
+
+      if (payloads.isEmpty) return null;
+
+      final direct = payloads.where((entry) {
+        final ext = path.extension(entry.name).toLowerCase();
+        return _directRomExtensions.contains(ext);
+      }).toList();
+
+      ArchiveFile? selected;
+      if (direct.length == 1) {
+        selected = direct.single;
+      } else if (direct.length > 1) {
+        final archiveStem = path.basenameWithoutExtension(romPath).toLowerCase();
+        for (final candidate in direct) {
+          final candidateStem =
+              path.basenameWithoutExtension(candidate.name).toLowerCase();
+          if (candidateStem == archiveStem) {
+            selected = candidate;
+            break;
+          }
+        }
+        // Disc sets commonly contain one cue/m3u plus track files. The cue or
+        // m3u is the content RetroArch should load.
+        selected ??= direct.cast<ArchiveFile?>().firstWhere(
+              (entry) {
+                if (entry == null) return false;
+                final ext = path.extension(entry.name).toLowerCase();
+                return ext == '.cue' || ext == '.m3u';
+              },
+              orElse: () => null,
+            );
+      } else if (payloads.length == 1) {
+        // Covers valid one-ROM archives with an uncommon extension while still
+        // refusing ambiguous multi-file arcade sets.
+        selected = payloads.single;
+      }
+
+      if (selected == null) {
+        _log.w(
+          'RetroArch App Store: ZIP ${path.basename(romPath)} has '
+          '${payloads.length} payload files and no unambiguous ROM entry.',
+        );
+        return null;
+      }
+
+      final inner = selected.name
+          .replaceAll('\\', '/')
+          .replaceFirst(RegExp(r'^/+'), '');
+      if (inner.isEmpty) return null;
+      final launchId = '${path.basename(romPath)}#$inner';
+
+      _put(_launchIds, romPath, launchId);
+      _put(_launchIds, path.basename(romPath), launchId);
+      _put(_launchIds, path.basenameWithoutExtension(romPath), launchId);
+      await _persistCache();
+      _log.i('RetroArch App Store: resolved ZIP launch id $launchId');
+      return launchId;
+    } catch (e) {
+      _log.e('RetroArch App Store: failed inspecting ZIP $romPath: $e');
+      return null;
+    }
   }
 
   static Future<Directory?> _findPlaylistsDirectory(String root) async {
