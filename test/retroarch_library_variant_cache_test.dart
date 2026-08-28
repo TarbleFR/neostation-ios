@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/retroarch_appstore_service.dart';
@@ -54,7 +55,7 @@ void main() {
     );
   });
 
-  test('App Store ZIP sync maps archive to RetroArch inner content id', () async {
+  test('App Store playlist keeps complete libretro ZIP content id', () async {
     final root = await Directory.systemTemp.createTemp('retroarch_zip_');
     addTearDown(() => root.delete(recursive: true));
     final roms = Directory(path.join(root.path, 'roms'));
@@ -82,16 +83,48 @@ void main() {
     expect(await RetroArchAppStoreService.syncLinkedLibrary(), isTrue);
     expect(
       await RetroArchAppStoreService.launchIdForRomPath(rom.path),
-      '688 Attack Sub (USA, Europe).a26',
+      '688 Attack Sub (USA, Europe).zip#688 Attack Sub (USA, Europe).a26',
     );
 
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('retroarch_appstore_launch_cache_v1');
     expect(raw, isNotNull);
-    expect(raw, contains('688 Attack Sub (USA, Europe).a26'));
+    expect(raw, contains('688 Attack Sub (USA, Europe).zip#'));
     expect(
       prefs.getString('retroarch_testflight_library_cache_v1'),
       isNull,
+    );
+  });
+
+  test('App Store reconstructs ZIP launch id without RetroArch playlists', () async {
+    final root = await Directory.systemTemp.createTemp('retroarch_zip_local_');
+    addTearDown(() => root.delete(recursive: true));
+    final roms = Directory(path.join(root.path, 'roms'));
+    await roms.create(recursive: true);
+
+    final rom = File(
+      path.join(
+        roms.path,
+        '36 Great Holes Starring Fred Couples (32X) (E) [!].zip',
+      ),
+    );
+    final archive = Archive();
+    final payload = List<int>.generate(64, (index) => index);
+    archive.addFile(
+      ArchiveFile(
+        '36 Great Holes Starring Fred Couples (32X) (E) [!].32x',
+        payload.length,
+        payload,
+      ),
+    );
+    final encoded = ZipEncoder().encode(archive);
+    await rom.writeAsBytes(encoded);
+
+    ConfigService.linkedExternalFolderPath = root.path;
+    expect(
+      await RetroArchAppStoreService.launchIdForRomPath(rom.path),
+      '36 Great Holes Starring Fred Couples (32X) (E) [!].zip#'
+      '36 Great Holes Starring Fred Couples (32X) (E) [!].32x',
     );
   });
 
