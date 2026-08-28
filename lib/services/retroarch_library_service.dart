@@ -1,31 +1,74 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:provider/provider.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/services/retroarch_appstore_service.dart';
+import 'package:neostation/services/retroarch_distribution_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// RetroArch TestFlight integration only.
+/// Stable facade used by the rest of NeoStation.
 ///
-/// TestFlight protocol:
-///   retroarch://library?scheme=neostation
-///   -> neostation://retroarch?games=<base64url>
-///   -> retroarch://game/<filename>
-///
-/// App Store integration deliberately lives in RetroArchAppStoreService so
-/// changing App Store support can never alter this known-good TestFlight path.
+/// The two RetroArch distributions are intentionally isolated behind this
+/// router. TestFlight never touches the App Store linked-folder state, and the
+/// App Store path never reads or writes the TestFlight export cache.
 class RetroArchLibraryService {
   RetroArchLibraryService._();
+
+  static Future<bool> requestLibrarySync() async {
+    final distribution = await RetroArchDistributionService.current();
+    if (distribution == RetroArchDistribution.appStore) {
+      return RetroArchAppStoreService.syncLinkedLibrary();
+    }
+    return _RetroArchTestFlightBackend.requestLibrarySync();
+  }
+
+  /// Incoming neostation://retroarch callbacks belong exclusively to
+  /// TestFlight. Receiving one also reasserts TestFlight mode, which protects
+  /// users who update from an older build with stale App Store preferences.
+  static Future<bool> handleIncomingUri(Uri uri) async {
+    if (uri.scheme == 'neostation' && uri.host == 'retroarch') {
+      await RetroArchDistributionService.useTestFlight();
+    }
+    return _RetroArchTestFlightBackend.handleIncomingUri(uri);
+  }
+
+  static Future<void> loadCachedLibrary() =>
+      _RetroArchTestFlightBackend.loadCachedLibrary();
+
+  static bool get hasSyncedLibrary =>
+      _RetroArchTestFlightBackend.hasSyncedLibrary;
+
+  static bool hasGameForRomPath(String romPath) {
+    // This synchronous helper is used only for launch-choice UI. App Store
+    // ownership is filesystem-based and does not need the TestFlight cache.
+    return RetroArchAppStoreService.ownsRomPath(romPath) ||
+        _RetroArchTestFlightBackend.hasGameForRomPath(romPath);
+  }
+
+  static Future<bool> launchGameByRomPath(String romPath) async {
+    final distribution = await RetroArchDistributionService.current();
+    if (distribution == RetroArchDistribution.appStore) {
+      return RetroArchAppStoreService.launchGameByRomPath(romPath);
+    }
+    return _RetroArchTestFlightBackend.launchGameByRomPath(romPath);
+  }
+}
+
+/// Known-good TestFlight implementation restored from the 2026-08-23 backup.
+/// Keep this backend free of every App Store concept.
+class _RetroArchTestFlightBackend {
+  _RetroArchTestFlightBackend._();
 
   static final _log = LoggerService.instance;
   static const String _callbackScheme = 'neostation';
   static const String _prefsKey = 'retroarch_testflight_library_cache_v1';
   static const String _legacyPrefsKey = 'retroarch_library_cache_v1';
-
   static Map<String, Map<String, dynamic>>? _cache;
 
   static Future<bool> requestLibrarySync() async {
@@ -42,27 +85,21 @@ class RetroArchLibraryService {
 
   static Future<bool> handleIncomingUri(Uri uri) async {
     if (uri.scheme != _callbackScheme || uri.host != 'retroarch') return false;
-
     final gamesParam = uri.queryParameters['games'];
-    if (gamesParam == null) {
-      _log.w('RetroArch TestFlight callback with no games parameter');
-      return false;
-    }
+    if (gamesParam == null) return false;
 
     try {
       final normalized = base64Url.normalize(gamesParam);
-      final decoded = jsonDecode(
-        utf8.decode(base64Url.decode(normalized)),
-      );
+      final decoded = jsonDecode(utf8.decode(base64Url.decode(normalized)));
       if (decoded is! List) return false;
 
       final byFilename = <String, Map<String, dynamic>>{};
-      for (final entry in decoded) {
-        if (entry is! Map) continue;
-        final map = Map<String, dynamic>.from(entry);
-        final filename = (map['filename'] ?? map['titleId'])?.toString();
+      for (final raw in decoded) {
+        if (raw is! Map) continue;
+        final entry = Map<String, dynamic>.from(raw);
+        final filename = (entry['filename'] ?? entry['titleId'])?.toString();
         if (filename == null || filename.isEmpty) continue;
-        _index(byFilename, filename, map);
+        _index(byFilename, filename, entry);
       }
 
       _cache = byFilename;
@@ -73,9 +110,6 @@ class RetroArchLibraryService {
             '${const JsonEncoder.withIndent('  ').convert(decoded)}',
       );
 
-      // Preserve the exact known-good backup behavior: after a TestFlight
-      // callback, rescan the ordinary NeoStation ROM folders. No App Store
-      // cache, folder association or local index participates here.
       try {
         final context = rootNavigatorKey.currentContext;
         if (context != null) {
@@ -99,14 +133,12 @@ class RetroArchLibraryService {
   ) {
     target[filename] = entry;
     target[path.basename(filename)] = entry;
-
     final hashIndex = filename.indexOf('#');
     if (hashIndex > 0) {
       final archivePart = filename.substring(0, hashIndex);
       target[path.basename(archivePart)] = entry;
       target[path.basenameWithoutExtension(archivePart)] = entry;
     }
-
     final stem = path.basenameWithoutExtension(filename);
     target.putIfAbsent(stem, () => entry);
   }
@@ -115,8 +147,6 @@ class RetroArchLibraryService {
     if (_cache != null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Migrate the old pre-App-Store cache once, because that cache came from
-      // the original TestFlight-only implementation.
       final raw = prefs.getString(_prefsKey) ?? prefs.getString(_legacyPrefsKey);
       if (raw == null) {
         _cache = {};
@@ -160,7 +190,6 @@ class RetroArchLibraryService {
   static Future<bool> launchGameByRomPath(String romPath) async {
     final cache = _cache;
     if (cache == null || cache.isEmpty) return false;
-
     final basename = path.basename(romPath);
     final stem = path.basenameWithoutExtension(romPath);
     final entry = cache[basename] ?? cache[romPath] ?? cache[stem];
@@ -168,7 +197,6 @@ class RetroArchLibraryService {
 
     final filename = (entry['filename'] ?? entry['titleId'])?.toString();
     if (filename == null || filename.isEmpty) return false;
-
     final uri = Uri(
       scheme: 'retroarch',
       host: 'game',
@@ -191,8 +219,8 @@ class RetroArchLibraryService {
   static Future<void> _writeDebugFile(String name, String content) async {
     try {
       final docsDir = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docsDir.path, name));
-      await file.writeAsString('--- ${DateTime.now()} ---\n$content');
+      await File(path.join(docsDir.path, name))
+          .writeAsString('--- ${DateTime.now()} ---\n$content');
     } catch (e) {
       _log.e('RetroArch TestFlight debug write failed: $e');
     }
