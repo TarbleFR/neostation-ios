@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/manic_emu_locale.dart';
 import '../services/ios_emulator_preference_service.dart';
+import '../services/retroarch_library_service.dart';
 
 class IosEmulatorChoiceScreen extends StatefulWidget {
   const IosEmulatorChoiceScreen({super.key, required this.onFinished});
@@ -24,6 +25,23 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
     try {
       await IosEmulatorPreferenceService.setPrimary(selected);
       await IosEmulatorPreferenceService.markUpgradeOfferSeen();
+
+      // RetroArch needs its exported library metadata before NeoStation can
+      // launch a discovered ROM directly. Request that export immediately on
+      // first use so the user never has to visit Settings > Directories just
+      // to press Sync. RetroArch returns the library through the existing
+      // neostation://retroarch callback; the global callback handler persists
+      // it and triggers a rescan. The following setup step then links the ROM
+      // folder and performs its normal scan with the launch metadata already
+      // available.
+      //
+      // Manic EMU does not use an exported-library callback: its first-run
+      // synchronization is the security-scoped folder link + direct scan in
+      // SetupWizard, and its launch identifier is derived locally when needed.
+      if (selected == IosLibraryEmulator.retroArch) {
+        await RetroArchLibraryService.requestLibrarySync();
+      }
+
       if (mounted) widget.onFinished();
     } finally {
       if (mounted) setState(() => _isSaving = false);
