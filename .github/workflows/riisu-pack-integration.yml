@@ -1,0 +1,167 @@
+name: Integrate RiiSU System Art pack
+
+on:
+  push:
+    branches:
+      - feature/riisu-system-art-pack
+    paths:
+      - .github/workflows/riisu-pack-integration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/riisu-system-art-pack
+
+      - name: Register RiiSU as an external System Art pack
+        shell: python
+        run: |
+          from pathlib import Path
+
+          file = Path('lib/services/neo_assets_service.dart')
+          text = file.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one match, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "const _manifestUrl = '$_baseRaw/manifest.json';\n",
+              "const _manifestUrl = '$_baseRaw/manifest.json';\n"
+              "\n"
+              "// Curated third-party System Art pack. Assets stay hosted by the\n"
+              "// original RiiSU project so NeoStation does not redistribute the artwork\n"
+              "// or inflate the application bundle.\n"
+              "const _riisuRaw =\n"
+              "    'https://raw.githubusercontent.com/mult1v4c/RiiSU/main';\n"
+              "const _riisuThemeFolder = 'RiiSU';\n"
+              "const _riisuPreviewUrl =\n"
+              "    '$_riisuRaw/themes/RiiSU/backgrounds/switch.webp';\n"
+          )
+
+          replace_once(
+              "class NeoAssetsService {\n"
+              "  static List<NeoAssetsTheme>? _cachedThemes;\n"
+              "  static String? _cachedThemeDir;\n",
+              "class NeoAssetsService {\n"
+              "  static List<NeoAssetsTheme>? _cachedThemes;\n"
+              "  static String? _cachedThemeDir;\n"
+              "\n"
+              "  /// Adds curated System Art packs that are hosted outside the default\n"
+              "  /// neostation-assets repository. Folder IDs remain unique because they\n"
+              "  /// are also used as the local cache key.\n"
+              "  static List<NeoAssetsTheme> _withCuratedExternalThemes(\n"
+              "    List<NeoAssetsTheme> themes,\n"
+              "  ) {\n"
+              "    final result = [...themes];\n"
+              "    if (!result.any((theme) => theme.folder == _riisuThemeFolder)) {\n"
+              "      result.add(\n"
+              "        const NeoAssetsTheme(\n"
+              "          name: 'RiiSU',\n"
+              "          folder: _riisuThemeFolder,\n"
+              "          previewUrl: _riisuPreviewUrl,\n"
+              "          previewSource: _riisuPreviewUrl,\n"
+              "          isAi: false,\n"
+              "        ),\n"
+              "      );\n"
+              "    }\n"
+              "    return result;\n"
+              "  }\n"
+          )
+
+          replace_once(
+              "      final merged = await _mergeWithLocalThemes(remote);",
+              "      final merged = await _mergeWithLocalThemes(\n"
+              "        _withCuratedExternalThemes(remote),\n"
+              "      );"
+          )
+
+          replace_once(
+              "    final fallback = await _mergeWithLocalThemes(await _readCachedManifest());",
+              "    final fallback = await _mergeWithLocalThemes(\n"
+              "      _withCuratedExternalThemes(await _readCachedManifest()),\n"
+              "    );"
+          )
+
+          replace_once(
+              "  /// Returns the remote URL for a specific system background within a theme.\n"
+              "  static String getBackgroundUrl(\n"
+              "    String themeFolder,\n"
+              "    String systemFolderName, {\n"
+              "    String ext = 'webp',\n"
+              "  }) {\n"
+              "    return '$_baseRaw/themes/$themeFolder/backgrounds/$systemFolderName.$ext';\n"
+              "  }\n"
+              "\n"
+              "  /// Returns the remote URL for a specific system logo within a theme.\n"
+              "  static String getLogoUrl(\n"
+              "    String themeFolder,\n"
+              "    String systemFolderName, {\n"
+              "    String ext = 'webp',\n"
+              "  }) {\n"
+              "    return '$_baseRaw/themes/$themeFolder/logos/$systemFolderName.$ext';\n"
+              "  }\n"
+              "\n"
+              "  /// Returns the remote URL for a theme's metadata JSON file.\n"
+              "  static String getThemeMetadataUrl(String themeFolder) {\n"
+              "    return '$_baseRaw/themes/$themeFolder/theme.json';\n"
+              "  }",
+              "  /// Base URL for a System Art pack. The default catalog lives in\n"
+              "  /// neostation-assets; curated external packs can keep their assets at\n"
+              "  /// the original source.\n"
+              "  static String _themeBaseUrl(String themeFolder) {\n"
+              "    if (themeFolder == _riisuThemeFolder) {\n"
+              "      return '$_riisuRaw/themes/$_riisuThemeFolder';\n"
+              "    }\n"
+              "    return '$_baseRaw/themes/$themeFolder';\n"
+              "  }\n"
+              "\n"
+              "  /// Returns the remote URL for a specific system background within a theme.\n"
+              "  static String getBackgroundUrl(\n"
+              "    String themeFolder,\n"
+              "    String systemFolderName, {\n"
+              "    String ext = 'webp',\n"
+              "  }) {\n"
+              "    return '${_themeBaseUrl(themeFolder)}/backgrounds/$systemFolderName.$ext';\n"
+              "  }\n"
+              "\n"
+              "  /// Returns the remote URL for a specific system logo within a theme.\n"
+              "  static String getLogoUrl(\n"
+              "    String themeFolder,\n"
+              "    String systemFolderName, {\n"
+              "    String ext = 'webp',\n"
+              "  }) {\n"
+              "    return '${_themeBaseUrl(themeFolder)}/logos/$systemFolderName.$ext';\n"
+              "  }\n"
+              "\n"
+              "  /// Returns the remote URL for a theme's metadata JSON file.\n"
+              "  static String getThemeMetadataUrl(String themeFolder) {\n"
+              "    return '${_themeBaseUrl(themeFolder)}/theme.json';\n"
+              "  }"
+          )
+
+          file.write_text(text)
+
+      - name: Verify patch
+        run: |
+          git diff --check
+          grep -q "mult1v4c/RiiSU" lib/services/neo_assets_service.dart
+          grep -q "_withCuratedExternalThemes" lib/services/neo_assets_service.dart
+          grep -q "_themeBaseUrl" lib/services/neo_assets_service.dart
+
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/services/neo_assets_service.dart
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: add RiiSU System Art pack"
+          git push origin HEAD:feature/riisu-system-art-pack
