@@ -54,6 +54,21 @@ class IosEmulatorPreferenceService {
     await prefs.setString('$_gameChoicePrefix$romPath', _encode(emulator));
   }
 
+  /// Chooses the iOS library app for one game from actual library availability.
+  ///
+  /// The primary emulator is a preference only when both libraries contain the
+  /// game. It must never route a RetroArch-only game to Manic EMU, or vice versa.
+  static IosLibraryEmulator? resolveLaunchEmulator({
+    required IosLibraryEmulator primary,
+    required bool retroArchHasGame,
+    required bool manicEmuHasGame,
+  }) {
+    if (retroArchHasGame && manicEmuHasGame) return primary;
+    if (retroArchHasGame) return IosLibraryEmulator.retroArch;
+    if (manicEmuHasGame) return IosLibraryEmulator.manicEmu;
+    return null;
+  }
+
   /// Resolves the iOS library applications associated with a system's games.
   ///
   /// A per-game choice is authoritative. Otherwise the ROM's persisted path
