@@ -241,10 +241,3 @@ p = Path("pubspec.yaml")
 s = p.read_text()
 s = replace_once(s, "version: 1.0.0+158", "version: 1.0.0+159", "build number")
 p.write_text(s)
-
-p = Path(".github/workflows/build-ios-ipa.yml")
-s = p.read_text()
-if "NeoStation-iOS-Build-158" not in s:
-    raise SystemExit("build workflow: Build-158 marker missing")
-s = s.replace("NeoStation-iOS-Build-158", "NeoStation-iOS-Build-159")
-p.write_text(s)
