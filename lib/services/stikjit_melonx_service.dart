@@ -97,7 +97,8 @@ class StikJitMeloNxService {
         mode: LaunchMode.externalApplication,
       );
       if (!opened) {
-        _lastError = 'JIT succeeded, but the MeloNX game URL could not be opened.';
+        _lastError =
+            'JIT succeeded, but the MeloNX game URL could not be opened.';
         await _appendDiagnostic('STATE: ERROR\nError: $_lastError\n');
         return false;
       }
