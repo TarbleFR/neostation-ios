@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -130,11 +132,22 @@ class StikJitMeloNxService {
       return stored;
     }
 
+    await _appendDiagnostic(
+      'STATE: PAIRING_REQUIRED\n'
+      'No stored pairing file was found. Showing setup explanation before the iOS picker.\n',
+    );
+
+    final confirmed = await _confirmPairingFileImport();
+    if (!confirmed) {
+      await _appendDiagnostic('STATE: PAIRING_PROMPT_CANCELLED\n');
+      return null;
+    }
+
     // file_picker 12.0.0-beta.3 exposes the static FilePicker facade but still
     // returns a nullable FilePickerResult. The direct List<PlatformFile> return
     // type arrived in a later beta, so keep using the result.files wrapper here.
     final picked = await FilePicker.pickFiles(
-      dialogTitle: 'Select your iPhone pairing file',
+      dialogTitle: 'Veuillez sélectionner votre pairing file',
       allowMultiple: false,
       type: FileType.any,
       withData: true,
@@ -158,6 +171,51 @@ class StikJitMeloNxService {
     }
 
     throw StateError('The selected pairing file could not be read.');
+  }
+
+  static Future<bool> _confirmPairingFileImport() async {
+    final context = rootNavigatorKey.currentContext;
+    if (context == null || !context.mounted) {
+      // The launch normally originates from the visible game screen, so a
+      // navigator context should exist. Do not make JIT unusable if it does not:
+      // fall back to the native picker and leave a diagnostic breadcrumb.
+      _log.w(
+        'StikJitMeloNxService: no navigator context for pairing explanation; '
+        'opening the picker directly.',
+      );
+      await _appendDiagnostic(
+        'PAIRING UI: navigator context unavailable; picker opened directly.\n',
+      );
+      return true;
+    }
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Pairing file requis'),
+        content: const Text(
+          'Pour utiliser MeloNX avec le JIT intégré, NeoStation doit importer '
+          'une fois le pairing file de cet iPhone.\n\n'
+          'Veuillez sélectionner votre fichier .mobiledevicepairing. Il sera '
+          'conservé localement par NeoStation et ne vous sera redemandé que si '
+          'le fichier est supprimé ou si l’application est réinstallée.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Choisir le pairing file'),
+          ),
+        ],
+      ),
+    );
+
+    return accepted ?? false;
   }
 
   static Future<File> _diagnosticFile() async {
