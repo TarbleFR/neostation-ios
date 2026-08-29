@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/sqlite_config_provider.dart';
-import '../l10n/manic_emu_locale.dart';
 import '../screens/systems_screen/fork_first_run_onboarding.dart';
 import '../services/ios_emulator_preference_service.dart';
 import 'ios_emulator_choice_screen.dart';
@@ -138,9 +137,9 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     }
   }
 
-  /// Existing iOS users may still need to choose between RetroArch and Manic
-  /// EMU. RetroArch itself is now TestFlight-only, so there is deliberately no
-  /// second distribution/version dialog here.
+  /// Existing iOS users may still need to choose between the two supported
+  /// library applications. RetroArch is TestFlight-only and Manic EMU is
+  /// IPA-only; App Store variants are deliberately not offered by NeoStation.
   void _scheduleExistingUserOffer() {
     if (!Platform.isIOS || _upgradeOfferScheduled) return;
     _upgradeOfferScheduled = true;
@@ -157,7 +156,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Configuration de l’émulateur iOS'),
           content: const Text(
-            'Choisissez l’émulateur principal de votre bibliothèque. RetroArch utilise désormais uniquement la version bêta/TestFlight compatible NeoStation.',
+            'Choisissez l’émulateur principal de votre bibliothèque. NeoStation prend uniquement en charge RetroArch TestFlight et Manic EMU installé par IPA.',
           ),
           actions: [
             TextButton(
@@ -172,7 +171,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
                 dialogContext,
                 IosLibraryEmulator.manicEmu,
               ),
-              child: const Text('Manic EMU'),
+              child: const Text('Manic EMU IPA'),
             ),
           ],
         ),
