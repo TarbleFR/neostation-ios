@@ -27,18 +27,18 @@ jobs:
           ref: rollback/testflight-clean-20260823
           fetch-depth: 0
 
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
       - name: Assemble selective rollback
         shell: bash
         run: |
           set -euo pipefail
           chmod +x build-utils/prepare_rollback_162.sh
           build-utils/prepare_rollback_162.sh
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
 
       - name: Resolve Flutter dependencies
         run: flutter pub get
