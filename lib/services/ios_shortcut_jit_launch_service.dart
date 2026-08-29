@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/stikjit_melonx_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Runs the Apple Shortcuts used by NeoStation's MeloNX and ARMSX2 iOS launch
@@ -86,6 +87,15 @@ class IosShortcutJitLaunchService {
   /// Runs an installed Shortcut and optionally passes text input to it.
   static Future<bool> run({required String shortcutName, String? input}) async {
     if (!Platform.isIOS) return false;
+
+    // Experimental builds can replace only the MeloNX Shortcut hop with the
+    // built-in StikJIT bridge. ARMSX2 and every normal build keep the exact
+    // existing Shortcut behaviour.
+    if (shortcutName == melonxShortcutName &&
+        input != null &&
+        StikJitMeloNxService.isExperimentalEnabled) {
+      return StikJitMeloNxService.launch(gameUrl: input);
+    }
 
     final shortcutUri = buildRunUri(shortcutName: shortcutName, input: input);
 
