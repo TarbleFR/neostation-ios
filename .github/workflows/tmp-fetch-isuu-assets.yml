@@ -1,0 +1,45 @@
+name: Temporary fetch iiSU platform assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/tmp-fetch-isuu-assets.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download iiSU starter pack 0.0.6
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            'https://github.com/iisu-network/iiSU/releases/download/starter-v0.0.6/iiSU_StarterPack.zip' \
+            -o /tmp/iisu.zip
+          mkdir -p /tmp/iisu
+          unzip -q /tmp/iisu.zip -d /tmp/iisu
+          echo '--- platform candidates ---'
+          find /tmp/iisu -type f | grep -Ei '/(platforms|platform_packs)/' | sort | head -400 || true
+
+      - name: Package platform assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          find /tmp/iisu -type d -iname 'platforms' -print > artifact/platform-directories.txt
+          cp -R /tmp/iisu/. artifact/starter-pack/
+          cd artifact
+          zip -qry ../isuu-starter-v0.0.6-extracted.zip starter-pack platform-directories.txt
+
+      - name: Upload extracted pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: isuu-starter-v0.0.6-extracted
+          path: isuu-starter-v0.0.6-extracted.zip
+          if-no-files-found: error
+          retention-days: 2
