@@ -6,10 +6,7 @@ import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:external_folder_access/external_folder_access.dart';
-import 'package:neostation/services/retroarch_playlist_service.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/armsx2_library_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
@@ -129,6 +126,15 @@ class GameLaunchService {
           romExists = true;
         } else {
           romExists = await File(game.romPath!).exists();
+          if (!romExists && Platform.isIOS) {
+            try {
+              romExists = await RetroArchLibraryService.hasGameForRomPath(
+                game.romPath!,
+              );
+            } catch (_) {
+              // A missing/invalid TestFlight cache remains a normal not-found.
+            }
+          }
         }
       }
       if (!context.mounted) return GameLaunchResult.failure('', '');
@@ -254,92 +260,11 @@ class GameLaunchService {
           // Fall through to the playlist/Open In/Share fallbacks below.
         }
 
-        // Genuine one-tap launch: if this ROM lives in a folder we've
-        // live-linked to RetroArch's own folder (see
-        // ConfigService.linkedExternalFolderPath +
-        // external_folder_access), and RetroArch has already scanned it
-        // into one of its own playlists, move that entry to the front of
-        // content_history.lpl and trigger RetroArch's parameter-less
-        // "Resume Last Game" Shortcuts action. That action was confirmed
-        // (on-device) to accept no external input for a *specific* game —
-        // but it needs no input at all, since it just plays whatever's
-        // most recent. See RetroArchPlaylistService for the details.
-        //
-        // The exact name of the Shortcut wrapping "Resume Last Game" is a
-        // one-time setup step done by the user in the Shortcuts app.
-        // "ResumeNeoStation" is the default name expected here.
-        final linkedFolder = ConfigService.linkedExternalFolderPath;
-        if (linkedFolder != null &&
-            path.isWithin(linkedFolder, game.romPath!)) {
-          try {
-            final updated = await RetroArchPlaylistService.setAsMostRecent(
-              game.romPath!,
-            );
-            if (updated) {
-              final opened = await launchUrl(
-                Uri.parse('shortcuts://run-shortcut?name=ResumeNeoStation'),
-              );
-              if (opened) return GameLaunchResult.success();
-            }
-          } catch (e) {
-            // Fall through to Open In / Share below rather than dead-end.
-          }
-        }
-
-        // Uses iOS's genuine "Open In" document-interaction flow rather
-        // than the general Share Sheet (which the previous version of this
-        // code used via share_plus, still available as a fallback below).
-        // "Open In" hands the file to an app that declared itself able to
-        // *own*/import that document type — the traditional "here's a
-        // file, please open it" flow, as opposed to "here's some content,
-        // do something with it" (sharing). Whether RetroArch treats these
-        // differently for a ROM its own playlist already recognizes
-        // (matched path/crc32, core resolved via "DETECT") is exactly what
-        // this is here to find out.
-        try {
-          final presented = await ExternalFolderAccess.openInMenu(
-            game.romPath!,
-          );
-          if (presented == true) {
-            return GameLaunchResult.success();
-          }
-          // Falls through to the Share Sheet below if "Open In" wasn't
-          // presented (e.g. no root view controller available) — better to
-          // still offer a working path than a dead end.
-        } catch (e) {
-          // Same — fall through to the Share Sheet fallback.
-        }
-
-        // share_plus requires a non-null sharePositionOrigin on iPad, or it
-        // can crash / hang with no visible error. Best-effort from whatever
-        // context we were handed; falls back to a small on-screen rect if
-        // the render tree isn't available for some reason.
-        Rect sharePositionOrigin = const Rect.fromLTWH(0, 0, 1, 1);
-        final renderObject = context.findRenderObject();
-        if (renderObject is RenderBox && renderObject.hasSize) {
-          sharePositionOrigin =
-              renderObject.localToGlobal(Offset.zero) & renderObject.size;
-        }
-
-        try {
-          final result = await SharePlus.instance.share(
-            ShareParams(
-              files: [XFile(game.romPath!)],
-              sharePositionOrigin: sharePositionOrigin,
-            ),
-          );
-          if (result.status == ShareResultStatus.success) {
-            return GameLaunchResult.success();
-          }
-          // `dismissed` just means the user closed the share sheet without
-          // picking anything — not an error worth surfacing as a failure.
-          return GameLaunchResult.success();
-        } catch (e) {
-          return GameLaunchResult.failure(
-            'Could not open the share sheet for this game.',
-            '$e',
-          );
-        }
+        if (!context.mounted) return GameLaunchResult.failure('', '');
+        return GameLaunchResult.failure(
+          'RetroArch TestFlight library entry not found.',
+          'Synchronize the RetroArch TestFlight library in NeoStation and try again.',
+        );
       }
 
       final configFileName = '${system.folderName}.json';

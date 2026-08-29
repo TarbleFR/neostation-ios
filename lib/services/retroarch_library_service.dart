@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -37,6 +39,12 @@ class RetroArchLibraryService {
 
   static const String _callbackScheme = 'neostation';
   static const String _prefsKey = 'retroarch_library_cache_v1';
+  static const String _cleanRollbackKey =
+      'ios_testflight_clean_rollback_162_v1';
+  static const List<String> _newTestFlightCacheKeys = <String>[
+    'retroarch_testflight_library_cache_v1',
+    'retroarch_testflight_library_cache_v2',
+  ];
 
   /// filename -> the raw exported entry (titleId/filename/titleName/
   /// gameId/system/coreName), cached in memory after the first sync or
@@ -49,9 +57,7 @@ class RetroArchLibraryService {
   /// app_links package. Returns whether the request URL was opened at all
   /// (not whether RetroArch actually responded).
   static Future<bool> requestLibrarySync() async {
-    return launchUrl(
-      Uri.parse('retroarch://library?scheme=$_callbackScheme'),
-    );
+    return launchUrl(Uri.parse('retroarch://library?scheme=$_callbackScheme'));
   }
 
   /// Call this with every incoming URI the app receives (from
@@ -153,10 +159,103 @@ class RetroArchLibraryService {
     }
   }
 
+  static bool _looksLikeLibraryCache(String? raw) {
+    if (raw == null || raw.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map && decoded.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// One-time bridge from the experimental App Store/Manic builds back to the
+  /// stable TestFlight-only cache format used by this rollback baseline.
+  /// Physical ROM files and unrelated emulator bookmarks are never touched.
+  static Future<void> _runCleanRollbackMigration() async {
+    if (!Platform.isIOS) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_cleanRollbackKey) == true) return;
+
+      final legacyCache = prefs.getString(_prefsKey);
+      if (!_looksLikeLibraryCache(legacyCache)) {
+        for (final candidateKey in _newTestFlightCacheKeys) {
+          final candidate = prefs.getString(candidateKey);
+          if (_looksLikeLibraryCache(candidate)) {
+            await prefs.setString(_prefsKey, candidate!);
+            _log.i(
+              'RetroArch rollback: restored TestFlight cache from $candidateKey.',
+            );
+            break;
+          }
+        }
+      }
+
+      const exactRemovedKeys = <String>{
+        'ios_library_emulator_v1',
+        'manic_emu_upgrade_offer_seen_v1',
+        'retroarch_linked_library_cache_v2',
+        'retroarch_linked_library_root_v1',
+        'retroarch_testflight_library_root_v1',
+        'retroarch_distribution_v1',
+        'retroarch_ios_distribution_v1',
+        'retroarch_hard_split_migrated_v1',
+        'retroarch_hard_split_offer_seen_v1',
+        'retroarch_appstore_launch_cache_v1',
+        'retroarch_appstore_launch_cache_v2',
+        'retroarch_appstore_launch_cache_v3',
+        'retroarch_appstore_launch_root_v1',
+        'retroarch_appstore_launch_root_v2',
+        'retroarch_appstore_launch_root_v3',
+        'retroarch_testflight_library_cache_v1',
+        'retroarch_testflight_library_cache_v2',
+      };
+
+      final keys = prefs.getKeys().toList(growable: false);
+      for (final key in keys) {
+        if (exactRemovedKeys.contains(key) ||
+            key.startsWith('retroarch_appstore_') ||
+            key.startsWith('manic_emu_') ||
+            key.startsWith('ios_game_emulator_v1:')) {
+          await prefs.remove(key);
+        }
+      }
+
+      await ExternalFolderAccess.clearBookmark(key: 'manicemu');
+      await prefs.setBool(_cleanRollbackKey, true);
+      _log.i(
+        'RetroArch rollback: removed App Store/Manic routing state; TestFlight only.',
+      );
+    } catch (e) {
+      _log.w('RetroArch rollback migration will retry next launch: $e');
+    }
+  }
+
+  static Map<String, dynamic>? _entryForRomPath(
+    Map<String, Map<String, dynamic>> cache,
+    String romPath,
+  ) {
+    final basename = path.basename(romPath);
+    final stem = path.basenameWithoutExtension(romPath);
+    return cache[basename] ?? cache[romPath] ?? cache[stem];
+  }
+
+  /// Returns true when the last TestFlight library export contains this game.
+  /// This intentionally does not require the old absolute iOS container path
+  /// to still exist after an emulator reinstall/update.
+  static Future<bool> hasGameForRomPath(String romPath) async {
+    if (_cache == null) await loadCachedLibrary();
+    final cache = _cache;
+    if (cache == null || cache.isEmpty) return false;
+    return _entryForRomPath(cache, romPath) != null;
+  }
+
   /// Loads the last-synced library from disk into memory, if not already
   /// loaded this session. Call once at startup so [launchGameByRomPath]
   /// works without needing a fresh sync every cold launch.
   static Future<void> loadCachedLibrary() async {
+    await _runCleanRollbackMigration();
     if (_cache != null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -168,10 +267,8 @@ class RetroArchLibraryService {
       final decoded = jsonDecode(raw);
       if (decoded is Map) {
         _cache = decoded.map(
-          (key, value) => MapEntry(
-            key.toString(),
-            Map<String, dynamic>.from(value as Map),
-          ),
+          (key, value) =>
+              MapEntry(key.toString(), Map<String, dynamic>.from(value as Map)),
         );
       } else {
         _cache = {};
@@ -211,8 +308,7 @@ class RetroArchLibraryService {
     }
 
     final basename = path.basename(romPath);
-    final stem = path.basenameWithoutExtension(romPath);
-    final entry = cache[basename] ?? cache[romPath] ?? cache[stem];
+    final entry = _entryForRomPath(cache, romPath);
 
     await _writeDebugFile(
       'launch_debug.txt',
@@ -250,9 +346,7 @@ class RetroArchLibraryService {
     try {
       final docsDir = await getApplicationDocumentsDirectory();
       final file = File(path.join(docsDir.path, name));
-      await file.writeAsString(
-        '--- ${DateTime.now()} ---\n$content',
-      );
+      await file.writeAsString('--- ${DateTime.now()} ---\n$content');
     } catch (e) {
       _log.e('RetroArchLibraryService: failed writing debug file $name: $e');
     }
