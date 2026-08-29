@@ -32,10 +32,11 @@ jobs:
           set -euo pipefail
           git checkout -B automation/ios-library-routing-160
           python3 build-utils/tmp_apply_ios_library_routing.py
+          sed -i "/import 'package:neostation\/services\/manic_emu_library_service.dart';/a import 'package:path/path.dart' as path;" test/manic_emu_library_service_test.dart
           dart format \
-            lib/services/ios_emulator_preference_service.dart \
+            lib/services/manic_emu_library_service.dart \
             lib/services/game/game_launch_service.dart \
-            test/ios_system_emulator_association_test.dart
+            test/manic_emu_library_service_test.dart
           git diff --check
 
       - name: Run targeted regression tests
@@ -44,6 +45,7 @@ jobs:
           set -euo pipefail
           flutter pub get
           flutter test test/ios_system_emulator_association_test.dart
+          flutter test test/manic_emu_library_service_test.dart
 
       - name: Commit feature branch
         shell: bash
@@ -52,9 +54,8 @@ jobs:
           git config user.name 'Tarble FR'
           git config user.email 'f9wynyv9qy@privaterelay.appleid.com'
           git add \
-            lib/services/ios_emulator_preference_service.dart \
+            lib/services/manic_emu_library_service.dart \
             lib/services/game/game_launch_service.dart \
-            test/ios_system_emulator_association_test.dart \
-            pubspec.yaml
-          git commit -m 'Route iOS games by actual library membership'
+            test/manic_emu_library_service_test.dart
+          git commit -m 'Detect Manic membership across linked libraries'
           git push --force origin HEAD:automation/ios-library-routing-160
