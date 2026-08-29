@@ -24,16 +24,17 @@ Experimental iOS-only bridge allowing NeoStation to prepare StikJIT and enable J
   # StikJIT 1.5.0 was distributed with BUILD_LIBRARY_FOR_DISTRIBUTION=YES
   # while its module and its main public enum share the name `StikJIT`.
   # Swift can therefore resolve module-qualified top-level types as members of
-  # enum StikJIT (Swift #56573). Codemagic patches the downloaded source copy,
-  # but Xcode also creates an XCFrameworkIntermediates copy; patch both just
-  # before this pod compiles so the client never sees the invalid interface.
+  # enum StikJIT (Swift #56573). The released iOS framework also lacks the
+  # framework-level Info.plist required by installd. Patch both issues in every
+  # source/intermediate/product copy before the bridge compiles.
   s.script_phase = {
-    :name => 'Patch StikJIT Swift interfaces',
+    :name => 'Prepare StikJIT framework',
     :execution_position => :before_compile,
     :script => <<-'SCRIPT'
 set -euo pipefail
 python3 - <<'PY'
 import os
+import plistlib
 from pathlib import Path
 
 root_candidates = []
@@ -50,19 +51,33 @@ for key in (
             root_candidates.append(path)
 
 interfaces = []
-seen = set()
+frameworks = []
+seen_interfaces = set()
+seen_frameworks = set()
+
 for root in root_candidates:
     for interface in root.rglob('*.swiftinterface'):
         if 'StikJIT.swiftmodule' not in str(interface):
             continue
         resolved = str(interface.resolve())
-        if resolved in seen:
+        if resolved in seen_interfaces:
             continue
-        seen.add(resolved)
+        seen_interfaces.add(resolved)
         interfaces.append(interface)
+
+    for framework in root.rglob('StikJIT.framework'):
+        if not framework.is_dir() or not (framework / 'StikJIT').is_file():
+            continue
+        resolved = str(framework.resolve())
+        if resolved in seen_frameworks:
+            continue
+        seen_frameworks.add(resolved)
+        frameworks.append(framework)
 
 if not interfaces:
     raise SystemExit('No StikJIT Swift interface found before bridge compilation.')
+if not frameworks:
+    raise SystemExit('No StikJIT.framework bundle found before bridge compilation.')
 
 top_level_types = (
     'DDIPaths',
@@ -103,9 +118,54 @@ if invalid:
         'Invalid StikJIT module-qualified references remain: ' + '; '.join(invalid)
     )
 
+required_plist = {
+    'CFBundleDevelopmentRegion': 'en',
+    'CFBundleExecutable': 'StikJIT',
+    'CFBundleIdentifier': 'com.stik.StikJIT',
+    'CFBundleInfoDictionaryVersion': '6.0',
+    'CFBundleName': 'StikJIT',
+    'CFBundlePackageType': 'FMWK',
+    'CFBundleShortVersionString': '1.5.0',
+    'CFBundleVersion': '1',
+    'CFBundleSupportedPlatforms': ['iPhoneOS'],
+    'MinimumOSVersion': '17.4',
+    'UIDeviceFamily': [1, 2],
+}
+
+plist_updates = 0
+for framework in frameworks:
+    info = framework / 'Info.plist'
+    payload = {}
+    if info.is_file():
+        try:
+            with info.open('rb') as handle:
+                payload = plistlib.load(handle)
+        except Exception:
+            payload = {}
+
+    changed = False
+    for key, value in required_plist.items():
+        if payload.get(key) != value:
+            payload[key] = value
+            changed = True
+
+    if changed or not info.is_file():
+        with info.open('wb') as handle:
+            plistlib.dump(payload, handle, fmt=plistlib.FMT_XML, sort_keys=False)
+        plist_updates += 1
+        print(f'Created/updated framework Info.plist: {info}')
+
+    with info.open('rb') as handle:
+        verified = plistlib.load(handle)
+    for key, value in required_plist.items():
+        if verified.get(key) != value:
+            raise SystemExit(f'Invalid StikJIT Info.plist {info}: {key}')
+
 print(
     f'Validated {len(interfaces)} StikJIT interface(s); '
-    f'patched {patched_files} during CocoaPods build phase.'
+    f'patched {patched_files} interface file(s); '
+    f'validated {len(frameworks)} framework bundle(s); '
+    f'updated {plist_updates} Info.plist file(s).'
 )
 PY
 SCRIPT
