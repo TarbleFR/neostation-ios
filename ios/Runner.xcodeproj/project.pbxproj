@@ -1,0 +1,69 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 54;
+	objects = {
+		A00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = A00000000000000000000002;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A00000000000000000000003;
+			productRefGroup = A00000000000000000000004;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A00000000000000000000005 /* Runner */);
+		};
+		A00000000000000000000003 = {
+			isa = PBXGroup;
+			children = (A00000000000000000000004 /* Products */);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (A00000000000000000000006 /* Runner.app */);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000006 /* Runner.app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = Runner.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		A00000000000000000000005 /* Runner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00000000000000000000007;
+			buildPhases = ();
+			buildRules = ();
+			dependencies = ();
+			name = Runner;
+			productName = Runner;
+			productReference = A00000000000000000000006 /* Runner.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A00000000000000000000002 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A00000000000000000000008, A00000000000000000000009, A0000000000000000000000A);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00000000000000000000007 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A0000000000000000000000B, A0000000000000000000000C, A0000000000000000000000D);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00000000000000000000008 = {isa = XCBuildConfiguration; buildSettings = {}; name = Debug;};
+		A00000000000000000000009 = {isa = XCBuildConfiguration; buildSettings = {}; name = Release;};
+		A0000000000000000000000A = {isa = XCBuildConfiguration; buildSettings = {}; name = Profile;};
+		A0000000000000000000000B = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.neogamelab.neostation; PRODUCT_NAME = "$(TARGET_NAME)";}; name = Debug;};
+		A0000000000000000000000C = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.neogamelab.neostation; PRODUCT_NAME = "$(TARGET_NAME)";}; name = Release;};
+		A0000000000000000000000D = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.neogamelab.neostation; PRODUCT_NAME = "$(TARGET_NAME)";}; name = Profile;};
+	};
+	rootObject = A00000000000000000000001 /* Project object */;
+}
