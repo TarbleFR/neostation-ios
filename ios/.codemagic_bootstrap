@@ -1,0 +1,2 @@
+This placeholder allows Codemagic to detect an iOS project before workflow scripts run.
+The workflow deletes and regenerates the ios directory with Flutter before the real build.
