@@ -31,6 +31,8 @@ jobs:
         run: |
           python3 .github/scripts/retroarch_testflight_cleanup.py
           python3 .github/scripts/retroarch_testflight_cleanup_fix.py
+          sed -i "/manic_emu_locale.dart/d" lib/services/game/game_launch_service.dart
+          git checkout -- .github/workflows/build-ios-ipa.yml
 
       - name: Format changed Dart files
         run: |
@@ -80,7 +82,6 @@ jobs:
             test/ios_retroarch_testflight_launch_guard_test.dart \
             test/ios_linked_library_path_service_test.dart \
             test/ios_linked_library_reassociation_test.dart \
-            pubspec.yaml \
-            .github/workflows/build-ios-ipa.yml
+            pubspec.yaml
           git commit -m 'Fix RetroArch TestFlight sync and remove Open In fallbacks'
           git push origin HEAD:feature/riisu-system-art-pack
