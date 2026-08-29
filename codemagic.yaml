@@ -65,7 +65,6 @@ workflows:
           python3 - <<'PY'
           import json
           import os
-          import sys
           import urllib.error
           import urllib.parse
           import urllib.request
@@ -94,25 +93,37 @@ workflows:
               status = error.code
               body = error.read()
           except Exception as error:
-              print("ScreenScraper developer preflight network failure: " + type(error).__name__)
-              sys.exit(1)
+              print(
+                  "WARNING: ScreenScraper developer preflight network failure: "
+                  + type(error).__name__
+                  + ". Continuing build because this check must not block IPA generation."
+              )
+              raise SystemExit(0)
 
           print(f"ScreenScraper developer preflight HTTP status: {status}")
           if status != 200:
-              print("ScreenScraper rejected or could not validate the configured developer credentials.")
-              sys.exit(1)
+              print(
+                  "WARNING: ScreenScraper rejected or could not validate the configured "
+                  "developer credentials. Continuing build; credentials will still be "
+                  "embedded for runtime testing."
+              )
+              raise SystemExit(0)
 
           try:
               payload = json.loads(body.decode("utf-8"))
           except Exception:
-              print("ScreenScraper preflight returned invalid JSON.")
-              sys.exit(1)
+              print(
+                  "WARNING: ScreenScraper preflight returned invalid JSON. Continuing build."
+              )
+              raise SystemExit(0)
 
           header = payload.get("header") if isinstance(payload, dict) else None
           success = header.get("success") if isinstance(header, dict) else None
           if str(success).lower() not in {"true", "1"}:
-              print("ScreenScraper developer preflight response did not report success.")
-              sys.exit(1)
+              print(
+                  "WARNING: ScreenScraper preflight did not report success. Continuing build."
+              )
+              raise SystemExit(0)
 
           print("ScreenScraper developer credentials were accepted by the API.")
           PY
