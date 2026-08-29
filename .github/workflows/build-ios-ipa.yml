@@ -187,17 +187,17 @@ jobs:
           cp -R "$APP_PATH" build/ios/unsigned/Payload/NeoStation.app
           (
             cd build/ios/unsigned
-            zip -qry ../../../NeoStation-iOS-Build-157.ipa Payload
+            zip -qry ../../../NeoStation-iOS-Build-158.ipa Payload
           )
-          shasum -a 256 NeoStation-iOS-Build-157.ipa | tee NeoStation-iOS-Build-157.sha256
+          shasum -a 256 NeoStation-iOS-Build-158.ipa | tee NeoStation-iOS-Build-158.sha256
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Build-157
+          name: NeoStation-iOS-Build-158
           path: |
-            NeoStation-iOS-Build-157.ipa
-            NeoStation-iOS-Build-157.sha256
+            NeoStation-iOS-Build-158.ipa
+            NeoStation-iOS-Build-158.sha256
             build/ios/xcodebuild-unsigned.log
           if-no-files-found: error
           retention-days: 14
