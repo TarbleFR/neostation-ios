@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/data/datasources/sqlite_database_service.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/services/manic_emu_library_service.dart';
+import 'package:path/path.dart' as path;
 
 import 'database_test_helper.dart';
 
@@ -42,23 +43,26 @@ void main() {
     );
   });
 
-  test('reads a large mixed Datas library without opening ROM contents', () async {
-    final data = await Directory.systemTemp.createTemp('manic_mixed_datas_');
-    addTearDown(() async {
-      if (await data.exists()) await data.delete(recursive: true);
-    });
+  test(
+    'reads a large mixed Datas library without opening ROM contents',
+    () async {
+      final data = await Directory.systemTemp.createTemp('manic_mixed_datas_');
+      addTearDown(() async {
+        if (await data.exists()) await data.delete(recursive: true);
+      });
 
-    const extensions = ['nes', 'sfc', 'gba', 'gbc', 'nds', '3ds'];
-    for (var index = 0; index < 60; index++) {
-      final extension = extensions[index % extensions.length];
-      File('${data.path}/Game $index.$extension').writeAsStringSync('rom');
-    }
+      const extensions = ['nes', 'sfc', 'gba', 'gbc', 'nds', '3ds'];
+      for (var index = 0; index < 60; index++) {
+        final extension = extensions[index % extensions.length];
+        File('${data.path}/Game $index.$extension').writeAsStringSync('rom');
+      }
 
-    expect(
-      await ManicEmuLibraryService.extensionsInDataFolder(data.path),
-      containsAll(extensions),
-    );
-  });
+      expect(
+        await ManicEmuLibraryService.extensionsInDataFolder(data.path),
+        containsAll(extensions),
+      );
+    },
+  );
 
   test('imports a 3DS ROM from Manic Datas as an extra scan path', () async {
     final helper = DatabaseTestHelper();
@@ -101,4 +105,33 @@ void main() {
     );
     expect(games.single['filename'], 'Mario Kart 7.3ds');
   });
+
+  test(
+    'RetroArch path is recognized when same game exists in Manic Datas',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'manic_membership_test_',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      final datas = Directory(path.join(temp.path, 'Datas'));
+      await datas.create(recursive: true);
+      await File(path.join(datas.path, 'Virtua Racing Deluxe.32x'))
+          .writeAsBytes([1]);
+
+      expect(
+        await ManicEmuLibraryService.hasGameForRomPath(
+          temp.path,
+          '/RetroArch/32x/Virtua Racing Deluxe.zip',
+        ),
+        isTrue,
+      );
+      expect(
+        await ManicEmuLibraryService.hasGameForRomPath(
+          temp.path,
+          '/RetroArch/32x/WWF Raw.zip',
+        ),
+        isFalse,
+      );
+    },
+  );
 }
