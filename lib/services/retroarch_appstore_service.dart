@@ -67,9 +67,28 @@ class RetroArchAppStoreService {
   /// available under the linked RetroArch root.
   static Future<bool> syncLinkedLibrary() async {
     final root = ConfigService.linkedExternalFolderPath;
-    if (root == null || root.trim().isEmpty) return false;
+    if (root == null || root.trim().isEmpty) {
+      await _writeDebugFile(
+        'retroarch_appstore_index_debug.txt',
+        '[RetroArch Index Rebuild]\n'
+        'result=ABORTED: linkedExternalFolderPath is null/empty\n',
+      );
+      return false;
+    }
     try {
-      if (!await Directory(root).exists()) return false;
+      final rootExists = await Directory(root).exists();
+      if (!rootExists) {
+        await _writeDebugFile(
+          'retroarch_appstore_index_debug.txt',
+          '[RetroArch Index Rebuild]\n'
+          'result=ABORTED: Directory(root).exists() == false\n'
+          'root=$root\n'
+          '(this usually means the security-scoped bookmark for this '
+          'folder is stale/unreachable -- try unlinking and relinking the '
+          'RetroArch folder in Settings)\n',
+        );
+        return false;
+      }
       await _rebuildLaunchIndex(root);
 
       final context = rootNavigatorKey.currentContext;
@@ -78,8 +97,16 @@ class RetroArchAppStoreService {
             .scanSystems();
       }
       return true;
-    } catch (e) {
+    } catch (e, st) {
       _log.e('RetroArch App Store library scan failed: $e');
+      await _writeDebugFile(
+        'retroarch_appstore_index_debug.txt',
+        '[RetroArch Index Rebuild]\n'
+        'result=EXCEPTION\n'
+        'root=$root\n'
+        'error=$e\n'
+        'stackTrace=\n$st\n',
+      );
       return false;
     }
   }
@@ -241,6 +268,15 @@ class RetroArchAppStoreService {
     _log.i(
       'RetroArch App Store: indexed ${index.length} launch keys from '
       '${playlists?.path ?? 'no accessible Playlist directory'}.',
+    );
+    await _writeDebugFile(
+      'retroarch_appstore_index_debug.txt',
+      '[RetroArch Index Rebuild]\n'
+      'root=$root\n'
+      'playlistsDirFound=${playlists != null}\n'
+      'playlistsDirPath=${playlists?.path ?? '(none found)'}\n'
+      'indexedKeys=${index.length}\n'
+      'fullPlaylistPathsRecorded=${fullPaths.length}\n',
     );
   }
 
