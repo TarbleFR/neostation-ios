@@ -16,12 +16,17 @@ class StikJitMeloNxService {
   StikJitMeloNxService._();
 
   static final _log = LoggerService.instance;
+  static String? _lastError;
+
+  static String? get lastError => _lastError;
 
   static const bool isExperimentalEnabled = bool.fromEnvironment(
     'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX',
     defaultValue: false,
   );
 
+  // This is now only a hint. The native bridge discovers the actual installed
+  // MeloNX bundle identifier because SideStore/Plume can rewrite it.
   static const String _bundleId = String.fromEnvironment(
     'NEOSTATION_MELONX_BUNDLE_ID',
     defaultValue: 'com.nur.nx',
@@ -30,18 +35,35 @@ class StikJitMeloNxService {
   static Future<bool> launch({required String gameUrl}) async {
     if (!Platform.isIOS || !isExperimentalEnabled) return false;
 
+    _lastError = null;
+    await _writeDiagnostic(
+      'STATE: START\n'
+      'Game URL: $gameUrl\n'
+      'Bundle hint: $_bundleId\n',
+    );
+
     final gameUri = Uri.tryParse(gameUrl);
     if (gameUri == null || gameUri.scheme.isEmpty) {
+      _lastError = 'Invalid MeloNX game URL.';
       _log.e('StikJitMeloNxService: invalid MeloNX game URL.');
+      await _appendDiagnostic('STATE: ERROR\nError: $_lastError\n');
       return false;
     }
 
     try {
       final pairingFile = await _ensurePairingFile();
       if (pairingFile == null) {
+        _lastError = 'Pairing file selection was cancelled.';
         _log.w('StikJitMeloNxService: pairing file selection was cancelled.');
+        await _appendDiagnostic('STATE: CANCELLED\nError: $_lastError\n');
         return false;
       }
+
+      await _appendDiagnostic(
+        'STATE: PAIRING_READY\n'
+        'Stored pairing file: ${path.basename(pairingFile.path)}\n'
+        'Pairing bytes: ${await pairingFile.length()}\n',
+      );
 
       final jit = await StikjitBridge.enableMeloNxJit(
         pairingFilePath: pairingFile.path,
@@ -50,21 +72,47 @@ class StikJitMeloNxService {
 
       _log.i(
         'StikJitMeloNxService: JIT ready for MeloNX pid=${jit.pid} '
+        'bundle=${jit.bundleId ?? 'unknown'} '
         'txm=${jit.txmPresent ?? 'unknown'}.',
       );
       for (final message in jit.logs) {
         _log.d('StikJIT: $message');
       }
 
+      await _appendDiagnostic(
+        'STATE: JIT_READY\n'
+        'PID: ${jit.pid}\n'
+        'Detected bundle ID: ${jit.bundleId ?? 'unknown'}\n'
+        'TXM: ${jit.txmPresent ?? 'unknown'}\n'
+        'Native log:\n${jit.logs.join('\n')}\n',
+      );
+
       // StikJIT has completed and detached. MeloNX is now running with JIT, so
       // deliver the exact frontend deep link that the old Shortcut received as
       // Shortcut Input. No StikDebug app transition is needed.
-      return await launchUrl(gameUri, mode: LaunchMode.externalApplication);
+      final opened = await launchUrl(
+        gameUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        _lastError = 'JIT succeeded, but the MeloNX game URL could not be opened.';
+        await _appendDiagnostic('STATE: ERROR\nError: $_lastError\n');
+        return false;
+      }
+
+      await _appendDiagnostic('STATE: GAME_URL_OPENED\n');
+      return true;
     } catch (error, stackTrace) {
+      _lastError = error.toString();
       _log.e(
         'StikJitMeloNxService: built-in JIT launch failed: $error',
         error: error,
         stackTrace: stackTrace,
+      );
+      await _appendDiagnostic(
+        'STATE: ERROR\n'
+        'Error: $error\n'
+        'Stack: $stackTrace\n',
       );
       return false;
     }
@@ -110,5 +158,28 @@ class StikJitMeloNxService {
     }
 
     throw StateError('The selected pairing file could not be read.');
+  }
+
+  static Future<File> _diagnosticFile() async {
+    final documents = await getApplicationDocumentsDirectory();
+    return File(path.join(documents.path, 'stikjit_melonx_debug.txt'));
+  }
+
+  static Future<void> _writeDiagnostic(String content) async {
+    try {
+      final file = await _diagnosticFile();
+      await file.writeAsString(content, flush: true);
+    } catch (_) {
+      // Diagnostic persistence must never block launching.
+    }
+  }
+
+  static Future<void> _appendDiagnostic(String content) async {
+    try {
+      final file = await _diagnosticFile();
+      await file.writeAsString(content, mode: FileMode.append, flush: true);
+    } catch (_) {
+      // Diagnostic persistence must never block launching.
+    }
   }
 }
