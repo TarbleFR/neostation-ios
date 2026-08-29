@@ -128,28 +128,34 @@ workflows:
           print("ScreenScraper developer credentials were accepted by the API.")
           PY
 
-      - name: Resolve Flutter dependencies
-        script: flutter pub get
-
-      - name: Keep iOS audio session owned by NeoStation
-        script: python3 build-utils/patch_ios_video_player_audio_session.py
-
-      - name: Scaffold iOS platform if missing
+      - name: Regenerate real iOS platform from bootstrap
         script: |
           set -euo pipefail
-          if [ ! -d ios ]; then
+          if [ -f ios/.codemagic_bootstrap ] || [ ! -f ios/Runner/Info.plist ]; then
+            echo "Replacing Codemagic detection bootstrap with a real Flutter iOS project..."
+            rm -rf ios
             flutter create \
               --platforms=ios \
               --org com.neogamelab \
               --project-name neostation \
               .
           fi
+          test -f ios/Runner.xcodeproj/project.pbxproj
+          test -f ios/Runner/Info.plist
+
+      - name: Resolve Flutter dependencies
+        script: flutter pub get
+
+      - name: Keep iOS audio session owned by NeoStation
+        script: python3 build-utils/patch_ios_video_player_audio_session.py
 
       - name: Configure iOS 18 and Info.plist
         script: |
           set -euo pipefail
 
-          sed -i '' "s/platform :ios, '13.0'/platform :ios, '18.0'/" ios/Podfile
+          if [ -f ios/Podfile ]; then
+            sed -i '' "s/platform :ios, '13.0'/platform :ios, '18.0'/" ios/Podfile || true
+          fi
           sed -i '' \
             's/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/IPHONEOS_DEPLOYMENT_TARGET = 18.0;/g' \
             ios/Runner.xcodeproj/project.pbxproj
