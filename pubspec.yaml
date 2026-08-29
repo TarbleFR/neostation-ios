@@ -10,7 +10,7 @@ workspace:
   - packages/gamepads_darwin
   - packages/gamepads_platform_interface
 
-version: 1.0.0+157
+version: 1.0.0+158
 environment:
   sdk: '>=3.9.2'
 
@@ -48,51 +48,90 @@ dependencies:
   url_launcher: ^6.3.2
   app_links: ^7.2.1
   share_plus: ^13.0.0
-  flutter_screenutil: 5.9.3
-  window_manager: ^0.5.2
-  permission_handler: ^12.0.3
-  pointycastle: ^4.0.0
-  sqlite3: ^3.5.0
-  fullscreen_window: ^1.2.1
-  animated_toggle_switch: ^0.8.7
-  marquee: ^2.3.0
-  logger: ^2.7.0
-  sub_screen: ^0.1.9
-  flutter_soloud: ^4.0.12
-  audio_metadata_reader: ^1.7.1
-  wakelock_plus: ^1.7.0
-  flutter_localization: ^0.4.1
-  pdfrx: ^2.4.6
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^6.0.0
-  flutter_launcher_icons: "^0.14.4"
-
-flutter_launcher_icons:
-  ios: true
-  image_path: "assets/images/logo.png"
-  image_path_ios: "assets/images/fork-icon-valid.jpg"
+  cupertino_icons: ^1.0.8
+  flutter_markdown: ^0.7.7+1
+  qr_flutter: ^4.1.0
+  flutter_dotenv: ^6.0.0
+  sqflite: ^2.4.2
+  sqflite_common_ffi: ^2.3.6
+  synchronized: ^3.4.0
+  drift: ^2.26.1
+  sqlite3_flutter_libs: ^0.5.32
+  sqlite3: ^2.9.4
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  intl: ^0.20.2
+  collection: ^1.19.1
+  uuid: ^4.5.1
+  image: ^4.5.4
+  video_thumbnail: ^0.5.6
+  flutter_svg: ^2.1.0
+  flutter_cache_manager: ^3.4.1
+  dio: ^5.8.0+1
+  wakelock_plus: ^1.3.2
+  logging: ^1.3.0
+  permission_handler: ^12.0.0+1
+  open_filex: ^4.7.0
+  url_protocol: ^1.0.0
+  window_manager: ^0.5.1
+  fullscreen_window: ^1.2.0
+  system_info2: ^4.0.0
+  installed_apps: ^1.6.0
+  flutter_inappwebview: ^6.1.5
+  device_apps: ^2.2.0
+  connectivity_plus: ^7.0.0
+  network_info_plus: ^7.0.0
+  flutter_local_notifications: ^19.4.2
+  path_provider_windows: ^2.3.0
+  ffi: ^2.1.4
+  win32: ^5.14.0
+  media_kit: ^1.2.0
+  media_kit_video: ^1.3.0
+  media_kit_libs_video: ^1.0.6
+  audio_session: ^0.2.2
+  just_audio: ^0.10.5
+  gamepads_darwin:
+    path: packages/gamepads_darwin
 
 flutter:
-  config:
-    enable-swift-package-manager: false
   uses-material-design: true
+
   assets:
+    - assets/
     - assets/images/
-    - assets/images/logos/
-    - assets/images/emulators/
     - assets/images/gamepad/
     - assets/images/icons/
-    - assets/images/music/
-    - assets/manifest.json
-    - assets/data/
-    - assets/systems/
-    - assets/sounds/
-  shaders:
-    - assets/shaders/stripes.frag
-    - assets/shaders/fluid.frag
-    - assets/shaders/gif_player.frag
-    - assets/shaders/music_visualizer.frag
-    - assets/shaders/music_card_background.frag
+    - assets/images/systems/
+    - assets/images/systems/banners/
+    - assets/images/systems/fanart/
+    - assets/images/systems/screenshots/
+    - assets/images/systems/wheels/
+    - assets/videos/
+    - assets/config/
+    - assets/translations/
+    - assets/neostation_data/
+    - assets/neostation_data/database.db
+    - assets/neostation_data/config.json
+    - assets/neostation_data/systems/
+    - assets/neostation_data/systems/all/
+    - assets/neostation_data/systems/all-background/
+    - assets/neostation_data/systems/android/
+    - assets/neostation_data/systems/neogeopocket/
+    - assets/neostation_data/systems/ps2/
+    - assets/neostation_data/systems/ps3/
+    - assets/neostation_data/systems/psp/
+    - assets/neostation_data/systems/switch/
+    - assets/neostation_data/systems/xbox/
+    - assets/neostation_data/systems/xbox360/
+    - assets/neostation_data/systems/xboxone/
+    - assets/neostation_data/systems/xboxseries/
+    - .env
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_transparent.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/images/logo_transparent.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21
