@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../l10n/manic_emu_locale.dart';
 import '../services/ios_emulator_preference_service.dart';
-import '../services/retroarch_distribution_service.dart';
 
 class IosEmulatorChoiceScreen extends StatefulWidget {
   const IosEmulatorChoiceScreen({super.key, required this.onFinished});
@@ -16,7 +15,6 @@ class IosEmulatorChoiceScreen extends StatefulWidget {
 
 class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
   IosLibraryEmulator? _selected;
-  RetroArchDistribution _retroDistribution = RetroArchDistribution.testFlight;
   bool _isSaving = false;
 
   Future<void> _continue() async {
@@ -25,9 +23,6 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
     setState(() => _isSaving = true);
     try {
       await IosEmulatorPreferenceService.setPrimary(selected);
-      if (selected == IosLibraryEmulator.retroArch) {
-        await RetroArchDistributionService.set(_retroDistribution);
-      }
       await IosEmulatorPreferenceService.markUpgradeOfferSeen();
       if (mounted) widget.onFinished();
     } finally {
@@ -68,56 +63,9 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
                           const SizedBox(height: 24),
                           _card(
                             IosLibraryEmulator.retroArch,
-                            'RetroArch',
-                            ManicEmuLocale.text(context, 'retroDescription'),
+                            'RetroArch TestFlight',
+                            'Synchronisation de bibliothèque et lancement direct via la version bêta/TestFlight de RetroArch.',
                           ),
-                          if (_selected == IosLibraryEmulator.retroArch) ...[
-                            const SizedBox(height: 10),
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Version de RetroArch',
-                                      style: theme.textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    const Text(
-                                      'Les configurations TestFlight et App Store sont totalement séparées.',
-                                    ),
-                                    RadioListTile<RetroArchDistribution>(
-                                      value: RetroArchDistribution.testFlight,
-                                      groupValue: _retroDistribution,
-                                      title: const Text('RetroArch TestFlight'),
-                                      subtitle: const Text(
-                                        'Synchronisation par export de bibliothèque et lancement direct.',
-                                      ),
-                                      onChanged: (value) {
-                                        if (value != null) {
-                                          setState(() => _retroDistribution = value);
-                                        }
-                                      },
-                                    ),
-                                    RadioListTile<RetroArchDistribution>(
-                                      value: RetroArchDistribution.appStore,
-                                      groupValue: _retroDistribution,
-                                      title: const Text('RetroArch App Store'),
-                                      subtitle: const Text(
-                                        'Bibliothèque basée uniquement sur le dossier RetroArch lié.',
-                                      ),
-                                      onChanged: (value) {
-                                        if (value != null) {
-                                          setState(() => _retroDistribution = value);
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
                           const SizedBox(height: 12),
                           _card(
                             IosLibraryEmulator.manicEmu,
