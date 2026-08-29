@@ -1,35 +1,40 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// RetroArch App Store integration only.
 ///
-/// The App Store build registers ROM/document UTIs and supports opening
-/// documents in place. It does not expose the TestFlight library callback/API,
-/// so this backend deliberately does not use `retroarch://game/...`.
+/// RetroArch 1.22.2 exposes `retroarch://game/<filename>`. The iOS handler
+/// looks up that filename in RetroArch's own playlists, then launches the
+/// playlist entry's full path with its recorded core. NeoStation therefore
+/// must reproduce RetroArch's filename derivation exactly instead of copying,
+/// extracting, or importing ROMs.
 class RetroArchAppStoreService {
   RetroArchAppStoreService._();
 
   static final _log = LoggerService.instance;
 
-  static const Set<String> _directRomExtensions = {
-    '.32x', '.a26', '.a52', '.a78', '.col', '.fds', '.gb', '.gbc', '.gba',
-    '.gen', '.gg', '.j64', '.lnx', '.md', '.n64', '.nds', '.nes', '.ngc',
-    '.ngp', '.pce', '.sfc', '.sg', '.smc', '.sms', '.sv', '.vec', '.v64',
-    '.vb', '.ws', '.wsc', '.z64', '.cue', '.m3u', '.iso', '.chd', '.bin',
+  static const String _cacheKey = 'retroarch_appstore_launch_cache_v2';
+  static const String _rootKey = 'retroarch_appstore_launch_root_v2';
+  static const Set<String> _ignoredPlaylists = {
+    'content_history.lpl',
+    'content_image_history.lpl',
+    'content_music_history.lpl',
+    'content_video_history.lpl',
+    'favorites.lpl',
   };
 
-  static const Set<String> _metadataExtensions = {
-    '.txt', '.nfo', '.md5', '.sha1', '.jpg', '.jpeg', '.png', '.gif', '.xml',
-    '.dat',
-  };
+  static Map<String, String> _launchIds = <String, String>{};
+  static String? _cacheRoot;
+  static bool _loaded = false;
 
   static bool ownsRomPath(String romPath) {
     final root = ConfigService.linkedExternalFolderPath;
@@ -43,13 +48,16 @@ class RetroArchAppStoreService {
     }
   }
 
-  /// App Store synchronization stays local. RetroArch App Store has no
-  /// TestFlight-style library export callback.
+  /// App Store sync stays local. It also refreshes the exact filename index
+  /// from RetroArch's own .lpl files when the Playlist/Playlists directory is
+  /// available under the linked RetroArch root.
   static Future<bool> syncLinkedLibrary() async {
     final root = ConfigService.linkedExternalFolderPath;
     if (root == null || root.trim().isEmpty) return false;
     try {
       if (!await Directory(root).exists()) return false;
+      await _rebuildLaunchIndex(root);
+
       final context = rootNavigatorKey.currentContext;
       if (context != null) {
         await Provider.of<SqliteConfigProvider>(context, listen: false)
@@ -62,120 +70,260 @@ class RetroArchAppStoreService {
     }
   }
 
-  /// Returns the actual document that iOS should hand to RetroArch App Store.
-  /// ZIP cartridge ROMs are extracted to a stable NeoStation cache first,
-  /// because iOS document handoff cannot address `archive.zip#inner.rom`.
-  static Future<String?> launchDocumentForRomPath(String romPath) async {
-    if (!ownsRomPath(romPath)) return null;
-    final file = File(romPath);
-    if (!await file.exists()) return null;
+  /// Returns the exact filename RetroArch 1.22.2 expects after
+  /// `retroarch://game/` for this ROM.
+  ///
+  /// Important archive rule from RetroArch's own `path_basename()`:
+  /// - `/roms/game.zip` -> `game.zip`
+  /// - `/roms/game.zip#game.32x` -> `game.32x`
+  ///
+  /// The archive member is only used when RetroArch itself recorded it in its
+  /// playlist. NeoStation never opens or inspects the ZIP to guess this value.
+  static Future<String?> launchIdForRomPath(String romPath) async {
+    await _loadCache();
+    final currentRoot = _normalizedRoot();
+    if (currentRoot != null && !_sameRoot(_cacheRoot, currentRoot)) {
+      await _rebuildLaunchIndex(currentRoot);
+    }
 
-    if (path.extension(romPath).toLowerCase() != '.zip') return romPath;
-    return _extractSingleRomFromZip(file);
+    final indexed = _lookup(romPath);
+    if (indexed != null && indexed.isNotEmpty) return indexed;
+
+    // If playlists are unavailable, the safest fallback is the physical
+    // filename. This is exactly what RetroArch expects for playlist entries
+    // that point to the archive/file itself.
+    final fallback = path.basename(romPath);
+    return fallback.isEmpty ? null : fallback;
   }
 
-  /// App Store direct launch uses Apple's document-opening contract rather than
-  /// the TestFlight-only `retroarch://game/...` route.
-  ///
-  /// `Share.shareXFiles` is intentional here: it asks iOS for applications that
-  /// declare the document type. RetroArch App Store declares ROM/public.data
-  /// document handling and opening-in-place, so it can receive the real file.
+  /// Direct launch for the App Store build. No Share sheet, no Open In, no
+  /// temporary copy, and no ZIP extraction: RetroArch resolves the playlist
+  /// entry, full content path and core itself.
   static Future<bool> launchGameByRomPath(String romPath) async {
     if (!ownsRomPath(romPath)) return false;
     try {
-      final documentPath = await launchDocumentForRomPath(romPath);
-      if (documentPath == null || documentPath.isEmpty) {
+      if (!await File(romPath).exists()) return false;
+
+      final launchId = await launchIdForRomPath(romPath);
+      if (launchId == null || launchId.isEmpty) {
         _log.w(
-          'RetroArch App Store: unable to produce an unambiguous launch '
-          'document for ${path.basename(romPath)}.',
+          'RetroArch App Store: no launch filename for ${path.basename(romPath)}.',
         );
         return true;
       }
 
-      await Share.shareXFiles(
-        <XFile>[XFile(documentPath)],
-        subject: 'Open in RetroArch',
+      final uri = Uri(
+        scheme: 'retroarch',
+        host: 'game',
+        pathSegments: <String>[launchId],
       );
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) {
+        _log.w('RetroArch App Store deeplink was not opened: $uri');
+      }
+
+      // This ROM belongs to RetroArch. A failed dispatch must never fall
+      // through to NeoStation's generic iOS Share/Open-In path.
       return true;
     } catch (e) {
-      _log.e('RetroArch App Store document handoff failed: $e');
+      _log.e('RetroArch App Store launch failed: $e');
       return true;
     }
   }
 
-  static Future<String?> _extractSingleRomFromZip(File zipFile) async {
-    try {
-      final archive = ZipDecoder().decodeBytes(
-        await zipFile.readAsBytes(),
-        verify: false,
-      );
-      final payloads = archive.files.where((entry) {
-        if (!entry.isFile || entry.name.isEmpty) return false;
-        final normalized = entry.name.replaceAll('\\', '/');
-        if (normalized.startsWith('__MACOSX/')) return false;
-        return !_metadataExtensions
-            .contains(path.extension(normalized).toLowerCase());
-      }).toList();
+  static Future<void> _rebuildLaunchIndex(String root) async {
+    final normalizedRoot = path.normalize(root);
+    final index = <String, String>{};
+    final playlists = await _findPlaylistsDirectory(normalizedRoot);
 
-      if (payloads.isEmpty) return null;
-      final direct = payloads.where((entry) => _directRomExtensions
-          .contains(path.extension(entry.name).toLowerCase())).toList();
+    if (playlists != null) {
+      try {
+        await for (final entity in playlists.list(followLinks: false)) {
+          if (entity is! File ||
+              path.extension(entity.path).toLowerCase() != '.lpl') {
+            continue;
+          }
+          final playlistName = path.basename(entity.path).toLowerCase();
+          if (_ignoredPlaylists.contains(playlistName)) continue;
 
-      ArchiveFile? selected;
-      if (direct.length == 1) {
-        selected = direct.single;
-      } else if (direct.length > 1) {
-        final archiveStem =
-            path.basenameWithoutExtension(zipFile.path).toLowerCase();
-        for (final candidate in direct) {
-          if (path.basenameWithoutExtension(candidate.name).toLowerCase() ==
-              archiveStem) {
-            selected = candidate;
-            break;
+          try {
+            final decoded = jsonDecode(await entity.readAsString());
+            if (decoded is! Map) continue;
+            final items = decoded['items'];
+            if (items is! List) continue;
+
+            for (final raw in items) {
+              if (raw is! Map) continue;
+              final contentPath = raw['path']?.toString();
+              if (contentPath == null || contentPath.isEmpty) continue;
+
+              final mapping = _mappingFromPlaylistPath(contentPath);
+              if (mapping == null) continue;
+              final physicalPath = mapping.$1;
+              final launchId = mapping.$2;
+
+              // Exact path wins. Basename/stem aliases only provide resilience
+              // when iOS presents the same security-scoped location through a
+              // slightly different absolute container prefix.
+              _put(index, physicalPath, launchId);
+              _put(index, path.basename(physicalPath), launchId);
+              _put(index, path.basenameWithoutExtension(physicalPath), launchId);
+            }
+          } catch (e) {
+            _log.w('RetroArch App Store: skipped playlist ${entity.path}: $e');
           }
         }
-        for (final candidate in direct) {
-          if (selected != null) break;
-          final ext = path.extension(candidate.name).toLowerCase();
-          if (ext == '.cue' || ext == '.m3u') selected = candidate;
-        }
-      } else if (payloads.length == 1) {
-        selected = payloads.single;
+      } catch (e) {
+        _log.w('RetroArch App Store: failed listing ${playlists.path}: $e');
       }
-
-      if (selected == null) {
-        _log.w(
-          'RetroArch App Store: ${path.basename(zipFile.path)} contains '
-          '${payloads.length} payloads and cannot be opened unambiguously.',
-        );
-        return null;
-      }
-
-      final outputName = path.basename(selected.name.replaceAll('\\', '/'));
-      if (outputName.isEmpty) return null;
-      final cacheDirectory = Directory(path.join(
-        Directory.systemTemp.path,
-        'neostation_retroarch_appstore',
-      ));
-      await cacheDirectory.create(recursive: true);
-      final output = File(path.join(cacheDirectory.path, outputName));
-
-      final content = selected.content;
-      if (content is List<int>) {
-        await output.writeAsBytes(content, flush: true);
-      } else {
-        _log.w('RetroArch App Store: unsupported ZIP payload representation.');
-        return null;
-      }
-
-      _log.i(
-        'RetroArch App Store: extracted ${path.basename(zipFile.path)} -> '
-        '${output.path}',
-      );
-      return output.path;
-    } catch (e) {
-      _log.e('RetroArch App Store ZIP extraction failed: $e');
-      return null;
     }
+
+    _launchIds = index;
+    _cacheRoot = normalizedRoot;
+    _loaded = true;
+    await _persistCache();
+    _log.i(
+      'RetroArch App Store: indexed ${index.length} launch keys from '
+      '${playlists?.path ?? 'no accessible Playlist directory'}.',
+    );
+  }
+
+  /// Returns `(physical file/container path, deeplink filename)` using the
+  /// same archive-basename semantics as RetroArch 1.22.2.
+  static (String, String)? _mappingFromPlaylistPath(String value) {
+    if (value.isEmpty) return null;
+    final normalized = value.replaceAll('\\', '/');
+    final archiveHash = _archiveDelimiterIndex(normalized);
+
+    if (archiveHash >= 0 && archiveHash < normalized.length - 1) {
+      final container = normalized.substring(0, archiveHash);
+      final member = normalized.substring(archiveHash + 1);
+      if (container.isEmpty || member.isEmpty) return null;
+      // RetroArch path_basename() returns everything after the compression '#'.
+      return (container, member);
+    }
+
+    final slash = normalized.lastIndexOf('/');
+    final filename = slash >= 0 ? normalized.substring(slash + 1) : normalized;
+    if (filename.isEmpty) return null;
+    return (normalized, filename);
+  }
+
+  static int _archiveDelimiterIndex(String value) {
+    var searchFrom = 0;
+    while (true) {
+      final hash = value.indexOf('#', searchFrom);
+      if (hash < 0) return -1;
+      final before = value.substring(0, hash).toLowerCase();
+      if (before.endsWith('.zip') ||
+          before.endsWith('.7z') ||
+          before.endsWith('.apk')) {
+        return hash;
+      }
+      searchFrom = hash + 1;
+    }
+  }
+
+  static Future<Directory?> _findPlaylistsDirectory(String root) async {
+    final rootDirectory = Directory(root);
+    final rootName = path.basename(root).toLowerCase();
+    if (rootName == 'playlist' || rootName == 'playlists') {
+      return rootDirectory;
+    }
+
+    // RetroArch upstream uses "playlists"; App Store installations may expose
+    // the folder as Playlist/Playlists in Files. Match case-insensitively and
+    // support both singular and plural without traversing outside the granted
+    // security-scoped root.
+    try {
+      await for (final entity in rootDirectory.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final name = path.basename(entity.path).toLowerCase();
+        if (name == 'playlist' || name == 'playlists') return entity;
+      }
+    } catch (_) {
+      // Fall through to direct candidates below.
+    }
+
+    for (final name in const <String>[
+      'Playlist',
+      'Playlists',
+      'playlist',
+      'playlists',
+    ]) {
+      try {
+        final candidate = Directory(path.join(root, name));
+        if (await candidate.exists()) return candidate;
+      } catch (_) {
+        // Security scope may not include the candidate.
+      }
+    }
+    return null;
+  }
+
+  static void _put(Map<String, String> target, String key, String value) {
+    if (key.isEmpty || value.isEmpty) return;
+    target.putIfAbsent(key, () => value);
+    target.putIfAbsent(key.toLowerCase(), () => value);
+  }
+
+  static String? _lookup(String romPath) {
+    final normalized = path.normalize(romPath);
+    final basename = path.basename(normalized);
+    final stem = path.basenameWithoutExtension(normalized);
+    return _launchIds[normalized] ??
+        _launchIds[normalized.toLowerCase()] ??
+        _launchIds[basename] ??
+        _launchIds[basename.toLowerCase()] ??
+        _launchIds[stem] ??
+        _launchIds[stem.toLowerCase()];
+  }
+
+  static Future<void> _loadCache() async {
+    if (_loaded) return;
+    _launchIds = <String, String>{};
+    _cacheRoot = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final root = prefs.getString(_rootKey);
+      final raw = prefs.getString(_cacheKey);
+      if (root != null && raw != null) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          _launchIds = decoded.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          );
+          _cacheRoot = path.normalize(root);
+        }
+      }
+    } catch (e) {
+      _log.e('RetroArch App Store: failed loading launch cache: $e');
+    }
+    _loaded = true;
+  }
+
+  static Future<void> _persistCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode(_launchIds));
+      if (_cacheRoot == null) {
+        await prefs.remove(_rootKey);
+      } else {
+        await prefs.setString(_rootKey, _cacheRoot!);
+      }
+    } catch (e) {
+      _log.e('RetroArch App Store: failed persisting launch cache: $e');
+    }
+  }
+
+  static String? _normalizedRoot() {
+    final root = ConfigService.linkedExternalFolderPath;
+    if (root == null || root.trim().isEmpty) return null;
+    return path.normalize(root.trim());
+  }
+
+  static bool _sameRoot(String? a, String? b) {
+    if (a == null || b == null) return a == b;
+    return path.normalize(a).toLowerCase() == path.normalize(b).toLowerCase();
   }
 }
