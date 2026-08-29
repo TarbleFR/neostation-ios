@@ -32,6 +32,7 @@ class StikjitBridge {
 
     return StikjitLaunchResult(
       pid: pidValue.toInt(),
+      bundleId: data['bundleId']?.toString(),
       txmPresent: data['txmPresent'] as bool?,
       logs: logs,
     );
@@ -41,11 +42,13 @@ class StikjitBridge {
 class StikjitLaunchResult {
   const StikjitLaunchResult({
     required this.pid,
+    required this.bundleId,
     required this.txmPresent,
     required this.logs,
   });
 
   final int pid;
+  final String? bundleId;
   final bool? txmPresent;
   final List<String> logs;
 }
