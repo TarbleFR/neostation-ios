@@ -1,6 +1,6 @@
 workflows:
-  ios-rpcs3-163:
-    name: NeoStation iOS Build 163 - RPCS3 Fix
+  ios-screenscraper-164:
+    name: NeoStation iOS Build 164 - ScreenScraper Codemagic Fix
     instance_type: mac_mini_m2
     max_build_duration: 120
 
@@ -15,42 +15,125 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: build/rpcs3-163-codemagic
+        - pattern: build/screenscraper-164-codemagic
           include: true
           source: true
       cancel_previous_builds: true
 
     scripts:
-      - name: Prepare ScreenScraper environment
+      - name: Verify application source is unchanged from Build 163
+        script: |
+          set -euo pipefail
+          BASE='e41704a617e9e4a8e421159db23337ae668fe5ab'
+          git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD | sort)
+          if [ "$CHANGED" != 'codemagic.yaml' ]; then
+            echo 'Build 164 must be pipeline-only. Unexpected changed files:'
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
+          grep -q 'version: 1.0.0+163' pubspec.yaml
+          grep -q 'final selected = await ExternalFolderAccess.resolveBookmarkedFolder' \
+            lib/services/rpcs3_library_service.dart
+          echo 'Application source matches Build 163; only codemagic.yaml changed.'
+
+      - name: Validate ScreenScraper Codemagic secrets
         script: |
           set -euo pipefail
           python3 - <<'PY'
           import os
           import pathlib
-          values = {
-              'SCREENSCRAPER_DEV_ID': os.environ.get('SCREENSCRAPER_DEV_ID', ''),
-              'SCREENSCRAPER_DEV_PASSWORD': os.environ.get('SCREENSCRAPER_DEV_PASSWORD', ''),
-          }
-          pathlib.Path('.env').write_text(
-              '\n'.join(f'{k}={v}' for k, v in values.items()) + '\n',
+          import sys
+
+          names = (
+              'SCREENSCRAPER_DEV_ID',
+              'SCREENSCRAPER_DEV_PASSWORD',
+          )
+          values = {name: os.environ.get(name, '') for name in names}
+
+          missing = [name for name, value in values.items() if not value]
+          if missing:
+              print('Missing required Codemagic ScreenScraper variables: ' + ', '.join(missing))
+              sys.exit(1)
+
+          malformed = [
+              name
+              for name, value in values.items()
+              if value != value.strip() or '\n' in value or '\r' in value
+          ]
+          if malformed:
+              print('Malformed ScreenScraper variables: ' + ', '.join(malformed))
+              sys.exit(1)
+
+          env_file = pathlib.Path('.env')
+          env_file.write_text(
+              '\n'.join(f'{name}={values[name]}' for name in names) + '\n',
               encoding='utf-8',
           )
+          env_file.chmod(0o600)
+          print('ScreenScraper Codemagic variables are present and well formed.')
+          PY
+
+      - name: Verify ScreenScraper developer credentials with API
+        script: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          query = urllib.parse.urlencode(
+              {
+                  'devid': os.environ['SCREENSCRAPER_DEV_ID'],
+                  'devpassword': os.environ['SCREENSCRAPER_DEV_PASSWORD'],
+                  'softname': 'neostation-ios-codemagic',
+                  'output': 'json',
+              }
+          )
+          request = urllib.request.Request(
+              'https://api.screenscraper.fr/api2/ssinfraInfos.php?' + query,
+              headers={
+                  'User-Agent': 'NeoStation/1.0',
+                  'Accept': 'application/json',
+              },
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=40) as response:
+                  status = response.status
+                  body = response.read()
+          except urllib.error.HTTPError as error:
+              status = error.code
+              body = error.read()
+          except Exception as error:
+              print('ScreenScraper preflight network failure: ' + type(error).__name__)
+              sys.exit(1)
+
+          print(f'ScreenScraper developer preflight HTTP status: {status}')
+          if status != 200:
+              print('ScreenScraper rejected the configured developer credentials.')
+              sys.exit(1)
+
+          try:
+              payload = json.loads(body.decode('utf-8'))
+          except Exception:
+              print('ScreenScraper preflight returned invalid JSON.')
+              sys.exit(1)
+
+          header = payload.get('header') if isinstance(payload, dict) else None
+          success = header.get('success') if isinstance(header, dict) else None
+          if str(success).lower() not in {'true', '1'}:
+              print('ScreenScraper preflight did not report success.')
+              sys.exit(1)
+
+          print('ScreenScraper developer credentials were accepted by the API.')
           PY
 
       - name: Resolve Flutter dependencies
         script: flutter pub get
-
-      - name: Validate RPCS3-only correction
-        script: |
-          set -euo pipefail
-          flutter test test/rpcs3_library_service_test.dart
-          flutter test test/rpcs3_stage3_test.dart
-          flutter test test/rpcs3_stage6_test.dart
-          flutter test test/rpcs3_stage7_test.dart
-          flutter test test/ios_selective_rollback_test.dart
-          flutter analyze --no-fatal-warnings --no-fatal-infos
-          grep -q "final selected = await ExternalFolderAccess.resolveBookmarkedFolder" lib/services/rpcs3_library_service.dart
-          grep -q "version: 1.0.0+163" pubspec.yaml
 
       - name: Regenerate real iOS platform from bootstrap
         script: |
@@ -123,13 +206,66 @@ workflows:
           cd ios
           pod install --repo-update
 
-      - name: Configure Flutter release
+      - name: Configure Flutter release with verified ScreenScraper defines
         script: |
+          set -euo pipefail
           flutter build ios \
             --release \
             --no-codesign \
             --config-only \
+            --build-number=164 \
             --dart-define-from-file=.env
+
+      - name: Verify ScreenScraper defines reached Xcode
+        script: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import os
+          import pathlib
+          import sys
+
+          config = pathlib.Path('ios/Flutter/Generated.xcconfig')
+          if not config.is_file():
+              print('Generated.xcconfig was not generated.')
+              sys.exit(1)
+
+          values = {}
+          for line in config.read_text(encoding='utf-8').splitlines():
+              if '=' in line:
+                  key, value = line.split('=', 1)
+                  values[key] = value
+
+          encoded = values.get('DART_DEFINES', '')
+          if not encoded:
+              print('DART_DEFINES is missing from Generated.xcconfig.')
+              sys.exit(1)
+
+          decoded = set()
+          for item in encoded.split(','):
+              if not item:
+                  continue
+              try:
+                  decoded.add(base64.b64decode(item).decode('utf-8'))
+              except Exception:
+                  print('Generated DART_DEFINES contains an invalid Base64 entry.')
+                  sys.exit(1)
+
+          expected = {
+              'SCREENSCRAPER_DEV_ID=' + os.environ['SCREENSCRAPER_DEV_ID'],
+              'SCREENSCRAPER_DEV_PASSWORD=' + os.environ['SCREENSCRAPER_DEV_PASSWORD'],
+          }
+          if not expected.issubset(decoded):
+              print('Exact ScreenScraper developer defines are missing from Xcode configuration.')
+              sys.exit(1)
+
+          if values.get('FLUTTER_BUILD_NUMBER') != '164':
+              print('FLUTTER_BUILD_NUMBER is not 164 in Generated.xcconfig.')
+              sys.exit(1)
+
+          print('Both ScreenScraper developer defines are embedded in Xcode configuration.')
+          print('Flutter build number 164 is configured.')
+          PY
 
       - name: Build unsigned iOS app
         script: |
@@ -151,7 +287,7 @@ workflows:
             COMPILER_INDEX_STORE_ENABLE=NO \
             build | tee build/ios/xcodebuild-unsigned.log
 
-      - name: Package Build 163 IPA
+      - name: Package Build 164 IPA
         script: |
           set -euo pipefail
           APP_PATH=$(find build/ios/DerivedData/Build/Products/Release-iphoneos \
@@ -161,25 +297,25 @@ workflows:
           cp -R "$APP_PATH" build/ios/unsigned/Payload/NeoStation.app
           (
             cd build/ios/unsigned
-            zip -qry ../../../NeoStation-iOS-Build-163.ipa Payload
+            zip -qry ../../../NeoStation-iOS-Build-164.ipa Payload
           )
           /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
-            build/ios/unsigned/Payload/NeoStation.app/Info.plist | grep -qx '163'
+            build/ios/unsigned/Payload/NeoStation.app/Info.plist | grep -qx '164'
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
             build/ios/unsigned/Payload/NeoStation.app/Info.plist | grep -qx 'com.neogamelab.neostation'
-          shasum -a 256 NeoStation-iOS-Build-163.ipa | tee NeoStation-iOS-Build-163.sha256
+          shasum -a 256 NeoStation-iOS-Build-164.ipa | tee NeoStation-iOS-Build-164.sha256
 
-      - name: Remove temporary environment file
+      - name: Remove temporary ScreenScraper environment file
         script: rm -f .env
 
     artifacts:
-      - NeoStation-iOS-Build-163.ipa
-      - NeoStation-iOS-Build-163.sha256
+      - NeoStation-iOS-Build-164.ipa
+      - NeoStation-iOS-Build-164.sha256
       - build/ios/xcodebuild-unsigned.log
 
     publishing:
       scripts:
-        - name: Publish Build 163 to GitHub Releases
+        - name: Publish Build 164 to GitHub Releases
           script: |
             set -euo pipefail
             if [ -z "${Ghtoken:-}" ]; then
@@ -188,17 +324,19 @@ workflows:
             fi
             export GH_TOKEN="$Ghtoken"
             command -v gh >/dev/null 2>&1 || brew install gh
-            TAG='ios-build-163-rpcs3'
-            if gh release view "$TAG" >/dev/null 2>&1; then
+            TAG='ios-build-164-screenscraper-codemagic'
+            if gh release view "$TAG" --repo TarbleFR/neostation-ios >/dev/null 2>&1; then
               gh release upload "$TAG" \
-                NeoStation-iOS-Build-163.ipa \
-                NeoStation-iOS-Build-163.sha256 \
+                NeoStation-iOS-Build-164.ipa \
+                NeoStation-iOS-Build-164.sha256 \
+                --repo TarbleFR/neostation-ios \
                 --clobber
             else
               gh release create "$TAG" \
-                NeoStation-iOS-Build-163.ipa \
-                NeoStation-iOS-Build-163.sha256 \
+                NeoStation-iOS-Build-164.ipa \
+                NeoStation-iOS-Build-164.sha256 \
+                --repo TarbleFR/neostation-ios \
                 --target "$CM_COMMIT" \
-                --title 'NeoStation iOS Build 163 - RPCS3 Fix' \
-                --notes 'Codemagic build. RPCS3-only fix: immediately re-activate the iOS security-scoped Data-folder bookmark before library discovery so synchronized PS3 games appear without restarting NeoStation.'
+                --title 'NeoStation iOS Build 164 - ScreenScraper Codemagic Fix' \
+                --notes 'Codemagic pipeline-only correction. Application source is unchanged from Build 163. ScreenScraper developer variables are now required, API-preflighted, injected through --dart-define-from-file, and verified in Generated.xcconfig before Xcode compilation.'
             fi
