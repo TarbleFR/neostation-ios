@@ -23,11 +23,12 @@ jobs:
       - name: Apply fixes
         run: |
           set -euo pipefail
+          git checkout -B automation/ios-first-sync-safearea-159
           python3 build-utils/tmp_apply_ios_first_sync_safearea.py
           git diff --check
           git diff --stat
 
-      - name: Commit fixes
+      - name: Commit feature branch
         run: |
           set -euo pipefail
           git config user.name 'Tarble FR'
@@ -37,7 +38,6 @@ jobs:
             lib/screens/game_screen/my_games_list.dart \
             lib/screens/game_screen/my_games_grid.dart \
             lib/screens/game_screen/my_games_carousel.dart \
-            pubspec.yaml \
-            .github/workflows/build-ios-ipa.yml
+            pubspec.yaml
           git commit -m 'Auto-sync iOS libraries and respect Dynamic Island'
-          git push origin HEAD:main
+          git push --force origin HEAD:automation/ios-first-sync-safearea-159
