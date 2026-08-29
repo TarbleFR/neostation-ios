@@ -69,8 +69,8 @@ class _IosEmulatorChoiceScreenState extends State<IosEmulatorChoiceScreen> {
                           const SizedBox(height: 12),
                           _card(
                             IosLibraryEmulator.manicEmu,
-                            'Manic EMU',
-                            ManicEmuLocale.text(context, 'manicDescription'),
+                            'Manic EMU IPA',
+                            'Utilisez uniquement la version IPA de Manic EMU comme bibliothèque et lanceur de jeux.',
                           ),
                         ],
                       ),
