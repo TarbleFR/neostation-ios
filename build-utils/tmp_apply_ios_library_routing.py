@@ -8,156 +8,156 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-# Pure routing rule: availability always wins. Primary is only a preference
-# when both libraries actually contain the game.
-p = Path("lib/services/ios_emulator_preference_service.dart")
+# ---------------------------------------------------------------------------
+# Manic EMU membership detection
+# ---------------------------------------------------------------------------
+p = Path("lib/services/manic_emu_library_service.dart")
 s = p.read_text()
-marker = "  /// Resolves the iOS library applications associated with a system's games.\n"
-method = """  /// Chooses the iOS library app for one game from actual library availability.
+marker = "  static Future<bool> containsNintendo3dsGames(String dataFolder) async {\n"
+method = """  /// Returns whether a ROM represented by [romPath] is actually present in the
+  /// linked Manic EMU library.
   ///
-  /// The primary emulator is a preference only when both libraries contain the
-  /// game. It must never route a RetroArch-only game to Manic EMU, or vice versa.
-  static IosLibraryEmulator? resolveLaunchEmulator({
-    required IosLibraryEmulator primary,
-    required bool retroArchHasGame,
-    required bool manicEmuHasGame,
-  }) {
-    if (retroArchHasGame && manicEmuHasGame) return primary;
-    if (retroArchHasGame) return IosLibraryEmulator.retroArch;
-    if (manicEmuHasGame) return IosLibraryEmulator.manicEmu;
-    return null;
+  /// A row originating from Manic itself is identified by folder ownership.
+  /// For a row originating from RetroArch, compare the filename stem against
+  /// Manic's public Documents/Datas folder. This also handles RetroArch ZIP
+  /// containers because Manic imports/extracts the contained ROM using the same
+  /// title stem before computing its launch identifier.
+  static Future<bool> hasGameForRomPath(
+    String? linkedPath,
+    String romPath,
+  ) async {
+    final root = linkedPath?.trim();
+    final rom = romPath.trim();
+    if (root == null || root.isEmpty || rom.isEmpty) return false;
+
+    final normalizedRoot = path.normalize(root);
+    final normalizedRom = path.normalize(rom);
+    if (path.equals(normalizedRoot, normalizedRom) ||
+        path.isWithin(normalizedRoot, normalizedRom)) {
+      return true;
+    }
+
+    final targetStem = path.basenameWithoutExtension(normalizedRom).toLowerCase();
+    if (targetStem.isEmpty) return false;
+
+    final dataFolder = await resolveDataFolder(normalizedRoot);
+    if (dataFolder != null) {
+      try {
+        await for (final entity in Directory(dataFolder).list(
+          recursive: false,
+          followLinks: false,
+        )) {
+          if (entity is! File) continue;
+          if (path.basenameWithoutExtension(entity.path).toLowerCase() ==
+              targetStem) {
+            return true;
+          }
+        }
+      } catch (_) {
+        // An unavailable security-scoped bookmark means the game cannot be
+        // considered launchable from Manic for this session.
+      }
+    }
+
+    // 3DS installs live outside Datas. Only inspect that tree for 3DS-family
+    // extensions so ordinary ROM launches never pay for a recursive walk.
+    final extension = path
+        .extension(normalizedRom)
+        .toLowerCase()
+        .replaceFirst('.', '');
+    if (!nintendo3dsExtensions.contains(extension)) return false;
+
+    final documentsRoot = path.basename(normalizedRoot).toLowerCase() == 'datas'
+        ? path.dirname(normalizedRoot)
+        : normalizedRoot;
+    final threeDsRoot = Directory(path.join(documentsRoot, '3DS'));
+    if (!await threeDsRoot.exists()) return false;
+    try {
+      await for (final entity in threeDsRoot.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        if (path.basenameWithoutExtension(entity.path).toLowerCase() ==
+            targetStem) {
+          return true;
+        }
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
   }
 
 """
-s = replace_once(s, marker, method + marker, "insert launch resolver")
+s = replace_once(s, marker, method + marker, "insert Manic membership resolver")
 p.write_text(s)
 
 
-# Replace the former global-primary/per-game-prompt routing block.
+# ---------------------------------------------------------------------------
+# Use true Manic membership in the launch router
+# ---------------------------------------------------------------------------
 p = Path("lib/services/game/game_launch_service.dart")
 s = p.read_text()
-start = s.index(
-    "        // Multi-system iOS libraries: RetroArch and Manic EMU can coexist."
+s = replace_once(
+    s,
+    "import 'package:neostation/services/manic_emu_launch_service.dart';\n",
+    "import 'package:neostation/services/manic_emu_launch_service.dart';\n"
+    "import 'package:neostation/services/manic_emu_library_service.dart';\n",
+    "add Manic library import",
 )
-end = s.index(
-    "        // Genuine one-tap launch via RetroArch's synced library and", start
-)
-new = """        // Multi-system iOS libraries: route by actual membership first.
-        // The user's primary emulator is only a preference when BOTH libraries
-        // contain this game. It is never a global override for every title.
-        final retroArchHasGame =
-            RetroArchLibraryService.hasGameForRomPath(game.romPath!);
-        final manicInstalled = await ManicEmuLaunchService.isInstalled();
+old = """        final manicInstalled = await ManicEmuLaunchService.isInstalled();
         final manicFolder = ConfigService.linkedManicEmuFolderPath;
         final manicHasGame =
             manicInstalled &&
             manicFolder != null &&
             (path.equals(manicFolder, game.romPath!) ||
                 path.isWithin(manicFolder, game.romPath!));
-        final primaryLibraryEmulator =
-            await IosEmulatorPreferenceService.primary();
-        final libraryEmulator =
-            IosEmulatorPreferenceService.resolveLaunchEmulator(
-              primary: primaryLibraryEmulator,
-              retroArchHasGame: retroArchHasGame,
-              manicEmuHasGame: manicHasGame,
-            );
-
-        if (libraryEmulator == IosLibraryEmulator.manicEmu) {
-          final launched = await ManicEmuLaunchService.launchGame(
-            game.romPath!,
-          );
-          if (launched) return GameLaunchResult.success();
-          return GameLaunchResult.failure(
-            AppLocale.failedToLaunchStandalone
-                .getString(context)
-                .replaceFirst('{name}', 'Manic EMU'),
-            game.romPath,
-          );
-        }
-
 """
-s = s[:start] + new + s[end:]
+new = """        final manicInstalled = await ManicEmuLaunchService.isInstalled();
+        final manicHasGame =
+            manicInstalled &&
+            await ManicEmuLibraryService.hasGameForRomPath(
+              ConfigService.linkedManicEmuFolderPath,
+              game.romPath!,
+            );
+"""
+s = replace_once(s, old, new, "replace Manic membership check")
 p.write_text(s)
 
 
-# Regression tests for the exact desired routing matrix.
-p = Path("test/ios_system_emulator_association_test.dart")
+# ---------------------------------------------------------------------------
+# Regression tests for cross-library matching
+# ---------------------------------------------------------------------------
+p = Path("test/manic_emu_library_service_test.dart")
 s = p.read_text()
 insert = """
-  group('per-game iOS launch routing', () {
-    IosLibraryEmulator? route({
-      required IosLibraryEmulator primary,
-      required bool retroArch,
-      required bool manic,
-    }) => IosEmulatorPreferenceService.resolveLaunchEmulator(
-      primary: primary,
-      retroArchHasGame: retroArch,
-      manicEmuHasGame: manic,
+
+  test('RetroArch path is recognized when same game exists in Manic Datas', () async {
+    final temp = await Directory.systemTemp.createTemp('manic_membership_test_');
+    addTearDown(() => temp.delete(recursive: true));
+    final datas = Directory(path.join(temp.path, 'Datas'));
+    await datas.create(recursive: true);
+    await File(path.join(datas.path, 'Virtua Racing Deluxe.32x')).writeAsBytes([1]);
+
+    expect(
+      await ManicEmuLibraryService.hasGameForRomPath(
+        temp.path,
+        '/RetroArch/32x/Virtua Racing Deluxe.zip',
+      ),
+      isTrue,
     );
-
-    test('RetroArch-only game ignores Manic primary preference', () {
-      expect(
-        route(
-          primary: IosLibraryEmulator.manicEmu,
-          retroArch: true,
-          manic: false,
-        ),
-        IosLibraryEmulator.retroArch,
-      );
-    });
-
-    test('Manic-only game ignores RetroArch primary preference', () {
-      expect(
-        route(
-          primary: IosLibraryEmulator.retroArch,
-          retroArch: false,
-          manic: true,
-        ),
-        IosLibraryEmulator.manicEmu,
-      );
-    });
-
-    test('game in both libraries uses the primary preference', () {
-      expect(
-        route(
-          primary: IosLibraryEmulator.manicEmu,
-          retroArch: true,
-          manic: true,
-        ),
-        IosLibraryEmulator.manicEmu,
-      );
-      expect(
-        route(
-          primary: IosLibraryEmulator.retroArch,
-          retroArch: true,
-          manic: true,
-        ),
-        IosLibraryEmulator.retroArch,
-      );
-    });
-
-    test('game in neither library does not force a library emulator', () {
-      expect(
-        route(
-          primary: IosLibraryEmulator.manicEmu,
-          retroArch: false,
-          manic: false,
-        ),
-        isNull,
-      );
-    });
+    expect(
+      await ManicEmuLibraryService.hasGameForRomPath(
+        temp.path,
+        '/RetroArch/32x/WWF Raw.zip',
+      ),
+      isFalse,
+    );
   });
 """
 idx = s.rfind("\n}")
 if idx < 0:
-    raise SystemExit("test file closing brace not found")
+    raise SystemExit("Manic library test closing brace not found")
 s = s[:idx] + insert + s[idx:]
-p.write_text(s)
-
-
-# Build number 160 for this behavior change.
-p = Path("pubspec.yaml")
-s = p.read_text()
-s = replace_once(s, "version: 1.0.0+159", "version: 1.0.0+160", "build number")
 p.write_text(s)
