@@ -128,7 +128,7 @@ workflows:
           print('ScreenScraper developer credentials accepted.')
           PY
 
-      - name: Download and verify StikJIT 1.5.0
+      - name: Download, verify and patch StikJIT 1.5.0
         script: |
           set -euo pipefail
           ARCHIVE=/tmp/StikJIT.xcframework.zip
@@ -148,6 +148,55 @@ workflows:
           test -n "$FRAMEWORK"
           cp -R "$FRAMEWORK" "$DEST/StikJIT.xcframework"
 
+          # StikJIT 1.5.0 was archived with BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+          # while exporting a public enum named StikJIT from a module also named
+          # StikJIT. Its own release build warns about Swift issue #56573. The
+          # resulting textual module interface contains module-qualified names
+          # such as StikJIT.DDIPaths, which newer Swift compilers can resolve as
+          # a member of enum StikJIT instead of a type in module StikJIT.
+          #
+          # Verify the official archive checksum first, then patch only the
+          # ephemeral textual interfaces used by this experimental build. The
+          # framework executable itself is not modified.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework')
+          interfaces = sorted(root.rglob('*.swiftinterface'))
+          if not interfaces:
+              raise SystemExit('StikJIT XCFramework contains no textual Swift interfaces.')
+
+          total = 0
+          for interface in interfaces:
+              text = interface.read_text(encoding='utf-8')
+              before = text
+
+              # Top-level DDIPaths was incorrectly module-qualified.
+              text = text.replace('StikJIT.DDIPaths', 'DDIPaths')
+              # Nested public types may be emitted as StikJIT.StikJIT.Type;
+              # drop only the module prefix and keep the enum qualification.
+              text = text.replace('StikJIT.StikJIT.', 'StikJIT.')
+
+              changed = int(before != text)
+              if changed:
+                  interface.write_text(text, encoding='utf-8')
+                  total += 1
+                  print(f'Patched Swift #56573 interface: {interface}')
+
+          if total == 0:
+              raise SystemExit('Expected invalid StikJIT 1.5.0 interface references were not found.')
+
+          remaining = []
+          for interface in interfaces:
+              text = interface.read_text(encoding='utf-8')
+              if 'StikJIT.DDIPaths' in text or 'StikJIT.StikJIT.' in text:
+                  remaining.append(str(interface))
+          if remaining:
+              raise SystemExit('Invalid StikJIT module-qualified references remain: ' + ', '.join(remaining))
+
+          print(f'Applied Swift #56573 workaround to {total} StikJIT interface file(s).')
+          PY
+
           DEVICE_BIN=$(find "$DEST/StikJIT.xcframework" \
             -path '*ios-arm64*' -type f -name 'StikJIT' -print -quit)
           test -n "$DEVICE_BIN"
@@ -159,7 +208,7 @@ workflows:
           grep -Fq '_process_control_new' "$SYMBOLS"
           grep -Fq '_process_control_launch_app' "$SYMBOLS"
           grep -Fq '_idevice_error_free' "$SYMBOLS"
-          echo 'StikJIT framework checksum and required process-control exports verified.'
+          echo 'StikJIT checksum, Swift interfaces and required process-control exports verified.'
 
       - name: Resolve Flutter dependencies
         script: flutter pub get
@@ -207,9 +256,6 @@ workflows:
             sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
           fi
 
-          # Flutter can generate a Podfile whose platform line is commented out,
-          # which makes CocoaPods default Runner to iOS 15. StikJIT requires
-          # iOS 17.4+, so force an explicit iOS 18 platform before pod install.
           python3 - <<'PY'
           from pathlib import Path
           import re
