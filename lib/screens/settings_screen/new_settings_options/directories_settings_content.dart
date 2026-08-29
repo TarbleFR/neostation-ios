@@ -13,6 +13,7 @@ import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/services/ios_emulator_preference_service.dart';
+import 'package:neostation/services/ios_linked_library_path_service.dart';
 import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
@@ -547,19 +548,20 @@ class DirectoriesSettingsContentState
 
       if (bookmarkKey == ManicEmuLaunchService.bookmarkKey) {
         ConfigService.linkedManicEmuFolderPath = activePath;
+        await IosLinkedLibraryPathService.rememberManicEmu(activePath);
       } else {
         ConfigService.linkedExternalFolderPath = activePath;
+        await IosLinkedLibraryPathService.rememberRetroArch(activePath);
       }
 
       final configProvider = Provider.of<SqliteConfigProvider>(
         context,
         listen: false,
       );
-      // RetroArch App Store/TestFlight and Manic EMU App Store/IPA are
-      // equivalent linked-library providers within their own family. Only
-      // update NeoStation's active source reference; never modify an app
-      // container. Force a scan even when iOS resolves both picks to the same
-      // display path.
+      // RetroArch TestFlight and Manic EMU IPA keep independent
+      // security-scoped roots. Update NeoStation's source reference only;
+      // never modify either emulator container. Force a scan even when iOS
+      // resolves a bookmark to the same visible path.
       final previousIsUsedByOtherLibrary =
           previousPath != null &&
           ((bookmarkKey == ManicEmuLaunchService.bookmarkKey &&
@@ -570,11 +572,10 @@ class DirectoriesSettingsContentState
         previousIsUsedByOtherLibrary ? null : previousPath,
         activePath,
         scan: true,
-        // RetroArch's exported index and existing rows remain usable until a
-        // new App Store/TestFlight callback succeeds. Manic EMU scans directly
-        // from its linked source and can safely discard the former association.
-        purgePreviousEntries:
-            bookmarkKey == ManicEmuLaunchService.bookmarkKey,
+        // RetroArch's TestFlight export and existing rows remain usable until
+        // a fresh TestFlight callback succeeds. Manic EMU scans directly from
+        // its linked source and can safely discard the former association.
+        purgePreviousEntries: bookmarkKey == ManicEmuLaunchService.bookmarkKey,
       );
       if (!mounted) return;
 

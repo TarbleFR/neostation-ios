@@ -96,25 +96,6 @@ class ExternalFolderAccess {
     }
   }
 
-  /// Presents iOS's genuine "Open In" menu for [filePath] — a different API
-  /// from the general Share Sheet (see the `share_plus` package, used
-  /// elsewhere in NeoStation). "Open In" hands the file to an app that
-  /// declared itself able to *own*/import that document type, which is the
-  /// traditional "here's a file, please open it" flow, as opposed to
-  /// "here's some content, do something with it" (sharing). Returns `true`
-  /// if the menu was presented, `false`/`null` otherwise (including on
-  /// non-iOS platforms, where this is a no-op).
-  static Future<bool?> openInMenu(String filePath) async {
-    if (!Platform.isIOS) return null;
-    try {
-      return await _channel.invokeMethod<bool>('openInMenu', {
-        'path': filePath,
-      });
-    } on PlatformException {
-      return null;
-    }
-  }
-
   /// Opens an arbitrary URL string on iOS without round-tripping through
   /// Dart's [Uri] class. This matters for custom URL schemes whose handler
   /// (incorrectly, but in practice) treats the host as case-sensitive, e.g.

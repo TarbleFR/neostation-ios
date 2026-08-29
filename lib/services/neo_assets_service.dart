@@ -10,6 +10,15 @@ const _baseRaw =
     'https://raw.githubusercontent.com/misobadev/neostation-assets/main';
 const _manifestUrl = '$_baseRaw/manifest.json';
 
+// Curated third-party System Art pack. Assets stay hosted by the
+// original RiiSU project so NeoStation does not redistribute the artwork
+// or inflate the application bundle.
+const _riisuRaw =
+    'https://raw.githubusercontent.com/mult1v4c/RiiSU/main';
+const _riisuThemeFolder = 'RiiSU';
+const _riisuPreviewUrl =
+    '$_riisuRaw/themes/RiiSU/backgrounds/switch.webp';
+
 final _log = LoggerService.instance;
 
 /// Represents a plan for downloading or updating theme assets.
@@ -198,6 +207,27 @@ class NeoAssetsService {
   static List<NeoAssetsTheme>? _cachedThemes;
   static String? _cachedThemeDir;
 
+  /// Adds curated System Art packs that are hosted outside the default
+  /// neostation-assets repository. Folder IDs remain unique because they
+  /// are also used as the local cache key.
+  static List<NeoAssetsTheme> _withCuratedExternalThemes(
+    List<NeoAssetsTheme> themes,
+  ) {
+    final result = [...themes];
+    if (!result.any((theme) => theme.folder == _riisuThemeFolder)) {
+      result.add(
+        const NeoAssetsTheme(
+          name: 'RiiSU',
+          folder: _riisuThemeFolder,
+          previewUrl: _riisuPreviewUrl,
+          previewSource: _riisuPreviewUrl,
+          isAi: false,
+        ),
+      );
+    }
+    return result;
+  }
+
   /// Fetches the global manifest of available themes.
   ///
   /// Tries the remote manifest first (caching it to disk on success), then
@@ -213,13 +243,17 @@ class NeoAssetsService {
 
     final remote = await _fetchRemoteThemes();
     if (remote != null) {
-      final merged = await _mergeWithLocalThemes(remote);
+      final merged = await _mergeWithLocalThemes(
+        _withCuratedExternalThemes(remote),
+      );
       _cachedThemes = merged;
       return merged;
     }
 
     // Offline: last cached manifest, floored by locally downloaded themes.
-    final fallback = await _mergeWithLocalThemes(await _readCachedManifest());
+    final fallback = await _mergeWithLocalThemes(
+      _withCuratedExternalThemes(await _readCachedManifest()),
+    );
     if (fallback.isNotEmpty) {
       _log.i('Themes: offline fallback served ${fallback.length} theme(s)');
       _cachedThemes = fallback;
@@ -353,13 +387,23 @@ class NeoAssetsService {
     _cachedThemes = null;
   }
 
+  /// Base URL for a System Art pack. The default catalog lives in
+  /// neostation-assets; curated external packs can keep their assets at
+  /// the original source.
+  static String _themeBaseUrl(String themeFolder) {
+    if (themeFolder == _riisuThemeFolder) {
+      return '$_riisuRaw/themes/$_riisuThemeFolder';
+    }
+    return '$_baseRaw/themes/$themeFolder';
+  }
+
   /// Returns the remote URL for a specific system background within a theme.
   static String getBackgroundUrl(
     String themeFolder,
     String systemFolderName, {
     String ext = 'webp',
   }) {
-    return '$_baseRaw/themes/$themeFolder/backgrounds/$systemFolderName.$ext';
+    return '${_themeBaseUrl(themeFolder)}/backgrounds/$systemFolderName.$ext';
   }
 
   /// Returns the remote URL for a specific system logo within a theme.
@@ -368,12 +412,12 @@ class NeoAssetsService {
     String systemFolderName, {
     String ext = 'webp',
   }) {
-    return '$_baseRaw/themes/$themeFolder/logos/$systemFolderName.$ext';
+    return '${_themeBaseUrl(themeFolder)}/logos/$systemFolderName.$ext';
   }
 
   /// Returns the remote URL for a theme's metadata JSON file.
   static String getThemeMetadataUrl(String themeFolder) {
-    return '$_baseRaw/themes/$themeFolder/theme.json';
+    return '${_themeBaseUrl(themeFolder)}/theme.json';
   }
 
   /// Downloads a remote asset to the local filesystem and returns the absolute path.

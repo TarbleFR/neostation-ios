@@ -43,6 +43,15 @@ jobs:
       - name: Resolve Flutter dependencies
         run: flutter pub get
 
+      - name: Validate TestFlight-only iOS library paths
+        run: |
+          flutter test \
+            test/retroarch_testflight_library_test.dart \
+            test/ios_retroarch_testflight_launch_guard_test.dart \
+            test/ios_linked_library_path_service_test.dart \
+            test/ios_linked_library_reassociation_test.dart
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+
       - name: Prepare ScreenScraper build environment
         shell: bash
         run: |
@@ -187,17 +196,17 @@ jobs:
           cp -R "$APP_PATH" build/ios/unsigned/Payload/NeoStation.app
           (
             cd build/ios/unsigned
-            zip -qry ../../../NeoStation-iOS-Build-159.ipa Payload
+            zip -qry ../../../NeoStation-iOS-Build-161.ipa Payload
           )
-          shasum -a 256 NeoStation-iOS-Build-159.ipa | tee NeoStation-iOS-Build-159.sha256
+          shasum -a 256 NeoStation-iOS-Build-161.ipa | tee NeoStation-iOS-Build-161.sha256
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Build-159
+          name: NeoStation-iOS-Build-161
           path: |
-            NeoStation-iOS-Build-159.ipa
-            NeoStation-iOS-Build-159.sha256
+            NeoStation-iOS-Build-161.ipa
+            NeoStation-iOS-Build-161.sha256
             build/ios/xcodebuild-unsigned.log
           if-no-files-found: error
           retention-days: 14

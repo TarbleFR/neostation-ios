@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+
 import '../models/system_model.dart';
 import '../models/config_model.dart';
 import '../models/emulator_model.dart';
@@ -21,11 +23,14 @@ import '../services/permission_service.dart';
 import '../services/steam_scraper_service.dart';
 import '../services/systems_update_service.dart';
 import '../models/secondary_display_state.dart';
+
 import 'package:flutter/services.dart';
+
 import '../widgets/tv_directory_picker.dart';
 import '../constants/system_folder_names.dart';
 import '../services/game_session_persistence.dart';
 import '../services/manic_emu_library_service.dart';
+import '../services/ios_linked_library_path_service.dart';
 import '../utils/nav_tabs.dart';
 import '../services/saf_directory_service.dart';
 
@@ -226,6 +231,22 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       // Load initial data
       await _loadInitialData();
+
+      if (Platform.isIOS) {
+        final reconciledFolders = await IosLinkedLibraryPathService.reconcile(
+          configuredFolders: _config.romFolders,
+          retroArchPath: ConfigService.linkedExternalFolderPath,
+          manicEmuPath: ConfigService.linkedManicEmuFolderPath,
+        );
+        if (!listEquals(reconciledFolders, _config.romFolders)) {
+          _log.i(
+            'Reassociated iOS linked library paths after security-scoped '
+            'bookmark resolution.',
+          );
+          _config = _config.copyWith(romFolders: reconciledFolders);
+          await SqliteConfigService.saveConfig(_config);
+        }
+      }
 
       _initialized = true;
 

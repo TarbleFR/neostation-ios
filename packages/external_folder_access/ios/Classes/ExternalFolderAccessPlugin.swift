@@ -16,9 +16,7 @@ import CryptoKit
 /// on every subsequent launch. That's exactly what this plugin does, so
 /// NeoStation can scan RetroArch's own ROM folder in place instead of
 /// copying files into its own sandbox.
-public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate,
-    UIDocumentInteractionControllerDelegate
-{
+public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
     private var pendingResult: FlutterResult?
     private var channel: FlutterMethodChannel?
     private var audioSessionObservers: [NSObjectProtocol] = []
@@ -54,11 +52,6 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         }
         return key
     }
-
-    // Held as a property, not a local var — UIDocumentInteractionController
-    // must stay alive for the duration of its menu/preview, and a local
-    // variable would be deallocated the moment the calling function returns.
-    private var documentInteractionController: UIDocumentInteractionController?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
@@ -99,8 +92,6 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             resolveBookmarkedFolder(key: Self.bookmarkKey(from: call), result: result)
         case "clearBookmark":
             clearBookmark(key: Self.bookmarkKey(from: call), result: result)
-        case "openInMenu":
-            openInMenu(call: call, result: result)
         case "openRawUrl":
             openRawUrl(call: call, result: result)
         case "configureAudioSessionForSilentMode":
@@ -571,76 +562,6 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         } catch {
             // Diagnostics must never interfere with launching a game.
         }
-    }
-
-    // MARK: - Open In
-
-    /// Presents iOS's genuine "Open In" menu for a file — a different API
-    /// from the general Share Sheet (UIActivityViewController, used
-    /// elsewhere via the share_plus package). "Open In" specifically hands
-    /// the file to an app that declared itself able to *own*/import that
-    /// document type, which is the traditional "here's a file, please open
-    /// it" flow — distinct from "here's some content, do something with
-    /// it" (sharing). Whether RetroArch actually treats these two
-    /// differently (e.g. jumping straight into a game it already
-    /// recognizes vs. re-importing) is exactly what this exists to test.
-    private func openInMenu(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any],
-            let filePath = args["path"] as? String
-        else {
-            result(
-                FlutterError(
-                    code: "INVALID_ARGS",
-                    message: "openInMenu requires a 'path' string argument",
-                    details: nil
-                )
-            )
-            return
-        }
-
-        guard let rootVC = Self.topViewController(), let view = rootVC.view else {
-            result(
-                FlutterError(
-                    code: "NO_ROOT_VC",
-                    message: "No root view controller available to present the menu from",
-                    details: nil
-                )
-            )
-            return
-        }
-
-        let fileURL = URL(fileURLWithPath: filePath)
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            result(
-                FlutterError(
-                    code: "FILE_NOT_FOUND",
-                    message: "No file at \(filePath)",
-                    details: nil
-                )
-            )
-            return
-        }
-
-        let controller = UIDocumentInteractionController(url: fileURL)
-        controller.delegate = self
-        documentInteractionController = controller
-
-        // Centered rect as a reasonable default anchor for the iPad
-        // popover; exact position doesn't affect whether an app can open
-        // the file, only where the menu visually appears from.
-        let anchorRect = CGRect(
-            x: view.bounds.midX - 1,
-            y: view.bounds.midY - 1,
-            width: 2,
-            height: 2
-        )
-
-        let didPresent = controller.presentOpenInMenu(
-            from: anchorRect,
-            in: view,
-            animated: true
-        )
-        result(didPresent)
     }
 
     // MARK: - Helpers
