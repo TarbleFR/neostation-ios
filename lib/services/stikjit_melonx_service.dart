@@ -91,7 +91,8 @@ class StikJitMeloNxService {
     if (picked == null || picked.files.isEmpty) return null;
 
     final selected = picked.files.single;
-    if (selected.path case final sourcePath?) {
+    final sourcePath = selected.path;
+    if (sourcePath != null) {
       final source = File(sourcePath);
       if (await source.exists() && await source.length() > 0) {
         await source.copy(stored.path);
