@@ -152,11 +152,17 @@ workflows:
           DEVICE_BIN=$(find "$DEST/StikJIT.xcframework" \
             -path '*ios-arm64*' -type f -name 'StikJIT' -print -quit)
           test -n "$DEVICE_BIN"
-          nm -gU "$DEVICE_BIN" | grep -q '_tunnel_create_rppairing'
-          nm -gU "$DEVICE_BIN" | grep -q '_remote_server_connect_rsd'
-          nm -gU "$DEVICE_BIN" | grep -q '_process_control_new'
-          nm -gU "$DEVICE_BIN" | grep -q '_process_control_launch_app'
-          nm -gU "$DEVICE_BIN" | grep -q '_idevice_error_free'
+
+          # Do not pipe nm into grep -q while pipefail is enabled. grep -q exits
+          # after the first match and can make nm receive SIGPIPE, which Codemagic
+          # reports as status 141 even though the requested symbol was found.
+          SYMBOLS=/tmp/stikjit-symbols.txt
+          nm -gU "$DEVICE_BIN" > "$SYMBOLS"
+          grep -Fq '_tunnel_create_rppairing' "$SYMBOLS"
+          grep -Fq '_remote_server_connect_rsd' "$SYMBOLS"
+          grep -Fq '_process_control_new' "$SYMBOLS"
+          grep -Fq '_process_control_launch_app' "$SYMBOLS"
+          grep -Fq '_idevice_error_free' "$SYMBOLS"
           echo 'StikJIT framework checksum and required process-control exports verified.'
 
       - name: Resolve Flutter dependencies
@@ -332,8 +338,9 @@ workflows:
           grep -R -q 'StikjitBridgePlugin' ios/Runner ios/Flutter 2>/dev/null
 
           EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
-          otool -L "build/ios/unsigned/Payload/NeoStation.app/$EXECUTABLE" \
-            | grep -q 'StikJIT.framework/StikJIT'
+          LINKED_FRAMEWORKS=/tmp/neostation-linked-frameworks.txt
+          otool -L "build/ios/unsigned/Payload/NeoStation.app/$EXECUTABLE" > "$LINKED_FRAMEWORKS"
+          grep -Fq 'StikJIT.framework/StikJIT' "$LINKED_FRAMEWORKS"
 
           (
             cd build/ios/unsigned
