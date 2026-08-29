@@ -34,6 +34,7 @@ class RetroArchAppStoreService {
   };
 
   static Map<String, String> _launchIds = <String, String>{};
+  static Map<String, String> _fullPlaylistPaths = <String, String>{};
   static String? _cacheRoot;
   static bool _loaded = false;
 
@@ -130,10 +131,37 @@ class RetroArchAppStoreService {
         host: 'game',
         pathSegments: <String>[launchId],
       );
+
+      // TEMP DIAGNOSTIC LOGGING -- remove once ZIP launches are confirmed
+      // working on-device. Format requested for comparing a working
+      // non-archive launch against a failing archive launch side by side.
+      // `containerFilename`/`fullPlaylistPath` are alternate candidates for
+      // the deep link filename in case the "member only" theory is wrong;
+      // they are NOT sent, only logged, so they can be hand-tested by
+      // pasting `retroarch://game/<candidate>` directly into Safari's
+      // address bar (bypasses NeoStation entirely, isolates whether the
+      // bug is in this derivation or in RetroArch's own matching).
+      final extension = path.extension(romPath).toLowerCase();
+      final isArchive = extension == '.zip' ||
+          extension == '.7z' ||
+          extension == '.zst' ||
+          extension == '.apk';
+      final containerFilename = path.basename(romPath);
+      final fullPlaylistPath = _fullPlaylistPathFor(romPath);
       await _writeDebugFile(
         'retroarch_appstore_launch_debug.txt',
-        'romPath: $romPath\nlaunchId: $launchId\nuri: $uri',
+        '[RetroArch Launch]\n'
+        'variant=appstore\n'
+        'sourcePath=$romPath\n'
+        'extension=$extension\n'
+        'isArchive=$isArchive\n'
+        'launchPath(sent)=$launchId\n'
+        'candidate_containerOnly=$containerFilename\n'
+        'candidate_fullPlaylistPath=${fullPlaylistPath ?? '(not indexed)'}\n'
+        'encodedPath=${Uri.encodeComponent(launchId)}\n'
+        'finalURL=$uri\n',
       );
+
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) {
         _log.w('RetroArch App Store deeplink was not opened: $uri');
@@ -151,6 +179,7 @@ class RetroArchAppStoreService {
   static Future<void> _rebuildLaunchIndex(String root) async {
     final normalizedRoot = path.normalize(root);
     final index = <String, String>{};
+    final fullPaths = <String, String>{};
     final playlists = await _findPlaylistsDirectory(normalizedRoot);
 
     if (playlists != null) {
@@ -185,6 +214,15 @@ class RetroArchAppStoreService {
               _put(index, physicalPath, launchId);
               _put(index, path.basename(physicalPath), launchId);
               _put(index, path.basenameWithoutExtension(physicalPath), launchId);
+
+              // Diagnostic only: remember the raw, unsplit playlist path
+              // (e.g. "game.zip#game.32x") so it can be surfaced in the
+              // launch debug log without recomputing it at launch time.
+              fullPaths.putIfAbsent(physicalPath, () => contentPath);
+              fullPaths.putIfAbsent(
+                path.basename(physicalPath),
+                () => contentPath,
+              );
             }
           } catch (e) {
             _log.w('RetroArch App Store: skipped playlist ${entity.path}: $e');
@@ -196,6 +234,7 @@ class RetroArchAppStoreService {
     }
 
     _launchIds = index;
+    _fullPlaylistPaths = fullPaths;
     _cacheRoot = normalizedRoot;
     _loaded = true;
     await _persistCache();
@@ -302,6 +341,16 @@ class RetroArchAppStoreService {
         _launchIds[basename.toLowerCase()] ??
         _launchIds[stem] ??
         _launchIds[stem.toLowerCase()];
+  }
+
+  /// Diagnostic-only: the raw, unsplit playlist `path` field RetroArch
+  /// itself recorded for this ROM (e.g. `game.zip#game.32x`), if it was
+  /// found in a playlist during the last index rebuild. Never sent in the
+  /// deep link -- only surfaced in the launch debug log.
+  static String? _fullPlaylistPathFor(String romPath) {
+    final normalized = path.normalize(romPath);
+    final basename = path.basename(normalized);
+    return _fullPlaylistPaths[normalized] ?? _fullPlaylistPaths[basename];
   }
 
   static Future<void> _loadCache() async {
