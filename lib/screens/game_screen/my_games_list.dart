@@ -1087,6 +1087,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// info/preview panel (right). The selected game's fanart is rendered behind
   /// the entire viewport so it peeks through both panels.
   Widget _buildGamesList() {
+    final safeLeftInset = Platform.isIOS
+        ? MediaQuery.viewPaddingOf(context).left
+        : 0.0;
     final availableHeight =
         MediaQuery.of(context).size.height -
         MediaQuery.of(context).padding.top -
@@ -1128,7 +1131,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
               width: 200.r,
               height: availableHeight,
               margin: EdgeInsets.only(
-                left: GameLegendVisibility.hidden.value ? 12.r : 72.r,
+                left:
+                    safeLeftInset +
+                    (GameLegendVisibility.hidden.value ? 12.r : 72.r),
                 top: 12.r,
                 bottom: 12.r,
               ),
@@ -1202,7 +1207,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
             curve: Curves.easeOutCubic,
             top: 12.r,
             bottom: 12.r,
-            left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
+            left: GameLegendVisibility.hidden.value
+                ? -(72.r + safeLeftInset)
+                : safeLeftInset + 10.r,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 250),
               opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,

@@ -85,6 +85,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   /// push stops re-asserting `setupWizardActive` and the dock can come in.
   bool _finishing = false;
 
+  // iOS first-run library linking is kicked off automatically once the app is
+  // active. This guard prevents duplicate document pickers across lifecycle
+  // transitions while RetroArch hands the user back to NeoStation.
+  bool _initialIosLibraryLinkStarted = false;
+
   static final _log = LoggerService.instance;
 
   GamepadNavigation? _gamepadNav;
@@ -123,6 +128,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initializeSteps();
     _initGamepad();
+    if (Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _startInitialIosLibraryLinkIfNeeded();
+      });
+    }
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _hasSecondaryDisplay =
@@ -159,11 +169,22 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
+    if (state != AppLifecycleState.resumed) return;
+
+    if (Platform.isAndroid) {
       _refreshPermissionStates();
       // The gamepad was deactivated before we sent the user to Settings; bring
       // it back now that we have focus again on the Permissions step.
       if (_currentStep == _stepPermissions) _gamepadNav?.activate();
+      return;
+    }
+
+    // RetroArch's first-run sync temporarily backgrounds NeoStation. Wait for
+    // the return before presenting the security-scoped folder picker. Manic
+    // EMU never leaves the app here, so its picker is normally started by the
+    // initial post-frame callback above.
+    if (Platform.isIOS) {
+      _startInitialIosLibraryLinkIfNeeded();
     }
   }
 
@@ -2000,7 +2021,46 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _selectFolder() async {
+  Future<void> _startInitialIosLibraryLinkIfNeeded() async {
+    if (!Platform.isIOS ||
+        !mounted ||
+        _currentStep != _stepFolder ||
+        _isSelectingFolder ||
+        _initialIosLibraryLinkStarted) {
+      return;
+    }
+
+    // Do not attempt to present UIDocumentPicker while NeoStation is inactive
+    // (notably while RetroArch is still in the foreground for its callback).
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    final primary = await IosEmulatorPreferenceService.primary();
+    if (!mounted || _currentStep != _stepFolder || _isSelectingFolder) return;
+
+    final existingLink = primary == IosLibraryEmulator.manicEmu
+        ? ConfigService.linkedManicEmuFolderPath
+        : ConfigService.linkedExternalFolderPath;
+    if (existingLink != null && existingLink.trim().isNotEmpty) return;
+
+    _initialIosLibraryLinkStarted = true;
+    try {
+      // The picker is the one iOS-required user confirmation. Once granted,
+      // _selectFolder persists the bookmark, registers the ROM source and runs
+      // the real scan immediately, so no trip to Settings > Directories is
+      // required on first use.
+      await _selectFolder(allowInternalFallback: false);
+    } finally {
+      // A cancellation leaves the user on the same wizard step, where the main
+      // action can retry normally. A successful link advances to Scanning.
+      if (mounted && _currentStep == _stepFolder) {
+        _initialIosLibraryLinkStarted = false;
+      }
+    }
+  }
+
+  Future<void> _selectFolder({bool allowInternalFallback = true}) async {
     if (_currentStep != _stepFolder) return;
 
     // Guard: prevent re-entry and stop gamepad from intercepting picker events
@@ -2076,9 +2136,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
               type: NotificationType.info,
             );
           }
-        } else if (mounted) {
-          // Declined/cancelled the picker — fall back to the internal
-          // default so onboarding still has somewhere to go.
+        } else if (mounted && allowInternalFallback) {
+          // Manual folder selection retains the historical internal fallback.
+          // The automatic first-run attempt deliberately stays on this step if
+          // the picker is cancelled, so it never silently replaces the chosen
+          // RetroArch/Manic EMU library with NeoStation's private ROM folder.
           await configProvider.selectRomFolder(scan: false);
           result = configProvider.config.romFolder;
         }

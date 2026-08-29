@@ -1027,6 +1027,9 @@ class _GamesGridState extends State<GamesGrid> {
     }
 
     _buildSettledChrome();
+    final safeLeftInset = Platform.isIOS
+        ? MediaQuery.viewPaddingOf(context).left
+        : 0.0;
 
     return Stack(
       children: [
@@ -1041,7 +1044,9 @@ class _GamesGridState extends State<GamesGrid> {
               // smaller when the legend is shown.
               child: Padding(
                 padding: EdgeInsets.only(
-                  left: GameLegendVisibility.hidden.value ? 0 : 72.r,
+                  left:
+                      safeLeftInset +
+                      (GameLegendVisibility.hidden.value ? 0 : 72.r),
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -1256,7 +1261,9 @@ class _GamesGridState extends State<GamesGrid> {
           curve: Curves.easeOutCubic,
           top: 12.r,
           bottom: 12.r,
-          left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
+          left: GameLegendVisibility.hidden.value
+              ? -(72.r + safeLeftInset)
+              : safeLeftInset + 10.r,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 250),
             opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,

@@ -1031,6 +1031,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
 
     _buildSettledChrome();
+    final safeLeftInset = Platform.isIOS
+        ? MediaQuery.viewPaddingOf(context).left
+        : 0.0;
+    final safeRightInset = Platform.isIOS
+        ? MediaQuery.viewPaddingOf(context).right
+        : 0.0;
 
     return Stack(
       children: [
@@ -1042,7 +1048,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
             // the vertical legend on the left.
             Expanded(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 60.r),
+                padding: EdgeInsets.only(
+                  left: 60.r + safeLeftInset,
+                  right: 60.r + safeRightInset,
+                ),
                 child: NativeCarousel(
                   key: _carouselKey,
                   itemCount: widget.games.length,
@@ -1163,7 +1172,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
           curve: Curves.easeOutCubic,
           top: 12.r,
           bottom: 12.r,
-          left: GameLegendVisibility.hidden.value ? -72.r : 10.r,
+          left: GameLegendVisibility.hidden.value
+              ? -(72.r + safeLeftInset)
+              : safeLeftInset + 10.r,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 250),
             opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
