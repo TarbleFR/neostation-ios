@@ -9,10 +9,6 @@ workflows:
 
     environment:
       flutter: stable
-      # StikJIT 1.5.0 was officially archived with Xcode 16.4 / Swift from
-      # Xcode 16.4. Matching that toolchain lets the client consume the binary
-      # Swift module instead of unnecessarily rebuilding its textual interface
-      # with a different compiler.
       xcode: 16.4
       cocoapods: default
       groups:
@@ -54,7 +50,7 @@ workflows:
           grep -q 'final selected = await ExternalFolderAccess.resolveBookmarkedFolder' \
             lib/services/rpcs3_library_service.dart
           grep -q 'version: 1.0.0+163' pubspec.yaml
-          echo 'Experiment isolation verified. Stable RPCS3, ScreenScraper and MeloNX library code are untouched.'
+          echo 'Experiment isolation verified.'
 
       - name: Show pinned Apple toolchain
         script: |
@@ -152,9 +148,6 @@ workflows:
           test -n "$FRAMEWORK"
           cp -R "$FRAMEWORK" "$DEST/StikJIT.xcframework"
 
-          # Keep the already-validated Swift #56573 fallback. It changes only
-          # textual interfaces after the official archive checksum is verified;
-          # the framework executable is never altered.
           python3 - <<'PY'
           from pathlib import Path
 
@@ -352,6 +345,7 @@ workflows:
           rm -rf build/ios/DerivedData build/ios/unsigned
           mkdir -p build/ios
           LOG=build/ios/xcodebuild-unsigned.log
+          ERRORS=build/ios/xcode-errors.txt
 
           set +e
           xcodebuild \
@@ -368,14 +362,64 @@ workflows:
             PROVISIONING_PROFILE_SPECIFIER='' \
             COMPILER_INDEX_STORE_ENABLE=NO \
             build 2>&1 | tee "$LOG"
-          XCODE_STATUS=$?
+          XCODE_STATUS=${PIPESTATUS[0]}
           set -e
 
           if [ "$XCODE_STATUS" -ne 0 ]; then
-            echo '===== CONCISE XCODE FAILURE ====='
-            grep -nE 'error:|fatal error:|SwiftCompile|CompileSwift|Undefined symbols|ld: ' "$LOG" \
-              | tail -n 160 || true
-            echo '===== END CONCISE XCODE FAILURE ====='
+            python3 - "$LOG" "$ERRORS" <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1])
+          destination = Path(sys.argv[2])
+          lines = source.read_text(encoding='utf-8', errors='replace').splitlines()
+
+          hits = set()
+          for index, line in enumerate(lines):
+              lowered = line.lower()
+              exact_bridge_diagnostic = (
+                  'stikjitbridgeplugin.swift:' in lowered
+                  and (': error:' in lowered or ': fatal error:' in lowered or ': warning:' in lowered)
+              )
+              generic_error = (
+                  ': error:' in lowered
+                  or ': fatal error:' in lowered
+                  or 'undefined symbols for architecture' in lowered
+                  or lowered.startswith('ld: ')
+                  or 'clang: error:' in lowered
+              )
+              if exact_bridge_diagnostic or generic_error:
+                  hits.add(index)
+
+          # If Xcode emitted no conventional diagnostic, show every occurrence
+          # of our bridge file with enough surrounding context to expose the
+          # compiler message immediately before or after it.
+          if not hits:
+              for index, line in enumerate(lines):
+                  if 'StikjitBridgePlugin.swift' in line:
+                      hits.add(index)
+
+          selected = set()
+          for index in hits:
+              start = max(0, index - 6)
+              end = min(len(lines), index + 7)
+              selected.update(range(start, end))
+
+          output = ['===== EXACT XCODE FAILURE =====']
+          if selected:
+              previous = None
+              for index in sorted(selected):
+                  if previous is not None and index > previous + 1:
+                      output.append('...')
+                  output.append(f'{index + 1}: {lines[index]}')
+                  previous = index
+          else:
+              output.append('No conventional Xcode diagnostic was found.')
+              output.extend(f'{i + 1}: {line}' for i, line in enumerate(lines[-120:], start=max(0, len(lines)-120)))
+          output.append('===== END EXACT XCODE FAILURE =====')
+          destination.write_text('\n'.join(output) + '\n', encoding='utf-8')
+          print('\n'.join(output))
+          PY
             exit "$XCODE_STATUS"
           fi
 
@@ -413,6 +457,7 @@ workflows:
       - NeoStation-iOS-Build-165-StikJIT-Experimental.ipa
       - NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
       - build/ios/xcodebuild-unsigned.log
+      - build/ios/xcode-errors.txt
 
     publishing:
       scripts:
