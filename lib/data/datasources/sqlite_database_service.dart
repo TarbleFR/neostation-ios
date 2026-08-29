@@ -258,6 +258,7 @@ class SqliteDatabaseService {
     ];
 
     final walkedDirs = <String>{};
+    var successfulTargetWalks = 0;
     for (final target in orderedTargets) {
       // An alias pointing at a directory already walked for this system.
       if (!walkedDirs.add(target.canonicalPath)) continue;
@@ -277,12 +278,29 @@ class SqliteDatabaseService {
                 ignoreHiddenFiles: ignoreHiddenFiles,
               );
 
+        successfulTargetWalks++;
         if (entries.isNotEmpty) {
           romEntries.addAll(entries);
         }
       } catch (e) {
         _log.e('Error scanning folder ${target.dirPath}: $e');
       }
+    }
+
+    if (Platform.isIOS &&
+        initialCount > 0 &&
+        orderedTargets.isNotEmpty &&
+        successfulTargetWalks == 0) {
+      _log.w(
+        'Keeping ${system.realName} ROM rows because every iOS linked-folder '
+        'walk failed during this scan.',
+      );
+      return ScanSummary(
+        added: 0,
+        removed: 0,
+        total: initialCount,
+        systemName: system.realName,
+      );
     }
 
     // Apply M3U and redundancy filters

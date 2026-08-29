@@ -4,47 +4,47 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 
 void main() {
-  test('moves NeoStation association from App Store to IPA source', () {
+  test('moves NeoStation association to a newly resolved linked source', () {
     expect(
       replacedRomFolderPaths(
-        const ['/roms', '/manic-app-store'],
-        '/manic-app-store',
-        '/manic-ipa',
+        const ['/roms', '/manic-old-root'],
+        '/manic-old-root',
+        '/manic-new-root',
       ),
-      const ['/roms', '/manic-ipa'],
+      const ['/roms', '/manic-new-root'],
     );
   });
 
-  test('moves RetroArch association between App Store and TestFlight', () {
+  test('moves RetroArch association between resolved TestFlight roots', () {
     expect(
       replacedRomFolderPaths(
-        const ['/roms', '/retroarch-app-store'],
-        '/retroarch-app-store',
-        '/retroarch-testflight',
+        const ['/roms', '/retroarch-old-root'],
+        '/retroarch-old-root',
+        '/retroarch-new-root',
       ),
-      const ['/roms', '/retroarch-testflight'],
+      const ['/roms', '/retroarch-new-root'],
     );
   });
 
   test('selecting the same linked folder keeps one source', () {
     expect(
       replacedRomFolderPaths(
-        const ['/roms', '/manic-ipa'],
-        '/manic-ipa',
-        '/manic-ipa',
+        const ['/roms', '/manic-new-root'],
+        '/manic-new-root',
+        '/manic-new-root',
       ),
-      const ['/roms', '/manic-ipa'],
+      const ['/roms', '/manic-new-root'],
     );
   });
 
   test('a replacement can proceed when all source slots are occupied', () {
     expect(
       replacedRomFolderPaths(
-        const ['/one', '/two', '/three', '/four', '/manic-app-store'],
-        '/manic-app-store',
-        '/manic-ipa',
+        const ['/one', '/two', '/three', '/four', '/manic-old-root'],
+        '/manic-old-root',
+        '/manic-new-root',
       ),
-      const ['/one', '/two', '/three', '/four', '/manic-ipa'],
+      const ['/one', '/two', '/three', '/four', '/manic-new-root'],
     );
   });
 
@@ -69,7 +69,7 @@ void main() {
       helper.indexOf('pickAndBookmarkFolder'),
       lessThan(helper.indexOf('resolveBookmarkedFolder')),
     );
-    final selectionStart = wizard.indexOf('Future<void> _selectFolder()');
+    final selectionStart = wizard.indexOf('Future<void> _selectFolder({');
     final selectionEnd = wizard.indexOf(
       'Future<void> _ensureLinkedFolderIsReadable',
       selectionStart,
@@ -91,9 +91,8 @@ void main() {
   });
 
   test('large Manic EMU ROM launch uses bounded native streaming', () {
-    final service = File(
-      'lib/services/manic_emu_launch_service.dart',
-    ).readAsStringSync();
+    final service = File('lib/services/manic_emu_launch_service.dart')
+        .readAsStringSync();
     final native = File(
       'packages/external_folder_access/ios/Classes/'
       'ExternalFolderAccessPlugin.swift',

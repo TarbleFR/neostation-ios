@@ -11,6 +11,7 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/ios_emulator_preference_service.dart';
+import 'package:neostation/services/ios_linked_library_path_service.dart';
 import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/user_data_location_service.dart';
@@ -2119,16 +2120,18 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
           if (usesManic) {
             ConfigService.linkedManicEmuFolderPath = linked;
+            await IosLinkedLibraryPathService.rememberManicEmu(linked);
           } else {
             ConfigService.linkedExternalFolderPath = linked;
+            await IosLinkedLibraryPathService.rememberRetroArch(linked);
           }
           await configProvider.addRomFolder(linked, scan: false);
           result = linked;
 
           // Do not open an emulator or wait for an external callback here.
           // The next wizard page owns the local folder scan and displays its
-          // real progress. Waiting on RetroArch kept this button spinning when
-          // an App Store/TestFlight build did not return a library callback.
+          // real progress. Waiting on RetroArch here would keep onboarding tied to an
+          // external callback; the dedicated TestFlight sync owns that flow.
           if (mounted && usesManic) {
             AppNotification.showNotification(
               context,

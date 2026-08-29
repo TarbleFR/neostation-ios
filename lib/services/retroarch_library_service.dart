@@ -26,6 +26,7 @@ class RetroArchLibraryService {
   static const String _legacyPrefsKey = 'retroarch_library_cache_v1';
 
   static const List<String> _removedAppStorePreferenceKeys = <String>[
+    _legacyPrefsKey,
     'retroarch_ios_distribution_v1',
     'retroarch_appstore_launch_cache_v1',
     'retroarch_appstore_launch_cache_v2',
@@ -63,6 +64,21 @@ class RetroArchLibraryService {
       final decoded = jsonDecode(utf8.decode(base64Url.decode(normalized)));
       if (decoded is! List) return false;
 
+      // A transient/empty TestFlight export must never erase the last known
+      // good launch index. Keep the persisted cache and wait for a later sync.
+      if (decoded.isEmpty) {
+        await loadCachedLibrary();
+        _log.w(
+          'RetroArchLibraryService: TestFlight returned an empty library; '
+          'preserving the previous synchronized cache.',
+        );
+        await _writeDebugFile(
+          'retroarch_testflight_sync_debug.txt',
+          'STATE: EMPTY_EXPORT_PRESERVED\nPrevious entries: ${_cache?.length ?? 0}',
+        );
+        return true;
+      }
+
       final byFilename = <String, Map<String, dynamic>>{};
       for (final raw in decoded) {
         if (raw is! Map) continue;
@@ -77,8 +93,21 @@ class RetroArchLibraryService {
         final titleName = entry['titleName']?.toString();
         if (titleName != null && titleName.trim().isNotEmpty) {
           _put(byFilename, titleName.trim(), entry);
-          _put(byFilename, path.basenameWithoutExtension(titleName.trim()), entry);
+          _put(
+            byFilename,
+            path.basenameWithoutExtension(titleName.trim()),
+            entry,
+          );
         }
+      }
+
+      if (byFilename.isEmpty) {
+        await loadCachedLibrary();
+        _log.w(
+          'RetroArchLibraryService: TestFlight export had no usable entries; '
+          'preserving the previous synchronized cache.',
+        );
+        return true;
       }
 
       _cache = byFilename;
@@ -92,8 +121,10 @@ class RetroArchLibraryService {
       try {
         final context = rootNavigatorKey.currentContext;
         if (context != null) {
-          await Provider.of<SqliteConfigProvider>(context, listen: false)
-              .scanSystems();
+          await Provider.of<SqliteConfigProvider>(
+            context,
+            listen: false,
+          ).scanSystems();
         }
       } catch (e) {
         _log.e('RetroArch TestFlight post-sync rescan failed: $e');
@@ -138,7 +169,7 @@ class RetroArchLibraryService {
     await _cleanupRemovedAppStoreState();
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_prefsKey) ?? prefs.getString(_legacyPrefsKey);
+      final raw = prefs.getString(_prefsKey);
       if (raw == null) {
         _cache = {};
         return;
@@ -146,10 +177,8 @@ class RetroArchLibraryService {
       final decoded = jsonDecode(raw);
       if (decoded is Map) {
         _cache = decoded.map(
-          (key, value) => MapEntry(
-            key.toString(),
-            Map<String, dynamic>.from(value as Map),
-          ),
+          (key, value) =>
+              MapEntry(key.toString(), Map<String, dynamic>.from(value as Map)),
         );
         await prefs.setString(_prefsKey, raw);
       } else {
@@ -171,6 +200,7 @@ class RetroArchLibraryService {
 
   static Future<bool> launchGameByRomPath(String romPath) async {
     await _cleanupRemovedAppStoreState();
+    await loadCachedLibrary();
     final cache = _cache;
     if (cache == null || cache.isEmpty) return false;
 
@@ -192,7 +222,21 @@ class RetroArchLibraryService {
     );
 
     try {
-      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!await canLaunchUrl(uri)) {
+        _log.e('RetroArch TestFlight URL scheme is unavailable: $uri');
+        return false;
+      }
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) {
+        // UIKit can occasionally report a false completion after a custom URL
+        // handoff. The dispatch is terminal once canLaunchUrl succeeded: never
+        // route the ROM into Open In/Share as a fallback.
+        _log.w(
+          'RetroArch TestFlight handoff reported false after a valid scheme '
+          'dispatch: $uri',
+        );
+      }
+      return true;
     } catch (e) {
       _log.e('RetroArch TestFlight launch failed: $e');
       return false;

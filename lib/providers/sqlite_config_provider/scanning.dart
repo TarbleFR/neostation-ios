@@ -10,9 +10,7 @@ List<String> replacedRomFolderPaths(
   final normalizedNewPath = newPath.trim();
   final folders = [...currentFolders];
 
-  if (oldPath != null &&
-      oldPath.isNotEmpty &&
-      oldPath != normalizedNewPath) {
+  if (oldPath != null && oldPath.isNotEmpty && oldPath != normalizedNewPath) {
     folders.removeWhere((folder) => folder == oldPath);
   }
   if (!folders.contains(normalizedNewPath)) {
@@ -44,10 +42,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     try {
       _setLoading(true);
       final newList = [..._config.romFolders, folderPath];
-      _config = _config.copyWith(
-        romFolders: newList,
-        lastScan: DateTime.now(),
-      );
+      _config = _config.copyWith(romFolders: newList, lastScan: DateTime.now());
       await SqliteConfigService.saveConfig(_config);
       if (scan) {
         await scanSystems();
@@ -63,8 +58,8 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
   /// Re-associates a linked ROM source and always performs a real rescan.
   ///
-  /// The selected folder may belong to either an App Store installation or a
-  /// sideloaded/re-signed IPA. NeoStation never modifies either app container:
+  /// The selected folder may be re-resolved by iOS under a different
+  /// security-scoped absolute path after relaunch or re-sign. NeoStation never modifies either app container:
   /// it only updates its own source list and, when [purgePreviousEntries] is
   /// enabled, its database rows. Re-linking can move the same logical library
   /// to a new absolute path, while selecting the same visible folder must still
@@ -98,10 +93,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         await GameRepository.deleteRomsByFolderPath(oldPath);
       }
 
-      _config = _config.copyWith(
-        romFolders: folders,
-        lastScan: DateTime.now(),
-      );
+      _config = _config.copyWith(romFolders: folders, lastScan: DateTime.now());
       await SqliteConfigService.saveConfig(_config);
       if (scan) await scanSystems();
       _notify();
@@ -189,8 +181,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       if (!hasBroadPermissions &&
           !hasSafFolders &&
           _config.romFolders.isNotEmpty) {
-        _error =
-            'Storage access required. Please select a ROM folder using the file picker.';
+        _error = 'Storage access required. Please select a ROM folder using the file picker.';
         SqliteConfigProvider._log.e('$_error');
         _finishSystemScan();
         return;
@@ -221,6 +212,24 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         _scanStatus = 'ROM storage is not ready; existing games were kept.';
         SqliteConfigProvider._log.w(
           'Startup scan skipped because Android ROM storage never became ready',
+        );
+        _finishSystemScan();
+        return;
+      }
+    }
+
+    if (Platform.isIOS &&
+        _config.romFolders.isNotEmpty &&
+        await _hasStoredRoms()) {
+      final unavailable = await IosLinkedLibraryPathService.unreadableFolders(
+        _config.romFolders,
+      );
+      if (unavailable.isNotEmpty) {
+        _scanStatus = 'Linked iOS ROM library is temporarily unavailable; existing games were kept.';
+        _scanCompleted = true;
+        SqliteConfigProvider._log.w(
+          'Skipping destructive iOS startup scan because linked folder access '
+          'is unavailable: $unavailable',
         );
         _finishSystemScan();
         return;
