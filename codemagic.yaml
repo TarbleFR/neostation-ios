@@ -9,7 +9,11 @@ workflows:
 
     environment:
       flutter: stable
-      xcode: latest
+      # StikJIT 1.5.0 was officially archived with Xcode 16.4 / Swift from
+      # Xcode 16.4. Matching that toolchain lets the client consume the binary
+      # Swift module instead of unnecessarily rebuilding its textual interface
+      # with a different compiler.
+      xcode: 16.4
       cocoapods: default
       groups:
         - neostation_secrets
@@ -52,6 +56,12 @@ workflows:
           grep -q 'version: 1.0.0+163' pubspec.yaml
           echo 'Experiment isolation verified. Stable RPCS3, ScreenScraper and MeloNX library code are untouched.'
 
+      - name: Show pinned Apple toolchain
+        script: |
+          set -euo pipefail
+          xcodebuild -version
+          swiftc --version
+
       - name: Prepare verified build-time defines
         script: |
           set -euo pipefail
@@ -61,16 +71,12 @@ workflows:
           import pathlib
           import sys
 
-          required = (
-              'SCREENSCRAPER_DEV_ID',
-              'SCREENSCRAPER_DEV_PASSWORD',
-          )
+          required = ('SCREENSCRAPER_DEV_ID', 'SCREENSCRAPER_DEV_PASSWORD')
           values = {name: os.environ.get(name, '') for name in required}
           missing = [name for name, value in values.items() if not value]
           if missing:
               print('Missing required Codemagic variables: ' + ', '.join(missing))
               sys.exit(1)
-
           malformed = [
               name for name, value in values.items()
               if value != value.strip() or '\n' in value or '\r' in value
@@ -81,11 +87,10 @@ workflows:
 
           values['NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX'] = 'true'
           values['NEOSTATION_MELONX_BUNDLE_ID'] = 'com.nur.nx'
-
           output = pathlib.Path('.dart-defines.json')
           output.write_text(json.dumps(values, ensure_ascii=False), encoding='utf-8')
           output.chmod(0o600)
-          print('ScreenScraper credentials and experimental StikJIT flag are ready.')
+          print('Build-time defines prepared.')
           PY
 
       - name: Verify ScreenScraper developer credentials
@@ -119,7 +124,6 @@ workflows:
           print(f'ScreenScraper developer diagnostic HTTP status: {status}')
           if status != 200:
               raise SystemExit('ScreenScraper developer credentials were rejected.')
-
           payload = json.loads(body.decode('utf-8'))
           header = payload.get('header') if isinstance(payload, dict) else None
           success = header.get('success') if isinstance(header, dict) else None
@@ -148,16 +152,9 @@ workflows:
           test -n "$FRAMEWORK"
           cp -R "$FRAMEWORK" "$DEST/StikJIT.xcframework"
 
-          # StikJIT 1.5.0 was archived with BUILD_LIBRARY_FOR_DISTRIBUTION=YES
-          # while exporting a public enum named StikJIT from a module also named
-          # StikJIT. Its own release build warns about Swift issue #56573. The
-          # resulting textual module interface contains module-qualified names
-          # such as StikJIT.DDIPaths, which newer Swift compilers can resolve as
-          # a member of enum StikJIT instead of a type in module StikJIT.
-          #
-          # Verify the official archive checksum first, then patch only the
-          # ephemeral textual interfaces used by this experimental build. The
-          # framework executable itself is not modified.
+          # Keep the already-validated Swift #56573 fallback. It changes only
+          # textual interfaces after the official archive checksum is verified;
+          # the framework executable is never altered.
           python3 - <<'PY'
           from pathlib import Path
 
@@ -166,41 +163,26 @@ workflows:
           if not interfaces:
               raise SystemExit('StikJIT XCFramework contains no textual Swift interfaces.')
 
-          total = 0
+          changed = 0
           for interface in interfaces:
               text = interface.read_text(encoding='utf-8')
-              before = text
-
-              # Top-level DDIPaths was incorrectly module-qualified.
-              text = text.replace('StikJIT.DDIPaths', 'DDIPaths')
-              # Nested public types may be emitted as StikJIT.StikJIT.Type;
-              # drop only the module prefix and keep the enum qualification.
-              text = text.replace('StikJIT.StikJIT.', 'StikJIT.')
-
-              changed = int(before != text)
-              if changed:
-                  interface.write_text(text, encoding='utf-8')
-                  total += 1
+              patched = text.replace('StikJIT.DDIPaths', 'DDIPaths')
+              patched = patched.replace('StikJIT.StikJIT.', 'StikJIT.')
+              if patched != text:
+                  interface.write_text(patched, encoding='utf-8')
+                  changed += 1
                   print(f'Patched Swift #56573 interface: {interface}')
 
-          if total == 0:
-              raise SystemExit('Expected invalid StikJIT 1.5.0 interface references were not found.')
-
-          remaining = []
           for interface in interfaces:
               text = interface.read_text(encoding='utf-8')
               if 'StikJIT.DDIPaths' in text or 'StikJIT.StikJIT.' in text:
-                  remaining.append(str(interface))
-          if remaining:
-              raise SystemExit('Invalid StikJIT module-qualified references remain: ' + ', '.join(remaining))
-
-          print(f'Applied Swift #56573 workaround to {total} StikJIT interface file(s).')
+                  raise SystemExit(f'Invalid StikJIT interface reference remains in {interface}')
+          print(f'Swift interface fallback applied to {changed} file(s).')
           PY
 
           DEVICE_BIN=$(find "$DEST/StikJIT.xcframework" \
             -path '*ios-arm64*' -type f -name 'StikJIT' -print -quit)
           test -n "$DEVICE_BIN"
-
           SYMBOLS=/tmp/stikjit-symbols.txt
           nm -gU "$DEVICE_BIN" > "$SYMBOLS"
           grep -Fq '_tunnel_create_rppairing' "$SYMBOLS"
@@ -208,25 +190,24 @@ workflows:
           grep -Fq '_process_control_new' "$SYMBOLS"
           grep -Fq '_process_control_launch_app' "$SYMBOLS"
           grep -Fq '_idevice_error_free' "$SYMBOLS"
-          echo 'StikJIT checksum, Swift interfaces and required process-control exports verified.'
+          echo 'StikJIT archive and native exports verified.'
 
       - name: Resolve Flutter dependencies
         script: flutter pub get
 
-      - name: Verify experimental Dart formatting and run analyzer diagnostics
+      - name: Verify experimental Dart formatting and analyzer diagnostics
         script: |
           set -euo pipefail
           dart format --output=none --set-exit-if-changed \
             lib/services/ios_shortcut_jit_launch_service.dart \
             lib/services/stikjit_melonx_service.dart \
             packages/stikjit_bridge/lib/stikjit_bridge.dart
-
           set +e
           flutter analyze --no-fatal-warnings --no-fatal-infos
           ANALYZE_STATUS=$?
           set -e
           if [ "$ANALYZE_STATUS" -ne 0 ]; then
-            echo "WARNING: flutter analyze returned $ANALYZE_STATUS; continuing to real iOS compilation."
+            echo "WARNING: flutter analyze returned $ANALYZE_STATUS; continuing to native compilation."
           fi
 
       - name: Regenerate real iOS platform from bootstrap
@@ -264,31 +245,23 @@ workflows:
           text = podfile.read_text(encoding='utf-8')
           pattern = re.compile(r"(?m)^\s*#?\s*platform\s+:ios\s*,\s*['\"][^'\"]+['\"]\s*$")
           replacement = "platform :ios, '18.0'"
-          if pattern.search(text):
-              text = pattern.sub(replacement, text, count=1)
-          else:
-              text = replacement + '\n\n' + text
+          text = pattern.sub(replacement, text, count=1) if pattern.search(text) else replacement + '\n\n' + text
           podfile.write_text(text, encoding='utf-8')
+
+          project = Path('ios/Runner.xcodeproj/project.pbxproj')
+          project_text = project.read_text(encoding='utf-8')
+          project_text, count = re.subn(
+              r'IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;',
+              'IPHONEOS_DEPLOYMENT_TARGET = 18.0;',
+              project_text,
+          )
+          if count == 0:
+              raise SystemExit('Runner project had no deployment target to patch.')
+          project.write_text(project_text, encoding='utf-8')
+          print(f'Patched {count} Runner deployment-target entries to iOS 18.0.')
           PY
 
           grep -Eq "^platform :ios, ['\"]18\.0['\"]$" ios/Podfile
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          project = Path('ios/Runner.xcodeproj/project.pbxproj')
-          text = project.read_text(encoding='utf-8')
-          text, count = re.subn(
-              r'IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;',
-              'IPHONEOS_DEPLOYMENT_TARGET = 18.0;',
-              text,
-          )
-          if count == 0:
-              raise SystemExit('Runner project did not contain an iOS deployment target to patch.')
-          project.write_text(text, encoding='utf-8')
-          print(f'Patched {count} Runner deployment target entries to iOS 18.0.')
-          PY
 
           PLIST=ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Delete :UISupportedInterfaceOrientations' "$PLIST" 2>/dev/null || true
@@ -331,7 +304,7 @@ workflows:
           pod install --repo-update
           grep -q 'stikjit_bridge' Podfile.lock
           test -d .symlinks/plugins/stikjit_bridge/ios/Frameworks/StikJIT.xcframework
-          echo 'CocoaPods resolved StikJIT bridge with Runner platform iOS 18.0.'
+          echo 'CocoaPods resolved StikJIT bridge.'
 
       - name: Configure experimental Flutter release
         script: |
@@ -349,22 +322,16 @@ workflows:
           python3 - <<'PY'
           import base64
           import os
-          import pathlib
-
-          config = pathlib.Path('ios/Flutter/Generated.xcconfig')
-          if not config.is_file():
-              raise SystemExit('Generated.xcconfig was not generated.')
+          from pathlib import Path
 
           values = {}
-          for line in config.read_text(encoding='utf-8').splitlines():
+          for line in Path('ios/Flutter/Generated.xcconfig').read_text(encoding='utf-8').splitlines():
               if '=' in line:
                   key, value = line.split('=', 1)
                   values[key] = value
-
-          encoded = values.get('DART_DEFINES', '')
           decoded = {
               base64.b64decode(item).decode('utf-8')
-              for item in encoded.split(',') if item
+              for item in values.get('DART_DEFINES', '').split(',') if item
           }
           expected = {
               'SCREENSCRAPER_DEV_ID=' + os.environ['SCREENSCRAPER_DEV_ID'],
@@ -376,14 +343,17 @@ workflows:
               raise SystemExit('Required Dart defines are missing from Xcode configuration.')
           if values.get('FLUTTER_BUILD_NUMBER') != '165':
               raise SystemExit('FLUTTER_BUILD_NUMBER is not 165.')
-          print('ScreenScraper and experimental StikJIT defines are embedded exactly.')
+          print('Experimental and ScreenScraper defines reached Xcode exactly.')
           PY
 
       - name: Build unsigned experimental iOS app
         script: |
-          set -euo pipefail
+          set -uo pipefail
           rm -rf build/ios/DerivedData build/ios/unsigned
           mkdir -p build/ios
+          LOG=build/ios/xcodebuild-unsigned.log
+
+          set +e
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
             -scheme Runner \
@@ -397,7 +367,17 @@ workflows:
             DEVELOPMENT_TEAM='' \
             PROVISIONING_PROFILE_SPECIFIER='' \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            build | tee build/ios/xcodebuild-unsigned.log
+            build 2>&1 | tee "$LOG"
+          XCODE_STATUS=$?
+          set -e
+
+          if [ "$XCODE_STATUS" -ne 0 ]; then
+            echo '===== CONCISE XCODE FAILURE ====='
+            grep -nE 'error:|fatal error:|SwiftCompile|CompileSwift|Undefined symbols|ld: ' "$LOG" \
+              | tail -n 160 || true
+            echo '===== END CONCISE XCODE FAILURE ====='
+            exit "$XCODE_STATUS"
+          fi
 
       - name: Package and verify Build 165 IPA
         script: |
@@ -411,14 +391,12 @@ workflows:
           PLIST=build/ios/unsigned/Payload/NeoStation.app/Info.plist
           /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST" | grep -qx '165'
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" | grep -qx 'com.neogamelab.neostation'
-
           test -d build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework
           test -f build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework/StikJIT
 
           EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
-          OTOOL=/tmp/neostation-otool.txt
-          otool -L "build/ios/unsigned/Payload/NeoStation.app/$EXECUTABLE" > "$OTOOL"
-          grep -Fq 'StikJIT.framework/StikJIT' "$OTOOL"
+          otool -L "build/ios/unsigned/Payload/NeoStation.app/$EXECUTABLE" > /tmp/neostation-otool.txt
+          grep -Fq 'StikJIT.framework/StikJIT' /tmp/neostation-otool.txt
 
           (
             cd build/ios/unsigned
@@ -426,7 +404,7 @@ workflows:
           )
           shasum -a 256 NeoStation-iOS-Build-165-StikJIT-Experimental.ipa \
             | tee NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
-          echo 'Build 165 contains the StikJIT framework and is linked by NeoStation.'
+          echo 'Build 165 contains and links StikJIT.'
 
       - name: Remove temporary build inputs
         script: rm -f .dart-defines.json
@@ -441,16 +419,20 @@ workflows:
         - name: Publish experimental Build 165 to GitHub Releases
           script: |
             set -euo pipefail
+            IPA='NeoStation-iOS-Build-165-StikJIT-Experimental.ipa'
+            SHA='NeoStation-iOS-Build-165-StikJIT-Experimental.sha256'
+            if [ ! -f "$IPA" ] || [ ! -f "$SHA" ]; then
+              echo 'No verified Build 165 IPA exists; skipping release publication.'
+              exit 0
+            fi
             if [ -z "${Ghtoken:-}" ]; then
               echo 'Codemagic secret Ghtoken is missing.'
               exit 1
             fi
+
             export GH_TOKEN="$Ghtoken"
             command -v gh >/dev/null 2>&1 || brew install gh
-
             TAG='ios-build-165-stikjit-melonx-exp'
-            IPA='NeoStation-iOS-Build-165-StikJIT-Experimental.ipa'
-            SHA='NeoStation-iOS-Build-165-StikJIT-Experimental.sha256'
             NOTES='EXPERIMENTAL branch-only build. Stable backup is untouched. MeloNX launches use NeoStation built-in StikJIT 1.5.0 with universal.js instead of opening StikDebug. Requires a valid pairing file, LocalDevVPN connectivity, Developer Mode, and a MeloNX installation signed with the entitlements required by MeloNX. The existing Shortcut/StikDebug route remains the default in normal builds.'
 
             if gh release view "$TAG" --repo TarbleFR/neostation-ios >/dev/null 2>&1; then
