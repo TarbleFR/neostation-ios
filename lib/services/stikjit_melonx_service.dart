@@ -1,0 +1,110 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:neostation/services/logger_service.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:stikjit_bridge/stikjit_bridge.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Experimental built-in StikJIT path for MeloNX.
+///
+/// The feature is compile-time gated so normal NeoStation builds keep using
+/// the existing Apple Shortcut -> StikDebug flow unchanged. The experimental
+/// Codemagic build enables this service with a Dart define.
+class StikJitMeloNxService {
+  StikJitMeloNxService._();
+
+  static final _log = LoggerService.instance;
+
+  static const bool isExperimentalEnabled = bool.fromEnvironment(
+    'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX',
+    defaultValue: false,
+  );
+
+  static const String _bundleId = String.fromEnvironment(
+    'NEOSTATION_MELONX_BUNDLE_ID',
+    defaultValue: 'com.nur.nx',
+  );
+
+  static Future<bool> launch({required String gameUrl}) async {
+    if (!Platform.isIOS || !isExperimentalEnabled) return false;
+
+    final gameUri = Uri.tryParse(gameUrl);
+    if (gameUri == null || gameUri.scheme.isEmpty) {
+      _log.e('StikJitMeloNxService: invalid MeloNX game URL.');
+      return false;
+    }
+
+    try {
+      final pairingFile = await _ensurePairingFile();
+      if (pairingFile == null) {
+        _log.w('StikJitMeloNxService: pairing file selection was cancelled.');
+        return false;
+      }
+
+      final jit = await StikjitBridge.enableMeloNxJit(
+        pairingFilePath: pairingFile.path,
+        bundleId: _bundleId,
+      );
+
+      _log.i(
+        'StikJitMeloNxService: JIT ready for MeloNX pid=${jit.pid} '
+        'txm=${jit.txmPresent ?? 'unknown'}.',
+      );
+      for (final message in jit.logs) {
+        _log.d('StikJIT: $message');
+      }
+
+      // StikJIT has completed and detached. MeloNX is now running with JIT, so
+      // deliver the exact frontend deep link that the old Shortcut received as
+      // Shortcut Input. No StikDebug app transition is needed.
+      return await launchUrl(gameUri, mode: LaunchMode.externalApplication);
+    } catch (error, stackTrace) {
+      _log.e(
+        'StikJitMeloNxService: built-in JIT launch failed: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  static Future<File?> _ensurePairingFile() async {
+    final support = await getApplicationSupportDirectory();
+    final directory = Directory(path.join(support.path, 'StikJIT'));
+    await directory.create(recursive: true);
+
+    final stored = File(
+      path.join(directory.path, 'pairing.mobiledevicepairing'),
+    );
+    if (await stored.exists() && await stored.length() > 0) {
+      return stored;
+    }
+
+    final picked = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select your iPhone pairing file',
+      allowMultiple: false,
+      type: FileType.any,
+      withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return null;
+
+    final selected = picked.files.single;
+    if (selected.path case final sourcePath?) {
+      final source = File(sourcePath);
+      if (await source.exists() && await source.length() > 0) {
+        await source.copy(stored.path);
+        return stored;
+      }
+    }
+
+    final bytes = selected.bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      await stored.writeAsBytes(bytes, flush: true);
+      return stored;
+    }
+
+    throw StateError('The selected pairing file could not be read.');
+  }
+}
