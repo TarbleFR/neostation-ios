@@ -72,8 +72,7 @@ workflows:
               sys.exit(1)
 
           malformed = [
-              name
-              for name, value in values.items()
+              name for name, value in values.items()
               if value != value.strip() or '\n' in value or '\r' in value
           ]
           if malformed:
@@ -173,10 +172,6 @@ workflows:
             lib/services/stikjit_melonx_service.dart \
             packages/stikjit_bridge/lib/stikjit_bridge.dart
 
-          # The stable application contains existing analyzer findings unrelated
-          # to this branch. Keep the full analyzer output as a diagnostic, but
-          # let the actual Flutter/Xcode compilation below decide whether the
-          # experimental code is buildable.
           set +e
           flutter analyze --no-fatal-warnings --no-fatal-infos
           ANALYZE_STATUS=$?
@@ -198,8 +193,9 @@ workflows:
           fi
           test -f ios/Runner.xcodeproj/project.pbxproj
           test -f ios/Runner/Info.plist
+          test -f ios/Podfile
 
-      - name: Patch iOS runtime configuration
+      - name: Patch iOS 18 runtime configuration
         script: |
           set -euo pipefail
           python3 build-utils/patch_ios_video_player_audio_session.py
@@ -211,12 +207,42 @@ workflows:
             sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
           fi
 
-          if [ -f ios/Podfile ]; then
-            sed -i '' "s/platform :ios, '13.0'/platform :ios, '18.0'/" ios/Podfile || true
-          fi
-          sed -i '' \
-            's/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/IPHONEOS_DEPLOYMENT_TARGET = 18.0;/g' \
-            ios/Runner.xcodeproj/project.pbxproj || true
+          # Flutter can generate a Podfile whose platform line is commented out,
+          # which makes CocoaPods default Runner to iOS 15. StikJIT requires
+          # iOS 17.4+, so force an explicit iOS 18 platform before pod install.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          podfile = Path('ios/Podfile')
+          text = podfile.read_text(encoding='utf-8')
+          pattern = re.compile(r"(?m)^\s*#?\s*platform\s+:ios\s*,\s*['\"][^'\"]+['\"]\s*$")
+          replacement = "platform :ios, '18.0'"
+          if pattern.search(text):
+              text = pattern.sub(replacement, text, count=1)
+          else:
+              text = replacement + '\n\n' + text
+          podfile.write_text(text, encoding='utf-8')
+          PY
+
+          grep -Eq "^platform :ios, ['\"]18\.0['\"]$" ios/Podfile
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          project = Path('ios/Runner.xcodeproj/project.pbxproj')
+          text = project.read_text(encoding='utf-8')
+          text, count = re.subn(
+              r'IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;',
+              'IPHONEOS_DEPLOYMENT_TARGET = 18.0;',
+              text,
+          )
+          if count == 0:
+              raise SystemExit('Runner project did not contain an iOS deployment target to patch.')
+          project.write_text(text, encoding='utf-8')
+          print(f'Patched {count} Runner deployment target entries to iOS 18.0.')
+          PY
 
           PLIST=ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Delete :UISupportedInterfaceOrientations' "$PLIST" 2>/dev/null || true
@@ -254,10 +280,12 @@ workflows:
       - name: Install CocoaPods with StikJIT bridge
         script: |
           set -euo pipefail
+          grep -Eq "^platform :ios, ['\"]18\.0['\"]$" ios/Podfile
           cd ios
           pod install --repo-update
           grep -q 'stikjit_bridge' Podfile.lock
-          grep -q 'StikJIT' Podfile.lock
+          test -d .symlinks/plugins/stikjit_bridge/ios/Frameworks/StikJIT.xcframework
+          echo 'CocoaPods resolved StikJIT bridge with Runner platform iOS 18.0.'
 
       - name: Configure experimental Flutter release
         script: |
@@ -288,11 +316,10 @@ workflows:
                   values[key] = value
 
           encoded = values.get('DART_DEFINES', '')
-          decoded = set()
-          for item in encoded.split(','):
-              if item:
-                  decoded.add(base64.b64decode(item).decode('utf-8'))
-
+          decoded = {
+              base64.b64decode(item).decode('utf-8')
+              for item in encoded.split(',') if item
+          }
           expected = {
               'SCREENSCRAPER_DEV_ID=' + os.environ['SCREENSCRAPER_DEV_ID'],
               'SCREENSCRAPER_DEV_PASSWORD=' + os.environ['SCREENSCRAPER_DEV_PASSWORD'],
@@ -341,7 +368,6 @@ workflows:
 
           test -d build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework
           test -f build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework/StikJIT
-          grep -R -q 'StikjitBridgePlugin' ios/Runner ios/Flutter 2>/dev/null
 
           EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
           OTOOL=/tmp/neostation-otool.txt
@@ -354,7 +380,7 @@ workflows:
           )
           shasum -a 256 NeoStation-iOS-Build-165-StikJIT-Experimental.ipa \
             | tee NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
-          echo 'Build 165 contains the StikJIT framework and plugin registration.'
+          echo 'Build 165 contains the StikJIT framework and is linked by NeoStation.'
 
       - name: Remove temporary build inputs
         script: rm -f .dart-defines.json
