@@ -33,13 +33,6 @@ jobs:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               return text.replace(old, new, 1)
 
-          # ------------------------------------------------------------------
-          # First-run iOS library linking: automatically open the selected
-          # emulator's folder picker as soon as SetupWizard becomes active.
-          # RetroArch's exported metadata sync is already requested by the
-          # emulator-choice screen; Manic EMU synchronizes by linking + scanning
-          # its public Documents/Datas library.
-          # ------------------------------------------------------------------
           p = Path('lib/widgets/setup_wizard.dart')
           s = p.read_text()
 
@@ -66,46 +59,52 @@ jobs:
 
           marker = "  Future<void> _selectFolder() async {\n"
           auto_method = """  Future<void> _startInitialIosLibraryLinkIfNeeded() async {
-    if (!Platform.isIOS ||
-        !mounted ||
-        _currentStep != _stepFolder ||
-        _isSelectingFolder ||
-        _initialIosLibraryLinkStarted) {
-      return;
-    }
+          if (!Platform.isIOS ||
+              !mounted ||
+              _currentStep != _stepFolder ||
+              _isSelectingFolder ||
+              _initialIosLibraryLinkStarted) {
+            return;
+          }
 
-    // Do not attempt to present UIDocumentPicker while NeoStation is inactive
-    // (notably while RetroArch is still in the foreground for its callback).
-    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
-      return;
-    }
+          // Do not attempt to present UIDocumentPicker while NeoStation is inactive
+          // (notably while RetroArch is still in the foreground for its callback).
+          if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+            return;
+          }
 
-    final primary = await IosEmulatorPreferenceService.primary();
-    if (!mounted || _currentStep != _stepFolder || _isSelectingFolder) return;
+          final primary = await IosEmulatorPreferenceService.primary();
+          if (!mounted || _currentStep != _stepFolder || _isSelectingFolder) return;
 
-    final existingLink = primary == IosLibraryEmulator.manicEmu
-        ? ConfigService.linkedManicEmuFolderPath
-        : ConfigService.linkedExternalFolderPath;
-    if (existingLink != null && existingLink.trim().isNotEmpty) return;
+          final existingLink = primary == IosLibraryEmulator.manicEmu
+              ? ConfigService.linkedManicEmuFolderPath
+              : ConfigService.linkedExternalFolderPath;
+          if (existingLink != null && existingLink.trim().isNotEmpty) return;
 
-    _initialIosLibraryLinkStarted = true;
-    try {
-      // The picker is the one iOS-required user confirmation. Once granted,
-      // _selectFolder persists the bookmark, registers the ROM source and runs
-      // the real scan immediately, so no trip to Settings > Directories is
-      // required on first use.
-      await _selectFolder(allowInternalFallback: false);
-    } finally {
-      // A cancellation leaves the user on the same wizard step, where the main
-      // action can retry normally. A successful link advances to Scanning.
-      if (mounted && _currentStep == _stepFolder) {
-        _initialIosLibraryLinkStarted = false;
-      }
-    }
-  }
+          _initialIosLibraryLinkStarted = true;
+          try {
+            // The picker is the one iOS-required user confirmation. Once granted,
+            // _selectFolder persists the bookmark, registers the ROM source and runs
+            // the real scan immediately, so no trip to Settings > Directories is
+            // required on first use.
+            await _selectFolder(allowInternalFallback: false);
+          } finally {
+            // A cancellation leaves the user on the same wizard step, where the main
+            // action can retry normally. A successful link advances to Scanning.
+            if (mounted && _currentStep == _stepFolder) {
+              _initialIosLibraryLinkStarted = false;
+            }
+          }
+        }
 
-  Future<void> _selectFolder({bool allowInternalFallback = true}) async {
-"""
+        Future<void> _selectFolder({bool allowInternalFallback = true}) async {
+          """
+          # The YAML block indentation above becomes Python source indentation;
+          # strip the helper-only ten-space prefix from every interior line.
+          auto_method = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in auto_method.splitlines()
+          ) + '\n'
           s = replace_once(s, marker, auto_method, 'setup select folder signature')
 
           s = replace_once(
@@ -116,12 +115,6 @@ jobs:
           )
           p.write_text(s)
 
-          # ------------------------------------------------------------------
-          # Dynamic Island / landscape safe-area handling in every game
-          # playlist presentation. The action rail follows iOS's actual left
-          # viewPadding, and the list/grid content keeps the same gutter behind
-          # it. Non-iOS layout remains byte-for-byte equivalent geometrically.
-          # ------------------------------------------------------------------
           p = Path('lib/screens/game_screen/my_games_list.dart')
           s = p.read_text()
           s = replace_once(
@@ -188,7 +181,6 @@ jobs:
           )
           p.write_text(s)
 
-          # This set of fixes supersedes the still-building 158 package.
           p = Path('pubspec.yaml')
           s = p.read_text()
           s = replace_once(s, 'version: 1.0.0+158', 'version: 1.0.0+159', 'build number')
