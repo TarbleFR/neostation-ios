@@ -176,3 +176,29 @@ workflows:
       - NeoStation-iOS-Build-163.ipa
       - NeoStation-iOS-Build-163.sha256
       - build/ios/xcodebuild-unsigned.log
+
+    publishing:
+      scripts:
+        - name: Publish Build 163 to GitHub Releases
+          script: |
+            set -euo pipefail
+            if [ -z "${Ghtoken:-}" ]; then
+              echo 'Codemagic secret Ghtoken is missing.'
+              exit 1
+            fi
+            export GH_TOKEN="$Ghtoken"
+            command -v gh >/dev/null 2>&1 || brew install gh
+            TAG='ios-build-163-rpcs3'
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" \
+                NeoStation-iOS-Build-163.ipa \
+                NeoStation-iOS-Build-163.sha256 \
+                --clobber
+            else
+              gh release create "$TAG" \
+                NeoStation-iOS-Build-163.ipa \
+                NeoStation-iOS-Build-163.sha256 \
+                --target "$CM_COMMIT" \
+                --title 'NeoStation iOS Build 163 - RPCS3 Fix' \
+                --notes 'Codemagic build. RPCS3-only fix: immediately re-activate the iOS security-scoped Data-folder bookmark before library discovery so synchronized PS3 games appear without restarting NeoStation.'
+            fi
