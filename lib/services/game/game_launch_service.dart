@@ -17,6 +17,7 @@ import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
 import 'package:neostation/services/manic_emu_launch_service.dart';
+import 'package:neostation/services/manic_emu_library_service.dart';
 import 'package:neostation/services/ios_emulator_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 
@@ -256,12 +257,12 @@ class GameLaunchService {
           game.romPath!,
         );
         final manicInstalled = await ManicEmuLaunchService.isInstalled();
-        final manicFolder = ConfigService.linkedManicEmuFolderPath;
         final manicHasGame =
             manicInstalled &&
-            manicFolder != null &&
-            (path.equals(manicFolder, game.romPath!) ||
-                path.isWithin(manicFolder, game.romPath!));
+            await ManicEmuLibraryService.hasGameForRomPath(
+              ConfigService.linkedManicEmuFolderPath,
+              game.romPath!,
+            );
         final primaryLibraryEmulator =
             await IosEmulatorPreferenceService.primary();
         final libraryEmulator =

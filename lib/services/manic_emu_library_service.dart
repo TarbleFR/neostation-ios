@@ -41,6 +41,82 @@ class ManicEmuLibraryService {
     return await child.exists() ? child.path : null;
   }
 
+  /// Returns whether a ROM represented by [romPath] is actually present in the
+  /// linked Manic EMU library.
+  ///
+  /// A row originating from Manic itself is identified by folder ownership.
+  /// For a row originating from RetroArch, compare the filename stem against
+  /// Manic's public Documents/Datas folder. This also handles RetroArch ZIP
+  /// containers because Manic imports/extracts the contained ROM using the same
+  /// title stem before computing its launch identifier.
+  static Future<bool> hasGameForRomPath(
+    String? linkedPath,
+    String romPath,
+  ) async {
+    final root = linkedPath?.trim();
+    final rom = romPath.trim();
+    if (root == null || root.isEmpty || rom.isEmpty) return false;
+
+    final normalizedRoot = path.normalize(root);
+    final normalizedRom = path.normalize(rom);
+    if (path.equals(normalizedRoot, normalizedRom) ||
+        path.isWithin(normalizedRoot, normalizedRom)) {
+      return true;
+    }
+
+    final targetStem = path
+        .basenameWithoutExtension(normalizedRom)
+        .toLowerCase();
+    if (targetStem.isEmpty) return false;
+
+    final dataFolder = await resolveDataFolder(normalizedRoot);
+    if (dataFolder != null) {
+      try {
+        await for (final entity in Directory(
+          dataFolder,
+        ).list(recursive: false, followLinks: false)) {
+          if (entity is! File) continue;
+          if (path.basenameWithoutExtension(entity.path).toLowerCase() ==
+              targetStem) {
+            return true;
+          }
+        }
+      } catch (_) {
+        // An unavailable security-scoped bookmark means the game cannot be
+        // considered launchable from Manic for this session.
+      }
+    }
+
+    // 3DS installs live outside Datas. Only inspect that tree for 3DS-family
+    // extensions so ordinary ROM launches never pay for a recursive walk.
+    final extension = path
+        .extension(normalizedRom)
+        .toLowerCase()
+        .replaceFirst('.', '');
+    if (!nintendo3dsExtensions.contains(extension)) return false;
+
+    final documentsRoot = path.basename(normalizedRoot).toLowerCase() == 'datas'
+        ? path.dirname(normalizedRoot)
+        : normalizedRoot;
+    final threeDsRoot = Directory(path.join(documentsRoot, '3DS'));
+    if (!await threeDsRoot.exists()) return false;
+    try {
+      await for (final entity in threeDsRoot.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        if (path.basenameWithoutExtension(entity.path).toLowerCase() ==
+            targetStem) {
+          return true;
+        }
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
+  }
+
   static Future<bool> containsNintendo3dsGames(String dataFolder) async {
     final extensions = await extensionsInDataFolder(dataFolder);
     return extensions.any(nintendo3dsExtensions.contains);
@@ -52,10 +128,9 @@ class ManicEmuLibraryService {
   static Future<Set<String>> extensionsInDataFolder(String dataFolder) async {
     final extensions = <String>{};
     try {
-      await for (final entity in Directory(dataFolder).list(
-        recursive: false,
-        followLinks: false,
-      )) {
+      await for (final entity in Directory(
+        dataFolder,
+      ).list(recursive: false, followLinks: false)) {
         if (entity is! File) continue;
         final extension = path
             .extension(entity.path)
