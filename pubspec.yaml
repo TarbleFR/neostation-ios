@@ -9,6 +9,7 @@ workspace:
   - packages/gamepads
   - packages/gamepads_darwin
   - packages/gamepads_platform_interface
+  - packages/stikjit_bridge
 
 version: 1.0.0+163
 environment:
@@ -26,6 +27,8 @@ dependencies:
     path: packages/flutter_7zip
   external_folder_access:
     path: packages/external_folder_access
+  stikjit_bridge:
+    path: packages/stikjit_bridge
     
   file_picker: 12.0.0-beta.3
   device_info_plus: ^13.2.0
