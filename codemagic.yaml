@@ -1,7 +1,9 @@
-# Codemagic trigger: Build 164 ScreenScraper pipeline-only
+# EXPERIMENTAL ONLY: built-in StikJIT for MeloNX.
+# This workflow exists only on feature/stikjit-melonx and never updates main or
+# backup/stable-20260829-build164.
 workflows:
-  ios-screenscraper-164:
-    name: NeoStation iOS Build 164 - ScreenScraper Codemagic Fix
+  ios-stikjit-melonx-165-experimental:
+    name: NeoStation iOS Build 165 - StikJIT MeloNX Experimental
     instance_type: mac_mini_m2
     max_build_duration: 120
 
@@ -16,29 +18,41 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: build/screenscraper-164-codemagic
+        - pattern: feature/stikjit-melonx
           include: true
           source: true
       cancel_previous_builds: true
 
     scripts:
-      - name: Verify application source is unchanged from Build 163
+      - name: Verify experiment is isolated from stable code
         script: |
           set -euo pipefail
-          BASE='e41704a617e9e4a8e421159db23337ae668fe5ab'
+          BASE='b839ef10722ecbcfee721bdb7deb8f31431082cd'
           git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE"
-          CHANGED=$(git diff --name-only "$BASE"...HEAD | sort)
-          if [ "$CHANGED" != 'codemagic.yaml' ]; then
-            echo 'Build 164 must be pipeline-only. Unexpected changed files:'
-            printf '%s\n' "$CHANGED"
-            exit 1
-          fi
-          grep -q 'version: 1.0.0+163' pubspec.yaml
+
+          unexpected=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              codemagic.yaml|pubspec.yaml|lib/services/ios_shortcut_jit_launch_service.dart|lib/services/stikjit_melonx_service.dart|packages/stikjit_bridge/*)
+                ;;
+              *)
+                echo "Unexpected experimental change: $file"
+                unexpected=1
+                ;;
+            esac
+          done < <(git diff --name-only "$BASE"...HEAD)
+          [ "$unexpected" -eq 0 ]
+
+          git diff --quiet "$BASE"...HEAD -- lib/services/rpcs3_library_service.dart
+          git diff --quiet "$BASE"...HEAD -- lib/services/screenscraper_service.dart
+          git diff --quiet "$BASE"...HEAD -- lib/services/melonx_library_service.dart
           grep -q 'final selected = await ExternalFolderAccess.resolveBookmarkedFolder' \
             lib/services/rpcs3_library_service.dart
-          echo 'Application source matches Build 163; only codemagic.yaml changed.'
+          grep -q 'version: 1.0.0+163' pubspec.yaml
+          echo 'Experiment isolation verified. Stable RPCS3, ScreenScraper and MeloNX library code are untouched.'
 
-      - name: Validate ScreenScraper Codemagic secrets
+      - name: Prepare verified build-time defines
         script: |
           set -euo pipefail
           python3 - <<'PY'
@@ -47,15 +61,14 @@ workflows:
           import pathlib
           import sys
 
-          names = (
+          required = (
               'SCREENSCRAPER_DEV_ID',
               'SCREENSCRAPER_DEV_PASSWORD',
           )
-          values = {name: os.environ.get(name, '') for name in names}
-
+          values = {name: os.environ.get(name, '') for name in required}
           missing = [name for name, value in values.items() if not value]
           if missing:
-              print('Missing required Codemagic ScreenScraper variables: ' + ', '.join(missing))
+              print('Missing required Codemagic variables: ' + ', '.join(missing))
               sys.exit(1)
 
           malformed = [
@@ -64,21 +77,19 @@ workflows:
               if value != value.strip() or '\n' in value or '\r' in value
           ]
           if malformed:
-              print('Malformed ScreenScraper variables: ' + ', '.join(malformed))
+              print('Malformed Codemagic variables: ' + ', '.join(malformed))
               sys.exit(1)
 
-          # JSON avoids .env parsing edge cases if a developer password contains
-          # characters that have special meaning in dotenv-style files.
-          defines_file = pathlib.Path('.dart-defines.json')
-          defines_file.write_text(
-              json.dumps(values, ensure_ascii=False),
-              encoding='utf-8',
-          )
-          defines_file.chmod(0o600)
-          print('ScreenScraper Codemagic variables are present and a secure Dart-defines JSON file was generated.')
+          values['NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX'] = 'true'
+          values['NEOSTATION_MELONX_BUNDLE_ID'] = 'com.nur.nx'
+
+          output = pathlib.Path('.dart-defines.json')
+          output.write_text(json.dumps(values, ensure_ascii=False), encoding='utf-8')
+          output.chmod(0o600)
+          print('ScreenScraper credentials and experimental StikJIT flag are ready.')
           PY
 
-      - name: ScreenScraper API diagnostic (non-blocking)
+      - name: Verify ScreenScraper developer credentials
         script: |
           set -euo pipefail
           python3 - <<'PY'
@@ -88,24 +99,16 @@ workflows:
           import urllib.parse
           import urllib.request
 
-          query = urllib.parse.urlencode(
-              {
-                  'devid': os.environ['SCREENSCRAPER_DEV_ID'],
-                  'devpassword': os.environ['SCREENSCRAPER_DEV_PASSWORD'],
-                  # Runtime NeoStation supplies its own versioned softname on-device.
-                  # This CI call is diagnostics only and must never gate IPA creation.
-                  'softname': 'neostation-1.0.0-ios',
-                  'output': 'json',
-              }
-          )
+          query = urllib.parse.urlencode({
+              'devid': os.environ['SCREENSCRAPER_DEV_ID'],
+              'devpassword': os.environ['SCREENSCRAPER_DEV_PASSWORD'],
+              'softname': 'neostation-1.0.0-ios',
+              'output': 'json',
+          })
           request = urllib.request.Request(
               'https://api.screenscraper.fr/api2/ssinfraInfos.php?' + query,
-              headers={
-                  'User-Agent': 'NeoStation/1.0',
-                  'Accept': 'application/json',
-              },
+              headers={'User-Agent': 'NeoStation/1.0', 'Accept': 'application/json'},
           )
-
           try:
               with urllib.request.urlopen(request, timeout=40) as response:
                   status = response.status
@@ -113,40 +116,60 @@ workflows:
           except urllib.error.HTTPError as error:
               status = error.code
               body = error.read()
-          except Exception as error:
-              print(
-                  'WARNING: ScreenScraper CI diagnostic network failure: '
-                  + type(error).__name__
-                  + '. Continuing because runtime access is tested on the iOS device.'
-              )
-              raise SystemExit(0)
 
-          print(f'ScreenScraper CI diagnostic HTTP status: {status}')
+          print(f'ScreenScraper developer diagnostic HTTP status: {status}')
           if status != 200:
-              print(
-                  'WARNING: ScreenScraper returned a non-200 response to the Codemagic runner. '
-                  'Continuing: this runner-side diagnostic is not used to decide whether the '
-                  'developer values are embedded in the IPA.'
-              )
-              raise SystemExit(0)
+              raise SystemExit('ScreenScraper developer credentials were rejected.')
 
-          try:
-              payload = json.loads(body.decode('utf-8'))
-          except Exception:
-              print('WARNING: ScreenScraper CI diagnostic returned non-JSON data. Continuing build.')
-              raise SystemExit(0)
-
+          payload = json.loads(body.decode('utf-8'))
           header = payload.get('header') if isinstance(payload, dict) else None
           success = header.get('success') if isinstance(header, dict) else None
           if str(success).lower() not in {'true', '1'}:
-              print('WARNING: ScreenScraper CI diagnostic did not report success. Continuing build.')
-              raise SystemExit(0)
-
-          print('ScreenScraper developer credentials were accepted by the CI diagnostic endpoint.')
+              raise SystemExit('ScreenScraper diagnostic did not report success.')
+          print('ScreenScraper developer credentials accepted.')
           PY
+
+      - name: Download and verify StikJIT 1.5.0
+        script: |
+          set -euo pipefail
+          ARCHIVE=/tmp/StikJIT.xcframework.zip
+          EXTRACT=/tmp/neostation-stikjit
+          DEST=packages/stikjit_bridge/ios/Frameworks
+          rm -rf "$EXTRACT" "$DEST/StikJIT.xcframework" "$ARCHIVE"
+          mkdir -p "$EXTRACT" "$DEST"
+
+          curl -fL --retry 3 --retry-delay 2 \
+            'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' \
+            -o "$ARCHIVE"
+          echo '444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85  /tmp/StikJIT.xcframework.zip' \
+            | shasum -a 256 -c -
+
+          unzip -q "$ARCHIVE" -d "$EXTRACT"
+          FRAMEWORK=$(find "$EXTRACT" -type d -name 'StikJIT.xcframework' -print -quit)
+          test -n "$FRAMEWORK"
+          cp -R "$FRAMEWORK" "$DEST/StikJIT.xcframework"
+
+          DEVICE_BIN=$(find "$DEST/StikJIT.xcframework" \
+            -path '*ios-arm64*' -type f -name 'StikJIT' -print -quit)
+          test -n "$DEVICE_BIN"
+          nm -gU "$DEVICE_BIN" | grep -q '_tunnel_create_rppairing'
+          nm -gU "$DEVICE_BIN" | grep -q '_remote_server_connect_rsd'
+          nm -gU "$DEVICE_BIN" | grep -q '_process_control_new'
+          nm -gU "$DEVICE_BIN" | grep -q '_process_control_launch_app'
+          nm -gU "$DEVICE_BIN" | grep -q '_idevice_error_free'
+          echo 'StikJIT framework checksum and required process-control exports verified.'
 
       - name: Resolve Flutter dependencies
         script: flutter pub get
+
+      - name: Verify Dart formatting and analysis
+        script: |
+          set -euo pipefail
+          dart format --output=none --set-exit-if-changed \
+            lib/services/ios_shortcut_jit_launch_service.dart \
+            lib/services/stikjit_melonx_service.dart \
+            packages/stikjit_bridge/lib/stikjit_bridge.dart
+          flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Regenerate real iOS platform from bootstrap
         script: |
@@ -168,7 +191,7 @@ workflows:
           python3 build-utils/patch_ios_video_player_audio_session.py
 
           DEVICE_INFO_FILE=$(find "$HOME/.pub-cache" \
-            -path "*device_info_plus*/FPPDeviceInfoPlusPlugin.m" \
+            -path '*device_info_plus*/FPPDeviceInfoPlusPlugin.m' \
             2>/dev/null | head -1 || true)
           if [ -n "$DEVICE_INFO_FILE" ]; then
             sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
@@ -182,30 +205,30 @@ workflows:
             ios/Runner.xcodeproj/project.pbxproj || true
 
           PLIST=ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeRight" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad array" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeRight" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Delete :UISupportedInterfaceOrientations' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeRight' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Delete :UISupportedInterfaceOrientations~ipad' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations~ipad array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeLeft' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeRight' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UIFileSharingEnabled bool true' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :LSSupportsOpeningDocumentsInPlace bool true' "$PLIST" 2>/dev/null || true
 
-          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string com.neogamelab.neostation" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string neostation" "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0 dict' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLName string com.neogamelab.neostation' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string neostation' "$PLIST"
 
-          /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes array" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:0 string retroarch" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:1 string shortcuts" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:2 string armsx2" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes:3 string melonx" "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Delete :LSApplicationQueriesSchemes' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:0 string retroarch' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:1 string shortcuts' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:2 string armsx2' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:3 string melonx' "$PLIST"
           plutil -lint "$PLIST"
 
       - name: Generate iOS icon
@@ -214,22 +237,25 @@ workflows:
           chmod +x build-utils/force_ios_fork_icon.sh
           build-utils/force_ios_fork_icon.sh
 
-      - name: Install CocoaPods
+      - name: Install CocoaPods with StikJIT bridge
         script: |
+          set -euo pipefail
           cd ios
           pod install --repo-update
+          grep -q 'stikjit_bridge' Podfile.lock
+          grep -q 'StikJIT' Podfile.lock
 
-      - name: Configure Flutter release with verified ScreenScraper defines
+      - name: Configure experimental Flutter release
         script: |
           set -euo pipefail
           flutter build ios \
             --release \
             --no-codesign \
             --config-only \
-            --build-number=164 \
+            --build-number=165 \
             --dart-define-from-file=.dart-defines.json
 
-      - name: Verify ScreenScraper defines reached Xcode
+      - name: Verify defines reached Xcode
         script: |
           set -euo pipefail
           python3 - <<'PY'
@@ -240,8 +266,7 @@ workflows:
 
           config = pathlib.Path('ios/Flutter/Generated.xcconfig')
           if not config.is_file():
-              print('Generated.xcconfig was not generated.')
-              sys.exit(1)
+              raise SystemExit('Generated.xcconfig was not generated.')
 
           values = {}
           for line in config.read_text(encoding='utf-8').splitlines():
@@ -250,37 +275,26 @@ workflows:
                   values[key] = value
 
           encoded = values.get('DART_DEFINES', '')
-          if not encoded:
-              print('DART_DEFINES is missing from Generated.xcconfig.')
-              sys.exit(1)
-
           decoded = set()
           for item in encoded.split(','):
-              if not item:
-                  continue
-              try:
+              if item:
                   decoded.add(base64.b64decode(item).decode('utf-8'))
-              except Exception:
-                  print('Generated DART_DEFINES contains an invalid Base64 entry.')
-                  sys.exit(1)
 
           expected = {
               'SCREENSCRAPER_DEV_ID=' + os.environ['SCREENSCRAPER_DEV_ID'],
               'SCREENSCRAPER_DEV_PASSWORD=' + os.environ['SCREENSCRAPER_DEV_PASSWORD'],
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX=true',
+              'NEOSTATION_MELONX_BUNDLE_ID=com.nur.nx',
           }
-          if not expected.issubset(decoded):
-              print('Exact ScreenScraper developer defines are missing from Xcode configuration.')
-              sys.exit(1)
-
-          if values.get('FLUTTER_BUILD_NUMBER') != '164':
-              print('FLUTTER_BUILD_NUMBER is not 164 in Generated.xcconfig.')
-              sys.exit(1)
-
-          print('Both exact ScreenScraper developer defines are embedded in Xcode configuration.')
-          print('Flutter build number 164 is configured.')
+          missing = expected - decoded
+          if missing:
+              raise SystemExit('Required Dart defines are missing from Xcode configuration.')
+          if values.get('FLUTTER_BUILD_NUMBER') != '165':
+              raise SystemExit('FLUTTER_BUILD_NUMBER is not 165.')
+          print('ScreenScraper and experimental StikJIT defines are embedded exactly.')
           PY
 
-      - name: Build unsigned iOS app
+      - name: Build unsigned experimental iOS app
         script: |
           set -euo pipefail
           rm -rf build/ios/DerivedData build/ios/unsigned
@@ -294,41 +308,52 @@ workflows:
             -derivedDataPath build/ios/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            PROVISIONING_PROFILE_SPECIFIER='' \
             COMPILER_INDEX_STORE_ENABLE=NO \
             build | tee build/ios/xcodebuild-unsigned.log
 
-      - name: Package Build 164 IPA
+      - name: Package and verify Build 165 IPA
         script: |
           set -euo pipefail
           APP_PATH=$(find build/ios/DerivedData/Build/Products/Release-iphoneos \
             -maxdepth 1 -type d -name '*.app' -print -quit)
           test -n "$APP_PATH"
+
           mkdir -p build/ios/unsigned/Payload
           cp -R "$APP_PATH" build/ios/unsigned/Payload/NeoStation.app
+          PLIST=build/ios/unsigned/Payload/NeoStation.app/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST" | grep -qx '165'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" | grep -qx 'com.neogamelab.neostation'
+
+          test -d build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework
+          test -f build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework/StikJIT
+          grep -R -q 'StikjitBridgePlugin' ios/Runner ios/Flutter 2>/dev/null
+
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
+          otool -L "build/ios/unsigned/Payload/NeoStation.app/$EXECUTABLE" \
+            | grep -q 'StikJIT.framework/StikJIT'
+
           (
             cd build/ios/unsigned
-            zip -qry ../../../NeoStation-iOS-Build-164.ipa Payload
+            zip -qry ../../../NeoStation-iOS-Build-165-StikJIT-Experimental.ipa Payload
           )
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
-            build/ios/unsigned/Payload/NeoStation.app/Info.plist | grep -qx '164'
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
-            build/ios/unsigned/Payload/NeoStation.app/Info.plist | grep -qx 'com.neogamelab.neostation'
-          shasum -a 256 NeoStation-iOS-Build-164.ipa | tee NeoStation-iOS-Build-164.sha256
+          shasum -a 256 NeoStation-iOS-Build-165-StikJIT-Experimental.ipa \
+            | tee NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
+          echo 'Build 165 contains the StikJIT framework and plugin registration.'
 
-      - name: Remove temporary ScreenScraper defines file
+      - name: Remove temporary build inputs
         script: rm -f .dart-defines.json
 
     artifacts:
-      - NeoStation-iOS-Build-164.ipa
-      - NeoStation-iOS-Build-164.sha256
+      - NeoStation-iOS-Build-165-StikJIT-Experimental.ipa
+      - NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
       - build/ios/xcodebuild-unsigned.log
 
     publishing:
       scripts:
-        - name: Publish Build 164 to GitHub Releases
+        - name: Publish experimental Build 165 to GitHub Releases
           script: |
             set -euo pipefail
             if [ -z "${Ghtoken:-}" ]; then
@@ -337,19 +362,19 @@ workflows:
             fi
             export GH_TOKEN="$Ghtoken"
             command -v gh >/dev/null 2>&1 || brew install gh
-            TAG='ios-build-164-screenscraper-codemagic'
+
+            TAG='ios-build-165-stikjit-melonx-exp'
+            IPA='NeoStation-iOS-Build-165-StikJIT-Experimental.ipa'
+            SHA='NeoStation-iOS-Build-165-StikJIT-Experimental.sha256'
+            NOTES='EXPERIMENTAL branch-only build. Stable backup is untouched. MeloNX launches use NeoStation built-in StikJIT 1.5.0 with universal.js instead of opening StikDebug. Requires a valid pairing file, LocalDevVPN connectivity, Developer Mode, and a MeloNX installation signed with the entitlements required by MeloNX. The existing Shortcut/StikDebug route remains the default in normal builds.'
+
             if gh release view "$TAG" --repo TarbleFR/neostation-ios >/dev/null 2>&1; then
-              gh release upload "$TAG" \
-                NeoStation-iOS-Build-164.ipa \
-                NeoStation-iOS-Build-164.sha256 \
-                --repo TarbleFR/neostation-ios \
-                --clobber
+              gh release upload "$TAG" "$IPA" "$SHA" \
+                --repo TarbleFR/neostation-ios --clobber
             else
-              gh release create "$TAG" \
-                NeoStation-iOS-Build-164.ipa \
-                NeoStation-iOS-Build-164.sha256 \
+              gh release create "$TAG" "$IPA" "$SHA" \
                 --repo TarbleFR/neostation-ios \
                 --target "$CM_COMMIT" \
-                --title 'NeoStation iOS Build 164 - ScreenScraper Codemagic Fix' \
-                --notes 'Codemagic pipeline-only correction. Application source is unchanged from Build 163. ScreenScraper developer variables are required, serialized through a JSON Dart-defines file, and verified exactly in Generated.xcconfig before Xcode compilation. The runner-side API diagnostic is intentionally non-blocking because runtime ScreenScraper access occurs on the iOS device.'
+                --title 'NeoStation iOS Build 165 - StikJIT MeloNX Experimental' \
+                --notes "$NOTES"
             fi
