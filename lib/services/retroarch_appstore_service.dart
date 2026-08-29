@@ -5,6 +5,7 @@ import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/retroarch_appstore_launch_target.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -13,18 +14,23 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// RetroArch App Store integration only.
 ///
-/// RetroArch 1.22.2 exposes `retroarch://game/<filename>`. The iOS handler
-/// looks up that filename in RetroArch's own playlists, then launches the
-/// playlist entry's full path with its recorded core. NeoStation therefore
-/// must reproduce RetroArch's filename derivation exactly instead of copying,
-/// extracting, or importing ROMs.
+/// RetroArch 1.22.2 exposes `retroarch://game/<value>`. For ordinary playlist
+/// entries, `<value>` is the filename RetroArch derives with `path_basename()`.
+/// Archive entries require an extra workaround: when a playlist/default core
+/// is still DETECT, sending only the archive member filename can enter
+/// RetroArch's playlist shortcut branch without a usable core. In that case we
+/// send RetroArch's own archive container path instead. Its fallback launcher
+/// can validate the ZIP, inspect its members and select a compatible core.
 class RetroArchAppStoreService {
   RetroArchAppStoreService._();
 
   static final _log = LoggerService.instance;
 
-  static const String _cacheKey = 'retroarch_appstore_launch_cache_v2';
-  static const String _rootKey = 'retroarch_appstore_launch_root_v2';
+  // v3 persists the raw playlist path as well as the filename index. This is
+  // required because archive launches need RetroArch's own `~/Documents/...`
+  // container path even after NeoStation itself has been restarted.
+  static const String _cacheKey = 'retroarch_appstore_launch_cache_v3';
+  static const String _rootKey = 'retroarch_appstore_launch_root_v3';
   static const Set<String> _ignoredPlaylists = {
     'content_history.lpl',
     'content_image_history.lpl',
@@ -55,15 +61,14 @@ class RetroArchAppStoreService {
     // `.../File Provider Storage/<UUID>/...` is not guaranteed stable).
     // When that happens the prefix check above spuriously fails even though
     // this is genuinely the linked RetroArch folder. A hit in our own
-    // playlist-derived index is strong independent evidence of ownership,
-    // so treat it as one instead of hard-failing and silently falling
-    // through to the Share Sheet / "Resume Last Game" fallbacks.
-    return _launchIds.containsKey(path.basename(romPath)) ||
-        _launchIds.containsKey(path.basename(romPath).toLowerCase());
+    // playlist-derived index is strong independent evidence of ownership.
+    final basename = path.basename(romPath);
+    return _launchIds.containsKey(basename) ||
+        _launchIds.containsKey(basename.toLowerCase());
   }
 
-  /// App Store sync stays local. It also refreshes the exact filename index
-  /// from RetroArch's own .lpl files when the Playlist/Playlists directory is
+  /// App Store sync stays local. It also refreshes the exact launch index from
+  /// RetroArch's own .lpl files when the Playlist/Playlists directory is
   /// available under the linked RetroArch root.
   static Future<bool> syncLinkedLibrary() async {
     final root = ConfigService.linkedExternalFolderPath;
@@ -111,15 +116,15 @@ class RetroArchAppStoreService {
     }
   }
 
-  /// Returns the exact filename RetroArch 1.22.2 expects after
-  /// `retroarch://game/` for this ROM.
+  /// Returns the exact filename RetroArch exposes for this playlist entry.
   ///
   /// Important archive rule from RetroArch's own `path_basename()`:
   /// - `/roms/game.zip` -> `game.zip`
   /// - `/roms/game.zip#game.32x` -> `game.32x`
   ///
-  /// The archive member is only used when RetroArch itself recorded it in its
-  /// playlist. NeoStation never opens or inspects the ZIP to guess this value.
+  /// The archive member is derived only from RetroArch's own playlist. It is
+  /// still useful as an index key even though archive *launches* now use the
+  /// container path to force RetroArch's automatic core-detection fallback.
   static Future<String?> launchIdForRomPath(String romPath) async {
     await _loadCache();
     final currentRoot = _normalizedRoot();
@@ -127,25 +132,24 @@ class RetroArchAppStoreService {
       await _rebuildLaunchIndex(currentRoot);
     }
 
-    final indexed = _lookup(romPath);
+    final indexed = _lookup(_launchIds, romPath);
     if (indexed != null && indexed.isNotEmpty) return indexed;
 
-    // If playlists are unavailable, the safest fallback is the physical
-    // filename. This is exactly what RetroArch expects for playlist entries
-    // that point to the archive/file itself.
     final fallback = path.basename(romPath);
     return fallback.isEmpty ? null : fallback;
   }
 
   /// Direct launch for the App Store build. No Share sheet, no Open In, no
-  /// temporary copy, and no ZIP extraction: RetroArch resolves the playlist
-  /// entry, full content path and core itself.
+  /// temporary copy, and no ZIP extraction in NeoStation.
   static Future<bool> launchGameByRomPath(String romPath) async {
-    if (!ownsRomPath(romPath)) return false;
     try {
+      // Load/rebuild the index before the ownership check. This also handles
+      // the case where iOS changed the security-scoped container prefix after
+      // a restart and ownership has to fall back to the playlist basename.
+      final launchId = await launchIdForRomPath(romPath);
+      if (!ownsRomPath(romPath)) return false;
       if (!await File(romPath).exists()) return false;
 
-      final launchId = await launchIdForRomPath(romPath);
       if (launchId == null || launchId.isEmpty) {
         _log.w(
           'RetroArch App Store: no launch filename for ${path.basename(romPath)}.',
@@ -153,40 +157,46 @@ class RetroArchAppStoreService {
         return true;
       }
 
-      final uri = Uri(
-        scheme: 'retroarch',
-        host: 'game',
-        pathSegments: <String>[launchId],
-      );
-
-      // TEMP DIAGNOSTIC LOGGING -- remove once ZIP launches are confirmed
-      // working on-device. Format requested for comparing a working
-      // non-archive launch against a failing archive launch side by side.
-      // `containerFilename`/`fullPlaylistPath` are alternate candidates for
-      // the deep link filename in case the "member only" theory is wrong;
-      // they are NOT sent, only logged, so they can be hand-tested by
-      // pasting `retroarch://game/<candidate>` directly into Safari's
-      // address bar (bypasses NeoStation entirely, isolates whether the
-      // bug is in this derivation or in RetroArch's own matching).
-      final extension = path.extension(romPath).toLowerCase();
-      final isArchive = extension == '.zip' ||
-          extension == '.7z' ||
-          extension == '.zst' ||
-          extension == '.apk';
-      final containerFilename = path.basename(romPath);
       final fullPlaylistPath = _fullPlaylistPathFor(romPath);
+      final archiveContainerPath =
+          RetroArchAppStoreLaunchTarget.archiveContainerPath(fullPlaylistPath);
+      final launchTarget = RetroArchAppStoreLaunchTarget.select(
+        launchId: launchId,
+        fullPlaylistPath: fullPlaylistPath,
+      );
+      final uri = RetroArchAppStoreLaunchTarget.buildUri(launchTarget);
+
+      // For a RetroArch playlist path such as:
+      //   .../game.zip#game.32x
+      // the shortcut receives the existing archive container:
+      //   .../game.zip
+      // This deliberately avoids the playlist-filename branch that can hand
+      // `DETECT` to the loader as though it were an actual core path. The
+      // fallback in cocoa_launch_game_by_filename() then validates the ZIP and
+      // asks core_info_list_get_supported_cores() to inspect the archive.
+      final isArchive = archiveContainerPath != null;
+      final strategy = isArchive
+          ? 'archive-container-auto-detect'
+          : 'playlist-filename';
+
       await _writeDebugFile(
         'retroarch_appstore_launch_debug.txt',
         '[RetroArch Launch]\n'
         'variant=appstore\n'
         'sourcePath=$romPath\n'
-        'extension=$extension\n'
+        'playlistPath=${fullPlaylistPath ?? '(not indexed)'}\n'
+        'playlistLaunchId=$launchId\n'
         'isArchive=$isArchive\n'
-        'launchPath(sent)=$launchId\n'
-        'candidate_containerOnly=$containerFilename\n'
-        'candidate_fullPlaylistPath=${fullPlaylistPath ?? '(not indexed)'}\n'
-        'encodedPath=${Uri.encodeComponent(launchId)}\n'
+        'archiveContainerPath=${archiveContainerPath ?? '(none)'}\n'
+        'strategy=$strategy\n'
+        'launchPath(sent)=$launchTarget\n'
+        'encodedPath=${Uri.encodeComponent(launchTarget)}\n'
         'finalURL=$uri\n',
+      );
+
+      _log.i(
+        'RetroArch App Store: launching ${path.basename(romPath)} '
+        'with $strategy.',
       );
 
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -230,25 +240,31 @@ class RetroArchAppStoreService {
               final contentPath = raw['path']?.toString();
               if (contentPath == null || contentPath.isEmpty) continue;
 
-              final mapping = _mappingFromPlaylistPath(contentPath);
+              final mapping =
+                  RetroArchAppStoreLaunchTarget.mappingFromPlaylistPath(
+                contentPath,
+              );
               if (mapping == null) continue;
               final physicalPath = mapping.$1;
               final launchId = mapping.$2;
 
-              // Exact path wins. Basename/stem aliases only provide resilience
-              // when iOS presents the same security-scoped location through a
-              // slightly different absolute container prefix.
+              // Exact path wins. Basename/stem aliases provide resilience when
+              // iOS presents the same security-scoped location through a
+              // different absolute container prefix.
               _put(index, physicalPath, launchId);
               _put(index, path.basename(physicalPath), launchId);
               _put(index, path.basenameWithoutExtension(physicalPath), launchId);
 
-              // Diagnostic only: remember the raw, unsplit playlist path
-              // (e.g. "game.zip#game.32x") so it can be surfaced in the
-              // launch debug log without recomputing it at launch time.
-              fullPaths.putIfAbsent(physicalPath, () => contentPath);
-              fullPaths.putIfAbsent(
-                path.basename(physicalPath),
-                () => contentPath,
+              // This path is launch-critical for archives, not diagnostic-only.
+              // Keep RetroArch's raw string intact (`~`, accents, spaces and
+              // `#member`) so the correct archive container can be reconstructed
+              // inside RetroArch's own sandbox after an app restart.
+              _put(fullPaths, physicalPath, contentPath);
+              _put(fullPaths, path.basename(physicalPath), contentPath);
+              _put(
+                fullPaths,
+                path.basenameWithoutExtension(physicalPath),
+                contentPath,
               );
             }
           } catch (e) {
@@ -266,7 +282,8 @@ class RetroArchAppStoreService {
     _loaded = true;
     await _persistCache();
     _log.i(
-      'RetroArch App Store: indexed ${index.length} launch keys from '
+      'RetroArch App Store: indexed ${index.length} launch keys and '
+      '${fullPaths.length} playlist-path keys from '
       '${playlists?.path ?? 'no accessible Playlist directory'}.',
     );
     await _writeDebugFile(
@@ -278,50 +295,6 @@ class RetroArchAppStoreService {
       'indexedKeys=${index.length}\n'
       'fullPlaylistPathsRecorded=${fullPaths.length}\n',
     );
-  }
-
-  /// Returns `(physical file/container path, deeplink filename)` using the
-  /// same archive-basename semantics as RetroArch 1.22.2.
-  static (String, String)? _mappingFromPlaylistPath(String value) {
-    if (value.isEmpty) return null;
-    final normalized = value.replaceAll('\\', '/');
-    final archiveHash = _archiveDelimiterIndex(normalized);
-
-    if (archiveHash >= 0 && archiveHash < normalized.length - 1) {
-      final container = normalized.substring(0, archiveHash);
-      final member = normalized.substring(archiveHash + 1);
-      if (container.isEmpty || member.isEmpty) return null;
-      // RetroArch path_basename() returns everything after the compression '#'.
-      return (container, member);
-    }
-
-    final slash = normalized.lastIndexOf('/');
-    final filename = slash >= 0 ? normalized.substring(slash + 1) : normalized;
-    if (filename.isEmpty) return null;
-    return (normalized, filename);
-  }
-
-  /// Mirrors `path_get_archive_delim()` in RetroArch 1.22.2's
-  /// libretro-common/file/file_path.c *exactly*: only the first `#` that is
-  /// directly preceded by a recognized archive extension counts. RetroArch
-  /// recognizes four extensions here, not three -- `.zst` was missing from
-  /// earlier revisions of this file, which silently mis-derived the launch
-  /// filename (falling back to the raw `#`-joined string) for any content
-  /// scanned from a `.zst` archive.
-  static int _archiveDelimiterIndex(String value) {
-    var searchFrom = 0;
-    while (true) {
-      final hash = value.indexOf('#', searchFrom);
-      if (hash < 0) return -1;
-      final before = value.substring(0, hash).toLowerCase();
-      if (before.endsWith('.zip') ||
-          before.endsWith('.7z') ||
-          before.endsWith('.zst') ||
-          before.endsWith('.apk')) {
-        return hash;
-      }
-      searchFrom = hash + 1;
-    }
   }
 
   static Future<Directory?> _findPlaylistsDirectory(String root) async {
@@ -367,31 +340,28 @@ class RetroArchAppStoreService {
     target.putIfAbsent(key.toLowerCase(), () => value);
   }
 
-  static String? _lookup(String romPath) {
+  static String? _lookup(Map<String, String> source, String romPath) {
     final normalized = path.normalize(romPath);
     final basename = path.basename(normalized);
     final stem = path.basenameWithoutExtension(normalized);
-    return _launchIds[normalized] ??
-        _launchIds[normalized.toLowerCase()] ??
-        _launchIds[basename] ??
-        _launchIds[basename.toLowerCase()] ??
-        _launchIds[stem] ??
-        _launchIds[stem.toLowerCase()];
+    return source[normalized] ??
+        source[normalized.toLowerCase()] ??
+        source[basename] ??
+        source[basename.toLowerCase()] ??
+        source[stem] ??
+        source[stem.toLowerCase()];
   }
 
-  /// Diagnostic-only: the raw, unsplit playlist `path` field RetroArch
-  /// itself recorded for this ROM (e.g. `game.zip#game.32x`), if it was
-  /// found in a playlist during the last index rebuild. Never sent in the
-  /// deep link -- only surfaced in the launch debug log.
+  /// Raw, unsplit playlist `path` field RetroArch recorded for this ROM, e.g.
+  /// `~/Documents/.../game.zip#game.32x`.
   static String? _fullPlaylistPathFor(String romPath) {
-    final normalized = path.normalize(romPath);
-    final basename = path.basename(normalized);
-    return _fullPlaylistPaths[normalized] ?? _fullPlaylistPaths[basename];
+    return _lookup(_fullPlaylistPaths, romPath);
   }
 
   static Future<void> _loadCache() async {
     if (_loaded) return;
     _launchIds = <String, String>{};
+    _fullPlaylistPaths = <String, String>{};
     _cacheRoot = null;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -400,14 +370,27 @@ class RetroArchAppStoreService {
       if (root != null && raw != null) {
         final decoded = jsonDecode(raw);
         if (decoded is Map) {
-          _launchIds = decoded.map(
-            (key, value) => MapEntry(key.toString(), value.toString()),
-          );
+          final launchIds = decoded['launchIds'];
+          final playlistPaths = decoded['fullPlaylistPaths'];
+
+          if (launchIds is Map) {
+            _launchIds = launchIds.map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            );
+          }
+          if (playlistPaths is Map) {
+            _fullPlaylistPaths = playlistPaths.map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            );
+          }
           _cacheRoot = path.normalize(root);
         }
       }
     } catch (e) {
       _log.e('RetroArch App Store: failed loading launch cache: $e');
+      _launchIds = <String, String>{};
+      _fullPlaylistPaths = <String, String>{};
+      _cacheRoot = null;
     }
     _loaded = true;
   }
@@ -415,7 +398,14 @@ class RetroArchAppStoreService {
   static Future<void> _persistCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheKey, jsonEncode(_launchIds));
+      await prefs.setString(
+        _cacheKey,
+        jsonEncode(<String, Object>{
+          'version': 3,
+          'launchIds': _launchIds,
+          'fullPlaylistPaths': _fullPlaylistPaths,
+        }),
+      );
       if (_cacheRoot == null) {
         await prefs.remove(_rootKey);
       } else {
