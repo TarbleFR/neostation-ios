@@ -82,18 +82,18 @@ class StikJitMeloNxService {
       return stored;
     }
 
-    // file_picker 12.x uses a static facade. pickFiles() returns the selected
-    // PlatformFile objects directly; the old FilePicker.platform singleton and
-    // FilePickerResult.files wrapper no longer exist.
+    // file_picker 12.0.0-beta.3 exposes the static FilePicker facade but still
+    // returns a nullable FilePickerResult. The direct List<PlatformFile> return
+    // type arrived in a later beta, so keep using the result.files wrapper here.
     final picked = await FilePicker.pickFiles(
       dialogTitle: 'Select your iPhone pairing file',
       allowMultiple: false,
       type: FileType.any,
       withData: true,
     );
-    if (picked.isEmpty) return null;
+    if (picked == null || picked.files.isEmpty) return null;
 
-    final selected = picked.single;
+    final selected = picked.files.single;
     final sourcePath = selected.path;
     if (sourcePath != null) {
       final source = File(sourcePath);
