@@ -297,10 +297,21 @@ class Rpcs3LibraryService {
   static Future<Rpcs3SyncResult?> linkAndSync() async {
     if (!Platform.isIOS) return null;
 
-    final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
+    final picked = await ExternalFolderAccess.pickAndBookmarkFolder(
       key: bookmarkKey,
     );
-    if (selected == null) return null;
+    if (picked == null) return null;
+
+    // The document picker grant is temporary. Re-resolve the freshly stored
+    // RPCS3 bookmark immediately so this session owns an active
+    // security-scoped URL before discovery starts. Without this, iOS can make
+    // the first scan look empty until NeoStation is restarted.
+    final selected = await ExternalFolderAccess.resolveBookmarkedFolder(
+      key: bookmarkKey,
+    );
+    if (selected == null) {
+      throw StateError('RPCS3 Data folder could not be activated.');
+    }
 
     final normalized = await _normalizeDataRoot(selected);
     if (normalized == null) {
@@ -1421,9 +1432,8 @@ class Rpcs3LibraryService {
         }
         if (hasExisting) continue;
 
-        await File(
-          path.join(directory.path, '$mediaKey.$extension'),
-        ).writeAsBytes(bytes, flush: true);
+        await File(path.join(directory.path, '$mediaKey.$extension'))
+            .writeAsBytes(bytes, flush: true);
         written++;
       }
     }
