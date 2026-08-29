@@ -6,6 +6,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -42,10 +43,22 @@ class RetroArchAppStoreService {
       return false;
     }
     try {
-      return path.equals(root, romPath) || path.isWithin(root, romPath);
+      if (path.equals(root, romPath) || path.isWithin(root, romPath)) {
+        return true;
+      }
     } catch (_) {
-      return false;
+      // Fall through to the index-based check below.
     }
+    // iOS can re-resolve a security-scoped bookmark under a different
+    // absolute container prefix between launches (the UUID segment in
+    // `.../File Provider Storage/<UUID>/...` is not guaranteed stable).
+    // When that happens the prefix check above spuriously fails even though
+    // this is genuinely the linked RetroArch folder. A hit in our own
+    // playlist-derived index is strong independent evidence of ownership,
+    // so treat it as one instead of hard-failing and silently falling
+    // through to the Share Sheet / "Resume Last Game" fallbacks.
+    return _launchIds.containsKey(path.basename(romPath)) ||
+        _launchIds.containsKey(path.basename(romPath).toLowerCase());
   }
 
   /// App Store sync stays local. It also refreshes the exact filename index
@@ -116,6 +129,10 @@ class RetroArchAppStoreService {
         scheme: 'retroarch',
         host: 'game',
         pathSegments: <String>[launchId],
+      );
+      await _writeDebugFile(
+        'retroarch_appstore_launch_debug.txt',
+        'romPath: $romPath\nlaunchId: $launchId\nuri: $uri',
       );
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) {
@@ -209,6 +226,13 @@ class RetroArchAppStoreService {
     return (normalized, filename);
   }
 
+  /// Mirrors `path_get_archive_delim()` in RetroArch 1.22.2's
+  /// libretro-common/file/file_path.c *exactly*: only the first `#` that is
+  /// directly preceded by a recognized archive extension counts. RetroArch
+  /// recognizes four extensions here, not three -- `.zst` was missing from
+  /// earlier revisions of this file, which silently mis-derived the launch
+  /// filename (falling back to the raw `#`-joined string) for any content
+  /// scanned from a `.zst` archive.
   static int _archiveDelimiterIndex(String value) {
     var searchFrom = 0;
     while (true) {
@@ -217,6 +241,7 @@ class RetroArchAppStoreService {
       final before = value.substring(0, hash).toLowerCase();
       if (before.endsWith('.zip') ||
           before.endsWith('.7z') ||
+          before.endsWith('.zst') ||
           before.endsWith('.apk')) {
         return hash;
       }
@@ -325,5 +350,15 @@ class RetroArchAppStoreService {
   static bool _sameRoot(String? a, String? b) {
     if (a == null || b == null) return a == b;
     return path.normalize(a).toLowerCase() == path.normalize(b).toLowerCase();
+  }
+
+  static Future<void> _writeDebugFile(String name, String content) async {
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      await File(path.join(docsDir.path, name))
+          .writeAsString('--- ${DateTime.now()} ---\n$content');
+    } catch (e) {
+      _log.e('RetroArch App Store: failed writing debug file $name: $e');
+    }
   }
 }
