@@ -6,6 +6,8 @@ on:
       - feature/riisu-system-art-pack
     paths:
       - '.github/workflows/tmp-retroarch-testflight-cleanup.yml'
+      - '.github/scripts/retroarch_testflight_cleanup.py'
+      - '.github/scripts/retroarch_testflight_cleanup_fix.py'
 
 permissions:
   contents: write
