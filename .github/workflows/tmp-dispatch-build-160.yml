@@ -18,4 +18,4 @@ jobs:
       - name: Dispatch Build NeoStation iOS IPA on feature branch
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run build-ios-ipa.yml --ref feature/riisu-system-art-pack
+        run: gh workflow run build-ios-ipa.yml --repo TarbleFR/neostation-ios --ref feature/riisu-system-art-pack
