@@ -1,0 +1,40 @@
+name: Relay Codemagic IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_url:
+        description: Temporary Codemagic IPA URL
+        required: true
+        type: string
+      artifact_name:
+        description: IPA filename
+        required: true
+        default: NeoStation-iOS-Build-165-StikJIT-Experimental.ipa
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download IPA from temporary Codemagic URL
+        env:
+          ARTIFACT_URL: ${{ inputs.artifact_url }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 "$ARTIFACT_URL" -o "$ARTIFACT_NAME"
+          test -s "$ARTIFACT_NAME"
+          file "$ARTIFACT_NAME"
+
+      - name: Upload IPA as GitHub Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neostation-codemagic-ipa
+          path: ${{ inputs.artifact_name }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
