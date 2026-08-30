@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:external_folder_access/external_folder_access.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
@@ -70,12 +69,14 @@ class StikJitMeloNxService {
       final jit = await StikjitBridge.enableMeloNxJit(
         pairingFilePath: pairingFile.path,
         bundleId: _bundleId,
+        gameUrl: gameUrl,
       );
 
       _log.i(
         'StikJitMeloNxService: JIT ready for MeloNX pid=${jit.pid} '
         'bundle=${jit.bundleId ?? 'unknown'} '
-        'txm=${jit.txmPresent ?? 'unknown'}.',
+        'txm=${jit.txmPresent ?? 'unknown'} '
+        'urlOpened=${jit.gameUrlOpened ?? 'unknown'}.',
       );
       for (final message in jit.logs) {
         _log.d('StikJIT: $message');
@@ -86,30 +87,24 @@ class StikJitMeloNxService {
         'PID: ${jit.pid}\n'
         'Detected bundle ID: ${jit.bundleId ?? 'unknown'}\n'
         'TXM: ${jit.txmPresent ?? 'unknown'}\n'
+        'Native game URL opened: ${jit.gameUrlOpened ?? 'unknown'}\n'
         'Native log:\n${jit.logs.join('\n')}\n',
       );
 
-      // StikJIT has completed, detached and the native bridge has resumed the
-      // exact same MeloNX process. Deliver the frontend URL through our native
-      // UIApplication.open bridge instead of url_launcher. This avoids
-      // canOpenURL/LSApplicationQueriesSchemes behaviour in url_launcher and
-      // preserves the exact raw custom-scheme string.
-      await _appendDiagnostic(
-        'STATE: GAME_URL_NATIVE_OPEN_REQUEST\n'
-        'Raw URL: $gameUrl\n',
-      );
-      final opened = await ExternalFolderAccess.openRawUrl(gameUrl) ?? false;
-      if (!opened) {
+      if (jit.gameUrlOpened != true) {
         _lastError =
-            'JIT succeeded and MeloNX resumed, but native UIApplication.open rejected the MeloNX game URL.';
+            'JIT succeeded, but iOS rejected the MeloNX game URL while MeloNX was still suspended.';
         await _appendDiagnostic(
-          'STATE: GAME_URL_NATIVE_OPEN_FAILED\n'
+          'STATE: GAME_URL_PRE_RESUME_OPEN_FAILED\n'
           'Error: $_lastError\n',
         );
         return false;
       }
 
-      await _appendDiagnostic('STATE: GAME_URL_NATIVE_OPENED\n');
+      await _appendDiagnostic(
+        'STATE: GAME_URL_PRE_RESUME_OPENED\n'
+        'The URL handoff was accepted before explicit process-control resume.\n',
+      );
       return true;
     } catch (error, stackTrace) {
       _lastError = error.toString();

@@ -8,10 +8,12 @@ class StikjitBridge {
   static Future<StikjitLaunchResult> enableMeloNxJit({
     required String pairingFilePath,
     required String bundleId,
+    required String gameUrl,
   }) async {
     final raw = await _channel.invokeMethod<Object?>('enableMeloNxJit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
+      'gameUrl': gameUrl,
     });
 
     if (raw is! Map) {
@@ -34,6 +36,7 @@ class StikjitBridge {
       pid: pidValue.toInt(),
       bundleId: data['bundleId']?.toString(),
       txmPresent: data['txmPresent'] as bool?,
+      gameUrlOpened: data['gameUrlOpened'] as bool?,
       logs: logs,
     );
   }
@@ -44,11 +47,13 @@ class StikjitLaunchResult {
     required this.pid,
     required this.bundleId,
     required this.txmPresent,
+    required this.gameUrlOpened,
     required this.logs,
   });
 
   final int pid;
   final String? bundleId;
   final bool? txmPresent;
+  final bool? gameUrlOpened;
   final List<String> logs;
 }
