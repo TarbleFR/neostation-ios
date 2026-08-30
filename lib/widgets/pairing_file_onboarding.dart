@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:neostation/l10n/pairing_file_locale.dart';
+import 'package:neostation/l10n/pairing_targets_locale.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 
 class PairingFileOnboarding extends StatefulWidget {
@@ -135,10 +136,10 @@ class _PairingFileOnboardingState extends State<PairingFileOnboarding> {
                     color: theme.colorScheme.primaryContainer.withValues(
                       alpha: 0.28,
                     ),
-                    borderRadius: BorderRadius.circular(999.r),
+                    borderRadius: BorderRadius.circular(14.r),
                   ),
                   child: Text(
-                    'JIT: MeloNX • ARMSX2 • RPCS3',
+                    PairingTargetsLocale.text(context),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12.r,
