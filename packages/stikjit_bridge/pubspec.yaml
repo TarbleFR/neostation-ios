@@ -1,7 +1,7 @@
 name: stikjit_bridge
 resolution: workspace
 description: Experimental NeoStation iOS bridge for StikJIT and MeloNX.
-version: 0.0.1
+version: 0.0.2
 publish_to: none
 
 environment:
