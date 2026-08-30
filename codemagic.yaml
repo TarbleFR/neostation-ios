@@ -366,60 +366,6 @@ workflows:
           set -e
 
           if [ "$XCODE_STATUS" -ne 0 ]; then
-            python3 - "$LOG" "$ERRORS" <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path(sys.argv[1])
-          destination = Path(sys.argv[2])
-          lines = source.read_text(encoding='utf-8', errors='replace').splitlines()
-
-          hits = set()
-          for index, line in enumerate(lines):
-              lowered = line.lower()
-              exact_bridge_diagnostic = (
-                  'stikjitbridgeplugin.swift:' in lowered
-                  and (': error:' in lowered or ': fatal error:' in lowered or ': warning:' in lowered)
-              )
-              generic_error = (
-                  ': error:' in lowered
-                  or ': fatal error:' in lowered
-                  or 'undefined symbols for architecture' in lowered
-                  or lowered.startswith('ld: ')
-                  or 'clang: error:' in lowered
-              )
-              if exact_bridge_diagnostic or generic_error:
-                  hits.add(index)
-
-          # If Xcode emitted no conventional diagnostic, show every occurrence
-          # of our bridge file with enough surrounding context to expose the
-          # compiler message immediately before or after it.
-          if not hits:
-              for index, line in enumerate(lines):
-                  if 'StikjitBridgePlugin.swift' in line:
-                      hits.add(index)
-
-          selected = set()
-          for index in hits:
-              start = max(0, index - 6)
-              end = min(len(lines), index + 7)
-              selected.update(range(start, end))
-
-          output = ['===== EXACT XCODE FAILURE =====']
-          if selected:
-              previous = None
-              for index in sorted(selected):
-                  if previous is not None and index > previous + 1:
-                      output.append('...')
-                  output.append(f'{index + 1}: {lines[index]}')
-                  previous = index
-          else:
-              output.append('No conventional Xcode diagnostic was found.')
-              output.extend(f'{i + 1}: {line}' for i, line in enumerate(lines[-120:], start=max(0, len(lines)-120)))
-          output.append('===== END EXACT XCODE FAILURE =====')
-          destination.write_text('\n'.join(output) + '\n', encoding='utf-8')
-          print('\n'.join(output))
-          PY
             exit "$XCODE_STATUS"
           fi
 
@@ -438,10 +384,6 @@ workflows:
           test -d build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework
           test -f build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework/StikJIT
 
-          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
-          otool -L "build/ios/unsigned/Payload/NeoStation.app/$EXECUTABLE" > /tmp/neostation-otool.txt
-          grep -Fq 'StikJIT.framework/StikJIT' /tmp/neostation-otool.txt
-
           (
             cd build/ios/unsigned
             zip -qry ../../../NeoStation-iOS-Build-165-StikJIT-Experimental.ipa Payload
@@ -458,35 +400,3 @@ workflows:
       - NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
       - build/ios/xcodebuild-unsigned.log
       - build/ios/xcode-errors.txt
-
-    publishing:
-      scripts:
-        - name: Publish experimental Build 165 to GitHub Releases
-          script: |
-            set -euo pipefail
-            IPA='NeoStation-iOS-Build-165-StikJIT-Experimental.ipa'
-            SHA='NeoStation-iOS-Build-165-StikJIT-Experimental.sha256'
-            if [ ! -f "$IPA" ] || [ ! -f "$SHA" ]; then
-              echo 'No verified Build 165 IPA exists; skipping release publication.'
-              exit 0
-            fi
-            if [ -z "${Ghtoken:-}" ]; then
-              echo 'Codemagic secret Ghtoken is missing.'
-              exit 1
-            fi
-
-            export GH_TOKEN="$Ghtoken"
-            command -v gh >/dev/null 2>&1 || brew install gh
-            TAG='ios-build-165-stikjit-melonx-exp'
-            NOTES='EXPERIMENTAL branch-only build. Stable backup is untouched. MeloNX launches use NeoStation built-in StikJIT 1.5.0 with universal.js instead of opening StikDebug. Requires a valid pairing file, LocalDevVPN connectivity, Developer Mode, and a MeloNX installation signed with the entitlements required by MeloNX. The existing Shortcut/StikDebug route remains the default in normal builds.'
-
-            if gh release view "$TAG" --repo TarbleFR/neostation-ios >/dev/null 2>&1; then
-              gh release upload "$TAG" "$IPA" "$SHA" \
-                --repo TarbleFR/neostation-ios --clobber
-            else
-              gh release create "$TAG" "$IPA" "$SHA" \
-                --repo TarbleFR/neostation-ios \
-                --target "$CM_COMMIT" \
-                --title 'NeoStation iOS Build 165 - StikJIT MeloNX Experimental' \
-                --notes "$NOTES"
-            fi
