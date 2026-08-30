@@ -1,1 +1,0 @@
-Trigger Codemagic rebuild after native MeloNX deep-link dispatch fix (commit 1205e9e).
