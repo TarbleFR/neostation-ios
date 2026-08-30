@@ -1,4 +1,4 @@
-name: Build StikJIT ARMSX2 Experimental IPA
+name: Build StikJIT Backend Switch Experimental IPA
 
 on:
   push:
@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-stikjit-armsx2-experimental
+  group: neostation-stikjit-backend-switch-experimental
   cancel-in-progress: true
 
 jobs:
   build-ios-ipa:
-    name: Build NeoStation ARMSX2 StikJIT Experimental
+    name: Build NeoStation StikJIT Backend Switch
     runs-on: macos-15
     timeout-minutes: 120
 
@@ -24,7 +24,7 @@ jobs:
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout ARMSX2 experimental branch
+      - name: Checkout JIT backend experimental branch
         uses: actions/checkout@v4
         with:
           ref: feature/stikjit-armsx2
@@ -41,7 +41,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verify isolated ARMSX2 source
+      - name: Verify isolated JIT backend source
         shell: bash
         run: |
           set -euo pipefail
@@ -49,11 +49,13 @@ jobs:
           grep -q 'packages/stikjit_bridge' pubspec.yaml
           grep -q 'NeoStationStikjitBridgePlugin' packages/stikjit_bridge/pubspec.yaml
           test -f lib/services/pairing_file_service.dart
+          test -f lib/services/jit_backend_preference_service.dart
           test -f lib/services/stikjit_armsx2_service.dart
           test -f lib/services/stikjit_melonx_service.dart
+          test -f lib/l10n/jit_fallback_locale.dart
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift
           test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift
-          echo "Building isolated ARMSX2 source $(git rev-parse HEAD)"
+          echo "Building isolated JIT backend source $(git rev-parse HEAD)"
 
       - name: Prepare build-time defines
         shell: bash
@@ -70,8 +72,6 @@ jobs:
           if missing:
               raise SystemExit('Missing GitHub Actions secrets: ' + ', '.join(missing))
 
-          # Keep the validated MeloNX path enabled exactly as before and add a
-          # completely independent flag and bundle hint for ARMSX2.
           values['NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX'] = 'true'
           values['NEOSTATION_MELONX_BUNDLE_ID'] = 'com.nur.nx'
           values['NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2'] = 'true'
@@ -109,6 +109,14 @@ jobs:
           set -euo pipefail
           flutter --version
           flutter pub get
+
+      - name: Verify global JIT backend switch
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test \
+            test/jit_backend_preference_service_test.dart \
+            test/stikjit_armsx2_isolation_test.dart
 
       - name: Generate clean iOS scaffold
         shell: bash
@@ -213,7 +221,7 @@ jobs:
           flutter build ios \
             --release \
             --no-codesign \
-            --build-number=165 \
+            --build-number=166 \
             --dart-define-from-file=.dart-defines.json \
             2>&1 | tee build-ios.log
 
@@ -223,17 +231,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING=/tmp/neostation-stikjit-armsx2-ipa
+          STAGING=/tmp/neostation-stikjit-backend-switch-ipa
           rm -rf "$STAGING"
           mkdir -p "$STAGING/Payload"
           cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
           (
             cd "$STAGING"
             /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload \
-              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa"
+              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-166-StikJIT-Backend-Switch-Experimental.ipa"
           )
-          test -s NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa
-          ls -lh NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa
+          test -s NeoStation-iOS-Build-166-StikJIT-Backend-Switch-Experimental.ipa
+          ls -lh NeoStation-iOS-Build-166-StikJIT-Backend-Switch-Experimental.ipa
 
       - name: Remove temporary defines
         if: always()
@@ -243,9 +251,9 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental
+          name: NeoStation-iOS-Build-166-StikJIT-Backend-Switch-Experimental
           path: |
-            NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa
+            NeoStation-iOS-Build-166-StikJIT-Backend-Switch-Experimental.ipa
             build-ios.log
           if-no-files-found: error
           retention-days: 30

@@ -4,10 +4,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/jit_fallback_locale.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
+import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/custom_toggle_switch.dart';
 import 'settings_title.dart';
 import 'widgets/settings_card_row.dart';
 import 'widgets/settings_action_button.dart';
@@ -33,19 +36,30 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   bool _hasPairingFile = false;
   bool _isImportingPairingFile = false;
 
+  bool _jitFallbackStateLoaded = false;
+  bool _useStikDebugFallback = false;
+  bool _isUpdatingJitFallback = false;
+
   @override
   void initState() {
     super.initState();
     _refreshPairingState();
+    _refreshJitFallbackState();
   }
 
-  int getItemCount() => 1;
+  int getItemCount() => 2;
 
   void scrollToIndex(int index) {}
 
   void selectItem(int index) {
     if (index == 0) {
       _importOrReplacePairingFile();
+      return;
+    }
+    if (index == 1 &&
+        _jitFallbackStateLoaded &&
+        !_isUpdatingJitFallback) {
+      _setUseStikDebugFallback(!_useStikDebugFallback);
     }
   }
 
@@ -69,6 +83,67 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         _hasPairingFile = false;
         _pairingStateLoaded = true;
       });
+    }
+  }
+
+  Future<void> _refreshJitFallbackState() async {
+    try {
+      final enabled =
+          await JitBackendPreferenceService.useStikDebugFallback();
+      if (!mounted) return;
+      setState(() {
+        _useStikDebugFallback = enabled;
+        _jitFallbackStateLoaded = true;
+      });
+    } catch (error, stackTrace) {
+      _log.e(
+        'Could not load the global JIT fallback preference.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      setState(() {
+        _useStikDebugFallback = false;
+        _jitFallbackStateLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _setUseStikDebugFallback(bool value) async {
+    if (!_jitFallbackStateLoaded || _isUpdatingJitFallback) return;
+
+    final previousValue = _useStikDebugFallback;
+    setState(() {
+      _useStikDebugFallback = value;
+      _isUpdatingJitFallback = true;
+    });
+
+    try {
+      await JitBackendPreferenceService.setUseStikDebugFallback(value);
+      if (!mounted) return;
+      AppNotification.showNotification(
+        context,
+        JitFallbackLocale.get(
+          context,
+          value ? JitFallbackLocale.enabled : JitFallbackLocale.disabled,
+        ),
+        type: NotificationType.success,
+      );
+    } catch (error, stackTrace) {
+      _log.e(
+        'Could not save the global JIT fallback preference.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      setState(() => _useStikDebugFallback = previousValue);
+      AppNotification.showNotification(
+        context,
+        JitFallbackLocale.get(context, JitFallbackLocale.saveFailed),
+        type: NotificationType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingJitFallback = false);
     }
   }
 
@@ -150,16 +225,19 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
 
   @override
   Widget build(BuildContext context) {
-    final isSelected =
+    final theme = Theme.of(context);
+    final pairingSelected =
         widget.isContentFocused && widget.selectedContentIndex == 0;
+    final fallbackSelected =
+        widget.isContentFocused && widget.selectedContentIndex == 1;
 
-    final status = !_pairingStateLoaded
+    final pairingStatus = !_pairingStateLoaded
         ? PairingFileLocale.get(context, PairingFileLocale.checking)
         : _hasPairingFile
         ? PairingFileLocale.get(context, PairingFileLocale.configured)
         : PairingFileLocale.get(context, PairingFileLocale.notConfigured);
 
-    final description = _hasPairingFile
+    final pairingDescription = _hasPairingFile
         ? PairingFileLocale.get(
             context,
             PairingFileLocale.configuredSubtitle,
@@ -168,6 +246,22 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
             context,
             PairingFileLocale.notConfiguredSubtitle,
           );
+
+    final fallbackStatus = !_jitFallbackStateLoaded
+        ? JitFallbackLocale.get(context, JitFallbackLocale.checking)
+        : JitFallbackLocale.get(
+            context,
+            _useStikDebugFallback
+                ? JitFallbackLocale.fallbackStatus
+                : JitFallbackLocale.integratedStatus,
+          );
+
+    final fallbackDescription = JitFallbackLocale.get(
+      context,
+      _useStikDebugFallback
+          ? JitFallbackLocale.fallbackDescription
+          : JitFallbackLocale.integratedDescription,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,9 +281,9 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                   context,
                   PairingFileLocale.title,
                 ),
-                subtitle: '$status — $description',
+                subtitle: '$pairingStatus — $pairingDescription',
                 subtitleMaxLines: 3,
-                selected: isSelected,
+                selected: pairingSelected,
                 onTap: _isImportingPairingFile
                     ? null
                     : _importOrReplacePairingFile,
@@ -203,7 +297,35 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                         icon: _hasPairingFile
                             ? Symbols.change_circle_rounded
                             : Symbols.upload_file_rounded,
-                        selected: isSelected,
+                        selected: pairingSelected,
+                      ),
+              ),
+              SettingsCardRow(
+                icon: Symbols.swap_horiz_rounded,
+                title: JitFallbackLocale.get(
+                  context,
+                  JitFallbackLocale.title,
+                ),
+                subtitle: '$fallbackStatus — $fallbackDescription',
+                subtitleMaxLines: 4,
+                selected: fallbackSelected,
+                onTap: !_jitFallbackStateLoaded || _isUpdatingJitFallback
+                    ? null
+                    : () => _setUseStikDebugFallback(
+                        !_useStikDebugFallback,
+                      ),
+                trailing: !_jitFallbackStateLoaded || _isUpdatingJitFallback
+                    ? SizedBox(
+                        width: 22.r,
+                        height: 22.r,
+                        child: const CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : IgnorePointer(
+                        child: CustomToggleSwitch(
+                          value: _useStikDebugFallback,
+                          onChanged: null,
+                          activeColor: theme.colorScheme.primary,
+                        ),
                       ),
               ),
             ],

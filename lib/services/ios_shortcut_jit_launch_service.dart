@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/stikjit_armsx2_service.dart';
 import 'package:neostation/services/stikjit_melonx_service.dart';
@@ -85,23 +86,44 @@ class IosShortcutJitLaunchService {
     );
   }
 
-  /// Runs an installed Shortcut and optionally passes text input to it.
+  /// Runs the selected JIT backend and optionally passes the emulator game URL.
   static Future<bool> run({required String shortcutName, String? input}) async {
     if (!Platform.isIOS) return false;
 
-    // Experimental builds can replace only the MeloNX Shortcut hop with the
-    // built-in StikJIT bridge. ARMSX2 and every normal build keep the exact
-    // existing Shortcut behaviour.
-    if (shortcutName == melonxShortcutName &&
+    var useStikDebugFallback = false;
+    try {
+      useStikDebugFallback =
+          await JitBackendPreferenceService.useStikDebugFallback();
+    } catch (error, stackTrace) {
+      _log.e(
+        'IosShortcutJitLaunchService: failed to load the global JIT backend; '
+        'keeping integrated StikJIT.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    if (useStikDebugFallback) {
+      _log.i(
+        'IosShortcutJitLaunchService: global StikDebug fallback routes '
+        '$shortcutName through its existing Shortcut.',
+      );
+    }
+
+    // Keep the validated MeloNX path unchanged. The global emergency switch
+    // only decides whether this branch is entered before anything is launched.
+    if (!useStikDebugFallback &&
+        shortcutName == melonxShortcutName &&
         input != null &&
         StikJitMeloNxService.isExperimentalEnabled) {
       return StikJitMeloNxService.launch(gameUrl: input);
     }
 
-    // ARMSX2 uses a second, independent built-in StikJIT route. Keeping this
-    // condition separate preserves the validated MeloNX branch and leaves the
-    // existing Shortcut as the fallback for normal builds.
-    if (shortcutName == armsx2ShortcutName &&
+    // ARMSX2 remains a second independent integrated path. When the emergency
+    // switch is on, execution skips this branch and naturally reaches the old
+    // StikDebug Shortcut below.
+    if (!useStikDebugFallback &&
+        shortcutName == armsx2ShortcutName &&
         input != null &&
         StikJitArmsx2Service.isExperimentalEnabled) {
       return StikJitArmsx2Service.launch(gameUrl: input);
