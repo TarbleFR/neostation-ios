@@ -1,6 +1,6 @@
 name: stikjit_bridge
 resolution: workspace
-description: Experimental NeoStation iOS bridge for StikJIT and MeloNX.
+description: Experimental NeoStation iOS bridge for independent StikJIT emulator targets.
 version: 0.0.2
 publish_to: none
 
@@ -16,4 +16,4 @@ flutter:
   plugin:
     platforms:
       ios:
-        pluginClass: StikjitBridgePluginV2
+        pluginClass: NeoStationStikjitBridgePlugin

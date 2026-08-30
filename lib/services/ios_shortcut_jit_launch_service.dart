@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/stikjit_armsx2_service.dart';
 import 'package:neostation/services/stikjit_melonx_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -95,6 +96,15 @@ class IosShortcutJitLaunchService {
         input != null &&
         StikJitMeloNxService.isExperimentalEnabled) {
       return StikJitMeloNxService.launch(gameUrl: input);
+    }
+
+    // ARMSX2 uses a second, independent built-in StikJIT route. Keeping this
+    // condition separate preserves the validated MeloNX branch and leaves the
+    // existing Shortcut as the fallback for normal builds.
+    if (shortcutName == armsx2ShortcutName &&
+        input != null &&
+        StikJitArmsx2Service.isExperimentalEnabled) {
+      return StikJitArmsx2Service.launch(gameUrl: input);
     }
 
     final shortcutUri = buildRunUri(shortcutName: shortcutName, input: input);

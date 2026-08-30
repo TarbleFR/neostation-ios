@@ -1,21 +1,21 @@
-name: Build Pairing File Experimental IPA
+name: Build StikJIT ARMSX2 Experimental IPA
 
 on:
   push:
     branches:
-      - feature/pairing-file-settings
+      - feature/stikjit-armsx2
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-pairing-file-experimental
+  group: neostation-stikjit-armsx2-experimental
   cancel-in-progress: true
 
 jobs:
   build-ios-ipa:
-    name: Build NeoStation Pairing Experimental
+    name: Build NeoStation ARMSX2 StikJIT Experimental
     runs-on: macos-15
     timeout-minutes: 120
 
@@ -24,10 +24,10 @@ jobs:
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout experimental branch
+      - name: Checkout ARMSX2 experimental branch
         uses: actions/checkout@v4
         with:
-          ref: feature/pairing-file-settings
+          ref: feature/stikjit-armsx2
           fetch-depth: 1
 
       - name: Select Xcode 16.4
@@ -41,16 +41,19 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verify isolated experimental source
+      - name: Verify isolated ARMSX2 source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "feature/pairing-file-settings"
+          test "$(git branch --show-current)" = "feature/stikjit-armsx2"
           grep -q 'packages/stikjit_bridge' pubspec.yaml
+          grep -q 'NeoStationStikjitBridgePlugin' packages/stikjit_bridge/pubspec.yaml
           test -f lib/services/pairing_file_service.dart
-          test -f lib/l10n/pairing_file_locale.dart
-          test -f lib/widgets/pairing_file_onboarding.dart
-          echo "Building experimental source $(git rev-parse HEAD)"
+          test -f lib/services/stikjit_armsx2_service.dart
+          test -f lib/services/stikjit_melonx_service.dart
+          test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift
+          test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift
+          echo "Building isolated ARMSX2 source $(git rev-parse HEAD)"
 
       - name: Prepare build-time defines
         shell: bash
@@ -67,8 +70,12 @@ jobs:
           if missing:
               raise SystemExit('Missing GitHub Actions secrets: ' + ', '.join(missing))
 
+          # Keep the validated MeloNX path enabled exactly as before and add a
+          # completely independent flag and bundle hint for ARMSX2.
           values['NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX'] = 'true'
           values['NEOSTATION_MELONX_BUNDLE_ID'] = 'com.nur.nx'
+          values['NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2'] = 'true'
+          values['NEOSTATION_ARMSX2_BUNDLE_ID'] = 'com.armsx2.ios'
           Path('.dart-defines.json').write_text(
               json.dumps(values, ensure_ascii=False), encoding='utf-8'
           )
@@ -206,7 +213,7 @@ jobs:
           flutter build ios \
             --release \
             --no-codesign \
-            --build-number=164 \
+            --build-number=165 \
             --dart-define-from-file=.dart-defines.json \
             2>&1 | tee build-ios.log
 
@@ -216,17 +223,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING=/tmp/neostation-pairing-experimental-ipa
+          STAGING=/tmp/neostation-stikjit-armsx2-ipa
           rm -rf "$STAGING"
           mkdir -p "$STAGING/Payload"
           cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
           (
             cd "$STAGING"
             /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload \
-              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-164-Pairing-Experimental.ipa"
+              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa"
           )
-          test -s NeoStation-iOS-Build-164-Pairing-Experimental.ipa
-          ls -lh NeoStation-iOS-Build-164-Pairing-Experimental.ipa
+          test -s NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa
+          ls -lh NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa
 
       - name: Remove temporary defines
         if: always()
@@ -236,9 +243,9 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Build-164-Pairing-Experimental
+          name: NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental
           path: |
-            NeoStation-iOS-Build-164-Pairing-Experimental.ipa
+            NeoStation-iOS-Build-165-StikJIT-ARMSX2-Experimental.ipa
             build-ios.log
           if-no-files-found: error
           retention-days: 30
