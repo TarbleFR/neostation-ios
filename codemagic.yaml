@@ -400,3 +400,38 @@ workflows:
       - NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
       - build/ios/xcodebuild-unsigned.log
       - build/ios/xcode-errors.txt
+
+    publishing:
+      scripts:
+        - name: Generate temporary Codemagic IPA URL
+          script: |
+            set +e
+            if [ -z "${CM_API_TOKEN:-}" ]; then
+              echo 'WARNING: CM_API_TOKEN is missing; temporary IPA URL was not generated.'
+              exit 0
+            fi
+
+            IPA_NAME='NeoStation-iOS-Build-165-StikJIT-Experimental.ipa'
+            ARTIFACT_URL=$(echo "$CM_ARTIFACT_LINKS" | jq -r --arg name "$IPA_NAME" '.[] | select(.name == $name) | .url' | head -1)
+            if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = 'null' ]; then
+              echo 'WARNING: IPA artifact URL was not found in CM_ARTIFACT_LINKS.'
+              exit 0
+            fi
+
+            EXPIRES_AT=$(date -v+2H +%s)
+            RESPONSE=$(curl -sS \
+              -H 'Content-Type: application/json' \
+              -H "x-auth-token: $CM_API_TOKEN" \
+              -d "{\"expiresAt\": $EXPIRES_AT}" \
+              -X POST "$ARTIFACT_URL/public-url")
+            PUBLIC_URL=$(echo "$RESPONSE" | jq -r '.url // empty')
+
+            if [ -z "$PUBLIC_URL" ]; then
+              echo 'WARNING: Codemagic did not return a temporary public URL.'
+              echo "$RESPONSE"
+              exit 0
+            fi
+
+            echo 'TEMPORARY IPA URL (expires in 2 hours):'
+            echo "$PUBLIC_URL"
+            exit 0
