@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:neostation/services/ios_emulator_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
@@ -14,7 +15,7 @@ import 'pairing_file_onboarding.dart';
 import 'setup_wizard.dart';
 import 'shimmering_logo.dart';
 
-/// Widget that checks the initial configuration and shows the first-run flow if necessary.
+/// Checks the initial configuration and displays the first-run flow when needed.
 class PermissionCheckWrapper extends StatefulWidget {
   final Widget child;
 
@@ -33,6 +34,8 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   bool _isChecking = true;
   bool _showForkWelcomeGate = false;
   bool _showPairingFileGate = false;
+  bool _isStartingRetroArchSync = false;
+  bool _retroArchSyncStarted = false;
 
   static final _log = LoggerService.instance;
 
@@ -51,6 +54,8 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     try {
       final prefs = await SharedPreferences.getInstance();
 
+      // Existing installations must never be interrupted by a newly added
+      // onboarding step. The pairing file remains available in Settings > Tools.
       if (prefs.getBool(PermissionCheckWrapper.setupCompletedKey) == true) {
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
@@ -91,6 +96,8 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         return;
       }
 
+      // Genuine fresh install. Keep the established RetroArch first-run flow,
+      // inserting only the Pairing File gate before it.
       final welcomeGateCompleted =
           prefs.getBool(forkOnboardingCompletedKey) ?? false;
 
@@ -112,17 +119,28 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         }
       }
 
+      final pairingReady = !_supportsPairingGate || pairingGateCompleted;
+      final hasPrimaryChoice =
+          !Platform.isIOS ||
+          await IosEmulatorPreferenceService.hasPrimaryChoice();
+
       if (!mounted) return;
       _pushWizardActive(true);
       setState(() {
         _needsSetup = true;
         _showForkWelcomeGate = !welcomeGateCompleted;
         _showPairingFileGate =
-            welcomeGateCompleted &&
-            _supportsPairingGate &&
-            !pairingGateCompleted;
+            welcomeGateCompleted && !pairingReady && _supportsPairingGate;
         _isChecking = false;
       });
+
+      // If an interrupted first run already completed the two gates, resume the
+      // exact RetroArch-first setup rather than waiting for another launch.
+      if (welcomeGateCompleted && pairingReady && !hasPrimaryChoice) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _startFirstRunRetroArchFlow();
+        });
+      }
     } catch (e) {
       _log.e('Error checking initial setup: $e');
       if (!mounted) return;
@@ -174,6 +192,10 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     } catch (e) {
       _log.w('Could not persist first-run welcome state: $e');
     }
+
+    if (!showPairing) {
+      await _startFirstRunRetroArchFlow();
+    }
   }
 
   Future<void> _completePairingFileGate() async {
@@ -187,7 +209,53 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         true,
       );
     } catch (e) {
+      // A preference write failure must not trap the user in onboarding.
       _log.w('Could not persist pairing-file onboarding state: $e');
+    }
+
+    await _startFirstRunRetroArchFlow();
+  }
+
+  /// Reuses NeoStation's established first-install RetroArch sequence:
+  /// select RetroArch as the initial library, request its exported playlists,
+  /// then let the unchanged SetupWizard activate the linked folder and await
+  /// the real scan when NeoStation returns to the foreground.
+  Future<void> _startFirstRunRetroArchFlow() async {
+    if (!Platform.isIOS ||
+        !mounted ||
+        _retroArchSyncStarted ||
+        _isStartingRetroArchSync) {
+      return;
+    }
+
+    _retroArchSyncStarted = true;
+    setState(() {
+      _showForkWelcomeGate = false;
+      _showPairingFileGate = false;
+      _isStartingRetroArchSync = true;
+    });
+
+    try {
+      await IosEmulatorPreferenceService.setPrimary(
+        IosLibraryEmulator.retroArch,
+      );
+      await IosEmulatorPreferenceService.markUpgradeOfferSeen();
+
+      final opened = await RetroArchLibraryService.requestLibrarySync();
+      if (!opened) {
+        _log.w(
+          'RetroArch first-run library sync could not be opened; '
+          'continuing with the normal folder-link step.',
+        );
+      }
+    } catch (e) {
+      // RetroArch not being installed must not block NeoStation setup. The
+      // normal folder-link screen remains available immediately afterwards.
+      _log.w('RetroArch first-run library sync failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingRetroArchSync = false);
+      }
     }
   }
 
@@ -208,36 +276,13 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       _needsSetup = false;
       _showForkWelcomeGate = false;
       _showPairingFileGate = false;
+      _isStartingRetroArchSync = false;
     });
-
-    // Restore the first-install iOS behavior: once the setup wizard leaves the
-    // screen, immediately ask RetroArch for its exported library. Its existing
-    // neostation://retroarch callback persists the launch metadata and triggers
-    // a NeoStation rescan, so the playlists become available without forcing a
-    // manual app restart.
-    if (Platform.isIOS) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        try {
-          final opened = await RetroArchLibraryService.requestLibrarySync();
-          if (!opened) {
-            _log.w(
-              'First-run RetroArch library sync was not opened; RetroArch may not be installed.',
-            );
-          }
-        } catch (error, stackTrace) {
-          _log.e(
-            'First-run RetroArch library sync failed: $error',
-            error: error,
-            stackTrace: stackTrace,
-          );
-        }
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isChecking) {
+    if (_isChecking || _isStartingRetroArchSync) {
       return const Scaffold(body: Center(child: ShimmeringLogo()));
     }
 

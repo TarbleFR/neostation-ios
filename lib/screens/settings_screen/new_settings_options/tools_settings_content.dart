@@ -5,7 +5,6 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
-import 'package:neostation/l10n/pairing_targets_locale.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
@@ -188,9 +187,8 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                   context,
                   PairingFileLocale.title,
                 ),
-                subtitle:
-                    '$status — $description\n${PairingTargetsLocale.text(context)}',
-                subtitleMaxLines: 4,
+                subtitle: '$status — $description',
+                subtitleMaxLines: 3,
                 selected: isSelected,
                 onTap: _isImportingPairingFile
                     ? null

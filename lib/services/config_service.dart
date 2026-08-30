@@ -32,6 +32,9 @@ class ConfigService {
   /// GameLaunchService.launchGame).
   static String? linkedExternalFolderPath;
 
+  /// iOS-only folder linked from Manic EMU's Files container.
+  static String? linkedManicEmuFolderPath;
+
   /// iOS-only: absolute path of the folder linked for ARMSX2, resolved at
   /// startup from its own security-scoped bookmark (key `'armsx2'`, see
   /// ExternalFolderAccess). Kept separate from

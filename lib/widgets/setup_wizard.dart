@@ -10,7 +10,8 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:external_folder_access/external_folder_access.dart';
-import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/ios_emulator_preference_service.dart';
+import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
@@ -27,6 +28,7 @@ import '../utils/gamepad_nav.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/ios_setup_locale.dart';
+import 'package:neostation/l10n/manic_emu_locale.dart';
 
 import '../widgets/tv_directory_picker.dart';
 import '../widgets/folder_not_empty_dialog.dart';
@@ -83,6 +85,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   /// push stops re-asserting `setupWizardActive` and the dock can come in.
   bool _finishing = false;
 
+  // iOS first-run library linking is kicked off automatically once the app is
+  // active. This guard prevents duplicate document pickers across lifecycle
+  // transitions while RetroArch hands the user back to NeoStation.
+  bool _initialIosLibraryLinkStarted = false;
+
   static final _log = LoggerService.instance;
 
   GamepadNavigation? _gamepadNav;
@@ -121,6 +128,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initializeSteps();
     _initGamepad();
+    if (Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _startInitialIosLibraryLinkIfNeeded();
+      });
+    }
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _hasSecondaryDisplay =
@@ -157,11 +169,22 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
+    if (state != AppLifecycleState.resumed) return;
+
+    if (Platform.isAndroid) {
       _refreshPermissionStates();
       // The gamepad was deactivated before we sent the user to Settings; bring
       // it back now that we have focus again on the Permissions step.
       if (_currentStep == _stepPermissions) _gamepadNav?.activate();
+      return;
+    }
+
+    // RetroArch's first-run sync temporarily backgrounds NeoStation. Wait for
+    // the return before presenting the security-scoped folder picker. Manic
+    // EMU never leaves the app here, so its picker is normally started by the
+    // initial post-frame callback above.
+    if (Platform.isIOS) {
+      _startInitialIosLibraryLinkIfNeeded();
     }
   }
 
@@ -1921,6 +1944,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
 
     if (_currentStep == _stepScanning) {
+      // This wizard already completed the explicit first scan. Do not make the
+      // main screen immediately repeat the deferred startup scan before it can
+      // display the collections that were just found.
+      context.read<SqliteConfigProvider>().consumeStartupScan();
+
       // Scan finished → advance to the optional ES-DE import step, except
       // on iOS: ES-DE import needs picking an arbitrary external folder,
       // which iOS's sandbox doesn't support the way desktop/Android do,
@@ -1993,7 +2021,46 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _selectFolder() async {
+  Future<void> _startInitialIosLibraryLinkIfNeeded() async {
+    if (!Platform.isIOS ||
+        !mounted ||
+        _currentStep != _stepFolder ||
+        _isSelectingFolder ||
+        _initialIosLibraryLinkStarted) {
+      return;
+    }
+
+    // Do not attempt to present UIDocumentPicker while NeoStation is inactive
+    // (notably while RetroArch is still in the foreground for its callback).
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    final primary = await IosEmulatorPreferenceService.primary();
+    if (!mounted || _currentStep != _stepFolder || _isSelectingFolder) return;
+
+    final existingLink = primary == IosLibraryEmulator.manicEmu
+        ? ConfigService.linkedManicEmuFolderPath
+        : ConfigService.linkedExternalFolderPath;
+    if (existingLink != null && existingLink.trim().isNotEmpty) return;
+
+    _initialIosLibraryLinkStarted = true;
+    try {
+      // The picker is the one iOS-required user confirmation. Once granted,
+      // _selectFolder persists the bookmark, registers the ROM source and runs
+      // the real scan immediately, so no trip to Settings > Directories is
+      // required on first use.
+      await _selectFolder(allowInternalFallback: false);
+    } finally {
+      // A cancellation leaves the user on the same wizard step, where the main
+      // action can retry normally. A successful link advances to Scanning.
+      if (mounted && _currentStep == _stepFolder) {
+        _initialIosLibraryLinkStarted = false;
+      }
+    }
+  }
+
+  Future<void> _selectFolder({bool allowInternalFallback = true}) async {
     if (_currentStep != _stepFolder) return;
 
     // Guard: prevent re-entry and stop gamepad from intercepting picker events
@@ -2031,37 +2098,49 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         }
       } else if (Platform.isIOS) {
         // Lead with linking RetroArch's own folder here — now that
-        // launching found games works (see RetroArchLibraryService), it's
+        // launching found games works, it's
         // the better default for anyone using RetroArch. The plain
         // internal-folder path (ConfigService.getDefaultIOSRomsFolder,
         // via selectRomFolder below) remains available afterwards from
         // Settings > Directories for anyone who declines or doesn't use
         // RetroArch — this is only about which one leads during
         // first-run onboarding.
-        final linked = await ExternalFolderAccess.pickAndBookmarkFolder();
+        final primary = await IosEmulatorPreferenceService.primary();
+        final usesManic = primary == IosLibraryEmulator.manicEmu;
+        final bookmarkKey = usesManic
+            ? ManicEmuLaunchService.bookmarkKey
+            : ExternalFolderAccess.defaultBookmarkKey;
+        final linked = await ExternalFolderAccess.pickAndActivateFolder(
+          key: bookmarkKey,
+        );
         if (linked != null && mounted) {
-          ConfigService.linkedExternalFolderPath = linked;
+          await _ensureLinkedFolderIsReadable(linked);
+          if (!mounted) return;
+
+          if (usesManic) {
+            ConfigService.linkedManicEmuFolderPath = linked;
+          } else {
+            ConfigService.linkedExternalFolderPath = linked;
+          }
           await configProvider.addRomFolder(linked, scan: false);
           result = linked;
 
-          // Immediately follow the link with a sync request — RetroArch's
-          // response arrives asynchronously (RetroArchLibraryService
-          // already triggers a rescan when it does), but that's a
-          // background event the wizard's own state won't necessarily
-          // pick up mid-setup. Tell the user a relaunch guarantees they'll
-          // see everything, rather than leaving it to chance.
-          await RetroArchLibraryService.requestLibrarySync();
-          if (mounted) {
+          // Do not open an emulator or wait for an external callback here.
+          // The next wizard page owns the local folder scan and displays its
+          // real progress. Waiting on RetroArch kept this button spinning when
+          // an App Store/TestFlight build did not return a library callback.
+          if (mounted && usesManic) {
             AppNotification.showNotification(
               context,
-              'Linked! If your games don\'t show up in a few seconds, '
-              'relaunch NeoStation to see them.',
+              ManicEmuLocale.text(context, 'folderLinked'),
               type: NotificationType.info,
             );
           }
-        } else if (mounted) {
-          // Declined/cancelled the picker — fall back to the internal
-          // default so onboarding still has somewhere to go.
+        } else if (mounted && allowInternalFallback) {
+          // Manual folder selection retains the historical internal fallback.
+          // The automatic first-run attempt deliberately stays on this step if
+          // the picker is cancelled, so it never silently replaces the chosen
+          // RetroArch/Manic EMU library with NeoStation's private ROM folder.
           await configProvider.selectRomFolder(scan: false);
           result = configProvider.config.romFolder;
         }
@@ -2077,9 +2156,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           _isSelectingFolder = false;
           _currentStep++;
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          configProvider.scanSystems();
-        });
+        // Let the scanning page paint first, then await the exact scan that
+        // owns this newly activated folder. This keeps progress truthful and
+        // guarantees its systems are already in memory when setup completes.
+        await WidgetsBinding.instance.endOfFrame;
+        if (mounted) await configProvider.scanSystems();
       } else if (mounted) {
         setState(() {
           _isSelectingFolder = false;
@@ -2091,9 +2172,44 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         setState(() {
           _isSelectingFolder = false;
         });
+        AppNotification.showNotification(
+          context,
+          AppLocale.cannotReadFolder.getString(context),
+          type: NotificationType.error,
+        );
       }
     } finally {
       _gamepadNav?.activate();
+    }
+  }
+
+  /// Probes the selected security-scoped directory before it is registered as
+  /// a ROM source. iOS often reports an inaccessible path as merely empty;
+  /// treating that as a successful scan produced the misleading green
+  /// "0 systems" result during onboarding.
+  Future<void> _ensureLinkedFolderIsReadable(String folderPath) async {
+    const accessTimeout = Duration(seconds: 15);
+    final directory = Directory(folderPath);
+    if (!await directory.exists().timeout(
+      accessTimeout,
+      onTimeout: () => false,
+    )) {
+      throw FileSystemException('Linked folder does not exist', folderPath);
+    }
+
+    try {
+      await directory
+          .list(recursive: false, followLinks: false)
+          .take(1)
+          .drain<void>()
+          .timeout(accessTimeout);
+    } on FileSystemException {
+      rethrow;
+    } catch (error) {
+      throw FileSystemException(
+        'Linked folder is not readable: $error',
+        folderPath,
+      );
     }
   }
 
