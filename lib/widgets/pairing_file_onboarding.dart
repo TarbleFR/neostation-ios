@@ -128,6 +128,25 @@ class _PairingFileOnboardingState extends State<PairingFileOnboarding> {
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
                   ),
                 ),
+                SizedBox(height: 12.r),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 8.r),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(
+                      alpha: 0.28,
+                    ),
+                    borderRadius: BorderRadius.circular(999.r),
+                  ),
+                  child: Text(
+                    'JIT: MeloNX • ARMSX2 • RPCS3',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.r,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
                 if (_error != null) ...[
                   SizedBox(height: 16.r),
                   Container(
