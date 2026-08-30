@@ -47,7 +47,9 @@ class PairingFileService {
     if (picked == null || picked.files.isEmpty) return null;
 
     final selected = picked.files.single;
-    if (!selected.name.toLowerCase().endsWith('.mobiledevicepairing')) {
+    final lowerName = selected.name.toLowerCase();
+    if (!lowerName.endsWith('.mobiledevicepairing') &&
+        !lowerName.endsWith('.plist')) {
       throw const PairingFileException(PairingFileError.invalidExtension);
     }
 
@@ -65,7 +67,8 @@ class PairingFileService {
     if (await backup.exists()) await backup.delete();
 
     await temporary.writeAsBytes(bytes, flush: true);
-    if (!await temporary.exists() || !_isPlausiblePairingFile(await temporary.readAsBytes())) {
+    if (!await temporary.exists() ||
+        !_isPlausiblePairingFile(await temporary.readAsBytes())) {
       if (await temporary.exists()) await temporary.delete();
       throw const PairingFileException(PairingFileError.invalidFile);
     }
