@@ -1,0 +1,244 @@
+name: Build Pairing File Experimental IPA
+
+on:
+  push:
+    branches:
+      - feature/pairing-file-settings
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neostation-pairing-file-experimental
+  cancel-in-progress: true
+
+jobs:
+  build-ios-ipa:
+    name: Build NeoStation Pairing Experimental
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    env:
+      SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
+      SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/pairing-file-settings
+          fetch-depth: 1
+
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Verify isolated experimental source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "feature/pairing-file-settings"
+          grep -q 'packages/stikjit_bridge' pubspec.yaml
+          test -f lib/services/pairing_file_service.dart
+          test -f lib/l10n/pairing_file_locale.dart
+          test -f lib/widgets/pairing_file_onboarding.dart
+          echo "Building experimental source $(git rev-parse HEAD)"
+
+      - name: Prepare build-time defines
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          required = ('SCREENSCRAPER_DEV_ID', 'SCREENSCRAPER_DEV_PASSWORD')
+          values = {name: os.environ.get(name, '') for name in required}
+          missing = [name for name, value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing GitHub Actions secrets: ' + ', '.join(missing))
+
+          values['NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX'] = 'true'
+          values['NEOSTATION_MELONX_BUNDLE_ID'] = 'com.nur.nx'
+          Path('.dart-defines.json').write_text(
+              json.dumps(values, ensure_ascii=False), encoding='utf-8'
+          )
+          PY
+
+      - name: Restore StikJIT 1.5.0 framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE=/tmp/StikJIT.xcframework.zip
+          EXTRACT=/tmp/neostation-stikjit
+          DEST=packages/stikjit_bridge/ios/Frameworks
+          rm -rf "$EXTRACT" "$DEST/StikJIT.xcframework" "$ARCHIVE"
+          mkdir -p "$EXTRACT" "$DEST"
+
+          curl -fL --retry 3 --retry-delay 2 \
+            'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' \
+            -o "$ARCHIVE"
+          echo '444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85  /tmp/StikJIT.xcframework.zip' \
+            | shasum -a 256 -c -
+
+          unzip -q "$ARCHIVE" -d "$EXTRACT"
+          FRAMEWORK=$(find "$EXTRACT" -type d -name 'StikJIT.xcframework' -print -quit)
+          test -n "$FRAMEWORK"
+          cp -R "$FRAMEWORK" "$DEST/StikJIT.xcframework"
+          test -d "$DEST/StikJIT.xcframework"
+
+      - name: Resolve Flutter dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          flutter pub get
+
+      - name: Generate clean iOS scaffold
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf ios
+          flutter create \
+            --platforms=ios \
+            --org com.neogamelab \
+            --project-name neostation \
+            .
+          test -f ios/Runner.xcodeproj/project.pbxproj
+          test -f ios/Runner/Info.plist
+          test -f ios/Podfile
+
+      - name: Configure iOS 18 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -f build-utils/patch_ios_video_player_audio_session.py ]; then
+            python3 build-utils/patch_ios_video_player_audio_session.py
+          fi
+
+          DEVICE_INFO_FILE=$(find "$HOME/.pub-cache" \
+            -path '*device_info_plus*/FPPDeviceInfoPlusPlugin.m' \
+            2>/dev/null | head -1 || true)
+          if [ -n "$DEVICE_INFO_FILE" ]; then
+            sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          podfile = Path('ios/Podfile')
+          text = podfile.read_text(encoding='utf-8')
+          pattern = re.compile(r"(?m)^\s*#?\s*platform\s+:ios\s*,\s*['\"][^'\"]+['\"]\s*$")
+          replacement = "platform :ios, '18.0'"
+          if pattern.search(text):
+              text = pattern.sub(replacement, text, count=1)
+          else:
+              text = replacement + '\n\n' + text
+          podfile.write_text(text, encoding='utf-8')
+
+          project = Path('ios/Runner.xcodeproj/project.pbxproj')
+          project_text = project.read_text(encoding='utf-8')
+          project_text, count = re.subn(
+              r'IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;',
+              'IPHONEOS_DEPLOYMENT_TARGET = 18.0;',
+              project_text,
+          )
+          if count == 0:
+              raise SystemExit('No iOS deployment target found in Runner project.')
+          project.write_text(project_text, encoding='utf-8')
+          print(f'Patched {count} deployment target entries.')
+          PY
+
+          PLIST=ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Delete :UISupportedInterfaceOrientations' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeRight' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Delete :UISupportedInterfaceOrientations~ipad' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations~ipad array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeLeft' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeRight' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :UIFileSharingEnabled bool true' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :LSSupportsOpeningDocumentsInPlace bool true' "$PLIST" 2>/dev/null || true
+
+          /usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0 dict' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLName string com.neogamelab.neostation' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string neostation' "$PLIST"
+
+          /usr/libexec/PlistBuddy -c 'Delete :LSApplicationQueriesSchemes' "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes array' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:0 string retroarch' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:1 string shortcuts' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:2 string armsx2' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:3 string melonx' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:4 string neomelonx' "$PLIST"
+          plutil -lint "$PLIST"
+
+      - name: Generate iOS app icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart run flutter_launcher_icons
+          if [ -f build-utils/force_ios_fork_icon.sh ]; then
+            chmod +x build-utils/force_ios_fork_icon.sh
+            build-utils/force_ios_fork_icon.sh
+          fi
+
+      - name: Build unsigned IPA source app
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --build-number=164 \
+            --dart-define-from-file=.dart-defines.json \
+            2>&1 | tee build-ios.log
+
+          test -d build/ios/iphoneos/Runner.app
+
+      - name: Package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGING=/tmp/neostation-pairing-experimental-ipa
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING/Payload"
+          cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
+          (
+            cd "$STAGING"
+            /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload \
+              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-164-Pairing-Experimental.ipa"
+          )
+          test -s NeoStation-iOS-Build-164-Pairing-Experimental.ipa
+          ls -lh NeoStation-iOS-Build-164-Pairing-Experimental.ipa
+
+      - name: Remove temporary defines
+        if: always()
+        shell: bash
+        run: rm -f .dart-defines.json
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-164-Pairing-Experimental
+          path: |
+            NeoStation-iOS-Build-164-Pairing-Experimental.ipa
+            build-ios.log
+          if-no-files-found: error
+          retention-days: 30
