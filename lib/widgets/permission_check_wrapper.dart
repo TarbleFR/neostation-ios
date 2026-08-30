@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
+import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/stikjit_melonx_service.dart';
 import '../providers/sqlite_config_provider.dart';
 import '../screens/systems_screen/fork_first_run_onboarding.dart';
@@ -41,8 +42,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   @override
   void initState() {
     super.initState();
-
-    // Check whether initial configuration is needed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialSetup();
     });
@@ -52,9 +51,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Fast-path: this flag survives SD-card unavailability and early-launcher
-      // boot races. Existing installations must never be interrupted by a new
-      // onboarding screen added by the iOS fork.
       if (prefs.getBool(PermissionCheckWrapper.setupCompletedKey) == true) {
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
@@ -82,7 +78,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       final setupCompleted = configProvider.config.setupCompleted;
 
       if (hasRomFolder || setupCompleted) {
-        // Backfill preferences for users upgrading from an older build.
         await prefs.setBool(PermissionCheckWrapper.setupCompletedKey, true);
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
@@ -96,8 +91,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         return;
       }
 
-      // Genuinely fresh install. Show the fork welcome screen first. If it was
-      // already confirmed before an interrupted setup, resume at the next gate.
       final welcomeGateCompleted =
           prefs.getBool(forkOnboardingCompletedKey) ?? false;
 
@@ -143,8 +136,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     }
   }
 
-  /// Mirrors "the wizard is on screen" to the secondary display, which parks
-  /// its app dock and launcher while setup runs.
   void _pushWizardActive(bool active) {
     if (!mounted) return;
     Provider.of<SqliteConfigProvider>(
@@ -196,23 +187,18 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         true,
       );
     } catch (e) {
-      // A preference write failure must not trap the user in onboarding.
       _log.w('Could not persist pairing-file onboarding state: $e');
     }
   }
 
-  void _completeSetup() async {
+  Future<void> _completeSetup() async {
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
     );
     await configProvider.completeSetup();
-
-    // Setup is done — let the secondary display bring in the dock/launcher.
     configProvider.setSetupWizardActive(false);
 
-    // Persist flag to SharedPreferences so the wizard is never shown again
-    // even if the SQLite DB is temporarily inaccessible.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(PermissionCheckWrapper.setupCompletedKey, true);
     await prefs.setBool(forkOnboardingCompletedKey, true);
@@ -223,6 +209,30 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       _showForkWelcomeGate = false;
       _showPairingFileGate = false;
     });
+
+    // Restore the first-install iOS behavior: once the setup wizard leaves the
+    // screen, immediately ask RetroArch for its exported library. Its existing
+    // neostation://retroarch callback persists the launch metadata and triggers
+    // a NeoStation rescan, so the playlists become available without forcing a
+    // manual app restart.
+    if (Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final opened = await RetroArchLibraryService.requestLibrarySync();
+          if (!opened) {
+            _log.w(
+              'First-run RetroArch library sync was not opened; RetroArch may not be installed.',
+            );
+          }
+        } catch (error, stackTrace) {
+          _log.e(
+            'First-run RetroArch library sync failed: $error',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -248,12 +258,9 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
         );
       }
 
-      // Continue with NeoStation's original configuration wizard in the
-      // language automatically selected from the iPhone/iPad locale.
       return SetupWizard(onComplete: _completeSetup);
     }
 
-    // Show the normal app.
     return widget.child;
   }
 }
