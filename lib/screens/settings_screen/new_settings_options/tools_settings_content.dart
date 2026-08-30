@@ -187,8 +187,9 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                   context,
                   PairingFileLocale.title,
                 ),
-                subtitle: '$status — $description',
-                subtitleMaxLines: 3,
+                subtitle:
+                    '$status — $description\nJIT: MeloNX • ARMSX2 • RPCS3',
+                subtitleMaxLines: 4,
                 selected: isSelected,
                 onTap: _isImportingPairingFile
                     ? null
