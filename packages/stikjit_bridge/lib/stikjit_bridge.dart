@@ -7,6 +7,9 @@ class StikjitBridge {
   static const MethodChannel _armsx2Channel = MethodChannel(
     'neostation/stikjit_armsx2',
   );
+  static const MethodChannel _rpcs3Channel = MethodChannel(
+    'neostation/stikjit_rpcs3',
+  );
 
   static Future<StikjitLaunchResult> enableMeloNxJit({
     required String pairingFilePath,
@@ -63,6 +66,42 @@ class StikjitBridge {
     final pidValue = data['pid'];
     if (pidValue is! num) {
       throw StateError('ARMSX2 StikJIT bridge did not return the target PID.');
+    }
+
+    final logs = <String>[];
+    final rawLogs = data['logs'];
+    if (rawLogs is List) {
+      logs.addAll(rawLogs.map((entry) => entry.toString()));
+    }
+
+    return StikjitLaunchResult(
+      pid: pidValue.toInt(),
+      bundleId: data['bundleId']?.toString(),
+      txmPresent: data['txmPresent'] as bool?,
+      gameUrlOpened: data['gameUrlOpened'] as bool?,
+      logs: logs,
+    );
+  }
+
+  static Future<StikjitLaunchResult> enableRpcs3Jit({
+    required String pairingFilePath,
+    required String bundleId,
+    required String titleId,
+  }) async {
+    final raw = await _rpcs3Channel.invokeMethod<Object?>('enableRpcs3Jit', {
+      'pairingFilePath': pairingFilePath,
+      'bundleId': bundleId,
+      'titleId': titleId,
+    });
+
+    if (raw is! Map) {
+      throw StateError('RPCS3 StikJIT bridge returned an invalid response.');
+    }
+
+    final data = Map<String, dynamic>.from(raw);
+    final pidValue = data['pid'];
+    if (pidValue is! num) {
+      throw StateError('RPCS3 StikJIT bridge did not return the target PID.');
     }
 
     final logs = <String>[];

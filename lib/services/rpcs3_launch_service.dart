@@ -1,12 +1,17 @@
 import 'dart:io';
 
 import 'package:external_folder_access/external_folder_access.dart';
+import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/stikjit_rpcs3_service.dart';
 
-/// Stable RPCS3 iOS launcher.
+/// RPCS3 iOS JIT launcher.
 ///
-/// NeoStation requests StikDebug Universal JIT for RPCS3, then leaves RPCS3
-/// responsible for its native Start/Commencer screen and game selection.
+/// Integrated builds launch RPCS3 through the dedicated StikJIT bridge. The
+/// single global emergency switch in Settings > Tools preserves the original
+/// StikDebug Universal JIT request as an explicit fallback. RPCS3 remains
+/// responsible for its native Start/game selection screen because the current
+/// iOS port does not expose a supported direct-game callback.
 abstract final class Rpcs3LaunchService {
   static const String targetBundleId = 'com.xitrix.RPCS3';
 
@@ -21,10 +26,10 @@ abstract final class Rpcs3LaunchService {
   /// Compatibility hook used by application startup.
   static Future<void> initialize() async {}
 
-  /// Opens StikDebug with its Universal JIT request for RPCS3.
+  /// Starts RPCS3 with the JIT backend selected in Settings > Tools.
   ///
   /// [displayTitle], [sourcePath], and [sourceKind] are retained for diagnostics
-  /// and compatibility with existing callers. RPCS3 performs game selection.
+  /// and future direct-launch support. RPCS3 currently performs game selection.
   static Future<bool> launchTitle(
     String? rawTitleId, {
     String? displayTitle,
@@ -37,10 +42,40 @@ abstract final class Rpcs3LaunchService {
     if (titleId == null) return false;
 
     _log.i(
-      'RPCS3 standard launch: titleId=$titleId '
+      'RPCS3 launch: titleId=$titleId '
       'title=${displayTitle?.trim() ?? ''} '
       'sourceKind=${sourceKind?.trim() ?? ''} '
       'sourcePath=${sourcePath?.trim() ?? ''}',
+    );
+
+    var useStikDebugFallback = false;
+    try {
+      useStikDebugFallback =
+          await JitBackendPreferenceService.useStikDebugFallback();
+    } catch (error, stackTrace) {
+      _log.e(
+        'Rpcs3LaunchService: failed to load the global JIT backend; '
+        'keeping integrated StikJIT.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    if (!useStikDebugFallback &&
+        StikJitRpcs3Service.isExperimentalEnabled) {
+      _log.i('RPCS3 launch backend: integrated StikJIT.');
+      return StikJitRpcs3Service.launch(
+        titleId: titleId,
+        displayTitle: displayTitle,
+        sourcePath: sourcePath,
+        sourceKind: sourceKind,
+      );
+    }
+
+    _log.i(
+      useStikDebugFallback
+          ? 'RPCS3 launch backend: StikDebug emergency fallback.'
+          : 'RPCS3 integrated StikJIT is unavailable in this build; using the stable StikDebug path.',
     );
 
     try {
@@ -52,7 +87,7 @@ abstract final class Rpcs3LaunchService {
       return opened == true;
     } catch (error, stack) {
       _log.e(
-        'Rpcs3LaunchService: standard JIT handoff failed for $titleId',
+        'Rpcs3LaunchService: StikDebug JIT handoff failed for $titleId',
         error: error,
         stackTrace: stack,
       );
