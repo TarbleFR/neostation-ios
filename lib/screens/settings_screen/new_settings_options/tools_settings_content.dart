@@ -58,8 +58,9 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         _pairingStateLoaded = true;
       });
     } catch (error, stackTrace) {
-      _log.w(
+      _log.log(
         'Could not inspect the stored pairing file.',
+        level: LogLevel.warning,
         error: error,
         stackTrace: stackTrace,
       );
