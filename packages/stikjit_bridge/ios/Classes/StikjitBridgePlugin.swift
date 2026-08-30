@@ -121,10 +121,11 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
       )
     }
 
-    // Sideloaders such as SideStore/Plume can rewrite MeloNX's bundle ID,
-    // commonly to values such as com.stossy11.MeloNX.XXXXXX. The compile-time
-    // bundleId is therefore only a hint. Discover the actual installed MeloNX
-    // app through idevice's AppService on the same RSD tunnel before launch.
+    // Sideloaders can rewrite MeloNX's bundle identifier. Resolve the actual
+    // installed bundle through installation_proxy, matching the path StikDebug
+    // itself uses for installed-app inventory. CoreDevice AppService listing is
+    // deliberately avoided here because some iOS builds return an XPC response
+    // without CoreDevice.output even though the RSD tunnel itself is healthy.
     let runtime = try IdeviceRuntime()
     let launch = try runtime.launchMeloNxSuspended(
       preferredBundleId: bundleIdHint,
@@ -192,7 +193,6 @@ private enum StikjitBridgeError: LocalizedError {
   case invalidDeviceAddress(String)
   case idevice(String)
   case incompleteHandle(String)
-  case unsupportedAppListAbi
   case meloNxNotFound(String)
 
   var errorDescription: String? {
@@ -209,10 +209,8 @@ private enum StikjitBridgeError: LocalizedError {
       return message
     case .incompleteHandle(let name):
       return "StikJIT idevice runtime did not create \(name)."
-    case .unsupportedAppListAbi:
-      return "NeoStation cannot inspect installed apps on this device architecture."
     case .meloNxNotFound(let hint):
-      return "MeloNX was not found in the installed app list. Bundle hint: \(hint)."
+      return "MeloNX was not found through Installation Proxy. Bundle hint: \(hint)."
     }
   }
 }
@@ -258,24 +256,31 @@ private final class IdeviceRuntime {
   private typealias AdapterFreeFn = @convention(c) (OpaquePointer?) -> Void
   private typealias HandshakeFreeFn = @convention(c) (OpaquePointer?) -> Void
 
-  private typealias AppServiceConnectFn = @convention(c) (
+  // StikDebug's installed-app inventory uses installation_proxy over RSD.
+  private typealias InstallationProxyConnectFn = @convention(c) (
     OpaquePointer?,
     OpaquePointer?,
     UnsafeMutablePointer<OpaquePointer?>?
   ) -> OpaquePointer?
-  private typealias AppServiceFreeFn = @convention(c) (OpaquePointer?) -> Void
-  private typealias AppServiceListAppsFn = @convention(c) (
+  private typealias InstallationProxyFreeFn = @convention(c) (OpaquePointer?) -> Void
+  private typealias InstallationProxyGetAppsFn = @convention(c) (
     OpaquePointer?,
-    Int32,
-    Int32,
-    Int32,
-    Int32,
-    Int32,
+    UnsafePointer<CChar>?,
+    UnsafePointer<UnsafePointer<CChar>?>?,
+    Int,
     UnsafeMutablePointer<UnsafeMutableRawPointer?>?,
-    UnsafeMutablePointer<UInt>?
+    UnsafeMutablePointer<Int>?
   ) -> OpaquePointer?
-  private typealias AppServiceFreeAppListFn = @convention(c) (
-    UnsafeMutableRawPointer?,
+
+  private typealias PlistFreeFn = @convention(c) (OpaquePointer?) -> Void
+  private typealias PlistToBinFn = @convention(c) (
+    OpaquePointer?,
+    UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
+    UnsafeMutablePointer<UInt32>?
+  ) -> Int32
+  private typealias PlistMemFreeFn = @convention(c) (UnsafeMutableRawPointer?) -> Void
+  private typealias IdeviceDataFreeFn = @convention(c) (
+    UnsafeMutablePointer<UInt8>?,
     UInt
   ) -> Void
 
@@ -309,10 +314,13 @@ private final class IdeviceRuntime {
   private let tunnelCreate: TunnelCreateFn
   private let adapterFree: AdapterFreeFn
   private let handshakeFree: HandshakeFreeFn
-  private let appServiceConnect: AppServiceConnectFn
-  private let appServiceFree: AppServiceFreeFn
-  private let appServiceListApps: AppServiceListAppsFn
-  private let appServiceFreeAppList: AppServiceFreeAppListFn
+  private let installationProxyConnect: InstallationProxyConnectFn
+  private let installationProxyFree: InstallationProxyFreeFn
+  private let installationProxyGetApps: InstallationProxyGetAppsFn
+  private let plistFree: PlistFreeFn
+  private let plistToBin: PlistToBinFn
+  private let plistMemFree: PlistMemFreeFn
+  private let ideviceDataFree: IdeviceDataFreeFn
   private let remoteConnect: RemoteConnectFn
   private let remoteFree: RemoteFreeFn
   private let processNew: ProcessNewFn
@@ -345,14 +353,27 @@ private final class IdeviceRuntime {
     tunnelCreate = try Self.resolve("tunnel_create_rppairing", in: handles, as: TunnelCreateFn.self)
     adapterFree = try Self.resolve("adapter_free", in: handles, as: AdapterFreeFn.self)
     handshakeFree = try Self.resolve("rsd_handshake_free", in: handles, as: HandshakeFreeFn.self)
-    appServiceConnect = try Self.resolve("app_service_connect_rsd", in: handles, as: AppServiceConnectFn.self)
-    appServiceFree = try Self.resolve("app_service_free", in: handles, as: AppServiceFreeFn.self)
-    appServiceListApps = try Self.resolve("app_service_list_apps", in: handles, as: AppServiceListAppsFn.self)
-    appServiceFreeAppList = try Self.resolve(
-      "app_service_free_app_list",
+
+    installationProxyConnect = try Self.resolve(
+      "installation_proxy_connect_rsd",
       in: handles,
-      as: AppServiceFreeAppListFn.self
+      as: InstallationProxyConnectFn.self
     )
+    installationProxyFree = try Self.resolve(
+      "installation_proxy_client_free",
+      in: handles,
+      as: InstallationProxyFreeFn.self
+    )
+    installationProxyGetApps = try Self.resolve(
+      "installation_proxy_get_apps",
+      in: handles,
+      as: InstallationProxyGetAppsFn.self
+    )
+    plistFree = try Self.resolve("plist_free", in: handles, as: PlistFreeFn.self)
+    plistToBin = try Self.resolve("plist_to_bin", in: handles, as: PlistToBinFn.self)
+    plistMemFree = try Self.resolve("plist_mem_free", in: handles, as: PlistMemFreeFn.self)
+    ideviceDataFree = try Self.resolve("idevice_data_free", in: handles, as: IdeviceDataFreeFn.self)
+
     remoteConnect = try Self.resolve("remote_server_connect_rsd", in: handles, as: RemoteConnectFn.self)
     remoteFree = try Self.resolve("remote_server_free", in: handles, as: RemoteFreeFn.self)
     processNew = try Self.resolve("process_control_new", in: handles, as: ProcessNewFn.self)
@@ -470,80 +491,103 @@ private final class IdeviceRuntime {
     adapter: OpaquePointer,
     handshake: OpaquePointer
   ) throws -> String {
-    // AppListEntryC is an exported C struct from idevice. StikJIT is arm64-only
-    // on iOS, so parse the stable 64-bit C ABI layout without linking another
-    // copy of libidevice into NeoStation.
-    guard MemoryLayout<UnsafeRawPointer>.size == 8 else {
-      throw StikjitBridgeError.unsupportedAppListAbi
-    }
-
-    var appService: OpaquePointer?
+    var installationProxy: OpaquePointer?
     try check(
-      appServiceConnect(adapter, handshake, &appService),
-      fallback: "Failed to connect AppService for MeloNX discovery"
+      installationProxyConnect(adapter, handshake, &installationProxy),
+      fallback: "Failed to connect Installation Proxy for MeloNX discovery"
     )
-    guard let appService else {
-      throw StikjitBridgeError.incompleteHandle("AppService handle")
+    guard let installationProxy else {
+      throw StikjitBridgeError.incompleteHandle("Installation Proxy handle")
     }
-    defer { appServiceFree(appService) }
+    defer { installationProxyFree(installationProxy) }
 
-    var appsRaw: UnsafeMutableRawPointer?
-    var appCount: UInt = 0
+    var rawApps: UnsafeMutableRawPointer?
+    var appCount = 0
     try check(
-      appServiceListApps(
-        appService,
+      installationProxyGetApps(
+        installationProxy,
+        nil,
+        nil,
         0,
-        1,
-        0,
-        0,
-        0,
-        &appsRaw,
+        &rawApps,
         &appCount
       ),
-      fallback: "Failed to list installed apps"
+      fallback: "Failed to fetch installed apps through Installation Proxy"
     )
 
-    guard let appsRaw, appCount > 0 else {
+    guard let rawApps, appCount > 0 else {
       throw StikjitBridgeError.meloNxNotFound(preferredBundleId)
     }
-    defer { appServiceFreeAppList(appsRaw, appCount) }
+
+    let apps = rawApps.assumingMemoryBound(to: OpaquePointer?.self)
+    defer {
+      for index in 0..<appCount {
+        plistFree(apps[index])
+      }
+      ideviceDataFree(
+        rawApps.assumingMemoryBound(to: UInt8.self),
+        UInt(appCount * MemoryLayout<OpaquePointer?>.stride)
+      )
+    }
 
     let preferred = preferredBundleId.lowercased()
-    let stride = 80
-    let nameOffset = 8
-    let pathOffset = 24
-    let bundleIdentifierOffset = 32
     var candidates = [MeloNxCandidate]()
 
-    for index in 0..<Int(appCount) {
-      let record = UnsafeRawPointer(appsRaw).advanced(by: index * stride)
-      guard let bundleId = Self.readCString(record, offset: bundleIdentifierOffset),
-            !bundleId.isEmpty else {
+    for index in 0..<appCount {
+      guard let app = apps[index] else { continue }
+
+      var binaryPlist: UnsafeMutablePointer<CChar>?
+      var binaryLength: UInt32 = 0
+      guard plistToBin(app, &binaryPlist, &binaryLength) == 0,
+            let binaryPlist,
+            binaryLength > 0 else {
         continue
       }
-      let name = Self.readCString(record, offset: nameOffset) ?? ""
-      let path = Self.readCString(record, offset: pathOffset) ?? ""
+
+      let data = Data(bytes: binaryPlist, count: Int(binaryLength))
+      plistMemFree(UnsafeMutableRawPointer(binaryPlist))
+
+      guard
+        let plist = try? PropertyListSerialization.propertyList(
+          from: data,
+          options: [],
+          format: nil
+        ),
+        let dictionary = plist as? [String: Any],
+        let bundleId = dictionary["CFBundleIdentifier"] as? String,
+        !bundleId.isEmpty
+      else {
+        continue
+      }
+
+      let name = (dictionary["CFBundleDisplayName"] as? String)
+        ?? (dictionary["CFBundleName"] as? String)
+        ?? ""
+      let path = dictionary["Path"] as? String ?? ""
+      let executable = dictionary["CFBundleExecutable"] as? String ?? ""
 
       let bundleLower = bundleId.lowercased()
       let nameLower = name.lowercased()
       let pathLower = path.lowercased()
+      let executableLower = executable.lowercased()
       var score = 0
 
       if bundleLower == preferred {
-        score += 200
+        score += 300
       }
       if nameLower == "melonx" {
-        score += 150
+        score += 250
       } else if nameLower.contains("melonx") {
-        score += 80
-      }
-      if bundleLower.contains(".melonx") || bundleLower.hasSuffix("melonx") {
         score += 120
-      } else if bundleLower.contains("melonx") {
-        score += 70
+      }
+      if bundleLower.contains("melonx") {
+        score += 200
       }
       if pathLower.contains("/melonx.app") {
-        score += 100
+        score += 180
+      }
+      if executableLower == "melonx" {
+        score += 150
       }
 
       if score > 0 {
@@ -563,16 +607,6 @@ private final class IdeviceRuntime {
     }
 
     return best.bundleId
-  }
-
-  private static func readCString(
-    _ record: UnsafeRawPointer,
-    offset: Int
-  ) -> String? {
-    guard let pointer = record.advanced(by: offset).load(as: UnsafePointer<CChar>?.self) else {
-      return nil
-    }
-    return String(cString: pointer)
   }
 
   private func check(_ error: OpaquePointer?, fallback: String) throws {
