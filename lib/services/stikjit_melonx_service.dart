@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
@@ -7,7 +8,6 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 /// Experimental built-in StikJIT path for MeloNX.
 ///
@@ -89,21 +89,27 @@ class StikJitMeloNxService {
         'Native log:\n${jit.logs.join('\n')}\n',
       );
 
-      // StikJIT has completed and detached. MeloNX is now running with JIT, so
-      // deliver the exact frontend deep link that the old Shortcut received as
-      // Shortcut Input. No StikDebug app transition is needed.
-      final opened = await launchUrl(
-        gameUri,
-        mode: LaunchMode.externalApplication,
+      // StikJIT has completed, detached and the native bridge has resumed the
+      // exact same MeloNX process. Deliver the frontend URL through our native
+      // UIApplication.open bridge instead of url_launcher. This avoids
+      // canOpenURL/LSApplicationQueriesSchemes behaviour in url_launcher and
+      // preserves the exact raw custom-scheme string.
+      await _appendDiagnostic(
+        'STATE: GAME_URL_NATIVE_OPEN_REQUEST\n'
+        'Raw URL: $gameUrl\n',
       );
+      final opened = await ExternalFolderAccess.openRawUrl(gameUrl) ?? false;
       if (!opened) {
         _lastError =
-            'JIT succeeded, but the MeloNX game URL could not be opened.';
-        await _appendDiagnostic('STATE: ERROR\nError: $_lastError\n');
+            'JIT succeeded and MeloNX resumed, but native UIApplication.open rejected the MeloNX game URL.';
+        await _appendDiagnostic(
+          'STATE: GAME_URL_NATIVE_OPEN_FAILED\n'
+          'Error: $_lastError\n',
+        );
         return false;
       }
 
-      await _appendDiagnostic('STATE: GAME_URL_OPENED\n');
+      await _appendDiagnostic('STATE: GAME_URL_NATIVE_OPENED\n');
       return true;
     } catch (error, stackTrace) {
       _lastError = error.toString();
