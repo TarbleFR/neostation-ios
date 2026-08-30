@@ -2,8 +2,8 @@
 # This workflow exists only on feature/stikjit-melonx and never updates main or
 # backup/stable-20260829-build164.
 workflows:
-  ios-stikjit-melonx-165-experimental:
-    name: NeoStation iOS Build 165 - StikJIT MeloNX Experimental
+  ios-stikjit-melonx-166-experimental:
+    name: NeoStation iOS Build 166 - StikJIT MeloNX Experimental
     instance_type: mac_mini_m2
     max_build_duration: 120
 
@@ -34,7 +34,7 @@ workflows:
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
-              codemagic.yaml|pubspec.yaml|lib/services/ios_shortcut_jit_launch_service.dart|lib/services/stikjit_melonx_service.dart|packages/stikjit_bridge/*)
+              codemagic.yaml|pubspec.yaml|lib/services/ios_shortcut_jit_launch_service.dart|lib/services/stikjit_melonx_service.dart|packages/stikjit_bridge/*|.github/workflows/relay-codemagic-ipa.yml)
                 ;;
               *)
                 echo "Unexpected experimental change: $file"
@@ -281,6 +281,7 @@ workflows:
           /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:1 string shortcuts' "$PLIST"
           /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:2 string armsx2' "$PLIST"
           /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:3 string melonx' "$PLIST"
+          /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:4 string atariemulator' "$PLIST"
           plutil -lint "$PLIST"
 
       - name: Generate iOS icon
@@ -306,7 +307,7 @@ workflows:
             --release \
             --no-codesign \
             --config-only \
-            --build-number=165 \
+            --build-number=166 \
             --dart-define-from-file=.dart-defines.json
 
       - name: Verify defines reached Xcode
@@ -334,8 +335,8 @@ workflows:
           }
           if expected - decoded:
               raise SystemExit('Required Dart defines are missing from Xcode configuration.')
-          if values.get('FLUTTER_BUILD_NUMBER') != '165':
-              raise SystemExit('FLUTTER_BUILD_NUMBER is not 165.')
+          if values.get('FLUTTER_BUILD_NUMBER') != '166':
+              raise SystemExit('FLUTTER_BUILD_NUMBER is not 166.')
           print('Experimental and ScreenScraper defines reached Xcode exactly.')
           PY
 
@@ -369,7 +370,7 @@ workflows:
             exit "$XCODE_STATUS"
           fi
 
-      - name: Package and verify Build 165 IPA
+      - name: Package and verify Build 166 IPA
         script: |
           set -euo pipefail
           APP_PATH=$(find build/ios/DerivedData/Build/Products/Release-iphoneos \
@@ -379,24 +380,67 @@ workflows:
           mkdir -p build/ios/unsigned/Payload
           cp -R "$APP_PATH" build/ios/unsigned/Payload/NeoStation.app
           PLIST=build/ios/unsigned/Payload/NeoStation.app/Info.plist
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST" | grep -qx '165'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST" | grep -qx '166'
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" | grep -qx 'com.neogamelab.neostation'
           test -d build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework
           test -f build/ios/unsigned/Payload/NeoStation.app/Frameworks/StikJIT.framework/StikJIT
 
           (
             cd build/ios/unsigned
-            zip -qry ../../../NeoStation-iOS-Build-165-StikJIT-Experimental.ipa Payload
+            zip -qry ../../../NeoStation-iOS-Build-166-StikJIT-Experimental.ipa Payload
           )
-          shasum -a 256 NeoStation-iOS-Build-165-StikJIT-Experimental.ipa \
-            | tee NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
-          echo 'Build 165 contains and links StikJIT.'
+          shasum -a 256 NeoStation-iOS-Build-166-StikJIT-Experimental.ipa \
+            | tee NeoStation-iOS-Build-166-StikJIT-Experimental.sha256
+          echo 'Build 166 contains and links StikJIT.'
 
       - name: Remove temporary build inputs
         script: rm -f .dart-defines.json
 
     artifacts:
-      - NeoStation-iOS-Build-165-StikJIT-Experimental.ipa
-      - NeoStation-iOS-Build-165-StikJIT-Experimental.sha256
+      - NeoStation-iOS-Build-166-StikJIT-Experimental.ipa
+      - NeoStation-iOS-Build-166-StikJIT-Experimental.sha256
       - build/ios/xcodebuild-unsigned.log
       - build/ios/xcode-errors.txt
+
+    publishing:
+      scripts:
+        - name: Relay IPA as temporary GitHub Actions artifact
+          script: |
+            set -euo pipefail
+            if [ -z "${CM_API_TOKEN:-}" ]; then
+              echo 'CM_API_TOKEN is missing from neostation_secrets.'
+              exit 1
+            fi
+            if [ -z "${Ghtoken:-}" ]; then
+              echo 'Ghtoken is missing from neostation_secrets.'
+              exit 1
+            fi
+
+            IPA_NAME='NeoStation-iOS-Build-166-StikJIT-Experimental.ipa'
+            ARTIFACT_URL=$(echo "$CM_ARTIFACT_LINKS" | jq -r --arg name "$IPA_NAME" '.[] | select(.name == $name) | .url' | head -1)
+            if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = 'null' ]; then
+              echo 'Codemagic IPA artifact URL was not found.'
+              exit 1
+            fi
+
+            EXPIRES_AT=$(date -v+2H +%s)
+            RESPONSE=$(curl -fsS \
+              -H 'Content-Type: application/json' \
+              -H "x-auth-token: $CM_API_TOKEN" \
+              -d "{\"expiresAt\": $EXPIRES_AT}" \
+              -X POST "$ARTIFACT_URL/public-url")
+            PUBLIC_URL=$(echo "$RESPONSE" | jq -r '.url // empty')
+            test -n "$PUBLIC_URL"
+
+            DISPATCH=$(jq -nc \
+              --arg url "$PUBLIC_URL" \
+              --arg name "$IPA_NAME" \
+              '{ref:"feature/stikjit-melonx",inputs:{artifact_url:$url,artifact_name:$name}}')
+            curl -fsS \
+              -H "Authorization: Bearer $Ghtoken" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              -d "$DISPATCH" \
+              -X POST \
+              'https://api.github.com/repos/TarbleFR/neostation-ios/actions/workflows/relay-codemagic-ipa.yml/dispatches'
+            echo 'IPA relay workflow dispatched. No GitHub Release was created.'
