@@ -1,9 +1,10 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
@@ -12,7 +13,7 @@ import 'package:stikjit_bridge/stikjit_bridge.dart';
 ///
 /// The feature is compile-time gated so normal NeoStation builds keep using
 /// the existing Apple Shortcut -> StikDebug flow unchanged. The experimental
-/// Codemagic build enables this service with a Dart define.
+/// build enables this service with a Dart define.
 class StikJitMeloNxService {
   StikJitMeloNxService._();
 
@@ -123,15 +124,8 @@ class StikJitMeloNxService {
   }
 
   static Future<File?> _ensurePairingFile() async {
-    final support = await getApplicationSupportDirectory();
-    final directory = Directory(path.join(support.path, 'StikJIT'));
-    await directory.create(recursive: true);
-
-    final stored = File(
-      path.join(directory.path, 'pairing.mobiledevicepairing'),
-    );
-    if (await stored.exists() && await stored.length() > 0) {
-      return stored;
+    if (await PairingFileService.hasStoredPairingFile()) {
+      return PairingFileService.storedFile();
     }
 
     await _appendDiagnostic(
@@ -145,42 +139,22 @@ class StikJitMeloNxService {
       return null;
     }
 
-    // file_picker 12.0.0-beta.3 exposes the static FilePicker facade but still
-    // returns a nullable FilePickerResult. The direct List<PlatformFile> return
-    // type arrived in a later beta, so keep using the result.files wrapper here.
-    final picked = await FilePicker.pickFiles(
-      dialogTitle: 'Veuillez sélectionner votre pairing file',
-      allowMultiple: false,
-      type: FileType.any,
-      withData: true,
+    final context = rootNavigatorKey.currentContext;
+    final dialogTitle = context != null && context.mounted
+        ? PairingFileLocale.get(context, PairingFileLocale.pickerTitle)
+        : 'Select your pairing file';
+
+    final imported = await PairingFileService.importFromPicker(
+      dialogTitle: dialogTitle,
     );
-    if (picked == null || picked.files.isEmpty) return null;
-
-    final selected = picked.files.single;
-    final sourcePath = selected.path;
-    if (sourcePath != null) {
-      final source = File(sourcePath);
-      if (await source.exists() && await source.length() > 0) {
-        await source.copy(stored.path);
-        return stored;
-      }
-    }
-
-    final bytes = selected.bytes;
-    if (bytes != null && bytes.isNotEmpty) {
-      await stored.writeAsBytes(bytes, flush: true);
-      return stored;
-    }
-
-    throw StateError('The selected pairing file could not be read.');
+    return imported?.file;
   }
 
   static Future<bool> _confirmPairingFileImport() async {
     final context = rootNavigatorKey.currentContext;
     if (context == null || !context.mounted) {
       // The launch normally originates from the visible game screen, so a
-      // navigator context should exist. Do not make JIT unusable if it does not:
-      // fall back to the native picker and leave a diagnostic breadcrumb.
+      // navigator context should exist. If it does not, fall back to the picker.
       _log.w(
         'StikJitMeloNxService: no navigator context for pairing explanation; '
         'opening the picker directly.',
@@ -195,23 +169,37 @@ class StikJitMeloNxService {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Pairing file requis'),
-        content: const Text(
-          'Pour utiliser MeloNX avec le JIT intégré, NeoStation doit importer '
-          'une fois le pairing file de cet iPhone.\n\n'
-          'Veuillez sélectionner votre fichier .mobiledevicepairing. Il sera '
-          'conservé localement par NeoStation et ne vous sera redemandé que si '
-          'le fichier est supprimé ou si l’application est réinstallée.',
+        title: Text(
+          PairingFileLocale.get(
+            dialogContext,
+            PairingFileLocale.setupTitle,
+          ),
+        ),
+        content: Text(
+          PairingFileLocale.get(
+            dialogContext,
+            PairingFileLocale.setupBody,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Annuler'),
+            child: Text(
+              PairingFileLocale.get(
+                dialogContext,
+                PairingFileLocale.later,
+              ),
+            ),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             icon: const Icon(Icons.folder_open),
-            label: const Text('Choisir le pairing file'),
+            label: Text(
+              PairingFileLocale.get(
+                dialogContext,
+                PairingFileLocale.chooseFile,
+              ),
+            ),
           ),
         ],
       ),
