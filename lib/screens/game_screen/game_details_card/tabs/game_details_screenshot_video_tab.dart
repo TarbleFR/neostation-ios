@@ -124,8 +124,8 @@ class _GameDetailsScreenshotVideoTabState
       child: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: 200.r,
-            maxHeight: 155.r,
+            maxWidth: 170.r,
+            maxHeight: 110.r,
           ),
           child: AspectRatio(
             aspectRatio: mediaAspectRatio,
