@@ -74,6 +74,6 @@ void main() {
     final pluginManifest = File(
       'packages/stikjit_bridge/pubspec.yaml',
     ).readAsStringSync();
-    expect(pluginManifest, contains('pluginClass: NeoStationStikjitBridgePlugin'));
+    expect(pluginManifest, contains('pluginClass: NeoStationStikjitBridgePluginV2'));
   });
 }
