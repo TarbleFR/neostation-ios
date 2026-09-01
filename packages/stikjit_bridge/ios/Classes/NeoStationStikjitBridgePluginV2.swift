@@ -1,12 +1,13 @@
 import Flutter
 import Foundation
 
-/// Third-level composite registration: preserve the already validated
-/// MeloNX + ARMSX2 plugin registration exactly as-is, then add the independent
-/// RPCS3 bridge on its own method channel.
+/// Third-level composite registration. Keep the validated MeloNX path and
+/// independent RPCS3 path unchanged, while routing ARMSX2 through the V2
+/// lifecycle bridge that mirrors MeloNX's foreground handoff.
 public final class NeoStationStikjitBridgePluginV2: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
-    NeoStationStikjitBridgePlugin.register(with: registrar)
+    StikjitBridgePluginV2.register(with: registrar)
+    StikjitArmsx2BridgePluginV2.register(with: registrar)
     StikjitRpcs3BridgePlugin.register(with: registrar)
   }
 }
