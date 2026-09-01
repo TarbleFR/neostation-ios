@@ -28,10 +28,12 @@ void main() {
     expect(armsx2, contains('useArmsx2AutoLoadLastGame'));
     expect(armsx2, contains('autoLoadLastGame: autoLoadLastGame'));
     expect(armsx2, contains('postJitHandoffSkipped'));
+    expect(armsx2, contains('targetResumed'));
+    expect(armsx2, contains('ARMSX2_AUTOLOAD_RESUMED'));
     expect(armsx2, contains('stikjit_armsx2_debug.txt'));
   });
 
-  test('native ARMSX2 bridge preserves legacy handoff and adds auto-load mode', () {
+  test('native ARMSX2 bridge preserves legacy handoff and resumes same PID in auto-load mode', () {
     final composite = File(
       'packages/stikjit_bridge/ios/Classes/'
       'NeoStationStikjitBridgePlugin.swift',
@@ -42,6 +44,10 @@ void main() {
     expect(composite, contains('launchArmsx2Suspended'));
     expect(composite, contains('autoLoadLastGame'));
     expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
+    expect(composite, contains('ARMSX2_AUTOLOAD_RESUME_REQUESTED'));
+    expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
+    expect(composite, contains('resumedPID == UInt64(originalPID)'));
+    expect(composite, contains('targetResumed'));
     expect(composite, contains('postJitHandoffSkipped'));
     expect(composite, contains('openGameWhenNeoStationIsActive'));
 
@@ -50,6 +56,7 @@ void main() {
     ).readAsStringSync();
     expect(dartBridge, contains("'autoLoadLastGame': autoLoadLastGame"));
     expect(dartBridge, contains('postJitHandoffSkipped'));
+    expect(dartBridge, contains('targetResumed'));
 
     final preferences = File(
       'lib/services/jit_backend_preference_service.dart',
@@ -63,6 +70,15 @@ void main() {
     ).readAsStringSync();
     expect(tools, contains('Armsx2JitModeLocale'));
     expect(tools, contains('_setUseArmsx2AutoLoadLastGame'));
+
+    final footer = File(
+      'lib/screens/game_screen/game_details_card/widgets/'
+      'game_details_footer.dart',
+    ).readAsStringSync();
+    expect(footer, isNot(contains('GameUtils.formatGameName(game.name)')));
+    expect(footer, contains('_CombinedGameStatsPill'));
+    expect(footer, contains('currentGameInfo!.imageIcon'));
+    expect(footer, contains('Symbols.schedule_rounded'));
 
     final melonxNative = File(
       'packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift',
