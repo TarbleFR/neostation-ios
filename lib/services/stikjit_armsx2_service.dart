@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
+import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
@@ -11,10 +12,11 @@ import 'package:stikjit_bridge/stikjit_bridge.dart';
 
 /// Experimental built-in StikJIT path dedicated to ARMSX2.
 ///
-/// This service intentionally stays separate from the existing MeloNX service
-/// and uses a different compile-time gate, native method channel, bundle
-/// discovery path, and diagnostic file. Normal builds continue using the
-/// NeoStation+ARMSX2+JIT Shortcut unchanged.
+/// Two launch behaviours coexist deliberately:
+/// - compatibility mode keeps the original post-JIT NeoStation + armsx2://
+///   handoff, which is required when ARMSX2's intro/menu is left enabled;
+/// - Automatic Load Last Game mode stops after JIT and lets ARMSX2 continue on
+///   its own, avoiding the visible close/reopen cycle.
 class StikJitArmsx2Service {
   StikJitArmsx2Service._();
 
@@ -55,6 +57,12 @@ class StikJitArmsx2Service {
     }
 
     try {
+      final autoLoadLastGame =
+          await JitBackendPreferenceService.useArmsx2AutoLoadLastGame();
+      await _appendDiagnostic(
+        'Launch mode: ${autoLoadLastGame ? 'ARMSX2 Automatic Load Last Game' : 'Legacy post-JIT URL handoff'}\n',
+      );
+
       final pairingFile = await _ensurePairingFile();
       if (pairingFile == null) {
         _lastError = 'Pairing file selection was cancelled.';
@@ -73,13 +81,15 @@ class StikJitArmsx2Service {
         pairingFilePath: pairingFile.path,
         bundleId: _bundleId,
         gameUrl: gameUrl,
+        autoLoadLastGame: autoLoadLastGame,
       );
 
       _log.i(
         'StikJitArmsx2Service: JIT ready for ARMSX2 pid=${jit.pid} '
         'bundle=${jit.bundleId ?? 'unknown'} '
         'txm=${jit.txmPresent ?? 'unknown'} '
-        'urlOpened=${jit.gameUrlOpened ?? 'unknown'}.',
+        'urlOpened=${jit.gameUrlOpened ?? 'unknown'} '
+        'handoffSkipped=${jit.postJitHandoffSkipped}.',
       );
       for (final message in jit.logs) {
         _log.d('StikJIT ARMSX2: $message');
@@ -91,8 +101,27 @@ class StikJitArmsx2Service {
         'Detected bundle ID: ${jit.bundleId ?? 'unknown'}\n'
         'TXM: ${jit.txmPresent ?? 'unknown'}\n'
         'Native game URL opened: ${jit.gameUrlOpened ?? 'unknown'}\n'
+        'Post-JIT handoff skipped: ${jit.postJitHandoffSkipped}\n'
         'Native log:\n${jit.logs.join('\n')}\n',
       );
+
+      if (autoLoadLastGame) {
+        if (!jit.postJitHandoffSkipped) {
+          _lastError =
+              'JIT succeeded, but the ARMSX2 automatic-load path did not skip the legacy handoff.';
+          await _appendDiagnostic(
+            'STATE: ARMSX2_AUTOLOAD_HANDOFF_NOT_SKIPPED\n'
+            'Error: $_lastError\n',
+          );
+          return false;
+        }
+
+        await _appendDiagnostic(
+          'STATE: ARMSX2_AUTOLOAD_CONTINUING\n'
+          'NeoStation left ARMSX2 in control after JIT; no second armsx2:// open was requested.\n',
+        );
+        return true;
+      }
 
       if (jit.gameUrlOpened != true) {
         _lastError =
