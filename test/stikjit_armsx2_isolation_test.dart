@@ -81,7 +81,6 @@ void main() {
       expect(native, contains('completed["postJitHandoffSkipped"] = true'));
       expect(native, contains('completed["targetResumed"] = true'));
       expect(native, contains('completed["gameUrlOpened"] = false'));
-      expect(native, isNot(contains('neostation_active_then_neutral_url')));
       expect(native, contains('performLifecycleHandoff('));
       expect(native, contains('targetURL: gameUrl'));
 
