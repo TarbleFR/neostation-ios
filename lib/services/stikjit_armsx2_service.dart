@@ -12,12 +12,12 @@ import 'package:stikjit_bridge/stikjit_bridge.dart';
 
 /// Experimental built-in StikJIT path dedicated to ARMSX2.
 ///
-/// Two launch behaviours coexist deliberately:
-/// - compatibility mode keeps the original post-JIT NeoStation + armsx2://
-///   handoff, which is required when ARMSX2's intro/menu is left enabled;
-/// - Automatic Load Last Game mode resumes the exact same ARMSX2 PID that
-///   received JIT, avoiding both the NeoStation foreground round-trip and the
-///   second armsx2:// open that used to leave the emulator paused.
+/// NeoStation now auto-detects ARMSX2's Automatic Load Last Game preference
+/// whenever the ARMSX2 app container is readable through the paired-device
+/// tunnel. The saved Tools switch is kept as a fallback only:
+/// - detected ON: resume the exact same ARMSX2 PID that received JIT;
+/// - detected OFF: use the legacy NeoStation + armsx2:// handoff;
+/// - detection unavailable: preserve the saved Tools choice.
 class StikJitArmsx2Service {
   StikJitArmsx2Service._();
 
@@ -58,10 +58,11 @@ class StikJitArmsx2Service {
     }
 
     try {
-      final autoLoadLastGame =
+      final fallbackAutoLoadLastGame =
           await JitBackendPreferenceService.useArmsx2AutoLoadLastGame();
       await _appendDiagnostic(
-        'Launch mode: ${autoLoadLastGame ? 'ARMSX2 Automatic Load Last Game' : 'Legacy post-JIT URL handoff'}\n',
+        'Saved NeoStation fallback mode before ARMSX2 detection: '
+        '${fallbackAutoLoadLastGame ? 'Automatic Load Last Game' : 'Legacy post-JIT URL handoff'}\n',
       );
 
       final pairingFile = await _ensurePairingFile();
@@ -82,8 +83,28 @@ class StikJitArmsx2Service {
         pairingFilePath: pairingFile.path,
         bundleId: _bundleId,
         gameUrl: gameUrl,
-        autoLoadLastGame: autoLoadLastGame,
+        autoLoadLastGame: fallbackAutoLoadLastGame,
       );
+
+      final detectedAutoLoadLastGame = jit.detectedAutoLoadLastGame;
+      final effectiveAutoLoadLastGame =
+          jit.effectiveAutoLoadLastGame ??
+          detectedAutoLoadLastGame ??
+          fallbackAutoLoadLastGame;
+
+      // Mirror a successful ARMSX2 detection back into NeoStation so the Tools
+      // switch follows the emulator automatically. If detection is unavailable,
+      // leave the user's saved fallback untouched.
+      if (detectedAutoLoadLastGame != null &&
+          detectedAutoLoadLastGame != fallbackAutoLoadLastGame) {
+        await JitBackendPreferenceService.setUseArmsx2AutoLoadLastGame(
+          detectedAutoLoadLastGame,
+        );
+        _log.i(
+          'StikJitArmsx2Service: synchronized Tools fallback with detected '
+          'ARMSX2 Automatic Load Last Game=$detectedAutoLoadLastGame.',
+        );
+      }
 
       _log.i(
         'StikJitArmsx2Service: JIT ready for ARMSX2 pid=${jit.pid} '
@@ -91,7 +112,10 @@ class StikJitArmsx2Service {
         'txm=${jit.txmPresent ?? 'unknown'} '
         'urlOpened=${jit.gameUrlOpened ?? 'unknown'} '
         'handoffSkipped=${jit.postJitHandoffSkipped} '
-        'targetResumed=${jit.targetResumed}.',
+        'targetResumed=${jit.targetResumed} '
+        'detectedAutoLoad=${detectedAutoLoadLastGame ?? 'unavailable'} '
+        'effectiveAutoLoad=$effectiveAutoLoadLastGame '
+        'modeSource=${jit.autoLoadModeSource ?? 'unknown'}.',
       );
       for (final message in jit.logs) {
         _log.d('StikJIT ARMSX2: $message');
@@ -102,13 +126,19 @@ class StikJitArmsx2Service {
         'PID: ${jit.pid}\n'
         'Detected bundle ID: ${jit.bundleId ?? 'unknown'}\n'
         'TXM: ${jit.txmPresent ?? 'unknown'}\n'
+        'Detected ARMSX2 Automatic Load Last Game: '
+        '${detectedAutoLoadLastGame ?? 'unavailable'}\n'
+        'Detected preference key: '
+        '${jit.detectedAutoLoadPreferenceKey ?? 'unavailable'}\n'
+        'Launch mode source: ${jit.autoLoadModeSource ?? 'unknown'}\n'
+        'Effective Automatic Load Last Game: $effectiveAutoLoadLastGame\n'
         'Native game URL opened: ${jit.gameUrlOpened ?? 'unknown'}\n'
         'Post-JIT handoff skipped: ${jit.postJitHandoffSkipped}\n'
         'JIT target resumed: ${jit.targetResumed}\n'
         'Native log:\n${jit.logs.join('\n')}\n',
       );
 
-      if (autoLoadLastGame) {
+      if (effectiveAutoLoadLastGame) {
         if (!jit.postJitHandoffSkipped) {
           _lastError =
               'JIT succeeded, but the ARMSX2 automatic-load path did not skip the legacy handoff.';
