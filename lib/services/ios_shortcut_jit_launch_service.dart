@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:neostation/services/armsx2_return_state_service.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/stikjit_armsx2_service.dart';
@@ -86,9 +87,28 @@ class IosShortcutJitLaunchService {
     );
   }
 
+  static Future<bool> _finishArmsx2Launch(
+    bool launched, {
+    required bool armed,
+  }) async {
+    if (armed && !launched) {
+      await Armsx2ReturnStateService.clearAll();
+    }
+    return launched;
+  }
+
   /// Runs the selected JIT backend and optionally passes the emulator game URL.
   static Future<bool> run({required String shortcutName, String? input}) async {
     if (!Platform.isIOS) return false;
+
+    final isArmsx2Launch =
+        shortcutName == armsx2ShortcutName && input != null;
+    if (isArmsx2Launch) {
+      // Arm return + sync state before any native JIT handoff can background or
+      // terminate NeoStation. A cold-started process can then restore PS2 and
+      // synchronize ARMSX2 independently of the normal per-game lifecycle.
+      await Armsx2ReturnStateService.arm();
+    }
 
     var useStikDebugFallback = false;
     try {
@@ -126,14 +146,22 @@ class IosShortcutJitLaunchService {
         shortcutName == armsx2ShortcutName &&
         input != null &&
         StikJitArmsx2Service.isExperimentalEnabled) {
-      return StikJitArmsx2Service.launch(gameUrl: input);
+      final launched = await StikJitArmsx2Service.launch(gameUrl: input);
+      return _finishArmsx2Launch(launched, armed: isArmsx2Launch);
     }
 
     final shortcutUri = buildRunUri(shortcutName: shortcutName, input: input);
 
     try {
-      return await launchUrl(shortcutUri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        shortcutUri,
+        mode: LaunchMode.externalApplication,
+      );
+      return _finishArmsx2Launch(launched, armed: isArmsx2Launch);
     } catch (e) {
+      if (isArmsx2Launch) {
+        await Armsx2ReturnStateService.clearAll();
+      }
       _log.e('IosShortcutJitLaunchService: failed to run $shortcutName: $e');
       return false;
     }
