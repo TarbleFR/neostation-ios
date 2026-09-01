@@ -136,26 +136,6 @@ void main() {
       expect(launchFlow, contains('GameService.getGameDetails('));
       expect(launchFlow, contains('_databaseProvider.refresh();'));
 
-      final appScreen = File('lib/screens/app_screen.dart').readAsStringSync();
-      expect(appScreen, contains('skipIosReturnScan'));
-      expect(appScreen, contains('shouldSkipStartupScan()'));
-      expect(
-        appScreen,
-        contains('startupScanPending && !skipIosReturnScan && mounted'),
-      );
-
-      final systemContent = File(
-        'lib/screens/systems_screen/system_content.dart',
-      ).readAsStringSync();
-      expect(systemContent, contains('canReuseCachedIosLibrary'));
-      expect(systemContent, contains('configProvider.hasDetectedSystems'));
-      expect(systemContent, contains('!configProvider.pendingStartupScan'));
-      expect(
-        systemContent,
-        contains('configProvider.scanCompleted || canReuseCachedIosLibrary'),
-      );
-      expect(systemContent, contains('_scheduleStartupPhaseProbe'));
-
       final melonxNative = File(
         'packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift',
       ).readAsStringSync();

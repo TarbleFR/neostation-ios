@@ -9,7 +9,6 @@ import 'package:neostation/services/systems_update_service.dart';
 import 'package:neostation/widgets/update_dialog.dart';
 import 'package:neostation/widgets/systems_update_dialog.dart';
 import 'package:neostation/services/logger_service.dart';
-import 'package:neostation/services/game_session_persistence.dart';
 
 import '../widgets/fixed_header.dart';
 import 'systems_screen/system_content.dart';
@@ -189,27 +188,11 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     // timeouts) left the Systems tab completely blank until they timed out. The
     // scan flips isScanning/isLoading, so the user sees a spinner then content.
     final startupScanPending = configProvider.consumeStartupScan();
-
-    // iOS emulator-return guard: if iOS reclaimed NeoStation while ARMSX2 (or
-    // another external emulator) was in front, the database/library we built
-    // before launch is still authoritative. Do not treat that foreground return
-    // like an ordinary cold boot and scan every playlist again. Consume the
-    // one-shot marker here, before scanSystems() can enter its scanning UI.
-    final skipIosReturnScan =
-        Platform.isIOS && await GameSessionPersistence.shouldSkipStartupScan();
-    if (skipIosReturnScan) {
-      await GameSessionPersistence.consumeSkipStartupScan();
-      _log.i(
-        'AppScreen: iOS emulator return detected; reusing cached library and skipping startup scan.',
-      );
-    }
-
     _log.i(
-      'AppScreen: startupScanPending=$startupScanPending, '
-      'skipIosReturnScan=$skipIosReturnScan, mounted=$mounted',
+      'AppScreen: startupScanPending=$startupScanPending, mounted=$mounted',
     );
     Future<void>? initialScan;
-    if (startupScanPending && !skipIosReturnScan && mounted) {
+    if (startupScanPending && mounted) {
       // A default launcher may be started before removable storage has mounted.
       // Let the startup scan wait for it rather than interpreting an empty SD
       // card as a library whose ROMs were deleted.
@@ -376,7 +359,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
     _currentInstance?._gamepadNav.deactivate();
   }
 
-  /// Static hook to resume global gamepad and keyboard navigation.
+  /// Static hook to resume global navigation input.
   static void activateNavigation() {
     _currentInstance?._gamepadNav.activate();
   }

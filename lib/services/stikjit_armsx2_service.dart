@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
-import 'package:neostation/services/game_session_persistence.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
@@ -58,25 +57,6 @@ class StikJitArmsx2Service {
       return false;
     }
 
-    // Write this BEFORE the native process-control handoff. ARMSX2 can create
-    // enough memory pressure for iOS to reclaim NeoStation while the game owns
-    // the foreground. If that happens, the next NeoStation process consumes
-    // this one-shot flag and restores the existing library instead of scanning
-    // every playlist as if this were an ordinary cold launch.
-    await GameSessionPersistence.markSkipStartupScan();
-    await _appendDiagnostic('STATE: IOS_COLD_RETURN_GUARD_ARMED\n');
-
-    Future<bool> fail(String diagnosticState, String error) async {
-      _lastError = error;
-      await GameSessionPersistence.clearSkipStartupScan();
-      await _appendDiagnostic(
-        'STATE: $diagnosticState\n'
-        'Error: $_lastError\n'
-        'iOS cold-return guard cleared because ARMSX2 launch did not complete.\n',
-      );
-      return false;
-    }
-
     try {
       final fallbackAutoLoadLastGame =
           await JitBackendPreferenceService.useArmsx2AutoLoadLastGame();
@@ -87,11 +67,10 @@ class StikJitArmsx2Service {
 
       final pairingFile = await _ensurePairingFile();
       if (pairingFile == null) {
+        _lastError = 'Pairing file selection was cancelled.';
         _log.w('StikJitArmsx2Service: pairing file selection was cancelled.');
-        return fail(
-          'CANCELLED',
-          'Pairing file selection was cancelled.',
-        );
+        await _appendDiagnostic('STATE: CANCELLED\nError: $_lastError\n');
+        return false;
       }
 
       await _appendDiagnostic(
@@ -161,17 +140,23 @@ class StikJitArmsx2Service {
 
       if (effectiveAutoLoadLastGame) {
         if (!jit.postJitHandoffSkipped) {
-          return fail(
-            'ARMSX2_AUTOLOAD_HANDOFF_NOT_SKIPPED',
-            'JIT succeeded, but the ARMSX2 automatic-load path did not skip the legacy handoff.',
+          _lastError =
+              'JIT succeeded, but the ARMSX2 automatic-load path did not skip the legacy handoff.';
+          await _appendDiagnostic(
+            'STATE: ARMSX2_AUTOLOAD_HANDOFF_NOT_SKIPPED\n'
+            'Error: $_lastError\n',
           );
+          return false;
         }
 
         if (!jit.targetResumed) {
-          return fail(
-            'ARMSX2_AUTOLOAD_RESUME_FAILED',
-            'JIT succeeded, but NeoStation could not resume the same ARMSX2 process after JIT.',
+          _lastError =
+              'JIT succeeded, but NeoStation could not resume the same ARMSX2 process after JIT.';
+          await _appendDiagnostic(
+            'STATE: ARMSX2_AUTOLOAD_RESUME_FAILED\n'
+            'Error: $_lastError\n',
           );
+          return false;
         }
 
         await _appendDiagnostic(
@@ -182,10 +167,13 @@ class StikJitArmsx2Service {
       }
 
       if (jit.gameUrlOpened != true) {
-        return fail(
-          'ARMSX2_GAME_URL_POST_JIT_OPEN_FAILED',
-          'JIT succeeded, but NeoStation could not complete the direct ARMSX2 game handoff.',
+        _lastError =
+            'JIT succeeded, but NeoStation could not complete the direct ARMSX2 game handoff.';
+        await _appendDiagnostic(
+          'STATE: ARMSX2_GAME_URL_POST_JIT_OPEN_FAILED\n'
+          'Error: $_lastError\n',
         );
+        return false;
       }
 
       await _appendDiagnostic(
@@ -194,18 +182,16 @@ class StikJitArmsx2Service {
       );
       return true;
     } catch (error, stackTrace) {
+      _lastError = error.toString();
       _log.e(
         'StikJitArmsx2Service: built-in JIT launch failed: $error',
         error: error,
         stackTrace: stackTrace,
       );
-      await GameSessionPersistence.clearSkipStartupScan();
-      _lastError = error.toString();
       await _appendDiagnostic(
         'STATE: ERROR\n'
         'Error: $error\n'
-        'Stack: $stackTrace\n'
-        'iOS cold-return guard cleared because ARMSX2 launch failed.\n',
+        'Stack: $stackTrace\n',
       );
       return false;
     }
