@@ -16,9 +16,11 @@ public final class NeoStationStikjitBridgePlugin: NSObject, FlutterPlugin {
 /// Independent StikJIT path for ARMSX2.
 ///
 /// This class deliberately does not route through, subclass, or modify the
-/// MeloNX bridge. It launches the detected ARMSX2 process suspended, enables
-/// JIT on that exact PID, brings the existing NeoStation process back to the
-/// foreground, and finally delivers the already-exported ARMSX2 game URL.
+/// MeloNX bridge. It launches the detected ARMSX2 process suspended and enables
+/// JIT on that exact PID. The legacy mode then brings NeoStation back to the
+/// foreground and delivers the selected ARMSX2 URL. The optional automatic-load
+/// mode stops immediately after JIT so ARMSX2 can continue through its own
+/// "Automatic Load Last Game" startup without being opened a second time.
 public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
   private static let channelName = "neostation/stikjit_armsx2"
   private static let jitQueue = DispatchQueue(
@@ -79,8 +81,11 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
       return
     }
 
+    let autoLoadLastGame = arguments["autoLoadLastGame"] as? Bool ?? false
     let backgroundTask = Armsx2StikJitBackgroundTask(
-      name: "ARMSX2 post-JIT handoff"
+      name: autoLoadLastGame
+        ? "ARMSX2 automatic-load JIT"
+        : "ARMSX2 post-JIT handoff"
     )
 
     Self.jitQueue.async {
@@ -91,10 +96,28 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
         )
         var logs = response["logs"] as? [String] ?? []
         logs.append("STATE: ARMSX2_JIT_PID_READY")
+
+        if autoLoadLastGame {
+          logs.append("STATE: ARMSX2_AUTOLOAD_HANDOFF_SKIPPED")
+          logs.append(
+            "ARMSX2 Automatic Load Last Game mode is enabled. NeoStation will not reclaim the foreground or send the game URL a second time."
+          )
+          response["logs"] = logs
+          response["postJitHandoffSkipped"] = true
+          response["gameUrlOpened"] = false
+
+          DispatchQueue.main.async {
+            backgroundTask.end()
+            result(response)
+          }
+          return
+        }
+
         logs.append(
           "JIT detached. Re-acquiring NeoStation foreground before delivering the ARMSX2 game URL."
         )
         response["logs"] = logs
+        response["postJitHandoffSkipped"] = false
 
         guard let neoStationBundleId = Bundle.main.bundleIdentifier,
               !neoStationBundleId.isEmpty else {
