@@ -15,8 +15,9 @@ import 'package:stikjit_bridge/stikjit_bridge.dart';
 /// Two launch behaviours coexist deliberately:
 /// - compatibility mode keeps the original post-JIT NeoStation + armsx2://
 ///   handoff, which is required when ARMSX2's intro/menu is left enabled;
-/// - Automatic Load Last Game mode stops after JIT and lets ARMSX2 continue on
-///   its own, avoiding the visible close/reopen cycle.
+/// - Automatic Load Last Game mode resumes the exact same ARMSX2 PID that
+///   received JIT, avoiding both the NeoStation foreground round-trip and the
+///   second armsx2:// open that used to leave the emulator paused.
 class StikJitArmsx2Service {
   StikJitArmsx2Service._();
 
@@ -89,7 +90,8 @@ class StikJitArmsx2Service {
         'bundle=${jit.bundleId ?? 'unknown'} '
         'txm=${jit.txmPresent ?? 'unknown'} '
         'urlOpened=${jit.gameUrlOpened ?? 'unknown'} '
-        'handoffSkipped=${jit.postJitHandoffSkipped}.',
+        'handoffSkipped=${jit.postJitHandoffSkipped} '
+        'targetResumed=${jit.targetResumed}.',
       );
       for (final message in jit.logs) {
         _log.d('StikJIT ARMSX2: $message');
@@ -102,6 +104,7 @@ class StikJitArmsx2Service {
         'TXM: ${jit.txmPresent ?? 'unknown'}\n'
         'Native game URL opened: ${jit.gameUrlOpened ?? 'unknown'}\n'
         'Post-JIT handoff skipped: ${jit.postJitHandoffSkipped}\n'
+        'JIT target resumed: ${jit.targetResumed}\n'
         'Native log:\n${jit.logs.join('\n')}\n',
       );
 
@@ -116,9 +119,19 @@ class StikJitArmsx2Service {
           return false;
         }
 
+        if (!jit.targetResumed) {
+          _lastError =
+              'JIT succeeded, but NeoStation could not resume the same ARMSX2 process after JIT.';
+          await _appendDiagnostic(
+            'STATE: ARMSX2_AUTOLOAD_RESUME_FAILED\n'
+            'Error: $_lastError\n',
+          );
+          return false;
+        }
+
         await _appendDiagnostic(
-          'STATE: ARMSX2_AUTOLOAD_CONTINUING\n'
-          'NeoStation left ARMSX2 in control after JIT; no second armsx2:// open was requested.\n',
+          'STATE: ARMSX2_AUTOLOAD_RESUMED\n'
+          'The same JIT-enabled ARMSX2 process was resumed directly; no second armsx2:// open was requested.\n',
         );
         return true;
       }
