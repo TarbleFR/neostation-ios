@@ -83,6 +83,7 @@ class StikjitBridge {
       gameUrlOpened: data['gameUrlOpened'] as bool?,
       postJitHandoffSkipped:
           data['postJitHandoffSkipped'] as bool? ?? false,
+      targetResumed: data['targetResumed'] as bool? ?? false,
       logs: logs,
     );
   }
@@ -131,6 +132,7 @@ class StikjitLaunchResult {
     required this.txmPresent,
     required this.gameUrlOpened,
     this.postJitHandoffSkipped = false,
+    this.targetResumed = false,
     required this.logs,
   });
 
@@ -139,5 +141,6 @@ class StikjitLaunchResult {
   final bool? txmPresent;
   final bool? gameUrlOpened;
   final bool postJitHandoffSkipped;
+  final bool targetResumed;
   final List<String> logs;
 }
