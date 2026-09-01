@@ -52,15 +52,17 @@ void main() {
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools exposes Pairing File and one global fallback switch', () {
+  test('Tools exposes Pairing File, global fallback, and ARMSX2 launch mode', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
     ).readAsStringSync();
 
-    expect(tools, contains('int getItemCount() => 2;'));
+    expect(tools, contains('int getItemCount() => 3;'));
     expect(tools, contains('JitFallbackLocale.title'));
+    expect(tools, contains('Armsx2JitModeLocale.title'));
     expect(tools, contains('CustomToggleSwitch'));
     expect(tools, contains('setUseStikDebugFallback'));
+    expect(tools, contains('setUseArmsx2AutoLoadLastGame'));
   });
 }
