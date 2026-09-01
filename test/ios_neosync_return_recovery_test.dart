@@ -79,6 +79,22 @@ void main() {
     );
   });
 
+  test('iOS PS2 post-close sync reuses the ARMSX2-aware menu detector', () {
+    final adapter = File(
+      'lib/sync/providers/neo_sync_adapter.dart',
+    ).readAsStringSync();
+
+    expect(adapter, contains('final isIosPs2 ='));
+    expect(adapter, contains('Platform.isIOS'));
+    expect(adapter, contains("game.systemFolderName?.toLowerCase() == 'ps2'"));
+    expect(adapter, contains("startsWith('armsx2://')"));
+    expect(adapter, contains('await Future.delayed(const Duration(seconds: 1));'));
+    expect(adapter, contains('await _provider.detectGameSaveFiles(game);'));
+
+    // Non-PS2 providers retain the existing post-close implementation.
+    expect(adapter, contains('await _provider.syncGameSavesAfterClose(game);'));
+  });
+
   test('memory is released before an external game while ROM scanning stays guarded', () {
     final launchFlow = File(
       'lib/screens/game_screen/my_games_list/launch_flow.dart',
