@@ -14,6 +14,13 @@ extension _LaunchFlow on _SystemGamesListState {
   /// Frees maximum RAM before handing off to the emulator.
   /// Play time tracking continues unaffected in GameService.
   void _freeMemoryForGameplay() {
+    // iOS frontends remain suspended while ARMSX2/MeloNX/RPCS3/RetroArch is in
+    // front. Dropping the whole playlist here makes the eventual return look
+    // like a cold NeoStation startup and forces an unnecessary database reload.
+    // Video resources are already released by _stopVideoAndCleanup(), so keep
+    // the menu/list/background intact on iOS for an instant resume.
+    if (Platform.isIOS) return;
+
     // Clear all cached images — system backgrounds, logos, screenshots.
     imageCache.clear();
     imageCache.clearLiveImages();
@@ -94,36 +101,89 @@ extension _LaunchFlow on _SystemGamesListState {
 
     GamepadNavigationManager.reactivate();
 
-    // Reload games list (was cleared to free RAM during gameplay).
-    try {
-      final updatedGames = await GameService.loadGamesForSystem(widget.system);
-      if (!mounted) return;
+    if (Platform.isIOS) {
+      // NeoStation never destroyed its playlist on iOS. Refresh only the game
+      // that was just played so play time/favorite/metadata changes appear,
+      // without reloading every playlist or notifying the whole database tree.
+      try {
+        final currentGame = _selectedGame;
+        if (currentGame != null) {
+          SystemModel detailsSystem = widget.system;
+          if ((widget.system.folderName == 'all' ||
+                  widget.system.folderName == SystemFolderNames.favorites) &&
+              currentGame.systemFolderName != null) {
+            final resolved = await SystemRepository.getSystemByFolderName(
+              currentGame.systemFolderName!,
+            );
+            if (resolved != null) detailsSystem = resolved;
+          }
 
-      final previousRomname = _selectedGame?.romname;
-      final gameIndex = previousRomname != null
-          ? updatedGames.indexWhere((g) => g.romname == previousRomname)
-          : -1;
-
-      rebuild(() {
-        _games = updatedGames;
-        _gameIndexMap = {
-          for (int i = 0; i < updatedGames.length; i++) updatedGames[i]: i,
-        };
-        if (gameIndex != -1) {
-          _selectedGame = updatedGames[gameIndex];
-          _selectedGameIndex = gameIndex;
+          final updatedGame = await GameService.getGameDetails(
+            detailsSystem,
+            currentGame.romname,
+          );
+          if (mounted && updatedGame != null) {
+            final index = _games.indexWhere(
+              (game) => game.romname == currentGame.romname,
+            );
+            rebuild(() {
+              if (index != -1) {
+                _games[index] = updatedGame;
+                _selectedGameIndex = index;
+              }
+              _selectedGame = updatedGame;
+              _gameIndexMap = {
+                for (int i = 0; i < _games.length; i++) _games[i]: i,
+              };
+            });
+          }
         }
-      });
-      _databaseProvider.refresh();
-    } catch (e) {
-      _SystemGamesListState._log.e(
-        'Error refreshing game data after gameplay: $e',
-      );
+      } catch (e) {
+        _SystemGamesListState._log.e(
+          'Error refreshing played game after iOS emulator return: $e',
+        );
+      }
+
+      // The preview was intentionally disposed before launch. Re-arm it without
+      // rebuilding the playlist so the user returns to exactly the same menu.
+      if (mounted &&
+          _selectedGame != null &&
+          !_showVideo &&
+          _videoTimer == null &&
+          !_isGameLaunching) {
+        _startVideoTimer();
+      }
+    } else {
+      // Desktop/Android still release the list to maximize RAM, so rebuild it
+      // on return exactly as before.
+      try {
+        final updatedGames = await GameService.loadGamesForSystem(widget.system);
+        if (!mounted) return;
+
+        final previousRomname = _selectedGame?.romname;
+        final gameIndex = previousRomname != null
+            ? updatedGames.indexWhere((g) => g.romname == previousRomname)
+            : -1;
+
+        rebuild(() {
+          _games = updatedGames;
+          _gameIndexMap = {
+            for (int i = 0; i < updatedGames.length; i++) updatedGames[i]: i,
+          };
+          if (gameIndex != -1) {
+            _selectedGame = updatedGames[gameIndex];
+            _selectedGameIndex = gameIndex;
+          }
+        });
+        _databaseProvider.refresh();
+      } catch (e) {
+        _SystemGamesListState._log.e(
+          'Error refreshing game data after gameplay: $e',
+        );
+      }
     }
 
-    // Defer to after the games-list reload settles and the details card has
-    // re-registered its callback, otherwise this fires against the old/unmounted
-    // card and no-ops — which is why a manual refresh was previously needed.
+    // Defer until the details card has re-registered its callback.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshAchievementsCallback?.call();
     });
