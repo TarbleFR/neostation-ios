@@ -51,11 +51,13 @@ class StikjitBridge {
     required String pairingFilePath,
     required String bundleId,
     required String gameUrl,
+    bool autoLoadLastGame = false,
   }) async {
     final raw = await _armsx2Channel.invokeMethod<Object?>('enableArmsx2Jit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
       'gameUrl': gameUrl,
+      'autoLoadLastGame': autoLoadLastGame,
     });
 
     if (raw is! Map) {
@@ -79,6 +81,8 @@ class StikjitBridge {
       bundleId: data['bundleId']?.toString(),
       txmPresent: data['txmPresent'] as bool?,
       gameUrlOpened: data['gameUrlOpened'] as bool?,
+      postJitHandoffSkipped:
+          data['postJitHandoffSkipped'] as bool? ?? false,
       logs: logs,
     );
   }
@@ -126,6 +130,7 @@ class StikjitLaunchResult {
     required this.bundleId,
     required this.txmPresent,
     required this.gameUrlOpened,
+    this.postJitHandoffSkipped = false,
     required this.logs,
   });
 
@@ -133,5 +138,6 @@ class StikjitLaunchResult {
   final String? bundleId;
   final bool? txmPresent;
   final bool? gameUrlOpened;
+  final bool postJitHandoffSkipped;
   final List<String> logs;
 }
