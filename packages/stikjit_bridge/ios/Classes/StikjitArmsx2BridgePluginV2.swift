@@ -6,23 +6,20 @@ import UIKit
 
 /// Second-generation ARMSX2 bridge.
 ///
-/// The original automatic-load path resumed ARMSX2 directly from process
-/// control. That launches the game correctly, but it does not reproduce the
-/// normal iOS application transition used by RetroArch and by the validated
-/// MeloNX bridge. On some devices NeoStation is then reclaimed while ARMSX2
-/// owns the foreground, so returning from ARMSX2 cold-starts NeoStation.
+/// ARMSX2 is launched suspended and receives JIT on that exact PID. In
+/// Automatic Load Last Game mode the target itself eventually executes the
+/// universal JIT detach command. Once StikJIT returns, the debugger has already
+/// detached from the original ARMSX2 PID, so NeoStation must not add another
+/// process-control resume or URL activation on top of that transition.
 ///
-/// V2 mirrors the proven MeloNX lifecycle exactly:
+/// Automatic-load path:
 /// 1. launch ARMSX2 suspended;
 /// 2. enable JIT on that PID;
-/// 3. detect Automatic Load Last Game;
-/// 4. re-activate the existing NeoStation PID;
-/// 5. wait until UIApplication is actually active;
-/// 6. open ARMSX2 through UIKit.
+/// 3. universal.js handles JIT26Detach / debugger `D`;
+/// 4. detect the persisted Automatic Load Last Game preference;
+/// 5. if enabled, end the NeoStation background task and do nothing else.
 ///
-/// In automatic-load mode the final URL is deliberately the neutral
-/// `armsx2://` URL. The selected game URL is NOT sent a second time, so ARMSX2
-/// can load its own last game without the old double-launch regression.
+/// Legacy mode (Automatic Load disabled) retains the explicit game-URL handoff.
 public final class StikjitArmsx2BridgePluginV2: NSObject, FlutterPlugin {
   private static let channelName = "neostation/stikjit_armsx2"
   private static let jitQueue = DispatchQueue(
@@ -118,9 +115,37 @@ public final class StikjitArmsx2BridgePluginV2: NSObject, FlutterPlugin {
         }
         response["logs"] = logs
 
+        if effectiveAutoLoad {
+          // StikJIT's universal script leaves its loop only after the target
+          // requests JIT26Detach(), whose handler sends debugger command `D`.
+          // StikJIT.enableJIT therefore returns only after the original ARMSX2
+          // PID has been detached and allowed to continue. Do not perturb that
+          // normal transition with another process_control or UIApplication URL.
+          var completed = response
+          var completedLogs = completed["logs"] as? [String] ?? []
+          completed["postJitHandoffSkipped"] = true
+          completed["gameUrlOpened"] = false
+          completed["targetResumed"] = true
+          completed["neutralActivationOpened"] = false
+          completed["resumeStrategy"] = "stikjit_detach_only"
+          completedLogs.append("STATE: ARMSX2_V2_DETACH_ONLY")
+          completedLogs.append(
+            "Automatic Load is enabled. StikJIT already detached from the JIT-enabled ARMSX2 PID; NeoStation performs no post-JIT process-control resume and opens no second ARMSX2 URL."
+          )
+          completed["logs"] = completedLogs
+
+          DispatchQueue.main.async {
+            backgroundTask.end()
+            result(completed)
+          }
+          return
+        }
+
+        // Automatic Load is disabled: keep the explicit game-specific URL
+        // handoff that the frontend requires in this mode.
         self.performLifecycleHandoff(
-          targetURL: effectiveAutoLoad ? URL(string: "armsx2://")! : gameUrl,
-          automaticLoad: effectiveAutoLoad,
+          targetURL: gameUrl,
+          automaticLoad: false,
           response: response,
           pairingFilePath: pairingFilePath,
           backgroundTask: backgroundTask,
@@ -170,10 +195,8 @@ public final class StikjitArmsx2BridgePluginV2: NSObject, FlutterPlugin {
     let ddiPaths = DDIPaths.default(in: stikRoot)
     var logs = [String]()
 
-    // Do not call prepareDevice separately here. The public StikJIT
-    // enableJIT(...ddiPaths...) API already performs device preparation before
-    // attaching. Avoiding the duplicate pass reduces work and retained state in
-    // NeoStation before it is suspended behind ARMSX2.
+    // The public enableJIT(...ddiPaths...) API already performs device
+    // preparation. Keep a single preparation pass.
     logs.append("STATE: ARMSX2_V2_SINGLE_PREPARE_PATH")
 
     let runtime = try Armsx2IdeviceRuntime()
@@ -362,9 +385,6 @@ public final class StikjitArmsx2BridgePluginV2: NSObject, FlutterPlugin {
             opened
               ? "STATE: ARMSX2_V2_NEUTRAL_ACTIVATION_ACCEPTED"
               : "STATE: ARMSX2_V2_NEUTRAL_ACTIVATION_REJECTED"
-          )
-          completedLogs.append(
-            "Automatic Load mode used only armsx2://; no game-specific URL was sent after JIT."
           )
         } else {
           completed["postJitHandoffSkipped"] = false
