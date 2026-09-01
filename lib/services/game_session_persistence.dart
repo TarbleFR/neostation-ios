@@ -3,8 +3,11 @@ import 'package:neostation/services/logger_service.dart';
 
 /// Service responsible for persisting game session state across application restarts.
 ///
-/// Primarily used on Android to ensure that playtime can be recovered even if the
-/// OS terminates the application process while an emulator is running.
+/// Android stores the full active session so playtime can be recovered after a
+/// process kill. iOS also uses the lightweight startup-scan guard: memory-heavy
+/// external emulators such as ARMSX2 can cause iOS to reclaim NeoStation while
+/// the game is in front, and the next foreground should restore the existing
+/// library instead of performing a full ROM scan again.
 class GameSessionPersistence {
   static const String _keyGameActive = 'game_session_active';
   static const String _keySystemFolderName = 'game_session_system_folder';
@@ -29,6 +32,44 @@ class GameSessionPersistence {
       await prefs.setBool(_keySkipStartupScan, true);
     } catch (e) {
       _log.e('Error saving game session: $e');
+    }
+  }
+
+  /// Arms only the one-shot startup-scan guard.
+  ///
+  /// iOS does not need Android's full process/session recovery metadata, but it
+  /// does need to remember that a cold relaunch happened while an external game
+  /// was active. The flag is consumed by SqliteConfigProvider.scanSystems().
+  static Future<void> markSkipStartupScan() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keySkipStartupScan, true);
+    } catch (e) {
+      _log.e('Error marking startup scan to be skipped: $e');
+    }
+  }
+
+  /// Clears only the one-shot startup-scan guard after a normal emulator return.
+  static Future<void> clearSkipStartupScan() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keySkipStartupScan);
+    } catch (e) {
+      _log.e('Error clearing startup scan skip flag: $e');
+    }
+  }
+
+  /// Peeks at the startup-scan guard without consuming it.
+  ///
+  /// This lets the early provider initialization use a lightweight warm-return
+  /// path while leaving the flag available for the later ROM scan gate.
+  static Future<bool> shouldSkipStartupScan() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_keySkipStartupScan) ?? false;
+    } catch (e) {
+      _log.e('Error reading startup scan skip flag: $e');
+      return false;
     }
   }
 
