@@ -125,16 +125,31 @@ void main() {
       expect(media, contains('availableHeight < 175.r'));
       expect(media, contains('return LayoutBuilder('));
 
+      // ARMSX2 is the heaviest iOS handoff. Keep the proven pre-9c memory
+      // strategy: release the playlist/background before the emulator owns the
+      // foreground, then reload from SQLite on return. This is a DB reload, not
+      // a ROM/library scan, and avoids iOS jetsamming NeoStation behind ARMSX2.
       final launchFlow = File(
         'lib/screens/game_screen/my_games_list/launch_flow.dart',
       ).readAsStringSync();
-      expect(launchFlow, contains('if (Platform.isIOS) return;'));
+      expect(launchFlow, isNot(contains('if (Platform.isIOS) return;')));
+      expect(launchFlow, contains('imageCache.clear();'));
+      expect(launchFlow, contains('_games = [];'));
+      expect(launchFlow, contains('GameService.loadGamesForSystem(widget.system)'));
+
+      // The iOS game identity must be durable before StikJIT/ARMSX2 can suspend
+      // the Flutter process. Never rely only on an unawaited preference write.
+      final launchUtils = File(
+        'lib/utils/game_launch_utils.dart',
+      ).readAsStringSync();
       expect(
-        launchFlow,
-        contains('Error refreshing played game after iOS emulator return'),
+        launchUtils,
+        contains('await GameSessionPersistence.saveGameSession('),
       );
-      expect(launchFlow, contains('GameService.getGameDetails('));
-      expect(launchFlow, contains('_databaseProvider.refresh();'));
+      expect(
+        launchUtils,
+        contains('await GameSessionPersistence.clearGameSession();'),
+      );
 
       final appScreen = File('lib/screens/app_screen.dart').readAsStringSync();
       expect(appScreen, contains('skipIosReturnScan'));

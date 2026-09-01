@@ -142,10 +142,7 @@ class GameSessionManager {
     _currentGameSystem = system;
     _currentGame = game;
 
-    if (Platform.isAndroid || Platform.isIOS) {
-      // Android uses this record for playtime recovery. iOS additionally uses
-      // the game identity to resume NeoSync if ARMSX2 or another heavy external
-      // emulator causes the NeoStation process to be reclaimed in background.
+    if (Platform.isAndroid) {
       unawaited(
         GameSessionPersistence.saveGameSession(
           systemFolderName: system.folderName,
@@ -153,6 +150,12 @@ class GameSessionManager {
           startTimestamp: _gameLaunchTime!.millisecondsSinceEpoch,
         ),
       );
+    } else if (Platform.isIOS) {
+      // iOS may reclaim NeoStation while a memory-heavy emulator such as
+      // ARMSX2 owns the foreground. Arm a one-shot cold-return guard so, if that
+      // happens, the next NeoStation process restores the existing DB/library
+      // instead of scanning every ROM playlist again.
+      unawaited(GameSessionPersistence.markSkipStartupScan());
     }
 
     _startPlaytimeTimer();
@@ -216,9 +219,8 @@ class GameSessionManager {
       await platform.invokeMethod('setGamepadBlock', {'block': false});
       await GameSessionPersistence.clearGameSession();
     } else if (Platform.isIOS) {
-      // A normal warm return means NeoStation survived. The active-game
-      // identity is cleared by the iOS NeoSync recovery path after upload; only
-      // the one-shot startup scan marker belongs to session teardown here.
+      // A normal warm return means NeoStation survived; there is no future cold
+      // startup to protect, so clear the one-shot marker immediately.
       await GameSessionPersistence.clearSkipStartupScan();
     } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       if (_onProcessExitCallback != null) {

@@ -3,21 +3,32 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('iOS emulator return persists game identity for NeoSync recovery', () {
+  test('iOS emulator return persists game identity before the native handoff', () {
+    final launchUtils = File(
+      'lib/utils/game_launch_utils.dart',
+    ).readAsStringSync();
+    expect(
+      launchUtils,
+      contains('await GameSessionPersistence.saveGameSession('),
+    );
+    expect(launchUtils, contains('systemFolderName: system.folderName'));
+    expect(launchUtils, contains('filename: game.romname'));
+    expect(
+      launchUtils,
+      contains('await GameSessionPersistence.clearGameSession();'),
+    );
+
+    // GameSessionManager keeps the lightweight #71 scan guard on iOS. The full
+    // identity is written earlier by launchGameWithDialog, so there is no late
+    // unawaited write that can race a cold return and resurrect stale metadata.
     final sessionManager = File(
       'lib/services/game/game_session_manager.dart',
     ).readAsStringSync();
+    expect(sessionManager, contains('else if (Platform.isIOS)'));
+    expect(sessionManager, contains('GameSessionPersistence.markSkipStartupScan()'));
     expect(
       sessionManager,
-      contains('if (Platform.isAndroid || Platform.isIOS)'),
-    );
-    expect(
-      sessionManager,
-      contains('GameSessionPersistence.saveGameSession('),
-    );
-    expect(
-      sessionManager,
-      isNot(contains('unawaited(GameSessionPersistence.markSkipStartupScan())')),
+      isNot(contains('if (Platform.isAndroid || Platform.isIOS)')),
     );
 
     final persistence = File(
@@ -65,6 +76,24 @@ void main() {
     expect(
       lifecycle,
       contains('requireMinimumElapsed: true'),
+    );
+  });
+
+  test('memory is released before an external game while ROM scanning stays guarded', () {
+    final launchFlow = File(
+      'lib/screens/game_screen/my_games_list/launch_flow.dart',
+    ).readAsStringSync();
+    expect(launchFlow, contains('imageCache.clear();'));
+    expect(launchFlow, contains('imageCache.clearLiveImages();'));
+    expect(launchFlow, contains('_games = [];'));
+    expect(launchFlow, contains('context.read<SystemBackgroundProvider>().clear();'));
+    expect(launchFlow, contains('GameService.loadGamesForSystem(widget.system)'));
+
+    final appScreen = File('lib/screens/app_screen.dart').readAsStringSync();
+    expect(appScreen, contains('skipIosReturnScan'));
+    expect(
+      appScreen,
+      contains('startupScanPending && !skipIosReturnScan && mounted'),
     );
   });
 
