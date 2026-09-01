@@ -180,6 +180,28 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   @override
   Future<SyncResult> syncGameSavesAfterClose(GameModel game) async {
     try {
+      final isIosPs2 =
+          Platform.isIOS &&
+          (game.systemFolderName?.toLowerCase() == 'ps2' ||
+              (game.romPath?.toLowerCase().startsWith('armsx2://') ?? false));
+
+      if (isIosPs2) {
+        // The legacy post-close helper still finishes its upload through the
+        // RetroArch saves root. That is wrong for ARMSX2: its memory cards and
+        // save states live under the dedicated security-scoped ARMSX2 NeoSync
+        // root. The normal per-game detector already has the correct iOS PS2
+        // implementation and is the exact path used when the user revisits a
+        // game in the menu, where ARMSX2 synchronization is known to work.
+        //
+        // Give ARMSX2 a moment to flush the card/state, then reuse that proven
+        // ARMSX2-aware path. It scans both shared memory cards and save states
+        // and routes uploads through _uploadArmsx2File instead of pretending
+        // they belong to RetroArch.
+        await Future.delayed(const Duration(seconds: 1));
+        await _provider.detectGameSaveFiles(game);
+        return SyncResult.ok(message: 'ARMSX2 iOS post-game sync completed');
+      }
+
       await _provider.syncGameSavesAfterClose(game);
       return SyncResult.ok();
     } catch (e) {
