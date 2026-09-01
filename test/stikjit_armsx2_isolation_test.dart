@@ -119,8 +119,22 @@ void main() {
         'lib/screens/game_screen/game_details_card/tabs/'
         'game_details_screenshot_video_tab.dart',
       ).readAsStringSync();
-      expect(media, contains('maxWidth: 220.r'));
-      expect(media, contains('maxHeight: 165.r'));
+      expect(media, contains('final headerClearance = 58.r'));
+      expect(media, contains('final footerClearance = 72.r'));
+      expect(media, contains('availableWidth < 230.r'));
+      expect(media, contains('availableHeight < 175.r'));
+      expect(media, contains('return LayoutBuilder('));
+
+      final launchFlow = File(
+        'lib/screens/game_screen/my_games_list/launch_flow.dart',
+      ).readAsStringSync();
+      expect(launchFlow, contains('if (Platform.isIOS) return;'));
+      expect(
+        launchFlow,
+        contains('Error refreshing played game after iOS emulator return'),
+      );
+      expect(launchFlow, contains('GameService.getGameDetails('));
+      expect(launchFlow, contains('_databaseProvider.refresh();'));
 
       final melonxNative = File(
         'packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift',
