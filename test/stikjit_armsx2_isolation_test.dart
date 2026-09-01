@@ -61,7 +61,23 @@ void main() {
       expect(composite, contains('ARMSX2_LAUNCH_MODE_AUTO_DETECTED'));
       expect(composite, contains('ARMSX2_LAUNCH_MODE_FALLBACK'));
       expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_RESUME_REQUESTED'));
+      expect(
+        composite,
+        contains('ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_REQUESTED'),
+      );
+      expect(
+        composite,
+        contains('ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_ACCEPTED'),
+      );
+      expect(composite, contains('URL(string: "armsx2://")'));
+      expect(
+        composite,
+        contains('UIApplication.shared.open(neutralActivationURL'),
+      );
+      expect(composite, contains('uiapplication_neutral_url'));
+      // Keep the previous same-PID process-control route only as a safety
+      // fallback if iOS rejects the neutral UIKit activation.
+      expect(composite, contains('resumeAutomaticLoadTargetViaProcessControl'));
       expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
       expect(composite, contains('resumedPID == UInt64(originalPID)'));
       expect(composite, contains('targetResumed'));
