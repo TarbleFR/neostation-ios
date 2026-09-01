@@ -111,36 +111,39 @@ class _GameDetailsScreenshotVideoTabState
       mediaAspectRatio = _imageAspectRatios[screenshotPath]!;
     }
 
-    if (mediaAspectRatio <= 0 || mediaAspectRatio.isNaN) {
+    if (mediaAspectRatio <= 0 ||
+        mediaAspectRatio.isNaN ||
+        mediaAspectRatio.isInfinite) {
       mediaAspectRatio = 16 / 9;
     }
+
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(8.r, 40.r, 8.r, 80.r),
       child: Center(
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                BorderRadius.circular(14.r),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.shadow.withValues(alpha: 0.3),
-                blurRadius: 3.r,
-                offset: Offset(3.0.r, 3.0.r),
-              ),
-            ],
-            color: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 300.r,
+            maxHeight: 230.r,
           ),
-          child: ClipRRect(
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                BorderRadius.circular(14.r),
-            clipBehavior: Clip.antiAlias,
-            child: AspectRatio(
-              aspectRatio: mediaAspectRatio,
+          child: AspectRatio(
+            aspectRatio: mediaAspectRatio,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: radii.radiusInternal,
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.3),
+                    blurRadius: 3.r,
+                    offset: Offset(3.0.r, 3.0.r),
+                  ),
+                ],
+                color: Colors.black,
+              ),
+              clipBehavior: Clip.antiAlias,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -162,7 +165,7 @@ class _GameDetailsScreenshotVideoTabState
                       key: ValueKey(
                         '${screenshotPath}_fg_${widget.imageVersion}',
                       ),
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                       errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     ),
                   ] else
@@ -181,11 +184,7 @@ class _GameDetailsScreenshotVideoTabState
                       child: ExcludeFocus(
                         child: Material(
                           color: Colors.black54,
-                          borderRadius:
-                              Theme.of(
-                                context,
-                              ).extension<CornerRadii>()?.radiusExternal ??
-                              BorderRadius.circular(14.r),
+                          borderRadius: radii.radiusExternal,
                           child: InkWell(
                             onTap: () {
                               SfxService().playNavSound();
@@ -196,11 +195,7 @@ class _GameDetailsScreenshotVideoTabState
                             hoverColor: Colors.transparent,
                             highlightColor: Colors.transparent,
                             splashColor: Colors.transparent,
-                            borderRadius:
-                                Theme.of(
-                                  context,
-                                ).extension<CornerRadii>()?.radiusInternal ??
-                                BorderRadius.circular(14.r),
+                            borderRadius: radii.radiusInternal,
                             child: Padding(
                               padding: EdgeInsets.symmetric(
                                 horizontal: 8.r,
