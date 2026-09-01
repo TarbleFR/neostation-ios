@@ -41,49 +41,49 @@ void main() {
   });
 
   test(
-    'native ARMSX2 bridge auto-detects launch mode and preserves both handoffs',
+    'registered ARMSX2 bridge uses detach-only automatic load and legacy URL fallback',
     () {
-      final composite = File(
+      final registration = File(
         'packages/stikjit_bridge/ios/Classes/'
-        'NeoStationStikjitBridgePlugin.swift',
+        'NeoStationStikjitBridgePluginV2.swift',
       ).readAsStringSync();
       expect(
-        composite,
+        registration,
         contains('StikjitBridgePluginV2.register(with: registrar)'),
       );
-      expect(composite, contains('neostation/stikjit_armsx2'));
-      expect(composite, contains('enableArmsx2Jit'));
-      expect(composite, contains('launchArmsx2Suspended'));
-      expect(composite, contains('Armsx2PreferenceDetector'));
-      expect(composite, contains('detectedAutoLoadLastGame'));
-      expect(composite, contains('effectiveAutoLoadLastGame'));
-      expect(composite, contains('autoLoadModeSource'));
-      expect(composite, contains('ARMSX2_LAUNCH_MODE_AUTO_DETECTED'));
-      expect(composite, contains('ARMSX2_LAUNCH_MODE_FALLBACK'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
       expect(
-        composite,
-        contains('ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_REQUESTED'),
+        registration,
+        contains('StikjitArmsx2BridgePluginV2.register(with: registrar)'),
       );
       expect(
-        composite,
-        contains('ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_ACCEPTED'),
+        registration,
+        contains('StikjitRpcs3BridgePlugin.register(with: registrar)'),
       );
-      expect(composite, contains('URL(string: "armsx2://")'));
       expect(
-        composite,
-        contains('UIApplication.shared.open(neutralActivationURL'),
+        registration,
+        isNot(contains('NeoStationStikjitBridgePlugin.register(with: registrar)')),
       );
-      expect(composite, contains('uiapplication_neutral_url'));
-      // Keep the previous same-PID process-control route only as a safety
-      // fallback if iOS rejects the neutral UIKit activation.
-      expect(composite, contains('resumeAutomaticLoadTargetViaProcessControl'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
-      expect(composite, contains('resumedPID == UInt64(originalPID)'));
-      expect(composite, contains('targetResumed'));
-      expect(composite, contains('postJitHandoffSkipped'));
-      expect(composite, contains('performLegacyHandoff'));
-      expect(composite, contains('openGameWhenNeoStationIsActive'));
+
+      final native = File(
+        'packages/stikjit_bridge/ios/Classes/'
+        'StikjitArmsx2BridgePluginV2.swift',
+      ).readAsStringSync();
+      expect(native, contains('neostation/stikjit_armsx2'));
+      expect(native, contains('enableArmsx2Jit'));
+      expect(native, contains('launchArmsx2Suspended'));
+      expect(native, contains('Armsx2PreferenceDetector'));
+      expect(native, contains('detectedAutoLoadLastGame'));
+      expect(native, contains('effectiveAutoLoadLastGame'));
+      expect(native, contains('autoLoadModeSource'));
+      expect(native, contains('STATE: ARMSX2_V2_JIT_PID_READY'));
+      expect(native, contains('STATE: ARMSX2_V2_DETACH_ONLY'));
+      expect(native, contains('"resumeStrategy"] = "stikjit_detach_only"'));
+      expect(native, contains('completed["postJitHandoffSkipped"] = true'));
+      expect(native, contains('completed["targetResumed"] = true'));
+      expect(native, contains('completed["gameUrlOpened"] = false'));
+      expect(native, isNot(contains('neostation_active_then_neutral_url')));
+      expect(native, contains('performLifecycleHandoff('));
+      expect(native, contains('targetURL: gameUrl'));
 
       final detector = File(
         'packages/stikjit_bridge/ios/Classes/'
@@ -141,10 +141,6 @@ void main() {
       expect(media, contains('availableHeight < 175.r'));
       expect(media, contains('return LayoutBuilder('));
 
-      // ARMSX2 is the heaviest iOS handoff. Keep the proven pre-9c memory
-      // strategy: release the playlist/background before the emulator owns the
-      // foreground, then reload from SQLite on return. This is a DB reload, not
-      // a ROM/library scan, and avoids iOS jetsamming NeoStation behind ARMSX2.
       final launchFlow = File(
         'lib/screens/game_screen/my_games_list/launch_flow.dart',
       ).readAsStringSync();
@@ -153,8 +149,6 @@ void main() {
       expect(launchFlow, contains('_games = [];'));
       expect(launchFlow, contains('GameService.loadGamesForSystem(widget.system)'));
 
-      // The iOS game identity must be durable before StikJIT/ARMSX2 can suspend
-      // the Flutter process. Never rely only on an unawaited preference write.
       final launchUtils = File(
         'lib/utils/game_launch_utils.dart',
       ).readAsStringSync();
