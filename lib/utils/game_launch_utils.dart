@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
@@ -32,6 +34,16 @@ Future<void> launchGameWithDialog({
   Future<void> Function(BuildContext context, GameLaunchResult result)?
   onLaunchFailed,
 }) async {
+  // iOS keeps NeoStation suspended behind external emulators. Release decoded
+  // artwork before the handoff so memory-heavy apps such as ARMSX2 have more
+  // headroom and iOS is less likely to reclaim NeoStation. The actual game
+  // playlist/model stays in memory, so a warm return still lands instantly on
+  // the same menu instead of rebuilding the library.
+  if (Platform.isIOS) {
+    imageCache.clear();
+    imageCache.clearLiveImages();
+  }
+
   // Open the launch-pending window immediately so a transient app resume during
   // the dialog/handoff can't clear the Now Playing state (see
   // GameService.isGameLaunchInProgress). Closed by _registerGameLaunch on

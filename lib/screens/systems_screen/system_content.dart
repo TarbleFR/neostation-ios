@@ -31,11 +31,13 @@ class _SystemContentState extends State<SystemContent> {
 
   DateTime? _splashShownAt;
   Timer? _releaseTimer;
+  Timer? _startupPhaseProbeTimer;
   bool? _lastHomeMusicActive;
 
   @override
   void dispose() {
     _releaseTimer?.cancel();
+    _startupPhaseProbeTimer?.cancel();
     unawaited(HomeMusicService().setMainMenuActive(false));
     super.dispose();
   }
@@ -61,6 +63,25 @@ class _SystemContentState extends State<SystemContent> {
     return true;
   }
 
+  /// The deferred startup-scan flag is consumed by AppScreen without notifying
+  /// this provider listener. Normally scanSystems() immediately follows and
+  /// emits its own notification, but an iOS emulator return intentionally skips
+  /// that scan. Re-check the phase shortly after the first frame so a cached
+  /// library can be revealed instead of remaining on an empty phase forever.
+  void _scheduleStartupPhaseProbe(bool needed) {
+    if (!needed) {
+      _startupPhaseProbeTimer?.cancel();
+      _startupPhaseProbeTimer = null;
+      return;
+    }
+    if (_startupPhaseProbeTimer != null) return;
+
+    _startupPhaseProbeTimer = Timer(const Duration(milliseconds: 120), () {
+      _startupPhaseProbeTimer = null;
+      if (mounted) setState(() {});
+    });
+  }
+
   /// Keeps audio side effects outside build while still following route
   /// visibility. A pushed game library leaves this widget mounted underneath,
   /// so checking [ModalRoute.isCurrent] is what prevents ambience from leaking
@@ -79,6 +100,15 @@ class _SystemContentState extends State<SystemContent> {
   Widget build(BuildContext context) {
     return Consumer<SqliteConfigProvider>(
       builder: (context, configProvider, child) {
+        final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+
+        // On a normal startup this probe is superseded immediately by the
+        // scan's provider notification. On an iOS return where AppScreen skips
+        // scanning, it supplies the one rebuild needed after consumeStartupScan.
+        _scheduleStartupPhaseProbe(
+          isIOS && configProvider.pendingStartupScan,
+        );
+
         final isLoading = configProvider.isLoading || configProvider.isScanning;
         final showSplash = isLoading || _holdSplash(isLoading);
 
@@ -87,13 +117,27 @@ class _SystemContentState extends State<SystemContent> {
             !configProvider.hasDetectedSystems &&
             configProvider.scanCompleted;
 
+        // A cached iOS library is authoritative after returning from an
+        // external emulator. AppScreen consumes the one-shot return marker and
+        // intentionally does not call scanSystems(); in that path scanCompleted
+        // remains false because no scan ran. If systems already exist in SQLite,
+        // show them directly rather than interpreting "no scan" as "no UI".
+        final canReuseCachedIosLibrary =
+            isIOS &&
+            !showSplash &&
+            configProvider.hasDetectedSystems &&
+            !configProvider.pendingStartupScan &&
+            !configProvider.isScanningRoms &&
+            !configProvider.isSilentScanning;
+
         final showContent =
-            !showSplash && configProvider.scanCompleted && !showInitialSetup;
+            !showSplash &&
+            !showInitialSetup &&
+            (configProvider.scanCompleted || canReuseCachedIosLibrary);
 
         final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
         _syncHomeMusic(showContent && routeIsCurrent);
         final safePadding = MediaQuery.viewPaddingOf(context);
-        final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
         final safeLeft = isIOS ? safePadding.left : 0.0;
         final safeRight = isIOS ? safePadding.right : 0.0;
 
