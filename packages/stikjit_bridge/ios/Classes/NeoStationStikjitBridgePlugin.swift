@@ -15,12 +15,16 @@ public final class NeoStationStikjitBridgePlugin: NSObject, FlutterPlugin {
 
 /// Independent StikJIT path for ARMSX2.
 ///
-/// This class deliberately does not route through, subclass, or modify the
-/// MeloNX bridge. It launches the detected ARMSX2 process suspended and enables
-/// JIT on that exact PID. The legacy mode then brings NeoStation back to the
-/// foreground and delivers the selected ARMSX2 URL. The optional automatic-load
-/// mode resumes the exact same JIT-enabled ARMSX2 PID after attach, without
-/// returning to NeoStation and without opening armsx2:// a second time.
+/// ARMSX2 is launched suspended so JIT is attached before its CPU threads run.
+/// After attach, NeoStation automatically inspects ARMSX2's persisted
+/// "Automatic Load Last Game" preference when its container is readable:
+/// - enabled: resume the exact same JIT-enabled PID, without returning to
+///   NeoStation and without opening armsx2:// a second time;
+/// - disabled: preserve the legacy NeoStation -> armsx2:// handoff so the
+///   selected frontend game is delivered after the intro/menu path.
+///
+/// The Dart-side Tools preference remains a fallback only when the ARMSX2
+/// preference cannot be read safely.
 public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
   private static let channelName = "neostation/stikjit_armsx2"
   private static let jitQueue = DispatchQueue(
@@ -81,11 +85,13 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
       return
     }
 
-    let autoLoadLastGame = arguments["autoLoadLastGame"] as? Bool ?? false
+    // This value is intentionally only a fallback. A readable ARMSX2
+    // preference always wins so changing the option inside ARMSX2 takes effect
+    // on the very next launch without revisiting NeoStation Settings > Tools.
+    let fallbackAutoLoadLastGame =
+      arguments["autoLoadLastGame"] as? Bool ?? false
     let backgroundTask = Armsx2StikJitBackgroundTask(
-      name: autoLoadLastGame
-        ? "ARMSX2 automatic-load JIT"
-        : "ARMSX2 post-JIT handoff"
+      name: "ARMSX2 automatic JIT launch"
     )
 
     Self.jitQueue.async {
@@ -97,159 +103,43 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
         var logs = response["logs"] as? [String] ?? []
         logs.append("STATE: ARMSX2_JIT_PID_READY")
 
-        if autoLoadLastGame {
-          response["postJitHandoffSkipped"] = true
-          response["gameUrlOpened"] = false
-          response["targetResumed"] = false
+        let detectedAutoLoad = response["detectedAutoLoadLastGame"] as? Bool
+        let autoLoadLastGame = detectedAutoLoad ?? fallbackAutoLoadLastGame
+        response["effectiveAutoLoadLastGame"] = autoLoadLastGame
+        response["autoLoadModeSource"] = detectedAutoLoad == nil
+          ? "neostation_fallback"
+          : "armsx2_preferences"
 
-          guard
-            let detectedBundleId = response["bundleId"] as? String,
-            !detectedBundleId.isEmpty,
-            let originalPID = response["pid"] as? Int,
-            originalPID > 0
-          else {
-            logs.append("STATE: ARMSX2_AUTOLOAD_RESUME_METADATA_MISSING")
-            logs.append(
-              "JIT succeeded, but the detected ARMSX2 bundle ID/PID was missing before resume."
-            )
-            response["logs"] = logs
-            DispatchQueue.main.async {
-              backgroundTask.end()
-              result(response)
-            }
-            return
-          }
-
-          logs.append("STATE: ARMSX2_AUTOLOAD_HANDOFF_SKIPPED")
-          logs.append("STATE: ARMSX2_AUTOLOAD_RESUME_REQUESTED")
+        if let detectedAutoLoad {
+          logs.append("STATE: ARMSX2_LAUNCH_MODE_AUTO_DETECTED")
           logs.append(
-            "Automatic Load Last Game is enabled. NeoStation will resume the same JIT-enabled ARMSX2 process directly, without a second armsx2:// open."
+            "ARMSX2 Automatic Load Last Game was detected as \(detectedAutoLoad); NeoStation selected the matching launch path automatically."
           )
-          response["logs"] = logs
-
-          Self.handoffQueue.async {
-            do {
-              let configuration = StikJIT.Configuration.default
-              let resumedPID = try Armsx2NeoStationProcessActivator().activate(
-                bundleId: detectedBundleId,
-                pairingFilePath: pairingFilePath,
-                deviceAddress: configuration.deviceAddress,
-                rsdPort: configuration.rsdPort
-              )
-
-              var resumed = response
-              var resumedLogs = resumed["logs"] as? [String] ?? []
-              resumed["resumedPid"] = Int(resumedPID)
-
-              if resumedPID == UInt64(originalPID) {
-                resumed["targetResumed"] = true
-                resumedLogs.append("STATE: ARMSX2_AUTOLOAD_SAME_PID_RESUMED")
-                resumedLogs.append(
-                  "process_control resumed ARMSX2 PID \(resumedPID), matching the PID that received JIT."
-                )
-              } else {
-                resumed["targetResumed"] = false
-                resumedLogs.append("STATE: ARMSX2_AUTOLOAD_PID_MISMATCH")
-                resumedLogs.append(
-                  "Resume returned PID \(resumedPID), but JIT was enabled on PID \(originalPID). Treating the launch as failed to avoid claiming a non-JIT process is ready."
-                )
-              }
-
-              resumed["logs"] = resumedLogs
-              DispatchQueue.main.async {
-                backgroundTask.end()
-                result(resumed)
-              }
-            } catch {
-              var failed = response
-              var failedLogs = failed["logs"] as? [String] ?? []
-              failed["targetResumed"] = false
-              failedLogs.append("STATE: ARMSX2_AUTOLOAD_RESUME_FAILED")
-              failedLogs.append(
-                "Could not resume the JIT-enabled ARMSX2 process: \(error.localizedDescription)"
-              )
-              failed["logs"] = failedLogs
-
-              DispatchQueue.main.async {
-                backgroundTask.end()
-                result(failed)
-              }
-            }
-          }
-          return
+        } else {
+          logs.append("STATE: ARMSX2_LAUNCH_MODE_FALLBACK")
+          logs.append(
+            "ARMSX2 preferences were unavailable; using the saved NeoStation Tools fallback: \(fallbackAutoLoadLastGame)."
+          )
         }
-
-        logs.append(
-          "JIT detached. Re-acquiring NeoStation foreground before delivering the ARMSX2 game URL."
-        )
         response["logs"] = logs
-        response["postJitHandoffSkipped"] = false
-        response["targetResumed"] = false
 
-        guard let neoStationBundleId = Bundle.main.bundleIdentifier,
-              !neoStationBundleId.isEmpty else {
-          var failed = response
-          var failedLogs = failed["logs"] as? [String] ?? []
-          failedLogs.append("STATE: NEOSTATION_BUNDLE_ID_MISSING")
-          failed["logs"] = failedLogs
-          failed["gameUrlOpened"] = false
-          DispatchQueue.main.async {
-            backgroundTask.end()
-            result(failed)
-          }
+        if autoLoadLastGame {
+          Self.resumeAutomaticLoadTarget(
+            response: response,
+            pairingFilePath: pairingFilePath,
+            backgroundTask: backgroundTask,
+            result: result
+          )
           return
         }
 
-        Self.handoffQueue.async {
-          do {
-            let configuration = StikJIT.Configuration.default
-            let activatedPID = try Armsx2NeoStationProcessActivator().activate(
-              bundleId: neoStationBundleId,
-              pairingFilePath: pairingFilePath,
-              deviceAddress: configuration.deviceAddress,
-              rsdPort: configuration.rsdPort
-            )
-
-            var activated = response
-            var activatedLogs = activated["logs"] as? [String] ?? []
-            activated["neoStationPid"] = Int(activatedPID)
-            activatedLogs.append("STATE: NEOSTATION_FOREGROUND_REQUESTED")
-            activatedLogs.append(
-              "process_control returned NeoStation PID \(activatedPID); local PID is \(getpid())."
-            )
-            if activatedPID == UInt64(getpid()) {
-              activatedLogs.append("STATE: NEOSTATION_SAME_PID_CONFIRMED")
-            } else {
-              activatedLogs.append(
-                "WARNING: process_control reported a different NeoStation PID. Continuing only if the current process becomes active."
-              )
-            }
-            activated["logs"] = activatedLogs
-
-            DispatchQueue.main.async {
-              self.openGameWhenNeoStationIsActive(
-                gameUrl,
-                response: activated,
-                backgroundTask: backgroundTask,
-                result: result
-              )
-            }
-          } catch {
-            var failed = response
-            var failedLogs = failed["logs"] as? [String] ?? []
-            failedLogs.append("STATE: NEOSTATION_FOREGROUND_FAILED")
-            failedLogs.append(
-              "NeoStation foreground re-acquisition failed: \(error.localizedDescription)"
-            )
-            failed["logs"] = failedLogs
-            failed["gameUrlOpened"] = false
-
-            DispatchQueue.main.async {
-              backgroundTask.end()
-              result(failed)
-            }
-          }
-        }
+        self.performLegacyHandoff(
+          gameUrl: gameUrl,
+          response: response,
+          pairingFilePath: pairingFilePath,
+          backgroundTask: backgroundTask,
+          result: result
+        )
       } catch {
         DispatchQueue.main.async {
           backgroundTask.end()
@@ -260,6 +150,178 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
               details: String(reflecting: error)
             )
           )
+        }
+      }
+    }
+  }
+
+  @available(iOS 17.4, *)
+  private static func resumeAutomaticLoadTarget(
+    response: [String: Any],
+    pairingFilePath: String,
+    backgroundTask: Armsx2StikJitBackgroundTask,
+    result: @escaping FlutterResult
+  ) {
+    var response = response
+    var logs = response["logs"] as? [String] ?? []
+    response["postJitHandoffSkipped"] = true
+    response["gameUrlOpened"] = false
+    response["targetResumed"] = false
+
+    guard
+      let detectedBundleId = response["bundleId"] as? String,
+      !detectedBundleId.isEmpty,
+      let originalPID = response["pid"] as? Int,
+      originalPID > 0
+    else {
+      logs.append("STATE: ARMSX2_AUTOLOAD_RESUME_METADATA_MISSING")
+      logs.append(
+        "JIT succeeded, but the detected ARMSX2 bundle ID/PID was missing before resume."
+      )
+      response["logs"] = logs
+      DispatchQueue.main.async {
+        backgroundTask.end()
+        result(response)
+      }
+      return
+    }
+
+    logs.append("STATE: ARMSX2_AUTOLOAD_HANDOFF_SKIPPED")
+    logs.append("STATE: ARMSX2_AUTOLOAD_RESUME_REQUESTED")
+    logs.append(
+      "Automatic Load Last Game is active. NeoStation will resume the same JIT-enabled ARMSX2 process directly, without a second armsx2:// open."
+    )
+    response["logs"] = logs
+
+    handoffQueue.async {
+      do {
+        let configuration = StikJIT.Configuration.default
+        let resumedPID = try Armsx2NeoStationProcessActivator().activate(
+          bundleId: detectedBundleId,
+          pairingFilePath: pairingFilePath,
+          deviceAddress: configuration.deviceAddress,
+          rsdPort: configuration.rsdPort
+        )
+
+        var resumed = response
+        var resumedLogs = resumed["logs"] as? [String] ?? []
+        resumed["resumedPid"] = Int(resumedPID)
+
+        if resumedPID == UInt64(originalPID) {
+          resumed["targetResumed"] = true
+          resumedLogs.append("STATE: ARMSX2_AUTOLOAD_SAME_PID_RESUMED")
+          resumedLogs.append(
+            "process_control resumed ARMSX2 PID \(resumedPID), matching the PID that received JIT."
+          )
+        } else {
+          resumed["targetResumed"] = false
+          resumedLogs.append("STATE: ARMSX2_AUTOLOAD_PID_MISMATCH")
+          resumedLogs.append(
+            "Resume returned PID \(resumedPID), but JIT was enabled on PID \(originalPID). Treating the launch as failed to avoid claiming a non-JIT process is ready."
+          )
+        }
+
+        resumed["logs"] = resumedLogs
+        DispatchQueue.main.async {
+          backgroundTask.end()
+          result(resumed)
+        }
+      } catch {
+        var failed = response
+        var failedLogs = failed["logs"] as? [String] ?? []
+        failed["targetResumed"] = false
+        failedLogs.append("STATE: ARMSX2_AUTOLOAD_RESUME_FAILED")
+        failedLogs.append(
+          "Could not resume the JIT-enabled ARMSX2 process: \(error.localizedDescription)"
+        )
+        failed["logs"] = failedLogs
+
+        DispatchQueue.main.async {
+          backgroundTask.end()
+          result(failed)
+        }
+      }
+    }
+  }
+
+  @available(iOS 17.4, *)
+  private func performLegacyHandoff(
+    gameUrl: URL,
+    response: [String: Any],
+    pairingFilePath: String,
+    backgroundTask: Armsx2StikJitBackgroundTask,
+    result: @escaping FlutterResult
+  ) {
+    var response = response
+    var logs = response["logs"] as? [String] ?? []
+    logs.append(
+      "Automatic Load Last Game is off. Re-acquiring NeoStation foreground before delivering the ARMSX2 game URL."
+    )
+    response["logs"] = logs
+    response["postJitHandoffSkipped"] = false
+    response["targetResumed"] = false
+
+    guard let neoStationBundleId = Bundle.main.bundleIdentifier,
+          !neoStationBundleId.isEmpty else {
+      var failed = response
+      var failedLogs = failed["logs"] as? [String] ?? []
+      failedLogs.append("STATE: NEOSTATION_BUNDLE_ID_MISSING")
+      failed["logs"] = failedLogs
+      failed["gameUrlOpened"] = false
+      DispatchQueue.main.async {
+        backgroundTask.end()
+        result(failed)
+      }
+      return
+    }
+
+    Self.handoffQueue.async {
+      do {
+        let configuration = StikJIT.Configuration.default
+        let activatedPID = try Armsx2NeoStationProcessActivator().activate(
+          bundleId: neoStationBundleId,
+          pairingFilePath: pairingFilePath,
+          deviceAddress: configuration.deviceAddress,
+          rsdPort: configuration.rsdPort
+        )
+
+        var activated = response
+        var activatedLogs = activated["logs"] as? [String] ?? []
+        activated["neoStationPid"] = Int(activatedPID)
+        activatedLogs.append("STATE: NEOSTATION_FOREGROUND_REQUESTED")
+        activatedLogs.append(
+          "process_control returned NeoStation PID \(activatedPID); local PID is \(getpid())."
+        )
+        if activatedPID == UInt64(getpid()) {
+          activatedLogs.append("STATE: NEOSTATION_SAME_PID_CONFIRMED")
+        } else {
+          activatedLogs.append(
+            "WARNING: process_control reported a different NeoStation PID. Continuing only if the current process becomes active."
+          )
+        }
+        activated["logs"] = activatedLogs
+
+        DispatchQueue.main.async {
+          self.openGameWhenNeoStationIsActive(
+            gameUrl,
+            response: activated,
+            backgroundTask: backgroundTask,
+            result: result
+          )
+        }
+      } catch {
+        var failed = response
+        var failedLogs = failed["logs"] as? [String] ?? []
+        failedLogs.append("STATE: NEOSTATION_FOREGROUND_FAILED")
+        failedLogs.append(
+          "NeoStation foreground re-acquisition failed: \(error.localizedDescription)"
+        )
+        failed["logs"] = failedLogs
+        failed["gameUrlOpened"] = false
+
+        DispatchQueue.main.async {
+          backgroundTask.end()
+          result(failed)
         }
       }
     }
@@ -345,6 +407,28 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     )
     logs.append("StikJIT completed and detached from ARMSX2.")
 
+    var detectedAutoLoadLastGame: Bool?
+    var detectedPreferenceKey: String?
+    do {
+      let detection = try Armsx2PreferenceDetector().detect(
+        bundleId: launch.bundleId,
+        pairingFilePath: pairingFile.path,
+        deviceAddress: configuration.deviceAddress,
+        rsdPort: configuration.rsdPort
+      )
+      detectedAutoLoadLastGame = detection.enabled
+      detectedPreferenceKey = detection.key
+      logs.append(contentsOf: detection.logs)
+    } catch {
+      logs.append("STATE: ARMSX2_AUTOLOAD_PREFERENCE_DETECTION_FAILED")
+      logs.append(
+        "Automatic Load Last Game preference detection failed safely: \(error.localizedDescription)"
+      )
+      logs.append(
+        "NeoStation will keep the existing Tools preference as a fallback for this launch."
+      )
+    }
+
     var response: [String: Any] = [
       "pid": Int(launch.pid),
       "bundleId": launch.bundleId,
@@ -352,6 +436,12 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     ]
     if let txmPresent = securityState.isTXMPresent {
       response["txmPresent"] = txmPresent
+    }
+    if let detectedAutoLoadLastGame {
+      response["detectedAutoLoadLastGame"] = detectedAutoLoadLastGame
+    }
+    if let detectedPreferenceKey {
+      response["detectedAutoLoadPreferenceKey"] = detectedPreferenceKey
     }
     return response
   }
