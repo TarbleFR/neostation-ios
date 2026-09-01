@@ -16,8 +16,8 @@ import '../../music/music_player.dart';
 /// Sticky action/status footer used by the game details list view.
 ///
 /// The selected game title is intentionally not repeated here because the list
-/// panel already owns that identity. Keeping only rating, compact game stats and
-/// PLAY prevents the media surface from being visually crowded.
+/// panel already owns that identity. Rating and game stats are grouped directly
+/// beside PLAY so the footer reads as one compact action cluster.
 class GameDetailsFooter extends StatelessWidget {
   final SystemModel system;
   final GameModel game;
@@ -77,8 +77,11 @@ class GameDetailsFooter extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (game.rating > 0) _SteamStyleRating(game: game),
                   const Spacer(),
+                  if (game.rating > 0) ...[
+                    _SteamStyleRating(game: game),
+                    if (hasCombinedStats) SizedBox(width: 5.r),
+                  ],
                   if (hasCombinedStats) ...[
                     _CombinedGameStatsPill(
                       game: game,
@@ -88,7 +91,8 @@ class GameDetailsFooter extends StatelessWidget {
                       onShowAchievements: onShowAchievements,
                     ),
                     SizedBox(width: 8.r),
-                  ],
+                  ] else if (game.rating > 0)
+                    SizedBox(width: 8.r),
                   _buildPlayButtonCompact(context),
                 ],
               ),
