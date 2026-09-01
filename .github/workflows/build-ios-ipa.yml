@@ -1,38 +1,41 @@
-name: Build NeoStation iOS IPA
+name: Build NeoStation iOS PR113 IPA
 
 on:
+  push:
+    branches:
+      - fix/armsx2-autoload-achievements
   workflow_dispatch:
     inputs:
       build_number:
         description: iOS build number
         required: true
-        default: '167'
+        default: '168'
         type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-main-build
+  group: neostation-ios-pr113-build
   cancel-in-progress: true
 
 jobs:
   build-ios-ipa:
-    name: Build NeoStation iOS
+    name: Build NeoStation iOS PR113
     runs-on: macos-15
     timeout-minutes: 120
 
     env:
-      BUILD_NUMBER: ${{ inputs.build_number }}
-      ARTIFACT_BASENAME: NeoStation-iOS-Build-${{ inputs.build_number }}-Main
+      BUILD_NUMBER: ${{ inputs.build_number || '168' }}
+      ARTIFACT_BASENAME: NeoStation-iOS-Build-${{ inputs.build_number || '168' }}-PR113
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout main
+      - name: Checkout PR113 branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: fix/armsx2-autoload-achievements
           fetch-depth: 1
 
       - name: Select Xcode 16.4
@@ -46,11 +49,11 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verify main source
+      - name: Verify PR113 source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "main"
+          test "$(git branch --show-current)" = "fix/armsx2-autoload-achievements"
           grep -q 'packages/stikjit_bridge' pubspec.yaml
           grep -q 'NeoStationStikjitBridgePluginV2' packages/stikjit_bridge/pubspec.yaml
           test -f lib/services/pairing_file_service.dart
@@ -63,7 +66,7 @@ jobs:
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePluginV2.swift
           test -f packages/stikjit_bridge/ios/Classes/StikjitRpcs3BridgePlugin.swift
           test -f packages/stikjit_bridge/ios/Classes/Rpcs3IdeviceRuntime.swift
-          echo "Building main source $(git rev-parse HEAD)"
+          echo "Building PR113 source $(git rev-parse HEAD)"
 
       - name: Prepare build-time defines
         shell: bash
@@ -244,7 +247,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING=/tmp/neostation-main-ipa
+          STAGING=/tmp/neostation-pr113-ipa
           rm -rf "$STAGING"
           mkdir -p "$STAGING/Payload"
           cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
