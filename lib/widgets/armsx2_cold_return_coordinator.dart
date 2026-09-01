@@ -17,11 +17,10 @@ import '../sync/sync_manager.dart';
 
 /// iOS-only recovery layer for ARMSX2.
 ///
-/// ARMSX2 can cause iOS to reclaim NeoStation while gameplay is in the
-/// foreground. When that happens, the normal Flutter navigation stack and
-/// per-game NeoSync state no longer exist. This coordinator restores the user
-/// directly into the PS2 library and replays NeoSync from ARMSX2's dedicated
-/// save root instead of depending on the previous in-memory game object.
+/// Normal behavior is still a warm return, just like the other emulators. This
+/// widget exists only as a safety net when iOS actually reconstructs NeoStation:
+/// it restores the PS2 library and performs an ARMSX2-only NeoSync upload pass.
+/// It must never scan or upload RetroArch, MeloNX or RPCS3 data.
 class Armsx2ColdReturnCoordinator extends StatefulWidget {
   const Armsx2ColdReturnCoordinator({
     super.key,
@@ -61,34 +60,40 @@ class _Armsx2ColdReturnCoordinatorState
 
     final hadActiveGameSession = await GameSessionPersistence.hasActiveSession();
 
-    // A persisted active session plus the ARMSX2 marker means this process was
-    // reconstructed after the emulator handoff. Clear the old per-game record
-    // before AppLifecycleHandler's delayed generic recovery can consume it: the
-    // ARMSX2 path below does not need a GameModel and therefore survives library
-    // reinitialization much more reliably.
+    // The persisted game identity is only used here to prove that this is a
+    // genuine emulator cold return. ARMSX2 NeoSync itself does not need to
+    // reconstruct a GameModel because PS2 memory cards are shared storage.
     if (hadActiveGameSession) {
       await GameSessionPersistence.clearActiveGameSession();
     }
 
     if (pendingReturn && hadActiveGameSession) {
-      await _restorePs2Library();
+      unawaited(_restorePs2Library());
     } else if (pendingReturn && !hadActiveGameSession) {
-      // This is a stale marker left by a warm return whose normal lifecycle
-      // already completed. Never force PS2 on an unrelated later app launch.
+      // A warm return already kept the normal navigation stack alive. Do not
+      // force PS2 during an unrelated future launch.
       await Armsx2ReturnStateService.clearPendingLibraryReturn();
     }
 
-    if (pendingSync) {
+    if (pendingSync && hadActiveGameSession) {
       unawaited(_syncPendingArmsx2Saves());
+    } else if (pendingSync && !hadActiveGameSession) {
+      // The normal warm-return pipeline owns the save in this case. Avoid a
+      // stale marker firing a standalone-emulator scan on a later cold launch.
+      await Armsx2ReturnStateService.clearPendingSync();
     }
   }
 
   Future<void> _restorePs2Library() async {
     if (_ps2RoutePushed || !mounted) return;
 
+    // Cold startup can still be restoring SQLite/config providers. Give the PS2
+    // system up to ten seconds to become available instead of falling back to
+    // the main menu after a short fixed delay.
     var system = await SystemRepository.getSystemByFolderName('ps2');
-    for (var attempt = 0; system == null && attempt < 12; attempt++) {
-      await Future.delayed(const Duration(milliseconds: 150));
+    for (var attempt = 0; system == null && attempt < 40; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
       system = await SystemRepository.getSystemByFolderName('ps2');
     }
 
@@ -112,8 +117,6 @@ class _Armsx2ColdReturnCoordinatorState
         ),
       );
 
-      // The route has been accepted by Navigator. Consume only the navigation
-      // marker; NeoSync owns its own independent pending flag.
       await Armsx2ReturnStateService.clearPendingLibraryReturn();
       unawaited(routeFuture);
       _log.i('ARMSX2 cold return: restored PS2 game library.');
@@ -124,22 +127,45 @@ class _Armsx2ColdReturnCoordinatorState
   }
 
   Future<void> _syncPendingArmsx2Saves() async {
-    if (!mounted ||
-        !await Armsx2ReturnStateService.hasPendingSync()) {
+    if (!mounted || !await Armsx2ReturnStateService.hasPendingSync()) {
       return;
     }
 
-    final syncProvider = Provider.of<SyncManager>(context, listen: false).active;
-    if (syncProvider == null ||
-        syncProvider.providerId != NeoSyncAdapter.kProviderId ||
-        !syncProvider.isAuthenticated) {
+    // Authentication and SyncManager are rebuilt during a cold start. Wait for
+    // them instead of trying once at ~500 ms and silently retaining the marker.
+    var ready = false;
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (!mounted) return;
+      final provider = Provider.of<SyncManager>(context, listen: false).active;
+      if (provider != null &&
+          provider.providerId == NeoSyncAdapter.kProviderId &&
+          provider.isAuthenticated) {
+        ready = true;
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    if (!ready || !mounted) {
       _log.i(
         'ARMSX2 cold return: NeoSync not ready/authenticated; sync marker retained.',
       );
       return;
     }
 
-    final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+    // The security-scoped bookmark can also finish restoring after the first
+    // frame. Wait briefly for the dedicated ARMSX2 root to become reachable.
+    String? armsx2Root;
+    for (var attempt = 0; attempt < 20; attempt++) {
+      armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+      if (armsx2Root != null &&
+          armsx2Root.isNotEmpty &&
+          Directory(armsx2Root).existsSync()) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
+
     if (armsx2Root == null ||
         armsx2Root.isEmpty ||
         !Directory(armsx2Root).existsSync()) {
@@ -151,9 +177,8 @@ class _Armsx2ColdReturnCoordinatorState
 
     final neoSync = Provider.of<NeoSyncProvider>(context, listen: false);
 
-    // Avoid colliding with an initialization sync. Retry for a few seconds; if
-    // another task is still active, leave the marker for the next resume/start.
-    for (var attempt = 0; neoSync.isSyncing && attempt < 8; attempt++) {
+    // Avoid colliding with the provider's startup work.
+    for (var attempt = 0; neoSync.isSyncing && attempt < 20; attempt++) {
       await Future.delayed(const Duration(milliseconds: 500));
     }
     if (neoSync.isSyncing) {
@@ -162,19 +187,19 @@ class _Armsx2ColdReturnCoordinatorState
     }
 
     try {
-      // autoSyncUploads already has an iOS-native ARMSX2 branch: it enumerates
-      // the linked memcards/savestates/sstates root and routes each file through
-      // _uploadArmsx2File with system=ps2, emulator=armsx2, scope=shared.
-      await neoSync.autoSyncUploads();
+      // Critical isolation rule: NEVER call autoSyncUploads() here. That global
+      // method also enumerates MeloNX/RetroArch/RPCS3 and caused a Switch save to
+      // be uploaded after playing The Hobbit. This call sees ARMSX2 only.
+      final completed = await neoSync.autoSyncArmsx2UploadsOnly();
 
-      if (neoSync.error == null) {
+      if (completed) {
         await Armsx2ReturnStateService.clearPendingSync();
         _log.i(
-          'ARMSX2 cold return: dedicated save-root NeoSync pass completed.',
+          'ARMSX2 cold return: ARMSX2-only NeoSync pass completed.',
         );
       } else {
         _log.w(
-          'ARMSX2 cold return: NeoSync reported ${neoSync.error}; marker retained.',
+          'ARMSX2 cold return: ARMSX2-only NeoSync did not complete; marker retained.',
         );
       }
     } catch (e) {
