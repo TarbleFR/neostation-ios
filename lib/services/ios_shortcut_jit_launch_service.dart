@@ -103,12 +103,6 @@ class IosShortcutJitLaunchService {
 
     final isArmsx2Launch =
         shortcutName == armsx2ShortcutName && input != null;
-    if (isArmsx2Launch) {
-      // Arm return + sync state before any native JIT handoff can background or
-      // terminate NeoStation. A cold-started process can then restore PS2 and
-      // synchronize ARMSX2 independently of the normal per-game lifecycle.
-      await Armsx2ReturnStateService.arm();
-    }
 
     var useStikDebugFallback = false;
     try {
@@ -139,27 +133,29 @@ class IosShortcutJitLaunchService {
       return StikJitMeloNxService.launch(gameUrl: input);
     }
 
-    // ARMSX2 remains a second independent integrated path. When the emergency
-    // switch is on, execution skips this branch and naturally reaches the old
-    // StikDebug Shortcut below.
+    // Only the integrated ARMSX2 path needs the cold-return safety markers.
+    // The historical StikDebug/Shortcut path already returns normally and must
+    // remain completely untouched by the experimental recovery layer.
     if (!useStikDebugFallback &&
         shortcutName == armsx2ShortcutName &&
         input != null &&
         StikJitArmsx2Service.isExperimentalEnabled) {
+      await Armsx2ReturnStateService.arm();
       final launched = await StikJitArmsx2Service.launch(gameUrl: input);
-      return _finishArmsx2Launch(launched, armed: isArmsx2Launch);
+      return _finishArmsx2Launch(launched, armed: true);
     }
 
     final shortcutUri = buildRunUri(shortcutName: shortcutName, input: input);
 
     try {
-      final launched = await launchUrl(
+      // StikDebug fallback deliberately carries no ARMSX2 recovery marker: its
+      // old app-switch lifecycle is the known-good reference behavior.
+      return await launchUrl(
         shortcutUri,
         mode: LaunchMode.externalApplication,
       );
-      return _finishArmsx2Launch(launched, armed: isArmsx2Launch);
     } catch (e) {
-      if (isArmsx2Launch) {
+      if (isArmsx2Launch && !useStikDebugFallback) {
         await Armsx2ReturnStateService.clearAll();
       }
       _log.e('IosShortcutJitLaunchService: failed to run $shortcutName: $e');
