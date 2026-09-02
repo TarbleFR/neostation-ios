@@ -1,21 +1,21 @@
-name: Build StikJIT RPCS3 Experimental IPA
+name: Build NeoStation 167 Stable Visual IPA
 
 on:
   push:
     branches:
-      - feature/stikjit-rpcs3
+      - fix/armsx2-autoload-achievements
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-stikjit-rpcs3-experimental
+  group: neostation-build167-stable-visual
   cancel-in-progress: true
 
 jobs:
   build-ios-ipa:
-    name: Build NeoStation StikJIT RPCS3 Experimental
+    name: Build NeoStation 167 Stable Visual
     runs-on: macos-15
     timeout-minutes: 120
 
@@ -24,10 +24,10 @@ jobs:
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout RPCS3 experimental branch
+      - name: Checkout stable visual branch
         uses: actions/checkout@v4
         with:
-          ref: feature/stikjit-rpcs3
+          ref: fix/armsx2-autoload-achievements
           fetch-depth: 1
 
       - name: Select Xcode 16.4
@@ -41,11 +41,11 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verify isolated RPCS3 source
+      - name: Verify Build 167 runtime source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "feature/stikjit-rpcs3"
+          test "$(git branch --show-current)" = "fix/armsx2-autoload-achievements"
           grep -q 'packages/stikjit_bridge' pubspec.yaml
           grep -q 'NeoStationStikjitBridgePluginV2' packages/stikjit_bridge/pubspec.yaml
           test -f lib/services/pairing_file_service.dart
@@ -59,7 +59,10 @@ jobs:
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePluginV2.swift
           test -f packages/stikjit_bridge/ios/Classes/StikjitRpcs3BridgePlugin.swift
           test -f packages/stikjit_bridge/ios/Classes/Rpcs3IdeviceRuntime.swift
-          echo "Building isolated RPCS3 source $(git rev-parse HEAD)"
+          grep -q 'final headerClearance = 58.r' lib/screens/game_screen/game_details_card/tabs/game_details_screenshot_video_tab.dart
+          grep -q 'this.bottomOffset = 78.0' lib/screens/game_screen/game_details_card/tabs/game_details_achievements_tab.dart
+          grep -q '_CombinedGameStatsPill' lib/screens/game_screen/game_details_card/widgets/game_details_footer.dart
+          echo "Building Build 167 runtime + visual-only source $(git rev-parse HEAD)"
 
       - name: Prepare build-time defines
         shell: bash
@@ -238,17 +241,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING=/tmp/neostation-stikjit-rpcs3-ipa
+          STAGING=/tmp/neostation-build167-stable-visual
           rm -rf "$STAGING"
           mkdir -p "$STAGING/Payload"
           cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
           (
             cd "$STAGING"
             /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload \
-              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa"
+              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-167-Stable-Visual.ipa"
           )
-          test -s NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa
-          ls -lh NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa
+          test -s NeoStation-iOS-Build-167-Stable-Visual.ipa
+          ls -lh NeoStation-iOS-Build-167-Stable-Visual.ipa
 
       - name: Remove temporary defines
         if: always()
@@ -258,9 +261,9 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental
+          name: NeoStation-iOS-Build-167-Stable-Visual
           path: |
-            NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa
+            NeoStation-iOS-Build-167-Stable-Visual.ipa
             build-ios.log
           if-no-files-found: error
           retention-days: 30
