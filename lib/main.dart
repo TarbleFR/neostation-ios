@@ -321,18 +321,15 @@ void main() async {
     // Load the last exported emulator libraries so direct-launch matching
     // works immediately after a cold start without forcing a fresh sync.
     await RetroArchLibraryService.loadCachedLibrary();
-    await Armsx2LibraryService.loadCachedLibrary();
     await MelonxLibraryService.loadCachedLibrary();
     await Rpcs3LibraryService.initialize();
     await Rpcs3LaunchService.initialize();
 
-    // RetroArch, ARMSX2 and MeloNX return their exported libraries through the
-    // neostation:// callback scheme. external_folder_access forwards every
-    // incoming URL from iOS to this one listener; each service ignores URLs
-    // that do not belong to it.
+    // RetroArch and MeloNX still receive their exported libraries through the
+    // neostation:// callback scheme. ARMSX2 library discovery is filesystem-only
+    // and therefore has no callback handler here.
     ExternalFolderAccess.setIncomingUrlListener((uri) async {
       if (await RetroArchLibraryService.handleIncomingUri(uri)) return;
-      if (await Armsx2LibraryService.handleIncomingUri(uri)) return;
       await MelonxLibraryService.handleIncomingUri(uri);
     });
   }
@@ -475,6 +472,16 @@ void main() async {
     );
 
     if (Platform.isIOS) {
+      // The pre-bookmark ARMSX2 integration stored an exported library cache
+      // and virtual armsx2:// rows. Remove them only once a physical ARMSX2
+      // library is already indexed, so upgrades never lose their only PS2 rows.
+      final removedLegacyArmsx2Rows =
+          await Armsx2LibraryService.cleanupLegacyExportArtifacts();
+      if (removedLegacyArmsx2Rows > 0) {
+        await sqliteDatabaseProvider.loadGamesForSystem('ps2');
+        await sqliteConfigProvider.refreshDetectedSystems();
+      }
+
       await Rpcs3LibraryService.restoreAfterDatabaseReady(
         configProvider: sqliteConfigProvider,
         databaseProvider: sqliteDatabaseProvider,

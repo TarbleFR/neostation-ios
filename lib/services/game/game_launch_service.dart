@@ -221,11 +221,10 @@ class GameLaunchService {
           }
         }
 
-        // PS2: ARMSX2 exports its own library with the exact fileName and
-        // launchURL it expects. If this ROM matches that synced library, send
-        // it straight to ARMSX2 before trying RetroArch. Restrict this branch
-        // to the PS2 system so identical filenames on unrelated systems can
-        // never be captured accidentally.
+        // PS2: ownership comes from the dedicated ARMSX2 root bookmark. A
+        // physical ROM below that root belongs to ARMSX2 and is launched there
+        // before RetroArch. Restrict this branch to PS2 so identical filenames
+        // on unrelated systems can never be captured accidentally.
         if (system.folderName.toLowerCase() == 'ps2') {
           final isArmsx2OwnedRom = Armsx2FolderService.ownsRomPath(
             game.romPath,
@@ -253,7 +252,7 @@ class GameLaunchService {
         // Genuine one-tap launch via RetroArch's synced library and
         // retroarch://game/<filename>. This remains the general iOS direct
         // launch path for systems RetroArch knows about, and the fallback for
-        // PS2 games that are not present in ARMSX2's exported library.
+        // PS2 games that are not owned by the linked ARMSX2 root.
         try {
           final launched = await RetroArchLibraryService.launchGameByRomPath(
             game.romPath!,
