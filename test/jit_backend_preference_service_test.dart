@@ -52,17 +52,36 @@ void main() {
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools exposes Pairing File, global fallback, and ARMSX2 launch mode', () {
+  test('Tools exposes only Pairing File and global JIT fallback', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
     ).readAsStringSync();
 
-    expect(tools, contains('int getItemCount() => 3;'));
+    expect(tools, contains('int getItemCount() => 2;'));
     expect(tools, contains('JitFallbackLocale.title'));
-    expect(tools, contains('Armsx2JitModeLocale.title'));
     expect(tools, contains('CustomToggleSwitch'));
     expect(tools, contains('setUseStikDebugFallback'));
-    expect(tools, contains('setUseArmsx2AutoLoadLastGame'));
+    expect(tools, isNot(contains('Armsx2JitModeLocale')));
+    expect(tools, isNot(contains('setUseArmsx2AutoLoadLastGame')));
+  });
+
+  test('ARMSX2 launch mode is not persisted by NeoStation', () async {
+    expect(
+      await JitBackendPreferenceService.useArmsx2AutoLoadLastGame(),
+      isFalse,
+    );
+
+    await JitBackendPreferenceService.setUseArmsx2AutoLoadLastGame(true);
+    expect(
+      await JitBackendPreferenceService.useArmsx2AutoLoadLastGame(),
+      isFalse,
+    );
+
+    final preferences = File(
+      'lib/services/jit_backend_preference_service.dart',
+    ).readAsStringSync();
+    expect(preferences, isNot(contains('ios_armsx2_autoload_last_game_v1')));
+    expect(preferences, contains('ARMSX2 itself is the sole source'));
   });
 }
