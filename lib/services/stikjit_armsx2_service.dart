@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
-import 'package:neostation/services/game_session_persistence.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
@@ -13,12 +12,10 @@ import 'package:stikjit_bridge/stikjit_bridge.dart';
 
 /// Experimental built-in StikJIT path dedicated to ARMSX2.
 ///
-/// NeoStation now auto-detects ARMSX2's Automatic Load Last Game preference
-/// whenever the ARMSX2 app container is readable through the paired-device
-/// tunnel. The saved Tools switch is kept as a fallback only:
-/// - detected ON: resume the exact same ARMSX2 PID that received JIT;
-/// - detected OFF: use the legacy NeoStation + armsx2:// handoff;
-/// - detection unavailable: preserve the saved Tools choice.
+/// This service intentionally stays separate from the existing MeloNX service
+/// and uses a different compile-time gate, native method channel, bundle
+/// discovery path, and diagnostic file. Normal builds continue using the
+/// NeoStation+ARMSX2+JIT Shortcut unchanged.
 class StikJitArmsx2Service {
   StikJitArmsx2Service._();
 
@@ -58,40 +55,20 @@ class StikJitArmsx2Service {
       return false;
     }
 
-    // Write this BEFORE the native process-control handoff. ARMSX2 can create
-    // enough memory pressure for iOS to reclaim NeoStation while the game owns
-    // the foreground. If that happens, the next NeoStation process consumes
-    // this one-shot flag and restores the existing library instead of scanning
-    // every playlist as if this were an ordinary cold launch.
-    await GameSessionPersistence.markSkipStartupScan();
-    await _appendDiagnostic('STATE: IOS_COLD_RETURN_GUARD_ARMED\n');
-
-    Future<bool> fail(String diagnosticState, String error) async {
-      _lastError = error;
-      await GameSessionPersistence.clearSkipStartupScan();
-      await _appendDiagnostic(
-        'STATE: $diagnosticState\n'
-        'Error: $_lastError\n'
-        'iOS cold-return guard cleared because ARMSX2 launch did not complete.\n',
-      );
-      return false;
-    }
-
     try {
       final fallbackAutoLoadLastGame =
           await JitBackendPreferenceService.useArmsx2AutoLoadLastGame();
       await _appendDiagnostic(
         'Saved NeoStation fallback mode before ARMSX2 detection: '
-        '${fallbackAutoLoadLastGame ? 'Automatic Load Last Game' : 'Legacy post-JIT URL handoff'}\n',
+        '${fallbackAutoLoadLastGame ? 'Automatic Load Last Game' : 'Natural post-JIT URL handoff'}\n',
       );
 
       final pairingFile = await _ensurePairingFile();
       if (pairingFile == null) {
+        _lastError = 'Pairing file selection was cancelled.';
         _log.w('StikJitArmsx2Service: pairing file selection was cancelled.');
-        return fail(
-          'CANCELLED',
-          'Pairing file selection was cancelled.',
-        );
+        await _appendDiagnostic('STATE: CANCELLED\nError: $_lastError\n');
+        return false;
       }
 
       await _appendDiagnostic(
@@ -113,17 +90,10 @@ class StikJitArmsx2Service {
           detectedAutoLoadLastGame ??
           fallbackAutoLoadLastGame;
 
-      // Mirror a successful ARMSX2 detection back into NeoStation so the Tools
-      // switch follows the emulator automatically. If detection is unavailable,
-      // leave the user's saved fallback untouched.
       if (detectedAutoLoadLastGame != null &&
           detectedAutoLoadLastGame != fallbackAutoLoadLastGame) {
         await JitBackendPreferenceService.setUseArmsx2AutoLoadLastGame(
           detectedAutoLoadLastGame,
-        );
-        _log.i(
-          'StikJitArmsx2Service: synchronized Tools fallback with detected '
-          'ARMSX2 Automatic Load Last Game=$detectedAutoLoadLastGame.',
         );
       }
 
@@ -132,8 +102,7 @@ class StikJitArmsx2Service {
         'bundle=${jit.bundleId ?? 'unknown'} '
         'txm=${jit.txmPresent ?? 'unknown'} '
         'urlOpened=${jit.gameUrlOpened ?? 'unknown'} '
-        'handoffSkipped=${jit.postJitHandoffSkipped} '
-        'targetResumed=${jit.targetResumed} '
+        'jitReady=${jit.jitReady ?? 'unknown'} '
         'detectedAutoLoad=${detectedAutoLoadLastGame ?? 'unavailable'} '
         'effectiveAutoLoad=$effectiveAutoLoadLastGame '
         'modeSource=${jit.autoLoadModeSource ?? 'unknown'}.',
@@ -147,6 +116,7 @@ class StikJitArmsx2Service {
         'PID: ${jit.pid}\n'
         'Detected bundle ID: ${jit.bundleId ?? 'unknown'}\n'
         'TXM: ${jit.txmPresent ?? 'unknown'}\n'
+        'JIT ready: ${jit.jitReady ?? 'unknown'}\n'
         'Detected ARMSX2 Automatic Load Last Game: '
         '${detectedAutoLoadLastGame ?? 'unavailable'}\n'
         'Detected preference key: '
@@ -154,38 +124,35 @@ class StikJitArmsx2Service {
         'Launch mode source: ${jit.autoLoadModeSource ?? 'unknown'}\n'
         'Effective Automatic Load Last Game: $effectiveAutoLoadLastGame\n'
         'Native game URL opened: ${jit.gameUrlOpened ?? 'unknown'}\n'
-        'Post-JIT handoff skipped: ${jit.postJitHandoffSkipped}\n'
-        'JIT target resumed: ${jit.targetResumed}\n'
         'Native log:\n${jit.logs.join('\n')}\n',
       );
 
-      if (effectiveAutoLoadLastGame) {
-        if (!jit.postJitHandoffSkipped) {
-          return fail(
-            'ARMSX2_AUTOLOAD_HANDOFF_NOT_SKIPPED',
-            'JIT succeeded, but the ARMSX2 automatic-load path did not skip the legacy handoff.',
-          );
-        }
-
-        if (!jit.targetResumed) {
-          return fail(
-            'ARMSX2_AUTOLOAD_RESUME_FAILED',
-            'JIT succeeded, but NeoStation could not resume the same ARMSX2 process after JIT.',
-          );
-        }
-
-        await _appendDiagnostic(
-          'STATE: ARMSX2_AUTOLOAD_RESUMED\n'
-          'The same JIT-enabled ARMSX2 process was resumed directly; no second armsx2:// open was requested.\n',
-        );
-        return true;
-      }
-
       if (jit.gameUrlOpened != true) {
-        return fail(
-          'ARMSX2_GAME_URL_POST_JIT_OPEN_FAILED',
-          'JIT succeeded, but NeoStation could not complete the direct ARMSX2 game handoff.',
+        // ARMSX2 is already on screen with JIT enabled at this point. Reporting
+        // a hard failure here would surface an error dialog *behind* ARMSX2 and
+        // make NeoStation look like it changed state while the user was playing.
+        // Treat a JIT-ready launch without URL delivery as a soft success only
+        // when Automatic Load Last Game is actually enabled.
+        if (jit.jitReady == true && effectiveAutoLoadLastGame) {
+          _lastError = null;
+          _log.w(
+            'StikJitArmsx2Service: JIT is ready but the direct game URL was not '
+            'delivered; Automatic Load Last Game is enabled, so ARMSX2 can continue without changing NeoStation state.',
+          );
+          await _appendDiagnostic(
+            'STATE: ARMSX2_GAME_URL_NOT_DELIVERED_JIT_READY\n'
+            'ARMSX2 is running with JIT. NeoStation stays exactly where it was.\n',
+          );
+          return true;
+        }
+
+        _lastError =
+            'JIT succeeded, but NeoStation could not complete the direct ARMSX2 game handoff.';
+        await _appendDiagnostic(
+          'STATE: ARMSX2_GAME_URL_POST_JIT_OPEN_FAILED\n'
+          'Error: $_lastError\n',
         );
+        return false;
       }
 
       await _appendDiagnostic(
@@ -194,18 +161,16 @@ class StikJitArmsx2Service {
       );
       return true;
     } catch (error, stackTrace) {
+      _lastError = error.toString();
       _log.e(
         'StikJitArmsx2Service: built-in JIT launch failed: $error',
         error: error,
         stackTrace: stackTrace,
       );
-      await GameSessionPersistence.clearSkipStartupScan();
-      _lastError = error.toString();
       await _appendDiagnostic(
         'STATE: ERROR\n'
         'Error: $error\n'
-        'Stack: $stackTrace\n'
-        'iOS cold-return guard cleared because ARMSX2 launch failed.\n',
+        'Stack: $stackTrace\n',
       );
       return false;
     }
