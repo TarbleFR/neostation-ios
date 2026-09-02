@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:neostation/services/armsx2_return_state_service.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/stikjit_armsx2_service.dart';
@@ -87,22 +86,9 @@ class IosShortcutJitLaunchService {
     );
   }
 
-  static Future<bool> _finishArmsx2Launch(
-    bool launched, {
-    required bool armed,
-  }) async {
-    if (armed && !launched) {
-      await Armsx2ReturnStateService.clearAll();
-    }
-    return launched;
-  }
-
   /// Runs the selected JIT backend and optionally passes the emulator game URL.
   static Future<bool> run({required String shortcutName, String? input}) async {
     if (!Platform.isIOS) return false;
-
-    final isArmsx2Launch =
-        shortcutName == armsx2ShortcutName && input != null;
 
     var useStikDebugFallback = false;
     try {
@@ -133,31 +119,21 @@ class IosShortcutJitLaunchService {
       return StikJitMeloNxService.launch(gameUrl: input);
     }
 
-    // Only the integrated ARMSX2 path needs the cold-return safety markers.
-    // The historical StikDebug/Shortcut path already returns normally and must
-    // remain completely untouched by the experimental recovery layer.
+    // ARMSX2 remains a second independent integrated path. When the emergency
+    // switch is on, execution skips this branch and naturally reaches the old
+    // StikDebug Shortcut below.
     if (!useStikDebugFallback &&
         shortcutName == armsx2ShortcutName &&
         input != null &&
         StikJitArmsx2Service.isExperimentalEnabled) {
-      await Armsx2ReturnStateService.arm();
-      final launched = await StikJitArmsx2Service.launch(gameUrl: input);
-      return _finishArmsx2Launch(launched, armed: true);
+      return StikJitArmsx2Service.launch(gameUrl: input);
     }
 
     final shortcutUri = buildRunUri(shortcutName: shortcutName, input: input);
 
     try {
-      // StikDebug fallback deliberately carries no ARMSX2 recovery marker: its
-      // old app-switch lifecycle is the known-good reference behavior.
-      return await launchUrl(
-        shortcutUri,
-        mode: LaunchMode.externalApplication,
-      );
+      return await launchUrl(shortcutUri, mode: LaunchMode.externalApplication);
     } catch (e) {
-      if (isArmsx2Launch && !useStikDebugFallback) {
-        await Armsx2ReturnStateService.clearAll();
-      }
       _log.e('IosShortcutJitLaunchService: failed to run $shortcutName: $e');
       return false;
     }

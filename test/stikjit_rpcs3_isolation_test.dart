@@ -24,23 +24,33 @@ void main() {
     expect(service, contains('stikjit_rpcs3_debug.txt'));
   });
 
-  test('RPCS3 registration stays isolated beside MeloNX and ARMSX2 V2', () {
+  test('RPCS3 registration wraps existing MeloNX and ARMSX2 registration', () {
     final wrapper = File(
       'packages/stikjit_bridge/ios/Classes/'
       'NeoStationStikjitBridgePluginV2.swift',
     ).readAsStringSync();
     expect(
       wrapper,
-      contains('StikjitBridgePluginV2.register(with: registrar)'),
-    );
-    expect(
-      wrapper,
-      contains('StikjitArmsx2BridgePluginV2.register(with: registrar)'),
+      contains('NeoStationStikjitBridgePlugin.register(with: registrar)'),
     );
     expect(
       wrapper,
       contains('StikjitRpcs3BridgePlugin.register(with: registrar)'),
     );
+
+    final existingComposite = File(
+      'packages/stikjit_bridge/ios/Classes/'
+      'NeoStationStikjitBridgePlugin.swift',
+    ).readAsStringSync();
+    expect(
+      existingComposite,
+      contains('StikjitBridgePluginV2.register(with: registrar)'),
+    );
+    expect(
+      existingComposite,
+      contains('StikjitArmsx2BridgePlugin.register(with: registrar)'),
+    );
+    expect(existingComposite, isNot(contains('StikjitRpcs3BridgePlugin')));
 
     final pluginManifest = File(
       'packages/stikjit_bridge/pubspec.yaml',

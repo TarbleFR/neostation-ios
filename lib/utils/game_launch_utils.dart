@@ -7,7 +7,6 @@ import '../providers/file_provider.dart';
 import '../sync/i_sync_provider.dart';
 import '../services/game_service.dart';
 import '../services/game_launch_manager.dart';
-import '../services/game_session_persistence.dart';
 import '../widgets/game_launch_dialog.dart';
 
 /// Standardizes the game launch workflow: Session initialization -> Progress Dialog -> Delay -> Execution -> Monitoring.
@@ -37,7 +36,9 @@ Future<void> launchGameWithDialog({
 }) async {
   // iOS keeps NeoStation suspended behind external emulators. Release decoded
   // artwork before the handoff so memory-heavy apps such as ARMSX2 have more
-  // headroom and iOS is less likely to reclaim NeoStation.
+  // headroom and iOS is less likely to reclaim NeoStation. The actual game
+  // playlist/model stays in memory, so a warm return still lands instantly on
+  // the same menu instead of rebuilding the library.
   if (Platform.isIOS) {
     imageCache.clear();
     imageCache.clearLiveImages();
@@ -74,27 +75,7 @@ Future<void> launchGameWithDialog({
     return;
   }
 
-  // Persist the full iOS game identity BEFORE native ARMSX2/StikJIT can move
-  // NeoStation to the background. This write is intentionally awaited: if iOS
-  // jetsams NeoStation while the emulator is running, the new process must know
-  // exactly which game's save NeoSync has to upload.
-  if (Platform.isIOS) {
-    await GameSessionPersistence.saveGameSession(
-      systemFolderName: system.folderName,
-      filename: game.romname,
-      startTimestamp: DateTime.now().millisecondsSinceEpoch,
-    );
-  }
-
-  late final GameLaunchResult result;
-  try {
-    result = await GameService.launchGame(context, system, game);
-  } catch (_) {
-    if (Platform.isIOS) {
-      await GameSessionPersistence.clearGameSession();
-    }
-    rethrow;
-  }
+  final result = await GameService.launchGame(context, system, game);
 
   if (result.success) {
     // Notify manager to begin background process monitoring. On success
@@ -104,11 +85,6 @@ Future<void> launchGameWithDialog({
       emulatorExe: GameService.launchedEmulatorExe,
     );
   } else {
-    // A failed iOS handoff must not leave a stale cold-return recovery record.
-    if (Platform.isIOS) {
-      await GameSessionPersistence.clearGameSession();
-    }
-
     // Clean up session and close dialog on failure.
     GameService.clearLaunchPending();
     GameLaunchManager().onDialogDisposed();

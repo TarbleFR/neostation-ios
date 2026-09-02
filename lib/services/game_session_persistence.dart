@@ -4,9 +4,10 @@ import 'package:neostation/services/logger_service.dart';
 /// Service responsible for persisting game session state across application restarts.
 ///
 /// Android stores the full active session so playtime can be recovered after a
-/// process kill. iOS persists the same lightweight game identity as well so a
-/// cold return from a memory-heavy external emulator can resume NeoSync without
-/// rebuilding or rescanning the user's library.
+/// process kill. iOS also uses the lightweight startup-scan guard: memory-heavy
+/// external emulators such as ARMSX2 can cause iOS to reclaim NeoStation while
+/// the game is in front, and the next foreground should restore the existing
+/// library instead of performing a full ROM scan again.
 class GameSessionPersistence {
   static const String _keyGameActive = 'game_session_active';
   static const String _keySystemFolderName = 'game_session_system_folder';
@@ -17,10 +18,6 @@ class GameSessionPersistence {
   static final _log = LoggerService.instance;
 
   /// Persists the initiation of a new game session.
-  ///
-  /// The same record is used on Android for playtime recovery and on iOS to
-  /// remember which game's save must be synchronized if NeoStation is reclaimed
-  /// while an external emulator owns the foreground.
   static Future<void> saveGameSession({
     required String systemFolderName,
     required String filename,
@@ -40,9 +37,9 @@ class GameSessionPersistence {
 
   /// Arms only the one-shot startup-scan guard.
   ///
-  /// Kept for callers that only need to suppress a cold-start ROM scan. Normal
-  /// iOS game launches now use [saveGameSession] so NeoSync can also recover the
-  /// identity of the game that just exited.
+  /// iOS does not need Android's full process/session recovery metadata, but it
+  /// does need to remember that a cold relaunch happened while an external game
+  /// was active. The flag is consumed by SqliteConfigProvider.scanSystems().
   static Future<void> markSkipStartupScan() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -104,24 +101,6 @@ class GameSessionPersistence {
     } catch (e) {
       _log.e('Error reading game session: $e');
       return null;
-    }
-  }
-
-  /// Clears the active-game identity but deliberately leaves the startup-scan
-  /// guard untouched.
-  ///
-  /// This is used after an iOS cold-return NeoSync recovery: AppScreen still
-  /// needs the one-shot guard in order to skip the normal startup ROM scan, but
-  /// the save must not be uploaded again on the next resume.
-  static Future<void> clearActiveGameSession() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_keyGameActive);
-      await prefs.remove(_keySystemFolderName);
-      await prefs.remove(_keyFilename);
-      await prefs.remove(_keyStartTimestamp);
-    } catch (e) {
-      _log.e('Error clearing active game session metadata: $e');
     }
   }
 

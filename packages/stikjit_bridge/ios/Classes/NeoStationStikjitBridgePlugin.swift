@@ -18,10 +18,9 @@ public final class NeoStationStikjitBridgePlugin: NSObject, FlutterPlugin {
 /// ARMSX2 is launched suspended so JIT is attached before its CPU threads run.
 /// After attach, NeoStation automatically inspects ARMSX2's persisted
 /// "Automatic Load Last Game" preference when its container is readable:
-/// - enabled: foreground the already-JIT-enabled ARMSX2 process through a
-///   neutral `armsx2://` activation, matching the normal iOS app-switch path
-///   used by MeloNX/RetroArch without re-sending the selected game's URL;
-/// - disabled: preserve the legacy NeoStation -> armsx2:// game handoff so the
+/// - enabled: resume the exact same JIT-enabled PID, without returning to
+///   NeoStation and without opening armsx2:// a second time;
+/// - disabled: preserve the legacy NeoStation -> armsx2:// handoff so the
 ///   selected frontend game is delivered after the intro/menu path.
 ///
 /// The Dart-side Tools preference remains a fallback only when the ARMSX2
@@ -156,13 +155,6 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     }
   }
 
-  /// Automatic Load Last Game needs only to make the suspended, already-JITed
-  /// ARMSX2 process active; it must not deliver the selected game's launch URL
-  /// again. Prefer a normal UIKit activation (`armsx2://`) so SpringBoard owns
-  /// the foreground/background transition exactly as it does for RetroArch and
-  /// MeloNX. This avoids keeping NeoStation in the unusual process-control-only
-  /// handoff state for an entire gameplay session. If UIKit rejects the neutral
-  /// activation, fall back to the validated same-PID process-control resume.
   @available(iOS 17.4, *)
   private static func resumeAutomaticLoadTarget(
     response: [String: Any],
@@ -195,75 +187,12 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     }
 
     logs.append("STATE: ARMSX2_AUTOLOAD_HANDOFF_SKIPPED")
-    logs.append("STATE: ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_REQUESTED")
+    logs.append("STATE: ARMSX2_AUTOLOAD_RESUME_REQUESTED")
     logs.append(
-      "Automatic Load Last Game is active. NeoStation will foreground the already-JITed ARMSX2 process with a neutral armsx2:// activation; the selected game URL will not be sent a second time."
+      "Automatic Load Last Game is active. NeoStation will resume the same JIT-enabled ARMSX2 process directly, without a second armsx2:// open."
     )
     response["logs"] = logs
 
-    DispatchQueue.main.async {
-      guard let neutralActivationURL = URL(string: "armsx2://") else {
-        var fallback = response
-        var fallbackLogs = fallback["logs"] as? [String] ?? []
-        fallbackLogs.append("STATE: ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_URL_INVALID")
-        fallback["logs"] = fallbackLogs
-        Self.resumeAutomaticLoadTargetViaProcessControl(
-          response: fallback,
-          detectedBundleId: detectedBundleId,
-          originalPID: originalPID,
-          pairingFilePath: pairingFilePath,
-          backgroundTask: backgroundTask,
-          result: result
-        )
-        return
-      }
-
-      UIApplication.shared.open(neutralActivationURL, options: [:]) { opened in
-        if opened {
-          var resumed = response
-          var resumedLogs = resumed["logs"] as? [String] ?? []
-          resumed["targetResumed"] = true
-          resumed["neutralActivationOpened"] = true
-          resumed["resumeStrategy"] = "uiapplication_neutral_url"
-          resumedLogs.append("STATE: ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_ACCEPTED")
-          resumedLogs.append(
-            "UIApplication.open accepted neutral armsx2:// activation. iOS will foreground the already-running ARMSX2 process without another game-specific URL. Original JIT PID: \(originalPID)."
-          )
-          resumed["logs"] = resumedLogs
-          backgroundTask.end()
-          result(resumed)
-          return
-        }
-
-        var fallback = response
-        var fallbackLogs = fallback["logs"] as? [String] ?? []
-        fallback["neutralActivationOpened"] = false
-        fallbackLogs.append("STATE: ARMSX2_AUTOLOAD_STANDARD_ACTIVATION_REJECTED")
-        fallbackLogs.append(
-          "UIApplication.open rejected neutral armsx2:// activation; falling back to the validated same-PID process-control resume."
-        )
-        fallback["logs"] = fallbackLogs
-        Self.resumeAutomaticLoadTargetViaProcessControl(
-          response: fallback,
-          detectedBundleId: detectedBundleId,
-          originalPID: originalPID,
-          pairingFilePath: pairingFilePath,
-          backgroundTask: backgroundTask,
-          result: result
-        )
-      }
-    }
-  }
-
-  @available(iOS 17.4, *)
-  private static func resumeAutomaticLoadTargetViaProcessControl(
-    response: [String: Any],
-    detectedBundleId: String,
-    originalPID: Int,
-    pairingFilePath: String,
-    backgroundTask: Armsx2StikJitBackgroundTask,
-    result: @escaping FlutterResult
-  ) {
     handoffQueue.async {
       do {
         let configuration = StikJIT.Configuration.default
@@ -277,19 +206,18 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
         var resumed = response
         var resumedLogs = resumed["logs"] as? [String] ?? []
         resumed["resumedPid"] = Int(resumedPID)
-        resumed["resumeStrategy"] = "process_control_fallback"
 
         if resumedPID == UInt64(originalPID) {
           resumed["targetResumed"] = true
           resumedLogs.append("STATE: ARMSX2_AUTOLOAD_SAME_PID_RESUMED")
           resumedLogs.append(
-            "Fallback process_control resumed ARMSX2 PID \(resumedPID), matching the PID that received JIT."
+            "process_control resumed ARMSX2 PID \(resumedPID), matching the PID that received JIT."
           )
         } else {
           resumed["targetResumed"] = false
           resumedLogs.append("STATE: ARMSX2_AUTOLOAD_PID_MISMATCH")
           resumedLogs.append(
-            "Fallback resume returned PID \(resumedPID), but JIT was enabled on PID \(originalPID). Treating the launch as failed to avoid claiming a non-JIT process is ready."
+            "Resume returned PID \(resumedPID), but JIT was enabled on PID \(originalPID). Treating the launch as failed to avoid claiming a non-JIT process is ready."
           )
         }
 

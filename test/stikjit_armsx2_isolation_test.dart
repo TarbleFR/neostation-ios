@@ -41,48 +41,33 @@ void main() {
   });
 
   test(
-    'registered ARMSX2 bridge uses detach-only automatic load and legacy URL fallback',
+    'native ARMSX2 bridge auto-detects launch mode and preserves both handoffs',
     () {
-      final registration = File(
+      final composite = File(
         'packages/stikjit_bridge/ios/Classes/'
-        'NeoStationStikjitBridgePluginV2.swift',
+        'NeoStationStikjitBridgePlugin.swift',
       ).readAsStringSync();
       expect(
-        registration,
+        composite,
         contains('StikjitBridgePluginV2.register(with: registrar)'),
       );
-      expect(
-        registration,
-        contains('StikjitArmsx2BridgePluginV2.register(with: registrar)'),
-      );
-      expect(
-        registration,
-        contains('StikjitRpcs3BridgePlugin.register(with: registrar)'),
-      );
-      expect(
-        registration,
-        isNot(contains('NeoStationStikjitBridgePlugin.register(with: registrar)')),
-      );
-
-      final native = File(
-        'packages/stikjit_bridge/ios/Classes/'
-        'StikjitArmsx2BridgePluginV2.swift',
-      ).readAsStringSync();
-      expect(native, contains('neostation/stikjit_armsx2'));
-      expect(native, contains('enableArmsx2Jit'));
-      expect(native, contains('launchArmsx2Suspended'));
-      expect(native, contains('Armsx2PreferenceDetector'));
-      expect(native, contains('detectedAutoLoadLastGame'));
-      expect(native, contains('effectiveAutoLoadLastGame'));
-      expect(native, contains('autoLoadModeSource'));
-      expect(native, contains('STATE: ARMSX2_V2_JIT_PID_READY'));
-      expect(native, contains('STATE: ARMSX2_V2_DETACH_ONLY'));
-      expect(native, contains('"resumeStrategy"] = "stikjit_detach_only"'));
-      expect(native, contains('completed["postJitHandoffSkipped"] = true'));
-      expect(native, contains('completed["targetResumed"] = true'));
-      expect(native, contains('completed["gameUrlOpened"] = false'));
-      expect(native, contains('performLifecycleHandoff('));
-      expect(native, contains('targetURL: gameUrl'));
+      expect(composite, contains('neostation/stikjit_armsx2'));
+      expect(composite, contains('enableArmsx2Jit'));
+      expect(composite, contains('launchArmsx2Suspended'));
+      expect(composite, contains('Armsx2PreferenceDetector'));
+      expect(composite, contains('detectedAutoLoadLastGame'));
+      expect(composite, contains('effectiveAutoLoadLastGame'));
+      expect(composite, contains('autoLoadModeSource'));
+      expect(composite, contains('ARMSX2_LAUNCH_MODE_AUTO_DETECTED'));
+      expect(composite, contains('ARMSX2_LAUNCH_MODE_FALLBACK'));
+      expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
+      expect(composite, contains('ARMSX2_AUTOLOAD_RESUME_REQUESTED'));
+      expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
+      expect(composite, contains('resumedPID == UInt64(originalPID)'));
+      expect(composite, contains('targetResumed'));
+      expect(composite, contains('postJitHandoffSkipped'));
+      expect(composite, contains('performLegacyHandoff'));
+      expect(composite, contains('openGameWhenNeoStationIsActive'));
 
       final detector = File(
         'packages/stikjit_bridge/ios/Classes/'
@@ -143,22 +128,13 @@ void main() {
       final launchFlow = File(
         'lib/screens/game_screen/my_games_list/launch_flow.dart',
       ).readAsStringSync();
-      expect(launchFlow, isNot(contains('if (Platform.isIOS) return;')));
-      expect(launchFlow, contains('imageCache.clear();'));
-      expect(launchFlow, contains('_games = [];'));
-      expect(launchFlow, contains('GameService.loadGamesForSystem(widget.system)'));
-
-      final launchUtils = File(
-        'lib/utils/game_launch_utils.dart',
-      ).readAsStringSync();
+      expect(launchFlow, contains('if (Platform.isIOS) return;'));
       expect(
-        launchUtils,
-        contains('await GameSessionPersistence.saveGameSession('),
+        launchFlow,
+        contains('Error refreshing played game after iOS emulator return'),
       );
-      expect(
-        launchUtils,
-        contains('await GameSessionPersistence.clearGameSession();'),
-      );
+      expect(launchFlow, contains('GameService.getGameDetails('));
+      expect(launchFlow, contains('_databaseProvider.refresh();'));
 
       final appScreen = File('lib/screens/app_screen.dart').readAsStringSync();
       expect(appScreen, contains('skipIosReturnScan'));

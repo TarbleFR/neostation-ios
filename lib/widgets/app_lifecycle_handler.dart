@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../services/notification_service.dart';
 import '../services/neosync/auth_service.dart';
-import '../services/game_session_persistence.dart';
 import '../sync/sync_manager.dart';
 import '../sync/providers/neo_sync_adapter.dart';
 import '../widgets/plan_welcome_modal.dart';
@@ -13,7 +12,6 @@ import '../widgets/plan_farewell_modal.dart';
 import '../services/game_service.dart';
 import '../services/music_player_service.dart';
 import '../providers/sqlite_config_provider.dart';
-import '../repositories/system_repository.dart';
 import 'package:provider/provider.dart';
 
 /// Widget that detects when the app returns to the foreground and reactivates the gamepad
@@ -30,12 +28,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     with WidgetsBindingObserver {
   String? _lastKnownPlan;
   AppLifecycleListener? _exitListener;
-
-  // iOS external emulators can suspend NeoStation for a long time or cause the
-  // process to be reclaimed entirely. Track a real background transition so a
-  // transient foreground event during launch cannot be mistaken for game exit.
-  bool _iosGameWasBackgrounded = false;
-  bool _iosGameRecoveryInProgress = false;
 
   static final _log = LoggerService.instance;
 
@@ -97,21 +89,14 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
         notificationService.suspend();
       }
     };
-
-    // Initialize with current plan after a delay to ensure auth is loaded.
-    // The same post-frame point is also the safest place to recover an iOS game
-    // session after the OS killed NeoStation behind ARMSX2: SQLite, bookmarks,
-    // AuthService and SyncManager are all already initialized by main.dart.
+    // Initialize with current plan after a delay to ensure auth is loaded
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Wait a bit more to ensure auth service is fully loaded
+      await Future.delayed(Duration(milliseconds: 500));
       if (!mounted) return;
       final authService = Provider.of<AuthService>(context, listen: false);
       if (authService.isLoggedIn) {
         _lastKnownPlan = authService.currentUser?.plan;
-      }
-
-      if (Platform.isIOS) {
-        await _recoverPendingIosGameSync(reason: 'cold-start');
       }
     });
   }
@@ -124,110 +109,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     super.dispose();
   }
 
-  /// Uploads the save for the persisted iOS game session.
-  ///
-  /// This covers both:
-  /// - a warm return where NeoStation survived behind the emulator; and
-  /// - a cold return where iOS reclaimed NeoStation and reconstructed the app.
-  ///
-  /// The active-game identity is cleared only after a successful provider call.
-  /// The startup-scan guard is deliberately preserved here; AppScreen owns and
-  /// consumes that one-shot flag so the existing #71 no-rescan behavior remains
-  /// untouched.
-  Future<void> _recoverPendingIosGameSync({
-    required String reason,
-    bool requireMinimumElapsed = false,
-  }) async {
-    if (!Platform.isIOS || !mounted || _iosGameRecoveryInProgress) return;
-
-    final session = await GameSessionPersistence.getActiveGameSession();
-    if (session == null) return;
-
-    final systemFolderName = session['systemFolderName']?.toString();
-    final filename = session['filename']?.toString();
-    final startTimestamp =
-        int.tryParse(session['startTimestamp']?.toString() ?? '0') ?? 0;
-
-    if (systemFolderName == null ||
-        systemFolderName.isEmpty ||
-        filename == null ||
-        filename.isEmpty) {
-      _log.w(
-        'iOS NeoSync recovery skipped: incomplete persisted game session.',
-      );
-      return;
-    }
-
-    if (requireMinimumElapsed && startTimestamp > 0) {
-      final elapsedMs =
-          DateTime.now().millisecondsSinceEpoch - startTimestamp;
-      if (elapsedMs < 4000) {
-        _log.i(
-          'iOS NeoSync recovery deferred during launch handoff '
-          '(elapsed=${elapsedMs}ms, reason=$reason).',
-        );
-        return;
-      }
-    }
-
-    final syncProvider = Provider.of<SyncManager>(
-      context,
-      listen: false,
-    ).active;
-    if (syncProvider == null || !syncProvider.isAuthenticated) {
-      _log.i(
-        'iOS NeoSync recovery retained for retry: provider unavailable or '
-        'not authenticated (reason=$reason).',
-      );
-      return;
-    }
-
-    _iosGameRecoveryInProgress = true;
-    try {
-      final system = await SystemRepository.getSystemByFolderName(
-        systemFolderName,
-      );
-      if (system?.id == null) {
-        _log.w(
-          'iOS NeoSync recovery retained: system "$systemFolderName" '
-          'is not ready yet (reason=$reason).',
-        );
-        return;
-      }
-
-      final game = await GameService.getGameDetails(system!, filename);
-      if (game == null) {
-        _log.w(
-          'iOS NeoSync recovery retained: game "$filename" was not found '
-          'in "$systemFolderName" yet (reason=$reason).',
-        );
-        return;
-      }
-
-      _log.i(
-        'iOS NeoSync recovery: syncing "${game.name}" after emulator return '
-        '(reason=$reason).',
-      );
-      final result = await syncProvider.syncGameSavesAfterClose(game);
-      if (result.success) {
-        await GameSessionPersistence.clearActiveGameSession();
-        _log.i(
-          'iOS NeoSync recovery complete for "${game.name}" '
-          '(reason=$reason).',
-        );
-      } else {
-        _log.w(
-          'iOS NeoSync recovery failed for "${game.name}": '
-          '${result.message ?? result.error?.name ?? 'unknown error'}',
-        );
-      }
-    } catch (e) {
-      _log.e('iOS NeoSync recovery error (reason=$reason): $e');
-    } finally {
-      _iosGameRecoveryInProgress = false;
-    }
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     super.didChangeAppLifecycleState(state);
@@ -238,16 +119,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       // dismiss the text-input channel before restoring the rest of the app.
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-
-      if (Platform.isIOS && _iosGameWasBackgrounded) {
-        _iosGameWasBackgrounded = false;
-        // syncGameSavesAfterClose already waits briefly for the emulator to
-        // finish flushing its save file before it uploads.
-        await _recoverPendingIosGameSync(
-          reason: 'warm-return',
-          requireMinimumElapsed: true,
-        );
-      }
 
       await GameService.handleAppResumed();
 
@@ -281,10 +152,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       await _checkForDataUpdates();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
-      if (Platform.isIOS && GameService.isGameLaunched) {
-        _iosGameWasBackgrounded = true;
-      }
-
       if (!mounted) return;
       Provider.of<NotificationService>(context, listen: false).suspend();
       MusicPlayerService().appPaused();
@@ -344,7 +211,7 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
           final isUpgrade = _isUpgrade(_lastKnownPlan!, currentPlan);
 
           // Delay to ensure the UI updates first
-          Future.delayed(const Duration(milliseconds: 1000), () {
+          Future.delayed(Duration(milliseconds: 1000), () {
             if (mounted) {
               if (isUpgrade) {
                 // Show welcome modal for upgrades
