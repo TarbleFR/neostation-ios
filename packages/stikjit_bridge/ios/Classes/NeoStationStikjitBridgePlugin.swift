@@ -15,16 +15,16 @@ public final class NeoStationStikjitBridgePlugin: NSObject, FlutterPlugin {
 
 /// Independent StikJIT path for ARMSX2.
 ///
-/// ARMSX2 is launched suspended so JIT is attached before its CPU threads run.
-/// After attach, NeoStation automatically inspects ARMSX2's persisted
-/// "Automatic Load Last Game" preference when its container is readable:
-/// - enabled: resume the exact same JIT-enabled PID, without returning to
-///   NeoStation and without opening armsx2:// a second time;
-/// - disabled: preserve the legacy NeoStation -> armsx2:// handoff so the
-///   selected frontend game is delivered after the intro/menu path.
+/// NeoStation now exposes two explicit user-selected modes:
+/// - Standard (default): the historical post-JIT NeoStation -> armsx2://
+///   handoff. The exact selected game URL is delivered and the normal
+///   intro/BIOS/return lifecycle remains available for NeoSync.
+/// - Direct: resume the exact same JIT-enabled ARMSX2 PID and rely on ARMSX2's
+///   own Automatic Load Last Game setting. This is faster but automatic NeoSync
+///   after the game is intentionally not promised.
 ///
-/// The Dart-side Tools preference remains a fallback only when the ARMSX2
-/// preference cannot be read safely.
+/// ARMSX2's stored preference is still inspected for diagnostics, but it never
+/// overrides the explicit NeoStation Tools choice.
 public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
   private static let channelName = "neostation/stikjit_armsx2"
   private static let jitQueue = DispatchQueue(
@@ -85,13 +85,11 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
       return
     }
 
-    // This value is intentionally only a fallback. A readable ARMSX2
-    // preference always wins so changing the option inside ARMSX2 takes effect
-    // on the very next launch without revisiting NeoStation Settings > Tools.
-    let fallbackAutoLoadLastGame =
-      arguments["autoLoadLastGame"] as? Bool ?? false
+    // The NeoStation Tools choice is authoritative. False is the default
+    // Standard/NeoSync-compatible mode; true is the optional Direct mode.
+    let directLoadLastGame = arguments["autoLoadLastGame"] as? Bool ?? false
     let backgroundTask = Armsx2StikJitBackgroundTask(
-      name: "ARMSX2 automatic JIT launch"
+      name: "ARMSX2 JIT launch"
     )
 
     Self.jitQueue.async {
@@ -103,27 +101,48 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
         var logs = response["logs"] as? [String] ?? []
         logs.append("STATE: ARMSX2_JIT_PID_READY")
 
-        let detectedAutoLoad = response["detectedAutoLoadLastGame"] as? Bool
-        let autoLoadLastGame = detectedAutoLoad ?? fallbackAutoLoadLastGame
-        response["effectiveAutoLoadLastGame"] = autoLoadLastGame
-        response["autoLoadModeSource"] = detectedAutoLoad == nil
-          ? "neostation_fallback"
-          : "armsx2_preferences"
+        // Consume the detected ARMSX2 setting for diagnostics only. Removing it
+        // from the response also prevents Dart from mirroring it back into the
+        // user's explicit NeoStation choice.
+        let detectedAutoLoad =
+          response.removeValue(forKey: "detectedAutoLoadLastGame") as? Bool
+        let detectedPreferenceKey =
+          response.removeValue(forKey: "detectedAutoLoadPreferenceKey") as? String
 
-        if let detectedAutoLoad {
-          logs.append("STATE: ARMSX2_LAUNCH_MODE_AUTO_DETECTED")
+        response["effectiveAutoLoadLastGame"] = directLoadLastGame
+        response["autoLoadModeSource"] = "neostation_tools_explicit"
+
+        if directLoadLastGame {
+          logs.append("STATE: ARMSX2_LAUNCH_MODE_DIRECT_SELECTED")
           logs.append(
-            "ARMSX2 Automatic Load Last Game was detected as \(detectedAutoLoad); NeoStation selected the matching launch path automatically."
+            "NeoStation Tools selected Direct / Load Last Game mode. Automatic NeoSync after the game is unavailable in this mode."
           )
         } else {
-          logs.append("STATE: ARMSX2_LAUNCH_MODE_FALLBACK")
+          logs.append("STATE: ARMSX2_LAUNCH_MODE_STANDARD_SELECTED")
           logs.append(
-            "ARMSX2 preferences were unavailable; using the saved NeoStation Tools fallback: \(fallbackAutoLoadLastGame)."
+            "NeoStation Tools selected Standard mode. The exact selected game URL will use the historical post-JIT handoff."
           )
+        }
+
+        if let detectedAutoLoad {
+          let keySuffix = detectedPreferenceKey.map { " (key: \($0))" } ?? ""
+          if detectedAutoLoad == directLoadLastGame {
+            logs.append("STATE: ARMSX2_SETTING_MATCHES_SELECTED_MODE")
+            logs.append(
+              "ARMSX2 Automatic Load Last Game=\(detectedAutoLoad) matches the NeoStation selection\(keySuffix)."
+            )
+          } else {
+            logs.append("STATE: ARMSX2_SETTING_MISMATCH")
+            logs.append(
+              "ARMSX2 Automatic Load Last Game=\(detectedAutoLoad) does not match NeoStation Direct mode=\(directLoadLastGame)\(keySuffix). The NeoStation Tools choice remains authoritative."
+            )
+          }
+        } else {
+          logs.append("STATE: ARMSX2_SETTING_UNAVAILABLE_DIAGNOSTIC_ONLY")
         }
         response["logs"] = logs
 
-        if autoLoadLastGame {
+        if directLoadLastGame {
           Self.resumeAutomaticLoadTarget(
             response: response,
             pairingFilePath: pairingFilePath,
@@ -189,7 +208,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     logs.append("STATE: ARMSX2_AUTOLOAD_HANDOFF_SKIPPED")
     logs.append("STATE: ARMSX2_AUTOLOAD_RESUME_REQUESTED")
     logs.append(
-      "Automatic Load Last Game is active. NeoStation will resume the same JIT-enabled ARMSX2 process directly, without a second armsx2:// open."
+      "Direct mode is active. NeoStation will resume the same JIT-enabled ARMSX2 process without a second armsx2:// open."
     )
     response["logs"] = logs
 
@@ -255,7 +274,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     var response = response
     var logs = response["logs"] as? [String] ?? []
     logs.append(
-      "Automatic Load Last Game is off. Re-acquiring NeoStation foreground before delivering the ARMSX2 game URL."
+      "Standard mode selected. Re-acquiring NeoStation foreground before delivering the exact ARMSX2 game URL."
     )
     response["logs"] = logs
     response["postJitHandoffSkipped"] = false
@@ -425,7 +444,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
         "Automatic Load Last Game preference detection failed safely: \(error.localizedDescription)"
       )
       logs.append(
-        "NeoStation will keep the existing Tools preference as a fallback for this launch."
+        "This detection is diagnostic only; the NeoStation Tools selection remains authoritative."
       )
     }
 
