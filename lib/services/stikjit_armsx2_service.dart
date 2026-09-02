@@ -12,10 +12,10 @@ import 'package:stikjit_bridge/stikjit_bridge.dart';
 
 /// Experimental built-in StikJIT path dedicated to ARMSX2.
 ///
-/// This service intentionally stays separate from the existing MeloNX service
-/// and uses a different compile-time gate, native method channel, bundle
-/// discovery path, and diagnostic file. Normal builds continue using the
-/// NeoStation+ARMSX2+JIT Shortcut unchanged.
+/// The native safe-boot channel keeps ARMSX2's direct launch and Skip BIOS,
+/// but stages the selected game URL while universal.js still holds the target
+/// under debugserver. This prevents Automatic Load Last Game from racing the
+/// ISO reader before the selected image has been opened.
 class StikJitArmsx2Service {
   StikJitArmsx2Service._();
 
@@ -29,9 +29,9 @@ class StikJitArmsx2Service {
     defaultValue: false,
   );
 
-  // Sideloaders may rewrite this identifier. The native bridge treats it only
-  // as a preferred hint and confirms the installed app through
-  // installation_proxy before launching anything.
+  // Sideloaders may rewrite this identifier. The native runtime treats it only
+  // as a preferred hint and resolves the actual installed bundle through
+  // Installation Proxy before launching anything.
   static const String _bundleId = String.fromEnvironment(
     'NEOSTATION_ARMSX2_BUNDLE_ID',
     defaultValue: 'com.armsx2.ios',
@@ -60,7 +60,7 @@ class StikJitArmsx2Service {
           await JitBackendPreferenceService.useArmsx2AutoLoadLastGame();
       await _appendDiagnostic(
         'Saved NeoStation fallback mode before ARMSX2 detection: '
-        '${fallbackAutoLoadLastGame ? 'Automatic Load Last Game' : 'Natural post-JIT URL handoff'}\n',
+        '${fallbackAutoLoadLastGame ? 'Automatic Load Last Game' : 'Safe staged URL handoff'}\n',
       );
 
       final pairingFile = await _ensurePairingFile();
@@ -74,10 +74,11 @@ class StikJitArmsx2Service {
       await _appendDiagnostic(
         'STATE: PAIRING_READY\n'
         'Stored pairing file: ${path.basename(pairingFile.path)}\n'
-        'Pairing bytes: ${await pairingFile.length()}\n',
+        'Pairing bytes: ${await pairingFile.length()}\n'
+        'Native safe-boot diagnostics continue below this line before JIT returns.\n',
       );
 
-      final jit = await StikjitBridge.enableArmsx2Jit(
+      final jit = await StikjitBridge.enableArmsx2JitSafe(
         pairingFilePath: pairingFile.path,
         bundleId: _bundleId,
         gameUrl: gameUrl,
@@ -98,7 +99,7 @@ class StikJitArmsx2Service {
       }
 
       _log.i(
-        'StikJitArmsx2Service: JIT ready for ARMSX2 pid=${jit.pid} '
+        'StikJitArmsx2Service: safe JIT ready for ARMSX2 pid=${jit.pid} '
         'bundle=${jit.bundleId ?? 'unknown'} '
         'txm=${jit.txmPresent ?? 'unknown'} '
         'urlOpened=${jit.gameUrlOpened ?? 'unknown'} '
@@ -108,7 +109,7 @@ class StikJitArmsx2Service {
         'modeSource=${jit.autoLoadModeSource ?? 'unknown'}.',
       );
       for (final message in jit.logs) {
-        _log.d('StikJIT ARMSX2: $message');
+        _log.d('StikJIT ARMSX2 safe: $message');
       }
 
       await _appendDiagnostic(
@@ -127,43 +128,25 @@ class StikJitArmsx2Service {
         'Native log:\n${jit.logs.join('\n')}\n',
       );
 
-      if (jit.gameUrlOpened != true) {
-        // ARMSX2 is already on screen with JIT enabled at this point. Reporting
-        // a hard failure here would surface an error dialog *behind* ARMSX2 and
-        // make NeoStation look like it changed state while the user was playing.
-        // Treat a JIT-ready launch without URL delivery as a soft success only
-        // when Automatic Load Last Game is actually enabled.
-        if (jit.jitReady == true && effectiveAutoLoadLastGame) {
-          _lastError = null;
-          _log.w(
-            'StikJitArmsx2Service: JIT is ready but the direct game URL was not '
-            'delivered; Automatic Load Last Game is enabled, so ARMSX2 can continue without changing NeoStation state.',
-          );
-          await _appendDiagnostic(
-            'STATE: ARMSX2_GAME_URL_NOT_DELIVERED_JIT_READY\n'
-            'ARMSX2 is running with JIT. NeoStation stays exactly where it was.\n',
-          );
-          return true;
-        }
-
+      if (jit.jitReady != true || jit.gameUrlOpened != true) {
         _lastError =
-            'JIT succeeded, but NeoStation could not complete the direct ARMSX2 game handoff.';
+            'ARMSX2 safe boot did not complete JIT + selected game URL handoff.';
         await _appendDiagnostic(
-          'STATE: ARMSX2_GAME_URL_POST_JIT_OPEN_FAILED\n'
+          'STATE: ARMSX2_SAFE_BOOT_INCOMPLETE\n'
           'Error: $_lastError\n',
         );
         return false;
       }
 
       await _appendDiagnostic(
-        'STATE: ARMSX2_GAME_URL_POST_JIT_OPENED\n'
-        'NeoStation delivered the ARMSX2 game URL to the already-JITed process.\n',
+        'STATE: ARMSX2_SAFE_BOOT_COMPLETE\n'
+        'The selected ARMSX2 game URL was staged while JIT held the target process.\n',
       );
       return true;
     } catch (error, stackTrace) {
       _lastError = error.toString();
       _log.e(
-        'StikJitArmsx2Service: built-in JIT launch failed: $error',
+        'StikJitArmsx2Service: safe built-in JIT launch failed: $error',
         error: error,
         stackTrace: stackTrace,
       );
