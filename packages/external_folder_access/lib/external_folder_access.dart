@@ -131,7 +131,7 @@ class ExternalFolderAccess {
   }
 
   /// Computes a file SHA-256 natively on a background queue. This avoids
-  /// blocking Flutter while Manic EMU identifiers are prepared for large ROMs.
+  /// blocking Flutter while file identifiers are prepared for large ROMs.
   static Future<String?> sha256File(String filePath) async {
     if (!Platform.isIOS) return null;
     try {

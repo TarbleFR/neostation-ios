@@ -48,6 +48,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/armsx2_library_service.dart';
+import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
@@ -289,16 +290,29 @@ void main() async {
     ConfigService.linkedExternalFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder();
 
-    // Same again for ARMSX2's folder, which lives under its own bookmark
-    // key so linking one emulator never invalidates the other.
-    ConfigService.linkedArmsx2FolderPath =
-        await ExternalFolderAccess.resolveBookmarkedFolder(key: 'armsx2');
-
-    // NeoSync save roots are independent from emulator library roots.
-    ConfigService.linkedArmsx2SaveFolderPath =
+    // ARMSX2 has one security-scoped root for library + NeoSync.
+    final canonicalArmsx2Path =
         await ExternalFolderAccess.resolveBookmarkedFolder(
-          key: ConfigService.armsx2NeoSyncBookmarkKey,
+          key: Armsx2FolderService.bookmarkKey,
         );
+    final legacyArmsx2Path =
+        await ExternalFolderAccess.resolveBookmarkedFolder(
+          key: Armsx2FolderService.legacyNeoSyncBookmarkKey,
+        );
+    final linkedArmsx2Path = canonicalArmsx2Path ?? legacyArmsx2Path;
+    if (linkedArmsx2Path != null && linkedArmsx2Path.trim().isNotEmpty) {
+      final root = await Armsx2FolderService.resolveRoot(linkedArmsx2Path);
+      ConfigService.linkedArmsx2FolderPath = root;
+      ConfigService.linkedArmsx2GameFolderPath =
+          await Armsx2FolderService.resolveGameDirectory(root);
+      log.i(
+        'ARMSX2 isolated root restored: root=$root '
+        'gameDir=${ConfigService.linkedArmsx2GameFolderPath ?? "none"}',
+      );
+    } else {
+      ConfigService.linkedArmsx2FolderPath = null;
+      ConfigService.linkedArmsx2GameFolderPath = null;
+    }
     ConfigService.linkedMelonxSaveFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder(
           key: ConfigService.melonxNeoSyncBookmarkKey,

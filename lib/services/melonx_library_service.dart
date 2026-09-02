@@ -44,7 +44,7 @@ class MelonxLibraryService {
   static const String _callbackHost = 'melonx';
   static const String _prefsKey = 'melonx_library_cache_v1';
   static const String _virtualScheme = 'melonx';
-  // MeloNX's compatibility scheme used by ManicEMU for frontend launches.
+  // MeloNX compatibility frontend scheme.
   // Keep NeoStation's stored virtual rows on melonx:// for backward
   // compatibility, but translate to this scheme only at launch time.
   static const String _frontendLaunchScheme = 'atariemulator';
@@ -684,7 +684,7 @@ class MelonxLibraryService {
   }
 
   /// Converts NeoStation's persistent `melonx://game?...` virtual URL into
-  /// MeloNX's compatibility frontend scheme. ManicEMU uses this exact scheme
+  /// MeloNX's compatibility frontend scheme. This scheme
   /// and performs one native UIApplication.open call, without a JIT delay or
   /// duplicate game launch request.
   static String _frontendLaunchUrlFromUri(Uri uri) {

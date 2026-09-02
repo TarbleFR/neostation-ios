@@ -100,7 +100,7 @@ extension NeoSyncDownload on NeoSyncProvider {
       if (Platform.isIOS &&
           parsed?.emulatorSlug == 'armsx2' &&
           parsed?.isShared == true) {
-        final root = ConfigService.linkedArmsx2SaveFolderPath;
+        final root = ConfigService.linkedArmsx2FolderPath;
         if (root == null || root.isEmpty) return;
         final localPath = _resolveArmsx2CloudFileToLocal(
           root,

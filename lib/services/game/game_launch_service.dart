@@ -6,9 +6,9 @@ import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/armsx2_library_service.dart';
+import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
@@ -227,19 +227,22 @@ class GameLaunchService {
         // to the PS2 system so identical filenames on unrelated systems can
         // never be captured accidentally.
         if (system.folderName.toLowerCase() == 'ps2') {
+          final isArmsx2OwnedRom = Armsx2FolderService.ownsRomPath(
+            game.romPath,
+            ConfigService.linkedArmsx2FolderPath,
+          );
           try {
             final launched = await Armsx2LibraryService.launchGameByRomPath(
               game.romPath!,
             );
             if (launched) return GameLaunchResult.success();
           } catch (e) {
-            // Physical PS2 rows can still fall through to RetroArch/Open In.
+            _log.e('ARMSX2 launch failed for ${game.romPath}: $e');
           }
 
-          // A virtual ARMSX2 row has no local file to hand to RetroArch or the
-          // iOS share sheet. If the deeplink failed, stop here with a useful
-          // error instead of attempting file-based fallbacks on armsx2://.
-          if (isArmsx2VirtualRom) {
+          // An ARMSX2-owned path must never be reinterpreted as a RetroArch
+          // game. This is the hard ownership boundary between both bookmarks.
+          if (isArmsx2OwnedRom || isArmsx2VirtualRom) {
             return GameLaunchResult.failure(
               'Could not launch this PS2 game in ARMSX2.',
               game.romPath,

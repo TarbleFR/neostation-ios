@@ -8,7 +8,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
-import 'package:neostation/services/armsx2_library_service.dart';
+import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
@@ -21,6 +21,7 @@ import 'package:neostation/services/esde_import_service.dart';
 import 'package:neostation/services/global_notification_service.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/ios_rom_library_root_resolver.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -74,9 +75,8 @@ class DirectoriesSettingsContentState
   String? _currentUserDataPath;
   bool _isLoading = true;
 
-  // iOS-only: live-linking RetroArch's external folder via a persisted
-  // security-scoped bookmark. ARMSX2 and MeloNX are sync-only and never
-  // expose a folder picker in this screen.
+  // iOS-only security-scoped roots. RetroArch and ARMSX2 are completely
+  // independent bookmarks; MeloNX keeps its existing save-only bookmark.
   String? _linkingFolderKey;
 
   // Migration progress state (shown inline, no dialog).
@@ -550,7 +550,24 @@ class DirectoriesSettingsContentState
         context,
         listen: false,
       );
-      await configProvider.addRomFolder(activePath, scan: true);
+      final availableSystems = configProvider.availableSystems.isNotEmpty
+          ? configProvider.availableSystems
+          : await ConfigService.loadAvailableSystems();
+      final scanRoot =
+          bookmarkKey == ExternalFolderAccess.defaultBookmarkKey
+          ? await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
+              linkedRoot: activePath,
+              systemFolderNames: availableSystems.expand(
+                (system) => <String>[system.folderName, ...system.folders],
+              ),
+            )
+          : activePath;
+      if (configProvider.config.romFolders.contains(scanRoot)) {
+        await configProvider.scanSystems();
+      } else {
+        await configProvider.addRomFolder(scanRoot, scan: true);
+      }
+      _log.i('iOS emulator link: root=$activePath romScanRoot=$scanRoot');
       if (!mounted) return;
 
       await _loadCurrentPaths();
@@ -563,6 +580,68 @@ class DirectoriesSettingsContentState
       );
     } catch (e) {
       _log.e('Link external folder failed ($bookmarkKey): $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.iosEmuLinkingFailed
+              .getString(context)
+              .replaceFirst('{error}', e.toString()),
+          type: NotificationType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _linkingFolderKey = null);
+    }
+  }
+
+  Future<void> _linkArmsx2RootFolder() async {
+    if (_linkingFolderKey != null) return;
+    setState(() => _linkingFolderKey = Armsx2FolderService.bookmarkKey);
+    try {
+      final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
+        key: Armsx2FolderService.bookmarkKey,
+      );
+      if (selected == null || !mounted) return;
+      final bookmarked = await ExternalFolderAccess.resolveBookmarkedFolder(
+        key: Armsx2FolderService.bookmarkKey,
+      );
+      final root = await Armsx2FolderService.resolveRoot(bookmarked ?? selected);
+      final gameDir = await Armsx2FolderService.resolveGameDirectory(root);
+      final previousGameDir = ConfigService.linkedArmsx2GameFolderPath;
+
+      ConfigService.linkedArmsx2FolderPath = root;
+      ConfigService.linkedArmsx2GameFolderPath = gameDir;
+
+      // New links use only `armsx2`. The old save-only bookmark is migration
+      // data and is removed as soon as the canonical root is linked.
+      await ExternalFolderAccess.clearBookmark(
+        key: Armsx2FolderService.legacyNeoSyncBookmarkKey,
+      );
+
+      if (!mounted) return;
+      final configProvider = Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      );
+      if (previousGameDir != null &&
+          previousGameDir != gameDir &&
+          configProvider.config.romFolders.contains(previousGameDir)) {
+        await configProvider.removeRomFolder(previousGameDir);
+      }
+      if (gameDir != null && gameDir.isNotEmpty) {
+        if (configProvider.config.romFolders.contains(gameDir)) {
+          await configProvider.scanSystems();
+        } else {
+          await configProvider.addRomFolder(gameDir, scan: true);
+        }
+      }
+
+      if (!mounted) return;
+      await _loadCurrentPaths();
+      if (mounted) setState(() {});
+      _log.i('ARMSX2 isolated root linked: root=$root gameDir=${gameDir ?? "none"}');
+    } catch (e) {
+      _log.e('ARMSX2 root link failed: $e');
       if (mounted) {
         AppNotification.showNotification(
           context,
@@ -592,9 +671,7 @@ class DirectoriesSettingsContentState
         key: bookmarkKey,
       );
       final activePath = resolved ?? selected;
-      if (bookmarkKey == ConfigService.armsx2NeoSyncBookmarkKey) {
-        ConfigService.linkedArmsx2SaveFolderPath = activePath;
-      } else if (bookmarkKey == ConfigService.melonxNeoSyncBookmarkKey) {
+      if (bookmarkKey == ConfigService.melonxNeoSyncBookmarkKey) {
         ConfigService.linkedMelonxSaveFolderPath = activePath;
       }
       if (mounted) setState(() {});
@@ -628,14 +705,33 @@ class DirectoriesSettingsContentState
   }
 
   Future<void> _syncWithArmsx2() async {
-    final opened = await Armsx2LibraryService.requestLibrarySync();
+    final root = ConfigService.linkedArmsx2FolderPath;
+    if (root == null || root.isEmpty) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.iosArmsx2StatusNeedsSync.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
+
+    final gameDir = await Armsx2FolderService.resolveGameDirectory(root);
+    ConfigService.linkedArmsx2GameFolderPath = gameDir;
     if (!mounted) return;
+    final configProvider = Provider.of<SqliteConfigProvider>(context, listen: false);
+    if (gameDir != null && gameDir.isNotEmpty) {
+      if (configProvider.config.romFolders.contains(gameDir)) {
+        await configProvider.scanSystems();
+      } else {
+        await configProvider.addRomFolder(gameDir, scan: true);
+      }
+    }
+    if (!mounted) return;
+    setState(() {});
     AppNotification.showNotification(
       context,
-      opened
-          ? AppLocale.iosArmsx2SyncRequested.getString(context)
-          : AppLocale.iosArmsx2Unavailable.getString(context),
-      type: opened ? NotificationType.info : NotificationType.error,
+      AppLocale.iosArmsx2StatusSynced.getString(context),
+      type: NotificationType.success,
     );
   }
 
@@ -831,9 +927,9 @@ class DirectoriesSettingsContentState
   }
 
   Widget _buildIOSArmsx2Section(ThemeData theme) {
-    final hasSynced = Armsx2LibraryService.hasSyncedLibrary;
-    final isSaveLinked = ConfigService.linkedArmsx2SaveFolderPath != null;
-    final statusText = hasSynced
+    final isRootLinked = ConfigService.linkedArmsx2FolderPath != null;
+    final hasLibrary = ConfigService.linkedArmsx2GameFolderPath != null;
+    final statusText = hasLibrary
         ? AppLocale.iosArmsx2StatusSynced.getString(context)
         : AppLocale.iosArmsx2StatusNeedsSync.getString(context);
 
@@ -842,13 +938,10 @@ class DirectoriesSettingsContentState
       name: 'ARMSX2',
       icon: Symbols.stadia_controller_rounded,
       statusText: statusText,
-      isLinked: isSaveLinked,
-      bookmarkKey: ConfigService.armsx2NeoSyncBookmarkKey,
+      isLinked: isRootLinked,
+      bookmarkKey: Armsx2FolderService.bookmarkKey,
       successMessage: '',
-      onLinkPressed: () => _linkNeoSyncSaveFolder(
-        bookmarkKey: ConfigService.armsx2NeoSyncBookmarkKey,
-        emulatorName: 'ARMSX2',
-      ),
+      onLinkPressed: _linkArmsx2RootFolder,
       trailingAction: Row(
         children: [
           Expanded(
@@ -858,7 +951,7 @@ class DirectoriesSettingsContentState
                 onPressed: _syncWithArmsx2,
                 icon: Icon(Symbols.bolt_rounded, size: 20.r),
                 label: Text(
-                  hasSynced
+                  hasLibrary
                       ? AppLocale.iosEmuResync.getString(context)
                       : AppLocale.iosEmuSync.getString(context),
                   style: TextStyle(fontSize: 14.r),

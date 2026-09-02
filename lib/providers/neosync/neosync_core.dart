@@ -701,7 +701,7 @@ extension NeoSyncCore on NeoSyncProvider {
         return await _uploadRpcs3File(file, rpcs3Root, preferredGame: game);
       }
 
-      final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+      final armsx2Root = ConfigService.linkedArmsx2FolderPath;
       if (Platform.isIOS &&
           system.folderName.toLowerCase() == 'ps2' &&
           armsx2Root != null &&
@@ -834,7 +834,7 @@ extension NeoSyncCore on NeoSyncProvider {
       const int maxFileSize = 10 * 1024 * 1024; // 10MB
       final armsx2ScanRoot =
           Platform.isIOS && system.folderName.toLowerCase() == 'ps2'
-          ? ConfigService.linkedArmsx2SaveFolderPath
+          ? ConfigService.linkedArmsx2FolderPath
           : null;
       final rpcs3ScanRoot =
           Platform.isIOS && system.folderName.toLowerCase() == 'ps3'
@@ -903,7 +903,7 @@ extension NeoSyncCore on NeoSyncProvider {
             );
             isMatch = rpcs3 != null;
           } else if (isSharedSystem) {
-            final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+            final armsx2Root = ConfigService.linkedArmsx2FolderPath;
             if (Platform.isIOS &&
                 system.folderName.toLowerCase() == 'ps2' &&
                 armsx2Root != null &&
@@ -968,7 +968,7 @@ extension NeoSyncCore on NeoSyncProvider {
 
             String relativePath;
             final rpcs3Root = Rpcs3LibraryService.linkedDataPath;
-            final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+            final armsx2Root = ConfigService.linkedArmsx2FolderPath;
             if (Platform.isIOS &&
                 system.folderName.toLowerCase() == 'ps3' &&
                 rpcs3Root != null &&

@@ -88,6 +88,23 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
     _setScanning(true);
     _error = null;
+
+    if (Platform.isIOS) {
+      final armsx2GameDir = ConfigService.linkedArmsx2GameFolderPath?.trim();
+      if (armsx2GameDir != null &&
+          armsx2GameDir.isNotEmpty &&
+          !_config.romFolders.contains(armsx2GameDir) &&
+          _config.romFolders.length < 5) {
+        _config = _config.copyWith(
+          romFolders: [..._config.romFolders, armsx2GameDir],
+          lastScan: DateTime.now(),
+          setupCompleted: true,
+        );
+        await SqliteConfigService.saveConfig(_config);
+        SqliteConfigProvider._log.i('Registered isolated ARMSX2 PS2 library: $armsx2GameDir');
+      }
+    }
+
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
     // granted or revoked between scans, but not during one.
     SafDirectoryService.resetFastWalkAvailability();
@@ -177,6 +194,17 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           romFolders: _config.romFolders,
           availableSystems: _availableSystems,
         );
+      }
+
+      if (Platform.isIOS &&
+          ConfigService.linkedArmsx2GameFolderPath?.isNotEmpty == true &&
+          !detectedSystems.any((system) => system.folderName == 'ps2')) {
+        try {
+          final ps2 = _availableSystems.firstWhere((system) => system.folderName == 'ps2');
+          detectedSystems = [...detectedSystems, ps2];
+        } catch (e) {
+          SqliteConfigProvider._log.w('Could not inject PS2 for ARMSX2 scan: $e');
+        }
       }
 
       // Determine the systems to use for initial detection

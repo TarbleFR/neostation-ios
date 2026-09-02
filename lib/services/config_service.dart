@@ -32,9 +32,6 @@ class ConfigService {
   /// GameLaunchService.launchGame).
   static String? linkedExternalFolderPath;
 
-  /// iOS-only folder linked from Manic EMU's Files container.
-  static String? linkedManicEmuFolderPath;
-
   /// iOS-only: absolute path of the folder linked for ARMSX2, resolved at
   /// startup from its own security-scoped bookmark (key `'armsx2'`, see
   /// ExternalFolderAccess). Kept separate from
@@ -42,12 +39,12 @@ class ConfigService {
   /// export and direct-launch URL scheme. Null if nothing is linked.
   static String? linkedArmsx2FolderPath;
 
-  /// iOS-only NeoSync save roots. These bookmarks are intentionally
-  /// separate from ROM/library folders so cloud-save configuration never
-  /// changes game discovery or launch paths.
-  static const String armsx2NeoSyncBookmarkKey = 'neosync-armsx2-saves';
+  /// Physical PS2 library derived from the one ARMSX2 root bookmark.
+  static String? linkedArmsx2GameFolderPath;
+
+  /// MeloNX keeps its own existing NeoSync bookmark. ARMSX2 does not: its
+  /// NeoSync paths are always derived from [linkedArmsx2FolderPath].
   static const String melonxNeoSyncBookmarkKey = 'neosync-melonx-saves';
-  static String? linkedArmsx2SaveFolderPath;
   static String? linkedMelonxSaveFolderPath;
 
   /// Determines the base execution path for Windows installations.

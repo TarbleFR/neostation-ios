@@ -9,6 +9,7 @@ import '../../utils/vita_title_extractor.dart';
 import 'package:neostation/services/android_service.dart';
 import 'package:neostation/services/saf_directory_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/config_service.dart';
 
 import 'dart:io';
 import 'dart:convert';
@@ -192,6 +193,21 @@ class SqliteDatabaseService {
       final bool useSaf =
           Platform.isAndroid && romFolder.startsWith('content://');
       final Map<String, String>? subdirsForRoot = rootFoldersMap?[romFolder];
+
+      final armsx2GameDir = ConfigService.linkedArmsx2GameFolderPath;
+      final isDirectArmsx2Ps2Root =
+          Platform.isIOS &&
+          system.folderName.toLowerCase() == 'ps2' &&
+          armsx2GameDir != null &&
+          path.normalize(romFolder) == path.normalize(armsx2GameDir);
+      if (isDirectArmsx2Ps2Root) {
+        scanTargets.add((
+          dirPath: romFolder,
+          canonicalPath: await _canonicalScanPath(romFolder, useSaf: false),
+          useSaf: false,
+        ));
+        continue;
+      }
 
       for (final folderToScan in allPossibleFolderNames) {
         try {

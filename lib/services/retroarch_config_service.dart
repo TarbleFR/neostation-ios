@@ -146,7 +146,39 @@ class RetroArchConfigService {
   Future<RetroArchConfig?> _getIOSLinkedConfig() async {
     if (!Platform.isIOS) return null;
 
-    final linkedRoot = ConfigService.linkedExternalFolderPath?.trim();
+    String? linkedRoot = ConfigService.linkedExternalFolderPath?.trim();
+
+    String? normalizeRetroArchRoot(String? raw) {
+      if (raw == null || raw.trim().isEmpty) return null;
+      final original = raw.trim();
+      var current = Directory(original);
+      for (var depth = 0; depth < 6; depth++) {
+        final hasCfg =
+            File(path.join(current.path, 'retroarch.cfg')).existsSync() ||
+            File(path.join(current.path, 'config', 'retroarch.cfg')).existsSync();
+        final hasSaves = Directory(path.join(current.path, 'saves')).existsSync();
+        final hasStates = Directory(path.join(current.path, 'states')).existsSync();
+        final hasPlaylists =
+            Directory(path.join(current.path, 'playlists')).existsSync();
+        if (hasCfg ||
+            (hasSaves && hasStates) ||
+            (hasPlaylists && (hasSaves || hasStates))) {
+          return current.path;
+        }
+        final parent = current.parent;
+        if (parent.path == current.path) break;
+        current = parent;
+      }
+      return original;
+    }
+
+    final normalizedRoot = normalizeRetroArchRoot(linkedRoot);
+    if (normalizedRoot != null && normalizedRoot != linkedRoot) {
+      _log.i('NeoSync normalized RetroArch root: $linkedRoot -> $normalizedRoot');
+      linkedRoot = normalizedRoot;
+      ConfigService.linkedExternalFolderPath = normalizedRoot;
+    }
+
     if (linkedRoot == null || linkedRoot.isEmpty) {
       _log.w(
         'iOS RetroArch folder is not linked; NeoSync local paths unavailable',
@@ -154,17 +186,19 @@ class RetroArchConfigService {
       return null;
     }
 
-    final root = Directory(linkedRoot);
+    final activeRoot = linkedRoot;
+
+    final root = Directory(activeRoot);
     if (!await root.exists()) {
-      _log.w('iOS linked RetroArch folder no longer exists: $linkedRoot');
+      _log.w('iOS linked RetroArch folder no longer exists: $activeRoot');
       return null;
     }
 
     String? configPath;
     final configCandidates = <String>[
-      path.join(linkedRoot, 'retroarch.cfg'),
-      path.join(linkedRoot, 'config', 'retroarch.cfg'),
-      path.join(linkedRoot, 'RetroArch', 'retroarch.cfg'),
+      path.join(activeRoot, 'retroarch.cfg'),
+      path.join(activeRoot, 'config', 'retroarch.cfg'),
+      path.join(activeRoot, 'RetroArch', 'retroarch.cfg'),
     ];
     for (final candidate in configCandidates) {
       if (File(candidate).existsSync()) {
@@ -212,8 +246,8 @@ class RetroArchConfigService {
       }
 
       final candidates = <String>[
-        for (final name in names) path.join(linkedRoot, name),
-        for (final name in names) path.join(linkedRoot, 'RetroArch', name),
+        for (final name in names) path.join(activeRoot, name),
+        for (final name in names) path.join(activeRoot, 'RetroArch', name),
       ];
       for (final candidate in candidates) {
         if (Directory(candidate).existsSync()) return candidate;
@@ -230,7 +264,7 @@ class RetroArchConfigService {
 
       // Downloads stay inside the bookmarked RetroArch folder even if the
       // directory has not been created by RetroArch yet.
-      return path.join(linkedRoot, logicalName);
+      return path.join(activeRoot, logicalName);
     }
 
     final resolved = RetroArchConfig(

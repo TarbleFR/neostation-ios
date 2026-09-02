@@ -21,6 +21,7 @@ import '../repositories/sync_repository.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/emulator_repository.dart';
 import '../services/config_service.dart';
+import '../services/armsx2_folder_service.dart';
 import '../services/retroarch_config_service.dart';
 import '../services/rpcs3_library_service.dart';
 import '../utils/cloud_path_builder.dart';

@@ -169,7 +169,7 @@ class RetroArchLibraryService {
     }
   }
 
-  /// One-time bridge from the experimental App Store/Manic builds back to the
+  /// One-time bridge from the experimental legacy iOS builds back to the
   /// stable TestFlight-only cache format used by this rollback baseline.
   /// Physical ROM files and unrelated emulator bookmarks are never touched.
   static Future<void> _runCleanRollbackMigration() async {
@@ -194,7 +194,6 @@ class RetroArchLibraryService {
 
       const exactRemovedKeys = <String>{
         'ios_library_emulator_v1',
-        'manic_emu_upgrade_offer_seen_v1',
         'retroarch_linked_library_cache_v2',
         'retroarch_linked_library_root_v1',
         'retroarch_testflight_library_root_v1',
@@ -216,16 +215,14 @@ class RetroArchLibraryService {
       for (final key in keys) {
         if (exactRemovedKeys.contains(key) ||
             key.startsWith('retroarch_appstore_') ||
-            key.startsWith('manic_emu_') ||
             key.startsWith('ios_game_emulator_v1:')) {
           await prefs.remove(key);
         }
       }
 
-      await ExternalFolderAccess.clearBookmark(key: 'manicemu');
       await prefs.setBool(_cleanRollbackKey, true);
       _log.i(
-        'RetroArch rollback: removed App Store/Manic routing state; TestFlight only.',
+        'RetroArch rollback: removed legacy iOS routing state; TestFlight only.',
       );
     } catch (e) {
       _log.w('RetroArch rollback migration will retry next launch: $e');

@@ -7,6 +7,8 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -263,10 +265,8 @@ class Armsx2LibraryService {
         final launchUri = parsedExported != null &&
                 parsedExported.scheme.toLowerCase() == _virtualScheme
             ? parsedExported
-            : Uri(
-                scheme: _virtualScheme,
-                host: 'launch',
-                queryParameters: {'game': fileName},
+            : Uri.parse(
+                'armsx2://launch?game=${Uri.encodeComponent(fileName)}',
               );
         final virtualPath = launchUri.toString();
         desiredVirtualPaths.add(virtualPath);
@@ -440,11 +440,18 @@ class Armsx2LibraryService {
       }
     }
 
+    final ownsLinkedPhysicalRom = Armsx2FolderService.ownsRomPath(
+      romPath,
+      ConfigService.linkedArmsx2FolderPath,
+    );
     final cache = _cache;
     if (cache == null || cache.isEmpty) {
+      if (ownsLinkedPhysicalRom) {
+        return await _launchLinkedPhysicalRom(romPath);
+      }
       await _writeDebugFile(
         'armsx2_launch_debug.txt',
-        'romPath: $romPath\ncache is null or empty (sync ARMSX2 first)',
+        'romPath: $romPath\nnot owned by the linked ARMSX2 root',
       );
       return false;
     }
@@ -469,7 +476,12 @@ class Armsx2LibraryService {
           'cache keys (${cache.length}):\n${cache.keys.join('\n')}',
     );
 
-    if (entry == null) return false;
+    if (entry == null) {
+      if (ownsLinkedPhysicalRom) {
+        return await _launchLinkedPhysicalRom(romPath);
+      }
+      return false;
+    }
 
     final fileName = entry['fileName']?.toString();
     if (fileName == null || fileName.isEmpty) return false;
@@ -483,7 +495,7 @@ class Armsx2LibraryService {
         Uri(
           scheme: 'armsx2',
           host: 'launch',
-          queryParameters: {'game': fileName},
+          query: 'game=${Uri.encodeComponent(fileName)}',
         );
 
     try {
@@ -507,6 +519,34 @@ class Armsx2LibraryService {
             'Game URL: $uri\n'
             'Error: $e',
       );
+      return false;
+    }
+  }
+
+  static Future<bool> _launchLinkedPhysicalRom(String romPath) async {
+    final fileName = path.basename(romPath);
+    if (fileName.isEmpty) return false;
+    // ARMSX2 treats '+' literally in its `game` query value. Dart's
+    // Uri(queryParameters: ...) uses form-style encoding where spaces become
+    // '+'. Percent-encode the filename so spaces are `%20` and a real plus
+    // character becomes `%2B`.
+    final encodedFileName = Uri.encodeComponent(fileName);
+    final uri = Uri.parse('armsx2://launch?game=$encodedFileName');
+    try {
+      await _writeDebugFile(
+        'armsx2_shortcut_launch_debug.txt',
+        'STATE: SHORTCUT_REQUESTED\n'
+            'Shortcut: ${IosShortcutJitLaunchService.armsx2ShortcutName}\n'
+            'Game URL: $uri\n'
+            'Source: linked ARMSX2 physical root\n'
+            'ROM: $romPath',
+      );
+      return await IosShortcutJitLaunchService.run(
+        shortcutName: IosShortcutJitLaunchService.armsx2ShortcutName,
+        input: uri.toString(),
+      );
+    } catch (e) {
+      _log.e('Armsx2LibraryService: linked physical launch failed: $e');
       return false;
     }
   }

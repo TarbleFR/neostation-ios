@@ -47,7 +47,7 @@ extension NeoSyncUpload on NeoSyncProvider {
             })
           >[];
       if (Platform.isIOS) {
-        final armsx2Root = ConfigService.linkedArmsx2SaveFolderPath;
+        final armsx2Root = ConfigService.linkedArmsx2FolderPath;
         if (armsx2Root != null && Directory(armsx2Root).existsSync()) {
           const categories = <String>['memcards', 'savestates', 'sstates'];
           final selectedName = path.basename(armsx2Root).toLowerCase();

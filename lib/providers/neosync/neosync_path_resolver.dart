@@ -11,6 +11,27 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     final folders = system.neosync.getFoldersForCurrentPlatform();
     final List<String> resolvedPaths = [];
 
+    // PS2 on iOS must never merge RetroArch and ARMSX2 save roots. Ownership
+    // comes from the ROM path: a ROM inside the ARMSX2 bookmark (or an armsx2://
+    // row) is ARMSX2-owned; every other PS2 row remains RetroArch-owned.
+    if (Platform.isIOS && system.folderName.toLowerCase() == 'ps2') {
+      final armsx2Root = ConfigService.linkedArmsx2FolderPath;
+      final isArmsx2Game = Armsx2FolderService.ownsRomPath(
+        game?.romPath,
+        armsx2Root,
+      );
+      if (isArmsx2Game && armsx2Root != null && armsx2Root.isNotEmpty) {
+        return await Armsx2FolderService.resolveSaveDirectories(armsx2Root);
+      }
+
+      final retroPaths = <String>[];
+      final saves = await _getRetroArchSavesPath();
+      final states = await _getRetroArchStatesPath();
+      if (saves != null) retroPaths.add(saves);
+      if (states != null) retroPaths.add(states);
+      return retroPaths.toSet().toList();
+    }
+
     // System JSON predates iOS NeoSync and has no ios_sync_folder entries.
     // RetroArch's bookmarked saves/states roots are authoritative for preview 1.
     if (Platform.isIOS && folders.isEmpty) {
@@ -22,10 +43,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
     if (Platform.isIOS) {
       final systemFolder = system.folderName.toLowerCase();
-      if (systemFolder == 'ps2') {
-        final custom = ConfigService.linkedArmsx2SaveFolderPath;
-        if (custom != null && custom.isNotEmpty) resolvedPaths.add(custom);
-      } else if (systemFolder == 'switch') {
+      if (systemFolder == 'switch') {
         final custom = ConfigService.linkedMelonxSaveFolderPath;
         if (custom != null && custom.isNotEmpty) resolvedPaths.add(custom);
       }
@@ -68,11 +86,11 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
     // 2. iOS ARMSX2 NeoSync root. This never falls back to Android paths.
     if (pathStr == '{ARMSX2_IOS_SAVES}' && Platform.isIOS) {
-      final root = ConfigService.linkedArmsx2SaveFolderPath;
-      if (root != null && root.isNotEmpty) {
-        if (!ensureExists || Directory(root).existsSync()) return [root];
-      }
-      return [];
+      final root = ConfigService.linkedArmsx2FolderPath;
+      if (root == null || root.isEmpty) return [];
+      final saves = await Armsx2FolderService.resolveSaveDirectories(root);
+      if (!ensureExists) return saves;
+      return saves.where((p) => Directory(p).existsSync()).toList();
     }
 
     // RPCS3 iOS native PS3 save-data roots. Reuse the existing security-
@@ -776,7 +794,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
     if (Platform.isIOS && v2Path != null) {
       if (v2Path.emulatorSlug == 'armsx2') {
-        final root = ConfigService.linkedArmsx2SaveFolderPath;
+        final root = ConfigService.linkedArmsx2FolderPath;
         if (root != null && root.isNotEmpty) {
           final local = _resolveArmsx2CloudFileToLocal(root, v2Path.filePath);
           return local == null ? [] : [local];

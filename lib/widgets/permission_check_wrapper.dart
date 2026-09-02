@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:neostation/services/ios_emulator_preference_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
@@ -120,10 +119,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       }
 
       final pairingReady = !_supportsPairingGate || pairingGateCompleted;
-      final hasPrimaryChoice =
-          !Platform.isIOS ||
-          await IosEmulatorPreferenceService.hasPrimaryChoice();
-
       if (!mounted) return;
       _pushWizardActive(true);
       setState(() {
@@ -136,7 +131,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
 
       // If an interrupted first run already completed the two gates, resume the
       // exact RetroArch-first setup rather than waiting for another launch.
-      if (welcomeGateCompleted && pairingReady && !hasPrimaryChoice) {
+      if (welcomeGateCompleted && pairingReady) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _startFirstRunRetroArchFlow();
         });
@@ -236,11 +231,6 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     });
 
     try {
-      await IosEmulatorPreferenceService.setPrimary(
-        IosLibraryEmulator.retroArch,
-      );
-      await IosEmulatorPreferenceService.markUpgradeOfferSeen();
-
       final opened = await RetroArchLibraryService.requestLibrarySync();
       if (!opened) {
         _log.w(

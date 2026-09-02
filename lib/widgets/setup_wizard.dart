@@ -9,9 +9,8 @@ import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/ios_rom_library_root_resolver.dart';
 import 'package:external_folder_access/external_folder_access.dart';
-import 'package:neostation/services/ios_emulator_preference_service.dart';
-import 'package:neostation/services/manic_emu_launch_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
@@ -28,7 +27,6 @@ import '../utils/gamepad_nav.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/ios_setup_locale.dart';
-import 'package:neostation/l10n/manic_emu_locale.dart';
 
 import '../widgets/tv_directory_picker.dart';
 import '../widgets/folder_not_empty_dialog.dart';
@@ -2036,12 +2034,9 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       return;
     }
 
-    final primary = await IosEmulatorPreferenceService.primary();
     if (!mounted || _currentStep != _stepFolder || _isSelectingFolder) return;
 
-    final existingLink = primary == IosLibraryEmulator.manicEmu
-        ? ConfigService.linkedManicEmuFolderPath
-        : ConfigService.linkedExternalFolderPath;
+    final existingLink = ConfigService.linkedExternalFolderPath;
     if (existingLink != null && existingLink.trim().isNotEmpty) return;
 
     _initialIosLibraryLinkStarted = true;
@@ -2097,50 +2092,39 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           await configProvider.addRomFolder(result, scan: false);
         }
       } else if (Platform.isIOS) {
-        // Lead with linking RetroArch's own folder here — now that
-        // launching found games works, it's
-        // the better default for anyone using RetroArch. The plain
-        // internal-folder path (ConfigService.getDefaultIOSRomsFolder,
-        // via selectRomFolder below) remains available afterwards from
-        // Settings > Directories for anyone who declines or doesn't use
-        // RetroArch — this is only about which one leads during
-        // first-run onboarding.
-        final primary = await IosEmulatorPreferenceService.primary();
-        final usesManic = primary == IosLibraryEmulator.manicEmu;
-        final bookmarkKey = usesManic
-            ? ManicEmuLaunchService.bookmarkKey
-            : ExternalFolderAccess.defaultBookmarkKey;
+        // iOS first-run links RetroArch directly.
         final linked = await ExternalFolderAccess.pickAndActivateFolder(
-          key: bookmarkKey,
+          key: ExternalFolderAccess.defaultBookmarkKey,
         );
         if (linked != null && mounted) {
           await _ensureLinkedFolderIsReadable(linked);
           if (!mounted) return;
 
-          if (usesManic) {
-            ConfigService.linkedManicEmuFolderPath = linked;
-          } else {
-            ConfigService.linkedExternalFolderPath = linked;
-          }
-          await configProvider.addRomFolder(linked, scan: false);
+          ConfigService.linkedExternalFolderPath = linked;
+          final availableSystems = configProvider.availableSystems.isNotEmpty
+              ? configProvider.availableSystems
+              : await ConfigService.loadAvailableSystems();
+          final scanRoot = await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
+            linkedRoot: linked,
+            systemFolderNames: availableSystems.expand(
+              (system) => <String>[system.folderName, ...system.folders],
+            ),
+          );
+          await configProvider.addRomFolder(scanRoot, scan: false);
           result = linked;
+          _log.i(
+            'iOS first-run emulator link: root=$linked romScanRoot=$scanRoot',
+          );
 
           // Do not open an emulator or wait for an external callback here.
           // The next wizard page owns the local folder scan and displays its
           // real progress. Waiting on RetroArch kept this button spinning when
           // an App Store/TestFlight build did not return a library callback.
-          if (mounted && usesManic) {
-            AppNotification.showNotification(
-              context,
-              ManicEmuLocale.text(context, 'folderLinked'),
-              type: NotificationType.info,
-            );
-          }
         } else if (mounted && allowInternalFallback) {
           // Manual folder selection retains the historical internal fallback.
           // The automatic first-run attempt deliberately stays on this step if
           // the picker is cancelled, so it never silently replaces the chosen
-          // RetroArch/Manic EMU library with NeoStation's private ROM folder.
+          // RetroArch library with NeoStation's private ROM folder.
           await configProvider.selectRomFolder(scan: false);
           result = configProvider.config.romFolder;
         }
