@@ -1,0 +1,93 @@
+name: Finalize Canonical Cleanup
+
+on:
+  push:
+    branches:
+      - cleanup/canonical
+    paths:
+      - '.github/workflows/finalize-canonical-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup/canonical
+          fetch-depth: 0
+
+      - name: Remove obsolete ARMSX2 export wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          main = Path('lib/main.dart')
+          text = main.read_text(encoding='utf-8')
+          old = """    await RetroArchLibraryService.loadCachedLibrary();\n    await Armsx2LibraryService.loadCachedLibrary();\n    await MelonxLibraryService.loadCachedLibrary();\n"""
+          new = """    await RetroArchLibraryService.loadCachedLibrary();\n    await MelonxLibraryService.loadCachedLibrary();\n"""
+          if old not in text:
+              raise SystemExit('main cache-load anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = """    // RetroArch, ARMSX2 and MeloNX return their exported libraries through the\n    // neostation:// callback scheme. external_folder_access forwards every\n    // incoming URL from iOS to this one listener; each service ignores URLs\n    // that do not belong to it.\n    ExternalFolderAccess.setIncomingUrlListener((uri) async {\n      if (await RetroArchLibraryService.handleIncomingUri(uri)) return;\n      if (await Armsx2LibraryService.handleIncomingUri(uri)) return;\n      await MelonxLibraryService.handleIncomingUri(uri);\n    });\n"""
+          new = """    // RetroArch and MeloNX still receive their exported libraries through the\n    // neostation:// callback scheme. ARMSX2 library discovery is filesystem-only\n    // and therefore has no callback handler here.\n    ExternalFolderAccess.setIncomingUrlListener((uri) async {\n      if (await RetroArchLibraryService.handleIncomingUri(uri)) return;\n      await MelonxLibraryService.handleIncomingUri(uri);\n    });\n"""
+          if old not in text:
+              raise SystemExit('main callback anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = """    await _cleanupRemovedIflyIntegration(\n      configProvider: sqliteConfigProvider,\n      databaseProvider: sqliteDatabaseProvider,\n    );\n\n    if (Platform.isIOS) {\n"""
+          new = """    await _cleanupRemovedIflyIntegration(\n      configProvider: sqliteConfigProvider,\n      databaseProvider: sqliteDatabaseProvider,\n    );\n\n    if (Platform.isIOS) {\n      // The pre-bookmark ARMSX2 integration stored an exported library cache\n      // and virtual armsx2:// rows. Remove them only once a physical ARMSX2\n      // library is already indexed, so upgrades never lose their only PS2 rows.\n      final removedLegacyArmsx2Rows =\n          await Armsx2LibraryService.cleanupLegacyExportArtifacts();\n      if (removedLegacyArmsx2Rows > 0) {\n        await sqliteDatabaseProvider.loadGamesForSystem('ps2');\n        await sqliteConfigProvider.refreshDetectedSystems();\n      }\n\n"""
+          if old not in text:
+              raise SystemExit('main database-ready cleanup anchor missing')
+          text = text.replace(old, new, 1)
+          main.write_text(text, encoding='utf-8')
+
+          launch = Path('lib/services/game/game_launch_service.dart')
+          text = launch.read_text(encoding='utf-8')
+          old = """        // PS2: ARMSX2 exports its own library with the exact fileName and\n        // launchURL it expects. If this ROM matches that synced library, send\n        // it straight to ARMSX2 before trying RetroArch. Restrict this branch\n        // to the PS2 system so identical filenames on unrelated systems can\n        // never be captured accidentally.\n"""
+          new = """        // PS2: ownership comes from the dedicated ARMSX2 root bookmark. A\n        // physical ROM below that root belongs to ARMSX2 and is launched there\n        // before RetroArch. Restrict this branch to PS2 so identical filenames\n        // on unrelated systems can never be captured accidentally.\n"""
+          if old not in text:
+              raise SystemExit('game launch ARMSX2 comment anchor missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              "// PS2 games that are not present in ARMSX2's exported library.",
+              "// PS2 games that are not owned by the linked ARMSX2 root.",
+              1,
+          )
+          launch.write_text(text, encoding='utf-8')
+
+          test = Path('test/armsx2_retroarch_routing_isolation_test.dart')
+          text = test.read_text(encoding='utf-8')
+          old = """    expect(service, contains('ownsLinkedPhysicalRom'));\n    expect(service, contains('_launchLinkedPhysicalRom(romPath)'));\n    expect(service, contains('Uri.encodeComponent(fileName)'));\n"""
+          new = """    expect(service, contains('ownsLinkedPhysicalRom'));\n    expect(service, contains('_launchLinkedPhysicalRom(romPath)'));\n    expect(service, contains('Uri.encodeComponent(fileName)'));\n    expect(service, isNot(contains('requestLibrarySync()')));\n    expect(service, isNot(contains('handleIncomingUri(Uri uri)')));\n    expect(service, isNot(contains('_importIntoNeoStation')));\n    expect(service, isNot(contains('hasSyncedLibrary')));\n    expect(service, contains('cleanupLegacyExportArtifacts'));\n"""
+          if old not in text:
+              raise SystemExit('routing test physical-launch anchor missing')
+          text = text.replace(old, new, 1)
+
+          marker = """  test('PS2 NeoSync resolves ARMSX2 or RetroArch but never both', () {\n"""
+          addition = """  test('ARMSX2 no longer registers exported-library callbacks at startup', () {\n    final mainSource = File('lib/main.dart').readAsStringSync();\n    expect(mainSource, isNot(contains('Armsx2LibraryService.loadCachedLibrary')));\n    expect(\n      mainSource,\n      isNot(contains('Armsx2LibraryService.handleIncomingUri')),\n    );\n    expect(\n      mainSource,\n      contains('Armsx2LibraryService.cleanupLegacyExportArtifacts'),\n    );\n  });\n\n"""
+          if marker not in text:
+              raise SystemExit('routing test insertion marker missing')
+          text = text.replace(marker, addition + marker, 1)
+          test.write_text(text, encoding='utf-8')
+          PY
+
+          dart --version >/dev/null 2>&1 || true
+          git diff --check
+
+          rm -f .github/workflows/finalize-canonical-cleanup.yml
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'NeoStation CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(ios): retire ARMSX2 exported-library path'
+          git push origin HEAD:cleanup/canonical
