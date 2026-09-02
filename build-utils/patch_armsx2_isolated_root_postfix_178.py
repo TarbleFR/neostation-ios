@@ -17,5 +17,21 @@ if arms_start < 0 or arms_end < 0:
 arms = text[arms_start:arms_end].replace('hasSynced', 'hasLibrary')
 text = text[:arms_start] + arms + text[arms_end:]
 
+# ARMSX2 sync is now a local root rescan, so the settings screen no longer
+# directly calls the exported-library service.
+text = text.replace(
+    "import 'package:neostation/services/armsx2_library_service.dart';\n",
+    '',
+)
 p.write_text(text, encoding='utf-8')
-print('Scoped ARMSX2 status variable fix applied')
+
+# The Build 171 iOS launcher no longer uses url_launcher after ManicEMU removal.
+launch = Path('lib/services/game/game_launch_service.dart')
+launch_text = launch.read_text(encoding='utf-8')
+launch_text = launch_text.replace(
+    "import 'package:url_launcher/url_launcher.dart';\n",
+    '',
+)
+launch.write_text(launch_text, encoding='utf-8')
+
+print('Scoped ARMSX2 status and analyze cleanup applied')
