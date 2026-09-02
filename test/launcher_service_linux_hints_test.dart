@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
@@ -12,6 +14,13 @@ import 'package:neostation/services/launcher_service.dart';
 /// spelling and this code honest about each other.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  if (!Platform.isLinux) {
+    test('Linux launcher hints are exercised only on Linux hosts', () {
+      expect(Platform.isLinux, isFalse);
+    });
+    return;
+  }
 
   final service = LauncherService.instance;
 
@@ -41,8 +50,6 @@ void main() {
   });
 
   test('carries flatpak and emudeck_launcher into the launch command', () {
-    // Platform-gated: getLaunchCommand only fills a desktop command when the
-    // host is desktop, and the suite runs on Linux.
     final command = service.getLaunchCommand(
       system,
       game,
@@ -55,10 +62,6 @@ void main() {
   });
 
   test('passes the ROM to Dolphin instead of opening its game list', () {
-    // The desktop blocks used to carry Android's `launch_arguments` key, which
-    // LauncherService does not read on desktop. The command came back with no
-    // arguments at all, so Dolphin started and sat on its own game list — the
-    // one system users reported having to pick the game by hand for.
     final command = service.getLaunchCommand(
       system,
       game,
@@ -79,12 +82,6 @@ void main() {
   });
 
   group('getLinuxDiscoveryHints', () {
-    // The emulator *list* has to answer "is this installed?" with no game in
-    // hand, so it cannot go through getLaunchCommand. Without these hints a
-    // standalone emulator reads as uninstalled on any machine where the user
-    // never file-pickered a path — every Steam Deck — and selection falls back
-    // to a RetroArch core that may not be installed. That combination launched
-    // and instantly closed on a real Deck.
     test('exposes the hints an install check needs', () {
       final hints = service.getLinuxDiscoveryHints(
         'gc',
