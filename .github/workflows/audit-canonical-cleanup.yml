@@ -50,14 +50,24 @@ jobs:
           fi
           echo 'none'
 
-          echo '=== Legacy ARMSX2 exported-library paths still present (audit only) ==='
-          grep -RniE --exclude-dir=.git \
-            'requestLibrarySync|handleIncomingUri|armsx2_library_cache|hasSyncedLibrary|_importIntoNeoStation' \
-            lib test 2>/dev/null || true
+          echo '=== Obsolete ARMSX2 exported-library implementation ==='
+          if grep -nE \
+            'requestLibrarySync|handleIncomingUri|_importIntoNeoStation|hasSyncedLibrary|static Map<String, Map<String, dynamic>>\? _cache' \
+            lib/services/armsx2_library_service.dart; then
+            echo 'ERROR: retired ARMSX2 exported-library implementation remains.'
+            exit 1
+          fi
+          if grep -nE \
+            'Armsx2LibraryService\.(loadCachedLibrary|handleIncomingUri)' \
+            lib/main.dart; then
+            echo 'ERROR: main.dart still wires retired ARMSX2 callbacks/cache.'
+            exit 1
+          fi
+          echo 'none'
 
-          echo '=== One-off/removed integration markers (audit only) ==='
+          echo '=== Migration markers retained intentionally (audit only) ==='
           grep -RniE --exclude-dir=.git \
-            'iFly|removed integration|legacy routing|deprecated|obsolete|TODO|FIXME' \
+            'iFly|legacy ARMSX2|legacy export|deprecated|obsolete|TODO|FIXME' \
             lib packages 2>/dev/null || true
 
       - name: Full Dart analysis
