@@ -1,0 +1,73 @@
+name: Audit Canonical NeoStation Source
+
+on:
+  push:
+    branches:
+      - cleanup/canonical
+    paths:
+      - '.github/workflows/audit-canonical-cleanup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup/canonical
+          fetch-depth: 1
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore dependencies
+        run: flutter pub get
+
+      - name: Repository hygiene audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== ManicEMU references in runtime/code ==='
+          if grep -RniE --exclude-dir=.git --exclude='*.md' \
+            'Manic[ _-]?EMU|ManicEMU|manicemu|manic_emu|IosEmulatorPreferenceService|IosLibraryEmulator|linkedManicEmuFolderPath' \
+            lib packages assets 2>/dev/null; then
+            echo 'ERROR: ManicEMU runtime/code reference remains.'
+            exit 1
+          fi
+          echo 'none'
+
+          echo '=== Obsolete ARMSX2 split-root references ==='
+          if grep -RniE --exclude-dir=.git \
+            'linkedArmsx2SaveFolderPath|armsx2NeoSyncBookmarkKey' lib packages test 2>/dev/null; then
+            echo 'ERROR: old ARMSX2 split-root architecture remains.'
+            exit 1
+          fi
+          echo 'none'
+
+          echo '=== Legacy ARMSX2 exported-library paths still present (audit only) ==='
+          grep -RniE --exclude-dir=.git \
+            'requestLibrarySync|handleIncomingUri|armsx2_library_cache|hasSyncedLibrary|_importIntoNeoStation' \
+            lib test 2>/dev/null || true
+
+          echo '=== One-off/removed integration markers (audit only) ==='
+          grep -RniE --exclude-dir=.git \
+            'iFly|removed integration|legacy routing|deprecated|obsolete|TODO|FIXME' \
+            lib packages 2>/dev/null || true
+
+      - name: Full Dart analysis
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos 2>&1 | tee /tmp/full-analyze.log
+
+      - name: Full test suite
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee /tmp/full-tests.log
