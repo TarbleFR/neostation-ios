@@ -57,8 +57,6 @@ class StikjitBridge {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
       'gameUrl': gameUrl,
-      // Native preference detection now takes priority. This remains the
-      // compatibility fallback when the ARMSX2 container cannot be inspected.
       'autoLoadLastGame': autoLoadLastGame,
     });
 
@@ -83,6 +81,7 @@ class StikjitBridge {
       bundleId: data['bundleId']?.toString(),
       txmPresent: data['txmPresent'] as bool?,
       gameUrlOpened: data['gameUrlOpened'] as bool?,
+      jitReady: data['jitReady'] as bool?,
       postJitHandoffSkipped:
           data['postJitHandoffSkipped'] as bool? ?? false,
       targetResumed: data['targetResumed'] as bool? ?? false,
@@ -138,24 +137,29 @@ class StikjitLaunchResult {
     required this.bundleId,
     required this.txmPresent,
     required this.gameUrlOpened,
+    required this.logs,
+    this.jitReady,
     this.postJitHandoffSkipped = false,
     this.targetResumed = false,
     this.detectedAutoLoadLastGame,
     this.effectiveAutoLoadLastGame,
     this.autoLoadModeSource,
     this.detectedAutoLoadPreferenceKey,
-    required this.logs,
   });
 
   final int pid;
   final String? bundleId;
   final bool? txmPresent;
   final bool? gameUrlOpened;
+  final List<String> logs;
+
+  /// True once JIT is enabled on the emulator PID, independently of whether
+  /// the direct game URL could still be delivered afterwards.
+  final bool? jitReady;
   final bool postJitHandoffSkipped;
   final bool targetResumed;
   final bool? detectedAutoLoadLastGame;
   final bool? effectiveAutoLoadLastGame;
   final String? autoLoadModeSource;
   final String? detectedAutoLoadPreferenceKey;
-  final List<String> logs;
 }
