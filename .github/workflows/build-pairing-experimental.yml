@@ -1,41 +1,33 @@
-name: Build NeoStation iOS PR113 IPA
+name: Build StikJIT RPCS3 Experimental IPA
 
 on:
   push:
     branches:
-      - fix/armsx2-autoload-achievements
+      - feature/stikjit-rpcs3
   workflow_dispatch:
-    inputs:
-      build_number:
-        description: iOS build number
-        required: true
-        default: '168'
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-pr113-build
+  group: neostation-stikjit-rpcs3-experimental
   cancel-in-progress: true
 
 jobs:
   build-ios-ipa:
-    name: Build NeoStation iOS PR113
+    name: Build NeoStation StikJIT RPCS3 Experimental
     runs-on: macos-15
     timeout-minutes: 120
 
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '168' }}
-      ARTIFACT_BASENAME: NeoStation-iOS-Build-${{ inputs.build_number || '168' }}-PR113
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout PR113 branch
+      - name: Checkout RPCS3 experimental branch
         uses: actions/checkout@v4
         with:
-          ref: fix/armsx2-autoload-achievements
+          ref: feature/stikjit-rpcs3
           fetch-depth: 1
 
       - name: Select Xcode 16.4
@@ -49,11 +41,11 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verify PR113 source
+      - name: Verify isolated RPCS3 source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "fix/armsx2-autoload-achievements"
+          test "$(git branch --show-current)" = "feature/stikjit-rpcs3"
           grep -q 'packages/stikjit_bridge' pubspec.yaml
           grep -q 'NeoStationStikjitBridgePluginV2' packages/stikjit_bridge/pubspec.yaml
           test -f lib/services/pairing_file_service.dart
@@ -61,12 +53,13 @@ jobs:
           test -f lib/services/stikjit_melonx_service.dart
           test -f lib/services/stikjit_armsx2_service.dart
           test -f lib/services/stikjit_rpcs3_service.dart
+          test -f lib/l10n/jit_fallback_locale.dart
           test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePluginV2.swift
           test -f packages/stikjit_bridge/ios/Classes/StikjitRpcs3BridgePlugin.swift
           test -f packages/stikjit_bridge/ios/Classes/Rpcs3IdeviceRuntime.swift
-          echo "Building PR113 source $(git rev-parse HEAD)"
+          echo "Building isolated RPCS3 source $(git rev-parse HEAD)"
 
       - name: Prepare build-time defines
         shell: bash
@@ -83,14 +76,12 @@ jobs:
           if missing:
               raise SystemExit('Missing GitHub Actions secrets: ' + ', '.join(missing))
 
-          values.update({
-              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX': 'true',
-              'NEOSTATION_MELONX_BUNDLE_ID': 'com.nur.nx',
-              'NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2': 'true',
-              'NEOSTATION_ARMSX2_BUNDLE_ID': 'com.armsx2.ios',
-              'NEOSTATION_EXPERIMENTAL_STIKJIT_RPCS3': 'true',
-              'NEOSTATION_RPCS3_BUNDLE_ID': 'com.xitrix.RPCS3',
-          })
+          values['NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX'] = 'true'
+          values['NEOSTATION_MELONX_BUNDLE_ID'] = 'com.nur.nx'
+          values['NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2'] = 'true'
+          values['NEOSTATION_ARMSX2_BUNDLE_ID'] = 'com.armsx2.ios'
+          values['NEOSTATION_EXPERIMENTAL_STIKJIT_RPCS3'] = 'true'
+          values['NEOSTATION_RPCS3_BUNDLE_ID'] = 'com.xitrix.RPCS3'
           Path('.dart-defines.json').write_text(
               json.dumps(values, ensure_ascii=False), encoding='utf-8'
           )
@@ -125,7 +116,7 @@ jobs:
           flutter --version
           flutter pub get
 
-      - name: Verify JIT paths and fallback switch
+      - name: Verify all isolated JIT paths and global fallback
         shell: bash
         run: |
           set -euo pipefail
@@ -237,7 +228,7 @@ jobs:
           flutter build ios \
             --release \
             --no-codesign \
-            --build-number="$BUILD_NUMBER" \
+            --build-number=167 \
             --dart-define-from-file=.dart-defines.json \
             2>&1 | tee build-ios.log
 
@@ -247,17 +238,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGING=/tmp/neostation-pr113-ipa
+          STAGING=/tmp/neostation-stikjit-rpcs3-ipa
           rm -rf "$STAGING"
           mkdir -p "$STAGING/Payload"
           cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
           (
             cd "$STAGING"
             /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload \
-              "$GITHUB_WORKSPACE/${ARTIFACT_BASENAME}.ipa"
+              "$GITHUB_WORKSPACE/NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa"
           )
-          test -s "${ARTIFACT_BASENAME}.ipa"
-          ls -lh "${ARTIFACT_BASENAME}.ipa"
+          test -s NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa
+          ls -lh NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa
 
       - name: Remove temporary defines
         if: always()
@@ -267,9 +258,9 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_BASENAME }}
+          name: NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental
           path: |
-            ${{ env.ARTIFACT_BASENAME }}.ipa
+            NeoStation-iOS-Build-167-StikJIT-RPCS3-Experimental.ipa
             build-ios.log
           if-no-files-found: error
           retention-days: 30

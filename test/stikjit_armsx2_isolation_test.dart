@@ -25,181 +25,29 @@ void main() {
     expect(armsx2, contains('NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2'));
     expect(armsx2, contains("defaultValue: 'com.armsx2.ios'"));
     expect(armsx2, contains('enableArmsx2Jit'));
-    expect(armsx2, contains('useArmsx2AutoLoadLastGame'));
-    expect(
-      armsx2,
-      contains('autoLoadLastGame: fallbackAutoLoadLastGame'),
-    );
-    expect(armsx2, contains('effectiveAutoLoadLastGame'));
-    expect(armsx2, contains('autoLoadModeSource'));
-    expect(armsx2, contains('postJitHandoffSkipped'));
-    expect(armsx2, contains('targetResumed'));
-    expect(armsx2, contains('ARMSX2_AUTOLOAD_RESUMED'));
     expect(armsx2, contains('stikjit_armsx2_debug.txt'));
   });
 
-  test(
-    'native ARMSX2 bridge obeys the explicit Tools choice and preserves both handoffs',
-    () {
-      final composite = File(
-        'packages/stikjit_bridge/ios/Classes/'
-        'NeoStationStikjitBridgePlugin.swift',
-      ).readAsStringSync();
-      expect(
-        composite,
-        contains('StikjitBridgePluginV2.register(with: registrar)'),
-      );
-      expect(composite, contains('neostation/stikjit_armsx2'));
-      expect(composite, contains('enableArmsx2Jit'));
-      expect(composite, contains('launchArmsx2Suspended'));
-      expect(composite, contains('Armsx2PreferenceDetector'));
-      expect(composite, contains('ARMSX2_LAUNCH_MODE_STANDARD_SELECTED'));
-      expect(composite, contains('ARMSX2_LAUNCH_MODE_DIRECT_SELECTED'));
-      expect(composite, contains('neostation_tools_explicit'));
-      expect(
-        composite,
-        contains('let directLoadLastGame = arguments["autoLoadLastGame"] as? Bool ?? false'),
-      );
-      expect(
-        composite,
-        contains('response.removeValue(forKey: "detectedAutoLoadLastGame")'),
-      );
-      expect(composite, contains('ARMSX2_SETTING_MISMATCH'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_RESUME_REQUESTED'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
-      expect(composite, contains('resumedPID == UInt64(originalPID)'));
-      expect(composite, contains('targetResumed'));
-      expect(composite, contains('postJitHandoffSkipped'));
-      expect(composite, contains('performLegacyHandoff'));
-      expect(composite, contains('openGameWhenNeoStationIsActive'));
+  test('native ARMSX2 bridge is registered beside the untouched MeloNX bridge', () {
+    final composite = File(
+      'packages/stikjit_bridge/ios/Classes/'
+      'NeoStationStikjitBridgePlugin.swift',
+    ).readAsStringSync();
+    expect(composite, contains('StikjitBridgePluginV2.register(with: registrar)'));
+    expect(composite, contains('neostation/stikjit_armsx2'));
+    expect(composite, contains('enableArmsx2Jit'));
+    expect(composite, contains('launchArmsx2Suspended'));
 
-      final detector = File(
-        'packages/stikjit_bridge/ios/Classes/'
-        'Armsx2PreferenceDetector.swift',
-      ).readAsStringSync();
-      expect(detector, contains('house_arrest_client_connect_rsd'));
-      expect(detector, contains('house_arrest_vend_container'));
-      expect(detector, contains('afc_file_read_entire'));
-      expect(detector, contains('Library/Preferences/'));
-      expect(detector, contains('automaticloadlastgame'));
-      expect(detector, contains('autoloadlastgame'));
-      expect(detector, contains('ARMSX2_AUTOLOAD_PREFERENCE_DETECTED'));
-      expect(detector, contains('ARMSX2_AUTOLOAD_PREFERENCE_UNAVAILABLE'));
+    final melonxNative = File(
+      'packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift',
+    ).readAsStringSync();
+    expect(melonxNative, contains('enableMeloNxJit'));
+    expect(melonxNative, isNot(contains('enableArmsx2Jit')));
+    expect(melonxNative, isNot(contains('stikjit_armsx2')));
 
-      final dartBridge = File(
-        'packages/stikjit_bridge/lib/stikjit_bridge.dart',
-      ).readAsStringSync();
-      expect(dartBridge, contains("'autoLoadLastGame': autoLoadLastGame"));
-      expect(dartBridge, contains('effectiveAutoLoadLastGame'));
-      expect(dartBridge, contains('autoLoadModeSource'));
-      expect(dartBridge, contains('postJitHandoffSkipped'));
-      expect(dartBridge, contains('targetResumed'));
-
-      final preferences = File(
-        'lib/services/jit_backend_preference_service.dart',
-      ).readAsStringSync();
-      expect(preferences, contains('ios_armsx2_direct_load_last_game_v2'));
-      expect(preferences, contains('useArmsx2DirectLaunch'));
-      expect(preferences, contains('setUseArmsx2DirectLaunch'));
-
-      final tools = File(
-        'lib/screens/settings_screen/new_settings_options/'
-        'tools_settings_content.dart',
-      ).readAsStringSync();
-      expect(tools, contains('int getItemCount() => 3;'));
-      expect(tools, contains('Armsx2JitModeLocale'));
-      expect(tools, contains('_setUseArmsx2DirectLaunch'));
-
-      final locale = File(
-        'lib/l10n/armsx2_jit_mode_locale.dart',
-      ).readAsStringSync();
-      expect(locale, contains('Standard (NeoSync)'));
-      expect(locale, contains('automatic NeoSync unavailable'));
-      expect(locale, contains('NeoSync automatique après la partie est indisponible'));
-
-      final footer = File(
-        'lib/screens/game_screen/game_details_card/widgets/'
-        'game_details_footer.dart',
-      ).readAsStringSync();
-      expect(footer, isNot(contains('GameUtils.formatGameName(game.name)')));
-      expect(footer, contains('_CombinedGameStatsPill'));
-      expect(footer, contains('currentGameInfo!.imageIcon'));
-      expect(footer, contains('Symbols.schedule_rounded'));
-
-      final media = File(
-        'lib/screens/game_screen/game_details_card/tabs/'
-        'game_details_screenshot_video_tab.dart',
-      ).readAsStringSync();
-      expect(media, contains('final headerClearance = 58.r'));
-      expect(media, contains('final footerClearance = 72.r'));
-      expect(media, contains('availableWidth < 230.r'));
-      expect(media, contains('availableHeight < 175.r'));
-      expect(media, contains('return LayoutBuilder('));
-
-      final launchFlow = File(
-        'lib/screens/game_screen/my_games_list/launch_flow.dart',
-      ).readAsStringSync();
-      expect(launchFlow, contains('if (Platform.isIOS) return;'));
-      expect(
-        launchFlow,
-        contains('Error refreshing played game after iOS emulator return'),
-      );
-      expect(launchFlow, contains('GameService.getGameDetails('));
-      expect(launchFlow, contains('_databaseProvider.refresh();'));
-
-      final sessionManager = File(
-        'lib/services/game/game_session_manager.dart',
-      ).readAsStringSync();
-      expect(
-        sessionManager,
-        contains(
-          'final notifyIosGameClosed = Platform.isIOS && _onProcessExitCallback != null;',
-        ),
-      );
-      expect(sessionManager, contains('if (notifyIosGameClosed) {'));
-      expect(sessionManager, contains('_onProcessExitCallback!();'));
-      final iosSessionReset = sessionManager.indexOf('_isGameLaunched = false;');
-      final iosCloseNotification = sessionManager.lastIndexOf(
-        'if (notifyIosGameClosed) {',
-      );
-      expect(iosSessionReset, greaterThanOrEqualTo(0));
-      expect(iosCloseNotification, greaterThan(iosSessionReset));
-
-      final appScreen = File('lib/screens/app_screen.dart').readAsStringSync();
-      expect(appScreen, contains('skipIosReturnScan'));
-      expect(appScreen, contains('shouldSkipStartupScan()'));
-      expect(
-        appScreen,
-        contains('startupScanPending && !skipIosReturnScan && mounted'),
-      );
-
-      final systemContent = File(
-        'lib/screens/systems_screen/system_content.dart',
-      ).readAsStringSync();
-      expect(systemContent, contains('canReuseCachedIosLibrary'));
-      expect(systemContent, contains('configProvider.hasDetectedSystems'));
-      expect(systemContent, contains('!configProvider.pendingStartupScan'));
-      expect(
-        systemContent,
-        contains('configProvider.scanCompleted || canReuseCachedIosLibrary'),
-      );
-      expect(systemContent, contains('_scheduleStartupPhaseProbe'));
-
-      final melonxNative = File(
-        'packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift',
-      ).readAsStringSync();
-      expect(melonxNative, contains('enableMeloNxJit'));
-      expect(melonxNative, isNot(contains('enableArmsx2Jit')));
-      expect(melonxNative, isNot(contains('stikjit_armsx2')));
-
-      final pluginManifest = File(
-        'packages/stikjit_bridge/pubspec.yaml',
-      ).readAsStringSync();
-      expect(
-        pluginManifest,
-        contains('pluginClass: NeoStationStikjitBridgePluginV2'),
-      );
-    },
-  );
+    final pluginManifest = File(
+      'packages/stikjit_bridge/pubspec.yaml',
+    ).readAsStringSync();
+    expect(pluginManifest, contains('pluginClass: NeoStationStikjitBridgePlugin'));
+  });
 }

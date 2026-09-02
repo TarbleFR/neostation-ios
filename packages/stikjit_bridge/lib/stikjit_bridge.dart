@@ -51,15 +51,11 @@ class StikjitBridge {
     required String pairingFilePath,
     required String bundleId,
     required String gameUrl,
-    bool autoLoadLastGame = false,
   }) async {
     final raw = await _armsx2Channel.invokeMethod<Object?>('enableArmsx2Jit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
       'gameUrl': gameUrl,
-      // Native preference detection now takes priority. This remains the
-      // compatibility fallback when the ARMSX2 container cannot be inspected.
-      'autoLoadLastGame': autoLoadLastGame,
     });
 
     if (raw is! Map) {
@@ -83,14 +79,6 @@ class StikjitBridge {
       bundleId: data['bundleId']?.toString(),
       txmPresent: data['txmPresent'] as bool?,
       gameUrlOpened: data['gameUrlOpened'] as bool?,
-      postJitHandoffSkipped:
-          data['postJitHandoffSkipped'] as bool? ?? false,
-      targetResumed: data['targetResumed'] as bool? ?? false,
-      detectedAutoLoadLastGame: data['detectedAutoLoadLastGame'] as bool?,
-      effectiveAutoLoadLastGame: data['effectiveAutoLoadLastGame'] as bool?,
-      autoLoadModeSource: data['autoLoadModeSource']?.toString(),
-      detectedAutoLoadPreferenceKey:
-          data['detectedAutoLoadPreferenceKey']?.toString(),
       logs: logs,
     );
   }
@@ -138,12 +126,6 @@ class StikjitLaunchResult {
     required this.bundleId,
     required this.txmPresent,
     required this.gameUrlOpened,
-    this.postJitHandoffSkipped = false,
-    this.targetResumed = false,
-    this.detectedAutoLoadLastGame,
-    this.effectiveAutoLoadLastGame,
-    this.autoLoadModeSource,
-    this.detectedAutoLoadPreferenceKey,
     required this.logs,
   });
 
@@ -151,11 +133,5 @@ class StikjitLaunchResult {
   final String? bundleId;
   final bool? txmPresent;
   final bool? gameUrlOpened;
-  final bool postJitHandoffSkipped;
-  final bool targetResumed;
-  final bool? detectedAutoLoadLastGame;
-  final bool? effectiveAutoLoadLastGame;
-  final String? autoLoadModeSource;
-  final String? detectedAutoLoadPreferenceKey;
   final List<String> logs;
 }

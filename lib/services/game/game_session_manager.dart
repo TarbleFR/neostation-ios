@@ -143,19 +143,11 @@ class GameSessionManager {
     _currentGame = game;
 
     if (Platform.isAndroid) {
-      unawaited(
-        GameSessionPersistence.saveGameSession(
-          systemFolderName: system.folderName,
-          filename: game.romname,
-          startTimestamp: _gameLaunchTime!.millisecondsSinceEpoch,
-        ),
+      GameSessionPersistence.saveGameSession(
+        systemFolderName: system.folderName,
+        filename: game.romname,
+        startTimestamp: _gameLaunchTime!.millisecondsSinceEpoch,
       );
-    } else if (Platform.isIOS) {
-      // iOS may reclaim NeoStation while a memory-heavy emulator such as
-      // ARMSX2 owns the foreground. Arm a one-shot cold-return guard so, if that
-      // happens, the next NeoStation process restores the existing DB/library
-      // instead of scanning every ROM playlist again.
-      unawaited(GameSessionPersistence.markSkipStartupScan());
     }
 
     _startPlaytimeTimer();
@@ -214,19 +206,10 @@ class GameSessionManager {
 
     _stopPlaytimeTimer();
 
-    // GameLaunchManager registers this callback for iOS too. Keep the callback
-    // until after the session flags have been cleared so its syncing phase can
-    // call endGameSession() idempotently without re-entering this teardown.
-    final notifyIosGameClosed = Platform.isIOS && _onProcessExitCallback != null;
-
     if (Platform.isAndroid) {
       const platform = MethodChannel('com.neogamelab.neostation/game');
       await platform.invokeMethod('setGamepadBlock', {'block': false});
-      await GameSessionPersistence.clearGameSession();
-    } else if (Platform.isIOS) {
-      // A normal warm return means NeoStation survived; there is no future cold
-      // startup to protect, so clear the one-shot marker immediately.
-      await GameSessionPersistence.clearSkipStartupScan();
+      GameSessionPersistence.clearGameSession();
     } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       if (_onProcessExitCallback != null) {
         _onProcessExitCallback!();
@@ -239,10 +222,6 @@ class GameSessionManager {
     _launchedEmulatorExe = null;
     _currentGameSystem = null;
     _currentGame = null;
-
-    if (notifyIosGameClosed) {
-      _onProcessExitCallback!();
-    }
   }
 
   static Future<void> _savePlayTime(
