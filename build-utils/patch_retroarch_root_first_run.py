@@ -50,6 +50,24 @@ replace_once(
     'RetroArch NeoSync root',
 )
 
+# Freeze the post-validation root into a final non-null value before the local
+# resolveDirectory closure captures it. Dart cannot promote a mutable nullable
+# variable through that closure even though the null guard has already returned.
+retro_config = Path('lib/services/retroarch_config_service.dart')
+retro_text = retro_config.read_text(encoding='utf-8')
+section_start = retro_text.find('    final root = Directory(linkedRoot);')
+section_end = retro_text.find('    final resolved = RetroArchConfig(', section_start)
+if section_start < 0 or section_end < 0:
+    raise SystemExit('RetroArch active-root section not found')
+section = retro_text[section_start:section_end].replace('linkedRoot', 'activeRoot')
+retro_text = (
+    retro_text[:section_start]
+    + '    final activeRoot = linkedRoot;\n\n'
+    + section
+    + retro_text[section_end:]
+)
+retro_config.write_text(retro_text, encoding='utf-8')
+
 # Preserve the ARMSX2 root handling from Build 170 so this build supersedes it.
 replace_once(
     'lib/main.dart',
