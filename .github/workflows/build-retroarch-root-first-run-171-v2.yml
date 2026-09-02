@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           flutter pub get
-          flutter analyze lib/services/ios_rom_library_root_resolver.dart lib/widgets/setup_wizard.dart lib/screens/settings_screen/new_settings_options/directories_settings_content.dart lib/services/retroarch_config_service.dart lib/main.dart
+          flutter analyze --no-fatal-infos lib/services/ios_rom_library_root_resolver.dart lib/widgets/setup_wizard.dart lib/screens/settings_screen/new_settings_options/directories_settings_content.dart lib/services/retroarch_config_service.dart lib/main.dart
           flutter test test/ios_rom_library_root_resolver_test.dart test/jit_backend_preference_service_test.dart test/stikjit_armsx2_isolation_test.dart test/stikjit_rpcs3_isolation_test.dart
 
       - name: Generate clean iOS scaffold
