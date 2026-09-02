@@ -1,0 +1,57 @@
+name: Modernize Canonical Build Workflow
+
+on:
+  push:
+    branches:
+      - cleanup/canonical
+    paths:
+      - '.github/workflows/modernize-build-workflow.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup/canonical
+          fetch-depth: 0
+
+      - name: Harden permanent build workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('.github/workflows/build-ios-ipa.yml')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("        default: '167'", "        default: '180'", 1)
+
+          old = """          test -f lib/services/stikjit_rpcs3_service.dart\n          test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift\n"""
+          new = """          test -f lib/services/stikjit_rpcs3_service.dart\n          test -f lib/services/armsx2_folder_service.dart\n          test -f lib/services/ios_rom_library_root_resolver.dart\n          test ! -e lib/services/manic_emu_launch_service.dart\n          test ! -e lib/services/ios_emulator_preference_service.dart\n          test ! -e lib/l10n/manic_emu_locale.dart\n          if grep -RniE --exclude-dir=.git --exclude='*.md' \\\n            'Manic[ _-]?EMU|ManicEMU|manicemu|manic_emu|IosEmulatorPreferenceService|IosLibraryEmulator|linkedManicEmuFolderPath' \\\n            lib packages assets 2>/dev/null; then\n            echo 'Unexpected ManicEMU runtime reference'\n            exit 1\n          fi\n          if grep -RniE 'linkedArmsx2SaveFolderPath|armsx2NeoSyncBookmarkKey' lib packages 2>/dev/null; then\n            echo 'Unexpected ARMSX2 split-root reference'\n            exit 1\n          fi\n          test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift\n"""
+          if old not in text:
+              raise SystemExit('main source verification anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = """      - name: Verify JIT paths and fallback switch\n        shell: bash\n        run: |\n          set -euo pipefail\n          flutter test \\\n            test/jit_backend_preference_service_test.dart \\\n            test/stikjit_armsx2_isolation_test.dart \\\n            test/stikjit_rpcs3_isolation_test.dart\n"""
+          new = """      - name: Analyze and test canonical source\n        shell: bash\n        run: |\n          set -euo pipefail\n          flutter analyze --no-fatal-infos\n          flutter test\n"""
+          if old not in text:
+              raise SystemExit('old JIT-only validation step missing')
+          text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+          rm -f .github/workflows/modernize-build-workflow.yml
+
+      - name: Commit permanent workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'NeoStation CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'ci: validate full canonical source before IPA builds'
+          git push origin HEAD:cleanup/canonical
