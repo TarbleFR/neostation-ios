@@ -6,7 +6,7 @@ on:
       build_number:
         description: iOS build number
         required: true
-        default: '167'
+        default: '180'
         type: string
 
 permissions:
@@ -58,6 +58,27 @@ jobs:
           test -f lib/services/stikjit_melonx_service.dart
           test -f lib/services/stikjit_armsx2_service.dart
           test -f lib/services/stikjit_rpcs3_service.dart
+          test -f lib/services/armsx2_folder_service.dart
+          test -f lib/services/ios_rom_library_root_resolver.dart
+          test ! -e lib/services/manic_emu_launch_service.dart
+          test ! -e lib/services/ios_emulator_preference_service.dart
+          test ! -e lib/l10n/manic_emu_locale.dart
+          if grep -RniE --exclude-dir=.git --exclude='*.md' \
+            'Manic[ _-]?EMU|ManicEMU|manicemu|manic_emu|IosEmulatorPreferenceService|IosLibraryEmulator|linkedManicEmuFolderPath' \
+            lib packages assets 2>/dev/null; then
+            echo 'Unexpected ManicEMU runtime reference'
+            exit 1
+          fi
+          if grep -RniE 'linkedArmsx2SaveFolderPath|armsx2NeoSyncBookmarkKey' lib packages 2>/dev/null; then
+            echo 'Unexpected ARMSX2 split-root reference'
+            exit 1
+          fi
+          if grep -nE \
+            'requestLibrarySync|handleIncomingUri|_importIntoNeoStation|hasSyncedLibrary|static Map<String, Map<String, dynamic>>\? _cache' \
+            lib/services/armsx2_library_service.dart; then
+            echo 'Unexpected retired ARMSX2 exported-library implementation'
+            exit 1
+          fi
           test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift
           test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePluginV2.swift
@@ -122,14 +143,12 @@ jobs:
           flutter --version
           flutter pub get
 
-      - name: Verify JIT paths and fallback switch
+      - name: Analyze and test canonical source
         shell: bash
         run: |
           set -euo pipefail
-          flutter test \
-            test/jit_backend_preference_service_test.dart \
-            test/stikjit_armsx2_isolation_test.dart \
-            test/stikjit_rpcs3_isolation_test.dart
+          flutter analyze --no-fatal-infos
+          flutter test
 
       - name: Generate clean iOS scaffold
         shell: bash
