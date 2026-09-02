@@ -29,7 +29,7 @@ jobs:
           ref: fix/armsx2-bookmark-library-saves-from-171-179
           fetch-depth: 1
 
-      - name: Apply Build 171 and ARMSX2 bookmark patches
+      - name: Apply and verify Build 171 ARMSX2 architecture
         shell: bash
         run: |
           set -euo pipefail
@@ -39,44 +39,13 @@ jobs:
           python3 build-utils/patch_armsx2_isolated_root_postfix_179.py
           python3 build-utils/patch_armsx2_launch_encoding_179.py
           git diff --check
-
-          # JIT/StikJIT remains exactly the Build 171 implementation.
           git diff --exit-code -- \
             lib/services/ios_shortcut_jit_launch_service.dart \
             lib/services/jit_backend_preference_service.dart \
             lib/services/stikjit_armsx2_service.dart \
             lib/services/stikjit_melonx_service.dart \
             packages/stikjit_bridge
-
-          # ManicEMU is removed from the runtime, not merely hidden.
-          test ! -e lib/services/manic_emu_launch_service.dart
-          test ! -e lib/services/ios_emulator_preference_service.dart
-          test ! -e lib/l10n/manic_emu_locale.dart
-          if grep -RniE 'Manic[ _-]?EMU|ManicEMU|manicemu|manic_emu|IosEmulatorPreferenceService|IosLibraryEmulator|linkedManicEmuFolderPath' lib packages; then
-            echo 'Removed ManicEMU runtime reference remains'
-            exit 1
-          fi
-
-          # ARMSX2 has exactly one bookmark/root for library + save-folder reading.
-          grep -Fq "static const String bookmarkKey = 'armsx2'" lib/services/armsx2_folder_service.dart
-          grep -Fq 'linkedArmsx2FolderPath' lib/services/config_service.dart
-          grep -Fq 'linkedArmsx2GameFolderPath' lib/services/config_service.dart
-          ! grep -Fq 'linkedArmsx2SaveFolderPath' lib/services/config_service.dart
-          ! grep -Fq 'armsx2NeoSyncBookmarkKey' lib/services/config_service.dart
-          grep -Fq 'onLinkPressed: _linkArmsx2RootFolder' lib/screens/settings_screen/new_settings_options/directories_settings_content.dart
-          ! grep -Fq 'Armsx2LibraryService.requestLibrarySync()' lib/screens/settings_screen/new_settings_options/directories_settings_content.dart
-
-          # RetroArch and ARMSX2 ownership must never merge.
-          grep -Fq 'final isArmsx2OwnedRom = Armsx2FolderService.ownsRomPath' lib/services/game/game_launch_service.dart
-          grep -Fq 'if (isArmsx2OwnedRom || isArmsx2VirtualRom)' lib/services/game/game_launch_service.dart
-          grep -Fq 'PS2 on iOS must never merge RetroArch and ARMSX2 save roots' lib/providers/neosync/neosync_path_resolver.dart
-          grep -Fq 'return await Armsx2FolderService.resolveSaveDirectories' lib/providers/neosync/neosync_path_resolver.dart
-          ! grep -Fq 'linkedExternalFolderPath' lib/services/armsx2_folder_service.dart
-
-          # Physical ARMSX2 filenames must preserve spaces as %20, never form-style +.
-          grep -Fq 'Uri.encodeComponent(fileName)' lib/services/armsx2_library_service.dart
-          grep -Fq 'armsx2://launch?game=$encodedFileName' lib/services/armsx2_library_service.dart
-          ! grep -Fq "queryParameters: {'game': fileName}" lib/services/armsx2_library_service.dart
+          python3 build-utils/verify_armsx2_bookmark_179.py
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
