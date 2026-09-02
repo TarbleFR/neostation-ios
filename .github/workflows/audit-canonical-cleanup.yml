@@ -44,7 +44,7 @@ jobs:
 
           echo '=== Obsolete ARMSX2 split-root references ==='
           if grep -RniE --exclude-dir=.git \
-            'linkedArmsx2SaveFolderPath|armsx2NeoSyncBookmarkKey' lib packages test 2>/dev/null; then
+            'linkedArmsx2SaveFolderPath|armsx2NeoSyncBookmarkKey' lib packages 2>/dev/null; then
             echo 'ERROR: old ARMSX2 split-root architecture remains.'
             exit 1
           fi
