@@ -187,7 +187,12 @@ class SqliteDatabaseService {
     // GameCube system, so walking each alias in turn finds every file twice and
     // stores it under two different rom_path spellings.
     final scanTargets =
-        <({String dirPath, String canonicalPath, bool useSaf})>[];
+        <({
+          String dirPath,
+          String canonicalPath,
+          bool useSaf,
+          bool isAlias,
+        })>[];
 
     for (final romFolder in romFolders) {
       final bool useSaf =
@@ -205,6 +210,7 @@ class SqliteDatabaseService {
           dirPath: romFolder,
           canonicalPath: await _canonicalScanPath(romFolder, useSaf: false),
           useSaf: false,
+          isAlias: await _isDirectSymbolicLink(romFolder),
         ));
         continue;
       }
@@ -235,6 +241,7 @@ class SqliteDatabaseService {
             dirPath: dirPath,
             canonicalPath: await _canonicalScanPath(dirPath, useSaf: useSaf),
             useSaf: useSaf,
+            isAlias: useSaf ? false : await _isDirectSymbolicLink(dirPath),
           ));
         } catch (e) {
           _log.e('Error resolving folder $folderToScan in $romFolder: $e');
@@ -246,8 +253,8 @@ class SqliteDatabaseService {
     // names the physical location: if the user later drops the alias link, the
     // rows that survived still resolve.
     final orderedTargets = [
-      ...scanTargets.where((t) => t.dirPath == t.canonicalPath),
-      ...scanTargets.where((t) => t.dirPath != t.canonicalPath),
+      ...scanTargets.where((t) => !t.isAlias),
+      ...scanTargets.where((t) => t.isAlias),
     ];
 
     final walkedDirs = <String>{};
@@ -1141,6 +1148,24 @@ class SqliteDatabaseService {
     } catch (e) {
       _log.e('Error resolving SAF folder $romFolderUri for $folderName: $e');
       return null;
+    }
+  }
+
+  /// Returns whether the final path component itself is a symbolic link.
+  ///
+  /// This is deliberately separate from [Directory.resolveSymbolicLinks]: on
+  /// macOS even a real directory under `/var` resolves through `/private/var`,
+  /// so comparing literal and canonical path strings incorrectly marks every
+  /// target as an alias.
+  static Future<bool> _isDirectSymbolicLink(String dirPath) async {
+    try {
+      return await FileSystemEntity.type(
+            dirPath,
+            followLinks: false,
+          ) ==
+          FileSystemEntityType.link;
+    } catch (_) {
+      return false;
     }
   }
 

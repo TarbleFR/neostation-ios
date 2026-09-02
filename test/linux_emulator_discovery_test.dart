@@ -42,6 +42,13 @@ void main() {
   });
 
   group('executable resolution', () {
+    if (!Platform.isLinux) {
+      test('Linux executable discovery is exercised only on Linux hosts', () {
+        expect(Platform.isLinux, isFalse);
+      });
+      return;
+    }
+
     test('finds the EmuDeck launcher script at the default Emulation root', () {
       final script = exe('Emulation/tools/launchers/retroarch.sh');
 

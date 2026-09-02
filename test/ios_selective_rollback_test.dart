@@ -22,7 +22,7 @@ void main() {
       expect(service, contains("_prefsKey = 'retroarch_library_cache_v1'"));
       expect(service, contains('retroarch_testflight_library_cache_v1'));
       expect(service, contains('retroarch_testflight_library_cache_v2'));
-      expect(service, contains("clearBookmark(key: 'manicemu')"));
+      expect(service.toLowerCase(), isNot(contains('manic')));
       expect(service, contains("key.startsWith('retroarch_appstore_')"));
       expect(service, contains("key.startsWith('ios_game_emulator_v1:')"));
     },
