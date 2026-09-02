@@ -136,6 +136,24 @@ void main() {
       expect(launchFlow, contains('GameService.getGameDetails('));
       expect(launchFlow, contains('_databaseProvider.refresh();'));
 
+      final sessionManager = File(
+        'lib/services/game/game_session_manager.dart',
+      ).readAsStringSync();
+      expect(
+        sessionManager,
+        contains(
+          'final notifyIosGameClosed = Platform.isIOS && _onProcessExitCallback != null;',
+        ),
+      );
+      expect(sessionManager, contains('if (notifyIosGameClosed) {'));
+      expect(sessionManager, contains('_onProcessExitCallback!();'));
+      final iosSessionReset = sessionManager.indexOf('_isGameLaunched = false;');
+      final iosCloseNotification = sessionManager.lastIndexOf(
+        'if (notifyIosGameClosed) {',
+      );
+      expect(iosSessionReset, greaterThanOrEqualTo(0));
+      expect(iosCloseNotification, greaterThan(iosSessionReset));
+
       final appScreen = File('lib/screens/app_screen.dart').readAsStringSync();
       expect(appScreen, contains('skipIosReturnScan'));
       expect(appScreen, contains('shouldSkipStartupScan()'));
