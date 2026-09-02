@@ -27,7 +27,7 @@ class GameDetailsAchievementsTab extends StatefulWidget {
     required this.isLoading,
     required this.onRefresh,
     this.topOffset = 55.0,
-    this.bottomOffset = 110.0,
+    this.bottomOffset = 78.0,
     this.leftOffset = 12.0,
     this.rightOffset = 12.0,
     this.headerAction,
@@ -43,6 +43,30 @@ class GameDetailsAchievementsTabState
   int _selectedAchievementIndex = 0;
   final Map<int, GlobalKey> _achievementKeys = {};
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant GameDetailsAchievementsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // The same achievements tab State is reused while the user moves through a
+    // playlist. Keeping the previous game's selected badge/scroll position can
+    // leave the new game with a stale selection or an apparently shifted grid.
+    // Reset the visual state whenever the hydrated achievement payload changes.
+    if (!identical(oldWidget.gameInfo, widget.gameInfo)) {
+      _selectedAchievementIndex = 0;
+      _achievementKeys.clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.jumpTo(0);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   /// Lazily retrieves or creates a GlobalKey for an achievement item to enable 'ensureVisible' logic.
   GlobalKey _getAchievementKey(int index) {
@@ -161,6 +185,7 @@ class GameDetailsAchievementsTabState
                 ),
               ],
             ),
+            clipBehavior: Clip.antiAlias,
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -199,6 +224,7 @@ class GameDetailsAchievementsTabState
               ),
             ],
           ),
+          clipBehavior: Clip.antiAlias,
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -252,6 +278,7 @@ class GameDetailsAchievementsTabState
             ),
           ],
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -531,6 +558,7 @@ class _AchievementsGrid extends StatelessWidget {
     final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
     return GridView.builder(
       controller: scrollController,
+      padding: EdgeInsets.zero,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 6,
         crossAxisSpacing: 4.r,
@@ -569,6 +597,14 @@ class _AchievementsGrid extends StatelessWidget {
                     : 'https://media.retroachievements.org/Badge/${achievement.badgeName}_lock.png',
                 cacheWidth: 64,
                 fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => ColoredBox(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Icon(
+                    Symbols.emoji_events_rounded,
+                    size: 18.r,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
             ),
           ),
