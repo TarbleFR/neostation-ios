@@ -8,7 +8,10 @@ void main() {
       'lib/services/game/game_launch_service.dart',
     ).readAsStringSync();
 
-    expect(launch, contains('final isArmsx2OwnedRom = Armsx2FolderService.ownsRomPath'));
+    expect(
+      launch,
+      contains('final isArmsx2OwnedRom = Armsx2FolderService.ownsRomPath'),
+    );
     expect(launch, contains('if (isArmsx2OwnedRom || isArmsx2VirtualRom)'));
     expect(launch, contains("'Could not launch this PS2 game in ARMSX2.'"));
 
@@ -28,8 +31,15 @@ void main() {
 
     expect(service, contains('ownsLinkedPhysicalRom'));
     expect(service, contains('_launchLinkedPhysicalRom(romPath)'));
-    expect(service, contains("host: 'launch'"));
-    expect(service, contains("queryParameters: {'game': fileName}"));
+    expect(service, contains('Uri.encodeComponent(fileName)'));
+    expect(
+      service,
+      contains("Uri.parse('armsx2://launch?game=\$encodedFileName')"),
+    );
+    expect(
+      service,
+      isNot(contains("queryParameters: {'game': fileName}")),
+    );
   });
 
   test('PS2 NeoSync resolves ARMSX2 or RetroArch but never both', () {
@@ -39,7 +49,10 @@ void main() {
 
     expect(resolver, contains("system.folderName.toLowerCase() == 'ps2'"));
     expect(resolver, contains('Armsx2FolderService.ownsRomPath'));
-    expect(resolver, contains('return await Armsx2FolderService.resolveSaveDirectories'));
+    expect(
+      resolver,
+      contains('return await Armsx2FolderService.resolveSaveDirectories'),
+    );
     expect(resolver, contains('final saves = await _getRetroArchSavesPath()'));
     expect(resolver, contains('final states = await _getRetroArchStatesPath()'));
     expect(resolver, isNot(contains('linkedArmsx2SaveFolderPath')));
