@@ -1,14 +1,21 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Stores the global iOS JIT backend preference.
+/// Stores iOS JIT preferences shared by the integrated launchers.
 ///
-/// ARMSX2 launch mode is intentionally NOT a NeoStation preference anymore.
-/// The integrated ARMSX2 bridge reads "Automatic Load Last Game" directly from
-/// ARMSX2 and chooses the matching launch path automatically.
+/// ARMSX2 exposes two deliberately separate NeoStation launch modes:
+/// - Standard (default): the historical post-JIT armsx2:// handoff. This sends
+///   the selected game and keeps the normal return/NeoSync lifecycle.
+/// - Direct: resume the same JIT-enabled ARMSX2 PID and let ARMSX2's own
+///   Automatic Load Last Game feature continue without a second URL handoff.
+///
+/// A new v2 key is used on purpose so experimental values saved by earlier
+/// builds can never silently opt existing users into Direct mode.
 class JitBackendPreferenceService {
   JitBackendPreferenceService._();
 
   static const String preferenceKey = 'ios_stikdebug_fallback_v1';
+  static const String armsx2DirectLaunchPreferenceKey =
+      'ios_armsx2_direct_load_last_game_v2';
 
   static Future<bool> useStikDebugFallback() async {
     final preferences = await SharedPreferences.getInstance();
@@ -23,17 +30,31 @@ class JitBackendPreferenceService {
     }
   }
 
-  /// Compatibility shim for the already-validated ARMSX2 bridge API.
+  /// Whether NeoStation should use the optional ARMSX2 direct/last-game path.
   ///
-  /// There is deliberately no saved NeoStation ARMSX2 mode anymore. Returning
-  /// false means that if ARMSX2's own preference cannot be read, the bridge
-  /// falls back conservatively to the legacy URL handoff instead of guessing a
-  /// direct Automatic Load launch. When ARMSX2's preference is readable, its
-  /// detected value always overrides this value in the native bridge.
-  static Future<bool> useArmsx2AutoLoadLastGame() async => false;
+  /// False is intentionally the default for every install/update. Standard mode
+  /// is the compatibility path that delivers the selected game URL and is the
+  /// mode intended for automatic NeoSync after the game closes.
+  static Future<bool> useArmsx2DirectLaunch() async {
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.getBool(armsx2DirectLaunchPreferenceKey) ?? false;
+  }
 
-  /// Kept temporarily for source compatibility with the validated #71 service.
-  /// The value is intentionally not persisted: ARMSX2 itself is the sole source
-  /// of truth for Automatic Load Last Game.
-  static Future<void> setUseArmsx2AutoLoadLastGame(bool value) async {}
+  static Future<void> setUseArmsx2DirectLaunch(bool value) async {
+    final preferences = await SharedPreferences.getInstance();
+    final saved = await preferences.setBool(
+      armsx2DirectLaunchPreferenceKey,
+      value,
+    );
+    if (!saved) {
+      throw StateError('The ARMSX2 direct launch preference was not saved.');
+    }
+  }
+
+  // Compatibility aliases for code outside the settings screen while the
+  // ARMSX2 bridge still names its wire argument `autoLoadLastGame`.
+  static Future<bool> useArmsx2AutoLoadLastGame() => useArmsx2DirectLaunch();
+
+  static Future<void> setUseArmsx2AutoLoadLastGame(bool value) =>
+      setUseArmsx2DirectLaunch(value);
 }
