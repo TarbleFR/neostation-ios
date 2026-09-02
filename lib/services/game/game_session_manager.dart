@@ -214,6 +214,11 @@ class GameSessionManager {
 
     _stopPlaytimeTimer();
 
+    // GameLaunchManager registers this callback for iOS too. Keep the callback
+    // until after the session flags have been cleared so its syncing phase can
+    // call endGameSession() idempotently without re-entering this teardown.
+    final notifyIosGameClosed = Platform.isIOS && _onProcessExitCallback != null;
+
     if (Platform.isAndroid) {
       const platform = MethodChannel('com.neogamelab.neostation/game');
       await platform.invokeMethod('setGamepadBlock', {'block': false});
@@ -234,6 +239,10 @@ class GameSessionManager {
     _launchedEmulatorExe = null;
     _currentGameSystem = null;
     _currentGame = null;
+
+    if (notifyIosGameClosed) {
+      _onProcessExitCallback!();
+    }
   }
 
   static Future<void> _savePlayTime(
