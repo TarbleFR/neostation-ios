@@ -19,8 +19,18 @@ if virtual_old not in text:
     raise SystemExit('ARMSX2 virtual launch URI anchor not found')
 text = text.replace(virtual_old, virtual_new, 1)
 
-if "queryParameters: {'game': fileName}" in text:
+# The Build 171 cache-based physical launch fallback contains another Uri()
+# constructor with the same form-style game query. Keep that constructor but
+# feed it an already percent-encoded raw query instead of queryParameters.
+remaining_form_query = "queryParameters: {'game': fileName},"
+if remaining_form_query in text:
+    text = text.replace(
+        remaining_form_query,
+        "query: 'game=${Uri.encodeComponent(fileName)}',",
+    )
+
+if remaining_form_query in text:
     raise SystemExit('An ARMSX2 form-style game query builder still remains')
 
 p.write_text(text, encoding='utf-8')
-print('Build 179: all ARMSX2 launch filenames use percent encoding')
+print('Build 179: every ARMSX2 game launch path uses percent encoding')
