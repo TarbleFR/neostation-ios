@@ -30,10 +30,8 @@ void main() {
       armsx2,
       contains('autoLoadLastGame: fallbackAutoLoadLastGame'),
     );
-    expect(armsx2, contains('detectedAutoLoadLastGame'));
     expect(armsx2, contains('effectiveAutoLoadLastGame'));
     expect(armsx2, contains('autoLoadModeSource'));
-    expect(armsx2, contains('setUseArmsx2AutoLoadLastGame'));
     expect(armsx2, contains('postJitHandoffSkipped'));
     expect(armsx2, contains('targetResumed'));
     expect(armsx2, contains('ARMSX2_AUTOLOAD_RESUMED'));
@@ -41,7 +39,7 @@ void main() {
   });
 
   test(
-    'native ARMSX2 bridge auto-detects launch mode and preserves both handoffs',
+    'native ARMSX2 bridge obeys the explicit Tools choice and preserves both handoffs',
     () {
       final composite = File(
         'packages/stikjit_bridge/ios/Classes/'
@@ -55,11 +53,18 @@ void main() {
       expect(composite, contains('enableArmsx2Jit'));
       expect(composite, contains('launchArmsx2Suspended'));
       expect(composite, contains('Armsx2PreferenceDetector'));
-      expect(composite, contains('detectedAutoLoadLastGame'));
-      expect(composite, contains('effectiveAutoLoadLastGame'));
-      expect(composite, contains('autoLoadModeSource'));
-      expect(composite, contains('ARMSX2_LAUNCH_MODE_AUTO_DETECTED'));
-      expect(composite, contains('ARMSX2_LAUNCH_MODE_FALLBACK'));
+      expect(composite, contains('ARMSX2_LAUNCH_MODE_STANDARD_SELECTED'));
+      expect(composite, contains('ARMSX2_LAUNCH_MODE_DIRECT_SELECTED'));
+      expect(composite, contains('neostation_tools_explicit'));
+      expect(
+        composite,
+        contains('let directLoadLastGame = arguments["autoLoadLastGame"] as? Bool ?? false'),
+      );
+      expect(
+        composite,
+        contains('response.removeValue(forKey: "detectedAutoLoadLastGame")'),
+      );
+      expect(composite, contains('ARMSX2_SETTING_MISMATCH'));
       expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
       expect(composite, contains('ARMSX2_AUTOLOAD_RESUME_REQUESTED'));
       expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
@@ -86,27 +91,32 @@ void main() {
         'packages/stikjit_bridge/lib/stikjit_bridge.dart',
       ).readAsStringSync();
       expect(dartBridge, contains("'autoLoadLastGame': autoLoadLastGame"));
-      expect(dartBridge, contains('detectedAutoLoadLastGame'));
       expect(dartBridge, contains('effectiveAutoLoadLastGame'));
       expect(dartBridge, contains('autoLoadModeSource'));
-      expect(dartBridge, contains('detectedAutoLoadPreferenceKey'));
       expect(dartBridge, contains('postJitHandoffSkipped'));
       expect(dartBridge, contains('targetResumed'));
 
       final preferences = File(
         'lib/services/jit_backend_preference_service.dart',
       ).readAsStringSync();
-      expect(preferences, isNot(contains('ios_armsx2_autoload_last_game_v1')));
-      expect(preferences, contains('useArmsx2AutoLoadLastGame() async => false'));
-      expect(preferences, contains('ARMSX2 itself is the sole source'));
+      expect(preferences, contains('ios_armsx2_direct_load_last_game_v2'));
+      expect(preferences, contains('useArmsx2DirectLaunch'));
+      expect(preferences, contains('setUseArmsx2DirectLaunch'));
 
       final tools = File(
         'lib/screens/settings_screen/new_settings_options/'
         'tools_settings_content.dart',
       ).readAsStringSync();
-      expect(tools, contains('int getItemCount() => 2;'));
-      expect(tools, isNot(contains('Armsx2JitModeLocale')));
-      expect(tools, isNot(contains('_setUseArmsx2AutoLoadLastGame')));
+      expect(tools, contains('int getItemCount() => 3;'));
+      expect(tools, contains('Armsx2JitModeLocale'));
+      expect(tools, contains('_setUseArmsx2DirectLaunch'));
+
+      final locale = File(
+        'lib/l10n/armsx2_jit_mode_locale.dart',
+      ).readAsStringSync();
+      expect(locale, contains('Standard (NeoSync)'));
+      expect(locale, contains('automatic NeoSync unavailable'));
+      expect(locale, contains('NeoSync automatique après la partie est indisponible'));
 
       final footer = File(
         'lib/screens/game_screen/game_details_card/widgets/'
