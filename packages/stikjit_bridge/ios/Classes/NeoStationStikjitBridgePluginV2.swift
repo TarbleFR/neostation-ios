@@ -1,12 +1,13 @@
 import Flutter
 import Foundation
 
-/// Third-level composite registration: preserve the already validated
-/// MeloNX + ARMSX2 plugin registration exactly as-is, then add the independent
-/// RPCS3 bridge on its own method channel.
+/// Composite registration keeps the validated MeloNX / legacy-ARMSX2 / RPCS3
+/// channels untouched and adds the race-free ARMSX2 safe-boot channel beside
+/// them. Dart explicitly opts into the safe channel, so rollback remains local.
 public final class NeoStationStikjitBridgePluginV2: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     NeoStationStikjitBridgePlugin.register(with: registrar)
+    StikjitArmsx2SafeBridgePlugin.register(with: registrar)
     StikjitRpcs3BridgePlugin.register(with: registrar)
   }
 }
