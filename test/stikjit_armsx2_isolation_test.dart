@@ -34,14 +34,13 @@ void main() {
     expect(armsx2, contains('effectiveAutoLoadLastGame'));
     expect(armsx2, contains('autoLoadModeSource'));
     expect(armsx2, contains('setUseArmsx2AutoLoadLastGame'));
-    expect(armsx2, contains('postJitHandoffSkipped'));
-    expect(armsx2, contains('targetResumed'));
-    expect(armsx2, contains('ARMSX2_AUTOLOAD_RESUMED'));
+    expect(armsx2, contains('jit.jitReady'));
+    expect(armsx2, contains('ARMSX2_GAME_URL_NOT_DELIVERED_JIT_READY'));
     expect(armsx2, contains('stikjit_armsx2_debug.txt'));
   });
 
   test(
-    'native ARMSX2 bridge auto-detects launch mode and preserves both handoffs',
+    'native ARMSX2 bridge preserves auto-load detection with natural return',
     () {
       final composite = File(
         'packages/stikjit_bridge/ios/Classes/'
@@ -60,14 +59,23 @@ void main() {
       expect(composite, contains('autoLoadModeSource'));
       expect(composite, contains('ARMSX2_LAUNCH_MODE_AUTO_DETECTED'));
       expect(composite, contains('ARMSX2_LAUNCH_MODE_FALLBACK'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_HANDOFF_SKIPPED'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_RESUME_REQUESTED'));
-      expect(composite, contains('ARMSX2_AUTOLOAD_SAME_PID_RESUMED'));
-      expect(composite, contains('resumedPID == UInt64(originalPID)'));
-      expect(composite, contains('targetResumed'));
-      expect(composite, contains('postJitHandoffSkipped'));
-      expect(composite, contains('performLegacyHandoff'));
+      expect(composite, contains('ARMSX2_NATURAL_HANDOFF'));
+      expect(composite, contains('reacquireNeoStationForeground = false'));
+      expect(composite, contains('response["jitReady"] = true'));
       expect(composite, contains('openGameWhenNeoStationIsActive'));
+      expect(composite, contains('NEOSTATION_ACTIVE_TIMEOUT'));
+      expect(composite, contains('Self.describe(state)'));
+
+      // The old self-bundle process_control call is retained only behind the
+      // explicit escape hatch. It must never precede the natural-handoff guard.
+      final escapeHatch = composite.indexOf(
+        'guard Self.reacquireNeoStationForeground else',
+      );
+      final selfActivator = composite.indexOf(
+        'Armsx2NeoStationProcessActivator().activate(',
+      );
+      expect(escapeHatch, greaterThanOrEqualTo(0));
+      expect(selfActivator, greaterThan(escapeHatch));
 
       final detector = File(
         'packages/stikjit_bridge/ios/Classes/'
@@ -92,6 +100,7 @@ void main() {
       expect(dartBridge, contains('detectedAutoLoadPreferenceKey'));
       expect(dartBridge, contains('postJitHandoffSkipped'));
       expect(dartBridge, contains('targetResumed'));
+      expect(dartBridge, contains('jitReady'));
 
       final preferences = File(
         'lib/services/jit_backend_preference_service.dart',
