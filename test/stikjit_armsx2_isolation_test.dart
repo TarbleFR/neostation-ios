@@ -96,15 +96,17 @@ void main() {
       final preferences = File(
         'lib/services/jit_backend_preference_service.dart',
       ).readAsStringSync();
-      expect(preferences, contains('ios_armsx2_autoload_last_game_v1'));
-      expect(preferences, contains('setUseArmsx2AutoLoadLastGame'));
+      expect(preferences, isNot(contains('ios_armsx2_autoload_last_game_v1')));
+      expect(preferences, contains('useArmsx2AutoLoadLastGame() async => false'));
+      expect(preferences, contains('ARMSX2 itself is the sole source'));
 
       final tools = File(
         'lib/screens/settings_screen/new_settings_options/'
         'tools_settings_content.dart',
       ).readAsStringSync();
-      expect(tools, contains('Armsx2JitModeLocale'));
-      expect(tools, contains('_setUseArmsx2AutoLoadLastGame'));
+      expect(tools, contains('int getItemCount() => 2;'));
+      expect(tools, isNot(contains('Armsx2JitModeLocale')));
+      expect(tools, isNot(contains('_setUseArmsx2AutoLoadLastGame')));
 
       final footer = File(
         'lib/screens/game_screen/game_details_card/widgets/'
