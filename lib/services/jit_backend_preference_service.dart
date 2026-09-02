@@ -1,16 +1,14 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Stores iOS JIT preferences shared by the integrated launchers.
+/// Stores the global iOS JIT backend preference.
 ///
-/// The default remains the built-in StikJIT path. When the global fallback is
-/// enabled, the central launcher skips every integrated bridge and runs the
-/// emulator's existing Apple Shortcut, which in turn uses StikDebug.
+/// ARMSX2 launch mode is intentionally NOT a NeoStation preference anymore.
+/// The integrated ARMSX2 bridge reads "Automatic Load Last Game" directly from
+/// ARMSX2 and chooses the matching launch path automatically.
 class JitBackendPreferenceService {
   JitBackendPreferenceService._();
 
   static const String preferenceKey = 'ios_stikdebug_fallback_v1';
-  static const String armsx2AutoLoadLastGamePreferenceKey =
-      'ios_armsx2_autoload_last_game_v1';
 
   static Future<bool> useStikDebugFallback() async {
     final preferences = await SharedPreferences.getInstance();
@@ -25,25 +23,17 @@ class JitBackendPreferenceService {
     }
   }
 
-  /// Uses ARMSX2's own "Automatic Load Last Game" flow after StikJIT is ready.
+  /// Compatibility shim for the already-validated ARMSX2 bridge API.
   ///
-  /// When disabled, NeoStation keeps the existing compatibility flow: ARMSX2 is
-  /// JIT-enabled, NeoStation is brought back to the foreground, and the selected
-  /// armsx2:// URL is delivered again. When enabled, the post-JIT round trip is
-  /// skipped and ARMSX2 is allowed to continue directly into its own last game.
-  static Future<bool> useArmsx2AutoLoadLastGame() async {
-    final preferences = await SharedPreferences.getInstance();
-    return preferences.getBool(armsx2AutoLoadLastGamePreferenceKey) ?? false;
-  }
+  /// There is deliberately no saved NeoStation ARMSX2 mode anymore. Returning
+  /// false means that if ARMSX2's own preference cannot be read, the bridge
+  /// falls back conservatively to the legacy URL handoff instead of guessing a
+  /// direct Automatic Load launch. When ARMSX2's preference is readable, its
+  /// detected value always overrides this value in the native bridge.
+  static Future<bool> useArmsx2AutoLoadLastGame() async => false;
 
-  static Future<void> setUseArmsx2AutoLoadLastGame(bool value) async {
-    final preferences = await SharedPreferences.getInstance();
-    final saved = await preferences.setBool(
-      armsx2AutoLoadLastGamePreferenceKey,
-      value,
-    );
-    if (!saved) {
-      throw StateError('The ARMSX2 launch mode preference was not saved.');
-    }
-  }
+  /// Kept temporarily for source compatibility with the validated #71 service.
+  /// The value is intentionally not persisted: ARMSX2 itself is the sole source
+  /// of truth for Automatic Load Last Game.
+  static Future<void> setUseArmsx2AutoLoadLastGame(bool value) async {}
 }
