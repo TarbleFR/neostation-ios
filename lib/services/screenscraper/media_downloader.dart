@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
 
@@ -127,7 +126,6 @@ class ScreenscraperMediaDownloader {
 
   /// Signature validation shared by the normal downloader, game-id fallback
   /// and unit tests.
-  @visibleForTesting
   static bool isValidMediaPayload(
     List<int> bytes, {
     required String mediaType,

@@ -39,8 +39,7 @@ abstract final class Rpcs3TitleCatalogService {
     return _parseCatalog(source);
   }
 
-  @visibleForTesting
-  static String? resolveFromCatalogForTesting(
+  static String? resolveFromCatalog(
     String titleId,
     Map<String, String> catalog,
   ) {
@@ -48,6 +47,12 @@ abstract final class Rpcs3TitleCatalogService {
     final title = catalog[normalized]?.trim();
     return title == null || title.isEmpty ? null : title;
   }
+
+  @visibleForTesting
+  static String? resolveFromCatalogForTesting(
+    String titleId,
+    Map<String, String> catalog,
+  ) => resolveFromCatalog(titleId, catalog);
 
   static Future<Map<String, String>> loadTitles({
     bool allowNetwork = true,
@@ -74,7 +79,7 @@ abstract final class Rpcs3TitleCatalogService {
     bool allowNetwork = true,
   }) async {
     final catalog = await loadTitles(allowNetwork: allowNetwork);
-    return resolveFromCatalogForTesting(titleId, catalog);
+    return resolveFromCatalog(titleId, catalog);
   }
 
   static Future<void> _ensureDiskCacheLoaded() async {

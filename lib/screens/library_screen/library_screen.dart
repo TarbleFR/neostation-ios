@@ -1001,54 +1001,6 @@ class LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  void _cycleLanguageFilter() {
-    final options = _languageOptions;
-    if (options.isEmpty) return;
-    var index = options.indexOf(_languageFilter);
-    if (index < 0) index = 0;
-    final next = options[(index + 1) % options.length];
-    setState(() {
-      _languageFilter = next;
-      _librarySelectedIndex = 0;
-      _alphabetAnchor = null;
-    });
-  }
-
-  void _toggleAlphabeticalSort() {
-    setState(() {
-      _sortAscending = !_sortAscending;
-      _librarySelectedIndex = 0;
-      _alphabetAnchor = null;
-    });
-  }
-
-  void _jumpToNextLetter() {
-    final visible = _visibleLibraryItems;
-    if (visible.isEmpty) return;
-    final letters =
-        visible
-            .map((entry) => _firstLetter(entry.item.title))
-            .where((letter) => letter.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    if (letters.isEmpty) return;
-
-    final current = _alphabetAnchor;
-    final currentIndex = current == null ? -1 : letters.indexOf(current);
-    final nextLetter = letters[(currentIndex + 1) % letters.length];
-    final itemIndex = visible.indexWhere(
-      (entry) => _firstLetter(entry.item.title) == nextLetter,
-    );
-    if (itemIndex < 0) return;
-
-    setState(() {
-      _alphabetAnchor = nextLetter;
-      _hubFocus = _HubFocus.books;
-      _librarySelectedIndex = itemIndex;
-    });
-    _ensureSelectedBookVisible();
-  }
 
   String _firstLetter(String title) {
     final trimmed = title.trim();

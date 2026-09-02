@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:flutter/foundation.dart';
@@ -532,7 +531,7 @@ class Rpcs3LibraryService {
         if (_needsCatalogTitle(game))
           game.copyWith(
             title:
-                Rpcs3TitleCatalogService.resolveFromCatalogForTesting(
+                Rpcs3TitleCatalogService.resolveFromCatalog(
                   game.titleId,
                   catalog,
                 ) ??
@@ -560,7 +559,7 @@ class Rpcs3LibraryService {
         if (_needsCatalogTitle(game))
           game.copyWith(
             title:
-                Rpcs3TitleCatalogService.resolveFromCatalogForTesting(
+                Rpcs3TitleCatalogService.resolveFromCatalog(
                   game.titleId,
                   catalog,
                 ) ??
@@ -882,7 +881,7 @@ class Rpcs3LibraryService {
   }
 
   static int _findZeroByte(Uint8List bytes, int start, int limit) {
-    final safeLimit = limit.clamp(start, bytes.length) as int;
+    final safeLimit = limit.clamp(start, bytes.length);
     for (var i = start; i < safeLimit; i++) {
       if (bytes[i] == 0) return i;
     }
@@ -1019,32 +1018,6 @@ class Rpcs3LibraryService {
     return text.trim();
   }
 
-  static Future<String?> _findEntityByBasename(
-    Directory root,
-    String basename, {
-    required int maxDepth,
-  }) async {
-    if (!await root.exists()) return null;
-    final wanted = basename.toLowerCase();
-
-    Future<String?> walk(Directory directory, int depth) async {
-      if (depth > maxDepth) return null;
-      try {
-        await for (final entity in directory.list(followLinks: false)) {
-          if (path.basename(entity.path).toLowerCase() == wanted) {
-            return entity.path;
-          }
-          if (entity is Directory && depth < maxDepth) {
-            final found = await walk(entity, depth + 1);
-            if (found != null) return found;
-          }
-        }
-      } catch (_) {}
-      return null;
-    }
-
-    return walk(root, 0);
-  }
 
   static void _putPreferred(
     Map<String, Rpcs3LibraryGame> target,
