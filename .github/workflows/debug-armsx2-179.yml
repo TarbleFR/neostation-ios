@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   debug:
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,22 +32,34 @@ jobs:
           test ! -e lib/services/ios_emulator_preference_service.dart
           test ! -e lib/l10n/manic_emu_locale.dart
           ! grep -RniE 'Manic[ _-]?EMU|ManicEMU|manicemu|manic_emu|IosEmulatorPreferenceService|IosLibraryEmulator|linkedManicEmuFolderPath' lib packages
-          echo G3
+          echo G3A
           grep -Fq "static const String bookmarkKey = 'armsx2'" lib/services/armsx2_folder_service.dart
+          echo G3B
           grep -Fq 'linkedArmsx2FolderPath' lib/services/config_service.dart
+          echo G3C
           grep -Fq 'linkedArmsx2GameFolderPath' lib/services/config_service.dart
+          echo G3D
           ! grep -Fq 'linkedArmsx2SaveFolderPath' lib/services/config_service.dart
+          echo G3E
           ! grep -Fq 'armsx2NeoSyncBookmarkKey' lib/services/config_service.dart
+          echo G3F
           grep -Fq 'onLinkPressed: _linkArmsx2RootFolder' lib/screens/settings_screen/new_settings_options/directories_settings_content.dart
+          echo G3G
           ! grep -Fq 'Armsx2LibraryService.requestLibrarySync()' lib/screens/settings_screen/new_settings_options/directories_settings_content.dart
-          echo G4
+          echo G4A
           grep -Fq 'final isArmsx2OwnedRom = Armsx2FolderService.ownsRomPath' lib/services/game/game_launch_service.dart
+          echo G4B
           grep -Fq 'if (isArmsx2OwnedRom || isArmsx2VirtualRom)' lib/services/game/game_launch_service.dart
+          echo G4C
           grep -Fq 'PS2 on iOS must never merge RetroArch and ARMSX2 save roots' lib/providers/neosync/neosync_path_resolver.dart
+          echo G4D
           grep -Fq 'return await Armsx2FolderService.resolveSaveDirectories' lib/providers/neosync/neosync_path_resolver.dart
+          echo G4E
           ! grep -Fq 'linkedExternalFolderPath' lib/services/armsx2_folder_service.dart
-          echo G5
+          echo G5A
           grep -Fq 'Uri.encodeComponent(fileName)' lib/services/armsx2_library_service.dart
+          echo G5B
           grep -Fq 'armsx2://launch?game=$encodedFileName' lib/services/armsx2_library_service.dart
+          echo G5C
           ! grep -Fq "queryParameters: {'game': fileName}" lib/services/armsx2_library_service.dart
           echo ALL_GUARDS_OK
