@@ -111,125 +111,152 @@ class _GameDetailsScreenshotVideoTabState
       mediaAspectRatio = _imageAspectRatios[screenshotPath]!;
     }
 
-    if (mediaAspectRatio <= 0 || mediaAspectRatio.isNaN) {
+    if (mediaAspectRatio <= 0 ||
+        mediaAspectRatio.isNaN ||
+        mediaAspectRatio.isInfinite) {
       mediaAspectRatio = 16 / 9;
     }
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(8.r, 40.r, 8.r, 80.r),
-      child: Center(
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                BorderRadius.circular(14.r),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.shadow.withValues(alpha: 0.3),
-                blurRadius: 3.r,
-                offset: Offset(3.0.r, 3.0.r),
-              ),
-            ],
-            color: Colors.transparent,
-          ),
-          child: ClipRRect(
-            borderRadius:
-                Theme.of(context).extension<CornerRadii>()?.radiusInternal ??
-                BorderRadius.circular(14.r),
-            clipBehavior: Clip.antiAlias,
-            child: AspectRatio(
-              aspectRatio: mediaAspectRatio,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (!widget.isVideoDelayActive &&
-                      hasVideo &&
-                      widget.videoController!.value.isInitialized &&
-                      widget.videoController!.value.size.width > 0 &&
-                      widget.videoController!.value.size.height > 0) ...[
-                    Consumer<SqliteConfigProvider>(
-                      builder: (context, config, child) {
-                        return VideoPlayer(widget.videoController!);
-                      },
-                    ),
-                  ] else if (File(screenshotPath).existsSync()) ...[
-                    Image.file(
-                      File(screenshotPath),
-                      height: double.infinity,
-                      cacheHeight: 640,
-                      key: ValueKey(
-                        '${screenshotPath}_fg_${widget.imageVersion}',
-                      ),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-                  ] else
-                    Center(
-                      child: Icon(
-                        Symbols.videogame_asset_rounded,
-                        size: 48.r,
-                        color: Colors.white24,
-                      ),
-                    ),
+    final radii = Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
 
-                  if (!widget.isVideoDelayActive && hasVideo)
-                    Positioned(
-                      bottom: 8.r,
-                      right: 8.r,
-                      child: ExcludeFocus(
-                        child: Material(
-                          color: Colors.black54,
-                          borderRadius:
-                              Theme.of(
-                                context,
-                              ).extension<CornerRadii>()?.radiusExternal ??
-                              BorderRadius.circular(14.r),
-                          child: InkWell(
-                            onTap: () {
-                              SfxService().playNavSound();
-                              widget.onToggleVideoMute();
-                            },
-                            canRequestFocus: false,
-                            focusColor: Colors.transparent,
-                            hoverColor: Colors.transparent,
-                            highlightColor: Colors.transparent,
-                            splashColor: Colors.transparent,
-                            borderRadius:
-                                Theme.of(
-                                  context,
-                                ).extension<CornerRadii>()?.radiusInternal ??
-                                BorderRadius.circular(14.r),
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8.r,
-                                vertical: 4.r,
-                              ),
-                              child: Consumer<SqliteConfigProvider>(
-                                builder: (context, configProvider, child) {
-                                  final isMuted =
-                                      !configProvider.config.videoSound;
-                                  return Icon(
-                                    isMuted
-                                        ? Symbols.volume_off_rounded
-                                        : Symbols.volume_up_rounded,
-                                    size: 16.r,
-                                    color: Colors.white,
-                                  );
+    // Reserve the real top and bottom chrome before fitting media. The header
+    // is 46.r and the footer is 61.r, so tall 4:3/vertical previews can never
+    // touch the tabs while wide Switch previews still get a little more room.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalClearance = 8.r;
+        final headerClearance = 58.r;
+        final footerClearance = 72.r;
+
+        final availableWidth =
+            constraints.maxWidth - (horizontalClearance * 2);
+        final availableHeight =
+            constraints.maxHeight - headerClearance - footerClearance;
+
+        if (availableWidth <= 0 || availableHeight <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final maxMediaWidth = availableWidth < 230.r
+            ? availableWidth
+            : 230.r;
+        final maxMediaHeight = availableHeight < 175.r
+            ? availableHeight
+            : 175.r;
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            horizontalClearance,
+            headerClearance,
+            horizontalClearance,
+            footerClearance,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: maxMediaWidth,
+                maxHeight: maxMediaHeight,
+              ),
+              child: AspectRatio(
+                aspectRatio: mediaAspectRatio,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: radii.radiusInternal,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.shadow.withValues(alpha: 0.3),
+                        blurRadius: 3.r,
+                        offset: Offset(3.0.r, 3.0.r),
+                      ),
+                    ],
+                    color: Colors.black,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (!widget.isVideoDelayActive &&
+                          hasVideo &&
+                          widget.videoController!.value.isInitialized &&
+                          widget.videoController!.value.size.width > 0 &&
+                          widget.videoController!.value.size.height > 0) ...[
+                        Consumer<SqliteConfigProvider>(
+                          builder: (context, config, child) {
+                            return VideoPlayer(widget.videoController!);
+                          },
+                        ),
+                      ] else if (File(screenshotPath).existsSync()) ...[
+                        Image.file(
+                          File(screenshotPath),
+                          height: double.infinity,
+                          cacheHeight: 640,
+                          key: ValueKey(
+                            '${screenshotPath}_fg_${widget.imageVersion}',
+                          ),
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ] else
+                        Center(
+                          child: Icon(
+                            Symbols.videogame_asset_rounded,
+                            size: 48.r,
+                            color: Colors.white24,
+                          ),
+                        ),
+
+                      if (!widget.isVideoDelayActive && hasVideo)
+                        Positioned(
+                          bottom: 8.r,
+                          right: 8.r,
+                          child: ExcludeFocus(
+                            child: Material(
+                              color: Colors.black54,
+                              borderRadius: radii.radiusExternal,
+                              child: InkWell(
+                                onTap: () {
+                                  SfxService().playNavSound();
+                                  widget.onToggleVideoMute();
                                 },
+                                canRequestFocus: false,
+                                focusColor: Colors.transparent,
+                                hoverColor: Colors.transparent,
+                                highlightColor: Colors.transparent,
+                                splashColor: Colors.transparent,
+                                borderRadius: radii.radiusInternal,
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 8.r,
+                                    vertical: 4.r,
+                                  ),
+                                  child: Consumer<SqliteConfigProvider>(
+                                    builder: (context, configProvider, child) {
+                                      final isMuted =
+                                          !configProvider.config.videoSound;
+                                      return Icon(
+                                        isMuted
+                                            ? Symbols.volume_off_rounded
+                                            : Symbols.volume_up_rounded,
+                                        size: 16.r,
+                                        color: Colors.white,
+                                      );
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
