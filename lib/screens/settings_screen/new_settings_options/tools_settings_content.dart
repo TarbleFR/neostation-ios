@@ -4,7 +4,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
-import 'package:neostation/l10n/armsx2_jit_mode_locale.dart';
 import 'package:neostation/l10n/jit_fallback_locale.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
@@ -41,19 +40,14 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   bool _useStikDebugFallback = false;
   bool _isUpdatingJitFallback = false;
 
-  bool _armsx2LaunchModeStateLoaded = false;
-  bool _useArmsx2AutoLoadLastGame = false;
-  bool _isUpdatingArmsx2LaunchMode = false;
-
   @override
   void initState() {
     super.initState();
     _refreshPairingState();
     _refreshJitFallbackState();
-    _refreshArmsx2LaunchModeState();
   }
 
-  int getItemCount() => 3;
+  int getItemCount() => 2;
 
   void scrollToIndex(int index) {}
 
@@ -66,12 +60,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         _jitFallbackStateLoaded &&
         !_isUpdatingJitFallback) {
       _setUseStikDebugFallback(!_useStikDebugFallback);
-      return;
-    }
-    if (index == 2 &&
-        _armsx2LaunchModeStateLoaded &&
-        !_isUpdatingArmsx2LaunchMode) {
-      _setUseArmsx2AutoLoadLastGame(!_useArmsx2AutoLoadLastGame);
     }
   }
 
@@ -121,29 +109,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     }
   }
 
-  Future<void> _refreshArmsx2LaunchModeState() async {
-    try {
-      final enabled =
-          await JitBackendPreferenceService.useArmsx2AutoLoadLastGame();
-      if (!mounted) return;
-      setState(() {
-        _useArmsx2AutoLoadLastGame = enabled;
-        _armsx2LaunchModeStateLoaded = true;
-      });
-    } catch (error, stackTrace) {
-      _log.e(
-        'Could not load the ARMSX2 launch mode preference.',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      if (!mounted) return;
-      setState(() {
-        _useArmsx2AutoLoadLastGame = false;
-        _armsx2LaunchModeStateLoaded = true;
-      });
-    }
-  }
-
   Future<void> _setUseStikDebugFallback(bool value) async {
     if (!_jitFallbackStateLoaded || _isUpdatingJitFallback) return;
 
@@ -179,44 +144,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       );
     } finally {
       if (mounted) setState(() => _isUpdatingJitFallback = false);
-    }
-  }
-
-  Future<void> _setUseArmsx2AutoLoadLastGame(bool value) async {
-    if (!_armsx2LaunchModeStateLoaded || _isUpdatingArmsx2LaunchMode) return;
-
-    final previousValue = _useArmsx2AutoLoadLastGame;
-    setState(() {
-      _useArmsx2AutoLoadLastGame = value;
-      _isUpdatingArmsx2LaunchMode = true;
-    });
-
-    try {
-      await JitBackendPreferenceService.setUseArmsx2AutoLoadLastGame(value);
-      if (!mounted) return;
-      AppNotification.showNotification(
-        context,
-        Armsx2JitModeLocale.get(
-          context,
-          value ? Armsx2JitModeLocale.enabled : Armsx2JitModeLocale.disabled,
-        ),
-        type: NotificationType.success,
-      );
-    } catch (error, stackTrace) {
-      _log.e(
-        'Could not save the ARMSX2 launch mode preference.',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      if (!mounted) return;
-      setState(() => _useArmsx2AutoLoadLastGame = previousValue);
-      AppNotification.showNotification(
-        context,
-        Armsx2JitModeLocale.get(context, Armsx2JitModeLocale.saveFailed),
-        type: NotificationType.error,
-      );
-    } finally {
-      if (mounted) setState(() => _isUpdatingArmsx2LaunchMode = false);
     }
   }
 
@@ -303,8 +230,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
         widget.isContentFocused && widget.selectedContentIndex == 0;
     final fallbackSelected =
         widget.isContentFocused && widget.selectedContentIndex == 1;
-    final armsx2ModeSelected =
-        widget.isContentFocused && widget.selectedContentIndex == 2;
 
     final pairingStatus = !_pairingStateLoaded
         ? PairingFileLocale.get(context, PairingFileLocale.checking)
@@ -336,22 +261,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       _useStikDebugFallback
           ? JitFallbackLocale.fallbackDescription
           : JitFallbackLocale.integratedDescription,
-    );
-
-    final armsx2ModeStatus = !_armsx2LaunchModeStateLoaded
-        ? Armsx2JitModeLocale.get(context, Armsx2JitModeLocale.checking)
-        : Armsx2JitModeLocale.get(
-            context,
-            _useArmsx2AutoLoadLastGame
-                ? Armsx2JitModeLocale.autoLoadStatus
-                : Armsx2JitModeLocale.legacyStatus,
-          );
-
-    final armsx2ModeDescription = Armsx2JitModeLocale.get(
-      context,
-      _useArmsx2AutoLoadLastGame
-          ? Armsx2JitModeLocale.autoLoadDescription
-          : Armsx2JitModeLocale.legacyDescription,
     );
 
     return Column(
@@ -414,36 +323,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                     : IgnorePointer(
                         child: CustomToggleSwitch(
                           value: _useStikDebugFallback,
-                          onChanged: null,
-                          activeColor: theme.colorScheme.primary,
-                        ),
-                      ),
-              ),
-              SettingsCardRow(
-                icon: Symbols.fast_forward_rounded,
-                title: Armsx2JitModeLocale.get(
-                  context,
-                  Armsx2JitModeLocale.title,
-                ),
-                subtitle: '$armsx2ModeStatus — $armsx2ModeDescription',
-                subtitleMaxLines: 5,
-                selected: armsx2ModeSelected,
-                onTap: !_armsx2LaunchModeStateLoaded ||
-                        _isUpdatingArmsx2LaunchMode
-                    ? null
-                    : () => _setUseArmsx2AutoLoadLastGame(
-                        !_useArmsx2AutoLoadLastGame,
-                      ),
-                trailing: !_armsx2LaunchModeStateLoaded ||
-                        _isUpdatingArmsx2LaunchMode
-                    ? SizedBox(
-                        width: 22.r,
-                        height: 22.r,
-                        child: const CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : IgnorePointer(
-                        child: CustomToggleSwitch(
-                          value: _useArmsx2AutoLoadLastGame,
                           onChanged: null,
                           activeColor: theme.colorScheme.primary,
                         ),
