@@ -17,11 +17,14 @@ public final class NeoStationStikjitBridgePlugin: NSObject, FlutterPlugin {
 ///
 /// ARMSX2 is launched suspended so JIT is attached before its CPU threads run.
 /// After attach, NeoStation automatically inspects ARMSX2's persisted
-/// "Automatic Load Last Game" preference when its container is readable:
-/// - enabled: resume the exact same JIT-enabled PID, without returning to
-///   NeoStation and without opening armsx2:// a second time;
-/// - disabled: preserve the legacy NeoStation -> armsx2:// handoff so the
-///   selected frontend game is delivered after the intro/menu path.
+/// "Automatic Load Last Game" preference when its container is readable.
+///
+/// Automatic Load stays enabled inside ARMSX2, but NeoStation deliberately
+/// restores the original UIKit handoff after JIT: it first reacquires its own
+/// foreground state, then opens the selected armsx2:// URL from an active app.
+/// This preserves the normal iOS app-switch lifecycle used before direct PID
+/// resume was introduced, while still allowing ARMSX2 to apply its own
+/// Automatic Load / Skip BIOS settings.
 ///
 /// The Dart-side Tools preference remains a fallback only when the ARMSX2
 /// preference cannot be read safely.
@@ -121,10 +124,24 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
             "ARMSX2 preferences were unavailable; using the saved NeoStation Tools fallback: \(fallbackAutoLoadLastGame)."
           )
         }
-        response["logs"] = logs
 
         if autoLoadLastGame {
-          Self.resumeAutomaticLoadTarget(
+          // Keep ARMSX2's own Automatic Load / Skip BIOS preference enabled, but
+          // restore the exact app-switch shape that behaved naturally before the
+          // direct process_control resume path was added. Dart is told to validate
+          // the UIKit URL handoff rather than the now-unused direct-resume flags.
+          response["effectiveAutoLoadLastGame"] = false
+          response["autoLoadModeSource"] = detectedAutoLoad == nil
+            ? "neostation_fallback_natural_handoff"
+            : "armsx2_preferences_natural_handoff"
+          logs.append("STATE: ARMSX2_AUTOLOAD_NATURAL_HANDOFF")
+          logs.append(
+            "Automatic Load Last Game remains enabled in ARMSX2. NeoStation will use its original active-UIKit game URL handoff instead of resuming ARMSX2 through process_control."
+          )
+          response["logs"] = logs
+
+          self.performLegacyHandoff(
+            gameUrl: gameUrl,
             response: response,
             pairingFilePath: pairingFilePath,
             backgroundTask: backgroundTask,
@@ -133,6 +150,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
           return
         }
 
+        response["logs"] = logs
         self.performLegacyHandoff(
           gameUrl: gameUrl,
           response: response,
@@ -155,6 +173,9 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     }
   }
 
+  // Kept as an isolated fallback/reference for diagnostics. The normal
+  // Automatic Load path no longer invokes it because direct process_control
+  // foregrounding is the lifecycle difference under test.
   @available(iOS 17.4, *)
   private static func resumeAutomaticLoadTarget(
     response: [String: Any],
@@ -255,7 +276,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     var response = response
     var logs = response["logs"] as? [String] ?? []
     logs.append(
-      "Automatic Load Last Game is off. Re-acquiring NeoStation foreground before delivering the ARMSX2 game URL."
+      "Re-acquiring NeoStation foreground before delivering the ARMSX2 game URL through the standard iOS application handoff."
     )
     response["logs"] = logs
     response["postJitHandoffSkipped"] = false
