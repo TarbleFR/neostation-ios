@@ -24,10 +24,10 @@ jobs:
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout stable visual branch
+      - name: Checkout exact event SHA
         uses: actions/checkout@v4
         with:
-          ref: fix/armsx2-autoload-achievements
+          ref: ${{ github.sha }}
           fetch-depth: 1
 
       - name: Select Xcode 16.4
@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "fix/armsx2-autoload-achievements"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           grep -q 'packages/stikjit_bridge' pubspec.yaml
           grep -q 'NeoStationStikjitBridgePluginV2' packages/stikjit_bridge/pubspec.yaml
           test -f lib/services/pairing_file_service.dart
