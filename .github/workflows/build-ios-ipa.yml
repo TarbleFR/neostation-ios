@@ -1,106 +1,91 @@
-name: Build NeoStation iOS IPA
+name: NeoStation iOS - Latest IPA
+run-name: NeoStation iOS Latest IPA • ${{ github.sha }}
 
 on:
   workflow_dispatch:
-    inputs:
-      build_number:
-        description: iOS build number
-        required: true
-        default: '180'
-        type: string
+  push:
+    branches:
+      - feature/dolphinios-stikjit-neosync
+  # GitHub evaluates scheduled workflows from the default branch. Once this
+  # workflow lands on main, this daily run automatically probes the newest
+  # compatible OatmealDome/dolphin-ios master revision.
+  schedule:
+    - cron: '17 4 * * *'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: neostation-ios-main-build
+  group: neostation-ios-latest
   cancel-in-progress: true
 
 jobs:
-  build-ios-ipa:
-    name: Build NeoStation iOS
+  build:
     runs-on: macos-15
-    timeout-minutes: 120
-
+    timeout-minutes: 360
     env:
-      BUILD_NUMBER: ${{ inputs.build_number }}
-      ARTIFACT_BASENAME: NeoStation-iOS-Build-${{ inputs.build_number }}-Main
+      BUILD_NUMBER: '191'
+      ARTIFACT_BASENAME: NeoStation-iOS-LATEST
+      HOMEBREW_NO_AUTO_UPDATE: '1'
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout main
+      - name: Checkout latest feature branch
         uses: actions/checkout@v4
         with:
-          ref: main
-          fetch-depth: 1
+          ref: feature/dolphinios-stikjit-neosync
+          fetch-depth: 0
+
+      # The branch still contains the previous external-DolphiniOS experiment.
+      # Perform the one-way cleanup in the repository itself, push it once, and
+      # let the new push start a clean build. No compatibility shims are kept.
+      - name: Remove legacy DolphiniOS integration
+        id: migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/migrate_dolphin_embedded_sources.py
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            git commit -m 'refactor: embed Dolphin runtime in NeoStation'
+            git push origin HEAD:feature/dolphinios-stikjit-neosync
+            echo 'committed=true' >> "$GITHUB_OUTPUT"
+            echo 'Migration committed; the push-triggered run will build the cleaned tree.'
+          else
+            echo 'committed=false' >> "$GITHUB_OUTPUT"
+            echo 'Embedded Dolphin source migration already applied.'
+          fi
 
       - name: Select Xcode 16.4
+        if: steps.migration.outputs.committed != 'true'
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
 
       - name: Set up Flutter stable
+        if: steps.migration.outputs.committed != 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: Verify main source
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git branch --show-current)" = "main"
-          grep -q 'packages/stikjit_bridge' pubspec.yaml
-          grep -q 'NeoStationStikjitBridgePluginV2' packages/stikjit_bridge/pubspec.yaml
-          test -f lib/services/pairing_file_service.dart
-          test -f lib/services/jit_backend_preference_service.dart
-          test -f lib/services/stikjit_melonx_service.dart
-          test -f lib/services/stikjit_armsx2_service.dart
-          test -f lib/services/stikjit_rpcs3_service.dart
-          test -f lib/services/armsx2_folder_service.dart
-          test -f lib/services/ios_rom_library_root_resolver.dart
-          test ! -e lib/services/manic_emu_launch_service.dart
-          test ! -e lib/services/ios_emulator_preference_service.dart
-          test ! -e lib/l10n/manic_emu_locale.dart
-          if grep -RniE --exclude-dir=.git --exclude='*.md' \
-            'Manic[ _-]?EMU|ManicEMU|manicemu|manic_emu|IosEmulatorPreferenceService|IosLibraryEmulator|linkedManicEmuFolderPath' \
-            lib packages assets 2>/dev/null; then
-            echo 'Unexpected ManicEMU runtime reference'
-            exit 1
-          fi
-          if grep -RniE 'linkedArmsx2SaveFolderPath|armsx2NeoSyncBookmarkKey' lib packages 2>/dev/null; then
-            echo 'Unexpected ARMSX2 split-root reference'
-            exit 1
-          fi
-          if grep -nE \
-            'requestLibrarySync|handleIncomingUri|_importIntoNeoStation|hasSyncedLibrary|static Map<String, Map<String, dynamic>>\? _cache' \
-            lib/services/armsx2_library_service.dart; then
-            echo 'Unexpected retired ARMSX2 exported-library implementation'
-            exit 1
-          fi
-          test -f packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift
-          test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift
-          test -f packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePluginV2.swift
-          test -f packages/stikjit_bridge/ios/Classes/StikjitRpcs3BridgePlugin.swift
-          test -f packages/stikjit_bridge/ios/Classes/Rpcs3IdeviceRuntime.swift
-          echo "Building main source $(git rev-parse HEAD)"
-
       - name: Prepare build-time defines
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json
-          import os
+          import json, os
           from pathlib import Path
-
           required = ('SCREENSCRAPER_DEV_ID', 'SCREENSCRAPER_DEV_PASSWORD')
           values = {name: os.environ.get(name, '') for name in required}
           missing = [name for name, value in values.items() if not value]
           if missing:
               raise SystemExit('Missing GitHub Actions secrets: ' + ', '.join(missing))
-
           values.update({
               'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX': 'true',
               'NEOSTATION_MELONX_BUNDLE_ID': 'com.nur.nx',
@@ -109,102 +94,182 @@ jobs:
               'NEOSTATION_EXPERIMENTAL_STIKJIT_RPCS3': 'true',
               'NEOSTATION_RPCS3_BUNDLE_ID': 'com.xitrix.RPCS3',
           })
-          Path('.dart-defines.json').write_text(
-              json.dumps(values, ensure_ascii=False), encoding='utf-8'
-          )
+          Path('.dart-defines.json').write_text(json.dumps(values), encoding='utf-8')
           PY
 
-      - name: Restore StikJIT 1.5.0 framework
+      - name: Restore StikJIT 1.5.0 for external JIT emulators
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
           ARCHIVE=/tmp/StikJIT.xcframework.zip
-          EXTRACT=/tmp/neostation-stikjit
-          DEST=packages/stikjit_bridge/ios/Frameworks
-          rm -rf "$EXTRACT" "$DEST/StikJIT.xcframework" "$ARCHIVE"
+          EXTRACT=/tmp/stikjit-latest
+          DEST="$GITHUB_WORKSPACE/packages/stikjit_bridge/ios/Frameworks"
+          rm -rf "$EXTRACT" "$DEST/StikJIT.xcframework"
           mkdir -p "$EXTRACT" "$DEST"
-
           curl -fL --retry 3 --retry-delay 2 \
             'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' \
             -o "$ARCHIVE"
-          echo '444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85  /tmp/StikJIT.xcframework.zip' \
-            | shasum -a 256 -c -
-
+          echo '444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85  /tmp/StikJIT.xcframework.zip' | shasum -a 256 -c -
           unzip -q "$ARCHIVE" -d "$EXTRACT"
-          FRAMEWORK=$(find "$EXTRACT" -type d -name 'StikJIT.xcframework' -print -quit)
-          test -n "$FRAMEWORK"
-          cp -R "$FRAMEWORK" "$DEST/StikJIT.xcframework"
-          test -d "$DEST/StikJIT.xcframework"
+          FOUND=$(find "$EXTRACT" -maxdepth 3 -type d -name StikJIT.xcframework | head -1)
+          test -n "$FOUND"
+          cp -R "$FOUND" "$DEST/StikJIT.xcframework"
+          test -f "$DEST/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT"
 
-      - name: Resolve Flutter dependencies
+      - name: Verify embedded-only Dolphin source tree
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          flutter --version
+          test -f packages/dolphin_core_bridge/lib/dolphin_core_bridge.dart
+          test -f packages/dolphin_core_bridge/ios/Classes/DolphinCoreBridgePlugin.swift
+          test -f lib/services/dolphin_embedded_service.dart
+          test -f build-utils/patch_dolphin_embedded_core.py
+          test -f build-utils/check_dolphin_embedded_compatibility.py
+          test -f build-utils/build_embedded_dolphin_runtime.sh
+          test -f build-utils/dolphin_compatible_commit.txt
+
+          grep -q 'neostation/dolphin_core' packages/dolphin_core_bridge/ios/Classes/DolphinCoreBridgePlugin.swift
+          grep -q 'DolphinEmbeddedService' lib/services/game/game_launch_service.dart
+          grep -q 'DolphinCoreBridge.launchGame' lib/services/game/game_launch_service.dart
+          grep -q "'Software'" lib/services/dolphin_embedded_service.dart
+          grep -q "'GC'" lib/services/dolphin_embedded_service.dart
+          grep -q "'Wii'" lib/services/dolphin_embedded_service.dart
+          grep -q "'StateSaves'" lib/services/dolphin_embedded_service.dart
+
+          # The old external Dolphin architecture must be gone from executable
+          # sources: no companion, deep link, Shortcut, debugger injection or
+          # separate Dolphin StikJIT bridge.
+          ! grep -R -n -E \
+            'DolphinIosFolderService|linkedDolphinFolderPath|linkedDolphinSoftwareFolderPath|StikJitDolphinService|dolphinios-neostation|--neostation-game=|DolphinSingleSessionLaunchScript|DolphinRuntimeLaunchScript|StikjitDolphinBridgePlugin' \
+            lib packages/stikjit_bridge/ios/Classes packages/dolphin_core_bridge
+
+          # StikJIT remains available to the other integrations.
+          grep -q 'script: .universal' packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift
+          grep -q 'script: .universal' packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift
+          grep -q 'script: .universal' packages/stikjit_bridge/ios/Classes/StikjitRpcs3BridgePlugin.swift
+
+      - name: Analyze and run tests
+        if: steps.migration.outputs.committed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
           flutter pub get
-
-      - name: Analyze and test canonical source
-        shell: bash
-        run: |
-          set -euo pipefail
           flutter analyze --no-fatal-infos
           flutter test
 
+      - name: Install Dolphin build utilities
+        if: steps.migration.outputs.committed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cmake >/dev/null || brew install cmake
+          command -v ninja >/dev/null || brew install ninja
+          command -v bartycrouch >/dev/null || brew install bartycrouch
+          python3 -m pip install --user --break-system-packages polib
+          chmod +x build-utils/build_embedded_dolphin_runtime.sh
+
+      - name: Resolve latest StikJIT-compatible Dolphin
+        if: steps.migration.outputs.committed != 'true'
+        id: dolphin
+        shell: bash
+        run: |
+          set -euo pipefail
+          LATEST=$(git ls-remote https://github.com/OatmealDome/dolphin-ios.git refs/heads/master | awk '{print $1}')
+          FALLBACK=$(tr -d '[:space:]' < build-utils/dolphin_compatible_commit.txt)
+          test -n "$LATEST"
+          test -n "$FALLBACK"
+
+          echo "Latest upstream Dolphin: $LATEST"
+          echo "Known-good embedded/JIT API fallback: $FALLBACK"
+
+          LATEST_WORK="$RUNNER_TEMP/dolphin-latest-work"
+          LATEST_OUT="$RUNNER_TEMP/dolphin-latest-out"
+          FALLBACK_WORK="$RUNNER_TEMP/dolphin-fallback-work"
+          FALLBACK_OUT="$RUNNER_TEMP/dolphin-fallback-out"
+
+          set +e
+          build-utils/build_embedded_dolphin_runtime.sh "$LATEST" "$LATEST_WORK" "$LATEST_OUT"
+          LATEST_STATUS=$?
+          set -e
+
+          FALLBACK_USED=false
+          if [ "$LATEST_STATUS" -eq 0 ]; then
+            SELECTED="$LATEST_OUT"
+            RESOLVED="$LATEST"
+          else
+            echo "Latest Dolphin failed compatibility/build gate (status=$LATEST_STATUS)."
+            cp -f "$LATEST_OUT/dolphin-build.log" "$GITHUB_WORKSPACE/dolphin-latest-failed.log" 2>/dev/null || true
+            if [ "$LATEST" = "$FALLBACK" ]; then
+              echo 'Latest upstream is also the fallback and it failed.' >&2
+              exit "$LATEST_STATUS"
+            fi
+
+            build-utils/build_embedded_dolphin_runtime.sh "$FALLBACK" "$FALLBACK_WORK" "$FALLBACK_OUT"
+            SELECTED="$FALLBACK_OUT"
+            RESOLVED="$FALLBACK"
+            FALLBACK_USED=true
+          fi
+
+          test -f "$SELECTED/Frameworks/libdolphin.dylib"
+          test -d "$SELECTED/Sys"
+
+          {
+            echo "DOLPHIN_LATEST_SHA=$LATEST"
+            echo "DOLPHIN_FALLBACK_SHA=$FALLBACK"
+            echo "DOLPHIN_RESOLVED_SHA=$RESOLVED"
+            echo "DOLPHIN_FALLBACK_USED=$FALLBACK_USED"
+            echo "DOLPHIN_RUNTIME_DIR=$SELECTED"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo 'NeoStation embedded Dolphin upstream'
+            echo "latest_master=$LATEST"
+            echo "known_good_fallback=$FALLBACK"
+            echo "resolved=$RESOLVED"
+            echo "fallback_used=$FALLBACK_USED"
+            echo 'compatibility_gate=embedded core API + iOS JIT/TXM source surface'
+            echo 'runtime_mode=interpreter for first in-process milestone; StikJIT runtime activation still pending'
+          } > DOLPHIN-UPSTREAM.txt
+
+          echo "resolved=$RESOLVED" >> "$GITHUB_OUTPUT"
+          echo "fallback_used=$FALLBACK_USED" >> "$GITHUB_OUTPUT"
+
       - name: Generate clean iOS scaffold
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
           rm -rf ios
-          flutter create \
-            --platforms=ios \
-            --org com.neogamelab \
-            --project-name neostation \
-            .
+          flutter create --platforms=ios --org com.neogamelab --project-name neostation .
           test -f ios/Runner.xcodeproj/project.pbxproj
           test -f ios/Runner/Info.plist
           test -f ios/Podfile
 
-      - name: Configure iOS 18 runtime
+      - name: Configure NeoStation iOS runtime
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
-
           if [ -f build-utils/patch_ios_video_player_audio_session.py ]; then
             python3 build-utils/patch_ios_video_player_audio_session.py
           fi
-
-          DEVICE_INFO_FILE=$(find "$HOME/.pub-cache" \
-            -path '*device_info_plus*/FPPDeviceInfoPlusPlugin.m' \
-            2>/dev/null | head -1 || true)
-          if [ -n "$DEVICE_INFO_FILE" ]; then
-            sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"
-          fi
+          DEVICE_INFO_FILE=$(find "$HOME/.pub-cache" -path '*device_info_plus*/FPPDeviceInfoPlusPlugin.m' 2>/dev/null | head -1 || true)
+          if [ -n "$DEVICE_INFO_FILE" ]; then sed -i '' '/isiOSAppOnVision/d' "$DEVICE_INFO_FILE"; fi
 
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           podfile = Path('ios/Podfile')
           text = podfile.read_text(encoding='utf-8')
           pattern = re.compile(r"(?m)^\s*#?\s*platform\s+:ios\s*,\s*['\"][^'\"]+['\"]\s*$")
-          replacement = "platform :ios, '18.0'"
-          if pattern.search(text):
-              text = pattern.sub(replacement, text, count=1)
-          else:
-              text = replacement + '\n\n' + text
-          podfile.write_text(text, encoding='utf-8')
-
+          podfile.write_text(pattern.sub("platform :ios, '18.0'", text, count=1) if pattern.search(text) else "platform :ios, '18.0'\n\n" + text, encoding='utf-8')
           project = Path('ios/Runner.xcodeproj/project.pbxproj')
-          project_text = project.read_text(encoding='utf-8')
-          project_text, count = re.subn(
-              r'IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;',
-              'IPHONEOS_DEPLOYMENT_TARGET = 18.0;',
-              project_text,
-          )
-          if count == 0:
-              raise SystemExit('No iOS deployment target found in Runner project.')
-          project.write_text(project_text, encoding='utf-8')
-          print(f'Patched {count} deployment target entries.')
+          value = project.read_text(encoding='utf-8')
+          value, count = re.subn(r'IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;', 'IPHONEOS_DEPLOYMENT_TARGET = 18.0;', value)
+          if count == 0: raise SystemExit('No deployment target')
+          project.write_text(value, encoding='utf-8')
           PY
 
           PLIST=ios/Runner/Info.plist
@@ -233,9 +298,12 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:2 string armsx2' "$PLIST"
           /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:3 string melonx' "$PLIST"
           /usr/libexec/PlistBuddy -c 'Add :LSApplicationQueriesSchemes:4 string neomelonx' "$PLIST"
-          plutil -lint "$PLIST"
 
-      - name: Generate iOS app icon
+          plutil -lint "$PLIST"
+          ! grep -q 'dolphinios-neostation' "$PLIST"
+
+      - name: Generate app icon
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -245,25 +313,73 @@ jobs:
             build-utils/force_ios_fork_icon.sh
           fi
 
-      - name: Build unsigned IPA source app
+      - name: Build NeoStation unsigned app
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
           set -o pipefail
-          flutter build ios \
-            --release \
-            --no-codesign \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define-from-file=.dart-defines.json \
-            2>&1 | tee build-ios.log
-
+          flutter build ios --release --no-codesign --build-number="$BUILD_NUMBER" --dart-define-from-file=.dart-defines.json 2>&1 | tee build-ios.log
           test -d build/ios/iphoneos/Runner.app
 
-      - name: Package IPA
+      - name: Embed latest compatible Dolphin runtime
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          STAGING=/tmp/neostation-main-ipa
+          APP=build/ios/iphoneos/Runner.app
+          test -d "$APP"
+          test -d "$DOLPHIN_RUNTIME_DIR/Frameworks"
+          test -d "$DOLPHIN_RUNTIME_DIR/Sys"
+
+          mkdir -p "$APP/Frameworks"
+          /usr/bin/ditto "$DOLPHIN_RUNTIME_DIR/Frameworks" "$APP/Frameworks"
+          rm -rf "$APP/Sys"
+          /usr/bin/ditto "$DOLPHIN_RUNTIME_DIR/Sys" "$APP/Sys"
+
+          test -f "$APP/Frameworks/libdolphin.dylib"
+          test -d "$APP/Sys"
+          cp -f "$DOLPHIN_RUNTIME_DIR/libdolphin-otool.txt" dolphin-libdolphin-otool.txt
+          cp -f "$DOLPHIN_RUNTIME_DIR/frameworks-manifest.txt" dolphin-frameworks-manifest.txt
+
+      - name: Verify final embedded Dolphin app
+        if: steps.migration.outputs.committed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=build/ios/iphoneos/Runner.app
+          CORE_PLUGIN="$APP/Frameworks/dolphin_core_bridge.framework/dolphin_core_bridge"
+          test -f "$CORE_PLUGIN"
+          strings "$CORE_PLUGIN" > /tmp/dolphin-core-bridge-strings.txt
+          grep -q 'neostation/dolphin_core' /tmp/dolphin-core-bridge-strings.txt
+          grep -q 'neostation_dolphin_launch' /tmp/dolphin-core-bridge-strings.txt
+
+          for symbol in \
+            _neostation_dolphin_initialize \
+            _neostation_dolphin_launch \
+            _neostation_dolphin_pause \
+            _neostation_dolphin_resume \
+            _neostation_dolphin_stop; do
+            nm -gU "$APP/Frameworks/libdolphin.dylib" | grep -q "$symbol"
+          done
+
+          test -d "$APP/Software" || true
+          test -d "$APP/Sys"
+
+          # No legacy external-Dolphin handoff can be packaged accidentally.
+          find "$APP/Frameworks" -type f -maxdepth 3 -print0 | while IFS= read -r -d '' file; do
+            strings "$file" 2>/dev/null || true
+          done > /tmp/all-framework-strings.txt
+          ! grep -q 'dolphinios-neostation' /tmp/all-framework-strings.txt
+          ! grep -q -- '--neostation-game=' /tmp/all-framework-strings.txt
+          ! grep -q 'DOLPHIN_RUNTIME_INJECTION_STARTED' /tmp/all-framework-strings.txt
+
+      - name: Package one NeoStation IPA
+        if: steps.migration.outputs.committed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGING="$RUNNER_TEMP/neostation-ios-latest"
           rm -rf "$STAGING"
           mkdir -p "$STAGING/Payload"
           cp -R build/ios/iphoneos/Runner.app "$STAGING/Payload/Runner.app"
@@ -273,19 +389,28 @@ jobs:
               "$GITHUB_WORKSPACE/${ARTIFACT_BASENAME}.ipa"
           )
           test -s "${ARTIFACT_BASENAME}.ipa"
-          ls -lh "${ARTIFACT_BASENAME}.ipa"
+          unzip -t "${ARTIFACT_BASENAME}.ipa" > ipa-integrity.txt
 
-      - name: Remove temporary defines
-        if: always()
+      - name: Generate checksums
+        if: steps.migration.outputs.committed != 'true'
         shell: bash
-        run: rm -f .dart-defines.json
+        run: |
+          set -euo pipefail
+          shasum -a 256 "${ARTIFACT_BASENAME}.ipa" | tee ipa-sha256.txt
 
-      - name: Upload IPA
+      - name: Upload latest NeoStation IPA
+        if: steps.migration.outputs.committed != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_BASENAME }}
           path: |
             ${{ env.ARTIFACT_BASENAME }}.ipa
+            DOLPHIN-UPSTREAM.txt
             build-ios.log
-          if-no-files-found: error
+            dolphin-libdolphin-otool.txt
+            dolphin-frameworks-manifest.txt
+            dolphin-latest-failed.log
+            ipa-integrity.txt
+            ipa-sha256.txt
+          if-no-files-found: warn
           retention-days: 30
