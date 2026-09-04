@@ -106,13 +106,18 @@ write_if_changed(launcher_relative, launcher)
 # Align the generated Objective-C++ bridge with the pinned Dolphin headers.
 core_relative = "build-utils/patch_dolphin_internal_core_v2.py"
 core = read(core_relative)
-core = core.replace(
-    '#include "Core/PowerPC/PowerPC.h"\n',
-    '#include "Core/PowerPC/JitInterface.h"\n#include "Core/PowerPC/PowerPC.h"\n',
-)
+# Remove all previous copies, then insert exactly one in deterministic order.
+core = core.replace('#include "Core/DolphinAnalytics.h"\n', '')
+core = core.replace('#include "Core/PowerPC/JitInterface.h"\n', '')
 core = core.replace(
     '#include "Core/Core.h"\n',
     '#include "Core/Core.h"\n#include "Core/DolphinAnalytics.h"\n',
+    1,
+)
+core = core.replace(
+    '#include "Core/PowerPC/PowerPC.h"\n',
+    '#include "Core/PowerPC/JitInterface.h"\n#include "Core/PowerPC/PowerPC.h"\n',
+    1,
 )
 core = core.replace('    Config::Init();\n', '')
 core = core.replace('    File::SetSysDirectory(g_system_directory);\n', '')
@@ -128,6 +133,12 @@ core = core.replace(
     '      PowerPC::GetCPUCore() != nullptr)',
     '      Core::System::GetInstance().GetJitInterface().GetCore() != nullptr)',
 )
+for header in (
+    '#include "Core/DolphinAnalytics.h"',
+    '#include "Core/PowerPC/JitInterface.h"',
+):
+    if core.count(header) != 1:
+        raise SystemExit(f"Expected exactly one generated include: {header}")
 for forbidden in (
     'File::SetSysDirectory(g_system_directory)',
     'UICommon::InitControllers();',
