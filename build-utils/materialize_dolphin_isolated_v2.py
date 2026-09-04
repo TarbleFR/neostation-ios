@@ -8,6 +8,7 @@ and refuses to recreate the integration from another branch.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -109,6 +110,10 @@ core = core.replace(
     '#include "Core/PowerPC/PowerPC.h"\n',
     '#include "Core/PowerPC/JitInterface.h"\n#include "Core/PowerPC/PowerPC.h"\n',
 )
+core = core.replace(
+    '#include "Core/Core.h"\n',
+    '#include "Core/Core.h"\n#include "Core/DolphinAnalytics.h"\n',
+)
 core = core.replace('    Config::Init();\n', '')
 core = core.replace('    File::SetSysDirectory(g_system_directory);\n', '')
 core = core.replace(
@@ -117,10 +122,6 @@ core = core.replace(
     '    controller_wsi.type = WindowSystemType::iOS;\n'
     '    UICommon::InitControllers(controller_wsi);\n'
     '    DolphinAnalytics::Instance().ReportDolphinStart("neostation-ios");\n',
-)
-core = core.replace(
-    '#include "Core/Core.h"\n',
-    '#include "Core/Core.h"\n#include "Core/DolphinAnalytics.h"\n',
 )
 core = core.replace('    Config::Shutdown();\n', '')
 core = core.replace(
@@ -143,46 +144,33 @@ for required in (
         raise SystemExit(f"Required pinned Dolphin API missing: {required}")
 write_if_changed(core_relative, core)
 
-# macOS runners execute /bin/bash 3.2, which has no mapfile builtin.
-workflow_relative = ".github/workflows/dolphin-internal-isolated-v3.yml"
-workflow = read(workflow_relative)
-workflow = workflow.replace(
-    """          mapfile -t APPS < <(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print)
-          test "${#APPS[@]}" -eq 1
-          APP="${APPS[0]}"
+# GitHub's macOS shell is Apple Bash 3.2. Source a tiny mapfile-compatible
+# function for the later structural packaging step without changing workflows.
+runner_temp = Path(os.environ.get("RUNNER_TEMP", "/tmp"))
+bash_env = runner_temp / "neostation-dolphin-bash-env.sh"
+bash_env.write_text(
+    """mapfile() {
+  local option="${1-}"
+  local array_name
+  if [ "$option" = "-t" ]; then
+    shift
+  fi
+  array_name="${1-MAPFILE}"
+  local index=0 line quoted
+  eval "$array_name=()"
+  while IFS= read -r line; do
+    printf -v quoted '%q' "$line"
+    eval "$array_name[$index]=$quoted"
+    index=$((index + 1))
+  done
+}
 """,
-    """          APP=$(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print -quit)
-          test -n "$APP"
-          test "$(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print | wc -l | tr -d ' ')" -eq 1
-""",
+    encoding="utf-8",
 )
-workflow = workflow.replace(
-    """          mapfile -t HELPERS < <(find "$APP" -type d -name 'DolphinJITHelper.appex' -print)
-          test "${#HELPERS[@]}" -eq 1
-          HELPER="${HELPERS[0]}"
-""",
-    """          HELPER=$(find "$APP" -type d -name 'DolphinJITHelper.appex' -print -quit)
-          test -n "$HELPER"
-          test "$(find "$APP" -type d -name 'DolphinJITHelper.appex' -print | wc -l | tr -d ' ')" -eq 1
-""",
-)
-workflow = workflow.replace(
-    """          mapfile -t STIKS < <(find "$APP" -type d -name 'StikJIT.framework' -print)
-          test "${#STIKS[@]}" -eq 1
-          STIK="${STIKS[0]}/StikJIT"
-""",
-    """          APP_STIK="$APP/Frameworks/StikJIT.framework"
-          HELPER_STIK="$HELPER/Frameworks/StikJIT.framework"
-          test -d "$APP_STIK"
-          test -d "$HELPER_STIK"
-          test "$(find "$APP/Frameworks" -maxdepth 1 -type d -name 'StikJIT.framework' -print | wc -l | tr -d ' ')" -eq 1
-          test "$(find "$HELPER/Frameworks" -maxdepth 1 -type d -name 'StikJIT.framework' -print | wc -l | tr -d ' ')" -eq 1
-          STIK="$HELPER_STIK/StikJIT"
-""",
-)
-if "mapfile -t" in workflow:
-    raise SystemExit("Bash 4 mapfile remains in the macOS workflow")
-write_if_changed(workflow_relative, workflow)
+github_env = os.environ.get("GITHUB_ENV")
+if github_env:
+    with Path(github_env).open("a", encoding="utf-8") as handle:
+        handle.write(f"BASH_ENV={bash_env}\n")
 
 # The materialized shared files must retain explicit isolation markers.
 for shared in (
