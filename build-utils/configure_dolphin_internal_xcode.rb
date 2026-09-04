@@ -114,9 +114,8 @@ entitlements_ref ||= runner_group.new_file('Runner.entitlements')
 helper = project.targets.find { |target| target.name == 'DolphinJITHelper' }
 unless helper
   helper = project.new_target(:app_extension, 'DolphinJITHelper', :ios, '26.0')
-  # xcodeproj models PBXNativeTarget.product_type as a Symbol. Passing the raw
-  # String raises before the generated project can be saved.
-  helper.product_type = :'com.apple.product-type.extensionkit-extension'
+  # xcodeproj 1.28.1 expects the raw product-type identifier as a String.
+  helper.product_type = 'com.apple.product-type.extensionkit-extension'
   helper.product_reference.explicit_file_type = 'wrapper.extensionkit-extension'
   helper.product_reference.path = 'DolphinJITHelper.appex'
 end
