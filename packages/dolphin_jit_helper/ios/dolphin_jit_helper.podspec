@@ -27,7 +27,7 @@ engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with legacy.js.
   s.libraries = 'z', 'bz2', 'iconv', 'compression'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'APPLICATION_EXTENSION_API_ONLY' => 'NO',
+    'APPLICATION_EXTENSION_API_ONLY' => 'YES',
     'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Frameworks/StikJIT.xcframework/ios-arm64"'
   }
 end
