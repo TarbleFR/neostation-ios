@@ -1,0 +1,127 @@
+name: NeoStation Dolphin v3 - Publish Successful IPA
+run-name: Publish Dolphin v3 IPA • ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - test/dolphin-internal-engine-isolated-v3
+  workflow_dispatch: {}
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: neostation-dolphin-v3-publish
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORKFLOW_FILE: dolphin-internal-isolated-v3.yml
+      ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-194
+      IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.ipa
+      RELEASE_TAG: dolphin-internal-isolated-v3-build-194
+
+    steps:
+      - name: Wait for the matching build workflow
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO='${{ github.repository }}'
+          SHA='${{ github.sha }}'
+          RUN_ID=''
+
+          for attempt in $(seq 1 180); do
+            RUN_ID=$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$REPO/actions/workflows/$WORKFLOW_FILE/runs?head_sha=$SHA&per_page=20" \
+              --jq '.workflow_runs | sort_by(.created_at) | last | .id // empty')
+            if [ -n "$RUN_ID" ]; then
+              STATUS=$(gh api "/repos/$REPO/actions/runs/$RUN_ID" --jq '.status')
+              CONCLUSION=$(gh api "/repos/$REPO/actions/runs/$RUN_ID" --jq '.conclusion // empty')
+              echo "Matching build run $RUN_ID: status=$STATUS conclusion=${CONCLUSION:-pending}"
+              if [ "$STATUS" = 'completed' ]; then
+                if [ "$CONCLUSION" != 'success' ]; then
+                  echo "The matching build failed; no release will be created."
+                  exit 1
+                fi
+                break
+              fi
+            fi
+            sleep 30
+          done
+
+          test -n "$RUN_ID"
+          test "$(gh api "/repos/$REPO/actions/runs/$RUN_ID" --jq '.conclusion')" = 'success'
+
+          ARTIFACT_ID=$(gh api "/repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+            --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\" and (.expired | not)) | .id" \
+            | head -1)
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo 'The successful run only materialized source and intentionally produced no IPA.'
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify the IPA artifact
+        if: steps.build.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-payload
+          gh api "/repos/${{ github.repository }}/actions/artifacts/${{ steps.build.outputs.artifact_id }}/zip" \
+            > artifact.zip
+          unzip -q artifact.zip -d release-payload
+          test -s "release-payload/$IPA_NAME"
+          unzip -t "release-payload/$IPA_NAME" >/dev/null
+          unzip -l "release-payload/$IPA_NAME" | grep -Eq 'Payload/[^/]+\.app/'
+          test -s "release-payload/NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.sha256"
+          (
+            cd release-payload
+            shasum -a 256 -c NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.sha256
+          )
+          test -s release-payload/dolphin-build-report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('release-payload/dolphin-build-report.json').read_text())
+          assert report['branch'] == 'test/dolphin-internal-engine-isolated-v3'
+          assert report['stikJITVersion'] == '1.5.0'
+          assert report['dolphinScript'] == 'legacy'
+          assert report['routes'] == {'gc': 'dolphin_internal', 'wii': 'dolphin_internal'}
+          assert report['deviceLaunchValidated'] is False
+          PY
+
+      - name: Publish verified test release
+        if: steps.build.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" \
+            --repo '${{ github.repository }}' \
+            --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$RELEASE_TAG" \
+            --repo '${{ github.repository }}' \
+            --target '${{ github.sha }}' \
+            --title 'NeoStation iOS — Dolphin Internal Isolated v3 — Build 194' \
+            --notes-file - \
+            --prerelease \
+            release-payload/NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.ipa \
+            release-payload/NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.sha256 \
+            release-payload/dolphin-build-report.json \
+            release-payload/dolphin-core-revision.txt <<'EOF'
+          Test build for the process-local Dolphin integration.
+
+          Routing is limited to Nintendo GameCube (`gc`) and Wii (`wii`). Existing emulator source routes, URL schemes and dependencies are protected by the targeted non-regression CI gate.
+
+          Dolphin uses the pinned iOS core, StikJIT 1.5.0 and its established legacy `BRK #0x69` handshake. The workflow validates compilation, linkage, archive structure and routing. Runtime launch on a physical iOS device is not claimed by CI.
+          EOF
