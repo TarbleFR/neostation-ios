@@ -18,6 +18,7 @@ BRIDGE = {
     '_neostation_dolphin_prepare_legacy_jit', '_neostation_dolphin_launch',
     '_neostation_dolphin_is_running', '_neostation_dolphin_set_paused',
     '_neostation_dolphin_stop',
+    '_neostation_dolphin_menu_snapshot', '_neostation_dolphin_menu_apply',
 }
 
 

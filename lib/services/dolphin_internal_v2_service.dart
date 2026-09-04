@@ -57,6 +57,7 @@ class DolphinInternalV2Service {
   static final _log = LoggerService.instance;
   static bool _systemImportBusy = false;
   static bool _launchInProgress = false;
+  static Future<void>? _layoutFuture;
 
   static const Set<String> _gameCubeExtensions = {
     'iso',
@@ -124,11 +125,21 @@ class DolphinInternalV2Service {
   }
 
   static Future<void> ensureLayout() async {
+    // Share initialization across the scanner, the import menu and logging.
+    // Recreating User/Wii during a snapshot rename could obstruct the commit.
+    final future = _layoutFuture ??= _initializeLayout();
+    try {
+      await future;
+    } catch (_) {
+      if (identical(_layoutFuture, future)) _layoutFuture = null;
+      rethrow;
+    }
+  }
+
+  static Future<void> _initializeLayout() async {
     final root = await rootDirectory();
-    if (!_systemImportBusy) {
-      for (final name in ['Wii', 'GC']) {
-        await DolphinSystemFiles.recover(Directory(path.join(root.path, 'User', name)));
-      }
+    for (final name in ['Wii', 'GC']) {
+      await DolphinSystemFiles.recover(Directory(path.join(root.path, 'User', name)));
     }
     final directories = <String>[
       'Library/gc',
@@ -319,10 +330,6 @@ class DolphinInternalV2Service {
     try {
       if (await _channel.invokeMethod<bool>('isRunning') != false) {
         throw const DolphinSystemFilesException('busy');
-      }
-      final root = await rootDirectory();
-      for (final name in ['Wii', 'GC']) {
-        await DolphinSystemFiles.recover(Directory(path.join(root.path, 'User', name)));
       }
       await ensureLayout();
       return await action();

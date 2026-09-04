@@ -52,6 +52,24 @@ complete authorship record.
 
 THIRD-PARTY COMPONENTS
 
+<!-- DOLPHIN_ISOLATION_BEGIN: native_component_notices -->
+Dolphin / DolphiniOS — copyright their respective contributors.
+Embedded source revision: 7cac54161659421ed95c2cd1c0b0746539a4cd38.
+Source: https://github.com/OatmealDome/dolphin-ios/tree/7cac54161659421ed95c2cd1c0b0746539a4cd38
+Most original Dolphin code is GPL-2.0-or-later; the aggregate repository is
+GPL-3.0-compatible. Preserve upstream COPYING, LICENSES/ and per-file SPDX notices.
+NeoStation's engine modifications are in build-utils/patch_dolphin_internal_core_v2.py;
+its host bridge and in-game interface are in packages/dolphin_internal_bridge/.
+
+StikJIT 1.5.0 — copyright StikDebug and contributors; Mozilla Public License 2.0.
+Source: https://github.com/StikDebug/StikJIT/tree/1.5.0
+License: https://github.com/StikDebug/StikJIT/blob/1.5.0/LICENSE
+The distributed 1.5.0 framework is used with Swift interface compatibility
+adjustments documented in packages/dolphin_internal_bridge/ci/build_support.py.
+The Dolphin helper is in packages/dolphin_jit_helper/.
+These projects retain their own licenses and attribution.
+<!-- DOLPHIN_ISOLATION_END: native_component_notices -->
+
 This project includes or depends on third-party software, including:
 
 - flutter_soloud / SoLoud audio engine (hosted Flutter dependency)

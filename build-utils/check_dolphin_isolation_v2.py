@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_FILES = {
+    "README.md",
+    "NOTICE.md",
     "lib/services/game/game_launch_service.dart",
     "lib/providers/sqlite_config_provider.dart",
     "lib/providers/sqlite_config_provider/scanning.dart",

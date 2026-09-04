@@ -243,6 +243,15 @@ All upstream authors and contributors retain attribution for their contributions
 - Patreon: **[TarbleFR](https://www.patreon.com/cw/TarbleFR)**
 - Modified iOS version maintained since **August 2026**.
 
+<!-- DOLPHIN_ISOLATION_BEGIN: native_component_credits -->
+### Dolphin and JIT components
+
+- **[Dolphin / DolphiniOS](https://github.com/OatmealDome/dolphin-ios/tree/7cac54161659421ed95c2cd1c0b0746539a4cd38)** — embedded GameCube/Wii engine, by the Dolphin Emulator and DolphiniOS contributors. Most original code is GPL-2.0-or-later; see the upstream [COPYING and per-file license notices](https://github.com/OatmealDome/dolphin-ios/blob/7cac54161659421ed95c2cd1c0b0746539a4cd38/COPYING).
+- **[StikJIT 1.5.0](https://github.com/StikDebug/StikJIT/tree/1.5.0)** — JIT support, by StikDebug and contributors, under the [Mozilla Public License 2.0](https://github.com/StikDebug/StikJIT/blob/1.5.0/LICENSE).
+
+Integration changes and exact source references are documented in [NOTICE.md](NOTICE.md).
+<!-- DOLPHIN_ISOLATION_END: native_component_credits -->
+
 ## GPL-3.0 and corresponding source
 
 NeoStation and this modified iOS fork are distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [`LICENSE.md`](LICENSE.md) for the complete license text and [`NOTICE.md`](NOTICE.md) for copyright, modification and third-party notices.
