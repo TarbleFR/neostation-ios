@@ -257,6 +257,22 @@ embed.dst_subfolder_spec = '13'
 unless embed.files.any? { |file| file.file_ref == helper.product_reference }
   embed.add_file_reference(helper.product_reference, true)
 end
+# Xcode processes the host Info.plist after copying its extensions. Flutter's
+# Thin Binary phase consumes that plist, so appending the extension copy after
+# Thin Binary / the CocoaPods scripts creates a dependency cycle. Place only
+# this copy phase after Resources, retaining the order of every other phase.
+other_phase_order = runner.build_phases.reject { |item| item == embed }.map(&:uuid)
+resources = runner.resources_build_phase
+runner.build_phases.delete(embed)
+runner.build_phases.insert(runner.build_phases.index(resources) + 1, embed)
+unless runner.build_phases.reject { |item| item == embed }.map(&:uuid) == other_phase_order
+  raise 'Dolphin changed the relative order of unrelated Runner phases'
+end
+runner.shell_script_build_phases.each do |item|
+  next unless ['Thin Binary', '[CP] Embed Pods Frameworks', '[CP] Copy Pods Resources'].include?(item.name)
+  raise "Dolphin helper must be embedded before #{item.name}" unless runner.build_phases.index(embed) < runner.build_phases.index(item)
+end
+puts "runner.build_phases=#{runner.build_phases.map(&:display_name).join(' -> ')}"
 runner_group = project.main_group.find_subpath('Runner', false)
 raise 'Runner group not found' unless runner_group
 sys_ref = runner_group.files.find { |file| file.path == 'Sys' }
