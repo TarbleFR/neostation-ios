@@ -2,11 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import '../l10n/dolphin_import_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import 'logger_service.dart';
+import 'dolphin_system_files.dart';
 
 /// IPL slots exposed by the native GameCube playlist.
 enum DolphinIplRegion { usa, eur, jap }
@@ -51,6 +55,8 @@ class DolphinInternalV2Service {
     'neostation/dolphin_internal',
   );
   static final _log = LoggerService.instance;
+  static bool _systemImportBusy = false;
+  static bool _launchInProgress = false;
 
   static const Set<String> _gameCubeExtensions = {
     'iso',
@@ -119,6 +125,11 @@ class DolphinInternalV2Service {
 
   static Future<void> ensureLayout() async {
     final root = await rootDirectory();
+    if (!_systemImportBusy) {
+      for (final name in ['Wii', 'GC']) {
+        await DolphinSystemFiles.recover(Directory(path.join(root.path, 'User', name)));
+      }
+    }
     final directories = <String>[
       'Library/gc',
       'Library/wii',
@@ -139,6 +150,7 @@ class DolphinInternalV2Service {
     for (final relative in directories) {
       await Directory(path.join(root.path, relative)).create(recursive: true);
     }
+    await sharedSystemDirectory('wii');
     await _recoverPreviousCrash(root);
   }
 
@@ -210,7 +222,7 @@ class DolphinInternalV2Service {
     );
   }
 
-  static Future<void> importIpl(DolphinIplRegion region) async {
+  static Future<bool> importIpl(DolphinIplRegion region) => _withSystemImport(() async {
     await ensureLayout();
     final selection = await FilePicker.pickFiles(
       allowMultiple: false,
@@ -219,7 +231,7 @@ class DolphinInternalV2Service {
       withData: true,
       lockParentWindow: true,
     );
-    if (selection == null || selection.files.isEmpty) return;
+    if (selection == null || selection.files.isEmpty) return false;
 
     final picked = selection.files.single;
     Uint8List? bytes = picked.bytes;
@@ -229,6 +241,11 @@ class DolphinInternalV2Service {
     if (bytes == null) {
       throw const FormatException('The selected IPL could not be read.');
     }
+    await _installIpl(bytes, region);
+    return true;
+  });
+
+  static Future<void> _installIpl(Uint8List bytes, DolphinIplRegion region) async {
     final validation = _validateIpl(bytes, region);
     if (!validation.accepted) {
       await _appendLog(
@@ -245,16 +262,16 @@ class DolphinInternalV2Service {
 
     final root = await rootDirectory();
     final slot = region.name.toUpperCase();
-    final target = File(path.join(root.path, 'User', 'GC', slot, 'IPL.bin'));
-    await target.parent.create(recursive: true);
-    final temporary = File('${target.path}.tmp');
-    await temporary.writeAsBytes(bytes, flush: true);
-    if (await temporary.length() != _iplSize) {
-      await _deleteIfExists(temporary);
-      throw const FormatException('The IPL changed while it was being written.');
-    }
-    await _deleteIfExists(target);
-    await temporary.rename(target.path);
+    await DolphinSystemFiles.replaceSnapshot(
+      Directory(path.join(root.path, 'User', 'GC')),
+      (stage) async {
+        final target = File(path.join(stage.path, slot, 'IPL.bin'));
+        await target.parent.create(recursive: true);
+        await target.writeAsBytes(bytes, flush: true);
+        return 1;
+      },
+      merge: true,
+    );
 
     final manifest = File(path.join(root.path, 'Metadata', 'IPL', '$slot.json'));
     await manifest.writeAsString(
@@ -283,8 +300,7 @@ class DolphinInternalV2Service {
     for (final region in DolphinIplRegion.values) {
       final slot = region.name.toUpperCase();
       final file = File(path.join(root.path, 'User', 'GC', slot, 'IPL.bin'));
-      final manifest = File(path.join(root.path, 'Metadata', 'IPL', '$slot.json'));
-      if (!await file.exists() || !await manifest.exists()) continue;
+      if (!await file.exists()) continue;
       try {
         final bytes = await file.readAsBytes();
         if (_validateIpl(bytes, region).accepted) installed.add(region);
@@ -295,7 +311,123 @@ class DolphinInternalV2Service {
     return installed;
   }
 
+  static Future<T> _withSystemImport<T>(Future<T> Function() action) async {
+    if (_systemImportBusy || _launchInProgress) {
+      throw const DolphinSystemFilesException('busy');
+    }
+    _systemImportBusy = true;
+    try {
+      if (await _channel.invokeMethod<bool>('isRunning') != false) {
+        throw const DolphinSystemFilesException('busy');
+      }
+      final root = await rootDirectory();
+      for (final name in ['Wii', 'GC']) {
+        await DolphinSystemFiles.recover(Directory(path.join(root.path, 'User', name)));
+      }
+      await ensureLayout();
+      return await action();
+    } finally {
+      _systemImportBusy = false;
+    }
+  }
+
+  /// Visible in Files > On My iPhone > NeoStation > Dolphin. These are
+  /// import folders, not the live NAND; copying here cannot alter a running game.
+  static Future<Directory> sharedSystemDirectory(String folderName) async {
+    final system = _normalizeSystem(folderName);
+    final documents = await getApplicationDocumentsDirectory();
+    final shared = Directory(path.join(documents.path, 'Dolphin'));
+    for (final name in ['Wii', 'GameCube/USA', 'GameCube/EUR', 'GameCube/JAP']) {
+      await Directory(path.join(shared.path, name)).create(recursive: true);
+    }
+    return Directory(path.join(shared.path, system == 'wii' ? 'Wii' : 'GameCube'));
+  }
+
+  static Future<int?> importSystemFolder(String folderName, {bool fromShared = false}) =>
+      _withSystemImport(() async {
+        final system = _normalizeSystem(folderName);
+        const bookmark = 'dolphin-system-import';
+        try {
+          final selected = fromShared
+              ? (await sharedSystemDirectory(system)).path
+              : await ExternalFolderAccess.pickAndActivateFolder(key: bookmark);
+          if (selected == null) return null;
+          final root = await rootDirectory();
+          if (system == 'wii') {
+            return await DolphinSystemFiles.importWiiFolder(
+              Directory(selected), Directory(path.join(root.path, 'User', 'Wii')),
+            );
+          }
+          // Accept GC, GameCube, User/GC or their parent; never confuse a Wii
+          // keys.bin with an IPL. Validate every selected slot before writing.
+          final images = <DolphinIplRegion, Uint8List>{};
+          for (final suffix in ['', 'GC', 'GameCube', 'User/GC']) {
+            for (final region in DolphinIplRegion.values) {
+              final file = File(path.join(selected, suffix, region.name.toUpperCase(), 'IPL.bin'));
+              if (!await file.exists()) continue;
+              final real = await file.resolveSymbolicLinks();
+              final sourceRoot = await Directory(selected).resolveSymbolicLinks();
+              if (!path.isWithin(sourceRoot, real)) {
+                throw const DolphinSystemFilesException('unsafePath');
+              }
+              final bytes = await file.readAsBytes();
+              if (!_validateIpl(bytes, region).accepted) {
+                throw const DolphinSystemFilesException('invalidIpl');
+              }
+              images[region] = bytes;
+            }
+            if (images.isNotEmpty) break;
+          }
+          if (images.isEmpty) throw const DolphinSystemFilesException('invalidGameCube');
+          return await DolphinSystemFiles.replaceSnapshot(
+            Directory(path.join(root.path, 'User', 'GC')),
+            (stage) async {
+              for (final entry in images.entries) {
+                final file = File(path.join(stage.path, entry.key.name.toUpperCase(), 'IPL.bin'));
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(entry.value, flush: true);
+              }
+              return images.length;
+            }, merge: true,
+          );
+        } finally {
+          if (!fromShared) await ExternalFolderAccess.clearBookmark(key: bookmark);
+        }
+      });
+
+  static Future<int?> importWiiSystemFiles() => _withSystemImport(() async {
+    final selection = await FilePicker.pickFiles(
+      allowMultiple: true, type: FileType.custom,
+      allowedExtensions: const ['bin', 'pem'], withData: false,
+    );
+    if (selection == null) return null;
+    if (selection.files.any((file) => file.path == null ||
+        !DolphinSystemFiles.wiiFiles.contains(file.name))) {
+      throw const DolphinSystemFilesException('invalidWiiFile');
+    }
+    final root = await rootDirectory();
+    return DolphinSystemFiles.importWiiFiles(
+      selection.files.map((file) => File(file.path!)).toList(),
+      Directory(path.join(root.path, 'User', 'Wii')),
+    );
+  });
+
   static Future<DolphinLaunchReport> launch({
+    required String folderName,
+    required String gamePath,
+  }) async {
+    if (_systemImportBusy || _launchInProgress) {
+      throw const DolphinSystemFilesException('busy');
+    }
+    _launchInProgress = true;
+    try {
+      return await _launch(folderName: folderName, gamePath: gamePath);
+    } finally {
+      _launchInProgress = false;
+    }
+  }
+
+  static Future<DolphinLaunchReport> _launch({
     required String folderName,
     required String gamePath,
   }) async {
@@ -367,6 +499,7 @@ class DolphinInternalV2Service {
         'launchGame',
         {
           'system': system,
+          'menuLabels': DolphinImportLocale.labelsFor(FlutterLocalization.instance.currentLocale),
           'gamePath': normalizedGame,
           'userDirectory': path.join(root.path, 'User'),
           'systemDirectory': systemDirectory,

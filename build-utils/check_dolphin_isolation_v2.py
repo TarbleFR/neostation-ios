@@ -19,6 +19,8 @@ SHARED_FILES = {
     "lib/providers/sqlite_config_provider.dart",
     "lib/providers/sqlite_config_provider/scanning.dart",
     "lib/screens/game_screen/my_games_list.dart",
+    "lib/screens/game_screen/game_details_card/game_details_card_list.dart",
+    "lib/screens/game_screen/game_details_card/widgets/game_details_tabs_header.dart",
 }
 ALLOWED_EXACT = {
     ".github/workflows/dolphin-internal-isolated-v3.yml",
@@ -30,6 +32,8 @@ ALLOWED_EXACT = {
     "build-utils/configure_dolphin_ios_v2.py",
     "build-utils/check_dolphin_isolation_v2.py",
     "lib/services/dolphin_internal_v2_service.dart",
+    "lib/services/dolphin_system_files.dart",
+    "lib/l10n/dolphin_import_locale.dart",
     "lib/widgets/dolphin_internal_playlist_actions.dart",
     *SHARED_FILES,
 }

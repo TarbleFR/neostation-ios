@@ -21,6 +21,7 @@ import 'dart:ui';
 
 // DOLPHIN_ISOLATION_BEGIN: playlist_import
 import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
+import 'package:neostation/services/dolphin_internal_v2_service.dart';
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
 import '../../utils/game_launch_utils.dart';
@@ -648,33 +649,53 @@ class _SystemGamesListState extends State<SystemGamesList> {
             GameViewModeDropdown(),
 
             // DOLPHIN_ISOLATION_BEGIN: playlist_actions
-
-            DolphinInternalPlaylistActions(
-
-              systemFolder: widget.system.folderName,
-
-              onLibraryChanged: () async {
-
-                await context
-
-                    .read<SqliteConfigProvider>()
-
-                    .refreshDolphinInternalLibrary(
-
-                      widget.system.folderName,
-
-                    );
-
-              },
-
-            ),
-
+            if (!_isGameLaunching && Platform.isIOS &&
+                DolphinInternalV2Service.isDolphinSystem(widget.system.folderName))
+              Consumer<SqliteConfigProvider>(
+                builder: (context, config, child) {
+                  final mode = config.config.gameViewMode;
+                  if (!_isLoading && _games.isNotEmpty && _selectedGame != null &&
+                      mode != 'grid' && mode != 'carousel') {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    top: 8.r,
+                    right: 10.r,
+                    child: SafeArea(
+                      child: Material(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12.r),
+                        child: _buildDolphinImportAction(),
+                      ),
+                    ),
+                  );
+                },
+              ),
             // DOLPHIN_ISOLATION_END: playlist_actions
           ],
         ),
       ),
     );
   }
+
+  // DOLPHIN_ISOLATION_BEGIN: import_action_builder
+  Widget _buildDolphinImportAction() => DolphinInternalPlaylistActions(
+    systemFolder: widget.system.folderName,
+    onInteractionChanged: (active) {
+      if (!mounted) return;
+      if (active) {
+        _gamepadNav.deactivate();
+      } else {
+        _gamepadNav.activate();
+      }
+    },
+    onLibraryChanged: () async {
+      if (!mounted) return;
+      await context.read<SqliteConfigProvider>()
+          .refreshDolphinInternalLibrary(widget.system.folderName);
+    },
+  );
+  // DOLPHIN_ISOLATION_END: import_action_builder
 
   /// Renders a large, semi-transparent alphabetical indicator for high-speed navigation.
   Widget _buildLetterIndicator() {
@@ -1439,6 +1460,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
     return Consumer<SyncManager>(
       builder: (context, syncManager, child) => GameDetailsCardList(
+        // DOLPHIN_ISOLATION_BEGIN: import_action_in_tabs
+        dolphinImportAction: Platform.isIOS &&
+            DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)
+            ? _buildDolphinImportAction() : null,
+        // DOLPHIN_ISOLATION_END: import_action_in_tabs
         game: _selectedGame!,
         system: widget.system,
         fileProvider: _fileProvider,

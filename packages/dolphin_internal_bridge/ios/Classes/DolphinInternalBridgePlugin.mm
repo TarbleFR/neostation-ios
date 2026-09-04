@@ -1,4 +1,5 @@
 #import "DolphinInternalBridgePlugin.h"
+#import "DolphinSessionMenu.h"
 
 #import <AVFoundation/AVFoundation.h>
 #import <Metal/Metal.h>
@@ -35,6 +36,8 @@ int32_t neostation_dolphin_launch(const char* game_path,
 int32_t neostation_dolphin_is_running(void);
 int32_t neostation_dolphin_set_paused(int32_t paused);
 int32_t neostation_dolphin_stop(const char* log_path);
+char* neostation_dolphin_menu_snapshot(int32_t wii, int32_t slot);
+int32_t neostation_dolphin_menu_apply(const char* request_json);
 
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 CFTypeRef SecTaskCopyValueForEntitlement(void* task,
@@ -145,6 +148,8 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 @interface DOLDolphinViewController : UIViewController
 @property(nonatomic, readonly) MTKView* metalView;
 @property(nonatomic, copy, nullable) dispatch_block_t closeHandler;
+@property(nonatomic, copy, nullable) dispatch_block_t menuHandler;
+@property(nonatomic, copy) NSString* menuLabel;
 @end
 
 @implementation DOLDolphinViewController {
@@ -172,19 +177,19 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 
   UIButton* close = [UIButton buttonWithType:UIButtonTypeSystem];
   close.translatesAutoresizingMaskIntoConstraints = NO;
-  close.accessibilityLabel = @"Close Dolphin session";
+  close.accessibilityLabel = self.menuLabel;
   close.layer.cornerRadius = 18.0;
   close.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
   close.tintColor = UIColor.whiteColor;
-  UIImage* image = [UIImage systemImageNamed:@"xmark"];
+  UIImage* image = [UIImage systemImageNamed:@"line.3.horizontal"];
   [close setImage:image forState:UIControlStateNormal];
-  [close addTarget:self action:@selector(closePressed:) forControlEvents:UIControlEventTouchUpInside];
+  [close addTarget:self action:@selector(menuPressed:) forControlEvents:UIControlEventTouchUpInside];
   [self.view addSubview:close];
   [NSLayoutConstraint activateConstraints:@[
     [close.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:12.0],
     [close.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12.0],
-    [close.widthAnchor constraintEqualToConstant:36.0],
-    [close.heightAnchor constraintEqualToConstant:36.0],
+    [close.widthAnchor constraintEqualToConstant:44.0],
+    [close.heightAnchor constraintEqualToConstant:44.0],
   ]];
 }
 
@@ -194,6 +199,10 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 
 - (void)closePressed:(__unused id)sender {
   if (self.closeHandler != nil) self.closeHandler();
+}
+
+- (void)menuPressed:(__unused id)sender {
+  if (self.menuHandler != nil) self.menuHandler();
 }
 
 - (BOOL)prefersHomeIndicatorAutoHidden {
@@ -547,6 +556,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 @property(nonatomic, strong, nullable) dispatch_source_t runningTimer;
 @property(nonatomic, copy, nullable) NSString* activeLogPath;
 @property(nonatomic, assign) BOOL launchInProgress;
+@property(nonatomic, strong, nullable) UINavigationController* sessionMenu;
+@property(nonatomic, assign) BOOL menuOpening;
+@property(nonatomic, assign) BOOL wiiSession;
+@property(nonatomic, copy) NSDictionary<NSString*, NSString*>* menuLabels;
 // These values belong to the Dolphin session, not to the global audio policy.
 @property(nonatomic, copy, nullable) NSString* previousAudioCategory;
 @property(nonatomic, copy, nullable) NSString* previousAudioMode;
@@ -750,7 +763,12 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       UIViewController* root = DOLRootViewController();
       if (root == nil) return;
       controller = [[DOLDolphinViewController alloc] init];
+      self.wiiSession = [system isEqual:@"wii"];
+      self.menuLabels = [arguments[@"menuLabels"] isKindOfClass:NSDictionary.class]
+          ? arguments[@"menuLabels"] : @{};
+      controller.menuLabel = self.menuLabels[@"menu"] ?: @"Dolphin";
       __weak DolphinInternalBridgePlugin* weakSelf = self;
+      controller.menuHandler = ^{ [weakSelf presentSessionMenu]; };
       controller.closeHandler = ^{
         DolphinInternalBridgePlugin* strongSelf = weakSelf;
         if (strongSelf == nil) return;
@@ -824,6 +842,71 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
   }
 }
 
+- (void)presentSessionMenu {
+  if (self.launchInProgress || self.menuOpening || self.sessionMenu || !self.dolphinController) return;
+  self.menuOpening = YES;
+  DOLDolphinViewController* owner = self.dolphinController;
+  __weak DolphinInternalBridgePlugin* weakSelf = self;
+  dispatch_async(_runtimeQueue, ^{
+    const BOOL paused = neostation_dolphin_set_paused(1) != 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DolphinInternalBridgePlugin* strongSelf = weakSelf;
+      if (!strongSelf) return;
+      strongSelf.menuOpening = NO;
+      if (!paused || strongSelf.dolphinController != owner) return;
+      DolphinSessionMenu* menu = [[DolphinSessionMenu alloc] init];
+      menu.labels = strongSelf.menuLabels;
+      menu.wii = strongSelf.wiiSession;
+      menu.readSettings = ^(BOOL wii, NSInteger slot, void (^completion)(NSDictionary*)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge) { completion(nil); return; }
+        dispatch_async(bridge->_runtimeQueue, ^{
+          char* text = neostation_dolphin_menu_snapshot(wii ? 1 : 0, (int32_t)slot);
+          NSDictionary* snapshot = nil;
+          if (text) {
+            NSData* data = [[NSString stringWithUTF8String:text] dataUsingEncoding:NSUTF8StringEncoding];
+            free(text);
+            id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if ([decoded isKindOfClass:NSDictionary.class]) snapshot = decoded;
+          }
+          dispatch_async(dispatch_get_main_queue(), ^{ completion(snapshot); });
+        });
+      };
+      menu.applySettings = ^(NSDictionary* request, void (^completion)(BOOL)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge) { completion(NO); return; }
+        dispatch_async(bridge->_runtimeQueue, ^{
+          NSData* data = [NSJSONSerialization dataWithJSONObject:request options:0 error:nil];
+          NSString* text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+          const BOOL success = text && neostation_dolphin_menu_apply(text.UTF8String) != 0;
+          dispatch_async(dispatch_get_main_queue(), ^{ completion(success); });
+        });
+      };
+      menu.resumeGame = ^{
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.menuOpening || !bridge.sessionMenu) return;
+        bridge.menuOpening = YES;
+        [bridge.sessionMenu dismissViewControllerAnimated:YES completion:^{
+          bridge.sessionMenu = nil;
+          bridge.menuOpening = NO;
+          if (bridge.dolphinController != owner) return;
+          dispatch_async(bridge->_runtimeQueue, ^{ neostation_dolphin_set_paused(0); });
+        }];
+      };
+      menu.quitGame = ^{
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge) return;
+        dispatch_async(bridge->_runtimeQueue, ^{ [bridge stopRuntimeWithReason:@"session_menu_quit"]; });
+      };
+      UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:menu];
+      navigation.modalPresentationStyle = UIModalPresentationFormSheet;
+      navigation.modalInPresentation = YES;
+      strongSelf.sessionMenu = navigation;
+      [owner presentViewController:navigation animated:YES completion:nil];
+    });
+  });
+}
+
 - (NSDictionary*)finishFailedLaunch:(NSMutableDictionary*)state {
   [self.helperSession close];
   self.helperSession = nil;
@@ -879,8 +962,11 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     }
     DOLDolphinViewController* controller = self.dolphinController;
     self.dolphinController = nil;
+    self.sessionMenu = nil;
+    self.menuOpening = NO;
     if (controller != nil) {
       controller.closeHandler = nil;
+      controller.menuHandler = nil;
       [controller dismissViewControllerAnimated:NO completion:nil];
     }
     if (self.audioPolicyCaptured) {

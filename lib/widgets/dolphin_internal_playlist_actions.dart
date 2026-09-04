@@ -3,20 +3,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import '../l10n/dolphin_import_locale.dart';
 import '../services/dolphin_internal_v2_service.dart';
+import '../services/dolphin_system_files.dart';
+import '../services/logger_service.dart';
 
-/// GameCube/Wii-only controls rendered on the native NeoStation playlist.
-///
-/// For every other system this widget returns an empty box and performs no
-/// initialization, JIT work, file access or routing changes.
+/// An action inside the existing media tab pill, never a positioned overlay.
 class DolphinInternalPlaylistActions extends StatefulWidget {
   final String systemFolder;
   final Future<void> Function() onLibraryChanged;
+  final ValueChanged<bool>? onInteractionChanged;
 
   const DolphinInternalPlaylistActions({
     super.key,
     required this.systemFolder,
     required this.onLibraryChanged,
+    this.onInteractionChanged,
   });
 
   @override
@@ -24,156 +26,144 @@ class DolphinInternalPlaylistActions extends StatefulWidget {
       _DolphinInternalPlaylistActionsState();
 }
 
-class _DolphinInternalPlaylistActionsState
-    extends State<DolphinInternalPlaylistActions> {
+class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylistActions> {
   bool _busy = false;
+  bool _interacting = false;
   Set<DolphinIplRegion> _regions = const {};
 
-  bool get _isDolphinPlaylist =>
-      Platform.isIOS &&
-      DolphinInternalV2Service.isDolphinSystem(widget.systemFolder);
-
   bool get _isGameCube => widget.systemFolder.toLowerCase() == 'gc';
+  String _text(String key) => DolphinImportLocale.text(context, key);
 
-  @override
-  void initState() {
-    super.initState();
-    if (_isGameCube && _isDolphinPlaylist) {
-      _reloadIplBadges();
-    }
+  void _interaction(bool active) {
+    _interacting = active;
+    widget.onInteractionChanged?.call(active);
   }
 
   @override
-  void didUpdateWidget(covariant DolphinInternalPlaylistActions oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.systemFolder != widget.systemFolder &&
-        _isGameCube &&
-        _isDolphinPlaylist) {
-      _reloadIplBadges();
+  void dispose() {
+    if (_interacting) widget.onInteractionChanged?.call(false);
+    super.dispose();
+  }
+
+  Future<void> _opened() async {
+    _interaction(true);
+    if (!_isGameCube) return;
+    try {
+      final regions = await DolphinInternalV2Service.installedIplRegions();
+      if (mounted) setState(() => _regions = regions);
+    } catch (_) {
+      // Import remains available if the first inspection cannot read a slot.
     }
   }
 
-  Future<void> _reloadIplBadges() async {
-    final regions = await DolphinInternalV2Service.installedIplRegions();
-    if (mounted) setState(() => _regions = regions);
+  Future<bool> _confirm(String message, {String? title}) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title ?? _text('replaceTitle')),
+          content: SingleChildScrollView(child: Text(message)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(_text('cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(_text('continue'))),
+          ],
+        ),
+      ) ?? false;
+
+  void _notice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _importGames() async {
+  Future<void> _selected(String action) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final result = await DolphinInternalV2Service.importGames(
-        widget.systemFolder,
-      );
-      if (result.imported > 0) await widget.onLibraryChanged();
+      int? count;
+      if (action == 'games') {
+        final result = await DolphinInternalV2Service.importGames(widget.systemFolder);
+        if (result.imported > 0) await widget.onLibraryChanged();
+        if (!mounted) return;
+        if (result.rejected > 0) _notice(_text('failed'));
+        if (result.imported > 0) count = result.imported;
+      } else if (action.startsWith('ipl:')) {
+        final region = DolphinIplRegion.values.byName(action.substring(4));
+        if (await DolphinInternalV2Service.importIpl(region)) count = 1;
+      } else if (action == 'wiiFiles') {
+        if (!await _confirm(_text('filesHelp')) || !mounted) return;
+        count = await DolphinInternalV2Service.importWiiSystemFiles();
+      } else {
+        final fromShared = action == 'shared';
+        if (fromShared) {
+          await DolphinInternalV2Service.sharedSystemDirectory(widget.systemFolder);
+          if (!mounted) return;
+          if (!await _confirm(
+            _text('sharedHelp').replaceAll('{system}', _isGameCube ? 'GameCube' : 'Wii'),
+            title: _text('shared'),
+          ) || !mounted) return;
+        }
+        if (!_isGameCube && (!await _confirm(_text('replaceWii')) || !mounted)) return;
+        count = await DolphinInternalV2Service.importSystemFolder(
+          widget.systemFolder, fromShared: fromShared,
+        );
+      }
       if (!mounted) return;
-      final details = result.errors.isEmpty ? '' : '\n${result.errors.first}';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${result.imported} game(s) imported, '
-            '${result.rejected} rejected.$details',
-          ),
-        ),
-      );
+      if (count != null) _notice(_text('imported').replaceAll('{count}', '$count'));
     } catch (error) {
+      LoggerService.instance.w('Dolphin system import failed: $error');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Dolphin import failed: $error')),
-      );
+      final code = error is DolphinSystemFilesException ? error.code : '';
+      final key = switch (code) {
+        'invalidWii' => 'invalidWii',
+        'invalidWiiFile' => 'filesHelp',
+        'invalidIpl' || 'invalidGameCube' => 'invalidIpl',
+        'busy' => 'busy',
+        _ => error is FormatException ? 'invalidIpl' : 'failed',
+      };
+      _notice(_text(key));
     } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _importIpl(DolphinIplRegion region) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await DolphinInternalV2Service.importIpl(region);
-      await _reloadIplBadges();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ IPL ${region.name.toUpperCase()} validated'),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('IPL rejected: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        _interaction(false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_isDolphinPlaylist) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
-    return Positioned(
-      top: 8.r,
-      right: 10.r,
-      child: SafeArea(
-        child: Material(
-          color: theme.colorScheme.surface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(12.r),
-          elevation: 3,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 6.r),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isGameCube) ...[
-                  for (final region in DolphinIplRegion.values)
-                    if (_regions.contains(region))
-                      Padding(
-                        padding: EdgeInsets.only(right: 5.r),
-                        child: Chip(
-                          visualDensity: VisualDensity.compact,
-                          label: Text(
-                            '✓ IPL ${region.name.toUpperCase()}',
-                            style: TextStyle(fontSize: 9.r),
-                          ),
-                        ),
-                      ),
-                  PopupMenuButton<DolphinIplRegion>(
-                    tooltip: 'Import GameCube IPL',
-                    enabled: !_busy,
-                    onSelected: _importIpl,
-                    itemBuilder: (_) => DolphinIplRegion.values
-                        .map(
-                          (region) => PopupMenuItem(
-                            value: region,
-                            child: Text(
-                              'Import IPL ${region.name.toUpperCase()}',
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    icon: Icon(Icons.memory_rounded, size: 19.r),
-                  ),
-                  SizedBox(width: 4.r),
-                ],
-                FilledButton.icon(
-                  onPressed: _busy ? null : _importGames,
-                  icon: _busy
-                      ? SizedBox(
-                          width: 14.r,
-                          height: 14.r,
-                          child: const CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Icon(Icons.file_upload_outlined, size: 17.r),
-                  label: const Text('Import'),
-                ),
-              ],
-            ),
-          ),
-        ),
+    if (!Platform.isIOS || !DolphinInternalV2Service.isDolphinSystem(widget.systemFolder)) {
+      return const SizedBox.shrink();
+    }
+    return SizedBox(
+      width: 36.r,
+      height: 36.r,
+      child: PopupMenuButton<String>(
+        key: const ValueKey('dolphin-import-menu'),
+        tooltip: _text('import'),
+        enabled: !_busy,
+        padding: EdgeInsets.zero,
+        onOpened: _opened,
+        onCanceled: () => _interaction(false),
+        onSelected: _selected,
+        icon: _busy
+            ? SizedBox(width: 18.r, height: 18.r, child: const CircularProgressIndicator(strokeWidth: 2))
+            : Icon(Icons.file_upload_outlined, size: 18.r),
+        itemBuilder: (context) => [
+          PopupMenuItem(value: 'games', child: Text(_text('games'))),
+          const PopupMenuDivider(),
+          if (!_isGameCube) ...[
+            PopupMenuItem(value: 'folder', child: Text(_text('wiiFolder'))),
+            PopupMenuItem(value: 'wiiFiles', child: Text(_text('wiiFiles'))),
+          ] else ...[
+            PopupMenuItem(value: 'folder', child: Text(_text('gcFolder'))),
+            for (final region in DolphinIplRegion.values)
+              PopupMenuItem(
+                value: 'ipl:${region.name}',
+                child: Text('${_regions.contains(region) ? '✓ ' : ''}${_text('ipl').replaceAll('{region}', region.name.toUpperCase())}'),
+              ),
+          ],
+          const PopupMenuDivider(),
+          PopupMenuItem(value: 'shared', child: Text(_text('shared'))),
+        ],
       ),
     );
   }

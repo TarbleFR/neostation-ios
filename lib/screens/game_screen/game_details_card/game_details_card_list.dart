@@ -119,6 +119,9 @@ class GameDetailsCardList extends StatefulWidget {
   final bool isSecondaryScreenActive;
   final bool isNavigatingFast;
   final VoidCallback? onBack;
+  // DOLPHIN_ISOLATION_BEGIN: import_action
+  final Widget? dolphinImportAction;
+  // DOLPHIN_ISOLATION_END: import_action
 
   const GameDetailsCardList({
     super.key,
@@ -159,6 +162,9 @@ class GameDetailsCardList extends StatefulWidget {
     this.isSecondaryScreenActive = false,
     this.isNavigatingFast = false,
     this.onBack,
+    // DOLPHIN_ISOLATION_BEGIN: import_action_parameter
+    this.dolphinImportAction,
+    // DOLPHIN_ISOLATION_END: import_action_parameter
   });
 
   @override
@@ -642,6 +648,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               hasRetroAchievements: _hasRetroAchievements,
               currentTab: _currentTab,
               onTabChanged: (tab) => _setTab(tab),
+              // DOLPHIN_ISOLATION_BEGIN: import_action_header
+              trailingAction: widget.dolphinImportAction,
+              // DOLPHIN_ISOLATION_END: import_action_header
             ),
           ),
 

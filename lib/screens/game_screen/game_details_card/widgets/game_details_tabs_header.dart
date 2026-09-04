@@ -19,6 +19,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
   final bool hasRetroAchievements;
   final DetailTab currentTab;
   final ValueChanged<DetailTab> onTabChanged;
+  // DOLPHIN_ISOLATION_BEGIN: import_action
+  final Widget? trailingAction;
+  // DOLPHIN_ISOLATION_END: import_action
 
   const GameDetailsTabsHeader({
     super.key,
@@ -26,6 +29,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
     required this.hasRetroAchievements,
     required this.currentTab,
     required this.onTabChanged,
+    // DOLPHIN_ISOLATION_BEGIN: import_action_parameter
+    this.trailingAction,
+    // DOLPHIN_ISOLATION_END: import_action_parameter
   });
 
   /// Ordered list of always-visible tab enums.
@@ -57,7 +63,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
 
     final theme = Theme.of(context);
 
-    return ClipRRect(
+    // DOLPHIN_ISOLATION_BEGIN: responsive_import_header
+    final header = ClipRRect(
+    // DOLPHIN_ISOLATION_END: responsive_import_header
       child: Container(
         height: 46.r,
         padding: EdgeInsets.only(top: 4.r, right: 8.r),
@@ -96,7 +104,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
                 ],
               ),
               child: SizedBox(
-                width: totalTabsWidth,
+                // DOLPHIN_ISOLATION_BEGIN: import_action_width
+                width: totalTabsWidth + (trailingAction == null ? 0 : tabWidth),
+                // DOLPHIN_ISOLATION_END: import_action_width
                 height: 36.r,
                 child: Stack(
                   children: [
@@ -129,6 +139,10 @@ class GameDetailsTabsHeader extends StatelessWidget {
                             isSelected: currentTab == tab,
                             onTap: onTabChanged,
                           ),
+                        // DOLPHIN_ISOLATION_BEGIN: import_action_item
+                        if (trailingAction != null)
+                          SizedBox(width: tabWidth, child: trailingAction),
+                        // DOLPHIN_ISOLATION_END: import_action_item
                       ],
                     ),
                   ],
@@ -142,6 +156,23 @@ class GameDetailsTabsHeader extends StatelessWidget {
         ),
       ),
     );
+    // DOLPHIN_ISOLATION_BEGIN: responsive_import_layout
+    if (trailingAction == null) return header;
+    return LayoutBuilder(builder: (context, constraints) {
+      // Keep every media tab visible even on a narrow details panel.
+      final minimumWidth = totalTabsWidth + tabWidth + 100.r;
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerRight,
+        child: SizedBox(
+          width: constraints.maxWidth < minimumWidth
+              ? minimumWidth
+              : constraints.maxWidth,
+          child: header,
+        ),
+      );
+    });
+    // DOLPHIN_ISOLATION_END: responsive_import_layout
   }
 
   static IconData _iconForTab(DetailTab tab) {
