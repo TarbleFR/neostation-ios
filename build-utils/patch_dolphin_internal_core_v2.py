@@ -654,6 +654,7 @@ int32_t neostation_dolphin_menu_apply(const char* request_json)
     }
     const int slot = [request[@"slot"] intValue];
     if (slot < 0 || slot > 3) return;
+    const Core::CPUThreadGuard cpu_guard(Core::System::GetInstance());
     auto lock = ControllerEmu::EmulatedController::GetStateLock();
     InputConfig* config = DOLInputConfig([request[@"wii"] boolValue]);
     if (!config || slot >= config->GetControllerCount()) return;

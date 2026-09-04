@@ -153,6 +153,9 @@ bool SelectInputProfile(bool wii, int slot, const std::string& device_name)
 void ConfigurePhysicalControllers()
 {
   if (!g_devices_changed.exchange(false)) return;
+  // Source changes can take Dolphin's CPU lock. Acquire it before the input
+  // lock, otherwise a CPU waiting to read a pad can deadlock a hotplug update.
+  const Core::CPUThreadGuard cpu_guard(Core::System::GetInstance());
   auto lock = ControllerEmu::EmulatedController::GetStateLock();
   std::vector<std::string> physical;
   for (const auto& device : g_controller_interface.GetAllDevices())
