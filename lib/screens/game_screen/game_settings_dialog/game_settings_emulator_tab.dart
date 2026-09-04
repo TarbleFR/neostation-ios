@@ -13,6 +13,10 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/emulator_loader.dart';
 import 'package:neostation/widgets/settings_rows.dart';
+// DOLPHIN_ISOLATION_BEGIN: emulator_identity_imports
+import 'package:neostation/services/dolphin_internal_v2_service.dart';
+import 'package:neostation/l10n/dolphin_import_locale.dart';
+// DOLPHIN_ISOLATION_END: emulator_identity_imports
 
 /// Per-game emulator override tab for [GameSettingsDialog].
 ///
@@ -41,6 +45,13 @@ class GameSettingsEmulatorTab extends StatefulWidget {
 
 class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   static final _log = LoggerService.instance;
+  // DOLPHIN_ISOLATION_BEGIN: emulator_identity_gate
+  bool get _usesDolphin => Platform.isIOS &&
+      DolphinInternalV2Service.isDolphinSystem(
+        widget.isAllMode && widget.game.systemFolderName != null
+            ? widget.game.systemFolderName! : widget.system.folderName,
+      );
+  // DOLPHIN_ISOLATION_END: emulator_identity_gate
 
   List<CoreEmulatorModel> _availableEmulators = [];
   int _selectedIndex = 0;
@@ -83,6 +94,9 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   }
 
   Future<void> _loadEmulators() async {
+    // DOLPHIN_ISOLATION_BEGIN: embedded_emulator_availability
+    if (_usesDolphin) return;
+    // DOLPHIN_ISOLATION_END: embedded_emulator_availability
     final emulators = await loadEmulatorsForSystem(widget.system);
     if (mounted) setState(() => _availableEmulators = emulators);
   }
@@ -163,6 +177,19 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   @override
   Widget build(BuildContext context) {
+    // DOLPHIN_ISOLATION_BEGIN: embedded_emulator_label
+    if (_usesDolphin) {
+      return Padding(
+        padding: EdgeInsets.all(12.r),
+        child: ListTile(
+          leading: const Icon(Symbols.sports_esports_rounded),
+          title: const Text('DolphiniOS'),
+          subtitle: Text(DolphinImportLocale.text(context, 'integrated')),
+          trailing: Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
+        ),
+      );
+    }
+    // DOLPHIN_ISOLATION_END: embedded_emulator_label
     if (_availableEmulators.isEmpty) {
       return Center(
         child: Text(

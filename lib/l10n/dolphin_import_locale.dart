@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 abstract final class DolphinImportLocale {
   static const values = <String, Map<String, String>>{
     "en": {
+      "integrated": "Integrated into NeoStation",
       "menu": "Dolphin menu",
       "resume": "Resume game",
       "quit": "Quit game",
@@ -70,6 +71,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accepted: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Existing system files are backed up before replacement.",
     },
     "fr": {
+      "integrated": "Intégré à NeoStation",
       "menu": "Menu Dolphin",
       "resume": "Reprendre le jeu",
       "quit": "Quitter le jeu",
@@ -137,6 +139,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Acceptés : keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Une copie de secours précède le remplacement des fichiers système existants.",
     },
     "de": {
+      "integrated": "In NeoStation integriert",
       "menu": "Dolphin-Menü",
       "resume": "Spiel fortsetzen",
       "quit": "Spiel beenden",
@@ -204,6 +207,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Erlaubt: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Bestehende Systemdateien werden vor dem Ersetzen gesichert.",
     },
     "es": {
+      "integrated": "Integrado en NeoStation",
       "menu": "Menú Dolphin",
       "resume": "Reanudar juego",
       "quit": "Salir del juego",
@@ -271,6 +275,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Se aceptan: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Los archivos existentes se respaldan antes de reemplazarlos.",
     },
     "it": {
+      "integrated": "Integrato in NeoStation",
       "menu": "Menu Dolphin",
       "resume": "Riprendi il gioco",
       "quit": "Esci dal gioco",
@@ -338,6 +343,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accettati: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. I file esistenti vengono salvati prima della sostituzione.",
     },
     "pt": {
+      "integrated": "Integrado ao NeoStation",
       "menu": "Menu Dolphin",
       "resume": "Retomar jogo",
       "quit": "Sair do jogo",
@@ -405,6 +411,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Aceitos: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Os arquivos existentes são copiados antes da substituição.",
     },
     "ru": {
+      "integrated": "Встроен в NeoStation",
       "menu": "Меню Dolphin",
       "resume": "Продолжить игру",
       "quit": "Выйти из игры",
@@ -472,6 +479,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Допустимы: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Перед заменой существующие файлы копируются.",
     },
     "id": {
+      "integrated": "Terintegrasi dalam NeoStation",
       "menu": "Menu Dolphin",
       "resume": "Lanjutkan game",
       "quit": "Keluar dari game",
@@ -539,6 +547,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Diterima: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Berkas lama dicadangkan sebelum diganti.",
     },
     "ja": {
+      "integrated": "NeoStationに内蔵",
       "menu": "Dolphinメニュー",
       "resume": "ゲームを再開",
       "quit": "ゲームを終了",
@@ -606,6 +615,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "対応：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。既存ファイルは置き換え前にバックアップされます。",
     },
     "ko": {
+      "integrated": "NeoStation에 내장됨",
       "menu": "Dolphin 메뉴",
       "resume": "게임 재개",
       "quit": "게임 종료",
@@ -673,6 +683,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "지원: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. 기존 파일은 교체 전에 백업됩니다.",
     },
     "zh": {
+      "integrated": "已集成到 NeoStation",
       "menu": "Dolphin 菜单",
       "resume": "继续游戏",
       "quit": "退出游戏",
@@ -740,6 +751,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "支持：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。现有文件将在替换前备份。",
     },
     "zh_Hant": {
+      "integrated": "已整合至 NeoStation",
       "menu": "Dolphin 選單",
       "resume": "繼續遊戲",
       "quit": "結束遊戲",
