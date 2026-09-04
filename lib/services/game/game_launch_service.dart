@@ -171,8 +171,8 @@ class GameLaunchService {
         if (!report.ready) {
           return GameLaunchResult.failure(
             report.message,
-            'Dolphin stage: ${report.failedStage ?? "unknown"}
-Log: ${report.logPath}',
+            'Dolphin stage: ${report.failedStage ?? "unknown"}\n'
+            'Log: ${report.logPath}',
           );
         }
         GameSessionManager.registerGameLaunch(

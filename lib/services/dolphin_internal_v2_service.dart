@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
@@ -147,7 +146,7 @@ class DolphinInternalV2Service {
     final system = _normalizeSystem(folderName);
     await ensureLayout();
     final extensions = extensionsFor(system).toList()..sort();
-    final selection = await FilePicker.platform.pickFiles(
+    final selection = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: extensions,
@@ -213,7 +212,7 @@ class DolphinInternalV2Service {
 
   static Future<void> importIpl(DolphinIplRegion region) async {
     await ensureLayout();
-    final selection = await FilePicker.platform.pickFiles(
+    final selection = await FilePicker.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
       allowedExtensions: const ['bin'],
@@ -456,9 +455,10 @@ class DolphinInternalV2Service {
       await _channel.invokeMethod<void>('stop');
     } finally {
       final root = await rootDirectory();
-      await File(path.join(root.path, 'CrashMarkers', 'active-session.json'))
-          .delete()
-          .catchError((_) {});
+      final marker = File(
+        path.join(root.path, 'CrashMarkers', 'active-session.json'),
+      );
+      await _deleteIfExists(marker);
       await _appendLog('session.clean_stop', 'Dolphin session stopped cleanly.');
     }
   }
