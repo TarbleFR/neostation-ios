@@ -207,15 +207,42 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         }
       }
 
+      // DOLPHIN_ISOLATION_BEGIN: native_playlists
+      // GameCube and Wii are native NeoStation playlists on iOS. They stay
+      // visible at zero games without registering Dolphin's private root as a
+      // global ROM folder or changing another system's scan source.
+      if (Platform.isIOS) {
+        for (final folderName in const ['gc', 'wii']) {
+          if (detectedSystems.any((system) => system.folderName == folderName)) {
+            continue;
+          }
+          try {
+            final nativeSystem = _availableSystems.firstWhere(
+              (system) => system.folderName == folderName,
+            );
+            detectedSystems = [...detectedSystems, nativeSystem];
+          } catch (error) {
+            SqliteConfigProvider._log.e(
+              'Could not expose native Dolphin playlist $folderName: $error',
+            );
+          }
+        }
+      }
+      // DOLPHIN_ISOLATION_END: native_playlists
+
       // Determine the systems to use for initial detection
       List<SystemModel> systemsForMapping = _availableSystems;
 
       // Filter systems if it's a Fast Scan for instant progress
       if (isFastScan) {
         // Only include those that auto-detect or are virtual depending on platform
+        // DOLPHIN_ISOLATION_BEGIN: fast_scan_playlists
         final List<String> fastScanFolders = Platform.isAndroid
             ? ['android']
+            : Platform.isIOS
+            ? ['gc', 'wii']
             : [];
+        // DOLPHIN_ISOLATION_END: fast_scan_playlists
 
         systemsForMapping = _availableSystems.where((s) {
           return fastScanFolders.contains(s.folderName);
@@ -517,8 +544,16 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         final bool isAndroidVirtual =
             (system.folderName == 'android' && Platform.isAndroid);
 
-        if (romCount > 0 || hasFolderWhenNonRecursive || isAndroidVirtual) {
+        // DOLPHIN_ISOLATION_BEGIN: keep_empty_native_systems
+        final isDolphinInternalSystem =
+            Platform.isIOS &&
+            DolphinInternalV2Service.isDolphinSystem(system.folderName);
+        if (romCount > 0 ||
+            hasFolderWhenNonRecursive ||
+            isAndroidVirtual ||
+            isDolphinInternalSystem) {
           systemsToKeep.add(system.copyWith(romCount: romCount));
+        // DOLPHIN_ISOLATION_END: keep_empty_native_systems
 
           // Increment count for 'all' logic if it's a real emulator system with games
           if (romCount > 0 && !virtualSystems.contains(system.folderName)) {
@@ -572,14 +607,48 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     }
   }
 
+  // DOLPHIN_ISOLATION_BEGIN: targeted_refresh_api
+  /// Refreshes only NeoStation's private GameCube or Wii library.
+  /// No configured ROM root and no other emulator playlist is scanned.
+  Future<void> refreshDolphinInternalLibrary(String folderName) async {
+    if (!Platform.isIOS ||
+        !DolphinInternalV2Service.isDolphinSystem(folderName)) {
+      throw ArgumentError.value(
+        folderName,
+        'folderName',
+        'Dolphin refresh is restricted to gc/wii on iOS.',
+      );
+    }
+    if (_availableSystems.isEmpty) await _loadAvailableSystems();
+    final system = _availableSystems.firstWhere(
+      (candidate) => candidate.folderName == folderName.toLowerCase(),
+    );
+    await SystemRepository.addDetectedSystem(system.id!, system.folderName);
+    if (!_detectedSystems.any((candidate) => candidate.id == system.id)) {
+      _detectedSystems = [..._detectedSystems, system];
+    }
+    await _scanSystemRoms(system);
+    await _refreshDetectedSystemsFromDatabase();
+    _sortDetectedSystems();
+    _notify();
+  }
+  // DOLPHIN_ISOLATION_END: targeted_refresh_api
+
   /// Performs an isolated scan for a specific system.
   Future<ScanSummary> _scanSystemRoms(
     SystemModel system, {
     Map<String, Map<String, String>>? rootFoldersMap,
   }) async {
     try {
-      // Allow scanning for Android system even if no ROM folders are selected
-      if (_config.romFolders.isEmpty && system.folderName != 'android') {
+      // DOLPHIN_ISOLATION_BEGIN: isolated_scan_root
+      final isDolphinInternalSystem =
+          Platform.isIOS &&
+          DolphinInternalV2Service.isDolphinSystem(system.folderName);
+      // Allow the private gc/wii root to scan even when no public ROM folder
+      // exists. Every non-Dolphin system retains the original early return.
+      if (_config.romFolders.isEmpty &&
+          system.folderName != 'android' &&
+          !isDolphinInternalSystem) {
         return ScanSummary(
           added: 0,
           removed: 0,
@@ -587,13 +656,24 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           systemName: system.realName,
         );
       }
+      final dolphinScanRoots = isDolphinInternalSystem
+          ? [await DolphinInternalV2Service.scanRootPath()]
+          : _config.romFolders;
+      final effectiveRootFoldersMap = isDolphinInternalSystem
+          ? await SqliteDatabaseService.getExistingSubdirectories(
+              dolphinScanRoots,
+            )
+          : rootFoldersMap;
+      // DOLPHIN_ISOLATION_END: isolated_scan_root
 
+      // DOLPHIN_ISOLATION_BEGIN: isolated_scan_call
       final summary = await SqliteDatabaseService.scanSystemRoms(
         system,
-        _config.romFolders,
+        dolphinScanRoots,
         ignoreHiddenFiles: _config.ignoreHiddenFiles,
-        rootFoldersMap: rootFoldersMap,
+        rootFoldersMap: effectiveRootFoldersMap,
       );
+      // DOLPHIN_ISOLATION_END: isolated_scan_call
 
       // Update ROM count in system
       await refreshSystem(system, rootFoldersMap: rootFoldersMap);
@@ -668,12 +748,18 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // INCREMENTAL PERSISTENCE: Keep a system when it has ROMs, when its
       // folder exists and recursive scan is explicitly OFF (user can re-enable),
       // or when it is a virtual system (android / all).
+      // DOLPHIN_ISOLATION_BEGIN: refresh_keep_native_systems
       final bool shouldKeep =
           updatedSystem.romCount > 0 ||
           hasFolderWhenNonRecursive ||
           (updatedSystem.folderName == 'android' && Platform.isAndroid) ||
           updatedSystem.folderName == 'all' ||
-          updatedSystem.folderName == SystemFolderNames.favorites;
+          updatedSystem.folderName == SystemFolderNames.favorites ||
+          (Platform.isIOS &&
+              DolphinInternalV2Service.isDolphinSystem(
+                updatedSystem.folderName,
+              ));
+      // DOLPHIN_ISOLATION_END: refresh_keep_native_systems
 
       if (shouldKeep) {
         await SystemRepository.addDetectedSystem(

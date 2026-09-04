@@ -185,8 +185,8 @@ class DolphinInternalV2Service {
         final sourceLength = await source.length();
         final outputLength = await output.length();
         if (sourceLength <= 0 || sourceLength != outputLength) {
-          await output.delete().catchError((_) {});
-          throw const FileSystemException('Copied image length mismatch');
+          await _deleteIfExists(output);
+          throw FileSystemException('Copied image length mismatch');
         }
         imported++;
         await _appendLog(
@@ -251,10 +251,10 @@ class DolphinInternalV2Service {
     final temporary = File('${target.path}.tmp');
     await temporary.writeAsBytes(bytes, flush: true);
     if (await temporary.length() != _iplSize) {
-      await temporary.delete().catchError((_) {});
+      await _deleteIfExists(temporary);
       throw const FormatException('The IPL changed while it was being written.');
     }
-    await target.delete().catchError((_) {});
+    await _deleteIfExists(target);
     await temporary.rename(target.path);
 
     final manifest = File(path.join(root.path, 'Metadata', 'IPL', '$slot.json'));
@@ -403,7 +403,7 @@ class DolphinInternalV2Service {
           flush: true,
         );
       } else {
-        await marker.delete().catchError((_) {});
+        await _deleteIfExists(marker);
       }
       await _appendLogTo(
         logPath,
@@ -419,7 +419,7 @@ class DolphinInternalV2Service {
         gates: gates,
       );
     } on PlatformException catch (error) {
-      await marker.delete().catchError((_) {});
+      await _deleteIfExists(marker);
       await _appendLogTo(
         logPath,
         'bridge.platform_exception',
@@ -434,7 +434,7 @@ class DolphinInternalV2Service {
         gates: _emptyGates(),
       );
     } catch (error, stackTrace) {
-      await marker.delete().catchError((_) {});
+      await _deleteIfExists(marker);
       await _appendLogTo(
         logPath,
         'bridge.exception',
@@ -473,6 +473,14 @@ class DolphinInternalV2Service {
       );
     }
     return normalized;
+  }
+
+  static Future<void> _deleteIfExists(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Best-effort cleanup never replaces the original diagnostic.
+    }
   }
 
   static Future<File> _uniqueDestination(Directory directory, String name) async {
@@ -648,7 +656,7 @@ class DolphinInternalV2Service {
       }
       await marker.rename('${marker.path}.${DateTime.now().millisecondsSinceEpoch}.recovered');
     } catch (_) {
-      await marker.delete().catchError((_) {});
+      await _deleteIfExists(marker);
     }
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the isolated Dolphin v2 patch into NeoStation sources.
+"""Materialize the isolated Dolphin v3 patch into NeoStation sources.
 
 Every shared-file change is fenced with DOLPHIN_ISOLATION markers so CI can
 prove that the pre-existing launch, scan and playlist implementations are
@@ -61,7 +61,7 @@ def patch_pubspec() -> None:
         )
     text = re.sub(
         r"^version:\s*([^+\n]+)\+\d+\s*$",
-        r"version: \1+193",
+        r"version: \1+194",
         text,
         count=1,
         flags=re.MULTILINE,
@@ -335,7 +335,7 @@ def patch_playlist() -> None:
     text = read(relative)
     marker = f"// {BEGIN}: playlist_import"
     if marker not in text:
-        anchor = "import 'package:neostation/services/game_service.dart';\n"
+        anchor = "import '../../services/game_service.dart';\n"
         block = (
             f"// {BEGIN}: playlist_import\n"
             "import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';\n"
@@ -451,7 +451,7 @@ def main() -> None:
     patch_launcher()
     patch_playlist()
     write_contract_test()
-    print("Materialized isolated Dolphin v2 sources and non-regression tests.")
+    print("Materialized isolated Dolphin v3 sources and non-regression tests.")
 
 
 if __name__ == "__main__":

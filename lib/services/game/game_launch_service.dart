@@ -12,6 +12,9 @@ import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
+// DOLPHIN_ISOLATION_BEGIN: launcher_import
+import '../dolphin_internal_v2_service.dart';
+// DOLPHIN_ISOLATION_END: launcher_import
 import 'package:neostation/services/logger_service.dart';
 
 import '../../models/game_model.dart';
@@ -145,6 +148,42 @@ class GameLaunchService {
           game.romPath ?? AppLocale.noData.getString(context),
         );
       }
+
+      // DOLPHIN_ISOLATION_BEGIN: explicit_gc_wii_route
+      // This is the only shared-router addition. It returns on both success and
+      // failure, so a GameCube/Wii image can never fall through to RetroArch,
+      // a DeepLink, a Shortcut or another emulator. Every other system skips
+      // this block and continues through the byte-for-byte existing router.
+      if (Platform.isIOS &&
+          DolphinInternalV2Service.isDolphinSystem(system.folderName)) {
+        final gamePath = game.romPath;
+        if (gamePath == null || gamePath.isEmpty) {
+          return GameLaunchResult.failure(
+            'Dolphin launch refused: the game path is missing.',
+            system.folderName,
+          );
+        }
+        final report = await DolphinInternalV2Service.launch(
+          folderName: system.folderName,
+          gamePath: gamePath,
+        );
+        if (!context.mounted) return GameLaunchResult.failure('', '');
+        if (!report.ready) {
+          return GameLaunchResult.failure(
+            report.message,
+            'Dolphin stage: ${report.failedStage ?? "unknown"}
+Log: ${report.logPath}',
+          );
+        }
+        GameSessionManager.registerGameLaunch(
+          system,
+          game,
+          'ios_dolphin_internal',
+        );
+        await FavoritesService.recordGamePlayed(game);
+        return GameLaunchResult.success();
+      }
+      // DOLPHIN_ISOLATION_END: explicit_gc_wii_route
 
       // iOS: there's no equivalent of Android's "send an Intent with a file
       // to any installed app", and dart:io Process is unimplemented. What

@@ -18,6 +18,8 @@ SHARED_FILES = {
 }
 ALLOWED_EXACT = {
     ".github/workflows/dolphin-internal-isolated-v2.yml",
+    ".github/workflows/dolphin-internal-isolated-v3.yml",
+    "build-utils/Gemfile.dolphin",
     "pubspec.yaml",
     "pubspec.lock",
     "build-utils/apply_dolphin_internal_patch.py",

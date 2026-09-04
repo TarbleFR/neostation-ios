@@ -8,6 +8,7 @@ preserved; no Dolphin URL scheme is added.
 
 from __future__ import annotations
 
+import os
 import plistlib
 import re
 import shutil
@@ -148,10 +149,49 @@ project = Xcodeproj::Project.open(project_path)
 runner = project.targets.find { |target| target.name == 'Runner' }
 raise 'Runner target not found' if runner.nil?
 
-helper = project.targets.find { |target| target.name == 'DolphinJITHelper' }
+helper_candidates = project.targets.select { |target| target.name == 'DolphinJITHelper' }
+if helper_candidates.length > 1
+  discovered = helper_candidates.map { |target| "#{target.name}:#{target.product_type}" }.join(', ')
+  raise "Multiple DolphinJITHelper targets found: #{discovered}"
+end
+helper = helper_candidates.first
 if helper.nil?
   helper = project.new_target(:app_extension, 'DolphinJITHelper', :ios, '17.4')
 end
+expected_type = 'com.apple.product-type.app-extension'
+unless helper.product_type == expected_type
+  raise "DolphinJITHelper has unexpected product type #{helper.product_type.inspect}; expected #{expected_type}"
+end
+if helper.product_reference.nil?
+  raise 'DolphinJITHelper has no product reference'
+end
+helper.product_reference.path = 'DolphinJITHelper.appex'
+
+framework_phases = helper.build_phases.select do |phase|
+  phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase)
+end
+if framework_phases.length > 1
+  raise "DolphinJITHelper has #{framework_phases.length} PBXFrameworksBuildPhase objects"
+end
+frameworks_phase = framework_phases.first
+if frameworks_phase.nil?
+  frameworks_phase = project.new(
+    Xcodeproj::Project::Object::PBXFrameworksBuildPhase
+  )
+  helper.build_phases << frameworks_phase
+end
+
+spec = Gem.loaded_specs['xcodeproj']
+puts "xcodeproj.version=#{Xcodeproj::VERSION}"
+puts "xcodeproj.path=#{spec&.full_gem_path}"
+puts "helper.class=#{helper.class.name}"
+puts "helper.name=#{helper.name}"
+puts "helper.product_type=#{helper.product_type}"
+puts "helper.product_reference=#{helper.product_reference.path}"
+puts "helper.build_phases=#{helper.build_phases.map { |phase| phase.class.name }.join(',')}"
+puts "helper.respond_to.frameworks_build_phase=#{helper.respond_to?(:frameworks_build_phase)}"
+puts "helper.respond_to.frameworks_build_phases=#{helper.respond_to?(:frameworks_build_phases)}"
+puts "helper.framework_phase=#{frameworks_phase.uuid}"
 
 helper_group = project.main_group.find_subpath('DolphinJITHelper', true)
 helper_group.set_source_tree('<group>')
@@ -166,7 +206,7 @@ helper.build_configurations.each do |configuration|
   settings['APPLICATION_EXTENSION_API_ONLY'] = 'NO'
   settings['CLANG_ENABLE_MODULES'] = 'YES'
   settings['CODE_SIGN_STYLE'] = 'Automatic'
-  settings['CURRENT_PROJECT_VERSION'] = '193'
+  settings['CURRENT_PROJECT_VERSION'] = '194'
   settings['DEFINES_MODULE'] = 'YES'
   settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
   settings['GENERATE_INFOPLIST_FILE'] = 'NO'
@@ -215,11 +255,24 @@ project.save
     script = IOS / ".configure_dolphin_helper.rb"
     script.write_text(ruby, encoding="utf-8")
     try:
-        subprocess.run(
-            ["ruby", str(script), str(IOS / "Runner.xcodeproj")],
-            cwd=ROOT,
-            check=True,
+        env = os.environ.copy()
+        gemfile = Path(
+            env.get(
+                "BUNDLE_GEMFILE",
+                str(ROOT / "build-utils/Gemfile.dolphin"),
+            )
         )
+        command = ["ruby", str(script), str(IOS / "Runner.xcodeproj")]
+        if gemfile.is_file():
+            env["BUNDLE_GEMFILE"] = str(gemfile)
+            command = [
+                "bundle",
+                "exec",
+                "ruby",
+                str(script),
+                str(IOS / "Runner.xcodeproj"),
+            ]
+        subprocess.run(command, cwd=ROOT, check=True, env=env)
     finally:
         script.unlink(missing_ok=True)
 

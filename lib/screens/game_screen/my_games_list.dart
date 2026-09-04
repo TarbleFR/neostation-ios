@@ -19,6 +19,9 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:ui';
 
+// DOLPHIN_ISOLATION_BEGIN: playlist_import
+import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
+// DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
 import '../../utils/game_launch_utils.dart';
 import '../../services/music_player_service.dart';
@@ -643,6 +646,30 @@ class _SystemGamesListState extends State<SystemGamesList> {
             if (_currentLetter != null && !_isGameLaunching)
               _buildLetterIndicator(),
             GameViewModeDropdown(),
+
+            // DOLPHIN_ISOLATION_BEGIN: playlist_actions
+
+            DolphinInternalPlaylistActions(
+
+              systemFolder: widget.system.folderName,
+
+              onLibraryChanged: () async {
+
+                await context
+
+                    .read<SqliteConfigProvider>()
+
+                    .refreshDolphinInternalLibrary(
+
+                      widget.system.folderName,
+
+                    );
+
+              },
+
+            ),
+
+            // DOLPHIN_ISOLATION_END: playlist_actions
           ],
         ),
       ),

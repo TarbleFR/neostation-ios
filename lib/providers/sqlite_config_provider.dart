@@ -1,4 +1,7 @@
 import 'dart:async';
+/* DOLPHIN_ISOLATION_BEGIN: provider_import */
+import '../services/dolphin_internal_v2_service.dart';
+/* DOLPHIN_ISOLATION_END: provider_import */
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';

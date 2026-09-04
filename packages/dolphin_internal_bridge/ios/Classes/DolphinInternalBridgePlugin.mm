@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <poll.h>
+#import <stdio.h>
 #import <arpa/inet.h>
 #import <netinet/in.h>
 #import <sys/socket.h>
@@ -653,7 +654,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
            @"This NeoStation installation does not preserve get-task-allow; Dolphin JIT is blocked.");
       return [self finishFailedLaunch:state];
     }
-    NSData* pairingData = [NSData dataWithContentsOfFile:pairingPath options:0 error:nil];
+    NSData* pairingData = [[NSData alloc] initWithContentsOfFile:pairingPath options:NSDataReadingMappedIfSafe error:nil];
     if (pairingData.length == 0) {
       fail(@"stikjit.pairing_missing", @"Import a readable pairing file before launching Dolphin.");
       return [self finishFailedLaunch:state];

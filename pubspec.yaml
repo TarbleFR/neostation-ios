@@ -10,8 +10,9 @@ workspace:
   - packages/gamepads_darwin
   - packages/gamepads_platform_interface
   - packages/stikjit_bridge
+  - packages/dolphin_internal_bridge
 
-version: 1.0.0+163
+version: 1.0.0+194
 environment:
   sdk: '>=3.9.2'
 
@@ -29,6 +30,8 @@ dependencies:
     path: packages/external_folder_access
   stikjit_bridge:
     path: packages/stikjit_bridge
+  dolphin_internal_bridge:
+    path: packages/dolphin_internal_bridge
     
   file_picker: 12.0.0-beta.3
   device_info_plus: ^13.2.0
