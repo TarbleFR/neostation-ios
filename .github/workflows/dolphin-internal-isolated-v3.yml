@@ -3,12 +3,11 @@ run-name: Dolphin Internal Isolated v3 Build 194 • ${{ github.sha }}
 
 on:
   push:
-    branches:
-      - test/dolphin-internal-engine-isolated-v3
+    branches: [test/dolphin-internal-engine-isolated-v3]
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: neostation-dolphin-internal-isolated-v3
@@ -16,694 +15,226 @@ concurrency:
 
 jobs:
   build:
+    name: Build and audit isolated Dolphin IPA
     runs-on: macos-15
-    timeout-minutes: 360
+    timeout-minutes: 180
     env:
       BUILD_NUMBER: '194'
       IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194
       ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-194
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
+      BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
+      BUNDLE_PATH: ${{ runner.temp }}/dolphin-ruby-gems
+      CCACHE_DIR: ${{ github.workspace }}/.dolphin-ccache
+      CCACHE_BASEDIR: ${{ runner.temp }}/dolphin-ios
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout isolated-v3 source of truth
+      - name: Checkout exact isolated-v3 commit
         uses: actions/checkout@v4
         with:
-          ref: test/dolphin-internal-engine-isolated-v3
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Snapshot source and verify isolation before compilation
+        run: |
+          set -euo pipefail
+          python3 packages/dolphin_internal_bridge/ci/build_support.py snapshot
+          python3 build-utils/check_dolphin_isolation_v2.py --base origin/main 2>&1 | tee build/dolphin-ci/isolation.txt
+          python3 -m unittest discover -s test -p 'dolphin_*test.py' -v 2>&1 | tee build/dolphin-ci/ipa-validator-tests.txt
+
+      - name: Upload auditable source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dolphin-v3-source-${{ github.run_id }}
+          path: build/dolphin-ci/source-review.zip
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
 
-      - name: Set up Flutter stable
+      - name: Set up pinned Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.2'
           channel: stable
           cache: true
 
-      - name: Materialize isolated-v3 source once
-        id: materialize
-        shell: bash
+      - name: Record toolchain and install pinned Ruby dependency
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = 'test/dolphin-internal-engine-isolated-v3'
-
-          required_paths=(
-            packages/dolphin_internal_bridge
-            packages/dolphin_jit_helper
-            native/dolphin_internal_helper
-            build-utils/patch_dolphin_internal_core_v2.py
-            build-utils/configure_dolphin_ios_v2.py
-            build-utils/check_dolphin_isolation_v2.py
-            build-utils/materialize_dolphin_isolated_v2.py
-            build-utils/Gemfile.dolphin
-            lib/services/dolphin_internal_v2_service.dart
-            lib/widgets/dolphin_internal_playlist_actions.dart
-          )
-          for item in "${required_paths[@]}"; do
-            test -e "$item" || { echo "Missing isolated-v3 source: $item" >&2; exit 1; }
-          done
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path: Path, old: str, new: str, label: str) -> None:
-              text = path.read_text(encoding='utf-8')
-              if new in text:
-                  return
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one anchor, found {count}')
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          materializer = Path('build-utils/materialize_dolphin_isolated_v2.py')
-          text = materializer.read_text(encoding='utf-8')
-          text = text.replace('isolated Dolphin v2 patch', 'isolated Dolphin v3 patch')
-          text = text.replace('Materialized isolated Dolphin v2 sources', 'Materialized isolated Dolphin v3 sources')
-          text = text.replace(r'r"version: \1+193"', r'r"version: \1+194"')
-          text = text.replace(
-              'anchor = "import \'package:neostation/services/game_service.dart\';\\n"',
-              'anchor = "import \'../../services/game_service.dart\';\\n"',
-          )
-          materializer.write_text(text, encoding='utf-8')
-
-          service = Path('lib/services/dolphin_internal_v2_service.dart')
-          text = service.read_text(encoding='utf-8')
-          text = text.replace(
-              "throw const FileSystemException('Copied image length mismatch');",
-              "throw FileSystemException('Copied image length mismatch');",
-          )
-          for old, new in {
-              "await output.delete().catchError((_) {});": "await _deleteIfExists(output);",
-              "await temporary.delete().catchError((_) {});": "await _deleteIfExists(temporary);",
-              "await target.delete().catchError((_) {});": "await _deleteIfExists(target);",
-              "await marker.delete().catchError((_) {});": "await _deleteIfExists(marker);",
-          }.items():
-              text = text.replace(old, new)
-          helper = (
-              "  static Future<void> _deleteIfExists(File file) async {\n"
-              "    try {\n"
-              "      if (await file.exists()) await file.delete();\n"
-              "    } catch (_) {\n"
-              "      // Best-effort cleanup never replaces the original diagnostic.\n"
-              "    }\n"
-              "  }\n\n"
-          )
-          anchor = '  static Future<File> _uniqueDestination(Directory directory, String name) async {\n'
-          if helper not in text:
-              if anchor not in text:
-                  raise SystemExit('Dolphin cleanup-helper anchor missing')
-              text = text.replace(anchor, helper + anchor, 1)
-          service.write_text(text, encoding='utf-8')
-
-          plugin = Path('packages/dolphin_internal_bridge/ios/Classes/DolphinInternalBridgePlugin.mm')
-          native = plugin.read_text(encoding='utf-8')
-          if '#import <stdio.h>' not in native:
-              if '#import <poll.h>\n' in native:
-                  native = native.replace('#import <poll.h>\n', '#import <poll.h>\n#import <stdio.h>\n', 1)
-              else:
-                  native = '#import <stdio.h>\n' + native
-          native = native.replace(
-              'NSData* pairingData = [NSData dataWithContentsOfFile:pairingPath options:0 error:nil];',
-              'NSData* pairingData = [[NSData alloc] initWithContentsOfFile:pairingPath '
-              'options:NSDataReadingMappedIfSafe error:nil];',
-          )
-          plugin.write_text(native, encoding='utf-8')
-
-          config = Path('build-utils/configure_dolphin_ios_v2.py')
-          cfg = config.read_text(encoding='utf-8')
-          if 'import os\n' not in cfg:
-              cfg = cfg.replace('import plistlib\n', 'import os\nimport plistlib\n', 1)
-          cfg = cfg.replace("settings['CURRENT_PROJECT_VERSION'] = '193'", "settings['CURRENT_PROJECT_VERSION'] = '194'")
-          old_target = """helper = project.targets.find { |target| target.name == 'DolphinJITHelper' }
-          if helper.nil?
-            helper = project.new_target(:app_extension, 'DolphinJITHelper', :ios, '17.4')
-          end
-          """
-          new_target = """helper_candidates = project.targets.select { |target| target.name == 'DolphinJITHelper' }
-          if helper_candidates.length > 1
-            discovered = helper_candidates.map { |target| "#{target.name}:#{target.product_type}" }.join(', ')
-            raise "Multiple DolphinJITHelper targets found: #{discovered}"
-          end
-          helper = helper_candidates.first
-          if helper.nil?
-            helper = project.new_target(:app_extension, 'DolphinJITHelper', :ios, '17.4')
-          end
-          expected_type = 'com.apple.product-type.app-extension'
-          unless helper.product_type == expected_type
-            raise "DolphinJITHelper has unexpected product type #{helper.product_type.inspect}; expected #{expected_type}"
-          end
-          if helper.product_reference.nil?
-            raise 'DolphinJITHelper has no product reference'
-          end
-          helper.product_reference.path = 'DolphinJITHelper.appex'
-
-          framework_phases = helper.build_phases.select do |phase|
-            phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase)
-          end
-          if framework_phases.length > 1
-            raise "DolphinJITHelper has #{framework_phases.length} PBXFrameworksBuildPhase objects"
-          end
-          frameworks_phase = framework_phases.first
-          if frameworks_phase.nil?
-            frameworks_phase = project.new(
-              Xcodeproj::Project::Object::PBXFrameworksBuildPhase
-            )
-            helper.build_phases << frameworks_phase
-          end
-
-          spec = Gem.loaded_specs['xcodeproj']
-          puts "xcodeproj.version=#{Xcodeproj::VERSION}"
-          puts "xcodeproj.path=#{spec&.full_gem_path}"
-          puts "helper.class=#{helper.class.name}"
-          puts "helper.name=#{helper.name}"
-          puts "helper.product_type=#{helper.product_type}"
-          puts "helper.product_reference=#{helper.product_reference.path}"
-          puts "helper.build_phases=#{helper.build_phases.map { |phase| phase.class.name }.join(',')}"
-          puts "helper.respond_to.frameworks_build_phase=#{helper.respond_to?(:frameworks_build_phase)}"
-          puts "helper.respond_to.frameworks_build_phases=#{helper.respond_to?(:frameworks_build_phases)}"
-          puts "helper.framework_phase=#{frameworks_phase.uuid}"
-          """
-          if old_target in cfg:
-              cfg = cfg.replace(old_target, new_target, 1)
-          elif 'helper.respond_to.frameworks_build_phase' not in cfg:
-              raise SystemExit('configure_dolphin_ios_v2.py target-selection anchor missing')
-
-          old_run = """        subprocess.run(
-                      [\"ruby\", str(script), str(IOS / \"Runner.xcodeproj\")],
-                      cwd=ROOT,
-                      check=True,
-                  )
-          """
-          new_run = """        env = os.environ.copy()
-                  gemfile = Path(
-                      env.get(
-                          \"BUNDLE_GEMFILE\",
-                          str(ROOT / \"build-utils/Gemfile.dolphin\"),
-                      )
-                  )
-                  command = [\"ruby\", str(script), str(IOS / \"Runner.xcodeproj\")]
-                  if gemfile.is_file():
-                      env[\"BUNDLE_GEMFILE\"] = str(gemfile)
-                      command = [
-                          \"bundle\",
-                          \"exec\",
-                          \"ruby\",
-                          str(script),
-                          str(IOS / \"Runner.xcodeproj\"),
-                      ]
-                  subprocess.run(command, cwd=ROOT, check=True, env=env)
-          """
-          if old_run in cfg:
-              cfg = cfg.replace(old_run, new_run, 1)
-          elif 'BUNDLE_GEMFILE' not in cfg:
-              raise SystemExit('configure_dolphin_ios_v2.py Ruby invocation anchor missing')
-          config.write_text(cfg, encoding='utf-8')
-
-          guard = Path('build-utils/check_dolphin_isolation_v2.py')
-          guard_text = guard.read_text(encoding='utf-8')
-          allowed_anchor = '    ".github/workflows/dolphin-internal-isolated-v2.yml",\n'
-          allowed_addition = (
-              allowed_anchor
-              + '    ".github/workflows/dolphin-internal-isolated-v3.yml",\n'
-              + '    "build-utils/Gemfile.dolphin",\n'
-          )
-          if '".github/workflows/dolphin-internal-isolated-v3.yml"' not in guard_text:
-              if allowed_anchor not in guard_text:
-                  raise SystemExit('Isolation guard workflow anchor missing')
-              guard_text = guard_text.replace(allowed_anchor, allowed_addition, 1)
-          guard.write_text(guard_text, encoding='utf-8')
-          PY
-
-          python3 build-utils/materialize_dolphin_isolated_v2.py
-          flutter pub get
-
-          rm -rf sitecustomize.py sitecustomize usercustomize.py usercustomize \
-            build-utils/sitecustomize.py build-utils/sitecustomize \
-            build-utils/usercustomize.py build-utils/usercustomize
-          find build-utils -maxdepth 1 -name '.dolphin-v2-*' -delete
-          find build-utils -maxdepth 1 -name 'dolphin_isolation_marker*.txt' -delete
-
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add -A
-            git commit -m 'feat(dolphin): materialize isolated-v3 runtime and Xcode safeguards'
-            git push origin HEAD:test/dolphin-internal-engine-isolated-v3
-            echo 'committed=true' >> "$GITHUB_OUTPUT"
-            echo 'Materialized isolated-v3 source committed; the push-triggered run will compile it.'
-          else
-            echo 'committed=false' >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Enforce non-regression boundaries
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main --depth=300
-          python3 build-utils/check_dolphin_isolation_v2.py --base origin/main
-
-      - name: Analyze and test all Dart integrations
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter analyze --no-fatal-infos
-          flutter test
-
-      - name: Scaffold iOS project
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -d ios ]; then
-            flutter create \
-              --platforms=ios \
-              --org com.neogamelab \
-              --project-name neostation \
-              .
-          fi
-          test -d ios/Runner.xcodeproj
-          test -f ios/Podfile
-
-      - name: Restore and inspect StikJIT 1.5.0
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ARCHIVE="$RUNNER_TEMP/StikJIT.xcframework.zip"
-          EXTRACT="$RUNNER_TEMP/stikjit-1.5.0"
-          rm -rf "$EXTRACT" "$ARCHIVE" \
-            packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework \
-            packages/dolphin_jit_helper/ios/Frameworks/StikJIT.xcframework
-          mkdir -p "$EXTRACT" \
-            packages/stikjit_bridge/ios/Frameworks \
-            packages/dolphin_jit_helper/ios/Frameworks
-          curl -fL --retry 4 --retry-delay 3 \
-            'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' \
-            -o "$ARCHIVE"
-          echo '444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85  '"$ARCHIVE" \
-            | shasum -a 256 -c -
-          unzip -q "$ARCHIVE" -d "$EXTRACT"
-          FOUND=$(find "$EXTRACT" -type d -name StikJIT.xcframework -print -quit)
-          test -n "$FOUND"
-          cp -R "$FOUND" packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework
-          cp -R "$FOUND" packages/dolphin_jit_helper/ios/Frameworks/StikJIT.xcframework
-
-          python3 - <<'PY'
-          import plistlib
-          from pathlib import Path
-          roots = (
-              Path('packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework'),
-              Path('packages/dolphin_jit_helper/ios/Frameworks/StikJIT.xcframework'),
-          )
-          for root in roots:
-              for interface in root.rglob('*.swiftinterface'):
-                  text = interface.read_text(encoding='utf-8')
-                  for name in ('DDIPaths', 'DeveloperDiskImageService', 'StikJITError'):
-                      text = text.replace(f'StikJIT.{name}', name)
-                  text = text.replace('StikJIT.StikJIT.', 'StikJIT.')
-                  interface.write_text(text, encoding='utf-8')
-              for framework in root.rglob('StikJIT.framework'):
-                  binary = framework / 'StikJIT'
-                  if not binary.is_file():
-                      continue
-                  info = framework / 'Info.plist'
-                  payload = {}
-                  if info.is_file():
-                      try:
-                          payload = plistlib.loads(info.read_bytes())
-                      except Exception:
-                          payload = {}
-                  payload.update({
-                      'CFBundleDevelopmentRegion': 'en',
-                      'CFBundleExecutable': 'StikJIT',
-                      'CFBundleIdentifier': 'com.stik.StikJIT',
-                      'CFBundleInfoDictionaryVersion': '6.0',
-                      'CFBundleName': 'StikJIT',
-                      'CFBundlePackageType': 'FMWK',
-                      'CFBundleShortVersionString': '1.5.0',
-                      'CFBundleVersion': '1',
-                      'CFBundleSupportedPlatforms': ['iPhoneOS'],
-                      'MinimumOSVersion': '17.4',
-                      'UIDeviceFamily': [1, 2],
-                  })
-                  info.write_bytes(plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False))
-          PY
-
-          STIK=packages/dolphin_jit_helper/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT
-          test -f "$STIK"
-          file "$STIK"
-          lipo -info "$STIK" | grep -q arm64
-          otool -L "$STIK" | tee stikjit-dependencies.txt
-
-      - name: Build pinned embedded Dolphin core
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
+          { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; flutter --version; ruby --version; command -v ruby; bundle --version; pod --version; } | tee build/dolphin-ci/toolchain.txt
+          bundle install
+          cp build-utils/Gemfile.dolphin.lock build/dolphin-ci/Gemfile.dolphin.lock
           command -v cmake >/dev/null || brew install cmake
           command -v ninja >/dev/null || brew install ninja
+          command -v ccache >/dev/null || brew install ccache
+          ccache --max-size=2G
 
-          DOLPHIN_ROOT="$RUNNER_TEMP/dolphin-ios"
-          rm -rf "$DOLPHIN_ROOT"
-          git clone --filter=blob:none --no-checkout \
-            https://github.com/OatmealDome/dolphin-ios.git "$DOLPHIN_ROOT"
-          git -C "$DOLPHIN_ROOT" checkout "$DOLPHIN_SHA"
-          git -C "$DOLPHIN_ROOT" submodule update --init --recursive --depth 1
-          test "$(git -C "$DOLPHIN_ROOT" rev-parse HEAD)" = "$DOLPHIN_SHA"
-
-          python3 build-utils/patch_dolphin_internal_core_v2.py "$DOLPHIN_ROOT"
-          grep -q 'brk #0x69' "$DOLPHIN_ROOT/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp"
-          ! grep -q 'brk #0xf00d' "$DOLPHIN_ROOT/Source/iOS/Library/NeoStationBridge.mm"
-
-          export PROJECT_DIR="$DOLPHIN_ROOT/Source/iOS/App"
-          export PLATFORM_NAME=iphoneos
-          export DOL_CORE_BUILD_TARGET=Release
-          export CONFIGURATION=Release
-          export IPHONEOS_DEPLOYMENT_TARGET=17.4
-          export ARCHS=arm64
-          export ONLY_ACTIVE_ARCH=NO
-          bash "$DOLPHIN_ROOT/Source/iOS/App/Project/Scripts/BuildCore.sh" \
-            2>&1 | tee "$GITHUB_WORKSPACE/dolphin-core-build.log"
-
-          DOLPHIN_BINARY=$(find "$DOLPHIN_ROOT" -type f -name 'libdolphin.dylib' -print -quit)
-          test -n "$DOLPHIN_BINARY"
-          lipo -info "$DOLPHIN_BINARY" | grep -q arm64
-
-          FRAMEWORK=packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework
-          rm -rf "$FRAMEWORK"
-          mkdir -p "$FRAMEWORK"
-          cp "$DOLPHIN_BINARY" "$FRAMEWORK/DolphinCore"
-          install_name_tool -id '@rpath/DolphinCore.framework/DolphinCore' "$FRAMEWORK/DolphinCore"
-          chmod +x "$FRAMEWORK/DolphinCore"
-          cat > "$FRAMEWORK/Info.plist" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleDevelopmentRegion</key><string>en</string>
-            <key>CFBundleExecutable</key><string>DolphinCore</string>
-            <key>CFBundleIdentifier</key><string>com.neogamelab.neostation.DolphinCore</string>
-            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-            <key>CFBundleName</key><string>DolphinCore</string>
-            <key>CFBundlePackageType</key><string>FMWK</string>
-            <key>CFBundleShortVersionString</key><string>1.0.0</string>
-            <key>CFBundleVersion</key><string>194</string>
-            <key>CFBundleSupportedPlatforms</key><array><string>iPhoneOS</string></array>
-            <key>MinimumOSVersion</key><string>17.4</string>
-          </dict></plist>
-          PLIST
-          plutil -lint "$FRAMEWORK/Info.plist"
-          nm -gU "$FRAMEWORK/DolphinCore" | grep -q '_neostation_dolphin_initialize'
-          nm -gU "$FRAMEWORK/DolphinCore" | grep -q '_neostation_dolphin_prepare_legacy_jit'
-          nm -gU "$FRAMEWORK/DolphinCore" | grep -q '_neostation_dolphin_launch'
-          nm -gU "$FRAMEWORK/DolphinCore" | grep -q '_neostation_dolphin_stop'
-          otool -L "$FRAMEWORK/DolphinCore" | tee dolphin-core-dependencies.txt
-
-          rm -rf ios/Runner/Sys
-          cp -R "$DOLPHIN_ROOT/Data/Sys" ios/Runner/Sys
-          test -d ios/Runner/Sys/GC
-          echo "$DOLPHIN_SHA" > dolphin-core-revision.txt
-
-      - name: Configure and idempotence-test the Xcode project
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ruby -v
-          command -v ruby
-          bundle -v
-          cp build-utils/Gemfile.dolphin "$RUNNER_TEMP/Gemfile.dolphin"
-          export BUNDLE_GEMFILE="$RUNNER_TEMP/Gemfile.dolphin"
-          bundle config set --local path "$RUNNER_TEMP/vendor/bundle"
-          bundle install --jobs 4 --retry 3
-          bundle exec ruby -rxcodeproj -e '
-            spec = Gem.loaded_specs.fetch("xcodeproj")
-            puts "xcodeproj.version=#{Xcodeproj::VERSION}"
-            puts "xcodeproj.path=#{spec.full_gem_path}"
-          ' | tee xcodeproj-version.txt
-
-          python3 -m py_compile build-utils/configure_dolphin_ios_v2.py
-          python3 build-utils/configure_dolphin_ios_v2.py | tee xcodeproj-configure-first.txt
-          FIRST=$(shasum -a 256 ios/Runner.xcodeproj/project.pbxproj | awk '{print $1}')
-          python3 build-utils/configure_dolphin_ios_v2.py | tee xcodeproj-configure-second.txt
-          SECOND=$(shasum -a 256 ios/Runner.xcodeproj/project.pbxproj | awk '{print $1}')
-          test "$FIRST" = "$SECOND"
-          echo "xcodeproj.idempotent.sha256=$SECOND" | tee xcodeproj-idempotence.txt
-
-          bundle exec ruby -rxcodeproj -e '
-            project = Xcodeproj::Project.open("ios/Runner.xcodeproj")
-            targets = project.targets.select { |target| target.name == "DolphinJITHelper" }
-            raise "Expected one DolphinJITHelper target, found #{targets.length}" unless targets.length == 1
-            helper = targets.first
-            phases = helper.build_phases.select { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
-            raise "Expected one Frameworks phase, found #{phases.length}" unless phases.length == 1
-            raise "Unexpected product type #{helper.product_type}" unless helper.product_type == "com.apple.product-type.app-extension"
-            raise "Unexpected product #{helper.product_reference&.path}" unless helper.product_reference&.path == "DolphinJITHelper.appex"
-            bundle_ids = helper.build_configurations.map { |cfg| cfg.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] }.uniq
-            raise "Unexpected helper bundle IDs #{bundle_ids.inspect}" unless bundle_ids == ["com.neogamelab.neostation.dolphinjithelper"]
-            puts "helper.target=#{helper.name}"
-            puts "helper.product_type=#{helper.product_type}"
-            puts "helper.framework_phase_count=#{phases.length}"
-            puts "helper.framework_reference_count=#{phases.first.files_references.length}"
-            puts "helper.respond_to.frameworks_build_phase=#{helper.respond_to?(:frameworks_build_phase)}"
-            puts "helper.respond_to.frameworks_build_phases=#{helper.respond_to?(:frameworks_build_phases)}"
-          ' | tee xcodeproj-helper-audit.txt
-
-          xcodebuild -list -project ios/Runner.xcodeproj | tee xcodebuild-list.txt
-          grep -q 'DolphinJITHelper' xcodebuild-list.txt
-          grep -q "target 'DolphinJITHelper'" ios/Podfile
-          ! grep -RniE 'dolphinios://|dolphin-emu://|shortcuts://.*dolphin' \
-            lib packages/dolphin_internal_bridge native/dolphin_internal_helper ios
-
-      - name: Install CocoaPods dependencies
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd ios
-          pod install --repo-update 2>&1 | tee ../pod-install-dolphin.log
-
-      - name: Audit helper linkage and preserved emulator routes
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export BUNDLE_GEMFILE="$RUNNER_TEMP/Gemfile.dolphin"
-          python3 build-utils/check_dolphin_isolation_v2.py --base origin/main
-          grep -q 'stikjit_bridge' ios/Podfile.lock
-          grep -q 'dolphin_internal_bridge' ios/Podfile.lock
-          grep -q 'dolphin_jit_helper' ios/Podfile.lock
-          grep -R -q 'StikJIT.xcframework' "ios/Pods/Target Support Files/Pods-DolphinJITHelper"
-
-          bundle exec ruby -rxcodeproj -e '
-            project = Xcodeproj::Project.open("ios/Runner.xcodeproj")
-            helper = project.targets.select { |target| target.name == "DolphinJITHelper" }.then { |items| raise("helper count #{items.length}") unless items.length == 1; items.first }
-            phases = helper.build_phases.select { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
-            raise "framework phase count #{phases.length}" unless phases.length == 1
-            refs = phases.first.files_references.compact.map { |ref| ref.path.to_s }
-            pod_refs = refs.count { |path| path.include?("Pods_DolphinJITHelper") }
-            raise "Expected one Pods_DolphinJITHelper reference, found #{pod_refs}: #{refs.inspect}" unless pod_refs == 1
-            puts "helper.frameworks=#{refs.join(",")}"
-            puts "helper.stikjit_direct_refs=#{refs.count { |path| path.include?("StikJIT") }}"
-          ' | tee xcodeproj-post-pod-audit.txt
-
-          for scheme in retroarch shortcuts armsx2 melonx; do
-            /usr/libexec/PlistBuddy -c 'Print :LSApplicationQueriesSchemes' ios/Runner/Info.plist \
-              | grep -q "$scheme"
-          done
-          ! /usr/libexec/PlistBuddy -c 'Print :LSApplicationQueriesSchemes' ios/Runner/Info.plist \
-            | grep -Ei 'dolphin|dolphinios|dolphin-emu'
-
-      - name: Prepare build-time defines
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
+      - name: Prepare existing emulator build definitions
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json, os
           from pathlib import Path
-          values = {
-              'SCREENSCRAPER_DEV_ID': os.environ.get('SCREENSCRAPER_DEV_ID', ''),
-              'SCREENSCRAPER_DEV_PASSWORD': os.environ.get('SCREENSCRAPER_DEV_PASSWORD', ''),
+          required = ('SCREENSCRAPER_DEV_ID', 'SCREENSCRAPER_DEV_PASSWORD')
+          values = {key: os.environ.get(key, '').strip() for key in required}
+          missing = [key for key, value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing build secrets: ' + ', '.join(missing))
+          values.update({
               'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX': 'true',
               'NEOSTATION_MELONX_BUNDLE_ID': 'com.nur.nx',
               'NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2': 'true',
-              'NEOSTATION_ARMSX2_BUNDLE_ID': 'com.xitrix.ARMSX2',
+              'NEOSTATION_ARMSX2_BUNDLE_ID': 'xyz.aethersx2.AetherSX2',
               'NEOSTATION_EXPERIMENTAL_STIKJIT_RPCS3': 'true',
               'NEOSTATION_RPCS3_BUNDLE_ID': 'com.xitrix.RPCS3',
-          }
-          Path('.dart-defines.json').write_text(json.dumps(values), encoding='utf-8')
+          })
+          Path('.dart-defines.json').write_text(json.dumps(values))
           PY
 
-      - name: Build unsigned arm64 iOS application
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
+      - name: Restore verified StikJIT 1.5.0
         run: |
           set -euo pipefail
-          flutter build ios \
-            --release \
-            --no-codesign \
-            --config-only \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define-from-file=.dart-defines.json
+          curl -fL --retry 3 --retry-delay 2 'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' -o "$RUNNER_TEMP/StikJIT.xcframework.zip"
+          python3 packages/dolphin_internal_bridge/ci/build_support.py stik "$RUNNER_TEMP/StikJIT.xcframework.zip"
 
-          rm -rf build/ios/DolphinDerivedData build/ios/dolphin-unsigned
-          mkdir -p build/ios
-          xcodebuild \
-            -workspace ios/Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
+      - name: Analyze and test every existing integration
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos 2>&1 | tee build/dolphin-ci/flutter-analyze.txt
+          flutter test --no-pub 2>&1 | tee build/dolphin-ci/flutter-tests.txt
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Generate iOS host without modifying application sources
+        run: |
+          set -euo pipefail
+          flutter config --no-enable-swift-package-manager
+          python3 packages/dolphin_internal_bridge/ci/build_support.py scaffold
+
+      - name: Restore exact pinned Dolphin build product
+        id: core-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: dolphin-v3-ios-arm64-xcode16.4-7cac5416-${{ hashFiles('build-utils/patch_dolphin_internal_core_v2.py') }}
+          path: |
+            ${{ runner.temp }}/dolphin-ios/build-iphoneos-Release/Source/iOS/Library/libdolphin.dylib
+            ${{ runner.temp }}/dolphin-ios/Data/Sys
+            ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/NeoStationBridge.mm
+            ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/CMakeLists.txt
+            ${{ runner.temp }}/dolphin-ios/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp
+
+      - name: Restore compiler cache
+        if: steps.core-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          key: dolphin-v3-ccache-xcode16.4-${{ github.run_id }}
+          restore-keys: dolphin-v3-ccache-xcode16.4-
+          path: .dolphin-ccache
+
+      - name: Compile pinned real Dolphin arm64 core
+        id: compile-core
+        if: steps.core-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/dolphin-ios"
+          rm -rf "$SRC"
+          git init "$SRC"
+          git -C "$SRC" remote add origin https://github.com/OatmealDome/dolphin-ios.git
+          git -C "$SRC" fetch --depth 1 origin "$DOLPHIN_SHA"
+          git -C "$SRC" checkout --detach FETCH_HEAD
+          git -C "$SRC" submodule update --init --recursive --depth 1
+          test "$(git -C "$SRC" rev-parse HEAD)" = "$DOLPHIN_SHA"
+          python3 build-utils/patch_dolphin_internal_core_v2.py "$SRC"
+          cmake -S "$SRC" -B "$SRC/build-iphoneos-Release" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$SRC/Externals/ios-cmake/ios.toolchain.cmake" \
+            -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=17.4 -DENABLE_VISIBILITY=ON \
+            -DENABLE_BITCODE=OFF -DENABLE_ARC=ON -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS=-fPIC -DIOS=ON -DENABLE_ANALYTICS=NO \
+            -DUSE_SYSTEM_LIBS=OFF -DENABLE_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache \
+            2>&1 | tee build/dolphin-ci/dolphin-configure.txt
+          cmake --build "$SRC/build-iphoneos-Release" --target dolphin --parallel 3 \
+            2>&1 | tee build/dolphin-ci/dolphin-core-build.txt
+          ccache --show-stats | tee build/dolphin-ci/ccache.txt
+
+      - name: Validate core ABI and prepare embedded framework
+        id: framework
+        run: |
+          set -euo pipefail
+          python3 packages/dolphin_internal_bridge/ci/build_support.py framework "$RUNNER_TEMP/dolphin-ios"
+
+      - name: Save verified pinned core for native build retries
+        if: steps.core-cache.outputs.cache-hit != 'true' && steps.framework.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          key: dolphin-v3-ios-arm64-xcode16.4-7cac5416-${{ hashFiles('build-utils/patch_dolphin_internal_core_v2.py') }}
+          path: |
+            ${{ runner.temp }}/dolphin-ios/build-iphoneos-Release/Source/iOS/Library/libdolphin.dylib
+            ${{ runner.temp }}/dolphin-ios/Data/Sys
+            ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/NeoStationBridge.mm
+            ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/CMakeLists.txt
+            ${{ runner.temp }}/dolphin-ios/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp
+
+      - name: Configure Flutter release and test helper idempotence
+        run: |
+          set -euo pipefail
+          flutter build ios --release --no-codesign --config-only --no-pub \
+            --build-number="$BUILD_NUMBER" --dart-define-from-file=.dart-defines.json \
+            2>&1 | tee build/dolphin-ci/flutter-configure.txt
+          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          dart run flutter_launcher_icons
+          bash build-utils/force_ios_fork_icon.sh
+          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios \
+            2>&1 | tee build/dolphin-ci/pod-install.txt
+          xcodebuild -list -workspace ios/Runner.xcworkspace 2>&1 | tee build/dolphin-ci/xcode-schemes.txt
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Compile NeoStation and Dolphin helper without signing
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath build/ios/DolphinDerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY='' \
-            DEVELOPMENT_TEAM='' \
-            PROVISIONING_PROFILE_SPECIFIER='' \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            build 2>&1 | tee build/ios/xcodebuild-dolphin.log
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+            COMPILER_INDEX_STORE_ENABLE=NO build \
+            2>&1 | tee build/dolphin-ci/xcodebuild.txt
 
-      - name: Package and structurally validate unsigned IPA
-        if: steps.materialize.outputs.committed != 'true'
-        shell: bash
+      - name: Audit actual Mach-O linkage and package the IPA
         run: |
           set -euo pipefail
-          PRODUCTS=build/ios/DolphinDerivedData/Build/Products/Release-iphoneos
-          mapfile -t APPS < <(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print)
-          test "${#APPS[@]}" -eq 1
-          APP="${APPS[0]}"
-          MAIN_EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
-          APP_BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
-          test -x "$APP/$MAIN_EXEC"
-          lipo -info "$APP/$MAIN_EXEC" | grep -q arm64
+          python3 build-utils/check_dolphin_isolation_v2.py --base origin/main
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package
 
-          test -f "$APP/Frameworks/DolphinCore.framework/DolphinCore"
-          lipo -info "$APP/Frameworks/DolphinCore.framework/DolphinCore" | grep -q arm64
-          test -d "$APP/Sys/GC"
-          nm -gU "$APP/Frameworks/DolphinCore.framework/DolphinCore" | grep -q '_neostation_dolphin_initialize'
-          nm -gU "$APP/Frameworks/DolphinCore.framework/DolphinCore" | grep -q '_neostation_dolphin_prepare_legacy_jit'
-          nm -gU "$APP/Frameworks/DolphinCore.framework/DolphinCore" | grep -q '_neostation_dolphin_launch'
-          nm -gU "$APP/Frameworks/DolphinCore.framework/DolphinCore" | grep -q '_neostation_dolphin_stop'
-
-          mapfile -t HELPERS < <(find "$APP" -type d -name 'DolphinJITHelper.appex' -print)
-          test "${#HELPERS[@]}" -eq 1
-          HELPER="${HELPERS[0]}"
-          HELPER_EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$HELPER/Info.plist")
-          HELPER_BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$HELPER/Info.plist")
-          test -x "$HELPER/$HELPER_EXEC"
-          lipo -info "$HELPER/$HELPER_EXEC" | grep -q arm64
-          plutil -lint "$HELPER/Info.plist"
-          test "$HELPER_BUNDLE" = 'com.neogamelab.neostation.dolphinjithelper'
-          test "$APP_BUNDLE" = 'com.neogamelab.neostation'
-
-          mapfile -t STIKS < <(find "$APP" -type d -name 'StikJIT.framework' -print)
-          test "${#STIKS[@]}" -eq 1
-          STIK="${STIKS[0]}/StikJIT"
-          test -f "$STIK"
-          lipo -info "$STIK" | grep -q arm64
-          otool -L "$HELPER/$HELPER_EXEC" | tee helper-dependencies.txt
-          otool -L "$HELPER/$HELPER_EXEC" | grep -q 'StikJIT.framework/StikJIT'
-          otool -L "$STIK" | tee packaged-stikjit-dependencies.txt
-          otool -L "$APP/Frameworks/DolphinCore.framework/DolphinCore" | tee packaged-dolphin-dependencies.txt
-
-          LINKED_DOLPHIN=$(find "$APP" -type f -perm -111 -print0 \
-            | xargs -0 -I{} sh -c 'otool -L "$1" 2>/dev/null | grep -q "DolphinCore.framework/DolphinCore" && echo "$1"' sh {} \
-            | head -1)
-          test -n "$LINKED_DOLPHIN"
-          echo "DolphinCore linked by: $LINKED_DOLPHIN"
-
-          test -z "$(find "$APP" -mindepth 2 -type d -name 'DolphiniOS.app' -print -quit)"
-          test -z "$(find "$APP" -mindepth 2 -type d -name '*.app' -print -quit)"
-          ! grep -R -a -n -E 'dolphinios://|dolphin-emu://|shortcuts://[^[:space:]]*dolphin|universal\.js' "$APP"
-
-          mkdir -p build/ios/dolphin-unsigned/Payload
-          cp -R "$APP" build/ios/dolphin-unsigned/Payload/NeoStation.app
-          test "$(find build/ios/dolphin-unsigned/Payload -maxdepth 1 -type d -name '*.app' | wc -l | tr -d ' ')" -eq 1
-          (
-            cd build/ios/dolphin-unsigned
-            /usr/bin/zip -qry "$GITHUB_WORKSPACE/${IPA_NAME}.ipa" Payload
-          )
-          test -s "${IPA_NAME}.ipa"
-          unzip -t "${IPA_NAME}.ipa" >/dev/null
-          unzip -l "${IPA_NAME}.ipa" | grep -Eq 'Payload/NeoStation\.app/'
-          test "$(unzip -l "${IPA_NAME}.ipa" | awk '$4 ~ /^Payload\/[^/]+\.app\/$/ {count++} END {print count+0}')" -eq 1
-          shasum -a 256 "${IPA_NAME}.ipa" > "${IPA_NAME}.sha256"
-          stat -f '%z' "${IPA_NAME}.ipa" > "${IPA_NAME}.size"
-
-          python3 - <<'PY'
-          import hashlib, json, os, zipfile
-          from pathlib import Path
-          ipa = Path(os.environ['IPA_NAME'] + '.ipa')
-          with zipfile.ZipFile(ipa) as archive:
-              bad = archive.testzip()
-              if bad:
-                  raise SystemExit(f'Corrupt IPA member: {bad}')
-              names = archive.namelist()
-          report = {
-              'branch': 'test/dolphin-internal-engine-isolated-v3',
-              'commit': os.environ['GITHUB_SHA'],
-              'buildNumber': 194,
-              'dolphinRevision': os.environ['DOLPHIN_SHA'],
-              'xcodeprojVersion': Path('xcodeproj-version.txt').read_text().strip(),
-              'stikJITVersion': '1.5.0',
-              'dolphinScript': 'legacy',
-              'routes': {'gc': 'dolphin_internal', 'wii': 'dolphin_internal'},
-              'otherEmulators': 'routes, URL schemes, playlists and shared StikJIT sources protected by CI',
-              'deviceLaunchValidated': False,
-              'deviceValidationNote': 'No physical iOS device is attached to GitHub Actions.',
-              'signatureState': 'unsigned; must be signed by the sideload signing system before installation',
-              'ipa': ipa.name,
-              'bytes': ipa.stat().st_size,
-              'sha256': hashlib.sha256(ipa.read_bytes()).hexdigest(),
-              'zipMembers': len(names),
-          }
-          Path('dolphin-build-report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
-          PY
-
-      - name: Upload verified unsigned IPA
-        if: steps.materialize.outputs.committed != 'true'
+      - name: Upload unsigned IPA for sideload signing
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-Dolphin-Internal-Isolated-v3-Build-194
-          retention-days: 30
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
           if-no-files-found: error
-          path: |
-            NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.ipa
-            NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.sha256
-            NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-194.size
-            dolphin-build-report.json
-            dolphin-core-revision.txt
-            xcodeproj-version.txt
-            xcodeproj-idempotence.txt
-            xcodeproj-helper-audit.txt
-            xcodeproj-post-pod-audit.txt
-            helper-dependencies.txt
-            packaged-stikjit-dependencies.txt
-            packaged-dolphin-dependencies.txt
+          retention-days: 14
 
-      - name: Upload build diagnostics on failure
-        if: steps.materialize.outputs.committed != 'true' && failure()
+      - name: Save incremental compiler cache
+        if: always() && steps.compile-core.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          key: dolphin-v3-ccache-xcode16.4-${{ github.run_id }}
+          path: .dolphin-ccache
+
+      - name: Upload compilation diagnostics without secrets
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NeoStation-Dolphin-Internal-Isolated-v3-Build-194-Diagnostics
-          retention-days: 30
+          name: ${{ env.ARTIFACT_NAME }}-Diagnostics
+          path: build/dolphin-ci/
           if-no-files-found: warn
-          path: |
-            dolphin-core-build.log
-            pod-install-dolphin.log
-            build/ios/xcodebuild-dolphin.log
-            xcodeproj-version.txt
-            xcodeproj-configure-first.txt
-            xcodeproj-configure-second.txt
-            xcodeproj-helper-audit.txt
-            xcodeproj-post-pod-audit.txt
-            xcodebuild-list.txt
-            stikjit-dependencies.txt
-            dolphin-core-dependencies.txt
+          retention-days: 14
