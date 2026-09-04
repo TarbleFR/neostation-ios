@@ -47,6 +47,17 @@ def source_snapshot() -> None:
     (LOGS / 'source-commit.txt').write_text(sha + '\n')
 
 
+def generate_plugin_registrant(ios: Path) -> None:
+    # Dependency resolution ran before the iOS scaffold existed. Let Flutter
+    # generate the real registrant from NeoStation's locked plugin graph now;
+    # --config-only --no-pub alone does not create these native source files.
+    run('flutter', 'pub', 'get', '--enforce-lockfile')
+    for name in ('GeneratedPluginRegistrant.h', 'GeneratedPluginRegistrant.m'):
+        path = ios / 'Runner' / name
+        demand(path.is_file() and path.stat().st_size > 0,
+               f'Flutter did not generate the native plugin registrant: {path}')
+
+
 def scaffold() -> None:
     # Never run flutter create in the source tree: it rewrites pubspec.lock and
     # creates a counter-app widget test unrelated to NeoStation.
@@ -94,6 +105,7 @@ end
     info = plist(info_path)
     info['CFBundleDisplayName'] = 'NeoStation iOS'
     write_plist(info_path, info)
+    generate_plugin_registrant(ios)
     run('git', 'diff', '--exit-code', '--', 'pubspec.yaml', 'pubspec.lock')
 
 
