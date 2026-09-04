@@ -1,0 +1,21 @@
+name: dolphin_internal_bridge
+resolution: workspace
+description: Isolated in-process Dolphin Core bridge for NeoStation iOS GameCube and Wii routes.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.9.2'
+  flutter: '>=3.35.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  stikjit_bridge:
+    path: ../stikjit_bridge
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: DolphinInternalBridgePlugin
