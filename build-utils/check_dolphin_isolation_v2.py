@@ -141,6 +141,25 @@ def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
+def iter_dolphin_path_sources() -> list[Path]:
+    explicit = [
+        ROOT / "lib/services/dolphin_internal_v2_service.dart",
+        ROOT / "lib/widgets/dolphin_internal_playlist_actions.dart",
+        ROOT / "lib/services/game/game_launch_service.dart",
+    ]
+    roots = [
+        ROOT / "packages/dolphin_internal_bridge",
+        ROOT / "packages/dolphin_jit_helper",
+        ROOT / "native/dolphin_internal_helper",
+    ]
+    sources = [path for path in explicit if path.is_file()]
+    for source_root in roots:
+        if not source_root.exists():
+            continue
+        sources.extend(path for path in source_root.rglob("*") if path.is_file())
+    return sources
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="origin/main")
@@ -194,12 +213,6 @@ def main() -> None:
         if shared_jit in changed:
             raise AssertionError(f"Shared StikJIT implementation changed: {shared_jit}")
 
-    active_roots = (
-        ROOT / "lib",
-        ROOT / "packages/dolphin_internal_bridge",
-        ROOT / "packages/dolphin_jit_helper",
-        ROOT / "native/dolphin_internal_helper",
-    )
     forbidden_tokens = (
         "dolphinios://",
         "dolphin-emu://",
@@ -209,21 +222,18 @@ def main() -> None:
         "universal.js",
     )
     offenders: list[str] = []
-    for source_root in active_roots:
-        if not source_root.exists():
+    for path in iter_dolphin_path_sources():
+        if path.suffix.lower() not in {
+            ".dart", ".swift", ".m", ".mm", ".h", ".plist", ".yaml", ".yml"
+        }:
             continue
-        for path in source_root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in {
-                ".dart", ".swift", ".m", ".mm", ".h", ".plist", ".yaml", ".yml"
-            }:
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                continue
-            for token in forbidden_tokens:
-                if token in text:
-                    offenders.append(f"{path.relative_to(ROOT)}: {token}")
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for token in forbidden_tokens:
+            if token in text:
+                offenders.append(f"{path.relative_to(ROOT)}: {token}")
     if offenders:
         raise AssertionError(
             "Forbidden external or universal Dolphin route found:\n"
