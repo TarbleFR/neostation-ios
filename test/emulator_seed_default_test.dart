@@ -136,10 +136,13 @@ void main() {
     final offenders = <String>[];
 
     for (final system in systems) {
-      // PS2 deliberately uses ARMSX2 on iOS. Its RetroArch definitions apply
-      // only to Android/desktop and therefore must not force an unsupported
-      // generic RetroArch entry into the iOS seed.
-      if (system.name == 'ps2.json') continue;
+      // PS2 deliberately uses ARMSX2 on iOS. GameCube and Wii deliberately use
+      // NeoStation's embedded Dolphin engine on this isolated branch. Their
+      // RetroArch/Dolphin definitions remain valid for Android and desktop,
+      // but none of the three systems should seed a generic iOS RetroArch app.
+      if (const {'ps2.json', 'gc.json', 'wii.json'}.contains(system.name)) {
+        continue;
+      }
 
       final hasRetroArchDefinition = system.emulators.any((e) {
         final uid = e.uniqueId.toLowerCase();
