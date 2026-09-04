@@ -75,6 +75,7 @@ def configure_podfile() -> None:
     block = """
 # NeoStation-owned helper used only for Dolphin's legacy BRK #0x69 handshake.
 target 'DolphinJITHelper' do
+  use_frameworks!
   use_modular_headers!
   pod 'dolphin_jit_helper', :path => '../packages/dolphin_jit_helper/ios'
 end
@@ -83,6 +84,17 @@ end
     if "target 'DolphinJITHelper' do" not in text:
         anchor = 'post_install do |installer|'
         text = text.replace(anchor, block + anchor, 1) if anchor in text else text + '\n' + block
+    else:
+        # Only repair the dedicated helper stanza; never change Runner or the
+        # linkage mode used by another existing emulator target.
+        pattern = r"(?ms)^target 'DolphinJITHelper' do\n.*?^end$"
+        matches = list(re.finditer(pattern, text))
+        if len(matches) != 1:
+            raise SystemExit('Expected exactly one DolphinJITHelper Podfile stanza')
+        current = matches[0].group(0)
+        if 'use_frameworks!' not in current:
+            repaired = current.replace("target 'DolphinJITHelper' do\n", "target 'DolphinJITHelper' do\n  use_frameworks!\n", 1)
+            text = text[:matches[0].start()] + repaired + text[matches[0].end():]
     path.write_text(text, encoding='utf-8')
 
 
