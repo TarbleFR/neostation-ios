@@ -113,10 +113,10 @@ entitlements_ref ||= runner_group.new_file('Runner.entitlements')
 
 helper = project.targets.find { |target| target.name == 'DolphinJITHelper' }
 unless helper
+  # xcodeproj 1.28 cannot model ExtensionKit's product identifier directly.
+  # Create a conventional app-extension target, save the project, then rewrite
+  # only its on-disk product metadata to ExtensionKit below.
   helper = project.new_target(:app_extension, 'DolphinJITHelper', :ios, '26.0')
-  # xcodeproj 1.28.1 expects the raw product-type identifier as a String.
-  helper.product_type = 'com.apple.product-type.extensionkit-extension'
-  helper.product_reference.explicit_file_type = 'wrapper.extensionkit-extension'
   helper.product_reference.path = 'DolphinJITHelper.appex'
 end
 
@@ -139,8 +139,6 @@ unless helper.frameworks_build_phase.files_references.include?(stik_ref)
   helper.frameworks_build_phase.add_file_reference(stik_ref, true)
 end
 
-# Runner must build the helper product even though it is copied to Extensions/
-# after the unsigned app is produced.
 unless runner.dependencies.any? { |dependency| dependency.target == helper }
   runner.add_dependency(helper)
 end
@@ -181,4 +179,17 @@ project.build_configurations.each do |configuration|
 end
 
 project.save
+
+pbxproj_path = File.join(project_path, 'project.pbxproj')
+pbxproj = File.read(pbxproj_path)
+app_extension_type = 'productType = "com.apple.product-type.app-extension";'
+extensionkit_type = 'productType = "com.apple.product-type.extensionkit-extension";'
+abort 'Generated helper app-extension product type was not found' unless pbxproj.include?(app_extension_type)
+pbxproj = pbxproj.sub(app_extension_type, extensionkit_type)
+pbxproj = pbxproj.sub(
+  'explicitFileType = "wrapper.app-extension";',
+  'explicitFileType = "wrapper.extensionkit-extension";'
+)
+File.write(pbxproj_path, pbxproj)
+
 puts 'Configured Runner + DolphinJITHelper ExtensionFoundation targets.'
