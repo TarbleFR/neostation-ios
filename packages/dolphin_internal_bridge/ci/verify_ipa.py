@@ -100,7 +100,10 @@ def macho(data: bytes) -> dict:
             if kind & 0xE0 or not kind & 1 or stringidx == 0:
                 continue
             demand(stringidx < strsize, 'Symbol string offset out of range')
-            name = data[stroff + stringidx:stroff + strsize].split(b'\0', 1)[0].decode('utf-8', errors='replace')
+            start = stroff + stringidx
+            end = data.find(b'\0', start, stroff + strsize)
+            demand(end >= start, 'Unterminated Mach-O symbol name')
+            name = data[start:end].decode('utf-8', errors='replace')
             out['undefinedSymbols' if kind & 0x0E == 0 else 'definedSymbols'].append(name)
     return out
 
@@ -142,7 +145,8 @@ def validate(ipa: Path) -> dict:
         for name in names:
             if name.endswith('/'):
                 continue
-            magic = z.open(name).read(4)
+            with z.open(name) as entry:
+                magic = entry.read(4)
             if magic in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf'):
                 image = macho(z.read(name))
                 demand(image['platform'] == 2, f'Non-iOS Mach-O embedded: {name}')
@@ -159,15 +163,12 @@ def validate(ipa: Path) -> dict:
         demand(any(d['path'] == '@rpath/DolphinCore.framework/DolphinCore'
                    for name, image in images.items() if name != core
                    for d in image['dependencies']), 'No host image links DolphinCore (self-ID is not evidence)')
-        required_resources = ('Sys/GC/dsp_rom.bin', 'Sys/GC/dsp_coef.bin')
-        for resource in required_resources:
+        for resource in ('Sys/GC/dsp_rom.bin', 'Sys/GC/dsp_coef.bin'):
             demand(app + '/' + resource in names, f'Missing Dolphin system resource: {resource}')
         demand(any(n.startswith(app + '/Sys/Wii/') for n in names), 'Wii system resources absent')
         schemes = set(info.get('LSApplicationQueriesSchemes', []))
         demand({'retroarch', 'shortcuts', 'armsx2', 'melonx'} <= schemes, 'Existing URL query schemes were removed')
         demand(not schemes & {'dolphin', 'dolphinios', 'dolphin-emu'}, 'External Dolphin query scheme found')
-        # Every non-system dependency must resolve in the actual packaged tree.
-        # Check both the app process and its helper with their distinct roots.
         dependency_checks = []
         system_dependencies = set()
         for name, image in images.items():
@@ -184,7 +185,6 @@ def validate(ipa: Path) -> dict:
                 if value.startswith(('/System/Library/', '/usr/lib/')):
                     system_dependencies.add(value)
                     continue
-                candidates = []
                 if value.startswith('@rpath/'):
                     suffix = value[len('@rpath/'):]
                     candidates = [posixpath.normpath(r + '/' + suffix) for r in rpaths]
