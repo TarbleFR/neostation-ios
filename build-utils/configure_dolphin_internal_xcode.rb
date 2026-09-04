@@ -52,16 +52,34 @@ PLIST
 app_delegate = File.join(ios, 'Runner', 'AppDelegate.swift')
 abort 'Expected Swift AppDelegate was not generated' unless File.file?(app_delegate)
 app_text = File.read(app_delegate)
-registration = <<~SWIFT.chomp
-    GeneratedPluginRegistrant.register(with: self)
-    NeoStationDolphinBridge.register(
-      with: self.registrar(forPlugin: "NeoStationDolphinBridge")
-    )
-SWIFT
 unless app_text.include?('NeoStationDolphinBridge.register')
-  anchor = '    GeneratedPluginRegistrant.register(with: self)'
-  abort 'Unexpected AppDelegate.swift layout' unless app_text.scan(anchor).length == 1
-  app_text = app_text.sub(anchor, registration)
+  implicit_anchor = '    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)'
+  legacy_anchor = '    GeneratedPluginRegistrant.register(with: self)'
+
+  if app_text.scan(implicit_anchor).length == 1
+    implicit_registration = <<~SWIFT.chomp
+        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+        if let registrar = engineBridge.pluginRegistry.registrar(
+          forPlugin: "NeoStationDolphinBridge"
+        ) {
+          NeoStationDolphinBridge.register(with: registrar)
+        } else {
+          assertionFailure("Flutter did not provide the NeoStationDolphinBridge registrar.")
+        }
+    SWIFT
+    app_text = app_text.sub(implicit_anchor, implicit_registration)
+  elsif app_text.scan(legacy_anchor).length == 1
+    legacy_registration = <<~SWIFT.chomp
+        GeneratedPluginRegistrant.register(with: self)
+        NeoStationDolphinBridge.register(
+          with: self.registrar(forPlugin: "NeoStationDolphinBridge")
+        )
+    SWIFT
+    app_text = app_text.sub(legacy_anchor, legacy_registration)
+  else
+    abort 'Unexpected AppDelegate.swift layout: no supported Flutter plugin registration anchor'
+  end
+
   File.write(app_delegate, app_text)
 end
 
