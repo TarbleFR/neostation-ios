@@ -31,6 +31,7 @@ tests.source_build_phase.add_file_reference(project.main_group.new_file(File.joi
       'TARGETED_DEVICE_FAMILY' => '1,2',
       'HEADER_SEARCH_PATHS' => [File.join(package, 'ios/Classes'), File.join(package, 'ios/Classes/TouchController')],
       'SWIFT_VERSION' => '5.0',
+      'OTHER_LDFLAGS' => ['$(inherited)', '-framework', 'UIKit'],
     })
   end
 end
@@ -40,7 +41,7 @@ app.build_configurations.each do |configuration|
     'ENABLE_TESTABILITY' => 'YES',
     'SWIFT_OBJC_BRIDGING_HEADER' => File.join(package, 'ios/Classes/TouchController/TCManagerInterface.h'),
     'INFOPLIST_KEY_UILaunchScreen_Generation' => 'YES',
-    'INFOPLIST_KEY_UISupportedInterfaceOrientations' => 'UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait',
+    'INFOPLIST_KEY_UISupportedInterfaceOrientations' => 'UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight',
   })
 end
 tests.build_configurations.each do |configuration|

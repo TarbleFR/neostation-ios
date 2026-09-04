@@ -169,6 +169,13 @@ def validate(ipa: Path) -> dict:
         for resource in ('Sys/GC/dsp_rom.bin', 'Sys/GC/dsp_coef.bin'):
             demand(app + '/' + resource in names, f'Missing Dolphin system resource: {resource}')
         demand(any(n.startswith(app + '/Sys/Wii/') for n in names), 'Wii system resources absent')
+        touch_bundle = app + '/Frameworks/dolphin_internal_bridge.framework/'
+        for layout in ('TCGameCubePad', 'TCWiiPad', 'TCClassicWiiPad'):
+            nib = touch_bundle + layout + '.nib'
+            demand(nib in names or any(n.startswith(nib + '/') for n in names),
+                   f'Original DolphiniOS touchscreen layout missing from its Swift bundle: {layout}')
+        for button in ('gcpad_a', 'wiimote_a', 'classic_a', 'nunchuk_c', 'gcwii_joystick'):
+            demand(touch_bundle + button + '@2x.png' in names, f'Touchscreen artwork missing: {button}')
         schemes = set(info.get('LSApplicationQueriesSchemes', []))
         demand({'retroarch', 'shortcuts', 'armsx2', 'melonx'} <= schemes, 'Existing URL query schemes were removed')
         demand(not schemes & {'dolphin', 'dolphinios', 'dolphin-emu'}, 'External Dolphin query scheme found')

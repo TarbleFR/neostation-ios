@@ -70,7 +70,7 @@
     NSArray<UIButton*>* buttons = [self buttonsIn:overlay];
     XCTAssertGreaterThan(buttons.count, 5u);
     UIButton* button = buttons.firstObject;
-    XCTAssertNotNil([button imageForState:UIControlStateNormal]);
+    XCTAssertGreaterThan([button imageForState:UIControlStateNormal].size.width, 0);
     [button sendActionsForControlEvents:UIControlEventTouchDown];
     NSArray* down = [NSUserDefaults.standardUserDefaults arrayForKey:@"lastTouch"];
     XCTAssertEqualObjects(down[0], wii.boolValue ? @4 : @0);

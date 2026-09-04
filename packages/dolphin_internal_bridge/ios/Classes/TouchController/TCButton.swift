@@ -59,18 +59,12 @@ class TCButton: UIButton
   {
     // In Interface Builder, the default bundle is not Dolphin's, so we must specify
     // the bundle for the image to load correctly
-    let image = UIImage(named: named, in: Bundle(for: type(of: self)), compatibleWith: nil) ?? UIImage()
-    
-    // Create a new CGSize with the new scale
+    guard let image = UIImage(named: named, in: Bundle(for: type(of: self)), compatibleWith: nil),
+          image.size.width > 0, image.size.height > 0 else { return UIImage() }
     let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-    
-    // Render the image into a context
-    UIGraphicsBeginImageContext(newSize)
-    image.draw(in: CGRect(origin: CGPoint.zero, size: newSize))
-    let newImage = UIGraphicsGetImageFromCurrentImageContext()!
-    UIGraphicsEndImageContext()
-    
-    return newImage.withRenderingMode(.alwaysOriginal)
+    return UIGraphicsImageRenderer(size: newSize).image { _ in
+      image.draw(in: CGRect(origin: .zero, size: newSize))
+    }.withRenderingMode(.alwaysOriginal)
   }
   
   @objc func buttonPressed()

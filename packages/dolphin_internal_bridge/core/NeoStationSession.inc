@@ -106,6 +106,39 @@ bool SelectInputProfile(bool wii, int slot, const std::string& device_name)
       (mode == "Physical" ? "Physical Controller.ini" : "Touchscreen.ini");
   if (!saved && !defaults.Load(path)) return false;
   Common::IniFile::Section selected = saved ? *saved : *defaults.GetOrCreateSection("Profile");
+  if (!saved && wii && mode == "Physical")
+  {
+    const bool has_gyro = std::any_of(device->Inputs().begin(), device->Inputs().end(),
+        [](const auto* input) { return input->GetName() == "Gyro Pitch Up"; });
+    if (!has_gyro)
+    {
+      selected.Set("IMUIR/Enabled", false);
+      selected.Set("IR/Up", "`R Stick Y+`");
+      selected.Set("IR/Down", "`R Stick Y-`");
+      selected.Set("IR/Left", "`R Stick X-`");
+      selected.Set("IR/Right", "`R Stick X+`");
+    }
+    for (const char* axis : {"X", "Y", "Z"})
+      selected.Set(std::string("Shake/") + axis, "`R Shoulder`");
+    // The stock physical profile only maps the Nunchuk. Make the Classic
+    // extension usable as soon as it is selected, while preserving saved edits.
+    for (const auto& [button, input] : std::map<std::string, std::string>{
+        {"A", "Button A"}, {"B", "Button B"}, {"X", "Button X"}, {"Y", "Button Y"},
+        {"+", "Menu"}, {"-", "Options"}, {"Home", "Home"}, {"ZL", "L Shoulder"}, {"ZR", "R Shoulder"}})
+      selected.Set("Classic/Buttons/" + button, "`" + input + "`");
+    for (const auto& [direction, axis] : std::map<std::string, std::string>{
+        {"Up", "Y+"}, {"Down", "Y-"}, {"Left", "X-"}, {"Right", "X+"}})
+    {
+      selected.Set("Classic/Left Stick/" + direction, "`L Stick " + axis + "`");
+      selected.Set("Classic/Right Stick/" + direction, "`R Stick " + axis + "`");
+      selected.Set("Classic/D-Pad/" + direction, "`D-Pad " + direction + "`");
+    }
+    for (const char* side : {"L", "R"})
+    {
+      selected.Set(std::string("Classic/Triggers/") + side, "`" + std::string(side) + " Trigger`");
+      selected.Set(std::string("Classic/Triggers/") + side + "-Analog", "`" + std::string(side) + " Trigger`");
+    }
+  }
   controller->LoadConfig(&selected);
   controller->SetDefaultDevice(device_name);
   controller->UpdateReferences(g_controller_interface);
