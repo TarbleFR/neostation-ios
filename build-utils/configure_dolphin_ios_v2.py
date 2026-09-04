@@ -98,6 +98,27 @@ end
     path.write_text(text, encoding='utf-8')
 
 
+def configure_flutter_xcconfigs() -> None:
+    # Flutter's current scaffold can omit CocoaPods includes. Preserve the
+    # Flutter base configuration; load the Pods settings before Generated so
+    # PODS_ROOT and the [CP] file-list paths resolve in the generated host.
+    for name, configuration in (('Debug', 'debug'), ('Release', 'release'), ('Profile', 'profile')):
+        path = IOS / 'Flutter' / (name + '.xcconfig')
+        if not path.is_file():
+            if name == 'Profile':
+                continue  # The standard Flutter Profile configuration reuses Release.
+            raise SystemExit(f'Missing Flutter base configuration: {path}')
+        text = path.read_text(encoding='utf-8')
+        if not re.search(r'^\s*#include\??\s+"Generated\.xcconfig"', text, re.MULTILINE):
+            raise SystemExit(f'Flutter Generated.xcconfig include missing: {path}')
+        basename = 'Pods-Runner.' + configuration + '.xcconfig'
+        includes = re.findall(r'^\s*#include\??\s+"([^"]+)"', text, re.MULTILINE)
+        if any(value.endswith('/' + basename) for value in includes):
+            continue
+        include = '#include? "Pods/Target Support Files/Pods-Runner/' + basename + '"\n'
+        path.write_text(include + text, encoding='utf-8')
+
+
 def configure_xcode_project() -> None:
     ruby = r'''
 require 'xcodeproj'
@@ -201,7 +222,7 @@ raise "Helper source does not resolve: #{entry.real_path}" unless File.file?(ent
 
 helper.build_configurations.each do |configuration|
   settings = configuration.build_settings
-  settings['APPLICATION_EXTENSION_API_ONLY'] = 'NO'
+  settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
   settings['CLANG_ENABLE_MODULES'] = 'YES'
   settings['CODE_SIGN_STYLE'] = 'Automatic'
   settings['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '194')
@@ -283,6 +304,7 @@ def main() -> None:
     configure_info_plist()
     configure_entitlements()
     configure_podfile()
+    configure_flutter_xcconfigs()
     configure_xcode_project()
     print('Configured Runner, DolphinJITHelper and root Sys resources.')
 
