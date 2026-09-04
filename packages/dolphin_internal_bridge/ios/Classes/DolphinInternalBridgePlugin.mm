@@ -395,6 +395,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
         [strongSelf->_condition broadcast];
         [strongSelf->_condition unlock];
       }
+      if (strongSelf.finished) break;
     }
     fclose(stream);
     if (!strongSelf.finished) {
@@ -546,6 +547,11 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 @property(nonatomic, strong, nullable) dispatch_source_t runningTimer;
 @property(nonatomic, copy, nullable) NSString* activeLogPath;
 @property(nonatomic, assign) BOOL launchInProgress;
+// These values belong to the Dolphin session, not to the global audio policy.
+@property(nonatomic, copy, nullable) NSString* previousAudioCategory;
+@property(nonatomic, copy, nullable) NSString* previousAudioMode;
+@property(nonatomic, assign) AVAudioSessionCategoryOptions previousAudioOptions;
+@property(nonatomic, assign) BOOL audioPolicyCaptured;
 @end
 
 @implementation DolphinInternalBridgePlugin {
@@ -761,16 +767,24 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     }
     self.dolphinController = controller;
 
-    NSError* audioError = nil;
-    AVAudioSession* audio = AVAudioSession.sharedInstance;
-    [audio setCategory:AVAudioSessionCategoryPlayback
-                 mode:AVAudioSessionModeDefault
-              options:AVAudioSessionCategoryOptionMixWithOthers
-                error:&audioError];
-    [audio setActive:YES error:&audioError];
-    if (audioError != nil) {
-      DOLAppendJSONLog(logPath, @"audio.warning", audioError.localizedDescription, nil);
-    }
+    // Capture and change shared audio only once this Dolphin session owns a
+    // real emulation view. An entitlement/JIT failure must not mute NeoStation.
+    dispatch_sync(dispatch_get_main_queue(), ^{
+      AVAudioSession* audio = AVAudioSession.sharedInstance;
+      self.previousAudioCategory = audio.category;
+      self.previousAudioMode = audio.mode;
+      self.previousAudioOptions = audio.categoryOptions;
+      self.audioPolicyCaptured = YES;
+      NSError* audioError = nil;
+      [audio setCategory:AVAudioSessionCategoryPlayback
+                   mode:AVAudioSessionModeDefault
+                options:AVAudioSessionCategoryOptionMixWithOthers
+                  error:&audioError];
+      if (audioError == nil) [audio setActive:YES error:&audioError];
+      if (audioError != nil) {
+        DOLAppendJSONLog(logPath, @"audio.warning", audioError.localizedDescription, nil);
+      }
+    });
 
     CAMetalLayer* layer = (CAMetalLayer*)controller.metalView.layer;
     int32_t launchFlags = neostation_dolphin_launch(
@@ -858,7 +872,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 }
 
 - (void)cleanupSharedResourcesAndUI {
-  dispatch_async(dispatch_get_main_queue(), ^{
+  dispatch_block_t cleanup = ^{
     if (self.runningTimer != nil) {
       dispatch_source_cancel(self.runningTimer);
       self.runningTimer = nil;
@@ -869,16 +883,30 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       controller.closeHandler = nil;
       [controller dismissViewControllerAnimated:NO completion:nil];
     }
-    NSError* error = nil;
-    [AVAudioSession.sharedInstance setActive:NO
-                                 withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
-                                       error:&error];
-    if (error != nil) {
-      DOLAppendJSONLog(self.activeLogPath ?: @"", @"audio.release_warning",
-                       error.localizedDescription, nil);
+    if (self.audioPolicyCaptured) {
+      // Restore the policy used before Dolphin, instead of deactivating the
+      // whole application's audio session while the frontend is still active.
+      AVAudioSession* audio = AVAudioSession.sharedInstance;
+      NSError* error = nil;
+      [audio setCategory:self.previousAudioCategory
+                    mode:self.previousAudioMode
+                 options:self.previousAudioOptions
+                   error:&error];
+      if (error == nil && UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
+        [audio setActive:YES error:&error];
+      }
+      DOLAppendJSONLog(self.activeLogPath ?: @"",
+                       error == nil ? @"audio.policy_restored" : @"audio.restore_warning",
+                       error.localizedDescription ?: @"Pre-Dolphin audio policy restored.", nil);
+      self.audioPolicyCaptured = NO;
+      self.previousAudioCategory = nil;
+      self.previousAudioMode = nil;
     }
     self.activeLogPath = nil;
-  });
+  };
+  // Finish releasing the session before allowing a subsequent emulator launch.
+  if (NSThread.isMainThread) cleanup();
+  else dispatch_sync(dispatch_get_main_queue(), cleanup);
 }
 
 @end
