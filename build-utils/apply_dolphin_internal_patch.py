@@ -145,9 +145,9 @@ replace_once(
 
 replace_once(
     "lib/screens/game_screen/my_games_list.dart",
-    "import 'package:neostation/widgets/game_view_footer.dart';\n",
-    "import 'package:neostation/widgets/game_view_footer.dart';\n"
-    "import 'package:neostation/widgets/dolphin_playlist_actions.dart';\n",
+    "import '../../widgets/game_view_mode_dropdown.dart';\n",
+    "import '../../widgets/game_view_mode_dropdown.dart';\n"
+    "import '../../widgets/dolphin_playlist_actions.dart';\n",
 )
 
 replace_once(
