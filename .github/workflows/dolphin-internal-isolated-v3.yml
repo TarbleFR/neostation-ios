@@ -25,9 +25,7 @@ jobs:
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
-      BUNDLE_PATH: ${{ runner.temp }}/dolphin-ruby-gems
       CCACHE_DIR: ${{ github.workspace }}/.dolphin-ccache
-      CCACHE_BASEDIR: ${{ runner.temp }}/dolphin-ios
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
@@ -42,6 +40,8 @@ jobs:
       - name: Snapshot source and verify isolation before compilation
         run: |
           set -euo pipefail
+          echo "BUNDLE_PATH=$RUNNER_TEMP/dolphin-ruby-gems" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=$RUNNER_TEMP/dolphin-ios" >> "$GITHUB_ENV"
           python3 packages/dolphin_internal_bridge/ci/build_support.py snapshot
           python3 build-utils/check_dolphin_isolation_v2.py --base origin/main 2>&1 | tee build/dolphin-ci/isolation.txt
           python3 -m unittest discover -s test -p 'dolphin_*test.py' -v 2>&1 | tee build/dolphin-ci/ipa-validator-tests.txt
