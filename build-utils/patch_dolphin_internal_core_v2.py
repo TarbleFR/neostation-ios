@@ -440,8 +440,8 @@ int32_t neostation_dolphin_set_paused(int32_t paused)
 extern "C" __attribute__((visibility("default")))
 int32_t neostation_dolphin_stop(const char* log_path)
 {
-  if (!g_initialized) return 1;
   if (log_path) g_log_path = log_path;
+  if (!g_initialized) return 1;
   ShutdownRuntime("host_stop");
   return 1;
 }
