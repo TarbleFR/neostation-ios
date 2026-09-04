@@ -11,7 +11,14 @@ engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with legacy.js.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*.swift'
-  s.vendored_frameworks = 'Frameworks/StikJIT.xcframework'
+  # The unchanged stikjit_bridge already owns the one embedded StikJIT binary.
+  # Do not register the same XCFramework with CocoaPods a second time: the
+  # helper's dependencies are also inspected in the containing Runner aggregate.
+  # Compile the helper wrapper statically, resolving StikJIT from its verified
+  # device interface. The helper target links the existing binary explicitly;
+  # @executable_path/../../Frameworks resolves its single copy in Runner.app.
+  s.static_framework = true
+  s.preserve_paths = 'Frameworks/StikJIT.xcframework'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
   s.swift_version = '5.0'
@@ -20,6 +27,7 @@ engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with legacy.js.
   s.libraries = 'z', 'bz2', 'iconv', 'compression'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'APPLICATION_EXTENSION_API_ONLY' => 'NO'
+    'APPLICATION_EXTENSION_API_ONLY' => 'NO',
+    'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Frameworks/StikJIT.xcframework/ios-arm64"'
   }
 end
