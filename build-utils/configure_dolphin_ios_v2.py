@@ -157,8 +157,24 @@ unless phase
   phase = project.new(Xcodeproj::Project::Object::PBXFrameworksBuildPhase)
   helper.build_phases << phase
 end
+
+# Link the helper to the SAME verified device binary that the existing host
+# bridge embeds. Registering it as a second vendored CocoaPod makes CocoaPods
+# reject Pods-Runner for duplicate StikJIT.xcframework names. There is no extra
+# copy phase here and no change to the host's existing StikJIT integration.
+stik_path = '../packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework'
+framework_group = project.main_group.groups.find { |group| group.display_name == 'Frameworks' }
+framework_group ||= project.main_group.new_group('Frameworks')
+stik_ref = project.files.find { |file| file.path == stik_path && file.source_tree == 'SOURCE_ROOT' }
+stik_ref ||= framework_group.new_file(stik_path, 'SOURCE_ROOT')
+raise "StikJIT binary does not resolve: #{stik_ref.real_path}" unless File.file?(File.join(stik_ref.real_path, 'StikJIT'))
+unless phase.files.any? { |file| file.file_ref == stik_ref }
+  phase.add_file_reference(stik_ref, true)
+end
 references = phase.files.map(&:file_ref).compact
 raise 'Duplicate framework references in helper' unless references.map(&:uuid).uniq.length == references.length
+stik_count = references.count { |ref| ref.path.to_s.end_with?('StikJIT.framework') }
+raise "Expected one StikJIT link reference in helper, found #{stik_count}" unless stik_count == 1
 
 puts "xcodeproj.version=#{Xcodeproj::VERSION}"
 puts "xcodeproj.path=#{Gem.loaded_specs.fetch('xcodeproj').full_gem_path}"
@@ -170,8 +186,8 @@ puts "helper.build_phases=#{helper.build_phases.map { |item| item.class.name }.j
 puts "helper.respond_to.frameworks_build_phase=#{helper.respond_to?(:frameworks_build_phase)}"
 puts "helper.respond_to.frameworks_build_phases=#{helper.respond_to?(:frameworks_build_phases)}"
 puts "helper.framework_phase=#{phase.uuid}"
-puts "helper.stikjit.direct_references=#{references.count { |ref| ref.path.to_s.end_with?('StikJIT.framework') }}"
-puts 'helper.stikjit.linkage=CocoaPods dolphin_jit_helper dependency; verified after pod install and in Mach-O'
+puts "helper.stikjit.direct_references=#{stik_count}"
+puts 'helper.stikjit.linkage=single host StikJIT binary; helper-only Frameworks reference and runpath'
 
 helper_group = project.main_group.find_subpath('DolphinJITHelper', true)
 helper_group.set_source_tree('<group>')
@@ -194,6 +210,7 @@ helper.build_configurations.each do |configuration|
   settings['GENERATE_INFOPLIST_FILE'] = 'NO'
   settings['INFOPLIST_FILE'] = 'DolphinJITHelper/Info.plist'
   settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.4'
+  settings['FRAMEWORK_SEARCH_PATHS'] = ['$(inherited)', '$(PROJECT_DIR)/../packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64']
   settings['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
   settings['MARKETING_VERSION'] = '1.0.0'
   settings['OTHER_LDFLAGS'] = '$(inherited) -ObjC -all_load'
