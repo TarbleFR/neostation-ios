@@ -27,7 +27,11 @@ void main() {
           '(C) 1999 ArtX Inc.  All rights reserved.'
           .codeUnits;
       bytes.setRange(0, header.length, header);
-      for (var index = 0x100; index < bytes.length; index += 4096) {
+
+      // Populate the same 4 KiB sampling offsets used by the structural check,
+      // so this synthetic file reaches (and must fail) the authoritative retail
+      // CRC gate rather than being rejected earlier as an all-zero placeholder.
+      for (var index = 4096; index < bytes.length; index += 4096) {
         bytes[index] = (index ~/ 4096) & 0xff;
       }
 
