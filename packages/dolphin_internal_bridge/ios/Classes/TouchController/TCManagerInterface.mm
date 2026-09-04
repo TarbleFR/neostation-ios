@@ -1,4 +1,6 @@
-// Adapted from DolphiniOS 7cac5416. SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright 2022 DolphiniOS Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Adapted for NeoStation from DolphiniOS 7cac5416.
 #import "TCManagerInterface.h"
 #include <stdint.h>
 extern "C" void neostation_dolphin_touch_event(int32_t, int32_t, float, int32_t);
