@@ -129,15 +129,12 @@ helper_plist = source_reference(helper_group, 'Info.plist')
 add_source(helper, helper_source)
 add_source(helper, source_refs.fetch('DolphinJITMessage.swift'))
 
-# The helper links the device slice directly. The framework is copied into the
-# helper bundle after xcodebuild, before IPA verification.
-frameworks_group = project.main_group.groups.find do |group|
-  group.display_name == 'Frameworks'
-end
-frameworks_group ||= project.main_group.new_group('Frameworks')
+# Link the device framework from a SOURCE_ROOT-relative path. Putting this
+# reference inside a Frameworks group would make Xcode resolve it below
+# ios/Frameworks rather than from ios/Runner.xcodeproj's directory.
 stik_path = '../packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework'
-stik_ref = frameworks_group.files.find { |file| file.path == stik_path }
-stik_ref ||= frameworks_group.new_file(stik_path)
+stik_ref = project.main_group.files.find { |file| file.path == stik_path }
+stik_ref ||= project.main_group.new_file(stik_path)
 unless helper.frameworks_build_phase.files_references.include?(stik_ref)
   helper.frameworks_build_phase.add_file_reference(stik_ref, true)
 end
