@@ -60,6 +60,12 @@ Most original Dolphin code is GPL-2.0-or-later; the aggregate repository is
 GPL-3.0-compatible. Preserve upstream COPYING, LICENSES/ and per-file SPDX notices.
 NeoStation's engine modifications are in build-utils/patch_dolphin_internal_core_v2.py;
 its host bridge and in-game interface are in packages/dolphin_internal_bridge/.
+The original DolphiniOS touchscreen widgets, nib layouts, button artwork and
+input profiles are adapted from the same pinned revision. Their source headers
+are preserved; ci/touch_resources.json records the original resource hashes.
+NeoStation adds C ABI input synchronization, cancelled-touch release, safe nib
+initialization and controller-dependent visibility. Session profile and console
+preference changes are in packages/dolphin_internal_bridge/core/.
 
 StikJIT 1.5.0 — copyright StikDebug and contributors; Mozilla Public License 2.0.
 Source: https://github.com/StikDebug/StikJIT/tree/1.5.0

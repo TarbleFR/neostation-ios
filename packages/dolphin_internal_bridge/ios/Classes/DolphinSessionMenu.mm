@@ -1,7 +1,7 @@
 #import "DolphinSessionMenu.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
-  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs
+  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole
 };
 
 @interface DolphinSessionMenu ()
@@ -44,7 +44,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  if (self.page == DOLMenuRoot || self.page == DOLMenuGraphics || self.page == DOLMenuControls)
+  if (self.page == DOLMenuConsole || self.page == DOLMenuGraphics || self.page == DOLMenuControls)
     [self reloadSettings];
 }
 
@@ -52,11 +52,11 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   if (self.loading || !self.readSettings) return;
   self.loading = YES;
   __weak DolphinSessionMenu* weakSelf = self;
-  self.readSettings(self.wii, self.slot, ^(NSDictionary* data) {
+  self.readSettings(self.wii, self.page == DOLMenuControls ? self.slot : -1, ^(NSDictionary* data) {
     DolphinSessionMenu* strongSelf = weakSelf;
     if (!strongSelf) return;
     strongSelf.loading = NO;
-    strongSelf.snapshot = data ?: @{};
+    strongSelf.snapshot = data;
     [strongSelf.tableView reloadData];
     if (!data && strongSelf.view.window) [strongSelf showFailure];
   });
@@ -83,6 +83,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   child.applySettings = self.applySettings;
   child.resumeGame = self.resumeGame;
   child.quitGame = self.quitGame;
+  child.restartGame = self.restartGame;
   child.binding = self.binding;
   child.returnPage = self.returnPage;
   return child;
@@ -94,10 +95,11 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
   switch (self.page) {
-    case DOLMenuRoot: return 4;
+    case DOLMenuRoot: return 5;
+    case DOLMenuConsole: return self.snapshot ? 2 : 0;
     case DOLMenuGraphics: return self.snapshot ? 4 : 0;
     case DOLMenuControls:
-      return section == 0 ? (self.wii ? 3 : 2) : [self.snapshot[@"controls"] count];
+      return section == 0 ? (self.wii ? 4 : 3) : [self.snapshot[@"controls"] count];
     case DOLMenuDevices: return [self.snapshot[@"devices"] count] + 1;
     default: return self.choices.count;
   }
@@ -110,6 +112,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
+  if (self.page == DOLMenuConsole) return [self text:@"languageHelp"];
   if (self.page == DOLMenuControls && section == 1) return [self text:@"bindingsHelp"];
   return nil;
 }
@@ -131,18 +134,27 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   NSInteger row = indexPath.row;
   if (self.page == DOLMenuRoot) {
-    cell.textLabel.text = [self text:@[@"graphics", @"controls", @"resume", @"quit"][row]];
-    if (row == 3) cell.textLabel.textColor = UIColor.systemRedColor;
+    cell.textLabel.text = [self text:@[@"graphics", @"controls", @"console", @"resume", @"quit"][row]];
+    if (row == 4) cell.textLabel.textColor = UIColor.systemRedColor;
+  } else if (self.page == DOLMenuConsole) {
+    cell.textLabel.text = [self text:row == 0 ? @"consoleLanguage" : @"restart"];
+    if (row == 0) {
+      for (NSDictionary* language in self.snapshot[@"console"][@"languages"])
+        if ([language[@"selected"] boolValue]) cell.detailTextLabel.text = language[@"name"];
+    } else if ([self.snapshot[@"console"][@"restartNeeded"] boolValue]) {
+      cell.detailTextLabel.text = [self text:@"restartRequired"];
+    }
   } else if (self.page == DOLMenuGraphics) {
     NSString* key = @[@"resolution", @"aspect", @"anisotropy", @"vsync"][row];
     cell.textLabel.text = [self text:key];
     cell.detailTextLabel.text = [self graphicsValue:key];
   } else if (self.page == DOLMenuControls) {
     if (indexPath.section == 0) {
-      cell.textLabel.text = [self text:@[@"controllerType", @"player", @"extension"][row]];
+      cell.textLabel.text = [self text:(self.wii ? @[@"controllerType", @"player", @"physicalController", @"extension"] : @[@"controllerType", @"player", @"physicalController"])[row]];
       if (row == 0) cell.detailTextLabel.text = self.wii ? [self text:@"wiimote"] : @"GameCube";
       if (row == 1) cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld", (long)self.slot + 1];
-      if (row == 2) {
+      if (row == 2) cell.detailTextLabel.text = self.snapshot[@"device"];
+      if (row == 3) {
         for (NSDictionary* item in self.snapshot[@"extensions"])
           if ([item[@"selected"] boolValue]) cell.detailTextLabel.text = [self controlLabel:item[@"name"]];
       }
@@ -191,8 +203,8 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   if (self.loading) return;
   NSInteger row = indexPath.row;
   if (self.page == DOLMenuRoot) {
-    if (row == 2) { [self resumePressed]; return; }
-    if (row == 3) {
+    if (row == 3) { [self resumePressed]; return; }
+    if (row == 4) {
       UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:@"quit"]
           message:[self text:@"quitHelp"] preferredStyle:UIAlertControllerStyleAlert];
       [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
@@ -203,8 +215,17 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
       [self presentViewController:alert animated:YES completion:nil];
       return;
     }
-    [self.navigationController pushViewController:[self child:row == 0 ? DOLMenuGraphics : DOLMenuControls
-        title:[self text:row == 0 ? @"graphics" : @"controls"]] animated:YES];
+    [self.navigationController pushViewController:[self child:row == 0 ? DOLMenuGraphics : row == 1 ? DOLMenuControls : DOLMenuConsole
+        title:[self text:@[@"graphics", @"controls", @"console"][row]]] animated:YES];
+  } else if (self.page == DOLMenuConsole) {
+    if (row == 1) { [self confirmRestart]; return; }
+    DolphinSessionMenu* child = [self child:DOLMenuChoices title:[self text:@"consoleLanguage"]];
+    NSMutableArray* choices = [NSMutableArray array];
+    for (NSDictionary* language in self.snapshot[@"console"][@"languages"])
+      [choices addObject:@{@"title": language[@"name"], @"selected": language[@"selected"],
+        @"request": @{@"kind": @"language", @"wii": @(self.wii), @"value": language[@"value"]}}];
+    child.choices = choices;
+    [self.navigationController pushViewController:child animated:YES];
   } else if (self.page == DOLMenuGraphics) {
     NSString* key = @[@"resolution", @"aspect", @"anisotropy", @"vsync"][row];
     NSArray* values;
@@ -228,7 +249,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
       [self.navigationController pushViewController:child animated:YES];
       return;
     }
-    DolphinSessionMenu* child = [self child:DOLMenuChoices title:[self text:@[@"controllerType", @"player", @"extension"][row]]];
+    DolphinSessionMenu* child = [self child:DOLMenuChoices title:[self text:(self.wii ? @[@"controllerType", @"player", @"physicalController", @"extension"] : @[@"controllerType", @"player", @"physicalController"])[row]]];
     NSMutableArray* choices = [NSMutableArray array];
     if (row == 0) {
       [choices addObject:@{@"title": @"GameCube", @"wii": @NO}];
@@ -236,6 +257,13 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
     } else if (row == 1) {
       for (NSInteger index = 0; index < 4; index++)
         [choices addObject:@{@"title": [NSString stringWithFormat:@"%ld", (long)index + 1], @"slot": @(index)}];
+    } else if (row == 2) {
+      for (NSDictionary* device in self.snapshot[@"devices"]) {
+        NSString* name = device[@"name"];
+        if (![name hasPrefix:@"MFi/"] && ![name isEqual:self.wii ? @"iOS/4/Touchscreen" : @"iOS/0/Touchscreen"]) continue;
+        [choices addObject:@{@"title": name, @"selected": @([name isEqual:self.snapshot[@"device"]]),
+          @"request": @{@"kind": @"device", @"device": name, @"wii": @(self.wii), @"slot": @(self.slot)}}];
+      }
     } else {
       for (NSDictionary* extension in self.snapshot[@"extensions"])
         [choices addObject:@{@"title": [self controlLabel:extension[@"name"]], @"selected": extension[@"selected"],
@@ -262,6 +290,17 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
       [self apply:choice[@"request"] thenReturn:NO];
     }
   }
+}
+
+- (void)confirmRestart {
+  UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:@"restart"]
+      message:[self text:@"restartHelp"] preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
+  __weak DolphinSessionMenu* weakSelf = self;
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"restart"] style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+    if (weakSelf.restartGame) weakSelf.restartGame();
+  }]];
+  [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }

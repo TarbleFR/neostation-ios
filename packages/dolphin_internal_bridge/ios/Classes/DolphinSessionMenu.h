@@ -9,5 +9,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy) void (^applySettings)(NSDictionary* request, void (^completion)(BOOL));
 @property(nonatomic, copy) dispatch_block_t resumeGame;
 @property(nonatomic, copy) dispatch_block_t quitGame;
+@property(nonatomic, copy) dispatch_block_t restartGame;
 @end
 NS_ASSUME_NONNULL_END

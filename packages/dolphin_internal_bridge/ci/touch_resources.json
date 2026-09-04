@@ -1,0 +1,254 @@
+{
+  "commit": "7cac54161659421ed95c2cd1c0b0746539a4cd38",
+  "files": [
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_a.imageset/classic_a@2x.png",
+      "sha": "82f05d64627420b6b34f45e5b1e48ede5623a0fb"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_a_pressed.imageset/classic_a_pressed@2x.png",
+      "sha": "7ad23e37581e91acccd3770c6b249812c56d5c5f"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_b.imageset/classic_b@2x.png",
+      "sha": "2bed333f4d59516c2383f36ad9eaced8be7a0fd6"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_b_pressed.imageset/classic_b_pressed@2x.png",
+      "sha": "2d227abc2110c91b37760180514b43fbe3ee114a"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_l.imageset/classic_l@2x.png",
+      "sha": "055df5ce2a00c1818ae97d0d54aa3cf69ee418a0"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_l_pressed.imageset/classic_l_pressed@2x.png",
+      "sha": "7487393c6c1ade36f2d5b8120ee34b87e205f604"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_r.imageset/classic_r@2x.png",
+      "sha": "efadf805c6de120c6a87680482e41e4d5cfc8f6d"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_r_pressed.imageset/classic_r_pressed@2x.png",
+      "sha": "41af0fff789856158abfe9b2654f141dc17672ef"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_x.imageset/classic_x@2x.png",
+      "sha": "88a4eb5ce86bb7ffeab422605db8998eca412348"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_x_pressed.imageset/classic_x_pressed@2x.png",
+      "sha": "7b85dcdc1434987f7a9d6d264a8066f18862c5f1"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_y.imageset/classic_y@2x.png",
+      "sha": "91df1db36ad1d187445e159e4160797354e705fb"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_y_pressed.imageset/classic_y_pressed@2x.png",
+      "sha": "3a6ed8acd0e21bae6e2028860cef387b39352d4f"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_zl.imageset/classic_zl@2x.png",
+      "sha": "360c0f46634f0bd4b68e1917091e70197fbf4a84"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_zl_pressed.imageset/classic_zl_pressed@2x.png",
+      "sha": "37889f77045125a2e489b3620a55b090a78d3252"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_zr.imageset/classic_zr@2x.png",
+      "sha": "87df7d15b9ae074c469b365a677bff742afcbbaf"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/classic_zr_pressed.imageset/classic_zr_pressed@2x.png",
+      "sha": "d75ef6fb45496568ba4b6c875dc604a5b1f202c2"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_a.imageset/gcpad_a@2x.png",
+      "sha": "8d4276c2eff3f60d11d3a2170460d4d95637272f"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_a_pressed.imageset/gcpad_a_pressed@2x.png",
+      "sha": "5e190f4d04f9ee52b56540d70a0771f83b2e9528"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_b.imageset/gcpad_b@2x.png",
+      "sha": "dede906bebb02777f051934ba731f2081e7de2ae"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_b_pressed.imageset/gcpad_b_pressed@2x.png",
+      "sha": "a9296031c67e708e803bc4354332247c69c55824"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_c.imageset/gcpad_c@2x.png",
+      "sha": "6b35577cbd68ab64f7e467f94d3f66ad4f1e513e"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_c_pressed.imageset/gcpad_c_pressed@2x.png",
+      "sha": "1fa6481b74eacda10f84ddb6b3447ccb1f23e473"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_l.imageset/gcpad_l@2x.png",
+      "sha": "a80d3c9e40d6cca0cef766cef7498e3ece51989f"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_l_pressed.imageset/gcpad_l_pressed@2x.png",
+      "sha": "017308d33de4bee63b71108493539cee480906fb"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_r.imageset/gcpad_r@2x.png",
+      "sha": "a4206394eb561e22e28be2a44131432016a353af"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_r_pressed.imageset/gcpad_r_pressed@2x.png",
+      "sha": "51766921a00757a20374db3b0767797589e38145"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_start.imageset/gcpad_start@2x.png",
+      "sha": "a4cf3db14e8ba0486473004d218edd3e33814e28"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_start_pressed.imageset/gcpad_start_pressed@2x.png",
+      "sha": "e3a283e309d3b73aab588591d833b4039b0c0a2b"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_x.imageset/gcpad_x@2x.png",
+      "sha": "160dc228d99ce03700a636d8aa59f8cc06dcb361"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_x_pressed.imageset/gcpad_x_pressed@2x.png",
+      "sha": "8fdee6abf881cae6cb664521db94b96324ee80f9"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_y.imageset/gcpad_y@2x.png",
+      "sha": "a74a5f161ce42024b2ad0e4ba2c7dfb19a8a5207"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_y_pressed.imageset/gcpad_y_pressed@2x.png",
+      "sha": "a61a5221e495629157f45af56112014871ed60a9"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_z.imageset/gcpad_z@2x.png",
+      "sha": "1052e615a8751f255849895029126ca33125b38d"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcpad_z_pressed.imageset/gcpad_z_pressed@2x.png",
+      "sha": "d8484890ce98371779fcb4049c72ff6a644f50e1"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcwii_dpad.imageset/gcwii_dpad@2x.png",
+      "sha": "91d0bf5f9dbb212936b0277f194655bd30c7ee5d"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcwii_dpad_pressed_one_direction.imageset/gcwii_dpad_pressed_one_direction@2x.png",
+      "sha": "feeb5e995ce18398ccd814d0baeadf13d9bced86"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcwii_dpad_pressed_two_directions.imageset/gcwii_dpad_pressed_two_directions@2x.png",
+      "sha": "4e1bff867b0f61dadee37e66367617b2a533918e"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcwii_joystick.imageset/gcwii_joystick@2x.png",
+      "sha": "c5413cd21422a215dfca6a181872243508576fd9"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcwii_joystick_pressed.imageset/gcwii_joystick_pressed@2x.png",
+      "sha": "5e31e939547b2e5e83c6d81d2c9d24487ace52f6"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/gcwii_joystick_range.imageset/gcwii_joystick_range@2x.png",
+      "sha": "a5a8f15035877354f0881661501cee2f34cb941d"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/nunchuk_c.imageset/nunchuk_c@2x.png",
+      "sha": "8489abf2e76e3a082b2d8fea7308cee6369d2787"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/nunchuk_c_pressed.imageset/nunchuk_c_pressed@2x.png",
+      "sha": "0dee63641db4e71732c7fbb2df3e12f985a0bfab"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/nunchuk_z.imageset/nunchuk_z@2x.png",
+      "sha": "27704c5882c8b6218b2c2b75a633de5cca02beae"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/nunchuk_z_pressed.imageset/nunchuk_z_pressed@2x.png",
+      "sha": "2b36a321839b00f1440b6146b6657ce284cf43cc"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_a.imageset/wiimote_a@2x.png",
+      "sha": "5592bd3d954aa4fb14c17e133f84a660c698d8a2"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_a_pressed.imageset/wiimote_a_pressed@2x.png",
+      "sha": "481f897027d4f1a603396b658f0eaa6df056d40f"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_b.imageset/wiimote_b@2x.png",
+      "sha": "f8549c5e9cfc71b6878f0e1665e1368e236e7d7a"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_b_pressed.imageset/wiimote_b_pressed@2x.png",
+      "sha": "e7440e8eed6824c82e81d529db7a35448eee6545"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_home.imageset/wiimote_home@2x.png",
+      "sha": "8cc57478aae00d16f65dfb31ab9bfc61758da237"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_home_pressed.imageset/wiimote_home_pressed@2x.png",
+      "sha": "ce0b48be26f4d24121cdda459ce70319718c1ce6"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_minus.imageset/wiimote_minus@2x.png",
+      "sha": "91a7a7eeab1fc836ede94011f03cf9c965182b5b"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_minus_pressed.imageset/wiimote_minus_pressed@2x.png",
+      "sha": "e9aa26b2152343100a2575ef83063425baf0b999"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_one.imageset/wiimote_one@2x.png",
+      "sha": "35128fde2919b060ecaeb08a9d303b4a6ffa8f1c"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_one_pressed.imageset/wiimote_one_pressed@2x.png",
+      "sha": "a6df572ccac887b315ed3138a30eeeec6f10796e"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_plus.imageset/wiimote_plus@2x.png",
+      "sha": "b01531bc4cefeff00b05e609f3238a6dc4b813fd"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_plus_pressed.imageset/wiimote_plus_pressed@2x.png",
+      "sha": "e25954c55cf05bb4ad9f96c91100e9bb1715d056"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_two.imageset/wiimote_two@2x.png",
+      "sha": "2f79b56a0a2c6b8fc93a23fa8d974a3c57e8410b"
+    },
+    {
+      "path": "Source/iOS/App/Common/DolphinAssets.xcassets/wiimote_two_pressed.imageset/wiimote_two_pressed@2x.png",
+      "sha": "107af2250b3e067ec99773f27a1c482d0f3a8cb9"
+    },
+    {
+      "path": "Source/iOS/App/DolphiniOS/UI/Emulation/TouchController/TCClassicWiiPad.xib",
+      "sha": "287e9a0b7391180ba8798ca8dfc04b8ff45d4f1a"
+    },
+    {
+      "path": "Source/iOS/App/DolphiniOS/UI/Emulation/TouchController/TCGameCubePad.xib",
+      "sha": "9bf3174d3ca5eb76be19fca3f2cd089a255a7c7b"
+    },
+    {
+      "path": "Source/iOS/App/DolphiniOS/UI/Emulation/TouchController/TCSidewaysWiiPad.xib",
+      "sha": "1d144899dfc7891e3a1e7dd310fc7d3622082625"
+    },
+    {
+      "path": "Source/iOS/App/DolphiniOS/UI/Emulation/TouchController/TCWiiPad.xib",
+      "sha": "179c6c6c956ed4e59393722f84876b601398eee6"
+    }
+  ]
+}
+
