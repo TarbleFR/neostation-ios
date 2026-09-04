@@ -23,6 +23,9 @@ legacy gate. It does not replace or modify other emulator integrations.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
-    'OTHER_LDFLAGS' => '$(inherited) -ObjC'
+    # CocoaPods exposes the vendored dynamic framework to consumers, but the
+    # bridge's own dynamic target must also link the actual Dolphin C ABI.
+    # Keep this target-local; do not add the core to any other emulator pod.
+    'OTHER_LDFLAGS' => '$(inherited) -ObjC -framework DolphinCore'
   }
 end
