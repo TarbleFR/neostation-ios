@@ -1,5 +1,5 @@
 name: NeoStation iOS - Dolphin Internal Isolated v3
-run-name: Dolphin Internal Isolated v3 Build 197 • ${{ github.sha }}
+run-name: Dolphin Internal Isolated v3 Build 198 • ${{ github.sha }}
 
 on:
   push:
@@ -19,9 +19,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '197'
-      IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-197
-      ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-197
+      BUILD_NUMBER: '198'
+      IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-198
+      ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-198
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin

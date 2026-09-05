@@ -13,12 +13,14 @@ app = project.new_target(:application, 'SessionHarness', :ios, '17.4')
 tests = project.new_target(:unit_test_bundle, 'SessionMenuTests', :ios, '17.4')
 tests.add_dependency(app)
 sources = [File.join(__dir__, 'SessionMenuHarness.mm'), File.join(package, 'ios/Classes/DolphinSessionMenu.mm')]
+sources << File.join(package, 'ios/Classes/DolphinSessionLifecycle.mm')
 sources += Dir[File.join(package, 'ios/Classes/TouchController/*.{swift,mm}')]
 sources.each { |path| app.source_build_phase.add_file_reference(project.main_group.new_file(path)) }
 Dir[File.join(package, 'ios/TouchResources/*')].each do |path|
   app.resources_build_phase.add_file_reference(project.main_group.new_file(path))
 end
 tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(__dir__, 'SessionMenuTests.mm')))
+tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(__dir__, 'SessionLifecycleTests.mm')))
 
 [app, tests].each do |target|
   target.build_configurations.each do |configuration|

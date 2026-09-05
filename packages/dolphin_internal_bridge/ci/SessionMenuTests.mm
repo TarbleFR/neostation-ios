@@ -6,6 +6,19 @@
 - (void)updateExtension:(NSString*)name;
 @end
 
+@interface UIView (WiiPointerTesting)
+- (void)handleLongPressWithGesture:(UILongPressGestureRecognizer*)gesture;
+@end
+
+@interface SimulatedPointerGesture : UILongPressGestureRecognizer
+@property(nonatomic) UIGestureRecognizerState simulatedState;
+@property(nonatomic) CGPoint simulatedLocation;
+@end
+@implementation SimulatedPointerGesture
+- (UIGestureRecognizerState)state { return self.simulatedState; }
+- (CGPoint)locationInView:(UIView*)view { return self.simulatedLocation; }
+@end
+
 @interface SessionMenuTests : XCTestCase
 @end
 @implementation SessionMenuTests
@@ -83,6 +96,68 @@
       [overlay layoutIfNeeded];
       XCTAssertGreaterThan([self buttonsIn:overlay].count, 8u);
     }
+  }
+}
+
+- (void)testTouchButtonsKeepTheirLayoutWhilePressed {
+  for (NSString* layout in @[@"GameCube", @"Nunchuk", @"Classic"]) {
+    DOLTouchOverlay* overlay = [[DOLTouchOverlay alloc] initWithWii:![layout isEqualToString:@"GameCube"]];
+    overlay.frame = CGRectMake(0, 0, 844, 390);
+    [overlay updateExtension:layout];
+    [overlay layoutIfNeeded];
+    NSArray<UIButton*>* buttons = [self buttonsIn:overlay];
+    NSMutableArray<NSValue*>* restingFrames = [NSMutableArray array];
+    for (UIButton* button in buttons)
+      [restingFrames addObject:[NSValue valueWithCGRect:[button convertRect:button.bounds toView:overlay]]];
+    for (UIButton* pressed in buttons) {
+      pressed.highlighted = YES;
+      [pressed sendActionsForControlEvents:UIControlEventTouchDown];
+      [overlay layoutIfNeeded];
+      XCTAssertFalse(pressed.selected, @"A momentary control must not activate UIKit selection styling");
+      for (NSUInteger index = 0; index < buttons.count; ++index) {
+        UIButton* button = buttons[index];
+        XCTAssertTrue(CGRectEqualToRect([button convertRect:button.bounds toView:overlay],
+                                       restingFrames[index].CGRectValue), @"%@ pad moved during a press", layout);
+      }
+      pressed.highlighted = NO;
+      [pressed sendActionsForControlEvents:UIControlEventTouchCancel];
+      [overlay layoutIfNeeded];
+    }
+    UIView* pad = overlay.subviews.firstObject;
+    [overlay updateExtension:layout];
+    [overlay layoutIfNeeded];
+    XCTAssertEqual(overlay.subviews.firstObject, pad, @"Unchanged extension polling must preserve the touch pad");
+  }
+}
+
+- (void)testWiiPointerMovesOnTouchDownAndIgnoresReleaseCoordinates {
+  DOLTouchOverlay* overlay = [[DOLTouchOverlay alloc] initWithWii:YES];
+  overlay.frame = CGRectMake(0, 0, 844, 390);
+  [overlay layoutIfNeeded];
+  UIView* pad = overlay.subviews.firstObject;
+  SimulatedPointerGesture* gesture = [SimulatedPointerGesture new];
+  [NSUserDefaults.standardUserDefaults removeObjectForKey:@"lastTouch"];
+  gesture.simulatedState = UIGestureRecognizerStateBegan;
+  gesture.simulatedLocation = CGPointMake(522, 195);
+  [pad handleLongPressWithGesture:gesture];
+  NSArray* began = [NSUserDefaults.standardUserDefaults arrayForKey:@"lastTouch"];
+  XCTAssertNotNil(began, @"A new touch must position the pointer immediately");
+  XCTAssertEqualObjects(began[0], @4);
+  XCTAssertEqualObjects(began[1], @115);
+  XCTAssertGreaterThan([began[2] doubleValue], 0.2);
+
+  gesture.simulatedState = UIGestureRecognizerStateChanged;
+  gesture.simulatedLocation = CGPointMake(650, 195);
+  [pad handleLongPressWithGesture:gesture];
+  NSArray* moved = [NSUserDefaults.standardUserDefaults arrayForKey:@"lastTouch"];
+  XCTAssertGreaterThan([moved[2] doubleValue], [began[2] doubleValue]);
+  for (NSNumber* state in @[@(UIGestureRecognizerStateEnded), @(UIGestureRecognizerStateCancelled),
+                            @(UIGestureRecognizerStateFailed)]) {
+    gesture.simulatedState = (UIGestureRecognizerState)state.integerValue;
+    gesture.simulatedLocation = CGPointMake(-5000, -5000);
+    [pad handleLongPressWithGesture:gesture];
+    XCTAssertEqualObjects([NSUserDefaults.standardUserDefaults arrayForKey:@"lastTouch"], moved,
+                          @"Lift-off and system gestures must not make the Wii pointer jump");
   }
 }
 @end

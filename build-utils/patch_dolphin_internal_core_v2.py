@@ -159,8 +159,11 @@ void ShutdownRuntime(const char* reason)
   Log("cleanup.begin", reason == nullptr ? "cleanup" : reason);
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
+    Log("cleanup.core_stop.begin", "Requesting CPU and GPU shutdown.");
     Core::Stop(system);
+    Log("cleanup.core_join.begin", "Waiting for the emulation thread.");
     Core::Shutdown(system); // Pinned API joins the real emulation thread.
+    Log("cleanup.core_join.complete", "Emulation thread joined; surface can be detached after cleanup.");
     ApplyConsolePreferences();
     Config::Save();
     if (g_devices_callback)
@@ -169,7 +172,9 @@ void ShutdownRuntime(const char* reason)
       g_devices_callback.reset();
     }
     ResetInputProfiles();
+    Log("cleanup.controllers.begin", "Releasing controller backends.");
     UICommon::ShutdownControllers();
+    Log("cleanup.controllers.complete", "Controller backends released.");
     UICommon::Shutdown();
   });
   UndeclareMainAsHostThread();
@@ -760,6 +765,7 @@ extern "C" __attribute__((visibility("default")))
 void neostation_dolphin_touch_event(int32_t controller, int32_t input, float value, int32_t axis)
 {
   if (controller < 0 || controller > 7 || input < 0 || input > 905 || !std::isfinite(value)) return;
+  if (!g_initialized || !g_running) return;
   auto lock = ControllerEmu::EmulatedController::GetStateLock();
   if (!g_initialized || !g_running) return;
   auto* manager = ciface::iOS::StateManager::GetInstance();
@@ -770,8 +776,11 @@ void neostation_dolphin_touch_event(int32_t controller, int32_t input, float val
 extern "C" __attribute__((visibility("default")))
 void neostation_dolphin_release_touches(void)
 {
+  // UIKit notifications can arrive during shutdown. Do not wait on input
+  // locks once the session has stopped accepting touch events.
+  if (!g_initialized || !g_running) return;
   auto lock = ControllerEmu::EmulatedController::GetStateLock();
-  if (g_initialized) ciface::iOS::StateManager::GetInstance()->Init();
+  if (g_initialized && g_running) ciface::iOS::StateManager::GetInstance()->Init();
 }
 
 extern "C" __attribute__((visibility("default")))

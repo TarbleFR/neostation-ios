@@ -21,6 +21,14 @@ class TCButton: UIButton
   var port: Int = 0
   var useHapicTouch: Bool = true
   var lastForce: CGFloat = CGFloat.zero
+  private var restingSize: CGSize?
+
+  override var intrinsicContentSize: CGSize
+  {
+    // The original nib positions neighbouring buttons using these dimensions.
+    // A press must only change its artwork, never reflow the controller pad.
+    return restingSize ?? super.intrinsicContentSize
+  }
   
   override init(frame: CGRect)
   {
@@ -33,11 +41,18 @@ class TCButton: UIButton
     super.init(coder: coder)
     sharedInit()
   }
+
+  override func awakeFromNib()
+  {
+    super.awakeFromNib()
+    restingSize = super.intrinsicContentSize
+    invalidateIntrinsicContentSize()
+  }
   
   func sharedInit()
   {
     self.setTitle("", for: .normal)
-    self.addTarget(self, action: #selector(buttonPressed), for: .touchDown)
+    self.addTarget(self, action: #selector(buttonPressed), for: [.touchDown, .touchDragEnter])
     self.addTarget(self, action: #selector(buttonReleased), for: [.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit])
     
     // TODO: Setting for hapic touch analog triggers enabled
@@ -52,7 +67,11 @@ class TCButton: UIButton
     self.setImage(buttonImage, for: .normal)
     
     let buttonPressedImage = getImage(named: buttonType.getImageName() + "_pressed", scale: buttonType.getButtonScale())
-    self.setImage(buttonPressedImage, for: .selected)
+    // These are momentary controls, not selected UIKit system buttons. Using
+    // selected adds a system selection background and changes their layout.
+    self.setImage(buttonPressedImage, for: .highlighted)
+    restingSize = super.intrinsicContentSize
+    invalidateIntrinsicContentSize()
   }
   
   func getImage(named: String, scale: CGFloat) -> UIImage
@@ -69,7 +88,6 @@ class TCButton: UIButton
   
   @objc func buttonPressed()
   {
-    isSelected = true
     if (isAxis && useHapicTouch)
     {
       return
@@ -89,7 +107,6 @@ class TCButton: UIButton
   
   @objc func buttonReleased()
   {
-    isSelected = false
     if (isAxis)
     {
       TCManagerInterface.setAxisValueFor(controllerButton, controller: port, value: 0.0)
@@ -102,6 +119,7 @@ class TCButton: UIButton
   
   @objc override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?)
   {
+    super.touchesMoved(touches, with: event)
     if (!isAxis || !useHapicTouch)
     {
       return
@@ -123,4 +141,3 @@ class TCButton: UIButton
   }
   
 }
-
