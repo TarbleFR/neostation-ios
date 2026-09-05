@@ -24,6 +24,8 @@ SHARED_FILES = {
     "lib/screens/game_screen/game_details_card/game_details_card_list.dart",
     "lib/screens/game_screen/game_details_card/widgets/game_details_tabs_header.dart",
     "lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart",
+    "lib/widgets/system_emulator_settings_dialog.dart",
+    "lib/widgets/system_emulator_settings_dialog/tabs.dart",
 }
 ALLOWED_EXACT = {
     ".github/workflows/dolphin-internal-isolated-v3.yml",
