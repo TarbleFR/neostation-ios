@@ -157,7 +157,8 @@
     [self completeOnNextMainTurn:^{ readCompletion([self stateSnapshotForWii:wii.boolValue saved:NO]); }];
     XCTAssertEqual([saves tableView:saves.tableView numberOfRowsInSection:0], 10);
     UITableViewCell* last = [saves tableView:saves.tableView cellForRowAtIndexPath:lastRow];
-    XCTAssertEqualObjects(last.textLabel.text, [NSString stringWithFormat:@"%@ — Slot 10", root.gameTitle]);
+    NSString* expectedSlotTitle = [NSString stringWithFormat:@"%@ — Slot 10", root.gameTitle];
+    XCTAssertEqualObjects(last.textLabel.text, expectedSlotTitle);
     XCTAssertEqualObjects(last.detailTextLabel.text, @"Empty");
 
     [saves tableView:saves.tableView didSelectRowAtIndexPath:lastRow];
