@@ -14,6 +14,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/emulator_loader.dart';
 import 'package:neostation/widgets/settings_rows.dart';
 // DOLPHIN_ISOLATION_BEGIN: emulator_identity_imports
+import 'package:dolphin_internal_bridge/dolphin_playlist_identity.dart';
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
 import 'package:neostation/l10n/dolphin_import_locale.dart';
 // DOLPHIN_ISOLATION_END: emulator_identity_imports
@@ -46,11 +47,18 @@ class GameSettingsEmulatorTab extends StatefulWidget {
 class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   static final _log = LoggerService.instance;
   // DOLPHIN_ISOLATION_BEGIN: emulator_identity_gate
-  bool get _usesDolphin => Platform.isIOS &&
-      DolphinInternalV2Service.isDolphinSystem(
-        widget.isAllMode && widget.game.systemFolderName != null
-            ? widget.game.systemFolderName! : widget.system.folderName,
-      );
+  bool get _usesDolphin {
+    if (!Platform.isIOS) return false;
+    // Imported GameCube playlists may keep a declared alias (GameCube,
+    // Nintendo GameCube or ngc) instead of the canonical gc folder name.
+    // Resolve only this label; never rewrite their storage or launch routes.
+    final system = DolphinPlaylistIdentity.forGameSettings(
+      systemFolderName: widget.system.folderName,
+      gameSystemFolderName: widget.game.systemFolderName,
+      isAllMode: widget.isAllMode,
+    );
+    return system != null && DolphinInternalV2Service.isDolphinSystem(system);
+  }
   // DOLPHIN_ISOLATION_END: emulator_identity_gate
 
   List<CoreEmulatorModel> _availableEmulators = [];
@@ -182,6 +190,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       return Padding(
         padding: EdgeInsets.all(12.r),
         child: ListTile(
+          key: const ValueKey('dolphin-integrated-emulator'),
           leading: const Icon(Symbols.sports_esports_rounded),
           title: const Text('DolphiniOS'),
           subtitle: Text(DolphinImportLocale.text(context, 'integrated')),
