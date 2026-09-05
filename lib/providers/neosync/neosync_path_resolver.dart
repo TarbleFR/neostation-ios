@@ -600,7 +600,6 @@ extension NeoSyncPathResolver on NeoSyncProvider {
   String? _resolveMeloNXGameSaveDirectory(
     String root,
     String titleId, {
-    bool allowCreate = false,
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_1
     String? profileId,
     String? saveId,
@@ -649,14 +648,54 @@ extension NeoSyncPathResolver on NeoSyncProvider {
           caseSensitive: false).firstMatch(file.path.replaceAll('\\', '/'));
       if (psp != null) {
         final titleId = psp[1]!.toUpperCase();
-        final candidates = (await GameRepository.loadGamesForSystem('psp'))
-            .where((row) => row.titleId?.toUpperCase() == titleId ||
-                row.filename.toUpperCase().contains(titleId)).toList();
-        if (candidates.length == 1) {
-          return GameModel.fromDatabaseModel(candidates.single);
+        final normalizedPath = file.path.replaceAll('\\', '/');
+        final saveDirectory = normalizedPath.substring(0, psp.end);
+        final sfo = File(path.join(saveDirectory, 'PARAM.SFO'));
+        String? nativeTitle;
+        try {
+          if (FileSystemEntity.typeSync(sfo.path, followLinks: false) ==
+                  FileSystemEntityType.file &&
+              sfo.lengthSync() <= 1024 * 1024) {
+            // PSP and PS3 share the PSF metadata container. Do not infer the
+            // game from one of its savedata members such as ICON0 or PLAYDATA.
+            // ignore: invalid_use_of_visible_for_testing_member
+            final values = Rpcs3LibraryService.parseParamSfoBytes(await sfo.readAsBytes());
+            final title = values['TITLE']?.toString().trim();
+            if (title != null && title.isNotEmpty) nativeTitle = title;
+          }
+        } catch (e) {
+          NeoSyncProvider._log.w('Could not read PSP savedata identity: $e');
         }
-        // Never assign ICON0/PLAYDATA to a game by a component-name prefix.
-        return null;
+        final libraries = await Future.wait([
+          GameRepository.loadGamesForSystem('psp'),
+          GameRepository.loadGamesForSystem('pspminis'),
+        ]);
+        final games = libraries.expand((rows) => rows).toList();
+        var candidates = games.where((row) =>
+            row.titleId?.toUpperCase() == titleId ||
+            row.filename.toUpperCase().contains(titleId)).toList();
+        if (candidates.isEmpty && nativeTitle != null) {
+          String normalize(String value) => value.toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]'), '');
+          final wanted = normalize(nativeTitle);
+          if (wanted.isNotEmpty) {
+            candidates = games.where((row) => <String?>[
+              row.titleName, row.realName, row.screenscraperRealName,
+              path.basenameWithoutExtension(row.filename),
+            ].any((name) => name != null && normalize(name) == wanted)).toList();
+          }
+        }
+        if (candidates.length == 1) {
+          return GameModel.fromDatabaseModel(candidates.single).copyWith(
+              coreName: candidates.single.coreName ?? 'ppsspp');
+        }
+        // Native saves remain eligible even before their ROM is imported.
+        // The serial identifies the savedata directory; the title is display
+        // metadata only, while the complete native path is kept in the key.
+        final title = nativeTitle ?? titleId;
+        return GameModel(name: title, realname: title, romname: titleId,
+            systemFolderName: 'psp', titleId: titleId, coreName: 'ppsspp',
+            year: '', developer: '', publisher: '', genre: '', players: '', rating: 0);
       }
       // DOLPHIN_ISOLATION_END: neosync_psp_savedata_game
       final row = await GameRepository.findRomByFilenamePrefix(saveBase);

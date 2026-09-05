@@ -41,6 +41,7 @@ SHARED_FILES = {
     "lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart",
 }
 ALLOWED_EXACT = {
+    "test/neosync_native_payload_test.dart",
     "lib/models/neo_sync_save_units.dart",
     "lib/services/neosync/neo_sync_restore_transaction.dart",
     "lib/services/neosync/neo_sync_status_rules.dart",

@@ -1,9 +1,10 @@
-// DOLPHIN_ISOLATION_BEGIN: neosync_adapter_save_filter_import
-import '../../services/neosync/neo_sync_save_policy.dart';
-// DOLPHIN_ISOLATION_END: neosync_adapter_save_filter_import
 /// Adapts the existing [NeoSyncProvider] to the [ISyncProvider] interface
 /// without rewriting its complex sync and quota logic.
 library;
+
+// DOLPHIN_ISOLATION_BEGIN: neosync_adapter_save_filter_import
+import '../../services/neosync/neo_sync_save_policy.dart';
+// DOLPHIN_ISOLATION_END: neosync_adapter_save_filter_import
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';

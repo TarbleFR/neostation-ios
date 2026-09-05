@@ -497,6 +497,9 @@ extension NeoSyncUpload on NeoSyncProvider {
           path.join(tempDir.path, '${path.basename(file.path)}.neosync.gz'),
         );
         await uploadFile.writeAsBytes(compressedBytes, flush: true);
+        // DOLPHIN_ISOLATION_BEGIN: neosync_original_card_date
+        await uploadFile.setLastModified(await file.lastModified());
+        // DOLPHIN_ISOLATION_END: neosync_original_card_date
         _processedItems.add(
           'ARMSX2 memory card detected: ${path.basename(file.path)} '
           '(${rawBytes.length} B → ${compressedBytes.length} B)',

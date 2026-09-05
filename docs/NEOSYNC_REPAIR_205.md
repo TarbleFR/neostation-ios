@@ -29,7 +29,7 @@ La règle « uniquement sauvegardes internes et savestates » avait été tradui
 
 Les objets historiques d’origine inconnue sont retirés de la liste active et conservés pour investigation. Seuls les objets prouvés étrangers sont supprimés du cloud. Les fichiers locaux de jeux, DLC et BIOS ne sont pas supprimés. Aucun accès direct au compte NeoSync de l’utilisateur n’était disponible pendant cette réparation : l’audit s’exécute sur son appareil authentifié.
 
-Une restauration MeloNX ne fabrique pas un index ou un profil natif. Le conteneur correspondant doit exister dans l’émulateur. La transaction protège les échecs pendant son exécution ; elle ne prétend pas fournir un journal de reprise après extinction forcée du téléphone.
+Une restauration MeloNX ne fabrique pas un index ou un profil natif. Le conteneur correspondant doit exister dans l’émulateur. Les envois restent effectués par constituant avec confirmation de contenu ; aucun manifeste de révision serveur ne garantit un instantané distant atomique en cas d’interruption entre deux envois. La transaction de restauration protège les échecs pendant son exécution ; elle ne prétend pas fournir un journal de reprise après extinction forcée du téléphone.
 
 ## Sources vérifiées et provenance
 

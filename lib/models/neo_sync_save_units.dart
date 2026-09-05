@@ -202,7 +202,7 @@ class NeoSyncSaveUnits {
         return directory('$namespace/$root', root, parts.skip(2).join('/'),
             parts[1], details: '${parts[0]} · ${parts[1]}');
       }
-      if (parsed.system == 'psp') {
+      if (const {'psp', 'pspminis'}.contains(parsed.system)) {
         final savedataIndex = parts.indexWhere((part) => part.toUpperCase() == 'SAVEDATA');
         final directoryIndex = savedataIndex >= 0 ? savedataIndex + 1 : 0;
         if (parts.length > directoryIndex + 1 &&

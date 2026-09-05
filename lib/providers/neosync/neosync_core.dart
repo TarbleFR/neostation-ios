@@ -712,7 +712,7 @@ extension NeoSyncCore on NeoSyncProvider {
               system.folderName.toLowerCase() == 'switch') {
             isMatch = await _resolveMeloNXFileForCloud(file, source!.rootPath,
                 preferredGame: game) != null;
-          } else if (system.folderName.toLowerCase() == 'psp' &&
+          } else if (const {'psp', 'pspminis'}.contains(system.folderName.toLowerCase()) &&
               RegExp(r'(?:^|/)(?:PSP/)?SAVEDATA/', caseSensitive: false)
                   .hasMatch(file.path.replaceAll('\\', '/'))) {
             final owner = await _gameForSaveFile(file);

@@ -163,7 +163,7 @@ class NeoSyncSavePolicy {
     ).hasMatch(key) || RegExp(
       r'(?:^|/)PSP/SAVEDATA/[^/]+/.+$', caseSensitive: false,
     ).hasMatch(key)) return NeoSyncSaveKind.save;
-    if (p != null && !p.isState && p.system == 'psp' &&
+    if (p != null && !p.isState && const {'psp', 'pspminis'}.contains(p.system) &&
         p.scope == 'game' && p.filePath.split('/').length >= 2 &&
         RegExp(r'^[A-Z]{4}[0-9]{5}').hasMatch(p.filePath)) {
       return NeoSyncSaveKind.save;
@@ -173,7 +173,7 @@ class NeoSyncSavePolicy {
         (p.emulatorSlug == 'armsx2' || p.emulatorSlug.startsWith('retroarch.'))) {
       return _package(key) ? NeoSyncSaveKind.foreign : NeoSyncSaveKind.save;
     }
-    if (p != null && !p.isState && p.system == 'psp' &&
+    if (p != null && !p.isState && const {'psp', 'pspminis'}.contains(p.system) &&
         RegExp(r'^(?:PSP/)?SAVEDATA/[^/]+/.+$', caseSensitive: false)
             .hasMatch(p.filePath)) return NeoSyncSaveKind.save;
     if (RegExp(r'(?:^|/)PSP/(?:GAME|TEXTURES|SYSTEM|flash0|Cheats)/',
@@ -206,7 +206,7 @@ class NeoSyncSavePolicy {
     }
     // A bare legacy image/config filename may be a flattened savedata file.
     // Only classify it as foreign when a non-bundle canonical origin is known.
-    if (p != null && p.system != 'ps3' && p.system != 'psp' &&
+    if (p != null && p.system != 'ps3' && !const {'psp', 'pspminis'}.contains(p.system) &&
         RegExp(r'\.(?:png|jpg|jpeg|webp|mp4|cfg|ini|log|tmp)$',
         caseSensitive: false).hasMatch(leaf)) return NeoSyncSaveKind.foreign;
     // Canonical RetroArch objects were emitted from its configured save root;
