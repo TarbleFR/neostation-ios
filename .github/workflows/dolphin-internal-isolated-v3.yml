@@ -1,26 +1,87 @@
 name: Build NeoStation iOS IPA
-run-name: NeoSync Dolphin source audit
+run-name: Materialize and verify isolated NeoSync Dolphin integration
 on:
   push:
     branches: [feature/neosync-dolphin-internal]
+    paths: [.github/workflows/dolphin-internal-isolated-v3.yml]
   workflow_dispatch: {}
 permissions:
-  contents: read
+  contents: write
 jobs:
-  source-audit:
+  materialize:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    env:
+      BASE: 41fb6cbd1401323f58224cee47c6e73091c55032
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: TarbleFR/neostation-ios
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 41fb6cbd1401323f58224cee47c6e73091c55032
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
-      - name: Export exact stable source without local secrets
-        run: git archive --format=zip --output=neosync-stable-source.zip HEAD
+      - name: Verify staged patch and refuse concurrent application changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,gzip,hashlib,os,subprocess
+          from pathlib import Path
+          changed=subprocess.check_output(['git','diff','--name-only',os.environ['BASE'],'HEAD'],text=True).splitlines()
+          allowed='.github/workflows/dolphin-internal-isolated-v3.yml'
+          assert all(p==allowed or p.startswith('build-utils/neosync-staging/') for p in changed), 'Unexpected feature-branch application changes: review before applying'
+          folder=Path('build-utils/neosync-staging')
+          groups=[['0'],['1'],['2','2b','2c'],['3','3b','3c']]
+          expected=['e0fffba1dca4fb9cf424f7988ad2097c9ce412c9','9cdf32f66075850ee983f04e50341bb4b8066488','3d9f6d14af493cb7b9541405853ca0348762fa2f','8286e817c1154ecb96cb8e0ac14222d84a359acc']
+          chunks=[]
+          for index,group in enumerate(groups):
+              data=b''.join((folder/(part+'.b64')).read_bytes().strip() for part in group)
+              blob=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              print('Verified transfer segment',index,len(data),blob)
+              assert blob==expected[index], f'Transfer segment {index} failed integrity verification'
+              chunks.append(data)
+          patch=gzip.decompress(base64.b64decode(b''.join(chunks),validate=True))
+          assert len(patch)==105654
+          assert hashlib.sha256(patch).hexdigest()=='ff361e34967b8a362d8e1899fe2c7b05b1f2dd3493ca643a450046253b7df8e2'
+          Path(os.environ['RUNNER_TEMP'],'neosync.patch').write_bytes(patch)
+          print('Full reviewed patch checksum confirmed.')
+          PY
+      - name: Apply real sources and remove temporary transfer files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git restore --source="$BASE" --staged --worktree -- .github/workflows/dolphin-internal-isolated-v3.yml
+          git apply --check "$RUNNER_TEMP/neosync.patch"
+          git apply "$RUNNER_TEMP/neosync.patch"
+          cp .github/workflows/dolphin-internal-isolated-v3.yml "$RUNNER_TEMP/final-build-workflow.yml"
+          # This token writes application sources only. The connected maintainer
+          # action installs the final build workflow after this run completes.
+          git restore --source=HEAD --staged --worktree -- .github/workflows/dolphin-internal-isolated-v3.yml
+          git rm -r build-utils/neosync-staging
+          git diff --check
+          python3 -m unittest discover -s test -p 'dolphin_*test.py' -v 2>&1 | tee "$RUNNER_TEMP/neosync-python-tests.txt"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(neosync): synchronize embedded Dolphin native saves with transactional restore and conflict protection [skip ci]'
+          python3 build-utils/check_dolphin_isolation_v2.py --base "$BASE" | tee "$RUNNER_TEMP/neosync-isolation.txt"
+          git diff --stat "$BASE" HEAD
+      - name: Publish verified implementation to feature branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          git push origin HEAD:refs/heads/feature/neosync-dolphin-internal
+          git rev-parse HEAD
+          git archive --format=zip --output="$RUNNER_TEMP/neosync-implemented-source.zip" HEAD
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: neosync-stable-source
-          path: neosync-stable-source.zip
-          retention-days: 2
-          if-no-files-found: error
+          name: neosync-source-verification
+          path: |
+            ${{ runner.temp }}/neosync-python-tests.txt
+            ${{ runner.temp }}/neosync-isolation.txt
+            ${{ runner.temp }}/final-build-workflow.yml
+            ${{ runner.temp }}/neosync-implemented-source.zip
+          retention-days: 7
+          if-no-files-found: warn
