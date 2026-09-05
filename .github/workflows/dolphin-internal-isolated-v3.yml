@@ -11,13 +11,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: f394ea9a0596e2d68cc7c33c442145de7d6ddbf1
           fetch-depth: 1
           persist-credentials: false
-      - name: Export tracked sources only
-        run: git archive --format=zip --output=neosync-safety-source.zip HEAD
+      - name: Export tracked sources and decode staged text for review only
+        run: |
+          git archive --format=zip --output=neosync-safety-source.zip HEAD
+          python3 - <<'PY'
+          import base64, hashlib, json, zlib
+          from pathlib import Path
+          parts=sorted(Path('build-utils/neosync-staging').glob('*.b64'))
+          encoded=''.join(p.read_text().strip() for p in parts)
+          data=base64.b64decode(encoded, validate=True)
+          decoder=zlib.decompressobj(31)
+          decoded=decoder.decompress(data)
+          Path('staged-for-review.patch').write_bytes(decoded)
+          Path('decode-status.json').write_text(json.dumps({'complete':decoder.eof,'parts':[p.name for p in parts],'bytes':len(decoded),'sha256':hashlib.sha256(decoded).hexdigest()},indent=2))
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: neosync-safety-source
-          path: neosync-safety-source.zip
+          path: |
+            neosync-safety-source.zip
+            staged-for-review.patch
+            decode-status.json
           if-no-files-found: error
           retention-days: 2
