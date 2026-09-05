@@ -915,7 +915,9 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       [controller loadViewIfNeeded];
       metalReady = controller.metalView.device != nil && [controller.metalView.device newCommandQueue] != nil;
       layer = (CAMetalLayer*)controller.metalView.layer;
-      metalScale = layer.contentsScale;
+      // Use the attached frontend screen. A not-yet-presented MTKView may
+      // still report a 1x layer scale before UIKit attaches it to that screen.
+      metalScale = root.view.window.screen.scale;
       if (!metalReady) return;
       [root presentViewController:controller animated:NO completion:nil];
       metalReady = controller.presentingViewController == root && root.presentedViewController == controller;
