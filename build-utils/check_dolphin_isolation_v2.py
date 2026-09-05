@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_FILES = {
+    # User explicitly requested global NeoSync saves-only policy and cleanup.
+    "lib/services/neosync/legacy_neo_sync_service.dart",
     # User-requested repair of NeoSync filename visibility, scoped by markers.
     "lib/models/neo_sync_models.dart",
     "lib/screens/neo_sync_screen/login_screen/neo_sync_content.dart",
@@ -37,6 +39,11 @@ SHARED_FILES = {
     "lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart",
 }
 ALLOWED_EXACT = {
+    "lib/services/neosync/neo_sync_save_policy.dart",
+    "lib/services/neosync/neo_sync_cloud_cleanup.dart",
+    "lib/providers/neosync/neosync_save_audit.dart",
+    "test/neosync_save_policy_test.dart",
+    "test/neosync_cloud_cleanup_test.dart",
     "lib/providers/neosync/neosync_dolphin.dart",
     "lib/services/dolphin_neosync_store.dart",
     "docs/DOLPHIN_NEOSYNC.md",

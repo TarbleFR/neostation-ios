@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+// DOLPHIN_ISOLATION_BEGIN: neosync_global_save_policy_imports
+import 'neo_sync_save_policy.dart';
+import 'neo_sync_cloud_cleanup.dart';
+// DOLPHIN_ISOLATION_END: neosync_global_save_policy_imports
 
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -114,6 +118,16 @@ class NeoSyncService extends ChangeNotifier {
     _safeNotifyListeners();
 
     try {
+// DOLPHIN_ISOLATION_BEGIN: neosync_syncFile_save_policy
+      final cloudKey = customFilename ?? file.path;
+      if (!NeoSyncSavePolicy.allowsUpload(file.path, cloudKey)) {
+        return {'success': false, 'excluded': true,
+          'message': 'NeoSync accepts only internal saves and savestates: $cloudKey'};
+      }
+      if (await FileSystemEntity.type(file.path, followLinks: false) != FileSystemEntityType.file) {
+        return {'success': false, 'excluded': true, 'message': 'NeoSync refuses linked save files'};
+      }
+// DOLPHIN_ISOLATION_END: neosync_syncFile_save_policy
       final fileBytes = await file.readAsBytes();
       final fileHash = _calculateFileHash(fileBytes);
       final filename = customFilename ?? file.path;
@@ -277,6 +291,16 @@ class NeoSyncService extends ChangeNotifier {
     _safeNotifyListeners();
 
     try {
+// DOLPHIN_ISOLATION_BEGIN: neosync_uploadFile_save_policy
+      final cloudKey = customFilename ?? file.path;
+      if (!NeoSyncSavePolicy.allowsUpload(file.path, cloudKey)) {
+        return {'success': false, 'excluded': true,
+          'message': 'NeoSync accepts only internal saves and savestates: $cloudKey'};
+      }
+      if (await FileSystemEntity.type(file.path, followLinks: false) != FileSystemEntityType.file) {
+        return {'success': false, 'excluded': true, 'message': 'NeoSync refuses linked save files'};
+      }
+// DOLPHIN_ISOLATION_END: neosync_uploadFile_save_policy
       final token = await _getToken();
       if (token == null) {
         throw Exception('Not authenticated');
@@ -321,11 +345,13 @@ class NeoSyncService extends ChangeNotifier {
   }
 
   // DOLPHIN_ISOLATION_BEGIN: dolphin_complete_cloud_listing
-  /// Dolphin must not treat a file outside the first page as absent. Preserve
-  /// the existing getFiles() contract for every other caller.
-  Future<Map<String, dynamic>> getDolphinSaveFiles() async {
+  /// Neither synchronization nor cleanup may mistake an incomplete page for
+  /// the full account inventory. Both use this bounded pagination routine.
+  Future<Map<String, dynamic>> getDolphinSaveFiles() async =>
+      _getCompleteFiles(await _getHeaders());
+
+  Future<Map<String, dynamic>> _getCompleteFiles(Map<String, String> headers) async {
     try {
-      final headers = await _getHeaders();
       final files = <NeoSyncFile>[];
       final seen = <String>{};
       var offset = 0;
@@ -361,44 +387,40 @@ class NeoSyncService extends ChangeNotifier {
   // DOLPHIN_ISOLATION_END: dolphin_complete_cloud_listing
 
   /// Fetches the metadata list of all files currently stored in the user's cloud account.
-  Future<Map<String, dynamic>> getFiles() async {
-    _isLoading = true;
-    _lastError = null;
-    _safeNotifyListeners();
+// DOLPHIN_ISOLATION_BEGIN: neosync_complete_inventory
+  Future<Map<String, dynamic>> getFiles() async => getDolphinSaveFiles();
 
+  Future<Map<String, dynamic>> auditAndPurge({
+    required Future<List<NeoSyncFile>> Function(List<NeoSyncFile>) resolveOrigins,
+  }) async {
     try {
-      final headers = await _getHeaders();
-      final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v2/files')
-          .replace(queryParameters: const {'limit': '200', 'offset': '0'});
-
-      final response = await http.get(uri, headers: headers);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final files =
-            (data['files'] as List?)
-                ?.map((file) => NeoSyncFile.fromJson(file))
-                .toList() ??
-            [];
-        return {'success': true, 'files': files};
-      } else {
-        final data = jsonDecode(response.body);
-        final error = data['error'] ?? 'Failed to fetch files';
-        _log.e('Fetch failed: $error (status: ${response.statusCode})');
-        return {'success': false, 'message': error};
-      }
-    } catch (e) {
-      final error = 'Network error: $e';
-      _log.e('Fetch error: $error');
-      _lastError = error;
-      return {'success': false, 'message': error};
-    } finally {
-      _isLoading = false;
-      _safeNotifyListeners();
+      final token = await _getToken();
+      if (token == null || token.isEmpty) throw StateError('Not authenticated');
+      final headers = {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
+      final listing = await _getCompleteFiles(headers);
+      if (listing['success'] != true) return listing;
+      final inventory = await resolveOrigins(listing['files'] as List<NeoSyncFile>);
+      final result = await NeoSyncCloudCleanup.run(
+        inventory: inventory,
+        isCurrentAccount: () async => await _getToken() == token,
+        delete: (file) async {
+          final response = await http.delete(
+            Uri.parse('${AppConfig.neoSyncBaseUrl}/api/v2/files/${Uri.encodeComponent(file.id)}'),
+            headers: headers).timeout(const Duration(seconds: 30));
+          final success = response.statusCode == 200 || response.statusCode == 204;
+          _log.i('NeoSync non-save purge: ${file.id} ${file.sourceSavePath} HTTP ${response.statusCode}');
+          return success;
+        },
+      );
+      return {'success': true, 'files': result.remaining,
+        'deleted': result.deletedIds.length, 'failed': result.failedIds.length,
+        'unresolved': result.unresolved};
+    } catch (error) {
+      return {'success': false, 'message': 'NeoSync cleanup stopped: $error'};
     }
   }
 
+// DOLPHIN_ISOLATION_END: neosync_complete_inventory
   /// Deletes a specific file from the cloud storage by its unique identifier.
   Future<Map<String, dynamic>> deleteFile(String fileId) async {
     _isLoading = true;

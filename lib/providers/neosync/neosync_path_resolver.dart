@@ -507,36 +507,9 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     File file,
     String root,
   ) {
-    final relative = path.relative(file.path, from: root).replaceAll('\\', '/');
-    if (relative == '..' || relative.startsWith('../')) return null;
-
-    final segments = relative
-        .split('/')
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (segments.isEmpty) return null;
-
-    var titleIndex = -1;
-    final saveIndex = segments.indexWhere(
-      (part) => part.toLowerCase() == 'save',
-    );
-    if (saveIndex >= 0) {
-      for (var i = saveIndex + 1; i < segments.length; i++) {
-        if (_isMeloNXTitleId(segments[i])) {
-          titleIndex = i;
-          break;
-        }
-      }
-    }
-    if (titleIndex < 0) {
-      titleIndex = segments.indexWhere(_isMeloNXTitleId);
-    }
-    if (titleIndex < 0 || titleIndex + 1 >= segments.length) return null;
-
-    return (
-      titleId: segments[titleIndex],
-      internalPath: segments.sublist(titleIndex + 1).join('/'),
-    );
+// DOLPHIN_ISOLATION_BEGIN: neosync_strict_melonx_source
+    return NeoSyncSavePolicy.melonxLocation(file.path, root);
+// DOLPHIN_ISOLATION_END: neosync_strict_melonx_source
   }
 
   Future<String?> _meloNXTitleIdForGame(GameModel game) async {
@@ -616,7 +589,11 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         followLinks: false,
       )) {
         if (entity is Directory &&
-            path.basename(entity.path).toLowerCase() == titleId.toLowerCase()) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_melonx_restore_source
+            path.basename(entity.path).toLowerCase() == titleId.toLowerCase() &&
+            NeoSyncSavePolicy.melonxLocation(
+              path.join(entity.path, '__save_probe__'), root) != null) {
+// DOLPHIN_ISOLATION_END: neosync_melonx_restore_source
           return entity.path;
         }
       }
@@ -808,7 +785,9 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     );
     if (resolvedFolders.isEmpty) return [];
 
-    final v2Path = CloudPathBuilder.parse(cloudFile.fileName);
+    // DOLPHIN_ISOLATION_BEGIN: neosync_restore_original_path
+final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
+// DOLPHIN_ISOLATION_END: neosync_restore_original_path
     final isState = v2Path?.isState ?? cloudFile.fileName.startsWith('states/');
     final isSave = v2Path != null
         ? !v2Path.isState
@@ -1069,9 +1048,14 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
     try {
       return await dir
-          .list(recursive: true)
+          // DOLPHIN_ISOLATION_BEGIN: neosync_no_symlink_scan
+.list(recursive: true, followLinks: false)
+// DOLPHIN_ISOLATION_END: neosync_no_symlink_scan
           .where((entity) => entity is File)
           .cast<File>()
+// DOLPHIN_ISOLATION_BEGIN: neosync_scan_save_policy
+          .where((file) => NeoSyncSavePolicy.classify(file.path) != NeoSyncSaveKind.foreign)
+// DOLPHIN_ISOLATION_END: neosync_scan_save_policy
           .toList();
     } catch (e) {
       NeoSyncProvider._log.e('Error listing save files in $directoryPath: $e');

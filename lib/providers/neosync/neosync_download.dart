@@ -107,7 +107,10 @@ extension NeoSyncDownload on NeoSyncProvider {
     // DOLPHIN_ISOLATION_END: dolphin_no_generic_download
 
     try {
-      final parsed = CloudPathBuilder.parse(cloudFile.fileName);
+      // DOLPHIN_ISOLATION_BEGIN: neosync_download_save_policy
+if (cloudFile.saveKind != NeoSyncSaveKind.save) return;
+      final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
+// DOLPHIN_ISOLATION_END: neosync_download_save_policy
       if (Platform.isIOS &&
           parsed?.emulatorSlug == 'armsx2' &&
           parsed?.isShared == true) {
@@ -206,7 +209,9 @@ extension NeoSyncDownload on NeoSyncProvider {
 
   /// Helper para encontrar el juego de un archivo de nube
   Future<GameModel?> _findGameForCloudFile(NeoSyncFile cloudFile) async {
-    final v2Path = CloudPathBuilder.parse(cloudFile.fileName);
+    // DOLPHIN_ISOLATION_BEGIN: neosync_restore_original_path
+final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
+// DOLPHIN_ISOLATION_END: neosync_restore_original_path
     if (v2Path != null &&
         v2Path.emulatorSlug == 'rpcs3' &&
         v2Path.gameName != null) {
@@ -373,6 +378,12 @@ extension NeoSyncDownload on NeoSyncProvider {
     NeoSyncFile cloudFile,
     File localFile,
   ) async {
+// DOLPHIN_ISOLATION_BEGIN: neosync_save_only_restore
+    if (cloudFile.saveKind != NeoSyncSaveKind.save) {
+      throw StateError('NeoSync refuses to restore an unverified save');
+    }
+
+// DOLPHIN_ISOLATION_END: neosync_save_only_restore
     // DOLPHIN_ISOLATION_BEGIN: dolphin_download_writer
     if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
       await _restoreDolphinCloud(cloudFile); return;
@@ -459,6 +470,9 @@ extension NeoSyncDownload on NeoSyncProvider {
 
     for (final legacyFile in legacyFiles) {
       if (!LegacyNeoSyncService.isLegacyId(legacyFile.id)) continue;
+// DOLPHIN_ISOLATION_BEGIN: neosync_legacy_save_policy
+      if (NeoSyncSavePolicy.classify(legacyFile.sourceSavePath) != NeoSyncSaveKind.save) continue;
+// DOLPHIN_ISOLATION_END: neosync_legacy_save_policy
       Directory? tempDir;
       try {
         final game = await _findGameForCloudFile(legacyFile);

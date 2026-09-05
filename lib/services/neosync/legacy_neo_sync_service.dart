@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+// DOLPHIN_ISOLATION_BEGIN: neosync_legacy_cleanup_import
+import 'neo_sync_cloud_cleanup.dart';
+// DOLPHIN_ISOLATION_END: neosync_legacy_cleanup_import
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -9,9 +12,11 @@ import 'package:neostation/models/neo_sync_models.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/app_config.dart';
 
-/// Read-only compatibility bridge for the historical NeoSync v1 storage.
-///
-/// The v1 files are never removed automatically. They are exposed to the v2
+// DOLPHIN_ISOLATION_BEGIN: neosync_legacy_cleanup_contract
+/// Compatibility bridge for historical NeoSync v1 storage. Save migration does
+/// not delete originals. The saves-only cleanup removes proven non-saves only.
+/// Files are exposed to the v2
+// DOLPHIN_ISOLATION_END: neosync_legacy_cleanup_contract
 /// provider with an ID prefixed by `v1:` so callers can route download/delete
 /// requests to the legacy service without changing the shared file model.
 class LegacyNeoSyncService {
@@ -43,10 +48,19 @@ class LegacyNeoSyncService {
   }
 
   Future<Map<String, dynamic>> getFiles() async {
+// DOLPHIN_ISOLATION_BEGIN: neosync_legacy_inventory_token
+    final token = await _getToken();
+    return _getFilesWithHeaders({'Authorization': 'Bearer $token', 'Content-Type': 'application/json'});
+  }
+
+  Future<Map<String, dynamic>> _getFilesWithHeaders(Map<String, String> headers) async {
+// DOLPHIN_ISOLATION_END: neosync_legacy_inventory_token
     try {
       final response = await http.get(
         Uri.parse('${AppConfig.legacyNeoSyncBaseUrl}/api/v1/files'),
-        headers: await _headers(),
+        // DOLPHIN_ISOLATION_BEGIN: neosync_legacy_bound_listing
+headers: headers,
+// DOLPHIN_ISOLATION_END: neosync_legacy_bound_listing
       );
       if (response.statusCode != 200) {
         _log.w('NeoSync v1 file listing failed: HTTP ${response.statusCode}');
@@ -58,10 +72,33 @@ class LegacyNeoSyncService {
       }
 
       final data = jsonDecode(response.body);
+      // DOLPHIN_ISOLATION_BEGIN: neosync_legacy_inventory_validation
+      if (data is! Map || data['files'] is! List ||
+          (data['files'] as List).any((item) => item is! Map)) {
+        throw const FormatException('Invalid legacy NeoSync inventory');
+      }
+      for (final metadata in [data, if (data['pagination'] is Map) data['pagination'] as Map,
+          if (data['meta'] is Map) data['meta'] as Map]) {
+        final total = int.tryParse('${metadata['total'] ?? metadata['total_count'] ?? ''}');
+        final more = metadata['has_more'];
+        if (more == true || more == 1 || more == 'true' ||
+            (metadata['next'] != null && metadata['next'] != false && metadata['next'] != '') ||
+            (metadata['next_cursor'] != null && metadata['next_cursor'] != '') ||
+            (metadata['next_page'] != null && metadata['next_page'] != false) ||
+            (total != null && total > (data['files'] as List).length)) {
+          throw StateError('Legacy NeoSync inventory is incomplete; no cleanup performed');
+        }
+      }
+      // DOLPHIN_ISOLATION_END: neosync_legacy_inventory_validation
       final files =
           (data['files'] as List?)?.whereType<Map>().map((raw) {
             final json = Map<String, dynamic>.from(raw);
             final parsed = NeoSyncFile.fromJson(json);
+            // DOLPHIN_ISOLATION_BEGIN: neosync_legacy_valid_id
+            if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(parsed.id)) {
+              throw const FormatException('Invalid legacy NeoSync file ID');
+            }
+            // DOLPHIN_ISOLATION_END: neosync_legacy_valid_id
             return NeoSyncFile(
               id: '$_idPrefix${parsed.id}',
               fileName: parsed.fileName,
@@ -82,6 +119,37 @@ class LegacyNeoSyncService {
       return {'success': false, 'message': e.toString()};
     }
   }
+
+// DOLPHIN_ISOLATION_BEGIN: neosync_legacy_requested_cleanup
+  Future<Map<String, dynamic>> auditAndPurge({
+    required Future<List<NeoSyncFile>> Function(List<NeoSyncFile>) resolveOrigins,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null || token.isEmpty) throw StateError('Not authenticated');
+      final headers = {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
+      final listing = await _getFilesWithHeaders(headers);
+      if (listing['success'] != true) return listing;
+      final result = await NeoSyncCloudCleanup.run(
+        inventory: await resolveOrigins(listing['files'] as List<NeoSyncFile>),
+        isCurrentAccount: () async => await _getToken() == token,
+        delete: (file) async {
+          final response = await http.delete(
+            Uri.parse('${AppConfig.legacyNeoSyncBaseUrl}/api/v1/files/${Uri.encodeComponent(rawId(file.id))}'),
+            headers: headers).timeout(const Duration(seconds: 30));
+          _log.i('NeoSync v1 non-save purge: ${file.id} ${file.sourceSavePath} HTTP ${response.statusCode}');
+          return response.statusCode == 200 || response.statusCode == 204;
+        },
+      );
+      return {'success': true, 'files': result.remaining,
+        'deleted': result.deletedIds.length, 'failed': result.failedIds.length,
+        'unresolved': result.unresolved};
+    } catch (error) {
+      return {'success': false, 'message': 'Legacy cleanup stopped: $error'};
+    }
+  }
+
+// DOLPHIN_ISOLATION_END: neosync_legacy_requested_cleanup
 
   Future<Map<String, dynamic>> downloadFile(String id) async {
     try {

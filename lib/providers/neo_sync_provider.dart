@@ -3,6 +3,9 @@ import 'dart:async';
 import '../services/dolphin_internal_v2_service.dart';
 import '../services/dolphin_neosync_store.dart';
 import '../services/dolphin_system_files.dart';
+import '../services/neosync/neo_sync_save_policy.dart';
+import '../services/neosync/neo_sync_cloud_cleanup.dart';
+import 'package:crypto/crypto.dart' as saveCrypto;
 // DOLPHIN_ISOLATION_END: neosync_imports
 import 'package:flutter/material.dart';
 
@@ -40,6 +43,7 @@ part 'neosync/neosync_download.dart';
 part 'neosync/neosync_core.dart';
 // DOLPHIN_ISOLATION_BEGIN: neosync_part
 part 'neosync/neosync_dolphin.dart';
+part 'neosync/neosync_save_audit.dart';
 // DOLPHIN_ISOLATION_END: neosync_part
 
 /// Provider responsible for managing the NeoSync cloud save synchronization service.
@@ -72,6 +76,8 @@ class NeoSyncProvider extends ChangeNotifier {
   int _dolphinBulkChecked = 0;
   int _dolphinBulkErrors = 0;
   final DolphinSaveTitleCache _dolphinTitles = DolphinSaveTitleCache();
+  String? _saveAuditMessage;
+  String? get saveAuditMessage => _saveAuditMessage;
   // DOLPHIN_ISOLATION_END: neosync_queue
 
   /// Whether a global synchronization task is currently active.
@@ -250,6 +256,12 @@ class NeoSyncProvider extends ChangeNotifier {
   /// Upon successful download, it synchronizes the local database sync state
   /// to match the cloud version.
   Future<void> _downloadCloudFile(NeoSyncFile cloudFile, File localFile) async {
+// DOLPHIN_ISOLATION_BEGIN: neosync_save_only_restore
+    if (cloudFile.saveKind != NeoSyncSaveKind.save) {
+      throw StateError('NeoSync refuses to restore an unverified save');
+    }
+
+// DOLPHIN_ISOLATION_END: neosync_save_only_restore
     // DOLPHIN_ISOLATION_BEGIN: dolphin_download_writer
     if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
       await _restoreDolphinCloud(cloudFile); return;

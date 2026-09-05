@@ -835,7 +835,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
         final pathGameName = _readableGameNameFromV2Path(file.presentationPath);
         // DOLPHIN_ISOLATION_END: neosync_ps3_listing_context
         label = pathGameName;
-        key = 'rpcs3:${pathGameName.toLowerCase()}';
+        // DOLPHIN_ISOLATION_BEGIN: neosync_native_ps3_bundle
+key = file.ps3BundleKey != null ? 'rpcs3:${file.ps3BundleKey}' : 'file:${file.id}';
+// DOLPHIN_ISOLATION_END: neosync_native_ps3_bundle
       } else if (isArmsx2Save || isArmsx2State) {
         label = file.gameName.trim().isNotEmpty
             ? file.gameName.trim()
@@ -936,6 +938,17 @@ class NeoSyncContentState extends State<NeoSyncContent>
     return result.isEmpty ? 'save' : result;
   }
 
+// DOLPHIN_ISOLATION_BEGIN: neosync_native_export_bytes
+  bool _sameSaveBytes(List<int> first, List<int> second) {
+    if (first.length != second.length) return false;
+    for (var i = 0; i < first.length; i++) {
+      if (first[i] != second[i]) return false;
+    }
+    return true;
+  }
+
+// DOLPHIN_ISOLATION_END: neosync_native_export_bytes
+
   List<String> _safeCloudPathSegments(String cloudPath) {
     var value = cloudPath.replaceAll('\\', '/').trim();
     if (value.toLowerCase().endsWith('.neosync.gz')) {
@@ -1005,9 +1018,23 @@ class NeoSyncContentState extends State<NeoSyncContent>
       for (final group in groups) {
         for (final cloudFile in group.files) {
           final bytes = await neoSyncProvider.downloadOnlineFileBytes(cloudFile);
+          // DOLPHIN_ISOLATION_BEGIN: neosync_native_export_collision
+          if (cloudFile.ps3BundleKey != null) {
+            final nativeTarget = File(p.joinAll([exportRoot.path,
+              ..._safeCloudPathSegments(cloudFile.exportSavePath)]));
+            if (await nativeTarget.exists()) {
+              final previous = await nativeTarget.readAsBytes();
+              if (previous.length == bytes.length &&
+                  _sameSaveBytes(previous, bytes)) continue;
+              throw StateError('Deux versions différentes du même fichier PS3. Exporte les sauvegardes séparément.');
+            }
+          }
+          // DOLPHIN_ISOLATION_END: neosync_native_export_collision
           final target = _uniqueExportFile(
             exportRoot,
-            _safeCloudPathSegments(cloudFile.fileName),
+            // DOLPHIN_ISOLATION_BEGIN: neosync_native_save_export
+            _safeCloudPathSegments(cloudFile.exportSavePath),
+            // DOLPHIN_ISOLATION_END: neosync_native_save_export
           );
           await target.parent.create(recursive: true);
           await target.writeAsBytes(bytes, flush: true);
@@ -1456,6 +1483,15 @@ class NeoSyncContentState extends State<NeoSyncContent>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+// DOLPHIN_ISOLATION_BEGIN: neosync_cleanup_summary_ui
+              if (neoSyncProvider.saveAuditMessage != null)
+                Padding(
+                  padding: EdgeInsets.all(8.r),
+                  child: Text(neoSyncProvider.saveAuditMessage!,
+                    style: TextStyle(fontSize: 9.r,
+                      color: Theme.of(context).colorScheme.onSurface)),
+                ),
+// DOLPHIN_ISOLATION_END: neosync_cleanup_summary_ui
               // Header (fijo en la parte superior)
               Row(
                 children: [

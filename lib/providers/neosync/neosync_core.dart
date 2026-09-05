@@ -1119,7 +1119,9 @@ extension NeoSyncCore on NeoSyncProvider {
 
         if (isSharedSystem) {
           // Para sistemas compartidos, filtrar estrictamente por sistema
-          final parsed = CloudPathBuilder.parse(cloudFile.fileName);
+          // DOLPHIN_ISOLATION_BEGIN: neosync_per_game_original_path
+final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
+// DOLPHIN_ISOLATION_END: neosync_per_game_original_path
           if (system.folderName.toLowerCase() == 'ps2' &&
               parsed?.emulatorSlug == 'armsx2' &&
               parsed?.isShared == true) {
@@ -1132,7 +1134,9 @@ extension NeoSyncCore on NeoSyncProvider {
             isMatch = true;
           }
         } else {
-          final parsed = CloudPathBuilder.parse(cloudFile.fileName);
+          // DOLPHIN_ISOLATION_BEGIN: neosync_per_game_original_path
+final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
+// DOLPHIN_ISOLATION_END: neosync_per_game_original_path
           if (system.folderName.toLowerCase() == 'ps3' &&
               parsed?.emulatorSlug == 'rpcs3' &&
               parsed?.gameName != null) {

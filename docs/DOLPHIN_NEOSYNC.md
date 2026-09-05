@@ -78,7 +78,8 @@ label. The individual numbered slots remain distinct.
 `ICON0.PNG`, `PARAM.SFO`, `PIC1.PNG`, `SYSDATA` and `PLAYDATA` can be constituent
 files of PlayStation save directories, not stray Dolphin files. Such components
 must remain available for restoration; a recognized common save path supplies
-their display context. No cloud files are deleted or excluded by extension.
+their display context. The subsequent user-requested saves-only cleanup checks
+provenance before deleting non-save objects; savedata components are preserved.
 If the server omits the upload date, an available file timestamp is displayed
 instead of replacing it with today's date; legacy Unix-second values are
 normalized to the millisecond representation used by current uploads.
@@ -195,3 +196,36 @@ CI compiles all existing integrations and verifies the native identity ABI in
 the actual IPA. Unit fixtures and compilation do not prove an authenticated
 round trip against a real NeoSync account or a launch on an iPhone/iPad. Those
 remain device/account validation steps for this candidate.
+
+
+## Saves-only rule and source investigation (build 204)
+
+NeoSync's two upload gateways now reject anything not identified as an internal
+save or savestate. Scans do not follow links. The MeloNX resolver previously
+accepted a Title ID anywhere under the linked folder, including installed DLC;
+it now requires the actual `user/save/0000000000000000/.../<application-id>/`
+source tree. Packages (`.nsp`, `.nca`, `.xci`, etc.) never enter that save stream.
+Restore directory lookup uses the same restriction.
+
+Opening or refreshing NeoSync obtains a complete v2 inventory and investigates
+origins before cleanup. The historical v1 inventory is checked too. Only proven
+non-save IDs are deleted, with the inventory's authentication token bound to
+all requests. Account changes stop cleanup; failed deletes stay visible and are
+retried on the next refresh. The UI reports deleted, failed and unresolved counts.
+No local emulator data, installed game or DLC is deleted by cloud cleanup.
+
+PS3 saves retain the native `dev_hdd0/home/<profile>/savedata/<save-directory>/`
+structure and original bytes. Each profile/save directory is grouped separately;
+exports reconstruct that native structure rather than exporting loose metadata
+files. Recovered canonical paths drive restoration without changing API IDs or
+transport filenames. If only a basename remains, the app searches linked RPCS3
+savedata and MeloNX native user-save trees for an exact filename, size and checksum match; multiple matches remain
+unresolved. Ambiguous Switch config/content members are also investigated instead
+of being deleted on filename alone. VMU, Saturn backup RAM and RTC saves are retained. A game title or a familiar icon is insufficient evidence. PS3/PSP
+bundle members (including PARAM.SFO/PFD, PNGs and extensionless data) are preserved.
+
+Unknown historical objects are not automatically destroyed. They are excluded
+from new uploads/restoration until identified and reported as unresolved. These
+rules intentionally distinguish a blocked upload from evidence sufficient for
+irreversible deletion. Actual account cleanup runs on the authenticated device;
+CI does not hold or access the user's NeoSync account.

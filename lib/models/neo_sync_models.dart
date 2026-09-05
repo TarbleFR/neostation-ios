@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 // DOLPHIN_ISOLATION_BEGIN: neosync_presentation_imports
 import '../services/dolphin_neosync_store.dart';
+import '../services/neosync/neo_sync_save_policy.dart';
 // DOLPHIN_ISOLATION_END: neosync_presentation_imports
 
 /// Configuration settings for the NeoSync cloud synchronization service.
@@ -105,14 +106,16 @@ class NeoSyncFile {
   }
 
   /// Server listings can split the basename from the original cloud path.
-  /// This recovered path is presentation only: transfers retain fileName/id.
+  /// A recovered origin drives display and native restoration. Transfers still
+  /// address the server by its unchanged filename/id.
   String get presentationPath {
+    if (verifiedSourcePath != null) return verifiedSourcePath!;
     final filename = fileName.replaceAll('\\', '/');
     if (filename.startsWith('v2/')) return filename;
     // Never reinterpret an existing relative path as a different cloud object.
     if (filename.contains('/')) return filename;
     final stored = filePath.replaceAll('\\', '/');
-    final match = RegExp(r'(?:^|/)(v2/(?:saves|states)/(?:gc|wii|ps3|psp)/[^/]+/(?:game|shared)/.+)$')
+    final match = RegExp(r'(?:^|/)(v2/(?:saves|states)/[a-zA-Z0-9_-]+/[^/]+/(?:game|shared)/.+)$')
         .firstMatch(stored);
     final candidate = match?.group(1);
     if (candidate != null &&
@@ -127,12 +130,47 @@ class NeoSyncFile {
 
   /// A local playlist title is a UI fallback, never upload/restore metadata.
   final String? dolphinDisplayTitle;
+  /// Recovered only from matching canonical metadata or an unambiguous local
+  /// savedata hash. Never serialized or used as an API object identifier.
+  final String? verifiedSourcePath;
+  String get sourceSavePath {
+    final key = presentationPath;
+    if (NeoSyncSavePolicy.canonical(key) != null || key.contains('/')) return key;
+    final stored = filePath.replaceAll('\\', '/');
+    if (NeoSyncSavePolicy.unwrap(stored).split('/').last ==
+        NeoSyncSavePolicy.unwrap(key) &&
+        NeoSyncSavePolicy.classify(stored) == NeoSyncSaveKind.save) return stored;
+    return key;
+  }
+  NeoSyncSaveKind get saveKind => verifiedSourcePath != null
+      ? NeoSyncSaveKind.save : NeoSyncSavePolicy.classify(sourceSavePath);
+  String get exportSavePath =>
+      NeoSyncSavePolicy.rpcs3NativePath(sourceSavePath) ?? sourceSavePath;
+  String? get ps3BundleKey {
+    final p = NeoSyncSavePolicy.canonical(sourceSavePath);
+    if (!NeoSyncSavePolicy.isRpcs3Payload(sourceSavePath)) return null;
+    return '${p!.gameName}/${p.filePath.split('/').take(2).join('/')}';
+  }
+  NeoSyncFile withVerifiedSourcePath(String key) {
+    final p = NeoSyncSavePolicy.canonical(key);
+    final kind = NeoSyncSavePolicy.classify(key);
+    final nativeSwitch = p != null && p.system == 'switch' &&
+        p.scope == 'game' && !p.isState && kind != NeoSyncSaveKind.foreign;
+    if (kind != NeoSyncSaveKind.save && !nativeSwitch) {
+      throw const FormatException('Source is not a verified save path');
+    }
+    return NeoSyncFile(id: id, fileName: fileName, filePath: filePath,
+      fileSize: fileSize, gameName: gameName, uploadedAt: uploadedAt,
+      fileModifiedAt: fileModifiedAt, fileModifiedAtTimestamp: fileModifiedAtTimestamp,
+      userId: userId, checksum: checksum, dolphinDisplayTitle: dolphinDisplayTitle,
+      verifiedSourcePath: key);
+  }
 
   NeoSyncFile withDolphinDisplayTitle(String? title) => NeoSyncFile(
     id: id, fileName: fileName, filePath: filePath, fileSize: fileSize,
     gameName: gameName, uploadedAt: uploadedAt, fileModifiedAt: fileModifiedAt,
     fileModifiedAtTimestamp: fileModifiedAtTimestamp, userId: userId,
-    checksum: checksum, dolphinDisplayTitle: title,
+    checksum: checksum, dolphinDisplayTitle: title, verifiedSourcePath: verifiedSourcePath,
   );
 
   static String _readGameName(Map<String, dynamic> json) {
@@ -264,6 +302,7 @@ class NeoSyncFile {
     this.checksum,
     // DOLPHIN_ISOLATION_BEGIN: neosync_local_title_parameter
     this.dolphinDisplayTitle,
+    this.verifiedSourcePath,
     // DOLPHIN_ISOLATION_END: neosync_local_title_parameter
   });
 
