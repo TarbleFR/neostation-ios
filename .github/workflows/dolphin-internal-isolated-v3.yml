@@ -1,26 +1,23 @@
-name: Build NeoStation iOS IPA
-run-name: NeoSync Dolphin source audit
+name: NeoSync Dolphin safety review
 on:
   push:
-    branches: [feature/neosync-dolphin-internal]
-  workflow_dispatch: {}
+    branches: [review/neosync-dolphin-safety]
 permissions:
   contents: read
 jobs:
-  source-audit:
+  source-review:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 41fb6cbd1401323f58224cee47c6e73091c55032
           fetch-depth: 1
           persist-credentials: false
-      - name: Export exact stable source without local secrets
-        run: git archive --format=zip --output=neosync-stable-source.zip HEAD
+      - name: Export tracked sources only
+        run: git archive --format=zip --output=neosync-safety-source.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
-          name: neosync-stable-source
-          path: neosync-stable-source.zip
-          retention-days: 2
+          name: neosync-safety-source
+          path: neosync-safety-source.zip
           if-no-files-found: error
+          retention-days: 2
