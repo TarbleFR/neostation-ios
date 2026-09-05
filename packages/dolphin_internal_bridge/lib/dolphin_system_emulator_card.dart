@@ -12,11 +12,15 @@ class DolphinSystemEmulatorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ListTile(
-      key: ValueKey('dolphin-system-emulator'),
-      leading: Icon(Icons.videogame_asset_outlined),
-      title: Text('Dolphin iOS'),
-      subtitle: Text('NeoStation'),
+    return ListView(
+      children: const [
+        ListTile(
+          key: ValueKey('dolphin-system-emulator'),
+          leading: Icon(Icons.videogame_asset_outlined),
+          title: Text('Dolphin iOS'),
+          subtitle: Text('NeoStation'),
+        ),
+      ],
     );
   }
 }

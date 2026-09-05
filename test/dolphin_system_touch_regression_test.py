@@ -57,23 +57,22 @@ class TouchResourceTests(unittest.TestCase):
 
 class SystemSettingsSourceTests(unittest.TestCase):
     def test_label_is_in_system_emulator_tab_not_game_settings(self):
-        source = (ROOT / 'lib/widgets/system_emulator_settings_dialog/tabs.dart').read_text()
-        tab = source.split('Widget _buildEmulatorsTab() {', 1)[1].split('Widget _buildCoresList()', 1)[0]
-        isolated = tab.split('// DOLPHIN_ISOLATION_BEGIN:', 1)[1].split('// DOLPHIN_ISOLATION_END:', 1)[0]
-        self.assertIn('Platform.isIOS', isolated)
-        self.assertIn('widget.system.folderName.trim().toLowerCase()', isolated)
-        self.assertIn("title: const Text('Dolphin iOS')", isolated)
-        self.assertIn("'gc'", isolated)
-        self.assertIn("'wii'", isolated)
-        self.assertNotIn('onTap:', isolated)
-        self.assertNotIn('setDefault', isolated)
-        self.assertIn('return _buildCoresList();', tab)
+        source = (ROOT / 'lib/widgets/system_emulator_settings_dialog.dart').read_text()
+        self.assertIn('DolphinSystemEmulatorCard.appliesTo', source)
+        self.assertIn('isIOS: Platform.isIOS', source)
+        self.assertIn('DolphinSystemEmulatorCard()', source)
+        card = (ROOT / 'packages/dolphin_internal_bridge/lib/dolphin_system_emulator_card.dart').read_text()
+        self.assertIn("title: Text('Dolphin iOS')", card)
+        self.assertIn("system == 'gc' || system == 'wii'", card)
+        self.assertNotIn('onTap:', card)
+        self.assertNotIn('setDefault', card)
+        tabs = (ROOT / 'lib/widgets/system_emulator_settings_dialog/tabs.dart').read_text()
+        self.assertIn('return _buildCoresList();', tabs)
 
     def test_correct_system_files_are_audited_as_shared_code(self):
         guard = (ROOT / 'build-utils/check_dolphin_isolation_v2.py').read_text()
         shared = guard.split('SHARED_FILES = {', 1)[1].split('\n}', 1)[0]
         self.assertIn('lib/widgets/system_emulator_settings_dialog.dart', shared)
-        self.assertIn('lib/widgets/system_emulator_settings_dialog/tabs.dart', shared)
 
 
 if __name__ == '__main__':

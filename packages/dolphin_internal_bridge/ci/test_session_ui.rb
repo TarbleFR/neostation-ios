@@ -18,8 +18,9 @@ sources.each { |path| app.source_build_phase.add_file_reference(project.main_gro
 Dir[File.join(package, 'ios/TouchResources/*')].each do |path|
   app.resources_build_phase.add_file_reference(project.main_group.new_file(path))
 end
-tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(__dir__, 'SessionMenuTests.mm')))
-tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(__dir__, 'SessionLifecycleTests.mm')))
+Dir[File.join(__dir__, '*Tests.mm')].sort.each do |path|
+  tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
+end
 tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(package, 'ios/Classes/DolphinSessionLifecycle.mm')))
 
 [app, tests].each do |target|
