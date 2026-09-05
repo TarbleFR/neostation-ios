@@ -763,9 +763,10 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     NeoSyncFile cloudFile,
   ) async {
     // DOLPHIN_ISOLATION_BEGIN: dolphin_restore_path
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) || _isDolphinGame(game)) {
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath) || _isDolphinGame(game)) {
       if (!_isDolphinGame(game)) return [];
-      final target = DolphinSaveTarget.parse(cloudFile.fileName);
+      final target = cloudFile.dolphinTarget;
       if (target == null) return [];
       return _dolphinExclusive((store) async {
         final identity = await DolphinInternalV2Service.readSaveIdentity(game.systemFolderName!, game.romPath ?? '');

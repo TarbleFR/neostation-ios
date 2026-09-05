@@ -77,6 +77,7 @@ class NeoSyncProvider extends ChangeNotifier {
   int _dolphinBulkErrors = 0;
   final DolphinSaveTitleCache _dolphinTitles = DolphinSaveTitleCache();
   String? _saveAuditMessage;
+  bool _saveAuditInProgress = false;
   String? get saveAuditMessage => _saveAuditMessage;
   // DOLPHIN_ISOLATION_END: neosync_queue
 
@@ -263,7 +264,8 @@ class NeoSyncProvider extends ChangeNotifier {
 
 // DOLPHIN_ISOLATION_END: neosync_save_only_restore
     // DOLPHIN_ISOLATION_BEGIN: dolphin_download_writer
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) {
       await _restoreDolphinCloud(cloudFile); return;
     }
     // DOLPHIN_ISOLATION_END: dolphin_download_writer

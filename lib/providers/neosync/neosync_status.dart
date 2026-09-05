@@ -68,7 +68,8 @@ extension NeoSyncStatus on NeoSyncProvider {
   /// that cannot be mapped safely remains visible as a `[V1]` entry in the UI.
   Future<void> loadOnlineFiles() async {
 // DOLPHIN_ISOLATION_BEGIN: neosync_cleanup_reentry
-    if (!isNeoSyncAuthenticated || _isLoadingOnlineFiles) return;
+    if (!isNeoSyncAuthenticated || _saveAuditInProgress) return;
+    _saveAuditInProgress = true;
     final auditAccount = _dolphinAccount;
     _saveAuditMessage = null;
 // DOLPHIN_ISOLATION_END: neosync_cleanup_reentry
@@ -124,11 +125,11 @@ final legacyResult = await _legacyNeoSyncService.auditAndPurge(resolveOrigins: _
       }
 
       // DOLPHIN_ISOLATION_BEGIN: dolphin_online_display_titles
-      final displayAccount = _dolphinAccount;
+      if (!isNeoSyncAuthenticated || _dolphinAccount != auditAccount) return;
       v2Files = await _resolveNeoSyncOrigins(v2Files);
       v2Files = await _dolphinDisplayFiles(v2Files);
+      if (!isNeoSyncAuthenticated || _dolphinAccount != auditAccount) return;
       _files = v2Files;
-      if (!isNeoSyncAuthenticated || _dolphinAccount != displayAccount) return;
       // DOLPHIN_ISOLATION_END: dolphin_online_display_titles
 
       final unresolvedLegacy = legacyFiles
@@ -151,6 +152,9 @@ final legacyResult = await _legacyNeoSyncService.auditAndPurge(resolveOrigins: _
       _saveAuditMessage = 'Vérification NeoSync interrompue. Réessaie avec le bouton Actualiser.';
 // DOLPHIN_ISOLATION_END: neosync_cleanup_error_visible
     } finally {
+      // DOLPHIN_ISOLATION_BEGIN: neosync_cleanup_unlock
+      _saveAuditInProgress = false;
+      // DOLPHIN_ISOLATION_END: neosync_cleanup_unlock
       _isLoadingOnlineFiles = false;
       notify();
     }

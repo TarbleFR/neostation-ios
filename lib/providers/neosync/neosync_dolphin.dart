@@ -103,7 +103,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
       for (final target in await store.targetsForGame(identity)) {
         final snapshot = await store.snapshot(target);
         if (snapshot != null) result.add(_dolphinLocal(snapshot, game.name,
-          synced: _files.any((remote) => remote.fileName == target.cloudPath && remote.checksum?.toLowerCase() == snapshot.checksum)));
+          synced: _files.any((remote) => remote.dolphinTarget?.cloudPath == target.cloudPath && remote.checksum?.toLowerCase() == snapshot.checksum)));
       }
       return result;
     });
@@ -115,7 +115,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
       final identity = await DolphinInternalV2Service.readSaveIdentity(game.systemFolderName!, game.romPath ?? '');
       _dolphinTitles.remember(identity, game.name);
       return (await _dolphinFetchCloud(_dolphinAccount)).where((file) =>
-        DolphinSaveTarget.parse(file.fileName)?.matches(identity) == true).toList();
+        file.dolphinTarget?.matches(identity) == true).toList();
     });
   }
 
@@ -143,10 +143,12 @@ extension NeoSyncDolphin on NeoSyncProvider {
         final cloudFiles = await _dolphinFetchCloud(account);
         final cloudByKey = <String, NeoSyncFile>{};
         for (final file in cloudFiles) {
-          final target = DolphinSaveTarget.parse(file.fileName);
-          if (target?.matches(identity) != true) continue;
-          if (cloudByKey.containsKey(file.fileName)) throw StateError('Duplicate Dolphin cloud save key');
-          cloudByKey[file.fileName] = file;
+          final target = file.dolphinTarget;
+          if (target == null || !target.matches(identity)) continue;
+          // Listings may separate the basename from its canonical source.
+          // Local identity uses the verified path; API transfers keep file.id.
+          if (cloudByKey.containsKey(target.cloudPath)) throw StateError('Duplicate Dolphin cloud save key');
+          cloudByKey[target.cloudPath] = file;
         }
         final targets = <String, DolphinSaveTarget>{
           for (final target in await store.targetsForGame(identity)) target.cloudPath: target,
@@ -199,7 +201,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
             // A successful HTTP request may be a skip because the cloud became
             // newer. Confirm its CONTENT before recording success/common history.
             final refreshed = await _dolphinFetchCloud(account);
-            final confirmed = refreshed.where((f) => f.fileName == entry.key && f.checksum?.toLowerCase() == local.checksum);
+            final confirmed = refreshed.where((f) => f.dolphinTarget?.cloudPath == entry.key && f.checksum?.toLowerCase() == local.checksum);
             if (confirmed.length != 1) throw StateError('Dolphin upload not confirmed; cloud may have changed');
             cloudByKey[entry.key] = confirmed.single;
             await store.remember(account, target, local.checksum);
@@ -306,12 +308,14 @@ extension NeoSyncDolphin on NeoSyncProvider {
 
   Future<void> _restoreDolphinCloud(NeoSyncFile cloudFile) async {
     if (!Platform.isIOS || !isNeoSyncAuthenticated || _dolphinAccount.isEmpty) throw StateError('NeoSync authentication required');
-    final target = DolphinSaveTarget.parse(cloudFile.fileName);
+    final target = cloudFile.dolphinTarget;
     if (target == null) throw const FormatException('Unsupported Dolphin save snapshot');
     final account = _dolphinAccount;
     await _dolphinExclusive((store) async {
       final current = await _dolphinFetchCloud(account);
-      if (!current.any((file) => file.id == cloudFile.id && file.fileName == cloudFile.fileName && file.checksum == cloudFile.checksum)) {
+      if (!current.any((file) => file.id == cloudFile.id &&
+          file.fileName == cloudFile.fileName && file.checksum == cloudFile.checksum &&
+          file.dolphinTarget?.cloudPath == target.cloudPath)) {
         throw StateError('Cloud save changed; refresh NeoSync before restoring');
       }
       if (cloudFile.fileSize > DolphinNeoSyncStore.payloadLimit(target)) throw const FormatException('Dolphin snapshot too large');

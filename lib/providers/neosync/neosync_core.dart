@@ -1112,7 +1112,8 @@ extension NeoSyncCore on NeoSyncProvider {
 
       for (final cloudFile in _files) {
         // DOLPHIN_ISOLATION_BEGIN: dolphin_no_foreign_cloud_match
-        if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) continue;
+        if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+            DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) continue;
         // DOLPHIN_ISOLATION_END: dolphin_no_foreign_cloud_match
         final fileName = path.basename(cloudFile.fileName).toLowerCase();
         bool isMatch = false;
@@ -1542,7 +1543,8 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
   /// Restaura un backup desde la nube (descarga y sobreescribe local)
   Future<void> restoreCloudBackup(NeoSyncFile cloudFile) async {
     // DOLPHIN_ISOLATION_BEGIN: dolphin_restore
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) {
       await _restoreDolphinCloud(cloudFile); return;
     }
     // DOLPHIN_ISOLATION_END: dolphin_restore

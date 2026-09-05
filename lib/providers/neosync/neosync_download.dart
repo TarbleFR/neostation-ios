@@ -103,7 +103,8 @@ extension NeoSyncDownload on NeoSyncProvider {
     String savesPath,
   ) async {
     // DOLPHIN_ISOLATION_BEGIN: dolphin_no_generic_download
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) return;
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) return;
     // DOLPHIN_ISOLATION_END: dolphin_no_generic_download
 
     try {
@@ -385,7 +386,8 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
 
 // DOLPHIN_ISOLATION_END: neosync_save_only_restore
     // DOLPHIN_ISOLATION_BEGIN: dolphin_download_writer
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) {
       await _restoreDolphinCloud(cloudFile); return;
     }
     // DOLPHIN_ISOLATION_END: dolphin_download_writer
@@ -428,7 +430,8 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
     String savesPath,
   ) async {
     // DOLPHIN_ISOLATION_BEGIN: dolphin_no_generic_download
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) return;
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
+        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) return;
     // DOLPHIN_ISOLATION_END: dolphin_no_generic_download
 
     GameModel? game = await _findGameForCloudFile(cloudFile);

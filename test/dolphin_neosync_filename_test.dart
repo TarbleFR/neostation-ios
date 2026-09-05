@@ -1,6 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/neo_sync_models.dart';
+import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/services/dolphin_neosync_store.dart';
+import 'package:neostation/services/neosync/neo_sync_service.dart';
+
+class _NoTransferNeoSyncService implements NeoSyncService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('No API transfer should be attempted');
+}
 
 void main() {
   const gcState = 'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav';
@@ -70,7 +79,7 @@ void main() {
     expect(wii.dolphinDetailName, '00010000524d4350');
   });
 
-  test('split basename and cloud path recover display only and preserve transport data', () {
+  test('split basename and cloud path recover native identity and preserve transport data', () {
     for (final filename in ['GMSE01.s01.nsav', '']) {
       final data = {
         'id': 'file-1', 'file_name': filename, 'file_path': '/account/$gcState',
@@ -78,6 +87,8 @@ void main() {
       };
       final file = NeoSyncFile.fromJson(data);
       expect(file.presentationPath, gcState);
+      expect(file.sourceSavePath, gcState);
+      expect(file.dolphinTarget?.cloudPath, gcState);
       expect(file.displayName, 'Super Mario Sunshine · Slot 1');
       expect(file.fileName, filename);
       expect(file.filePath, data['file_path']);
@@ -90,6 +101,38 @@ void main() {
       });
       expect(file.dolphinTarget, isNull);
       expect(file.displayName, filename);
+    }
+  });
+
+  test('split Dolphin saves cannot enter another emulator or generic restore', () async {
+    final provider = NeoSyncProvider(_NoTransferNeoSyncService());
+    addTearDown(provider.dispose);
+    const unrelatedGame = GameModel(
+      romname: 'GMSE01', realname: 'Another console', name: 'Another console',
+      year: '', developer: '', publisher: '', genre: '', players: '', rating: 0,
+      systemFolderName: 'ps2', systemId: 'ps2',
+    );
+    for (final key in [gcState, wiiState,
+      'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
+      'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
+      'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
+    ]) {
+      for (final name in [key.split('/').last, '']) {
+        final file = NeoSyncFile.fromJson({
+          'id': 'unchanged-id', 'file_name': name,
+          'file_path': '/storage/account/$key', 'file_hash': 'unchanged-hash',
+        });
+        final before = file.toJson();
+        expect(file.dolphinTarget?.cloudPath, key);
+        expect(await provider.resolveCloudFileToLocalPath(unrelatedGame, file), isEmpty);
+        // The dedicated Dolphin restore refuses this unauthenticated request
+        // before looking up RetroArch folders or contacting either API.
+        await expectLater(provider.restoreCloudBackup(file), throwsA(
+          isA<StateError>().having((error) => error.message, 'reason',
+            'NeoSync authentication required'),
+        ));
+        expect(file.toJson(), before);
+      }
     }
   });
 
