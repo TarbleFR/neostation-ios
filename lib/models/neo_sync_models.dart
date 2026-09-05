@@ -101,10 +101,19 @@ class NeoSyncFile {
     return '';
   }
 
-  /// Display fallback only: keep download, restore and delete identities intact
-  /// when historical cloud metadata has no file_name.
+  /// Presentation only: native Dolphin IDs remain the operational filenames,
+  /// while the uploaded title helps identify their saves and states in the UI.
+  /// Historical files without title metadata keep the filename fallback.
   String get displayName {
-    if (fileName.trim().isNotEmpty) return fileName;
+    if (fileName.trim().isNotEmpty) {
+      if (gameName.trim().isNotEmpty && RegExp(
+        r'^v2/(?:saves|states)/(?:gc|wii)/dolphinios/',
+        caseSensitive: false,
+      ).hasMatch(fileName)) {
+        return '${gameName.trim()} · ${fileName.split('/').last}';
+      }
+      return fileName;
+    }
     final segments = filePath.replaceAll('\\', '/').split('/')
         .where((segment) => segment.trim().isNotEmpty);
     if (segments.isNotEmpty) return segments.last;

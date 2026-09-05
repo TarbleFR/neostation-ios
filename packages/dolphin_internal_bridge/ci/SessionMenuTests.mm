@@ -65,6 +65,21 @@
     XCTAssertNotNil([menu tableView:menu.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:0]]);
 }
 
+- (void)testSystemMenuOnlyOffersSupportedSessionActions {
+  DolphinSessionMenu* menu = [DolphinSessionMenu new];
+  menu.stateActionsAvailable = NO;
+  __block BOOL resumed = NO;
+  menu.resumeGame = ^{ resumed = YES; };
+  [menu loadViewIfNeeded];
+  XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0], 5);
+  NSArray* expected = @[@"graphics", @"controls", @"console", @"resume", @"quit"];
+  for (NSInteger row = 0; row < expected.count; ++row)
+    XCTAssertEqualObjects([menu tableView:menu.tableView cellForRowAtIndexPath:
+        [NSIndexPath indexPathForRow:row inSection:0]].textLabel.text, expected[row]);
+  [menu tableView:menu.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]];
+  XCTAssertTrue(resumed);
+}
+
 - (NSDictionary*)stateSnapshotForWii:(BOOL)wii saved:(BOOL)saved {
   NSMutableArray* slots = [NSMutableArray array];
   for (NSInteger slot = 1; slot <= 10; slot++) {
@@ -102,6 +117,7 @@
   for (NSNumber* wii in @[@NO, @YES]) {
     AutoConfirmSessionMenu* root = [AutoConfirmSessionMenu new];
     root.wii = wii.boolValue;
+    root.gameTitle = wii.boolValue ? @"Super Mario Galaxy" : @"Super Mario Sunshine";
     root.labels = @{@"stateSlot": @"Slot {slot}", @"saveState": @"Save state",
         @"loadState": @"Load state", @"stateEmpty": @"Empty"};
     __block void (^finishRead)(NSDictionary*) = nil;
@@ -141,7 +157,7 @@
     [self completeOnNextMainTurn:^{ readCompletion([self stateSnapshotForWii:wii.boolValue saved:NO]); }];
     XCTAssertEqual([saves tableView:saves.tableView numberOfRowsInSection:0], 10);
     UITableViewCell* last = [saves tableView:saves.tableView cellForRowAtIndexPath:lastRow];
-    XCTAssertEqualObjects(last.textLabel.text, @"Slot 10");
+    XCTAssertEqualObjects(last.textLabel.text, [NSString stringWithFormat:@"%@ — Slot 10", root.gameTitle]);
     XCTAssertEqualObjects(last.detailTextLabel.text, @"Empty");
 
     [saves tableView:saves.tableView didSelectRowAtIndexPath:lastRow];

@@ -171,6 +171,7 @@ class GameLaunchService {
         final report = await DolphinInternalV2Service.launch(
           folderName: system.folderName,
           gamePath: gamePath,
+          gameTitle: game.name,
           onSessionStopped: () async {
             if (identical(SyncManager.instance.active, sync) && sync?.providerId == 'neosync' &&
                 sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {

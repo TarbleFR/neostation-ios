@@ -843,13 +843,6 @@ class NeoSyncContentState extends State<NeoSyncContent>
         label = file.id.startsWith('v1:')
             ? '[V1] ${file.displayName}'
             : file.displayName;
-        if ((lowerPath.startsWith('v2/saves/gc/dolphinios/') ||
-             lowerPath.startsWith('v2/states/gc/dolphinios/') ||
-             lowerPath.startsWith('v2/saves/wii/dolphinios/') ||
-             lowerPath.startsWith('v2/states/wii/dolphinios/')) &&
-            file.gameName.trim().isNotEmpty) {
-          label = '${file.gameName.trim()} · ${file.fileName.split('/').last}';
-        }
         // DOLPHIN_ISOLATION_END: neosync_visible_filenames
         key = 'file:${file.id}';
       }

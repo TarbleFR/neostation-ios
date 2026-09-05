@@ -20,6 +20,8 @@ BRIDGE = {
     '_neostation_dolphin_stop', '_neostation_dolphin_save_identity',
     '_neostation_dolphin_menu_snapshot', '_neostation_dolphin_menu_apply',
     '_neostation_dolphin_state_snapshot', '_neostation_dolphin_state_operation',
+    '_neostation_dolphin_performance_snapshot', '_neostation_dolphin_validate_wii_menu',
+    '_neostation_dolphin_launch_wii_menu',
     '_neostation_dolphin_restart', '_neostation_dolphin_refresh_controllers',
     '_neostation_dolphin_touch_event', '_neostation_dolphin_release_touches',
 }

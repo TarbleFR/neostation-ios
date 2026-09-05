@@ -1,5 +1,6 @@
 #import "DolphinInternalBridgePlugin.h"
 #import "DolphinSessionMenu.h"
+#import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
 #import <dolphin_internal_bridge/dolphin_internal_bridge-Swift.h>
 #import <GameController/GameController.h>
@@ -46,6 +47,9 @@ int32_t neostation_dolphin_menu_apply(const char* request_json);
 char* neostation_dolphin_state_snapshot(void);
 int32_t neostation_dolphin_state_operation(int32_t slot, int32_t load);
 int32_t neostation_dolphin_restart(void);
+int32_t neostation_dolphin_validate_wii_menu(const char* log_path);
+int32_t neostation_dolphin_launch_wii_menu(void* metal_layer, double metal_scale, const char* log_path);
+char* neostation_dolphin_performance_snapshot(void);
 int32_t neostation_dolphin_refresh_controllers(void);
 void neostation_dolphin_release_touches(void);
 
@@ -160,6 +164,11 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 @property(nonatomic, copy, nullable) dispatch_block_t closeHandler;
 @property(nonatomic, copy, nullable) dispatch_block_t menuHandler;
 @property(nonatomic, copy) NSString* menuLabel;
+@property(nonatomic, copy) NSDictionary<NSString*, NSString*>* labels;
+@property(nonatomic, strong) DolphinPerformanceOverlay* performanceOverlay;
+@property(nonatomic, strong) UIButton* performanceButton;
+@property(nonatomic, assign) BOOL showingPerformance;
+@property(nonatomic, assign) NSUInteger performanceGeneration;
 @property(nonatomic, assign) BOOL wii;
 @property(nonatomic, strong) DOLTouchOverlay* touchOverlay;
 @property(nonatomic, assign) BOOL acceptsTouchInput;
@@ -212,7 +221,30 @@ static UIViewController* _Nullable DOLRootViewController(void) {
   [close setImage:image forState:UIControlStateNormal];
   [close addTarget:self action:@selector(menuPressed:) forControlEvents:UIControlEventTouchUpInside];
   [self.view addSubview:close];
+  UIButton* performance = [UIButton buttonWithType:UIButtonTypeSystem];
+  performance.translatesAutoresizingMaskIntoConstraints = NO;
+  performance.accessibilityLabel = self.labels[@"performance"] ?: @"Performance";
+  performance.accessibilityValue = self.labels[@"off"] ?: @"Off";
+  performance.layer.cornerRadius = 18.0;
+  performance.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+  performance.tintColor = UIColor.whiteColor;
+  [performance setImage:[UIImage systemImageNamed:@"chart.xyaxis.line"] forState:UIControlStateNormal];
+  [performance addTarget:self action:@selector(performancePressed:) forControlEvents:UIControlEventTouchUpInside];
+  self.performanceButton = performance;
+  [self.view addSubview:performance];
+  self.performanceOverlay = [[DolphinPerformanceOverlay alloc] initWithLabels:self.labels];
+  self.performanceOverlay.translatesAutoresizingMaskIntoConstraints = NO;
+  self.performanceOverlay.hidden = YES;
+  [self.view addSubview:self.performanceOverlay];
   [NSLayoutConstraint activateConstraints:@[
+    [performance.leadingAnchor constraintEqualToAnchor:close.trailingAnchor constant:8.0],
+    [performance.centerYAnchor constraintEqualToAnchor:close.centerYAnchor],
+    [performance.widthAnchor constraintEqualToConstant:44.0],
+    [performance.heightAnchor constraintEqualToConstant:44.0],
+    [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:close.leadingAnchor],
+    [self.performanceOverlay.topAnchor constraintEqualToAnchor:close.bottomAnchor constant:8.0],
+    [self.performanceOverlay.widthAnchor constraintEqualToConstant:300.0],
+    [self.performanceOverlay.heightAnchor constraintEqualToConstant:170.0],
     [close.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:12.0],
     [close.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12.0],
     [close.widthAnchor constraintEqualToConstant:44.0],
@@ -248,6 +280,16 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 
 - (void)closePressed:(__unused id)sender {
   if (self.closeHandler != nil) self.closeHandler();
+}
+
+- (void)performancePressed:(__unused id)sender {
+  if (!self.acceptsTouchInput) return;
+  self.showingPerformance = !self.showingPerformance;
+  ++self.performanceGeneration;
+  [self.performanceOverlay reset];
+  self.performanceOverlay.hidden = !self.showingPerformance;
+  self.performanceButton.tintColor = self.showingPerformance ? UIColor.systemGreenColor : UIColor.whiteColor;
+  self.performanceButton.accessibilityValue = self.labels[self.showingPerformance ? @"on" : @"off"];
 }
 
 - (void)menuPressed:(__unused id)sender {
@@ -610,8 +652,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 @property(nonatomic, strong, nullable) UINavigationController* sessionMenu;
 @property(nonatomic, assign) BOOL menuOpening;
 @property(nonatomic, assign) BOOL wiiSession;
+@property(nonatomic, assign) BOOL systemMenuSession;
 @property(nonatomic, copy, nullable) NSString* saveSessionToken;
 @property(nonatomic, copy) NSDictionary<NSString*, NSString*>* menuLabels;
+@property(nonatomic, copy) NSString* activeGameTitle;
 // These values belong to the Dolphin session, not to the global audio policy.
 @property(nonatomic, copy, nullable) NSString* previousAudioCategory;
 @property(nonatomic, copy, nullable) NSString* previousAudioMode;
@@ -709,6 +753,12 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
                            ? arguments[@"gamePath"] : @"";
   NSString* system = [[arguments[@"system"] isKindOfClass:NSString.class]
                           ? arguments[@"system"] : @"" lowercaseString];
+  NSString* bootKind = [arguments[@"bootKind"] isKindOfClass:NSString.class] ? arguments[@"bootKind"] : @"game";
+  const BOOL wiiMenu = [bootKind isEqualToString:@"wiiSystemMenu"];
+  self.systemMenuSession = wiiMenu;
+  self.activeGameTitle = [arguments[@"gameTitle"] isKindOfClass:NSString.class] ? arguments[@"gameTitle"] : @"";
+  self.activeGameTitle = [self.activeGameTitle stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  if (!self.activeGameTitle.length) self.activeGameTitle = gamePath.lastPathComponent.stringByDeletingPathExtension;
   NSString* userDirectory = [arguments[@"userDirectory"] isKindOfClass:NSString.class]
                                 ? arguments[@"userDirectory"] : @"";
   NSString* systemDirectory = [arguments[@"systemDirectory"] isKindOfClass:NSString.class]
@@ -730,7 +780,11 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       fail(@"route.rejected", @"The internal Dolphin engine is restricted to GameCube and Wii.");
       return [self finishFailedLaunch:state];
     }
-    if (gamePath.length == 0 || ![NSFileManager.defaultManager fileExistsAtPath:gamePath]) {
+    if ((!wiiMenu && ![bootKind isEqualToString:@"game"]) || (wiiMenu && ![system isEqualToString:@"wii"])) {
+      fail(@"route.rejected", @"Unknown Dolphin boot mode.");
+      return [self finishFailedLaunch:state];
+    }
+    if (!wiiMenu && (gamePath.length == 0 || ![NSFileManager.defaultManager fileExistsAtPath:gamePath])) {
       fail(@"image.missing", @"The selected GameCube/Wii image is not readable.");
       return [self finishFailedLaunch:state];
     }
@@ -758,10 +812,14 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       return [self finishFailedLaunch:state];
     }
 
-    if (neostation_dolphin_validate_image(gamePath.fileSystemRepresentation,
-                                          system.UTF8String,
-                                          logPath.fileSystemRepresentation) != 1) {
-      fail(@"image.rejected", @"Dolphin rejected the selected image or its platform does not match the playlist.");
+    const BOOL accepted = wiiMenu
+        ? neostation_dolphin_validate_wii_menu(logPath.fileSystemRepresentation) == 1
+        : neostation_dolphin_validate_image(gamePath.fileSystemRepresentation, system.UTF8String,
+                                            logPath.fileSystemRepresentation) == 1;
+    if (!accepted) {
+      fail(wiiMenu ? @"wii.menu_missing" : @"image.rejected", wiiMenu
+          ? @"The imported Wii NAND does not contain a usable System Menu."
+          : @"Dolphin rejected the selected image or its platform does not match the playlist.");
       return [self finishFailedLaunch:state];
     }
     state[@"imageAccepted"] = @YES;
@@ -830,15 +888,20 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
                      @"Executable memory returned the expected ARM64 probe value.", nil);
 
     __block DOLDolphinViewController* controller = nil;
+    __block CAMetalLayer* layer = nil;
+    __block BOOL metalReady = NO;
+    __block double metalScale = 1.0;
     dispatch_sync(dispatch_get_main_queue(), ^{
+      @try {
       UIViewController* root = DOLRootViewController();
-      if (root == nil) return;
+      if (root == nil || root.view.window == nil || root.isBeingPresented || root.isBeingDismissed) return;
       controller = [[DOLDolphinViewController alloc] init];
       self.wiiSession = [system isEqual:@"wii"];
       controller.wii = self.wiiSession;
       self.menuLabels = [arguments[@"menuLabels"] isKindOfClass:NSDictionary.class]
           ? arguments[@"menuLabels"] : @{};
       controller.menuLabel = self.menuLabels[@"menu"] ?: @"Dolphin";
+      controller.labels = self.menuLabels;
       __weak DolphinInternalBridgePlugin* weakSelf = self;
       controller.menuHandler = ^{ [weakSelf presentSessionMenu]; };
       controller.closeHandler = ^{
@@ -848,10 +911,20 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           [strongSelf stopRuntimeWithReason:@"overlay_close"];
         });
       };
+      self.dolphinController = controller;
+      [controller loadViewIfNeeded];
+      metalReady = controller.metalView.device != nil && [controller.metalView.device newCommandQueue] != nil;
+      layer = (CAMetalLayer*)controller.metalView.layer;
+      metalScale = layer.contentsScale;
+      if (!metalReady) return;
       [root presentViewController:controller animated:NO completion:nil];
+      metalReady = controller.presentingViewController == root && root.presentedViewController == controller;
+      } @catch (NSException* exception) {
+        metalReady = NO;
+        DOLAppendJSONLog(logPath, @"session.presentation_failed", exception.reason ?: @"Could not present Dolphin.", nil);
+      }
     });
-    if (controller == nil || controller.metalView.device == nil ||
-        [controller.metalView.device newCommandQueue] == nil) {
+    if (controller == nil || !metalReady) {
       fail(@"metal.preflight_failed", @"Metal could not create a device, view and command queue.");
       return [self finishFailedLaunch:state];
     }
@@ -876,13 +949,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       }
     });
 
-    CAMetalLayer* layer = (CAMetalLayer*)controller.metalView.layer;
-    int32_t launchFlags = neostation_dolphin_launch(
-        gamePath.fileSystemRepresentation,
-        system.UTF8String,
-        (__bridge void*)layer,
-        UIScreen.mainScreen.scale,
-        logPath.fileSystemRepresentation);
+    int32_t launchFlags = wiiMenu
+        ? neostation_dolphin_launch_wii_menu((__bridge void*)layer, metalScale, logPath.fileSystemRepresentation)
+        : neostation_dolphin_launch(gamePath.fileSystemRepresentation, system.UTF8String,
+                                    (__bridge void*)layer, metalScale, logPath.fileSystemRepresentation);
     if ((launchFlags & 0x1) != 0) state[@"jitArm64Initialized"] = @YES;
     if ((launchFlags & 0x2) != 0) state[@"metalInitialized"] = @YES;
     if ((launchFlags & 0x4) != 0) state[@"gameSubmitted"] = @YES;
@@ -936,6 +1006,8 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       DolphinSessionMenu* menu = [[DolphinSessionMenu alloc] init];
       menu.labels = strongSelf.menuLabels;
       menu.wii = strongSelf.wiiSession;
+      menu.gameTitle = strongSelf.activeGameTitle;
+      menu.stateActionsAvailable = !strongSelf.systemMenuSession;
       menu.readSettings = ^(BOOL wii, NSInteger slot, void (^completion)(NSDictionary*)) {
         DolphinInternalBridgePlugin* bridge = weakSelf;
         if (!bridge) { completion(nil); return; }
@@ -1037,14 +1109,15 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
         if (!bridge || bridge.stopInProgress || bridge.launchInProgress || bridge.menuOpening) return;
         bridge.launchInProgress = YES;
         bridge.menuOpening = YES;
+        ++owner.performanceGeneration;
+        [owner.performanceOverlay reset];
         bridge.sessionMenu.view.userInteractionEnabled = NO;
         dispatch_async(bridge->_runtimeQueue, ^{
           const BOOL restarted = neostation_dolphin_restart() != 0;
-          if (!restarted) neostation_dolphin_stop(bridge.activeLogPath.fileSystemRepresentation);
+          if (!restarted) [bridge stopRuntimeWithReason:@"restart_failed"];
           dispatch_async(dispatch_get_main_queue(), ^{
             if (!restarted) {
               bridge.launchInProgress = NO;
-              [bridge cleanupSharedResourcesAndUI];
               UIAlertController* alert = [UIAlertController alertControllerWithTitle:bridge.menuLabels[@"restartFailed"]
                   message:nil preferredStyle:UIAlertControllerStyleAlert];
               [alert addAction:[UIAlertAction actionWithTitle:bridge.menuLabels[@"close"] style:UIAlertActionStyleCancel handler:nil]];
@@ -1111,6 +1184,8 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           strongSelf.monitorPollInProgress || !strongSelf.dolphinController) return;
       strongSelf.monitorPollInProgress = YES;
       DOLDolphinViewController* owner = strongSelf.dolphinController;
+      const NSUInteger performanceGeneration = owner.performanceGeneration;
+      const BOOL samplePerformance = owner.showingPerformance && !strongSelf.sessionMenu && !strongSelf.menuOpening;
       // Serialize status checks with pause/restart/stop. A false running flag
       // during Core::Shutdown must never detach the surface from the main timer.
       dispatch_async(strongSelf->_runtimeQueue, ^{
@@ -1125,12 +1200,27 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           return;
         }
         const int32_t layout = neostation_dolphin_refresh_controllers();
+        __block NSDictionary* performance = nil;
+        if (samplePerformance) {
+          @autoreleasepool {
+            char* json = neostation_dolphin_performance_snapshot();
+            if (json) {
+              NSData* data = [NSData dataWithBytes:json length:strlen(json)];
+              free(json);
+              id value = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+              if ([value isKindOfClass:NSDictionary.class]) performance = value;
+            }
+          }
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
           if (strongSelf.dolphinController != owner) return;
           strongSelf.monitorPollInProgress = NO;
           if (strongSelf.stopInProgress) return;
           if (layout && strongSelf.wiiSession)
             [owner.touchOverlay updateExtension:layout == 2 ? @"Classic" : @"Nunchuk"];
+          if (performance && owner.showingPerformance && owner.performanceGeneration == performanceGeneration &&
+              !strongSelf.sessionMenu && !strongSelf.menuOpening)
+            [owner.performanceOverlay appendSnapshot:performance];
         });
       });
     });
@@ -1176,13 +1266,18 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     self.dolphinController.menuHandler = nil;
     self.dolphinController.closeHandler = nil;
     [self.dolphinController suspendTouchInput];
+    self.dolphinController.showingPerformance = NO;
+    self.dolphinController.performanceOverlay.hidden = YES;
+    [self.dolphinController.performanceOverlay reset];
   };
   if (NSThread.isMainThread) prepare();
   else dispatch_sync(dispatch_get_main_queue(), prepare);
 }
 
 - (void)cleanupSharedResourcesAndUI {
-  dispatch_block_t cleanup = ^{
+  NSCAssert(!NSThread.isMainThread, @"Session cleanup must wait off the UIKit thread");
+  dispatch_semaphore_t dismissed = dispatch_semaphore_create(0);
+  dispatch_async(dispatch_get_main_queue(), ^{
     if (self.runningTimer != nil) {
       dispatch_source_cancel(self.runningTimer);
       self.runningTimer = nil;
@@ -1195,9 +1290,6 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     if (controller != nil) {
       controller.closeHandler = nil;
       controller.menuHandler = nil;
-      DOLDismissSessionController(controller);
-      DOLAppendJSONLog(self.activeLogPath ?: @"", @"session.ui_dismissed",
-                       @"Dolphin game and settings dismissed after core shutdown.", nil);
     }
     if (self.audioPolicyCaptured) {
       // Restore the policy used before Dolphin, instead of deactivating the
@@ -1218,12 +1310,19 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       self.previousAudioCategory = nil;
       self.previousAudioMode = nil;
     }
-    self.activeLogPath = nil;
-    self.stopInProgress = NO;
-  };
-  // Finish releasing the session before allowing a subsequent emulator launch.
-  if (NSThread.isMainThread) cleanup();
-  else dispatch_sync(dispatch_get_main_queue(), cleanup);
+    DOLDismissSessionController(controller, ^{
+      DOLAppendJSONLog(self.activeLogPath ?: @"", @"session.ui_dismissed",
+                       @"Dolphin game and settings fully dismissed after core shutdown.", nil);
+      self.activeLogPath = nil;
+      self.activeGameTitle = nil;
+      self.stopInProgress = NO;
+      dispatch_semaphore_signal(dismissed);
+    });
+  });
+  // UIKit dismissal is asynchronous even without animation. Keep the runtime
+  // queue occupied until its completion so the next console cannot reuse a
+  // presenter or Metal surface that is still being removed.
+  dispatch_semaphore_wait(dismissed, DISPATCH_TIME_FOREVER);
 }
 
 @end

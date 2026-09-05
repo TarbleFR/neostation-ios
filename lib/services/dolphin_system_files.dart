@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
@@ -19,6 +20,57 @@ abstract final class DolphinSystemFiles {
   static const wiiDirectories = {
     'import', 'meta', 'shared1', 'shared2', 'sys', 'ticket', 'title', 'tmp', 'wfs',
   };
+
+  /// A Wii keys file is not a System Menu installation. Check the bounded
+  /// metadata for the installed menu before requesting JIT. The
+  /// native ES/TMD reader then checks the actual installed contents at launch.
+  static Future<void> requireWiiMenuMetadata(Directory nand) async {
+    const systemMenuId = 0x0000000100000002;
+    final menu = await _readInstalledTmd(nand, systemMenuId);
+    if (menu == null) {
+      throw const DolphinSystemFilesException('wiiMenuMissing');
+    }
+    final iosId = menu.getUint64(0x184, Endian.big);
+    // Dolphin supplies Wii IOS in HLE. Requiring a second installed IOS TMD
+    // would incorrectly reject a usable menu extracted from the user's NAND.
+    if ((iosId >> 32) != 1 || (iosId & 0xffffffff) <= 2) {
+      throw const DolphinSystemFilesException('wiiMenuMissing');
+    }
+  }
+
+  static Future<ByteData?> _readInstalledTmd(Directory nand, int titleId) async {
+    final title = titleId.toRadixString(16).padLeft(16, '0');
+    var current = nand.path;
+    final components = ['title', title.substring(0, 8), title.substring(8),
+      'content', 'title.tmd'];
+    try {
+      if (await FileSystemEntity.type(current, followLinks: false) !=
+          FileSystemEntityType.directory) return null;
+      for (var index = 0; index < components.length; index++) {
+        current = p.join(current, components[index]);
+        final expected = index == components.length - 1
+            ? FileSystemEntityType.file : FileSystemEntityType.directory;
+        if (await FileSystemEntity.type(current, followLinks: false) != expected) return null;
+      }
+      final file = File(current);
+      final length = await file.length();
+      // These limits and offsets match Dolphin's IOS::ES::TMDHeader.
+      if (length < 0x1e4 || length > 0x49e4) return null;
+      final bytes = await file.readAsBytes();
+      if (bytes.length != length) return null;
+      final data = ByteData.sublistView(bytes);
+      final count = data.getUint16(0x1de, Endian.big);
+      if (data.getUint64(0x18c, Endian.big) != titleId || count == 0 ||
+          0x1e4 + count * 36 > length) return null;
+      final bootIndex = data.getUint16(0x1e0, Endian.big);
+      for (var index = 0; index < count; index++) {
+        if (data.getUint16(0x1e4 + index * 36 + 4, Endian.big) == bootIndex) return data;
+      }
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+  }
 
   static Future<Directory> findWiiRoot(Directory selected) async {
     for (final suffix in ['', 'Wii', 'User/Wii', 'Dolphin/Wii', 'Dolphin/User/Wii']) {

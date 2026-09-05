@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -87,5 +88,55 @@ void main() {
   test('cannot import the live NAND into itself', () async {
     await expectLater(DolphinSystemFiles.importWiiFolder(source, source), throwsA(isA<DolphinSystemFilesException>()));
     expect(await File(p.join(source.path, 'shared2/sys/SYSCONF')).exists(), isTrue);
+  });
+
+  Future<File> writeTmd(int titleId, {int iosId = 0}) async {
+    final bytes = Uint8List(0x1e4 + 36);
+    final data = ByteData.sublistView(bytes);
+    data.setUint32(0, 0x10001, Endian.big);
+    data.setUint64(0x184, iosId, Endian.big);
+    data.setUint64(0x18c, titleId, Endian.big);
+    data.setUint16(0x1de, 1, Endian.big);
+    data.setUint32(0x1e4, 1, Endian.big);
+    final id = titleId.toRadixString(16).padLeft(16, '0');
+    final file = File(p.join(target.path, 'title', id.substring(0, 8),
+        id.substring(8), 'content', 'title.tmd'));
+    await file.parent.create(recursive: true);
+    return file.writeAsBytes(bytes);
+  }
+
+  test('Wii Menu preflight requires menu metadata but accepts HLE IOS', () async {
+    await write('keys.bin', 'keys only', root: target);
+    await expectLater(DolphinSystemFiles.requireWiiMenuMetadata(target),
+        throwsA(isA<DolphinSystemFilesException>().having((e) => e.code, 'code', 'wiiMenuMissing')));
+    await writeTmd(0x0000000100000002, iosId: 0x0000000100000050);
+    await DolphinSystemFiles.requireWiiMenuMetadata(target);
+  });
+
+  test('Wii Menu metadata rejects a wrong title, truncated records and missing boot entry', () async {
+    await writeTmd(0x0000000100000050);
+    for (final change in <void Function(ByteData)>[
+      (data) => data.setUint64(0x18c, 0x0001000141424344, Endian.big),
+      (data) => data.setUint16(0x1de, 512, Endian.big),
+      (data) => data.setUint16(0x1e0, 99, Endian.big),
+      (data) => data.setUint64(0x184, 0x0000000100000002, Endian.big),
+    ]) {
+      final menu = await writeTmd(0x0000000100000002, iosId: 0x0000000100000050);
+      final bytes = await menu.readAsBytes();
+      change(ByteData.sublistView(bytes));
+      await menu.writeAsBytes(bytes);
+      await expectLater(DolphinSystemFiles.requireWiiMenuMetadata(target),
+          throwsA(isA<DolphinSystemFilesException>()));
+    }
+  });
+
+  test('Wii Menu metadata rejects symlinked title content', () async {
+    await writeTmd(0x0000000100000050);
+    final menu = await writeTmd(0x0000000100000002, iosId: 0x0000000100000050);
+    final original = menu.parent.path;
+    await menu.parent.rename('$original-outside');
+    await Link(original).create('$original-outside');
+    await expectLater(DolphinSystemFiles.requireWiiMenuMetadata(target),
+        throwsA(isA<DolphinSystemFilesException>()));
   });
 }

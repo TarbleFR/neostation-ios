@@ -16,6 +16,7 @@ void main() {
   late Directory root;
   late String gamePath;
   String? nativeToken;
+  Map<dynamic, dynamic>? nativeLaunchArguments;
   bool launchAccepted = true;
   final calls = <String>[];
 
@@ -52,6 +53,7 @@ void main() {
       calls.add(call.method);
       if (call.method == 'isRunning') return false;
       if (call.method == 'launchGame') {
+        nativeLaunchArguments = call.arguments as Map;
         nativeToken = (call.arguments as Map)['saveSessionToken'] as String;
         return {
           'success': launchAccepted,
@@ -73,12 +75,25 @@ void main() {
     gamePath = (await File(p.join(library.path, 'fixture.rvz'))
         .writeAsString('Native engine is mocked')).path;
   });
-  setUp(() { nativeToken = null; launchAccepted = true; calls.clear(); });
+  setUp(() { nativeToken = null; nativeLaunchArguments = null; launchAccepted = true; calls.clear(); });
   tearDownAll(() async {
     messenger.setMockMethodCallHandler(host, null);
     messenger.setMockMethodCallHandler(paths, null);
     host.setMethodCallHandler(null);
     await root.delete(recursive: true);
+  });
+
+  test('game title reaches the native menu without changing the image path', () async {
+    final report = await DolphinInternalV2Service.launch(
+      folderName: 'wii', gamePath: gamePath, gameTitle: '  Mario — Édition française  ',
+    );
+    expect(report.ready, isTrue);
+    expect(nativeLaunchArguments?['gameTitle'], 'Mario — Édition française');
+    expect(nativeLaunchArguments?['gamePath'], p.normalize(p.absolute(gamePath)));
+    await notifyStopped(nativeToken);
+    expect((await launch(() async {})).ready, isTrue);
+    expect(nativeLaunchArguments?['gameTitle'], 'fixture');
+    await notifyStopped(nativeToken);
   });
 
   test('only the active, flushed session triggers upload and only once', () async {

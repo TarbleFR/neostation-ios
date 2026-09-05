@@ -28,6 +28,36 @@ void ApplyConsolePreferences()
   if (!Core::IsRunning(Core::System::GetInstance())) Config::Save();
 }
 
+void ApplyGraphicsPreferences()
+{
+  // A game INI can override the base GFX.ini. Explicit in-game choices must
+  // also populate CurrentRun on the next boot, which has higher priority.
+  Common::IniFile preferences;
+  if (!preferences.Load(SessionPreferencesPath())) return;
+  auto* graphics = preferences.GetOrCreateSection("Graphics");
+  int value = 0;
+  if (graphics->Get("resolution", &value) && value >= 1 && value <= 4)
+  {
+    Config::SetBase(Config::GFX_EFB_SCALE, value);
+    Config::SetCurrent(Config::GFX_EFB_SCALE, value);
+  }
+  if (graphics->Get("aspect", &value) && value >= 0 && value <= 3)
+  {
+    Config::SetBase(Config::GFX_ASPECT_RATIO, static_cast<AspectMode>(value));
+    Config::SetCurrent(Config::GFX_ASPECT_RATIO, static_cast<AspectMode>(value));
+  }
+  if (graphics->Get("vsync", &value) && value >= 0 && value <= 1)
+  {
+    Config::SetBase(Config::GFX_VSYNC, value != 0);
+    Config::SetCurrent(Config::GFX_VSYNC, value != 0);
+  }
+  if (graphics->Get("anisotropy", &value) && value >= -1 && value <= 4)
+  {
+    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(value));
+    Config::SetCurrent(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(value));
+  }
+}
+
 std::string InputSection(bool wii, int slot, const std::string& mode)
 {
   return std::string(wii ? "Wii" : "GC") + std::to_string(slot + 1) + "." + mode;

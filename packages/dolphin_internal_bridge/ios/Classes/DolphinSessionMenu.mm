@@ -17,7 +17,15 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 @implementation DolphinSessionMenu
 
 - (instancetype)init {
-  return [super initWithStyle:UITableViewStyleInsetGrouped];
+  self = [super initWithStyle:UITableViewStyleInsetGrouped];
+  if (self) self.stateActionsAvailable = YES;
+  return self;
+}
+
+- (NSArray<NSString*>*)rootKeys {
+  return self.stateActionsAvailable
+      ? @[@"graphics", @"controls", @"console", @"saveState", @"loadState", @"resume", @"quit"]
+      : @[@"graphics", @"controls", @"console", @"resume", @"quit"];
 }
 
 - (NSString*)text:(NSString*)key {
@@ -37,7 +45,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   self.navigationItem.backButtonTitle = [self text:@"back"];
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.estimatedRowHeight = 56;
-  if (self.page == DOLMenuRoot) self.title = @"Dolphin";
+  if (self.page == DOLMenuRoot) self.title = self.gameTitle.length ? self.gameTitle : @"Dolphin";
   self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
       initWithTitle:[self text:@"resume"] style:UIBarButtonItemStyleDone
       target:self action:@selector(resumePressed)];
@@ -143,6 +151,8 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   child.page = page;
   child.title = title;
   child.wii = self.wii;
+  child.gameTitle = self.gameTitle;
+  child.stateActionsAvailable = self.stateActionsAvailable;
   child.slot = self.slot;
   child.snapshot = self.snapshot;
   child.readSettings = self.readSettings;
@@ -163,7 +173,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
   switch (self.page) {
-    case DOLMenuRoot: return 7;
+    case DOLMenuRoot: return self.rootKeys.count;
     case DOLMenuSaveStates:
     case DOLMenuLoadStates: return [self.snapshot[@"slots"] count];
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
@@ -208,11 +218,13 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   NSInteger row = indexPath.row;
   if (self.page == DOLMenuRoot) {
-    cell.textLabel.text = [self text:@[@"graphics", @"controls", @"console", @"saveState", @"loadState", @"resume", @"quit"][row]];
-    if (row == 6) cell.textLabel.textColor = UIColor.systemRedColor;
+    NSString* key = self.rootKeys[row];
+    cell.textLabel.text = [self text:key];
+    if ([key isEqual:@"quit"]) cell.textLabel.textColor = UIColor.systemRedColor;
   } else if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) {
     NSDictionary* slot = self.snapshot[@"slots"][row];
-    cell.textLabel.text = [[self text:@"stateSlot"] stringByReplacingOccurrencesOfString:@"{slot}" withString:[slot[@"slot"] stringValue]];
+    NSString* number = [[self text:@"stateSlot"] stringByReplacingOccurrencesOfString:@"{slot}" withString:[slot[@"slot"] stringValue]];
+    cell.textLabel.text = self.gameTitle.length ? [NSString stringWithFormat:@"%@ — %@", self.gameTitle, number] : number;
     if ([slot[@"exists"] boolValue]) {
       NSDate* date = [NSDate dateWithTimeIntervalSince1970:[slot[@"modified"] doubleValue]];
       cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@", slot[@"filename"],
@@ -293,8 +305,9 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   if (self.loading) return;
   NSInteger row = indexPath.row;
   if (self.page == DOLMenuRoot) {
-    if (row == 5) { [self resumePressed]; return; }
-    if (row == 6) {
+    NSString* key = self.rootKeys[row];
+    if ([key isEqual:@"resume"]) { [self resumePressed]; return; }
+    if ([key isEqual:@"quit"]) {
       UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:@"quit"]
           message:[self text:@"quitHelp"] preferredStyle:UIAlertControllerStyleAlert];
       [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
@@ -308,7 +321,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
     DOLMenuPage page = row == 0 ? DOLMenuGraphics : row == 1 ? DOLMenuControls :
         row == 2 ? DOLMenuConsole : row == 3 ? DOLMenuSaveStates : DOLMenuLoadStates;
     [self.navigationController pushViewController:[self child:page
-        title:[self text:@[@"graphics", @"controls", @"console", @"saveState", @"loadState"][row]]] animated:YES];
+        title:[self text:key]] animated:YES];
   } else if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) {
     NSDictionary* slot = self.snapshot[@"slots"][row];
     BOOL load = self.page == DOLMenuLoadStates;

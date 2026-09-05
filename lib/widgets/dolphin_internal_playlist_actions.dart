@@ -79,7 +79,14 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
     setState(() => _busy = true);
     try {
       int? count;
-      if (action == 'games') {
+      if (action == 'wiiMenu' && !_isGameCube) {
+        final report = await DolphinInternalV2Service.launchWiiMenu();
+        if (!report.ready) {
+          _notice(report.failedStage == 'wii.menu_missing'
+              ? _text('wiiMenuMissing')
+              : report.message.isNotEmpty ? report.message : _text('wiiMenuFailed'));
+        }
+      } else if (action == 'games') {
         final result = await DolphinInternalV2Service.importGames(widget.systemFolder);
         if (result.imported > 0) await widget.onLibraryChanged();
         if (!mounted) return;
@@ -109,7 +116,7 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
       if (!mounted) return;
       if (count != null) _notice(_text('imported').replaceAll('{count}', '$count'));
     } catch (error) {
-      LoggerService.instance.w('Dolphin system import failed: $error');
+      LoggerService.instance.w('Dolphin playlist action failed: $error');
       if (!mounted) return;
       final code = error is DolphinSystemFilesException ? error.code : '';
       final key = switch (code) {
@@ -117,6 +124,7 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
         'invalidWiiFile' => 'filesHelp',
         'invalidIpl' || 'invalidGameCube' => 'invalidIpl',
         'busy' => 'busy',
+        'wiiMenuMissing' => 'wiiMenuMissing',
         _ => error is FormatException ? 'invalidIpl' : 'failed',
       };
       _notice(_text(key));
@@ -151,6 +159,11 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
           PopupMenuItem(value: 'games', child: Text(_text('games'))),
           const PopupMenuDivider(),
           if (!_isGameCube) ...[
+            PopupMenuItem(
+              value: 'wiiMenu',
+              child: Text(_text('launchWiiMenu')),
+            ),
+            const PopupMenuDivider(),
             PopupMenuItem(value: 'folder', child: Text(_text('wiiFolder'))),
             PopupMenuItem(value: 'wiiFiles', child: Text(_text('wiiFiles'))),
           ] else ...[

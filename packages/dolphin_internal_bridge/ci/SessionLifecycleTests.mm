@@ -26,7 +26,13 @@
     [self present:settings from:game];
     XCTAssertNotNil(game.view.window);
   }
-  DOLDismissSessionController(game);
+  XCTestExpectation* dismissed = [self expectationWithDescription:@"Teardown completed before next launch"];
+  DOLDismissSessionController(game, ^{
+    XCTAssertNil(frontend.presentedViewController);
+    XCTAssertNil(game.view.window);
+    [dismissed fulfill];
+  });
+  [self waitForExpectations:@[dismissed] timeout:5];
   XCTNSPredicateExpectation* returned = [[XCTNSPredicateExpectation alloc]
       initWithPredicate:[NSPredicate predicateWithFormat:@"presentedViewController == nil"] object:frontend];
   [self waitForExpectations:@[returned] timeout:5];
@@ -38,5 +44,35 @@
 
 - (void)testQuitFromSettingsReturnsToFrontend { [self checkQuitWithSettings:YES]; }
 - (void)testQuitFromGameReturnsToFrontend { [self checkQuitWithSettings:NO]; }
+
+- (void)testRepeatedConsoleTransitionsWaitForFullDismissal {
+  for (NSInteger transition = 0; transition < 6; ++transition)
+    [self checkQuitWithSettings:transition % 2 == 0];
+}
+
+- (void)testStopWhileSettingsAreStillAppearingWaitsForTransition {
+  UIWindow* window = [(id)UIApplication.sharedApplication.delegate window];
+  UIViewController* frontend = window.rootViewController;
+  UIViewController* game = [UIViewController new];
+  game.modalPresentationStyle = UIModalPresentationFullScreen;
+  [self present:game from:frontend];
+  UIViewController* settings = [UIViewController new];
+  settings.modalPresentationStyle = UIModalPresentationOverFullScreen;
+  [game presentViewController:settings animated:YES completion:nil];
+  XCTestExpectation* dismissed = [self expectationWithDescription:@"Pending settings transition closed"];
+  DOLDismissSessionController(game, ^{
+    XCTAssertNil(frontend.presentedViewController);
+    XCTAssertNil(game.view.window);
+    XCTAssertNil(settings.view.window);
+    [dismissed fulfill];
+  });
+  [self waitForExpectations:@[dismissed] timeout:5];
+}
+
+- (void)testAbsentSessionCompletesTeardown {
+  __block BOOL finished = NO;
+  DOLDismissSessionController(nil, ^{ finished = YES; });
+  XCTAssertTrue(finished);
+}
 
 @end

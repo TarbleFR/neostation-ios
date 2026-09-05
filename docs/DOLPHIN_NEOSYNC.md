@@ -27,6 +27,35 @@ An already running Dolphin session defers synchronization. A cloud problem does
 not change the JIT policy or redirect the game to another emulator. A missing
 save is not uploaded as an empty replacement.
 
+## Build 203 session controls
+
+Save and load slots show the library game title as well as the unchanged native
+filename. NeoSync uses the same title metadata in its file list and dialogs.
+
+The chart button beside the in-game menu toggles a passive performance overlay:
+real Dolphin FPS/VPS, speed, average frame time and variation, a 60-second graph
+of frame intervals sampled twice per second, and the allocated internal EFB
+resolution. It does not measure every frame spike, and stops sampling while
+hidden or while settings are open. No GPU readback or CPU pause is used.
+
+Graphics selections persist in the session preferences and override game INI
+values on the next boot. The GPU's reported dimensions allow the selected scale
+to be checked after resuming. Cached shader compilation is completed before
+play where supported, so startup may take longer. This reduces a source of
+stutter; it does not guarantee a fixed frame rate on every device or game.
+
+The Wii playlist import menu also offers **Launch Wii Menu**. Import your own
+extracted NAND containing the installed System Menu, its ticket and content
+files. Keys or boot2 alone do not contain the menu. Dolphin supplies IOS HLE;
+no separate installed IOS binary is required. This uses the same embedded JIT
+checks as a game and does not create a game-specific NeoSync upload session.
+Game save-state actions are omitted in this system session.
+
+A stopped game releases CPU/GPU/audio/NAND resources before UIKit removes its
+view. Process-wide Dolphin input/config services remain initialized, following
+the upstream frontend lifecycle. The next console waits until UIKit has finished
+closing the previous game and settings, including a transition already in flight.
+
 ## Included saves
 
 - GameCube GCI directories: per native game ID, region (USA/EUR/JAP), and slot

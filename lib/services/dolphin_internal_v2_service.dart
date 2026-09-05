@@ -486,6 +486,31 @@ class DolphinInternalV2Service {
   static Future<DolphinLaunchReport> launch({
     required String folderName,
     required String gamePath,
+    String? gameTitle,
+    Future<void> Function()? onSessionStopped,
+  }) => _launchSession(
+    folderName: folderName,
+    gamePath: gamePath,
+    gameTitle: gameTitle,
+    onSessionStopped: onSessionStopped,
+  );
+
+  /// Boots the user's installed NAND title, with the same JIT and session
+  /// exclusion as a game. A menu session has no ROM identity or NeoSync game
+  /// callback, so it cannot be mistaken for the previously played Wii title.
+  static Future<DolphinLaunchReport> launchWiiMenu() => _launchSession(
+    folderName: 'wii',
+    wiiSystemMenu: true,
+    gameTitle: DolphinImportLocale.labelsFor(
+      FlutterLocalization.instance.currentLocale,
+    )['wiiMenuTitle'],
+  );
+
+  static Future<DolphinLaunchReport> _launchSession({
+    required String folderName,
+    String? gamePath,
+    String? gameTitle,
+    bool wiiSystemMenu = false,
     Future<void> Function()? onSessionStopped,
   }) async {
     // Let an already-started save transaction finish before opening the core.
@@ -501,9 +526,12 @@ class DolphinInternalV2Service {
       }
       _installSaveSessionHandler();
       ownsSaveCallback = true;
-    _saveSessionToken = '${DateTime.now().microsecondsSinceEpoch}';
-    _onSaveSessionStopped = onSessionStopped;
-      final report = await _launch(folderName: folderName, gamePath: gamePath);
+      _saveSessionToken = '${DateTime.now().microsecondsSinceEpoch}';
+      _onSaveSessionStopped = onSessionStopped;
+      final report = await _launch(
+        folderName: folderName, gamePath: gamePath, gameTitle: gameTitle,
+        wiiSystemMenu: wiiSystemMenu,
+      );
       if (!report.ready) { _saveSessionToken = null; _onSaveSessionStopped = null; }
       return report;
     } catch (_) {
@@ -519,15 +547,21 @@ class DolphinInternalV2Service {
 
   static Future<DolphinLaunchReport> _launch({
     required String folderName,
-    required String gamePath,
+    String? gamePath,
+    String? gameTitle,
+    required bool wiiSystemMenu,
   }) async {
     final system = _normalizeSystem(folderName);
     await ensureLayout();
     final root = await rootDirectory();
     final library = await libraryDirectory(system);
-    final normalizedGame = path.normalize(path.absolute(gamePath));
+    final normalizedGame = wiiSystemMenu ? '' : path.normalize(path.absolute(gamePath!));
     final normalizedLibrary = path.normalize(path.absolute(library.path));
-    if (!path.isWithin(normalizedLibrary, normalizedGame)) {
+    if (wiiSystemMenu) {
+      await DolphinSystemFiles.requireWiiMenuMetadata(
+        Directory(path.join(root.path, 'User', 'Wii')),
+      );
+    } else if (!path.isWithin(normalizedLibrary, normalizedGame)) {
       final logPath = await _sessionLogPath();
       await _appendLogTo(
         logPath,
@@ -543,7 +577,7 @@ class DolphinInternalV2Service {
       );
     }
     final extension = path.extension(normalizedGame).replaceFirst('.', '').toLowerCase();
-    if (!extensionsFor(system).contains(extension)) {
+    if (!wiiSystemMenu && !extensionsFor(system).contains(extension)) {
       final logPath = await _sessionLogPath();
       await _appendLogTo(logPath, 'image.extension_rejected', 'Unsupported $system image extension: $extension.');
       return DolphinLaunchReport(
@@ -577,7 +611,8 @@ class DolphinInternalV2Service {
       jsonEncode({
         'state': 'preparing',
         'system': system,
-        'gamePath': normalizedGame,
+        'bootKind': wiiSystemMenu ? 'wiiSystemMenu' : 'game',
+        if (!wiiSystemMenu) 'gamePath': normalizedGame,
         'logPath': logPath,
         'startedAt': DateTime.now().toUtc().toIso8601String(),
       }),
@@ -589,9 +624,12 @@ class DolphinInternalV2Service {
         'launchGame',
         {
           'system': system,
+          'bootKind': wiiSystemMenu ? 'wiiSystemMenu' : 'game',
           'saveSessionToken': _saveSessionToken,
           'menuLabels': DolphinImportLocale.labelsFor(FlutterLocalization.instance.currentLocale),
-          'gamePath': normalizedGame,
+          if (!wiiSystemMenu) 'gamePath': normalizedGame,
+          'gameTitle': gameTitle?.trim().isNotEmpty == true
+              ? gameTitle!.trim() : path.basenameWithoutExtension(normalizedGame),
           'userDirectory': path.join(root.path, 'User'),
           'systemDirectory': systemDirectory,
           'logPath': logPath,
@@ -619,7 +657,8 @@ class DolphinInternalV2Service {
           jsonEncode({
             'state': 'running',
             'system': system,
-            'gamePath': normalizedGame,
+            'bootKind': wiiSystemMenu ? 'wiiSystemMenu' : 'game',
+            if (!wiiSystemMenu) 'gamePath': normalizedGame,
             'logPath': logPath,
             'authorizedAt': DateTime.now().toUtc().toIso8601String(),
           }),
