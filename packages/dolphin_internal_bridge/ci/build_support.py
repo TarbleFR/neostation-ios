@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 from verify_ipa import BRIDGE, demand, file_sha256, macho, validate
+from device_info_sdk_compat import install as install_device_info_sdk_compat
 
 ROOT = Path(__file__).resolve().parents[3]
 LOGS = ROOT / 'build/dolphin-ci'
@@ -109,6 +110,9 @@ end
     info['CFBundleDisplayName'] = 'NeoStation iOS'
     write_plist(info_path, info)
     generate_plugin_registrant(ios)
+    # The locked device-info plugin references a newer SDK declaration.
+    # Supply only that declaration to its own Pod; keep runtime/API behavior.
+    install_device_info_sdk_compat(ios)
     run('git', 'diff', '--exit-code', '--', 'pubspec.yaml', 'pubspec.lock')
 
 

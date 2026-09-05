@@ -28,7 +28,8 @@ class DolphinRegistrantTests(unittest.TestCase):
             runner = ios / 'Runner'
             runner.mkdir(parents=True)
             SUPPORT.write_plist(runner / 'Info.plist', {'CFBundleIdentifier': 'com.neogamelab.neostation'})
-            (ios / 'Podfile').write_text('# Existing CocoaPods configuration\n')
+            original_podfile = '# Existing CocoaPods configuration\npost_install do |installer|\nend\n'
+            (ios / 'Podfile').write_text(original_podfile)
             def command(*args):
                 if args[:3] == ('flutter', 'pub', 'get'):
                     self.assertTrue(runner.is_dir())
@@ -41,7 +42,13 @@ class DolphinRegistrantTests(unittest.TestCase):
                 SUPPORT.scaffold()
                 run.assert_any_call('flutter', 'pub', 'get', '--enforce-lockfile')
                 run.assert_any_call('git', 'diff', '--exit-code', '--', 'pubspec.yaml', 'pubspec.lock')
-            self.assertEqual((ios / 'Podfile').read_text(), '# Existing CocoaPods configuration\n')
+            updated_podfile = (ios / 'Podfile').read_text()
+            self.assertIn('NeoStationDeviceInfoSDKCompatibility.apply(installer)', updated_podfile)
+            self.assertTrue((ios / 'NeoStationBuildCompatibility/NSProcessInfoVisionCompatibility.h').is_file())
+            # Only the tested per-Pod declaration hook may be added.
+            before_hook, after_hook = updated_podfile.split('# NEOSTATION_DEVICE_INFO_SDK_COMPAT_BEGIN', 1)
+            after_hook = after_hook.split('# NEOSTATION_DEVICE_INFO_SDK_COMPAT_END\n', 1)[1]
+            self.assertEqual(before_hook + after_hook, original_podfile)
 
     def test_rejects_missing_or_empty_registrant(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
