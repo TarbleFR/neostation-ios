@@ -107,6 +107,13 @@
     [overlay layoutIfNeeded];
     NSArray<UIButton*>* buttons = [self buttonsIn:overlay];
     NSMutableArray<NSValue*>* restingFrames = [NSMutableArray array];
+    NSMutableArray<NSValue*>* restingImageFrames = [NSMutableArray array];
+    for (UIButton* button in buttons) {
+      [button layoutIfNeeded];
+      [restingImageFrames addObject:[NSValue valueWithCGRect:button.imageView.frame]];
+      if ([button respondsToSelector:NSSelectorFromString(@"setControllerButton:")])
+        XCTAssertEqual(button.buttonType, UIButtonTypeCustom, @"Touch buttons must not use moving system styling");
+    }
     for (UIButton* button in buttons)
       [restingFrames addObject:[NSValue valueWithCGRect:[button convertRect:button.bounds toView:overlay]]];
     for (UIButton* pressed in buttons) {
@@ -116,6 +123,9 @@
       XCTAssertFalse(pressed.selected, @"A momentary control must not activate UIKit selection styling");
       for (NSUInteger index = 0; index < buttons.count; ++index) {
         UIButton* button = buttons[index];
+        [button layoutIfNeeded];
+        XCTAssertTrue(CGRectEqualToRect(button.imageView.frame, restingImageFrames[index].CGRectValue),
+                      @"%@ button artwork moved during a press", layout);
         XCTAssertTrue(CGRectEqualToRect([button convertRect:button.bounds toView:overlay],
                                        restingFrames[index].CGRectValue), @"%@ pad moved during a press", layout);
       }
@@ -128,6 +138,36 @@
     [overlay layoutIfNeeded];
     XCTAssertEqual(overlay.subviews.firstObject, pad, @"Unchanged extension polling must preserve the touch pad");
   }
+}
+
+- (UIView*)viewIn:(UIView*)root identified:(NSString*)identifier {
+  if ([root.accessibilityIdentifier isEqualToString:identifier]) return root;
+  for (UIView* child in root.subviews) {
+    UIView* found = [self viewIn:child identified:identifier];
+    if (found) return found;
+  }
+  return nil;
+}
+
+- (void)testWiiPointerSurfaceCannotOwnButtonTouches {
+  DOLTouchOverlay* overlay = [[DOLTouchOverlay alloc] initWithWii:YES];
+  overlay.frame = CGRectMake(0, 0, 844, 390);
+  [overlay layoutIfNeeded];
+  UIView* surface = [self viewIn:overlay identified:@"dolphin-wii-pointer-surface"];
+  XCTAssertNotNil(surface);
+  XCTAssertEqual(surface.superview.subviews.firstObject, surface, @"Pointer must be behind the controls");
+  XCTAssertTrue(CGRectEqualToRect(surface.frame, surface.superview.bounds));
+  XCTAssertEqual(surface.gestureRecognizers.count, 1u);
+  UIGestureRecognizer* pointer = surface.gestureRecognizers.firstObject;
+  XCTAssertFalse(pointer.cancelsTouchesInView);
+  for (UIButton* button in [self buttonsIn:overlay]) {
+    XCTAssertFalse([button isDescendantOfView:surface], @"A controller button must not feed the pointer recognizer");
+    for (UIView* parent = button; parent; parent = parent.superview)
+      XCTAssertFalse([parent.gestureRecognizers containsObject:pointer]);
+  }
+  overlay.frame = CGRectMake(0, 0, 1024, 768);
+  [overlay layoutIfNeeded];
+  XCTAssertTrue(CGRectEqualToRect(surface.frame, surface.superview.bounds), @"Pointer background must follow resizing");
 }
 
 - (void)testWiiPointerMovesOnTouchDownAndIgnoresReleaseCoordinates {
