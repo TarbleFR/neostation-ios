@@ -7,6 +7,24 @@ import json
 from pathlib import Path
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
+
+
+def adapt_touch_layout(data: bytes) -> bytes:
+    """Keep original constraints/art, but do not use UIKit system-button effects."""
+    root = ET.fromstring(data)
+    for view in root.iter():
+        if view.get('customModule') == 'DolphiniOS':
+            view.set('customModule', 'dolphin_internal_bridge')
+        if view.tag == 'button' and view.get('customClass') == 'TCButton':
+            view.set('buttonType', 'custom')
+            for state in view.findall('state'):
+                state.attrib.pop('title', None)
+            for configuration in view.findall('buttonConfiguration'):
+                view.remove(configuration)
+        if view.tag == 'view':
+            view.set('multipleTouchEnabled', 'YES')
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
 
 def main():
@@ -31,7 +49,7 @@ def main():
         if digest != item['sha']:
             raise ValueError(f'Upstream touch resource changed: {relative}')
         if relative.endswith('.xib'):
-            data = data.replace(b'customModule="DolphiniOS"', b'customModule="dolphin_internal_bridge"')
+            data = adapt_touch_layout(data)
         (target / Path(relative).name).write_bytes(data)
 
     with ThreadPoolExecutor(max_workers=8) as pool:
