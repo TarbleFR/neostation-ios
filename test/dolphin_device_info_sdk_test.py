@@ -80,6 +80,24 @@ puts JSON.generate(configs.map(&:build_settings))
         self.assertEqual(settings[2]['OTHER_CFLAGS'][:2], ['$(inherited)', '-DARRAY_FLAG=1'])
 
     @unittest.skipUnless(shutil.which('clang'), 'Clang is required')
+    def test_generated_c_and_cpp_sources_do_not_import_objective_c(self):
+        header = self.ios / 'compat.h'
+        header.write_text(COMPAT.HEADER)
+        # The Pod's generated *_vers.c shares OTHER_CFLAGS with its .m files.
+        # No Foundation stub is installed: importing it in C/C++ must fail.
+        source = self.ios / 'version.c'
+        source.write_text('double device_info_plusVersionNumber = 1.0;\n')
+        for language in ['c', 'c++']:
+            result = subprocess.run(
+                ['clang', '-fsyntax-only', '-x', language,
+                 '-target', 'arm64-apple-ios17.4',
+                 '-D__IPHONE_OS_VERSION_MAX_ALLOWED=180500',
+                 '-include', str(header), str(source)],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which('clang'), 'Clang is required')
     def test_old_sdk_declaration_compiles_without_changing_new_sdk(self):
         foundation = self.ios / 'Foundation'
         foundation.mkdir()

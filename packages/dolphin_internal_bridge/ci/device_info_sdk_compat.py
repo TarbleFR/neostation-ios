@@ -9,6 +9,7 @@ from pathlib import Path
 HEADER = '''// NeoStation build compatibility; no Foundation method is implemented here.
 // device_info_plus 13.2.0 calls this public getter behind @available(iOS 26.1, *).
 // Xcode 16.4 cannot see its declaration even though that runtime check is valid.
+#if defined(__OBJC__)
 #import <Foundation/Foundation.h>
 #import <Availability.h>
 
@@ -17,6 +18,7 @@ HEADER = '''// NeoStation build compatibility; no Foundation method is implement
 - (BOOL)isiOSAppOnVision API_AVAILABLE(ios(26.1));
 @end
 #endif
+#endif  // __OBJC__: the Pod also compiles generated C version sources.
 '''
 
 RUBY = '''# A declaration-only header, confined to the device_info_plus Pod.
