@@ -71,6 +71,7 @@ class NeoSyncProvider extends ChangeNotifier {
   Future<void> _dolphinSyncTail = Future<void>.value();
   int _dolphinBulkChecked = 0;
   int _dolphinBulkErrors = 0;
+  final DolphinSaveTitleCache _dolphinTitles = DolphinSaveTitleCache();
   // DOLPHIN_ISOLATION_END: neosync_queue
 
   /// Whether a global synchronization task is currently active.

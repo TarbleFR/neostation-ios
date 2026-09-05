@@ -43,13 +43,53 @@ extension NeoSyncDolphin on NeoSyncProvider {
     finally { complete.complete(); }
   }
 
+  /// Older unchanged snapshots may have no game_name; checksum skips must
+  /// stay intact. Resolve their UI titles from the local playlist and DiscIO,
+  /// without re-uploading saves, booting the core, or changing remote metadata.
+  Future<List<NeoSyncFile>> _dolphinDisplayFiles(List<NeoSyncFile> files) async {
+    if (!Platform.isIOS) return files;
+    final missing = <String, DolphinSaveTarget>{};
+    for (final file in files) {
+      final target = file.dolphinTarget;
+      if (target != null && target.isState && _dolphinTitles.titleFor(target) == null &&
+          !file.hasDolphinGameTitle) {
+        missing['${target.system}/${target.identity}'] = target;
+      }
+    }
+    for (final system in ['gc', 'wii']) {
+      if (!missing.values.any((target) => target.system == system)) continue;
+      try {
+        for (final row in await GameRepository.loadGamesForSystem(system)) {
+          if (!missing.values.any((target) => target.system == system)) break;
+          final game = GameModel.fromDatabaseModel(row);
+          if (game.name.trim().isEmpty || game.romPath?.isNotEmpty != true) continue;
+          try {
+            final identity = await DolphinInternalV2Service.readSaveIdentity(system, game.romPath!);
+            _dolphinTitles.remember(identity, game.name);
+            missing.remove('${identity.system}/${identity.system == 'gc' ? identity.gameId : identity.titleId}');
+          } catch (_) {
+            // An unavailable imported ROM must not hide cloud saves or prevent
+            // the remaining library entries from resolving their own titles.
+          }
+        }
+      } catch (error) {
+        NeoSyncProvider._log.w('[NeoSync][DolphiniOS][title.unavailable] $system: $error');
+      }
+    }
+    return files.map((file) {
+      final target = file.dolphinTarget;
+      return target != null && target.isState
+          ? file.withDolphinDisplayTitle(_dolphinTitles.titleFor(target)) : file;
+    }).toList();
+  }
+
   Future<List<NeoSyncFile>> _dolphinFetchCloud(String account) async {
     final response = await _neoSyncService.getDolphinSaveFiles();
     if (!isNeoSyncAuthenticated || _dolphinAccount != account) {
       throw StateError('NeoSync account changed during Dolphin synchronization');
     }
     if (response['success'] != true) throw StateError('NeoSync cloud listing failed: ${response['message']}');
-    final result = (response['files'] as List<NeoSyncFile>);
+    final result = response['files'] as List<NeoSyncFile>;
     _files = result;
     return result;
   }
@@ -58,6 +98,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
     if (!_isDolphinGame(game) || game.cloudSyncEnabled != true) return [];
     return _dolphinExclusive((store) async {
       final identity = await DolphinInternalV2Service.readSaveIdentity(game.systemFolderName!, game.romPath ?? '');
+      _dolphinTitles.remember(identity, game.name);
       final result = <LocalSaveFile>[];
       for (final target in await store.targetsForGame(identity)) {
         final snapshot = await store.snapshot(target);
@@ -72,6 +113,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
     if (!_isDolphinGame(game) || !isNeoSyncAuthenticated || game.cloudSyncEnabled != true) return [];
     return _dolphinExclusive((store) async {
       final identity = await DolphinInternalV2Service.readSaveIdentity(game.systemFolderName!, game.romPath ?? '');
+      _dolphinTitles.remember(identity, game.name);
       return (await _dolphinFetchCloud(_dolphinAccount)).where((file) =>
         DolphinSaveTarget.parse(file.fileName)?.matches(identity) == true).toList();
     });
@@ -97,6 +139,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
     try {
       await _dolphinExclusive((store) async {
         final identity = await DolphinInternalV2Service.readSaveIdentity(system.folderName, game.romPath ?? '');
+        _dolphinTitles.remember(identity, game.name);
         final cloudFiles = await _dolphinFetchCloud(account);
         final cloudByKey = <String, NeoSyncFile>{};
         for (final file in cloudFiles) {
@@ -141,7 +184,9 @@ extension NeoSyncDolphin on NeoSyncProvider {
           if (decision == DolphinSyncDecision.upload) {
             if (!perform || !upload) { hasPendingUpload = true; continue; }
             // Existing NeoSync transport enforces the account's real quota.
-            final response = await _neoSyncService.syncFile(local!.file, game.name,
+            final displayTitle = target.isState ? game.name
+                : target.system == 'gc' ? 'GC Memory cards' : 'Wii saves';
+            final response = await _neoSyncService.syncFile(local!.file, displayTitle,
               customFilename: entry.key, systemId: target.system,
               emulatorId: DolphinSaveTarget.emulator, scope: target.shared ? 'shared' : 'game',
               isState: target.isState);

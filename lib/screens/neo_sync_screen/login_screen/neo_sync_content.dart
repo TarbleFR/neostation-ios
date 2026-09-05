@@ -808,7 +808,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
     final labels = <String, String>{};
 
     for (final file in provider.onlineFiles) {
-      final lowerPath = file.fileName.toLowerCase();
+      // DOLPHIN_ISOLATION_BEGIN: neosync_listing_path_context
+      final lowerPath = file.presentationPath.toLowerCase();
+      // DOLPHIN_ISOLATION_END: neosync_listing_path_context
       final isMeloNX =
           lowerPath.startsWith('v2/saves/switch/melonx/game/') ||
           lowerPath.startsWith('v2/states/switch/melonx/game/');
@@ -829,7 +831,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
         // RPCS3 saves are made of many constituent files. The backend's
         // gameName metadata can vary between those files, so grouping must
         // use the canonical game segment embedded in the v2 cloud path.
-        final pathGameName = _readableGameNameFromV2Path(file.fileName);
+        // DOLPHIN_ISOLATION_BEGIN: neosync_ps3_listing_context
+        final pathGameName = _readableGameNameFromV2Path(file.presentationPath);
+        // DOLPHIN_ISOLATION_END: neosync_ps3_listing_context
         label = pathGameName;
         key = 'rpcs3:${pathGameName.toLowerCase()}';
       } else if (isArmsx2Save || isArmsx2State) {
@@ -3147,9 +3151,13 @@ class _OnlineSaveGroup {
 
   String get subtitle {
     final date = newestAt.toLocal().toString().split(' ')[0];
+    // DOLPHIN_ISOLATION_BEGIN: neosync_card_slot_details
+    final details = files.length == 1 ? primaryFile.dolphinDetailName : null;
+    final prefix = details == null ? '' : '$details • ';
     return files.length > 1
         ? '${files.length}× • $sizeFormatted • $date'
-        : '$sizeFormatted • $date';
+        : '$prefix$sizeFormatted • $date';
+    // DOLPHIN_ISOLATION_END: neosync_card_slot_details
   }
 
   NeoSyncFile get displayFile => NeoSyncFile(

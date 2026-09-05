@@ -323,6 +323,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 - (nullable instancetype)initWithLogPath:(NSString*)logPath error:(NSError**)error;
 - (void)startReader;
 - (BOOL)waitUntilConnected:(NSTimeInterval)timeout;
+- (BOOL)waitUntilAttached:(NSTimeInterval)timeout;
 - (BOOL)waitUntilFinished:(NSTimeInterval)timeout;
 - (void)close;
 @end
@@ -335,6 +336,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
   NSString* _logPath;
   NSCondition* _condition;
   BOOL _connected;
+  BOOL _attached;
   BOOL _finished;
   BOOL _success;
   NSString* _finalMessage;
@@ -473,7 +475,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
             ![payload[@"token"] isEqualToString:strongSelf->_token]) {
           continue;
         }
-        NSString* event = payload[@"event"];
+        NSString* event = [payload[@"event"] isKindOfClass:NSString.class] ? payload[@"event"] : @"unknown";
         NSString* message = [payload[@"message"] isKindOfClass:NSString.class]
                                 ? payload[@"message"]
                                 : @"";
@@ -485,6 +487,15 @@ static UIViewController* _Nullable DOLRootViewController(void) {
         [strongSelf->_condition lock];
         if ([event isEqualToString:@"helper_connected"]) {
           strongSelf->_connected = YES;
+        } else if ([event isEqualToString:@"pid_attached"] && strongSelf->_connected && !strongSelf->_finished) {
+          // The helper emits this only after this request's legacy.js vAttach
+          // stop reply. CS_DEBUGGED alone survives an earlier detach and can
+          // otherwise release BRK #0x69 before the next debugger is attached.
+          NSNumber* targetPID = [payload[@"targetPID"] isKindOfClass:NSNumber.class]
+              ? payload[@"targetPID"] : nil;
+          if ([targetPID isEqualToNumber:@(getpid())]) {
+            strongSelf->_attached = YES;
+          }
         } else if ([event isEqualToString:@"log"]) {
           if (message.length > 0) [strongSelf->_mutableLogs addObject:message];
         } else if ([event isEqualToString:@"complete"]) {
@@ -536,6 +547,15 @@ static UIViewController* _Nullable DOLRootViewController(void) {
                          timeout:timeout];
 }
 
+- (BOOL)waitUntilAttached:(NSTimeInterval)timeout {
+  [self waitForPredicate:^BOOL { return self->_attached || self->_finished; }
+                  timeout:timeout];
+  [_condition lock];
+  BOOL ready = _attached && !_finished;
+  [_condition unlock];
+  return ready;
+}
+
 - (void)close {
   if (_listener >= 0) {
     shutdown(_listener, SHUT_RDWR);
@@ -554,6 +574,12 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 }
 
 @end
+
+static BOOL DOLWaitForFreshDebuggerAttach(DOLHelperSession* helper, NSTimeInterval timeout) {
+  // Fresh authenticated helper evidence is required on every launch; the
+  // persistent code-signing flag is only an additional kernel check.
+  return [helper waitUntilAttached:timeout] && DOLHostIsDebugged();
+}
 
 static NSString* _Nullable DOLFindHelperBundleIdentifier(void) {
   NSURL* plugins = NSBundle.mainBundle.builtInPlugInsURL;
@@ -846,15 +872,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     state[@"stikjitConnected"] = @YES;
     DOLAppendJSONLog(logPath, @"stikjit.connected", @"Embedded StikJIT helper connected.", nil);
 
-    NSDate* attachDeadline = [NSDate dateWithTimeIntervalSinceNow:kDebuggerAttachTimeout];
-    while (!DOLHostIsDebugged() && [attachDeadline timeIntervalSinceNow] > 0.0) {
-      if (helper.finished) break;
-      [NSThread sleepForTimeInterval:0.10];
-    }
-    if (!DOLHostIsDebugged()) {
+    if (!DOLWaitForFreshDebuggerAttach(helper, kDebuggerAttachTimeout)) {
       NSString* reason = helper.finalMessage.length > 0
                              ? helper.finalMessage
-                             : @"StikJIT did not attach to the NeoStation PID before timeout.";
+                             : @"StikJIT did not confirm a fresh attachment to this NeoStation session before timeout.";
       fail(@"stikjit.pid_attach_failed", reason);
       return [self finishFailedLaunch:state];
     }

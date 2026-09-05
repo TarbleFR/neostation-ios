@@ -25,6 +25,7 @@ SHARED_FILES = {
     "lib/providers/neosync/neosync_path_resolver.dart",
     "lib/providers/neosync/neosync_upload.dart",
     "lib/providers/neosync/neosync_download.dart",
+    "lib/providers/neosync/neosync_status.dart",
     "README.md",
     "NOTICE.md",
     "lib/services/game/game_launch_service.dart",

@@ -30,7 +30,8 @@ save is not uploaded as an empty replacement.
 ## Build 203 session controls
 
 Save and load slots show the library game title as well as the unchanged native
-filename. NeoSync uses the same title metadata in its file list and dialogs.
+filename. NeoSync displays game titles for Dolphin savestates; internal GameCube
+save objects use **GC Memory cards** instead.
 
 The chart button beside the in-game menu toggles a passive performance overlay:
 real Dolphin FPS/VPS, speed, average frame time and variation, a 60-second graph
@@ -55,6 +56,36 @@ A stopped game releases CPU/GPU/audio/NAND resources before UIKit removes its
 view. Process-wide Dolphin input/config services remain initialized, following
 the upstream frontend lifecycle. The next console waits until UIKit has finished
 closing the previous game and settings, including a transition already in flight.
+
+## Build 204 relaunch and cloud presentation
+
+Every new game requires a fresh, authenticated `pid_attached` event from that
+launch's StikJIT helper before executing Dolphin's legacy breakpoint handshake.
+The event must name the current process. The persistent `CS_DEBUGGED` flag alone
+does not prove that the new debugger has attached after a previous game.
+
+Metal shutdown drains pending GPU work and retires its completion callbacks
+before destroying the objects those callbacks reference. These address concrete
+relaunch and teardown hazards; the reported device crash still requires an
+on-device retest.
+
+Cloud presentation accepts the API's short filename plus canonical `file_path`
+form, so old Dolphin savestates can recover their game title from the local
+library's native game identity. This lookup does not rewrite their cloud keys or
+upload their content again. Internal GameCube saves retain the generic card
+label. The individual numbered slots remain distinct.
+
+`ICON0.PNG`, `PARAM.SFO`, `PIC1.PNG`, `SYSDATA` and `PLAYDATA` can be constituent
+files of PlayStation save directories, not stray Dolphin files. Such components
+must remain available for restoration; a recognized common save path supplies
+their display context. No cloud files are deleted or excluded by extension.
+If the server omits the upload date, an available file timestamp is displayed
+instead of replacing it with today's date; legacy Unix-second values are
+normalized to the millisecond representation used by current uploads.
+
+The pinned Metal backend does not implement or link MetalFX. MetalFX upscaling
+requires a separate rendering integration; it is not an existing graphics
+setting this build can enable.
 
 ## Included saves
 

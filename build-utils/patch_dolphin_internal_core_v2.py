@@ -1060,6 +1060,47 @@ def patch_performance_metrics(root: Path) -> None:
     patch(source, old, new, 'clear released EFB dimensions')
 
 
+def patch_metal_shutdown(root: Path) -> None:
+    """Finish Metal callbacks before destroying their per-game result owners."""
+    def patch(path: Path, old: str, new: str, description: str) -> None:
+        if new not in path.read_text(encoding='utf-8'):
+            replace_once(path, old, new, description)
+
+    header = root / 'Source/Core/VideoBackends/Metal/MTLStateTracker.h'
+    tracker = root / 'Source/Core/VideoBackends/Metal/MTLStateTracker.mm'
+    backend = root / 'Source/Core/VideoBackends/Metal/MTLMain.mm'
+    patch(header, '  void WaitForFlushedEncoders();',
+          '  void WaitForFlushedEncoders();\n  void PrepareForShutdown();',
+          'declare Metal shutdown callback drain')
+    old = 'void Metal::StateTracker::WaitForFlushedEncoders()\n{'
+    new = '''void Metal::StateTracker::PrepareForShutdown()
+{
+  // Called by the emulation/GPU thread after CPU execution has joined, while
+  // g_perf_query and g_framebuffer_manager still belong to this session.
+  FlushEncoders();
+  // waitUntilCompleted also waits for this command buffer's completion handlers.
+  // Never hold the backref mutex here: those handlers need it to finish.
+  WaitForFlushedEncoders();
+  // Older completion handlers can still be entering on their callback threads.
+  // Finish any handler already inside the lock and reject all late callbacks
+  // before ShutdownShared releases their query/framebuffer objects.
+  std::lock_guard<std::mutex> lock(m_backref->mtx);
+  m_backref->state_tracker = nullptr;
+}
+
+''' + old
+    patch(tracker, old, new, 'drain and detach Metal completion callbacks')
+    old = 'void Metal::VideoBackend::Shutdown()\n{\n  ShutdownShared();'
+    new = '''void Metal::VideoBackend::Shutdown()
+{
+  // Shared renderer destruction releases objects used by asynchronous Metal
+  // completion handlers. Joining Dolphin's CPU thread alone does not join them.
+  if (g_state_tracker)
+    g_state_tracker->PrepareForShutdown();
+  ShutdownShared();'''
+    patch(backend, old, new, 'drain Metal before renderer destruction')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('dolphin_root', type=Path)
@@ -1085,6 +1126,7 @@ def main() -> None:
     patch_savestate_results(root)
     patch_savestate_memory(root)
     patch_performance_metrics(root)
+    patch_metal_shutdown(root)
     bridge.write_text(BRIDGE_SOURCE, encoding='utf-8')
     updated = memory.read_text()
     required = ('brk #0x69', '"mov x0, %0\\n"', '"mov x1, %1\\n"', 'if (rx_ptr == MAP_FAILED)')

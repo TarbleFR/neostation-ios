@@ -145,6 +145,21 @@ class DolphinSaveTarget {
   }
 }
 
+/// Display metadata only. Keys are verified native identities, so a filename
+/// guess, another console or a shared card cannot receive the wrong game title.
+class DolphinSaveTitleCache {
+  final Map<String, String> _titles = {};
+
+  void remember(DolphinSaveIdentity game, String title) {
+    if (!game.isValid || title.trim().isEmpty) return;
+    final identity = game.system == 'gc' ? game.gameId : game.titleId!;
+    _titles['${game.system}/$identity'] = title.trim();
+  }
+
+  String? titleFor(DolphinSaveTarget target) => target.isState
+      ? _titles['${target.system}/${target.identity}'] : null;
+}
+
 class DolphinSaveSnapshot {
   final DolphinSaveTarget target;
   final File file;

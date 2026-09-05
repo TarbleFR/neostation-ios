@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'dart:io';
+// DOLPHIN_ISOLATION_BEGIN: neosync_presentation_imports
+import '../services/dolphin_neosync_store.dart';
+// DOLPHIN_ISOLATION_END: neosync_presentation_imports
 
 /// Configuration settings for the NeoSync cloud synchronization service.
 ///
@@ -101,24 +104,120 @@ class NeoSyncFile {
     return '';
   }
 
-  /// Presentation only: native Dolphin IDs remain the operational filenames,
-  /// while the uploaded title helps identify their saves and states in the UI.
-  /// Historical files without title metadata keep the filename fallback.
-  String get displayName {
-    if (fileName.trim().isNotEmpty) {
-      if (gameName.trim().isNotEmpty && RegExp(
-        r'^v2/(?:saves|states)/(?:gc|wii)/dolphinios/',
-        caseSensitive: false,
-      ).hasMatch(fileName)) {
-        return '${gameName.trim()} · ${fileName.split('/').last}';
-      }
-      return fileName;
+  /// Server listings can split the basename from the original cloud path.
+  /// This recovered path is presentation only: transfers retain fileName/id.
+  String get presentationPath {
+    final filename = fileName.replaceAll('\\', '/');
+    if (filename.startsWith('v2/')) return filename;
+    // Never reinterpret an existing relative path as a different cloud object.
+    if (filename.contains('/')) return filename;
+    final stored = filePath.replaceAll('\\', '/');
+    final match = RegExp(r'(?:^|/)(v2/(?:saves|states)/(?:gc|wii|ps3|psp)/[^/]+/(?:game|shared)/.+)$')
+        .firstMatch(stored);
+    final candidate = match?.group(1);
+    if (candidate != null &&
+        !candidate.split('/').any((part) => part.isEmpty || part == '.' || part == '..') &&
+        (filename.trim().isEmpty || candidate.split('/').last == filename)) {
+      return candidate;
     }
+    return filename;
+  }
+
+  DolphinSaveTarget? get dolphinTarget => DolphinSaveTarget.parse(presentationPath);
+
+  /// A local playlist title is a UI fallback, never upload/restore metadata.
+  final String? dolphinDisplayTitle;
+
+  NeoSyncFile withDolphinDisplayTitle(String? title) => NeoSyncFile(
+    id: id, fileName: fileName, filePath: filePath, fileSize: fileSize,
+    gameName: gameName, uploadedAt: uploadedAt, fileModifiedAt: fileModifiedAt,
+    fileModifiedAtTimestamp: fileModifiedAtTimestamp, userId: userId,
+    checksum: checksum, dolphinDisplayTitle: title,
+  );
+
+  static String _readGameName(Map<String, dynamic> json) {
+    for (final key in ['game_name', 'gameName']) {
+      final value = json[key];
+      if (value is String && value.trim().isNotEmpty) return value;
+    }
+    return (json['game_name'] ?? '').toString();
+  }
+
+  bool get hasDolphinGameTitle {
+    final target = dolphinTarget;
+    final title = gameName.trim();
+    return target != null && target.isState && title.isNotEmpty &&
+        !{target.identity, target.rawName, target.objectName,
+          target.rawName.split('.').first, fileName}.contains(title);
+  }
+
+  /// A title is shown only for Dolphin savestates. Internal cards have one
+  /// stable label even when several games share the same native card.
+  String get displayName {
+    final target = dolphinTarget;
+    if (target != null) {
+      if (target.isState) {
+        final title = dolphinDisplayTitle?.trim().isNotEmpty == true
+            ? dolphinDisplayTitle!.trim()
+            : (hasDolphinGameTitle ? gameName.trim() : '');
+        return title.isNotEmpty
+            ? '$title · Slot ${int.parse(target.slot)}' : target.rawName;
+      }
+      return target.system == 'gc' ? 'GC Memory cards' : 'Wii saves';
+    }
+    // PNG/SFO and extensionless files are constituent PlayStation savedata,
+    // not screenshots or unrelated files. Add context only when its path proves
+    // the console; never hide or group unrelated same-named files.
+    final context = _playStationSaveContext;
+    final basename = (fileName.trim().isNotEmpty ? fileName : filePath)
+        .replaceAll('\\', '/').split('/').last;
+    if (context != null && basename.isNotEmpty) return '$context · $basename';
+    // Some historical listings retain only the leaf and human game metadata.
+    // Preserve the component as a separate row when no bundle path is known.
+    if (const {'SYSDATA', 'ICON0.PNG', 'PARAM.SFO', 'PIC1.PNG', 'PLAYDATA'}
+            .contains(basename.toUpperCase()) &&
+        gameName.trim().isNotEmpty &&
+        !{basename.toUpperCase(), basename.split('.').first.toUpperCase()}
+            .contains(gameName.trim().toUpperCase())) {
+      return '${gameName.trim()} · $basename';
+    }
+    if (fileName.trim().isNotEmpty) return fileName;
     final segments = filePath.replaceAll('\\', '/').split('/')
         .where((segment) => segment.trim().isNotEmpty);
     if (segments.isNotEmpty) return segments.last;
     if (gameName.trim().isNotEmpty) return gameName.trim();
     return id.isNotEmpty ? 'NeoSync · $id' : 'NeoSync';
+  }
+
+  /// Kept secondary so the user can distinguish GC card regions/slots without
+  /// presenting a game's title as the owner of a shared internal memory card.
+  String? get dolphinDetailName {
+    final target = dolphinTarget;
+    if (target == null) return null;
+    if (target.isState) return target.rawName;
+    if (target.kind == 'raw') return target.rawName;
+    if (target.kind == 'gci') return '${target.region} · ${target.slot} · ${target.identity}';
+    return target.identity;
+  }
+
+  String? get _playStationSaveContext {
+    final key = presentationPath;
+    final canonical = RegExp(r'^v2/saves/(ps3|psp)/[^/]+/game/([^/]+)/')
+        .firstMatch(key);
+    if (canonical != null) {
+      return '${canonical[1]!.toUpperCase()} · ${canonical[2]}';
+    }
+    final paths = [fileName, filePath];
+    for (final value in paths) {
+      final normalized = value.replaceAll('\\', '/');
+      final psp = RegExp(r'(?:^|/)PSP/SAVEDATA/([^/]+)/', caseSensitive: false)
+          .firstMatch(normalized);
+      if (psp != null) return 'PSP · ${psp[1]}';
+      final ps3 = RegExp(r'(?:^|/)dev_hdd0/home/[0-9]{8}/savedata/([^/]+)/', caseSensitive: false)
+          .firstMatch(normalized);
+      if (ps3 != null) return 'PS3 · ${ps3[1]}';
+    }
+    return null;
   }
   // DOLPHIN_ISOLATION_END: neosync_filename_regression
 
@@ -163,6 +262,9 @@ class NeoSyncFile {
     this.fileModifiedAtTimestamp,
     required this.userId,
     this.checksum,
+    // DOLPHIN_ISOLATION_BEGIN: neosync_local_title_parameter
+    this.dolphinDisplayTitle,
+    // DOLPHIN_ISOLATION_END: neosync_local_title_parameter
   });
 
   /// Creates a [NeoSyncFile] from a JSON-compatible map.
@@ -173,6 +275,14 @@ class NeoSyncFile {
 
     if (timestampRaw != null) {
       finalTimestamp = int.tryParse(timestampRaw.toString());
+      // DOLPHIN_ISOLATION_BEGIN: neosync_timestamp_units
+      // Current uploads use milliseconds; historical listings can use Unix
+      // seconds. Keep zero/ancient millisecond sentinel values unchanged.
+      if (finalTimestamp != null && finalTimestamp >= 1000000000 &&
+          finalTimestamp < 100000000000) {
+        finalTimestamp *= 1000;
+      }
+      // DOLPHIN_ISOLATION_END: neosync_timestamp_units
       if (finalTimestamp != null) {
         fileModifiedAtFromTimestamp = DateTime.fromMillisecondsSinceEpoch(
           finalTimestamp,
@@ -188,10 +298,16 @@ class NeoSyncFile {
       // DOLPHIN_ISOLATION_END: neosync_filename_field
       filePath: (json['file_path'] ?? '').toString(),
       fileSize: int.tryParse((json['file_size'] ?? '0').toString()) ?? 0,
-      gameName: (json['game_name'] ?? '').toString(),
+      // DOLPHIN_ISOLATION_BEGIN: neosync_game_title_field
+      gameName: _readGameName(json),
+      // DOLPHIN_ISOLATION_END: neosync_game_title_field
+      // DOLPHIN_ISOLATION_BEGIN: neosync_timestamp_display
       uploadedAt:
           DateTime.tryParse((json['created_at'] ?? '').toString()) ??
+          DateTime.tryParse((json['uploaded_at'] ?? '').toString()) ??
+          fileModifiedAtFromTimestamp ??
           DateTime.now(),
+      // DOLPHIN_ISOLATION_END: neosync_timestamp_display
       fileModifiedAt: fileModifiedAtFromTimestamp,
       fileModifiedAtTimestamp: finalTimestamp,
       userId: (json['user_id'] ?? '').toString(),

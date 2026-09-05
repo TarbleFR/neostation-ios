@@ -97,6 +97,12 @@ extension NeoSyncStatus on NeoSyncProvider {
         }
       }
 
+      // DOLPHIN_ISOLATION_BEGIN: dolphin_online_display_titles
+      final displayAccount = _dolphinAccount;
+      v2Files = await _dolphinDisplayFiles(v2Files);
+      if (!isNeoSyncAuthenticated || _dolphinAccount != displayAccount) return;
+      // DOLPHIN_ISOLATION_END: dolphin_online_display_titles
+
       final unresolvedLegacy = legacyFiles
           .where((file) => !migratedLegacyIds.contains(file.id))
           .toList();
