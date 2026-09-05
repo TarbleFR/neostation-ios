@@ -29,6 +29,18 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   }
 
   private func installPointer() {
+    guard let surface = real_view else { return }
+    isMultipleTouchEnabled = true
+    surface.isMultipleTouchEnabled = true
+    // A background sibling cannot receive touches belonging to controller
+    // buttons, their labels, the D-pad or the Nunchuk's gesture recognizer.
+    let pointerSurface = UIView(frame: surface.bounds)
+    pointerSurface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    pointerSurface.backgroundColor = .clear
+    pointerSurface.isMultipleTouchEnabled = true
+    pointerSurface.accessibilityIdentifier = "dolphin-wii-pointer-surface"
+    surface.insertSubview(pointerSurface, at: 0)
+
     let pressHandler = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
     pressHandler.minimumPressDuration = 0
     pressHandler.numberOfTouchesRequired = 1
@@ -36,8 +48,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     pressHandler.delaysTouchesBegan = false
     pressHandler.delaysTouchesEnded = false
     pressHandler.delegate = self
-    real_view?.isMultipleTouchEnabled = true
-    real_view?.addGestureRecognizer(pressHandler)
+    pointerSurface.addGestureRecognizer(pressHandler)
   }
 
   @objc func recalculatePointerValues(new_rect: CGRect, game_aspect: CGFloat) {
@@ -93,7 +104,8 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   }
 
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-    guard let surface = real_view else { return false }
+    // Additional fingers must not shift the pointer gesture's centroid.
+    guard gestureRecognizer.numberOfTouches == 0, let surface = real_view else { return false }
     let point = touch.location(in: self)
     let hit = surface.hitTest(touch.location(in: surface), with: nil)
     return acceptsPointer(at: point, hitView: touch.view) &&
