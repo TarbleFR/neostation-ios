@@ -28,14 +28,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 STABLE BUILD 198 AND CORRESPONDING SOURCE
 
 Original binary source: d23c681b84826fa694c07fa48d3a60d78282d0ef
-Source/release tag: ios-stable-198
 Original successful Actions run: 33933842637
 IPA SHA-256: 0754f5967fa07370802271931c58004fa1dd782bdf577bac2db064c0d3292f5f
-Release: https://github.com/TarbleFR/neostation-ios/releases/tag/ios-stable-198
 
-The original IPA is preserved without recompilation or binary modification.
-Its matching source archive, signing entitlements and build evidence are release
-assets, independent of historical Actions runs and artifact expiration.
+This provenance record identifies the original stable binary. It does not offer
+an IPA download or authorize a GitHub Release. Official binary publication and
+release-asset uploads require TarbleFR's explicit approval for that publication.
+GitHub hosts the source and development workflows, not the official IPA
+distribution channel. This publishing policy does not change the applicable
+open-source licenses.
 The maintainer reported this build working on their device; automated CI did not
 perform physical-device testing or establish universal game compatibility.
 

@@ -5,7 +5,7 @@
 <h4>An iPhone and iPad emulation frontend with embedded DolphiniOS and integrated StikJIT</h4>
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.md)
-[![Stable baseline](https://img.shields.io/badge/Stable%20baseline-Build%20198-success)](https://github.com/TarbleFR/neostation-ios/releases/tag/ios-stable-198)
+![Stable baseline](https://img.shields.io/badge/Stable%20baseline-Build%20198-success)
 [![Platform](https://img.shields.io/badge/Platform-iOS%2018%2B-blue)](https://github.com/TarbleFR/neostation-ios)
 [![StikJIT](https://img.shields.io/badge/StikJIT-1.5.0%20%7C%20MPL--2.0-blue)](https://github.com/StikDebug/StikJIT/tree/1.5.0)
 [![DolphiniOS](https://img.shields.io/badge/Dolphin%20%2F%20DolphiniOS-GPL--2.0--or--later-blue)](https://github.com/OatmealDome/dolphin-ios/tree/7cac54161659421ed95c2cd1c0b0746539a4cd38)
@@ -18,21 +18,24 @@ NeoStation iOS is an independent iOS fork of [NeoStation](https://github.com/mis
 
 **GameCube and Wii now run through an embedded Dolphin/DolphiniOS engine inside NeoStation.** There is no separate DolphiniOS app to install, no Dolphin deep link and no Dolphin launch Shortcut. Other systems retain their existing emulator integrations.
 
-## Stable baseline — Build 198
+## Distribution
 
-[Download the original stable Build 198 and its source](https://github.com/TarbleFR/neostation-ios/releases/tag/ios-stable-198).
+This GitHub repository hosts the source code and development workflows. **Official IPA distribution is managed by TarbleFR through the channels he explicitly authorizes, not through GitHub Releases.**
+
+Creating a development branch, producing a build artifact or preserving a stable baseline does not authorize a public release. Publishing an official IPA, creating a GitHub Release or uploading release assets requires TarbleFR's explicit approval for that publication. This repository publishing policy does not change the applicable open-source licenses.
+
+## Stable baseline — Build 198
 
 | Reference | Value |
 |---|---|
 | Original IPA source | `d23c681b84826fa694c07fa48d3a60d78282d0ef` |
-| Permanent release/source tag | `ios-stable-198` |
 | Original successful Actions run | `33933842637` |
 | IPA SHA-256 | `0754f5967fa07370802271931c58004fa1dd782bdf577bac2db064c0d3292f5f` |
 | Status | Maintainer-confirmed working baseline; automated compilation and structural audit passed |
 
-The release preserves the original IPA **without rebuilding or modifying it**, together with its source archive, signing entitlements and build evidence. Deleting historical Actions runs does not delete these release assets.
+Build 198 remains the application's stable source baseline. This reference documents provenance only; it is not a download offer or a publication of the IPA.
 
-`main` and `backup` are based on this stable source. Subsequent documentation and CI cleanup do not change the application code from Build 198. Later experimental touch/settings changes are not silently included in this baseline. The original IPA's corresponding source remains the exact commit and tag above, not a later maintenance commit.
+`main` and `backup` are based on this stable source. Subsequent documentation and CI cleanup do not change the application code from Build 198. Later experimental touch/settings changes are not silently included in this baseline. The original IPA's corresponding source remains the exact commit above, not a later maintenance commit.
 
 The IPA is unsigned and requires compatible sideload signing. A working result reported on one device is not a guarantee for every device or game; automated CI does not claim to have tested physical hardware.
 
@@ -83,7 +86,7 @@ The upstream project supports other platforms. This repository is maintained pri
 ## Requirements
 
 - iPhone or iPad running iOS/iPadOS 18 or newer for this documented fork baseline.
-- A compatible IPA signing/sideloading method. Retain the necessary entitlements when signing; the original release includes its signing-entitlements file.
+- A compatible IPA signing/sideloading method. Retain the necessary entitlements when signing.
 - Your own game files and any legally obtained system files needed by the selected game/engine.
 - Pairing File and LocalDevVPN/RSD preparation for integrated JIT.
 - Separate emulator apps for systems that still use external integrations, such as RetroArch, MeloNX, ARMSX2 or RPCS3. **A separate DolphiniOS app is not needed for GameCube/Wii.**
@@ -94,7 +97,7 @@ There is one maintained build workflow: **Actions → Build NeoStation iOS IPA �
 
 The pipeline retains the successful Build 198 build stages: locked dependencies, emulator-isolation checks, Flutter analysis/tests, pinned Dolphin build, original touch resources, iOS Simulator UI checks, Xcode compilation and an audit of the actual IPA/Mach-O linkage. It requires the existing ScreenScraper developer secrets. It does not print their values.
 
-The manual build number defaults to **199**, the next build after the preserved stable 198. A new build is a candidate until tested; it does not replace the stable release automatically.
+The manual build number defaults to **199**, the next build after the preserved stable 198. A new build is a candidate until tested; it does not replace the stable baseline or authorize publication.
 
 Toolchain used by the preserved build: **Xcode 16.4**, **Flutter 3.47.2 / Dart 3.13.2**, Dolphin revision `7cac54161659421ed95c2cd1c0b0746539a4cd38`, and StikJIT **1.5.0**. The workflow restores and verifies the native dependencies. Keep the lockfile, build scripts, helper extension and generated-project configuration together; a bare Flutter build is not a substitute for the native pipeline.
 
@@ -103,7 +106,7 @@ For the original source:
 ```bash
 git clone https://github.com/TarbleFR/neostation-ios.git
 cd neostation-ios
-git checkout ios-stable-198
+git checkout d23c681b84826fa694c07fa48d3a60d78282d0ef
 ```
 
 Use the workflow at that revision as the exact record of how the preserved binary was built. The generated `ios/` scaffold and build products are not the source of truth and are intentionally not committed. Never commit developer secrets or Pairing Files.
@@ -112,7 +115,7 @@ Use the workflow at that revision as the exact record of how the preserved binar
 
 Dolphin keeps engine-specific persistent diagnostics for JIT preparation, executable-memory checks, core/Metal initialization, game loading and session termination. External StikJIT integrations retain their own diagnostics, including `stikjit_melonx_debug.txt`, `stikjit_armsx2_debug.txt` and `stikjit_rpcs3_debug.txt`.
 
-The stable release includes the original build report and diagnostics archive. These distinguish build/structural checks from physical-device testing and remain available independently of Actions retention.
+Build reports and diagnostics distinguish build/structural checks from physical-device testing. Keeping technical evidence does not authorize distribution of the IPA.
 
 ## Credits and licenses
 
