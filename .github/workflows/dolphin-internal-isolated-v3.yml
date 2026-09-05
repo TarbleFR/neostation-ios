@@ -1,27 +1,32 @@
-name: NeoStation iOS - Dolphin Internal Isolated v3
-run-name: Dolphin Internal Isolated v3 Build 198 • ${{ github.sha }}
+name: Build NeoStation iOS IPA
+run-name: NeoStation iOS Build ${{ inputs.build_number }} • ${{ github.ref_name }} • ${{ github.sha }}
 
 on:
-  push:
-    branches: [test/dolphin-internal-engine-isolated-v3]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Candidate build number (stable 198 is preserved separately)'
+        type: string
+        required: true
+        default: '199'
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-dolphin-internal-isolated-v3
+  group: neostation-ios-release-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build and audit isolated Dolphin IPA
+    name: Build and audit NeoStation IPA
+    if: github.ref_name == 'main' || github.ref_name == 'backup'
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '198'
-      IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-198
-      ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-198
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      IPA_NAME: NeoStation-iOS-Build-${{ inputs.build_number }}
+      ARTIFACT_NAME: NeoStation-iOS-Build-${{ inputs.build_number }}
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -30,12 +35,22 @@ jobs:
       SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
 
     steps:
-      - name: Checkout exact isolated-v3 commit
+      - name: Checkout exact requested commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate candidate build number
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          value = os.environ['BUILD_NUMBER']
+          if not re.fullmatch(r'[1-9][0-9]{0,8}', value) or int(value) <= 198:
+              raise SystemExit('Use a candidate build number greater than stable Build 198.')
+          PY
 
       - name: Snapshot source and verify isolation before compilation
         run: |
@@ -49,7 +64,7 @@ jobs:
       - name: Upload auditable source snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: Dolphin-v3-source-${{ github.run_id }}
+          name: NeoStation-source-${{ github.run_id }}
           path: build/dolphin-ci/source-review.zip
           if-no-files-found: error
           retention-days: 14
@@ -223,6 +238,14 @@ jobs:
           set -euo pipefail
           python3 build-utils/check_dolphin_isolation_v2.py --base origin/main
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path('dist/dolphin-build-report.json')
+          report = json.loads(path.read_text())
+          report['branch'] = os.environ['GITHUB_REF_NAME']
+          path.write_text(json.dumps(report, indent=2) + '\n')
+          PY
 
       - name: Upload unsigned IPA for sideload signing
         uses: actions/upload-artifact@v4
@@ -238,6 +261,10 @@ jobs:
         with:
           key: dolphin-v3-ccache-xcode16.4-${{ github.run_id }}
           path: .dolphin-ccache
+
+      - name: Remove temporary build secrets
+        if: always()
+        run: rm -f .dart-defines.json
 
       - name: Upload compilation diagnostics without secrets
         if: always()

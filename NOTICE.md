@@ -25,17 +25,29 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ---
 
-CORRESPONDING SOURCE
+STABLE BUILD 198 AND CORRESPONDING SOURCE
+
+Original binary source: d23c681b84826fa694c07fa48d3a60d78282d0ef
+Source/release tag: ios-stable-198
+Original successful Actions run: 33933842637
+IPA SHA-256: 0754f5967fa07370802271931c58004fa1dd782bdf577bac2db064c0d3292f5f
+Release: https://github.com/TarbleFR/neostation-ios/releases/tag/ios-stable-198
+
+The original IPA is preserved without recompilation or binary modification.
+Its matching source archive, signing entitlements and build evidence are release
+assets, independent of historical Actions runs and artifact expiration.
+The maintainer reported this build working on their device; automated CI did not
+perform physical-device testing or establish universal game compatibility.
 
 The corresponding source for an IPA is the exact Git commit or tag whose source
-tree was used to produce that binary. The public repository is:
-
+tree was used to produce that binary. Documentation/CI maintenance commits on
+main and backup do not retroactively become the source revision of the original
+Build 198 binary. The public source repository is:
 https://github.com/TarbleFR/neostation-ios
 
-When redistributing an IPA from another location, distributors should preserve
-this license and the applicable notices and give recipients clear access to the
-matching source revision. A release/build artifact should never be represented
-as corresponding to a different or older source tree.
+When redistributing an IPA, preserve applicable licenses and notices and give
+recipients access to the matching source, integration modifications and build
+scripts. Never identify an unrelated or later runtime tree as its source.
 
 ---
 
@@ -50,14 +62,15 @@ complete authorship record.
 
 ---
 
-THIRD-PARTY COMPONENTS
+DOLPHIN / DOLPHINIOS — EMBEDDED GAMECUBE AND WII ENGINE
 
-<!-- DOLPHIN_ISOLATION_BEGIN: native_component_notices -->
-Dolphin / DolphiniOS — copyright their respective contributors.
+Copyright their respective Dolphin Emulator and DolphiniOS contributors.
 Embedded source revision: 7cac54161659421ed95c2cd1c0b0746539a4cd38.
 Source: https://github.com/OatmealDome/dolphin-ios/tree/7cac54161659421ed95c2cd1c0b0746539a4cd38
-Most original Dolphin code is GPL-2.0-or-later; the aggregate repository is
-GPL-3.0-compatible. Preserve upstream COPYING, LICENSES/ and per-file SPDX notices.
+Most original Dolphin code is GPL-2.0-or-later. Preserve upstream COPYING,
+LICENSES/ and individual file SPDX/copyright notices; other bundled components
+retain their own licenses. This notice does not relicense third-party code.
+
 NeoStation's engine modifications are in build-utils/patch_dolphin_internal_core_v2.py;
 its host bridge and in-game interface are in packages/dolphin_internal_bridge/.
 The original DolphiniOS touchscreen widgets, nib layouts, button artwork and
@@ -67,14 +80,34 @@ NeoStation adds C ABI input synchronization, cancelled-touch release, safe nib
 initialization and controller-dependent visibility. Session profile and console
 preference changes are in packages/dolphin_internal_bridge/core/.
 
-StikJIT 1.5.0 — copyright StikDebug and contributors; Mozilla Public License 2.0.
+The embedded engine is limited to GameCube and Wii. It does not require a second
+DolphiniOS installation. User-provided GameCube IPL/system files and games are
+not included or licensed by this repository.
+
+---
+
+STIKJIT FRAMEWORK 1.5.0 — MOZILLA PUBLIC LICENSE 2.0
+
+Copyright StikDebug and the StikJIT contributors.
 Source: https://github.com/StikDebug/StikJIT/tree/1.5.0
 License: https://github.com/StikDebug/StikJIT/blob/1.5.0/LICENSE
+
+This component is the embedded StikJIT XCFramework, licensed under MPL-2.0.
+It is distinct from the separate StikDebug application, whose upstream license
+is AGPL-3.0. Do not label the framework with the application's license.
+As stated by StikJIT upstream, bundled idevice, universal.js and legacy.js retain
+their own licenses and notices. Preserve these separately where applicable.
+
 The distributed 1.5.0 framework is used with Swift interface compatibility
 adjustments documented in packages/dolphin_internal_bridge/ci/build_support.py.
-The Dolphin helper is in packages/dolphin_jit_helper/.
-These projects retain their own licenses and attribution.
-<!-- DOLPHIN_ISOLATION_END: native_component_notices -->
+The Dolphin helper is in packages/dolphin_jit_helper/ and
+native/dolphin_internal_helper/. It uses the Dolphin-specific legacy mechanism
+and targets the host NeoStation PID. Existing external-emulator bridges keep
+their own JIT behavior. No Pairing Files or signing credentials are distributed.
+
+---
+
+OTHER THIRD-PARTY COMPONENTS
 
 This project includes or depends on third-party software, including:
 
@@ -91,23 +124,22 @@ This project includes or depends on third-party software, including:
   Preserve its package license and notices.
 
 - GameDB-PS3 title catalog (runtime cached lookup)
-  NeoStation may download `PS3.titles.json` from the GPL-3.0 GameDB-PS3
-  project to resolve PS3 serial numbers when local metadata and ScreenScraper
-  do not provide a usable title. Preserve the GameDB-PS3 license/attribution
-  when redistributing a cached or bundled copy of that data.
+  NeoStation may download PS3.titles.json from the GPL-3.0 GameDB-PS3 project
+  to resolve PS3 serial numbers when local metadata and ScreenScraper do not
+  provide a usable title. Preserve that project's license/attribution when
+  redistributing a cached or bundled copy of that data.
 
 Additional Flutter/Dart dependencies and emulator-related integrations may be
-governed by their own licenses or terms. Preserve all required third-party
-notices when redistribution requires it.
+governed by their own licenses or terms. Preserve required third-party notices.
 
 ---
 
 TRADEMARK NOTICE
 
 All trademarks, service marks, trade names, product names and logos appearing
-in this project (including but not limited to Nintendo, Sony PlayStation,
-Microsoft Xbox, SEGA, RetroArch, MeloNX, ARMSX2 and other referenced projects)
-are the property of their respective owners where applicable.
+in this project (including Nintendo, Sony PlayStation, Microsoft Xbox, SEGA,
+RetroArch, Dolphin, DolphiniOS, StikJIT, MeloNX, ARMSX2 and other referenced
+projects) are the property of their respective owners where applicable.
 
 NeoStation iOS is an independent frontend project and is not affiliated with,
 endorsed by, sponsored by, or otherwise associated with those trademark
