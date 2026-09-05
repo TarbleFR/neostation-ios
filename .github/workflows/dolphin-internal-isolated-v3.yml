@@ -1,5 +1,5 @@
 name: NeoStation iOS - Dolphin Internal Isolated v3
-run-name: Dolphin Internal Isolated v3 Build 198 • ${{ github.sha }}
+run-name: Dolphin Internal Isolated v3 Build 199 • ${{ github.sha }}
 
 on:
   push:
@@ -19,9 +19,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '198'
-      IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-198
-      ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-198
+      BUILD_NUMBER: '199'
+      IPA_NAME: NeoStation-iOS-Dolphin-Internal-Isolated-v3-Build-199
+      ARTIFACT_NAME: NeoStation-Dolphin-Internal-Isolated-v3-Build-199
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -43,6 +43,7 @@ jobs:
           echo "BUNDLE_PATH=$RUNNER_TEMP/dolphin-ruby-gems" >> "$GITHUB_ENV"
           echo "CCACHE_BASEDIR=$RUNNER_TEMP/dolphin-ios" >> "$GITHUB_ENV"
           python3 packages/dolphin_internal_bridge/ci/build_support.py snapshot
+          git archive --format=zip --output=build/dolphin-ci/system-settings-source.zip HEAD lib/widgets/system_emulator_settings_dialog.dart lib/widgets/system_emulator_settings_dialog lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart
           python3 build-utils/check_dolphin_isolation_v2.py --base origin/main 2>&1 | tee build/dolphin-ci/isolation.txt
           python3 -m unittest discover -s test -p 'dolphin_*test.py' -v 2>&1 | tee build/dolphin-ci/ipa-validator-tests.txt
 
@@ -50,7 +51,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Dolphin-v3-source-${{ github.run_id }}
-          path: build/dolphin-ci/source-review.zip
+          path: |
+            build/dolphin-ci/source-review.zip
+            build/dolphin-ci/system-settings-source.zip
           if-no-files-found: error
           retention-days: 14
 
