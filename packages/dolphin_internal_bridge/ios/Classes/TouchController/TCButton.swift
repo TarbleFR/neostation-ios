@@ -25,8 +25,10 @@ class TCButton: UIButton
 
   override var intrinsicContentSize: CGSize
   {
-    // The original nib positions neighbouring buttons using these dimensions.
-    // A press must only change its artwork, never reflow the controller pad.
+    // Pressed and released artwork must occupy exactly the same canvas. Some
+    // original DolphiniOS PNG pairs have slightly different transparent bounds;
+    // exposing those sizes to Auto Layout makes neighbouring controls appear to
+    // jump when a finger goes down.
     return restingSize ?? super.intrinsicContentSize
   }
   
@@ -45,32 +47,48 @@ class TCButton: UIButton
   override func awakeFromNib()
   {
     super.awakeFromNib()
-    restingSize = super.intrinsicContentSize
-    invalidateIntrinsicContentSize()
+    updateImage()
   }
   
   func sharedInit()
   {
     self.setTitle("", for: .normal)
+    self.adjustsImageWhenHighlighted = false
+    self.imageView?.contentMode = .center
     self.addTarget(self, action: #selector(buttonPressed), for: [.touchDown, .touchDragEnter])
     self.addTarget(self, action: #selector(buttonReleased), for: [.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit])
     
     // TODO: Setting for hapic touch analog triggers enabled
     self.useHapicTouch = self.traitCollection.forceTouchCapability == .available
   }
+
+  private func centeredImage(_ image: UIImage, canvas: CGSize) -> UIImage
+  {
+    guard canvas.width > 0, canvas.height > 0 else { return image }
+    return UIGraphicsImageRenderer(size: canvas).image { _ in
+      let origin = CGPoint(
+        x: (canvas.width - image.size.width) * 0.5,
+        y: (canvas.height - image.size.height) * 0.5
+      )
+      image.draw(at: origin)
+    }.withRenderingMode(.alwaysOriginal)
+  }
   
   func updateImage()
   {
     guard let buttonType = TCButtonType(rawValue: controllerButton) else { return }
     
-    let buttonImage = getImage(named: buttonType.getImageName(), scale: buttonType.getButtonScale())
-    self.setImage(buttonImage, for: .normal)
-    
-    let buttonPressedImage = getImage(named: buttonType.getImageName() + "_pressed", scale: buttonType.getButtonScale())
-    // These are momentary controls, not selected UIKit system buttons. Using
-    // selected adds a system selection background and changes their layout.
-    self.setImage(buttonPressedImage, for: .highlighted)
-    restingSize = super.intrinsicContentSize
+    let normalImage = getImage(named: buttonType.getImageName(), scale: buttonType.getButtonScale())
+    let pressedImage = getImage(named: buttonType.getImageName() + "_pressed", scale: buttonType.getButtonScale())
+    let canvas = CGSize(
+      width: max(normalImage.size.width, pressedImage.size.width),
+      height: max(normalImage.size.height, pressedImage.size.height)
+    )
+    let stableNormal = centeredImage(normalImage, canvas: canvas)
+    let stablePressed = centeredImage(pressedImage, canvas: canvas)
+    self.setImage(stableNormal, for: .normal)
+    self.setImage(stablePressed, for: .highlighted)
+    restingSize = canvas
     invalidateIntrinsicContentSize()
   }
   
