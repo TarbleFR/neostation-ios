@@ -1,11 +1,11 @@
 import UIKit
 
-@objc(DOLTouchOverlay) class DolphinTouchOverlay: UIView {
+@objc(DOLTouchOverlay) public class DolphinTouchOverlay: UIView {
   private let wii: Bool
   private var pad: TCView?
   private var layoutName = ""
 
-  @objc(initWithWii:) init(wii: Bool) {
+  @objc(initWithWii:) public init(wii: Bool) {
     self.wii = wii
     super.init(frame: .zero)
     backgroundColor = .clear
@@ -13,9 +13,9 @@ import UIKit
     updateExtension("Nunchuk")
   }
 
-  required init?(coder: NSCoder) { return nil }
+  public required init?(coder: NSCoder) { return nil }
 
-  @objc func updateExtension(_ name: String) {
+  @objc public func updateExtension(_ name: String) {
     let wanted = !wii ? "gc" : name == "Classic" ? "classic" : "wii"
     guard wanted != layoutName else { return }
     layoutName = wanted
@@ -33,7 +33,7 @@ import UIKit
     setNeedsLayout()
   }
 
-  override func layoutSubviews() {
+  public override func layoutSubviews() {
     super.layoutSubviews()
     pad?.frame = bounds
     if let remote = pad as? TCWiiPad {

@@ -1,6 +1,6 @@
 #import "DolphinInternalBridgePlugin.h"
 #import "DolphinSessionMenu.h"
-#import "dolphin_internal_bridge-Swift.h"
+#import <dolphin_internal_bridge/dolphin_internal_bridge-Swift.h>
 #import <GameController/GameController.h>
 
 #import <AVFoundation/AVFoundation.h>
