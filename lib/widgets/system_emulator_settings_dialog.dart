@@ -1,5 +1,8 @@
 import 'dart:io';
 
+// DOLPHIN_ISOLATION_BEGIN: system settings presentation only
+import 'package:dolphin_internal_bridge/dolphin_system_emulator_card.dart';
+// DOLPHIN_ISOLATION_END
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -83,6 +86,24 @@ class _SystemEmulatorSettingsDialogState
   late List<GlobalKey> _appearanceItemKeys;
 
   late SystemModel _system;
+
+  // DOLPHIN_ISOLATION_BEGIN: no per-game settings or emulator routing changes
+  bool get _usesInternalDolphin => DolphinSystemEmulatorCard.appliesTo(
+    systemFolderName: _system.folderName,
+    isIOS: Platform.isIOS,
+  );
+
+  Widget _buildEmulatorSettingsContent() {
+    if (_usesInternalDolphin) {
+      return ListView(children: const [DolphinSystemEmulatorCard()]);
+    }
+    return _isLoading
+        ? _buildLoadingState()
+        : _errorMessage != null
+        ? _buildErrorState()
+        : _buildEmulatorsTab();
+  }
+  // DOLPHIN_ISOLATION_END
 
   // Focus nodes for arrow key navigation blocking
   late final FocusNode _headerCloseButtonFocusNode;
@@ -386,6 +407,17 @@ class _SystemEmulatorSettingsDialogState
       _isLoading = true;
       _errorMessage = null;
     });
+
+    // DOLPHIN_ISOLATION_BEGIN: gc/wii do not query external emulator installs
+    if (_usesInternalDolphin) {
+      setState(() {
+        _displayItems = [];
+        _totalEmulators = 0;
+        _isLoading = false;
+      });
+      return;
+    }
+    // DOLPHIN_ISOLATION_END
 
     try {
       if (widget.system.id == null) {
@@ -725,7 +757,7 @@ class _SystemEmulatorSettingsDialogState
       if (Platform.isMacOS && selectedPath.endsWith('.app')) {
         exists = await Directory(selectedPath).exists();
       } else {
-        exists = await File(selectedPath).exists();
+        exists = await originalFileExists(selectedPath);
       }
 
       if (!exists) {
@@ -866,11 +898,9 @@ class _SystemEmulatorSettingsDialogState
               child: _currentTab == 0
                   ? _buildGeneralTab()
                   : _currentTab == 1
-                  ? (_isLoading
-                        ? _buildLoadingState()
-                        : _errorMessage != null
-                        ? _buildErrorState()
-                        : _buildEmulatorsTab())
+                  // DOLPHIN_ISOLATION_BEGIN: only the system Emulators tab
+                  ? _buildEmulatorSettingsContent()
+                  // DOLPHIN_ISOLATION_END
                   : _currentTab == 2
                   ? _buildAppearanceTab()
                   : _buildSystemInfoTab(),
