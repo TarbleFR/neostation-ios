@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#ifdef __cplusplus
 #include <algorithm>
 #include <cstdint>
 #include <limits>
@@ -52,3 +53,4 @@ class Timeline final {
   int64_t m_next = 0;
 };
 }  // namespace DolphinRecording
+#endif  // __cplusplus

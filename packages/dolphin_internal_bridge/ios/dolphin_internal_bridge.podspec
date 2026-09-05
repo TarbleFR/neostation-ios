@@ -12,6 +12,7 @@ legacy gate. It does not replace or modify other emulator integrations.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
+  s.private_header_files = 'Classes/DolphinRecordingTimeline.h'
   s.resources        = 'TouchResources/*'
   s.vendored_frameworks = 'Frameworks/DolphinCore.framework'
   s.dependency 'Flutter'

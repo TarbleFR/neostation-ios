@@ -129,7 +129,7 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   _stopCompletions = [NSMutableArray new];
   _state = DolphinRecordingStateIdle;
   _backgroundTask = UIBackgroundTaskInvalid;
-  __weak typeof(self) weakSelf = self;
+  __weak DolphinRecordingController* weakSelf = self;
   _backgroundObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil
       queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*) {
@@ -195,9 +195,9 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   dispatch_async(_queue, ^{ [self resetWriter]; });
   _accepting = true;
   _source.microphoneEnabled = NO;
-  __weak typeof(self) weakSelf = self;
+  __weak DolphinRecordingController* weakSelf = self;
   [_source startCaptureWithHandler:^(CMSampleBufferRef sample, RPSampleBufferType type, NSError* error) {
-    typeof(self) strongSelf = weakSelf;
+    DolphinRecordingController* strongSelf = weakSelf;
     if (!strongSelf || generation != strongSelf->_generation.load()) return;
     if (error) { [strongSelf signalFailure:error generation:generation]; return; }
     if (!strongSelf->_accepting.load() || !sample || !CMSampleBufferDataIsReady(sample)) return;
@@ -232,7 +232,7 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
     // Microphone buffers are never accepted, even if an external setting flips.
   } completionHandler:^(NSError* error) {
     dispatch_async(dispatch_get_main_queue(), ^{
-      typeof(self) strongSelf = weakSelf;
+      DolphinRecordingController* strongSelf = weakSelf;
       if (!strongSelf) return;
       strongSelf->_startInFlight = NO;
       if (generation != strongSelf->_generation.load() || strongSelf.state == DolphinRecordingStateIdle) {
@@ -289,10 +289,10 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   _accepting = false;
   const uint64_t generation = _generation.load();
   if (_backgroundTask == UIBackgroundTaskInvalid) {
-    __weak typeof(self) weakSelf = self;
+    __weak DolphinRecordingController* weakSelf = self;
     _backgroundTask = [UIApplication.sharedApplication beginBackgroundTaskWithName:@"DolphinRecordingFinalize"
         expirationHandler:^{
-      typeof(self) strongSelf = weakSelf;
+      DolphinRecordingController* strongSelf = weakSelf;
       if (!strongSelf) return;
       if (generation != strongSelf->_generation.load()) return;
       // UIKit invokes expiration on main. Release its lease immediately;
@@ -329,9 +329,9 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
 - (void)stopSource:(uint64_t)generation {
   if (_sourceStopIssued) return;
   _sourceStopIssued = YES;
-  __weak typeof(self) weakSelf = self;
+  __weak DolphinRecordingController* weakSelf = self;
   void (^completed)(NSError*) = ^(NSError* error) {
-    typeof(self) strongSelf = weakSelf;
+    DolphinRecordingController* strongSelf = weakSelf;
     if (!strongSelf) return;
     dispatch_async(strongSelf->_queue, ^{
       if (generation != strongSelf->_generation.load() || strongSelf->_finalizing) return;
@@ -429,7 +429,7 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
   dispatch_source_set_timer(_timer, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_MSEC),
       10 * NSEC_PER_MSEC, 2 * NSEC_PER_MSEC);
-  __weak typeof(self) weakSelf = self;
+  __weak DolphinRecordingController* weakSelf = self;
   dispatch_source_set_event_handler(_timer, ^{ [weakSelf drain]; });
   dispatch_resume(_timer);
   return YES;

@@ -24,6 +24,10 @@ def configure_info_plist() -> None:
     payload = plistlib.loads(path.read_bytes())
     payload['UIFileSharingEnabled'] = True
     payload['LSSupportsOpeningDocumentsInPlace'] = True
+    # The share sheet can offer Save Video. Add-only access is requested by iOS
+    # only when the user selects that action; recording itself stays in Files.
+    payload.setdefault('NSPhotoLibraryAddUsageDescription',
+                       'Save the game recordings you choose to your photo library.')
     # Match the established landscape host configuration. No audio, controller
     # or emulator-specific settings are changed here.
     orientations = ['UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight']

@@ -175,6 +175,8 @@ def validate(ipa: Path) -> dict:
         touch_bundle = app + '/Frameworks/dolphin_internal_bridge.framework/'
         bridge_image = images.get(touch_bundle + 'dolphin_internal_bridge')
         demand(bridge_image is not None, 'Dolphin native UI bridge missing')
+        demand(bool(info.get('NSPhotoLibraryAddUsageDescription')),
+               'Share-sheet Save Video usage description missing')
         demand(any('DolphinRecordingController' in symbol for symbol in bridge_image['definedSymbols']),
                'Native recording controller missing from the shipped executable')
         for framework in ('ReplayKit', 'AVFoundation', 'CoreImage'):
