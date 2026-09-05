@@ -12,6 +12,7 @@
 #import <objc/message.h>
 #import <poll.h>
 #import <stdio.h>
+#import <string.h>
 #import <arpa/inet.h>
 #import <netinet/in.h>
 #import <sys/socket.h>
@@ -975,30 +976,39 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
         DolphinInternalBridgePlugin* bridge = weakSelf;
         if (!bridge || bridge.stopInProgress || bridge.dolphinController != owner) { completion(nil); return; }
         dispatch_async(bridge->_runtimeQueue, ^{
-          char* text = neostation_dolphin_state_snapshot();
-          NSDictionary* snapshot = nil;
-          if (text) {
-            NSData* data = [[NSString stringWithUTF8String:text] dataUsingEncoding:NSUTF8StringEncoding];
-            free(text);
-            id decoded = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-            if ([decoded isKindOfClass:NSDictionary.class]) snapshot = decoded;
+          @autoreleasepool {
+            DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"state.list.begin", @"Reading savestate slots.", nil);
+            char* text = neostation_dolphin_state_snapshot();
+            NSDictionary* snapshot = nil;
+            if (text) {
+              NSData* data = [NSData dataWithBytes:text length:strlen(text)];
+              free(text);
+              id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+              if ([decoded isKindOfClass:NSDictionary.class] && [decoded[@"slots"] isKindOfClass:NSArray.class])
+                snapshot = decoded;
+            }
+            DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"state.list.complete", @"Savestate slots read.", @{@"success": @(snapshot != nil)});
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (!bridge.stopInProgress && bridge.dolphinController == owner) completion(snapshot);
+            });
           }
-          dispatch_async(dispatch_get_main_queue(), ^{
-            if (!bridge.stopInProgress && bridge.dolphinController == owner) completion(snapshot);
-          });
         });
       };
       menu.performStateOperation = ^(NSInteger slot, BOOL load, void (^completion)(BOOL)) {
         DolphinInternalBridgePlugin* bridge = weakSelf;
-        if (!bridge || bridge.stopInProgress || bridge.menuOpening || bridge.dolphinController != owner) { completion(NO); return; }
+        if (!bridge || bridge.stopInProgress || bridge.menuOpening || bridge.dolphinController != owner || slot < 1 || slot > 10) { completion(NO); return; }
         bridge.menuOpening = YES;
         dispatch_async(bridge->_runtimeQueue, ^{
-          const BOOL success = neostation_dolphin_state_operation((int32_t)slot, load ? 1 : 0) != 0;
-          dispatch_async(dispatch_get_main_queue(), ^{
-            if (bridge.stopInProgress || bridge.dolphinController != owner) return;
-            bridge.menuOpening = NO;
-            completion(success);
-          });
+          @autoreleasepool {
+            DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"state.operation.begin", @"Starting savestate operation.", @{@"slot": @(slot), @"load": @(load)});
+            const BOOL success = neostation_dolphin_state_operation((int32_t)slot, load ? 1 : 0) != 0;
+            DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"state.operation.complete", @"Savestate operation finished.", @{@"slot": @(slot), @"load": @(load), @"success": @(success)});
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (bridge.stopInProgress || bridge.dolphinController != owner) return;
+              bridge.menuOpening = NO;
+              completion(success);
+            });
+          }
         });
       };
       menu.resumeGame = ^{

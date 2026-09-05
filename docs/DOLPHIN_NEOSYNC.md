@@ -10,8 +10,11 @@ Enable NeoSync for the GameCube/Wii game using the existing per-game cloud switc
 The account must be authenticated and its subscription/quota must permit the
 operation. No external DolphiniOS folder or application is required.
 
-The in-game DolphiniOS menu offers save/load actions for slots 1–10 on both Wii
-and GameCube. Creating a checkpoint writes a native Dolphin state; loading a
+The in-game DolphiniOS menu has separate **Save state** and **Load state** entries
+on both Wii and GameCube. Each lists slots 1–10 with filenames and dates. Empty
+or unreadable slots cannot be loaded. Replacing a slot or loading one asks for
+confirmation; navigation waits for the native operation to finish. Creating a
+checkpoint writes a native Dolphin state; loading a
 checkpoint resumes that exact emulator state. NeoSync synchronizes those slots
 using the same per-game cloud switch as ordinary in-game saves.
 
@@ -121,6 +124,13 @@ interrupted replacements, account-scoped history, and exclusive access.
 State fixtures also cover all ten native slots, Wii game-channel identities,
 exact binary round trips above 40 MiB, corruption, wrong-game/slot rejection,
 temporary/undo/backup exclusion, symlinks and preservation of adjacent slots.
+The Build 202 bridge explicitly enables Objective-C ARC and copies slot-list JSON
+before leaving the host queue. Native state compression uses independent 1 MiB
+LZ4 blocks in the existing format to bound its additional workspace. Executable
+codec tests cover block boundaries, old single-block files and write failures.
+Simulator tests exercise separate save/load pages for both consoles, deferred
+callbacks, unavailable slots, duplicate input and recovery after a failed write.
+
 CI compiles all existing integrations and verifies the native identity ABI in
 the actual IPA. Unit fixtures and compilation do not prove an authenticated
 round trip against a real NeoSync account or a launch on an iPhone/iPad. Those

@@ -52,8 +52,10 @@ bool DOLStatePathIsSafe(const std::string& path)
 extern "C" __attribute__((visibility("default")))
 char* neostation_dolphin_state_snapshot(void)
 {
-  __block NSData* encoded = nil;
+  Log("savestate.snapshot.begin", "Reading the paused game's state slots.");
+  __block char* result = nullptr;
   DOLHostQueueRunSync(^{
+    @autoreleasepool {
     if (!DOLStateSessionReady()) return;
     NSMutableArray* slots = [NSMutableArray array];
     for (int slot = 1; slot <= 10; ++slot)
@@ -68,16 +70,22 @@ char* neostation_dolphin_state_snapshot(void)
           @"modified": @(modified ? modified.timeIntervalSince1970 : 0),
           @"filename": [DOLString(path) lastPathComponent]}];
     }
-    encoded = [NSJSONSerialization dataWithJSONObject:@{@"slots": slots} options:0 error:nil];
+    NSData* encoded = [NSJSONSerialization dataWithJSONObject:@{@"slots": slots} options:0 error:nil];
+    NSString* json = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
+    // Copy before the host queue's autorelease pool drains. The C ABI owns only
+    // these bytes; no Foundation object is borrowed across the queue boundary.
+    if (json.UTF8String) result = strdup(json.UTF8String);
+    }
   });
-  if (!encoded) return nullptr;
-  return strdup([[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding].UTF8String);
+  Log("savestate.snapshot.complete", result ? "Slot list copied." : "Slot list unavailable.");
+  return result;
 }
 
 extern "C" __attribute__((visibility("default")))
 int32_t neostation_dolphin_state_operation(int32_t slot, int32_t load)
 {
   if (slot < 1 || slot > 10 || (load != 0 && load != 1)) return 0;
+  Log(load ? "savestate.load.begin" : "savestate.save.begin", "Slot " + std::to_string(slot));
   __block bool success = false;
   // All bridge operations enter on the same serial runtime queue as Stop/Restart.
   // State's synchronous APIs acquire the CPU lock internally. An outer CPU lock
@@ -98,7 +106,10 @@ int32_t neostation_dolphin_state_operation(int32_t slot, int32_t load)
       State::SaveAs(system, path, true); // Also waits for compression and the completed disk write.
     }
     success = State::NeoStationLastOperationSucceeded();
-    Core::SetState(system, Core::State::Paused);
+    // RunOnCPUThread preserves the original pause state. Re-pausing an already
+    // paused core needlessly re-enters Wiimote, rumble and UI state callbacks.
+    if (Core::GetState(system) == Core::State::Running)
+      Core::SetState(system, Core::State::Paused);
   });
   Log(load ? "savestate.load" : "savestate.save",
       "Slot " + std::to_string(slot) + (success ? " completed." : " failed."));
