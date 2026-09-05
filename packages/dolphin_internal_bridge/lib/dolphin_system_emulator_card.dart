@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Presentation only. Never queries an external installation or initializes JIT.
 /// The strict identities match the existing native GameCube/Wii launch route.
+/// Naming the embedded engine does not claim its runtime JIT is ready.
 class DolphinSystemEmulatorCard extends StatelessWidget {
   const DolphinSystemEmulatorCard({super.key});
 
