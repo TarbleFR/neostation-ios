@@ -1,3 +1,6 @@
+// DOLPHIN_ISOLATION_BEGIN: neosync_adapter_save_filter_import
+import '../../services/neosync/neo_sync_save_policy.dart';
+// DOLPHIN_ISOLATION_END: neosync_adapter_save_filter_import
 /// Adapts the existing [NeoSyncProvider] to the [ISyncProvider] interface
 /// without rewriting its complex sync and quota logic.
 library;
@@ -102,6 +105,11 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   }) async {
     try {
       await _provider.autoSyncUploads();
+      // DOLPHIN_ISOLATION_BEGIN: neosync_autoSyncUploads_result
+      if (_provider.error != null) {
+        return SyncResult.fail(SyncError.unknown, message: _provider.error);
+      }
+      // DOLPHIN_ISOLATION_END: neosync_autoSyncUploads_result
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.unknown, message: e.toString());
@@ -112,6 +120,11 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   Future<SyncResult> downloadSave(String gameId, String fileId) async {
     try {
       await _provider.autoSyncDownloads();
+      // DOLPHIN_ISOLATION_BEGIN: neosync_autoSyncDownloads_result
+      if (_provider.error != null) {
+        return SyncResult.fail(SyncError.unknown, message: _provider.error);
+      }
+      // DOLPHIN_ISOLATION_END: neosync_autoSyncDownloads_result
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.unknown, message: e.toString());
@@ -120,9 +133,15 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
 
   @override
   Future<List<SyncFile>> listSaves({String? gameId}) async {
-    await _provider.loadFiles();
+    // DOLPHIN_ISOLATION_BEGIN: neosync_adapter_listing_failure
+    if (!await _provider.loadFiles()) {
+      throw StateError(_provider.error ?? 'NeoSync cloud inventory unavailable');
+    }
+    // DOLPHIN_ISOLATION_END: neosync_adapter_listing_failure
     return _provider.files
-        .where((f) => gameId == null || f.gameName == gameId)
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_0
+        .where((f) => f.saveKind == NeoSyncSaveKind.save && (gameId == null || f.gameName == gameId))
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_0
         .map(
           (f) => SyncFile(
             id: f.id,
@@ -141,6 +160,11 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   Future<SyncResult> fullSync() async {
     try {
       await _provider.syncWithConflictResolution();
+      // DOLPHIN_ISOLATION_BEGIN: neosync_syncWithConflictResolution_result
+      if (_provider.error != null) {
+        return SyncResult.fail(SyncError.unknown, message: _provider.error);
+      }
+      // DOLPHIN_ISOLATION_END: neosync_syncWithConflictResolution_result
       return SyncResult.ok(
         message:
             '${_provider.uploadedFiles} uploaded, '
@@ -160,6 +184,8 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
       // DOLPHIN_ISOLATION_BEGIN: detectGameSaveFiles_result
       final dolphinError = _provider.dolphinSaveSyncError(game);
       if (dolphinError != null) return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      final gameFailure = _gameFailure(game.romname);
+      if (gameFailure != null) return gameFailure;
       // DOLPHIN_ISOLATION_END: detectGameSaveFiles_result
       return SyncResult.ok();
     } catch (e) {
@@ -178,6 +204,8 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
       // DOLPHIN_ISOLATION_BEGIN: syncGameSavesBeforeLaunch_result
       final dolphinError = _provider.dolphinSaveSyncError(game);
       if (dolphinError != null) return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      final gameFailure = _gameFailure(game.romname);
+      if (gameFailure != null) return gameFailure;
       // DOLPHIN_ISOLATION_END: syncGameSavesBeforeLaunch_result
       return SyncResult.ok();
     } catch (e) {
@@ -192,6 +220,8 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
       // DOLPHIN_ISOLATION_BEGIN: syncGameSavesAfterClose_result
       final dolphinError = _provider.dolphinSaveSyncError(game);
       if (dolphinError != null) return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      final gameFailure = _gameFailure(game.romname);
+      if (gameFailure != null) return gameFailure;
       // DOLPHIN_ISOLATION_END: syncGameSavesAfterClose_result
       return SyncResult.ok();
     } catch (e) {
@@ -203,6 +233,21 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   Future<void> updateGameCloudSyncEnabled(String gameId, bool enabled) async {
     await _provider.updateGameCloudSyncEnabled(gameId, enabled);
   }
+
+  // DOLPHIN_ISOLATION_BEGIN: neosync_adapter_game_failures
+  SyncResult? _gameFailure(String gameId) {
+    final state = _provider.getGameSyncState(gameId);
+    if (state?.status == GameSyncStatus.quotaExceeded) {
+      return SyncResult.fail(SyncError.quotaExceeded,
+          message: state?.errorMessage ?? 'NeoSync storage quota exceeded');
+    }
+    if (state?.status == GameSyncStatus.error) {
+      return SyncResult.fail(SyncError.unknown,
+          message: state?.errorMessage ?? 'Save synchronization failed');
+    }
+    return null;
+  }
+  // DOLPHIN_ISOLATION_END: neosync_adapter_game_failures
 
   // ── Optional Capabilities ──────────────────────────────────────────────────
 

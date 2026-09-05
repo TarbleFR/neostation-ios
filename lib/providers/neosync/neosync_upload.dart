@@ -34,6 +34,13 @@ extension NeoSyncUpload on NeoSyncProvider {
         retroArchSaves = await _getSaveFiles(savesPath);
       }
 
+      // DOLPHIN_ISOLATION_BEGIN: neosync_flycast_shared_scan
+      final flycastRoot = await _flycastSystemSaveRoot();
+      if (flycastRoot != null) {
+        retroArchSaves.addAll(await _getSaveFiles(flycastRoot));
+      }
+      // DOLPHIN_ISOLATION_END: neosync_flycast_shared_scan
+
       final statesPath = await _getRetroArchStatesPath();
       List<File> retroArchStates = [];
       if (statesPath != null) {
@@ -239,7 +246,11 @@ extension NeoSyncUpload on NeoSyncProvider {
 
       // Process RetroArch Saves
       for (final file in retroArchSaves) {
-        await _processAutoUploadFile(file, savesPath!, isState: false);
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_0
+        await _processAutoUploadFile(file,
+            flycastRoot != null && path.isWithin(flycastRoot, file.path)
+                ? flycastRoot : savesPath!, isState: false);
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_0
         _processedFiles++;
         _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
         notify();
@@ -300,36 +311,10 @@ extension NeoSyncUpload on NeoSyncProvider {
   }
 
   /// Fase 1: Subir archivos locales
-  Future<void> _performUploadPhase(String basePath) async {
-    _syncStatus = 'Phase 1: Uploading local files...';
-    _processedItems.add('📤 Phase 1: Scanning and uploading local files...');
-    notify();
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_1
 
-    // Determine if it is a states folder for RetroArch
-    final statesPath = await _getRetroArchStatesPath();
-    final isState = statesPath != null && path.equals(basePath, statesPath);
 
-    final saveFiles = await _getSaveFiles(basePath);
-    if (saveFiles.isEmpty) {
-      _processedItems.add('No local files found in ${path.basename(basePath)}');
-      return;
-    }
-
-    _totalFiles = saveFiles.length * 2;
-    _processedItems.add('📤 Found ${saveFiles.length} local files to process');
-
-    for (final file in saveFiles) {
-      await _processUploadFileWithConflictDetection(
-        file,
-        basePath,
-        isState: isState,
-      );
-      _processedFiles++;
-      _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
-      notify();
-    }
-  }
-
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_1
   /// Procesa un archivo para auto-subida (versión optimizada)
   Future<void> _processAutoUploadFile(
     File file,
@@ -381,13 +366,18 @@ extension NeoSyncUpload on NeoSyncProvider {
         final result = await _neoSyncService.syncFile(
           file,
           _extractGameNameFromPath(file.path),
+        // DOLPHIN_ISOLATION_BEGIN: neosync_source_proof
+        source: await _sourceForLocalFile(file),
+        // DOLPHIN_ISOLATION_END: neosync_source_proof
           customFilename: cloudPath,
           systemId: customSystem,
           emulatorId: customEmulatorSlug,
           isState: isState,
           scope: 'shared',
         );
-        if (result['success'] == true) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_2
+        if (result['success'] == true && result['pending_download'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_2
           if (result['skipped'] == true) {
             _skippedFiles++;
           } else {
@@ -431,6 +421,9 @@ extension NeoSyncUpload on NeoSyncProvider {
       final result = await _neoSyncService.syncFile(
         file,
         game.name,
+        // DOLPHIN_ISOLATION_BEGIN: neosync_source_proof
+        source: await _sourceForLocalFile(file),
+        // DOLPHIN_ISOLATION_END: neosync_source_proof
         customFilename: relativePath,
         systemId: v2Path.system,
         emulatorId: v2Path.emulatorSlug,
@@ -438,7 +431,9 @@ extension NeoSyncUpload on NeoSyncProvider {
         scope: v2Path.scope,
       );
 
-      if (result['success']) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_3
+      if (result['success'] == true && result['pending_download'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_3
         if (result['skipped'] == true) {
           _skippedFiles++;
           _processedItems.add('⏭️ Already synced: $relativePath');
@@ -471,6 +466,9 @@ extension NeoSyncUpload on NeoSyncProvider {
     File file,
     String root, {
     GameModel? preferredGame,
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_4
+    bool contentHashOnly = false,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_4
   }) async {
     final resolved = _resolveArmsx2FileForCloud(file, root);
     if (resolved == null) {
@@ -508,15 +506,22 @@ extension NeoSyncUpload on NeoSyncProvider {
       final result = await _neoSyncService.syncFile(
         uploadFile,
         displayGameName,
+        // DOLPHIN_ISOLATION_BEGIN: neosync_source_proof
+        source: await _sourceForLocalFile(uploadFile),
+        // DOLPHIN_ISOLATION_END: neosync_source_proof
         customFilename: resolved.cloudPath,
         systemId: 'ps2',
         emulatorId: 'armsx2',
         isState: resolved.isState,
         scope: 'shared',
-        contentHashOnly: isMemoryCard,
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_5
+        contentHashOnly: isMemoryCard || contentHashOnly,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_5
       );
 
-      if (result['success'] == true) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_6
+      if (result['success'] == true && result['pending_download'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_6
         if (result['skipped'] == true) {
           _skippedFiles++;
         } else {
@@ -550,6 +555,9 @@ extension NeoSyncUpload on NeoSyncProvider {
     File file,
     String dataRoot, {
     GameModel? preferredGame,
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_7
+    bool contentHashOnly = false,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_7
   }) async {
     final resolved = await _resolveRpcs3FileForCloud(
       file,
@@ -564,14 +572,22 @@ extension NeoSyncUpload on NeoSyncProvider {
     final result = await _neoSyncService.syncFile(
       file,
       resolved.gameName,
+        // DOLPHIN_ISOLATION_BEGIN: neosync_source_proof
+        source: await _sourceForLocalFile(file),
+        // DOLPHIN_ISOLATION_END: neosync_source_proof
       customFilename: resolved.cloudPath,
       systemId: 'ps3',
       emulatorId: 'rpcs3',
       isState: false,
       scope: 'game',
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_8
+      contentHashOnly: contentHashOnly,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_8
     );
 
-    if (result['success'] == true) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_9
+    if (result['success'] == true && result['pending_download'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_9
       if (result['skipped'] == true) {
         _skippedFiles++;
       } else {
@@ -597,6 +613,9 @@ extension NeoSyncUpload on NeoSyncProvider {
     File file,
     String root, {
     GameModel? preferredGame,
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_10
+    bool contentHashOnly = false,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_10
   }) async {
     final resolved = await _resolveMeloNXFileForCloud(
       file,
@@ -611,14 +630,22 @@ extension NeoSyncUpload on NeoSyncProvider {
     final result = await _neoSyncService.syncFile(
       file,
       resolved.gameName,
+        // DOLPHIN_ISOLATION_BEGIN: neosync_source_proof
+        source: await _sourceForLocalFile(file),
+        // DOLPHIN_ISOLATION_END: neosync_source_proof
       customFilename: resolved.cloudPath,
       systemId: 'switch',
       emulatorId: 'melonx',
       isState: false,
       scope: 'game',
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_11
+      contentHashOnly: contentHashOnly,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_11
     );
 
-    if (result['success'] == true) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_12
+    if (result['success'] == true && result['pending_download'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_12
       if (result['skipped'] == true) {
         _skippedFiles++;
       } else {
@@ -679,10 +706,15 @@ extension NeoSyncUpload on NeoSyncProvider {
           final result = await _neoSyncService.syncFile(
             file,
             game.name,
+        // DOLPHIN_ISOLATION_BEGIN: neosync_source_proof
+        source: await _sourceForLocalFile(file),
+        // DOLPHIN_ISOLATION_END: neosync_source_proof
             customFilename: relativePath,
           );
 
-          if (result['success']) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_13
+          if (result['success'] == true && result['pending_download'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_13
             if (result['skipped'] == true) {
               _skippedFiles++;
               _processedItems.add('⏭️ Already synced: $relativePath');
@@ -712,67 +744,7 @@ extension NeoSyncUpload on NeoSyncProvider {
   }
 
   /// Procesa subida con detección de conflictos
-  Future<void> _processUploadFileWithConflictDetection(
-    File file,
-    String basePath, {
-    bool isState = false,
-  }) async {
-    try {
-      final game = await _gameForSaveFile(file);
-      if (game == null) {
-        _skippedFiles++;
-        _processedItems.add(
-          'Skipped unrecognized save (NeoSync v2 safety): ${path.basename(file.path)}',
-        );
-        return;
-      }
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_14
 
-      final relativePath = await _calculateSyncRelativePath(
-        game,
-        file,
-        basePath,
-        isState: isState,
-      );
-      final v2Path = CloudPathBuilder.parse(relativePath);
-      if (v2Path == null) {
-        _skippedFiles++;
-        _processedItems.add('Skipped non-v2 path: $relativePath');
-        return;
-      }
-
-      final result = await _neoSyncService.syncFile(
-        file,
-        game.name,
-        customFilename: relativePath,
-        systemId: v2Path.system,
-        emulatorId: v2Path.emulatorSlug,
-        isState: v2Path.isState,
-        scope: v2Path.scope,
-      );
-
-      if (result['success']) {
-        if (result['skipped'] == true) {
-          _skippedFiles++;
-          _processedItems.add('⏭️ Already synced: $relativePath');
-        } else {
-          _uploadedFiles++;
-          _processedItems.add('📤 Uploaded: $relativePath');
-          _resetQuotaAttempts();
-        }
-      } else {
-        final errorMessage = result['message'] ?? '';
-        _processedItems.add('Failed to upload: $relativePath - $errorMessage');
-        if (_checkQuotaExceeded(errorMessage)) {
-          _quotaExceededActive = true;
-          throw QuotaExceededException(errorMessage, _quotaExceededAttempts);
-        }
-      }
-    } catch (e) {
-      if (e is! QuotaExceededException) {
-        _processedItems.add('Error processing ${path.basename(file.path)}: $e');
-      } else {
-        rethrow;
-      }
-    }
-  }
 }
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_14

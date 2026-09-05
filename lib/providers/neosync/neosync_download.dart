@@ -11,6 +11,9 @@ extension NeoSyncDownload on NeoSyncProvider {
     _setSyncing(true);
     _error = null;
     _syncProgress = 0.0;
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_0
+    _processedNativeDownloads.clear();
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_0
     _syncStatus = 'Fetching cloud files...';
     _totalFiles = 0;
     _processedFiles = 0;
@@ -29,6 +32,9 @@ extension NeoSyncDownload on NeoSyncProvider {
       }
 
       final cloudFiles = result['files'] as List<NeoSyncFile>;
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_1
+      _files = cloudFiles;
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_1
       if (cloudFiles.isEmpty) {
         _syncStatus = 'No cloud files found';
         _processedItems.add('No cloud files found for auto-sync');
@@ -71,32 +77,10 @@ extension NeoSyncDownload on NeoSyncProvider {
   }
 
   /// Fase 2: Descargar archivos de la nube
-  Future<void> _performDownloadPhase(String savesPath) async {
-    _syncStatus = 'Phase 2: Downloading cloud files...';
-    _processedItems.add('⬇️ Phase 2: Downloading files from cloud...');
-    notify();
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_2
 
-    final result = await _neoSyncService.getFiles();
-    if (!result['success']) {
-      throw Exception('Failed to fetch cloud files: ${result['message']}');
-    }
 
-    final cloudFiles = result['files'] as List<NeoSyncFile>;
-    if (cloudFiles.isEmpty) {
-      _processedItems.add('No cloud files found');
-      return;
-    }
-
-    _processedItems.add('⬇️ Found ${cloudFiles.length} cloud files to process');
-
-    for (final cloudFile in cloudFiles) {
-      await _processDownloadFileWithConflictDetection(cloudFile, savesPath);
-      _processedFiles++;
-      _syncProgress = _totalFiles > 0 ? _processedFiles / _totalFiles : 0.0;
-      notify();
-    }
-  }
-
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_2
   /// Procesa un archivo para auto-descarga (Universal)
   Future<void> _processAutoDownloadFile(
     NeoSyncFile cloudFile,
@@ -110,6 +94,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     try {
       // DOLPHIN_ISOLATION_BEGIN: neosync_download_save_policy
 if (cloudFile.saveKind != NeoSyncSaveKind.save) return;
+      if (await _processNativeDirectoryDownload(cloudFile)) return;
       final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
 // DOLPHIN_ISOLATION_END: neosync_download_save_policy
       if (Platform.isIOS &&
@@ -205,8 +190,49 @@ if (cloudFile.saveKind != NeoSyncSaveKind.save) return;
       }
     } catch (e) {
       _processedItems.add('Error downloading ${cloudFile.fileName}: $e');
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_3
+      _error = 'Native save download failed: $e';
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_3
     }
   }
+
+  // DOLPHIN_ISOLATION_BEGIN: neosync_whole_directory_download
+  Future<bool> _processNativeDirectoryDownload(NeoSyncFile cloudFile) async {
+    final selected = NeoSyncSaveUnits.cloud(_files).where((unit) =>
+        unit.members.any((file) => file.id == cloudFile.id));
+    if (selected.length != 1) return false;
+    final unit = selected.single;
+    if (!unit.descriptor.isDirectory && unit.members.length <= 1) return false;
+    if (!_processedNativeDownloads.add(unit.key)) return true;
+    final game = await _findGameForCloudFile(cloudFile);
+    if (game == null) throw StateError('Cannot identify the native save owner');
+    final members = unit.members;
+    final localUnits = NeoSyncSaveUnits.local(await _findGameSaveFiles(game));
+    final localUnit = localUnits.where((local) => local.key == unit.key);
+    final locals = localUnit.isEmpty ? <LocalSaveFile>[] : localUnit.single.members;
+    final byIdentity = {for (final local in locals) _saveIdentity(local.relativePath): local};
+    final cloudByIdentity = {for (final member in members) _saveIdentity(member.sourceSavePath): member};
+    var needsDownload = false;
+    for (final identity in {...byIdentity.keys, ...cloudByIdentity.keys}) {
+      final status = await _calculateGameSyncStatus(byIdentity[identity], cloudByIdentity[identity]);
+      if (status == neo_sync.GameSyncStatus.error) {
+        throw StateError('Cannot verify every member of the native save');
+      }
+      if (status == neo_sync.GameSyncStatus.localOnly) {
+        _skippedFiles += members.length;
+        return true;
+      }
+      needsDownload |= status == neo_sync.GameSyncStatus.cloudOnly;
+    }
+    if (needsDownload) {
+      await restoreCloudSaveUnit(members, game: game);
+      _downloadedFiles += members.length;
+    } else {
+      _skippedFiles += members.length;
+    }
+    return true;
+  }
+  // DOLPHIN_ISOLATION_END: neosync_whole_directory_download
 
   /// Helper para encontrar el juego de un archivo de nube
   Future<GameModel?> _findGameForCloudFile(NeoSyncFile cloudFile) async {
@@ -275,6 +301,19 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
         );
       }
     }
+
+    // DOLPHIN_ISOLATION_BEGIN: neosync_cloud_native_owner
+    if (v2Path != null && !v2Path.isShared) {
+      final serial = RegExp(r'(?:^|/)([A-Za-z]{4}[0-9]{5})[^/]*/')
+          .firstMatch(v2Path.filePath)?[1]?.toUpperCase();
+      final names = <String>{v2Path.gameName?.toLowerCase() ?? '', cloudFile.gameName.toLowerCase()};
+      final rows = await GameRepository.loadGamesForSystem(v2Path.system);
+      final matches = rows.where((row) =>
+        (serial != null && (row.titleId?.toUpperCase() == serial || row.filename.toUpperCase().contains(serial))) ||
+        names.contains(CloudPathBuilder.sanitizeGameName(GameModel.fromDatabaseModel(row).name).toLowerCase())).toList();
+      if (matches.length == 1) return GameModel.fromDatabaseModel(matches.single);
+    }
+    // DOLPHIN_ISOLATION_END: neosync_cloud_native_owner
 
     if (v2Path != null && !v2Path.isShared) {
       final saveBase = path.basenameWithoutExtension(v2Path.filePath);
@@ -392,75 +431,16 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
     }
     // DOLPHIN_ISOLATION_END: dolphin_download_writer
 
-    final result = LegacyNeoSyncService.isLegacyId(cloudFile.id)
-        ? await _legacyNeoSyncService.downloadFile(cloudFile.id)
-        : await _neoSyncService.downloadFile(cloudFile.id);
-    if (result['success'] == true && result['data'] != null) {
-      final bytes = result['data'] as List<int>;
-      final payload = cloudFile.fileName.toLowerCase().endsWith('.neosync.gz')
-          ? gzip.decode(bytes)
-          : bytes;
-      await localFile.writeAsBytes(payload);
-
-      // Save the actual local sync state in the database.
-      // This avoids the "Operation not permitted" error on Android 11+ when trying
-      // to change the timestamp with setLastModified.
-      try {
-        final stat = await localFile.stat();
-        await SyncRepository.saveSyncState(
-          localFile.path,
-          stat.modified.millisecondsSinceEpoch,
-          cloudFile.fileModifiedAtTimestamp ?? 0,
-          stat.size,
-          fileHash: cloudFile.checksum,
-        );
-      } catch (e) {
-        NeoSyncProvider._log.w(
-          'Could not save sync state for ${localFile.path}: $e',
-        );
-      }
-    } else {
-      throw Exception(result['message'] ?? 'Failed to download file');
-    }
+    // DOLPHIN_ISOLATION_BEGIN: neosync_verified_native_writer
+    await _downloadCloudFile(cloudFile, localFile);
+    // DOLPHIN_ISOLATION_END: neosync_verified_native_writer
   }
 
   /// Procesa descarga con detección de conflictos
-  Future<void> _processDownloadFileWithConflictDetection(
-    NeoSyncFile cloudFile,
-    String savesPath,
-  ) async {
-    // DOLPHIN_ISOLATION_BEGIN: dolphin_no_generic_download
-    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
-        DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) return;
-    // DOLPHIN_ISOLATION_END: dolphin_no_generic_download
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_4
 
-    GameModel? game = await _findGameForCloudFile(cloudFile);
-    if (game == null) return;
 
-    final localPaths = await resolveCloudFileToLocalPath(game, cloudFile);
-
-    if (localPaths.isEmpty) return;
-
-    for (final localPath in localPaths) {
-      final localFile = File(localPath);
-      if (localFile.existsSync()) {
-        final localStat = await localFile.stat();
-        if (cloudFile.uploadedAt.isAfter(localStat.modified)) {
-          await _downloadCloudFileImpl(cloudFile, localFile);
-          _downloadedFiles++;
-          _processedItems.add('⬇️ Updated: ${cloudFile.fileName}');
-        } else {
-          _skippedFiles++;
-        }
-      } else {
-        await localFile.parent.create(recursive: true);
-        await _downloadCloudFileImpl(cloudFile, localFile);
-        _downloadedFiles++;
-        _processedItems.add('✨ Downloaded: ${cloudFile.fileName}');
-      }
-    }
-  }
-
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_4
   /// Copies recognizable NeoSync v1 files into the v2 namespace.
   ///
   /// This is intentionally non-destructive: the historical object remains in

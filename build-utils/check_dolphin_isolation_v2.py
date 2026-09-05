@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_FILES = {
+    # Build205: user-authorized NeoSync status repair across all emulators.
+    "lib/widgets/neo_sync_status_icon.dart",
     # User explicitly requested global NeoSync saves-only policy and cleanup.
     "lib/services/neosync/legacy_neo_sync_service.dart",
     # User-requested repair of NeoSync filename visibility, scoped by markers.
@@ -39,6 +41,17 @@ SHARED_FILES = {
     "lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart",
 }
 ALLOWED_EXACT = {
+    "lib/models/neo_sync_save_units.dart",
+    "lib/services/neosync/neo_sync_restore_transaction.dart",
+    "lib/services/neosync/neo_sync_status_rules.dart",
+    "docs/NEOSYNC_REPAIR_205.md",
+    "test/neosync_native_roots_test.dart",
+    "test/neosync_restore_transaction_test.dart",
+    "test/neosync_save_units_test.dart",
+    "test/neosync_status_regression_test.dart",
+    "test/neosync_status_rules_test.dart",
+    "test/neosync_transfer_confirmation_test.dart",
+
     "lib/services/neosync/neo_sync_save_policy.dart",
     "lib/services/neosync/neo_sync_cloud_cleanup.dart",
     "lib/providers/neosync/neosync_save_audit.dart",

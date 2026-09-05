@@ -23,6 +23,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter/gestures.dart';
 
 import '../../../models/neo_sync_models.dart';
+// DOLPHIN_ISOLATION_BEGIN: neosync_save_unit_import
+import '../../../models/neo_sync_save_units.dart';
+// DOLPHIN_ISOLATION_END: neosync_save_unit_import
 
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/repositories/game_repository.dart';
@@ -803,70 +806,12 @@ class NeoSyncContentState extends State<NeoSyncContent>
     super.dispose();
   }
 
-  List<_OnlineSaveGroup> _groupedOnlineSaves(NeoSyncProvider provider) {
-    final buckets = <String, List<NeoSyncFile>>{};
-    final labels = <String, String>{};
-
-    for (final file in provider.onlineFiles) {
-      // DOLPHIN_ISOLATION_BEGIN: neosync_listing_path_context
-      final lowerPath = file.presentationPath.toLowerCase();
-      // DOLPHIN_ISOLATION_END: neosync_listing_path_context
-      final isMeloNX =
-          lowerPath.startsWith('v2/saves/switch/melonx/game/') ||
-          lowerPath.startsWith('v2/states/switch/melonx/game/');
-      final isArmsx2Save = lowerPath.startsWith('v2/saves/ps2/armsx2/');
-      final isArmsx2State = lowerPath.startsWith('v2/states/ps2/armsx2/');
-      final isRpcs3 =
-          lowerPath.startsWith('v2/saves/ps3/rpcs3/game/') ||
-          lowerPath.startsWith('v2/states/ps3/rpcs3/game/');
-
-      String key;
-      String label;
-      if (isMeloNX) {
-        label = file.gameName.trim().isNotEmpty
-            ? file.gameName.trim()
-            : _readableGameNameFromV2Path(file.fileName);
-        key = 'melonx:${label.toLowerCase()}';
-      } else if (isRpcs3) {
-        // RPCS3 saves are made of many constituent files. The backend's
-        // gameName metadata can vary between those files, so grouping must
-        // use the canonical game segment embedded in the v2 cloud path.
-        // DOLPHIN_ISOLATION_BEGIN: neosync_ps3_listing_context
-        final pathGameName = _readableGameNameFromV2Path(file.presentationPath);
-        // DOLPHIN_ISOLATION_END: neosync_ps3_listing_context
-        label = pathGameName;
-        // DOLPHIN_ISOLATION_BEGIN: neosync_native_ps3_bundle
-key = file.ps3BundleKey != null ? 'rpcs3:${file.ps3BundleKey}' : 'file:${file.id}';
-// DOLPHIN_ISOLATION_END: neosync_native_ps3_bundle
-      } else if (isArmsx2Save || isArmsx2State) {
-        label = file.gameName.trim().isNotEmpty
-            ? file.gameName.trim()
-            : (isArmsx2State ? 'ARMSX2 Save States' : 'ARMSX2 Memory Cards');
-        key =
-            'armsx2:${isArmsx2State ? 'states' : 'saves'}:${label.toLowerCase()}';
-      } else {
-        // DOLPHIN_ISOLATION_BEGIN: neosync_visible_filenames
-        label = file.id.startsWith('v1:')
-            ? '[V1] ${file.displayName}'
-            : file.displayName;
-        // DOLPHIN_ISOLATION_END: neosync_visible_filenames
-        key = 'file:${file.id}';
-      }
-
-      buckets.putIfAbsent(key, () => <NeoSyncFile>[]).add(file);
-      labels[key] = label;
-    }
-
-    return [
-      for (final entry in buckets.entries)
-        _OnlineSaveGroup(files: entry.value, displayName: labels[entry.key]!),
-    ];
-  }
-
-  String _readableGameNameFromV2Path(String cloudPath) {
-    final parts = cloudPath.split('/');
-    return parts.length > 5 ? parts[5] : cloudPath;
-  }
+// DOLPHIN_ISOLATION_BEGIN: neosync_logical_save_groups
+  List<_OnlineSaveGroup> _groupedOnlineSaves(NeoSyncProvider provider) => [
+    for (final unit in NeoSyncSaveUnits.cloud(provider.onlineFiles))
+      _OnlineSaveGroup(unit),
+  ];
+// DOLPHIN_ISOLATION_END: neosync_logical_save_groups
 
   void _resetSelection() {
     if (!mounted) return;
@@ -949,19 +894,22 @@ key = file.ps3BundleKey != null ? 'rpcs3:${file.ps3BundleKey}' : 'file:${file.id
 
 // DOLPHIN_ISOLATION_END: neosync_native_export_bytes
 
+// DOLPHIN_ISOLATION_BEGIN: neosync_exact_native_export_names
   List<String> _safeCloudPathSegments(String cloudPath) {
-    var value = cloudPath.replaceAll('\\', '/').trim();
+    var value = cloudPath.replaceAll('\\', '/');
     if (value.toLowerCase().endsWith('.neosync.gz')) {
       value = value.substring(0, value.length - '.neosync.gz'.length);
     }
-    final result = <String>[];
-    for (final segment in value.split('/')) {
-      final trimmed = segment.trim();
-      if (trimmed.isEmpty || trimmed == '.' || trimmed == '..') continue;
-      result.add(_safeExportComponent(trimmed));
+    final parts = value.split('/');
+    if (value.contains('\u0000') || parts.any((part) =>
+        part.isEmpty || part == '.' || part == '..')) {
+      throw const FormatException('Invalid native save path');
     }
-    return result.isEmpty ? <String>['save.bin'] : result;
+    // Native filenames are data: do not rename spaces, Unicode, metadata or
+    // directory members while exporting an emulator's original save format.
+    return parts;
   }
+// DOLPHIN_ISOLATION_END: neosync_exact_native_export_names
 
   File _uniqueExportFile(Directory root, List<String> segments) {
     final directorySegments = segments.length > 1
@@ -1019,23 +967,22 @@ key = file.ps3BundleKey != null ? 'rpcs3:${file.ps3BundleKey}' : 'file:${file.id
         for (final cloudFile in group.files) {
           final bytes = await neoSyncProvider.downloadOnlineFileBytes(cloudFile);
           // DOLPHIN_ISOLATION_BEGIN: neosync_native_export_collision
-          if (cloudFile.ps3BundleKey != null) {
-            final nativeTarget = File(p.joinAll([exportRoot.path,
-              ..._safeCloudPathSegments(cloudFile.exportSavePath)]));
-            if (await nativeTarget.exists()) {
-              final previous = await nativeTarget.readAsBytes();
-              if (previous.length == bytes.length &&
-                  _sameSaveBytes(previous, bytes)) continue;
-              throw StateError('Deux versions différentes du même fichier PS3. Exporte les sauvegardes séparément.');
-            }
+          final descriptor = NeoSyncSaveUnits.describe(cloudFile.sourceSavePath,
+              gameName: cloudFile.gameName);
+          final exportPath = descriptor.isDirectory
+              ? descriptor.nativePath : cloudFile.exportSavePath;
+          final segments = _safeCloudPathSegments(exportPath);
+          final nativeTarget = File(p.joinAll([exportRoot.path, ...segments]));
+          if (group.unit.descriptor.isDirectory && await nativeTarget.exists()) {
+            final previous = await nativeTarget.readAsBytes();
+            if (_sameSaveBytes(previous, bytes)) continue;
+            throw StateError(fr
+                ? 'Deux versions différentes du même fichier de sauvegarde. Aucune archive partielle n’a été créée.'
+                : 'Conflicting versions of a native save member. No partial archive was created.');
           }
+          final target = group.unit.descriptor.isDirectory
+              ? nativeTarget : _uniqueExportFile(exportRoot, segments);
           // DOLPHIN_ISOLATION_END: neosync_native_export_collision
-          final target = _uniqueExportFile(
-            exportRoot,
-            // DOLPHIN_ISOLATION_BEGIN: neosync_native_save_export
-            _safeCloudPathSegments(cloudFile.exportSavePath),
-            // DOLPHIN_ISOLATION_END: neosync_native_save_export
-          );
           await target.parent.create(recursive: true);
           await target.writeAsBytes(bytes, flush: true);
           exportedFiles++;
@@ -3163,17 +3110,17 @@ class _ErrorDialogState extends State<_ErrorDialog> {
   }
 }
 
+// DOLPHIN_ISOLATION_BEGIN: neosync_save_unit_view
 class _OnlineSaveGroup {
-  final List<NeoSyncFile> files;
-  final String displayName;
+  final NeoSyncCloudSaveUnit unit;
 
-  const _OnlineSaveGroup({required this.files, required this.displayName});
+  const _OnlineSaveGroup(this.unit);
 
+  List<NeoSyncFile> get files => unit.members;
+  String get displayName => unit.displayName;
   NeoSyncFile get primaryFile => files.first;
-  int get totalBytes => files.fold(0, (sum, file) => sum + file.fileSize);
-  DateTime get newestAt => files
-      .map((file) => file.uploadedAt)
-      .reduce((a, b) => a.isAfter(b) ? a : b);
+  int get totalBytes => unit.totalBytes;
+  DateTime get newestAt => unit.newestAt;
 
   String get sizeFormatted {
     final bytes = totalBytes;
@@ -3187,13 +3134,10 @@ class _OnlineSaveGroup {
 
   String get subtitle {
     final date = newestAt.toLocal().toString().split(' ')[0];
-    // DOLPHIN_ISOLATION_BEGIN: neosync_card_slot_details
-    final details = files.length == 1 ? primaryFile.dolphinDetailName : null;
+    final details = unit.detailName;
     final prefix = details == null ? '' : '$details • ';
-    return files.length > 1
-        ? '${files.length}× • $sizeFormatted • $date'
-        : '$prefix$sizeFormatted • $date';
-    // DOLPHIN_ISOLATION_END: neosync_card_slot_details
+    final conflict = unit.hasConflictingMembers ? '⚠ ' : '';
+    return '$conflict$prefix$sizeFormatted • $date';
   }
 
   NeoSyncFile get displayFile => NeoSyncFile(
@@ -3209,6 +3153,7 @@ class _OnlineSaveGroup {
     checksum: primaryFile.checksum,
   );
 }
+// DOLPHIN_ISOLATION_END: neosync_save_unit_view
 
 class OnlineSavesListView extends StatefulWidget {
   final List<_OnlineSaveGroup> groups;

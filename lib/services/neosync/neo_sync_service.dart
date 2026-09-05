@@ -51,52 +51,60 @@ class NeoSyncService extends ChangeNotifier {
   /// determines if a synchronization is required.
   ///
   /// Considers file hash, size, and modification timestamps to detect changes.
+  // DOLPHIN_ISOLATION_BEGIN: neosync_checked_transfer
   Future<Map<String, dynamic>> checkFileExists(
     String filename,
     String fileHash,
     int fileSize, {
     DateTime? localModifiedAt,
+    String? accountToken,
   }) async {
     try {
-      final headers = await _getHeaders();
-      final baseUrl = AppConfig.neoSyncBaseUrl;
-      final uri = Uri.parse('$baseUrl/api/v2/files/check');
-
-      final requestBody = {
-        'filename': filename,
-        'hash': fileHash,
-        'size': fileSize,
+      final headers = accountToken == null ? await _getHeaders() : {
+        'Authorization': 'Bearer $accountToken', 'Content-Type': 'application/json',
       };
-
-      if (localModifiedAt != null) {
-        final timestampMillis = localModifiedAt.millisecondsSinceEpoch;
-        requestBody['local_modified_at_timestamp'] = timestampMillis;
-      }
-
+      final body = <String, Object>{'filename': filename, 'hash': fileHash, 'size': fileSize};
+      if (localModifiedAt != null) body['local_modified_at_timestamp'] = localModifiedAt.millisecondsSinceEpoch;
       final response = await http.post(
-        uri,
-        headers: headers,
-        body: jsonEncode(requestBody),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'exists': data['exists'] ?? false,
-          'needs_sync': data['needs_sync'] ?? true,
-          'remote_newer': data['remote_newer'] ?? false,
-          'db_modified_at_timestamp': data['db_modified_at_timestamp'],
-          'metadata': data['metadata'],
-        };
-      } else {
-        _log.e('Check request failed with status: ${response.statusCode}');
-        return {'exists': false, 'needs_sync': true, 'remote_newer': false};
+        Uri.parse('${AppConfig.neoSyncBaseUrl}/api/v2/files/check'),
+        headers: headers, body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) throw StateError('NeoSync file check HTTP ${response.statusCode}');
+      final data = jsonDecode(response.body);
+      if (data is! Map || data['exists'] is! bool || data['needs_sync'] is! bool ||
+          (data['remote_newer'] != null && data['remote_newer'] is! bool)) {
+        throw const FormatException('Invalid NeoSync file check');
       }
-    } catch (e) {
-      _log.e('Check request error: $e');
-      return {'exists': false, 'needs_sync': true, 'remote_newer': false};
+      return {
+        'success': true,
+        'exists': data['exists'], 'needs_sync': data['needs_sync'],
+        'remote_newer': data['remote_newer'] ?? false,
+        'db_modified_at_timestamp': data['db_modified_at_timestamp'],
+        'metadata': data['metadata'],
+      };
+    } catch (error) {
+      _log.e('NeoSync file check failed: $error');
+      return {'success': false, 'exists': false, 'needs_sync': true,
+        'remote_newer': false, 'message': '$error'};
     }
   }
+
+  Future<bool> _confirmUploadedContent(Map<String, dynamic> data,
+      String filename, String hash, int size, String token) async {
+    if (await _getToken() != token) return false;
+    for (final metadata in [data, if (data['file'] is Map) data['file'] as Map,
+        if (data['data'] is Map) data['data'] as Map]) {
+      final serverHash = metadata['file_hash'] ?? metadata['checksum'];
+      if (serverHash is String && RegExp(r'^[a-fA-F0-9]{32}$').hasMatch(serverHash)) {
+        return serverHash.toLowerCase() == hash;
+      }
+    }
+    final checked = await checkFileExists(filename, hash, size, accountToken: token);
+    return await _getToken() == token && checked['success'] == true &&
+        checked['exists'] == true && checked['needs_sync'] == false &&
+        checked['remote_newer'] != true;
+  }
+  // DOLPHIN_ISOLATION_END: neosync_checked_transfer
 
   /// Synchronizes a local file with the cloud.
   ///
@@ -112,6 +120,9 @@ class NeoSyncService extends ChangeNotifier {
     bool? isState,
     String? scope,
     bool contentHashOnly = false,
+    // DOLPHIN_ISOLATION_BEGIN: neosync_source_context
+    NeoSyncSaveSource? source,
+    // DOLPHIN_ISOLATION_END: neosync_source_context
   }) async {
     _isLoading = true;
     _lastError = null;
@@ -120,29 +131,49 @@ class NeoSyncService extends ChangeNotifier {
     try {
 // DOLPHIN_ISOLATION_BEGIN: neosync_syncFile_save_policy
       final cloudKey = customFilename ?? file.path;
-      if (!NeoSyncSavePolicy.allowsUpload(file.path, cloudKey)) {
+      if (!NeoSyncSavePolicy.allowsUpload(file.path, cloudKey, source: source)) {
         return {'success': false, 'excluded': true,
           'message': 'NeoSync accepts only internal saves and savestates: $cloudKey'};
       }
       if (await FileSystemEntity.type(file.path, followLinks: false) != FileSystemEntityType.file) {
         return {'success': false, 'excluded': true, 'message': 'NeoSync refuses linked save files'};
       }
+      final token = await _getToken();
+      if (token == null || token.isEmpty) throw StateError('Not authenticated');
 // DOLPHIN_ISOLATION_END: neosync_syncFile_save_policy
+// DOLPHIN_ISOLATION_BEGIN: neosync_stable_snapshot
+      final before = await file.stat();
       final fileBytes = await file.readAsBytes();
+      final after = await file.stat();
+      if (before.size != after.size || before.modified != after.modified || fileBytes.length != after.size) {
+        return {'success': false, 'deferred': true, 'message': 'Save changed while preparing upload; retry required'};
+      }
+// DOLPHIN_ISOLATION_END: neosync_stable_snapshot
       final fileHash = _calculateFileHash(fileBytes);
       final filename = customFilename ?? file.path;
 
-      final fileStat = await file.stat();
-      final localModifiedAt = fileStat.modified;
+      // DOLPHIN_ISOLATION_BEGIN: neosync_snapshot_time
+      final localModifiedAt = after.modified;
+      // DOLPHIN_ISOLATION_END: neosync_snapshot_time
 
       final checkResult = await checkFileExists(
         filename,
         fileHash,
         fileBytes.length,
         localModifiedAt: contentHashOnly ? null : localModifiedAt,
+        // DOLPHIN_ISOLATION_BEGIN: neosync_check_account
+        accountToken: token,
+        // DOLPHIN_ISOLATION_END: neosync_check_account
       );
-
-      if (!checkResult['needs_sync']) {
+// DOLPHIN_ISOLATION_BEGIN: neosync_failed_check_blocks_upload
+      if (checkResult['success'] != true) {
+        _lastError = checkResult['message']?.toString() ?? 'NeoSync file check failed';
+        return {'success': false, 'message': _lastError};
+      }
+      if (await _getToken() != token) throw StateError('NeoSync account changed');
+      if (checkResult['exists'] == true && checkResult['needs_sync'] == false &&
+          checkResult['remote_newer'] != true) {
+// DOLPHIN_ISOLATION_END: neosync_failed_check_blocks_upload
         int cloudTime = localModifiedAt.millisecondsSinceEpoch;
         if (checkResult['db_modified_at_timestamp'] != null) {
           final ts = checkResult['db_modified_at_timestamp'];
@@ -159,6 +190,9 @@ class NeoSyncService extends ChangeNotifier {
         return {
           'success': true,
           'skipped': true,
+          // DOLPHIN_ISOLATION_BEGIN: neosync_confirmed_skip
+          'synced': true,
+          // DOLPHIN_ISOLATION_END: neosync_confirmed_skip
           'message': 'File already in sync',
         };
       }
@@ -167,14 +201,17 @@ class NeoSyncService extends ChangeNotifier {
         return {
           'success': true,
           'skipped': true,
+          // DOLPHIN_ISOLATION_BEGIN: neosync_deferred_download
+          'synced': false,
+          'pending_download': true,
+          // DOLPHIN_ISOLATION_END: neosync_deferred_download
           'message': 'Remote file is newer',
         };
       }
 
-      final token = await _getToken();
-      if (token == null) {
-        throw Exception('Not authenticated');
-      }
+      // DOLPHIN_ISOLATION_BEGIN: neosync_same_upload_account
+      if (await _getToken() != token) throw StateError('NeoSync account changed');
+      // DOLPHIN_ISOLATION_END: neosync_same_upload_account
 
       final baseUrl = AppConfig.neoSyncBaseUrl;
       final uri = Uri.parse('$baseUrl/api/v2/upload');
@@ -212,8 +249,10 @@ class NeoSyncService extends ChangeNotifier {
         request.fields['scope'] = scope;
       }
 
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
+      // DOLPHIN_ISOLATION_BEGIN: neosync_upload_timeout
+      final response = await request.send().timeout(const Duration(seconds: 60));
+      final responseBody = await response.stream.bytesToString().timeout(const Duration(seconds: 60));
+      // DOLPHIN_ISOLATION_END: neosync_upload_timeout
       Map<String, dynamic> data = <String, dynamic>{};
       try {
         final decoded = jsonDecode(responseBody);
@@ -223,6 +262,12 @@ class NeoSyncService extends ChangeNotifier {
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        // DOLPHIN_ISOLATION_BEGIN: neosync_confirm_upload
+        if (!await _confirmUploadedContent(data, filename, fileHash, fileBytes.length, token)) {
+          _lastError = 'Upload received but cloud checksum was not confirmed; retry verification';
+          return {'success': false, 'verification_pending': true, 'message': _lastError};
+        }
+        // DOLPHIN_ISOLATION_END: neosync_confirm_upload
         int cloudTime = fileModifiedAtTimestamp;
         if (data['file_modified_at_timestamp'] != null) {
           final ts = data['file_modified_at_timestamp'];
@@ -285,6 +330,9 @@ class NeoSyncService extends ChangeNotifier {
     File file,
     String gameName, {
     String? customFilename,
+    // DOLPHIN_ISOLATION_BEGIN: neosync_forced_source_context
+    NeoSyncSaveSource? source,
+    // DOLPHIN_ISOLATION_END: neosync_forced_source_context
   }) async {
     _isLoading = true;
     _lastError = null;
@@ -293,7 +341,7 @@ class NeoSyncService extends ChangeNotifier {
     try {
 // DOLPHIN_ISOLATION_BEGIN: neosync_uploadFile_save_policy
       final cloudKey = customFilename ?? file.path;
-      if (!NeoSyncSavePolicy.allowsUpload(file.path, cloudKey)) {
+      if (!NeoSyncSavePolicy.allowsUpload(file.path, cloudKey, source: source)) {
         return {'success': false, 'excluded': true,
           'message': 'NeoSync accepts only internal saves and savestates: $cloudKey'};
       }
@@ -312,7 +360,16 @@ class NeoSyncService extends ChangeNotifier {
       final request = http.MultipartRequest('POST', uri);
       request.headers['Authorization'] = 'Bearer $token';
 
+      // DOLPHIN_ISOLATION_BEGIN: neosync_forced_snapshot
+      final before = await file.stat();
       final fileBytes = await file.readAsBytes();
+      final after = await file.stat();
+      if (before.size != after.size || before.modified != after.modified || fileBytes.length != after.size) {
+        return {'success': false, 'deferred': true, 'message': 'Save changed while preparing upload; retry required'};
+      }
+      final fileHash = _calculateFileHash(fileBytes);
+      if (await _getToken() != token) throw StateError('NeoSync account changed');
+      // DOLPHIN_ISOLATION_END: neosync_forced_snapshot
       final filename =
           customFilename ?? file.path.split(Platform.pathSeparator).last;
       request.files.add(
@@ -322,9 +379,18 @@ class NeoSyncService extends ChangeNotifier {
       request.fields['file_name'] = filename;
       request.fields['game_name'] = gameName;
 
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-      final data = jsonDecode(responseBody);
+      // DOLPHIN_ISOLATION_BEGIN: neosync_forced_confirmation
+      request.fields['file_hash'] = fileHash;
+      request.fields['file_size'] = fileBytes.length.toString();
+      final response = await request.send().timeout(const Duration(seconds: 60));
+      final responseBody = await response.stream.bytesToString().timeout(const Duration(seconds: 60));
+      final data = Map<String, dynamic>.from(jsonDecode(responseBody) as Map);
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          !await _confirmUploadedContent(data, filename, fileHash, fileBytes.length, token)) {
+        _lastError = 'Upload received but cloud checksum was not confirmed; retry verification';
+        return {'success': false, 'verification_pending': true, 'message': _lastError};
+      }
+      // DOLPHIN_ISOLATION_END: neosync_forced_confirmation
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': data};
@@ -355,6 +421,7 @@ class NeoSyncService extends ChangeNotifier {
       final files = <NeoSyncFile>[];
       final seen = <String>{};
       var offset = 0;
+      int? expectedTotal;
       for (var page = 0; page < 100; page++) {
         final uri = Uri.parse('${AppConfig.neoSyncBaseUrl}/api/v2/files')
             .replace(queryParameters: {'limit': '200', 'offset': '$offset'});
@@ -375,13 +442,60 @@ class NeoSyncService extends ChangeNotifier {
           }
           files.add(file);
         }
-        if (batch.length < 200) return {'success': true, 'files': files};
-        offset += batch.length;
+        // Some deployments cap a page below the requested limit. Explicit
+        // pagination metadata takes precedence over a short-page heuristic.
+        bool? hasMore;
+        int? nextOffset;
+        for (final metadata in [data,
+          if (data['pagination'] is Map) data['pagination'] as Map,
+          if (data['meta'] is Map) data['meta'] as Map]) {
+          final totalValue = metadata['total'] ?? metadata['total_count'];
+          if (totalValue != null) {
+            final total = int.tryParse('$totalValue');
+            if (total == null || total < files.length ||
+                (expectedTotal != null && expectedTotal != total)) {
+              throw StateError('NeoSync inventory changed or has an invalid total');
+            }
+            expectedTotal = total;
+          }
+          if (metadata.containsKey('has_more')) {
+            final value = metadata['has_more'];
+            final more = value == true || value == 1 || value == 'true';
+            if (!more && value != false && value != 0 && value != 'false') {
+              throw const FormatException('Invalid NeoSync has_more value');
+            }
+            if (hasMore != null && hasMore != more) {
+              throw StateError('Conflicting NeoSync pagination metadata');
+            }
+            hasMore = more;
+          }
+          if (metadata['next_offset'] != null) {
+            final next = int.tryParse('${metadata['next_offset']}');
+            if (next == null || next != offset + batch.length || next <= offset) {
+              throw StateError('Invalid NeoSync next offset');
+            }
+            nextOffset = next;
+          }
+          if (metadata['next_cursor'] != null && metadata['next_cursor'] != '') {
+            throw StateError('Unsupported NeoSync cursor pagination; inventory not verified');
+          }
+        }
+        if (expectedTotal != null) {
+          final more = files.length < expectedTotal;
+          if (hasMore != null && hasMore != more) {
+            throw StateError('NeoSync pagination contradicts its total');
+          }
+          hasMore = more;
+        }
+        hasMore ??= nextOffset != null || batch.length >= 200;
+        if (!hasMore) return {'success': true, 'files': files};
+        if (batch.isEmpty) throw StateError('NeoSync pagination ended before its total');
+        offset = nextOffset ?? offset + batch.length;
       }
       throw StateError('NeoSync listing limit reached; refusing an incomplete list');
     } catch (error) {
       _log.e('[NeoSync][DolphiniOS][list.failed] $error');
-      return {'success': false, 'message': '$error'};
+      return {'success': false, 'phase': 'listing', 'message': '$error'};
     }
   }
   // DOLPHIN_ISOLATION_END: dolphin_complete_cloud_listing
@@ -416,7 +530,7 @@ class NeoSyncService extends ChangeNotifier {
         'deleted': result.deletedIds.length, 'failed': result.failedIds.length,
         'unresolved': result.unresolved};
     } catch (error) {
-      return {'success': false, 'message': 'NeoSync cleanup stopped: $error'};
+      return {'success': false, 'phase': 'cleanup', 'message': 'NeoSync cleanup stopped: $error'};
     }
   }
 

@@ -131,13 +131,10 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
         isSyncing: true,
       );
     }
-    if (widget.syncProvider.lastError != null) {
-      return _NeoSyncStatus(
-        icon: Symbols.error_outline_rounded,
-        color: const Color(0xFFE53E3E),
-        isSyncing: false,
-      );
-    }
+    // DOLPHIN_ISOLATION_BEGIN: neosync_game_error_scope
+    // An account-level audit or another game must not override this game
+    // whose own save comparison/transfer has already produced a result.
+    // DOLPHIN_ISOLATION_END: neosync_game_error_scope
 
     if (gameState != null) {
       switch (gameState.status) {
@@ -197,6 +194,16 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
           );
       }
     }
+
+    // DOLPHIN_ISOLATION_BEGIN: neosync_unchecked_global_error
+    if (widget.syncProvider.lastError != null) {
+      return _NeoSyncStatus(
+        icon: Symbols.error_outline_rounded,
+        color: const Color(0xFFE53E3E),
+        isSyncing: false,
+      );
+    }
+    // DOLPHIN_ISOLATION_END: neosync_unchecked_global_error
 
     return _NeoSyncStatus(
       icon: Symbols.sync_rounded,

@@ -47,6 +47,48 @@ void main() {
     expect(result['files'], hasLength(200));
   });
 
+
+  test('server-capped pages honor total and has_more before any cleanup', () async {
+    final calls = <String>[];
+    final result = await http.runWithClient(() => NeoSyncService().auditAndPurge(
+      resolveOrigins: (files) async {
+        expect(files, hasLength(2));
+        calls.add('investigate');
+        return files;
+      }), () => MockClient((request) async {
+        if (request.method == 'DELETE') {
+          calls.add('delete');
+          return http.Response('', 204);
+        }
+        final offset = request.url.queryParameters['offset'];
+        calls.add('list-$offset');
+        return http.Response(jsonEncode({'files': offset == '0'
+          ? [{'id': 'save', 'file_name': 'Game.srm'}]
+          : [{'id': 'dlc', 'file_name': 'Costume.nsp'}],
+          'pagination': {'total': 2, 'has_more': offset == '0'}}), 200);
+      }));
+    expect(result['success'], isTrue);
+    expect(calls, ['list-0', 'list-1', 'investigate', 'delete']);
+  });
+
+  test('contradictory or unhandled pagination never triggers partial cleanup', () async {
+    for (final metadata in [
+      {'total': 2, 'has_more': false},
+      {'next_offset': 100},
+      {'next_cursor': 'opaque'},
+    ]) {
+      var deletes = 0;
+      final result = await http.runWithClient(() => NeoSyncService().auditAndPurge(
+        resolveOrigins: (files) async => files), () => MockClient((request) async {
+          if (request.method == 'DELETE') deletes++;
+          return http.Response(jsonEncode({'files': [{'id': 'dlc', 'file_name': 'Costume.nsp'}],
+            'pagination': metadata}), 200);
+        }));
+      expect(result['success'], isFalse, reason: '$metadata');
+      expect(result['phase'], 'listing');
+      expect(deletes, 0);
+    }
+  });
   test('a missing page prevents every delete, even if page one contained DLC', () async {
     var deletes = 0;
     var investigated = false;

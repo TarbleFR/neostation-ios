@@ -31,6 +31,12 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         armsx2Root,
       );
       if (isArmsx2Game && armsx2Root != null && armsx2Root.isNotEmpty) {
+        // DOLPHIN_ISOLATION_BEGIN: neosync_armsx2_selected_category
+        if (const ['memcards', 'savestates', 'sstates']
+            .contains(path.basename(armsx2Root).toLowerCase())) {
+          return [armsx2Root];
+        }
+        // DOLPHIN_ISOLATION_END: neosync_armsx2_selected_category
         return await Armsx2FolderService.resolveSaveDirectories(armsx2Root);
       }
 
@@ -42,6 +48,16 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       return retroPaths.toSet().toList();
     }
 
+    // DOLPHIN_ISOLATION_BEGIN: neosync_native_switch_roots
+    // MeloNX owns its Switch save tree. Never merge it with RetroArch's roots
+    // or scan the linked app/bis root (which also contains DLC and firmware).
+    if (Platform.isIOS && system.folderName.toLowerCase() == 'switch') {
+      final root = ConfigService.linkedMelonxSaveFolderPath;
+      return root == null || root.isEmpty
+          ? [] : NeoSyncSavePolicy.melonxSaveRoots(root);
+    }
+    // DOLPHIN_ISOLATION_END: neosync_native_switch_roots
+
     // System JSON predates iOS NeoSync and has no ios_sync_folder entries.
     // RetroArch's bookmarked saves/states roots are authoritative for preview 1.
     if (Platform.isIOS && folders.isEmpty) {
@@ -51,14 +67,9 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       if (states != null) resolvedPaths.add(states);
     }
 
-    if (Platform.isIOS) {
-      final systemFolder = system.folderName.toLowerCase();
-      if (systemFolder == 'switch') {
-        final custom = ConfigService.linkedMelonxSaveFolderPath;
-        if (custom != null && custom.isNotEmpty) resolvedPaths.add(custom);
-      }
-    }
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_0
 
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_0
     for (final folder in folders) {
       final resolved = await _resolveSinglePath(
         folder,
@@ -68,6 +79,13 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       );
       resolvedPaths.addAll(resolved);
     }
+
+    // DOLPHIN_ISOLATION_BEGIN: neosync_flycast_system_vmu
+    if (system.folderName.toLowerCase() == 'dc') {
+      final systemRoot = await _getRetroArchSystemPath();
+      if (systemRoot != null) resolvedPaths.add(path.join(systemRoot, 'dc'));
+    }
+    // DOLPHIN_ISOLATION_END: neosync_flycast_system_vmu
 
     // Eliminar duplicados y rutas inexistentes si requireExists es true
     var result = resolvedPaths.toSet();
@@ -258,6 +276,10 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
   ({String cloudPath, String gameName, bool isState, String category})?
   _resolveArmsx2FileForCloud(File file, String root) {
+    // DOLPHIN_ISOLATION_BEGIN: neosync_armsx2_source
+    if (NeoSyncSaveSource.resolve(filePath: file.path, rootPath: root,
+        family: NeoSyncSaveFamily.armsx2) == null) return null;
+    // DOLPHIN_ISOLATION_END: neosync_armsx2_source
     const categories = <String>['memcards', 'savestates', 'sstates'];
     final relative = path.relative(file.path, from: root).replaceAll('\\', '/');
     if (relative == '..' || relative.startsWith('../')) return null;
@@ -579,57 +601,76 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     String root,
     String titleId, {
     bool allowCreate = false,
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_1
+    String? profileId,
+    String? saveId,
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_1
   }) {
-    final rootDir = Directory(root);
-    if (!rootDir.existsSync()) return null;
-
-    try {
-      for (final entity in rootDir.listSync(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is Directory &&
-// DOLPHIN_ISOLATION_BEGIN: neosync_melonx_restore_source
-            path.basename(entity.path).toLowerCase() == titleId.toLowerCase() &&
-            NeoSyncSavePolicy.melonxLocation(
-              path.join(entity.path, '__save_probe__'), root) != null) {
-// DOLPHIN_ISOLATION_END: neosync_melonx_restore_source
-          return entity.path;
+    // DOLPHIN_ISOLATION_BEGIN: neosync_melonx_native_restore
+    final matches = <String>{};
+    for (final saveBase in NeoSyncSavePolicy.melonxSaveRoots(root)) {
+      try {
+        for (final entity in Directory(saveBase).listSync(
+            recursive: true, followLinks: false).whereType<Directory>()) {
+          final location = NeoSyncSavePolicy.melonxSaveLocation(
+              path.join(entity.path, '__save_probe__'), root);
+          if (location == null ||
+              location.titleId.toLowerCase() != titleId.toLowerCase() ||
+              (profileId != null && location.profileId != profileId) ||
+              (saveId != null && location.saveId != saveId)) continue;
+          matches.add(location.payloadRoot);
         }
+      } on FileSystemException catch (e) {
+        NeoSyncProvider._log.w('Could not inspect MeloNX committed saves: $e');
       }
-    } catch (e) {
-      NeoSyncProvider._log.w('Could not scan MeloNX save tree: $e');
     }
-
-    if (!allowCreate) return null;
-
-    var bisRoot = root;
-    if (path.basename(root).toLowerCase() != 'bis') {
-      final nestedBis = path.join(root, 'bis');
-      if (Directory(nestedBis).existsSync()) bisRoot = nestedBis;
-    }
-
-    final saveBase = path.join(bisRoot, 'user', 'save', '0000000000000000');
-    final saveBaseDir = Directory(saveBase);
-    if (!saveBaseDir.existsSync()) return null;
-
-    try {
-      final userDirs = saveBaseDir
-          .listSync(followLinks: false)
-          .whereType<Directory>();
-      if (userDirs.isEmpty) return null;
-      return path.join(userDirs.first.path, titleId);
-    } catch (_) {
-      return null;
-    }
+    // A different profile/container is never silently selected. Creation of a
+    // native LibHac save requires its indexer: let the emulator create it first.
+    return matches.length == 1 ? matches.single : null;
+    // DOLPHIN_ISOLATION_END: neosync_melonx_native_restore
   }
 
   /// Resolves a local save file back to its library game.
   Future<GameModel?> _gameForSaveFile(File file) async {
     final saveBase = path.basenameWithoutExtension(file.path);
     try {
+      // DOLPHIN_ISOLATION_BEGIN: neosync_shared_flycast_game
+      final systemRoot = await _getRetroArchSystemPath();
+      if (systemRoot != null && NeoSyncSaveSource.resolve(
+          filePath: file.path, rootPath: path.join(systemRoot, 'dc'),
+          family: NeoSyncSaveFamily.retroArchFlycastSystem) != null) {
+        return GameModel(name: 'Dreamcast Memory Cards', realname: 'Dreamcast Memory Cards',
+            romname: 'Dreamcast Memory Cards', systemFolderName: 'dc', coreName: 'flycast',
+            year: '', developer: '', publisher: '', genre: '', players: '', rating: 0);
+      }
+      // DOLPHIN_ISOLATION_END: neosync_shared_flycast_game
+      // DOLPHIN_ISOLATION_BEGIN: neosync_psp_savedata_game
+      final psp = RegExp(r'(?:^|/)(?:PSP/)?SAVEDATA/([A-Za-z]{4}[0-9]{5})[^/]*/',
+          caseSensitive: false).firstMatch(file.path.replaceAll('\\', '/'));
+      if (psp != null) {
+        final titleId = psp[1]!.toUpperCase();
+        final candidates = (await GameRepository.loadGamesForSystem('psp'))
+            .where((row) => row.titleId?.toUpperCase() == titleId ||
+                row.filename.toUpperCase().contains(titleId)).toList();
+        if (candidates.length == 1) {
+          return GameModel.fromDatabaseModel(candidates.single);
+        }
+        // Never assign ICON0/PLAYDATA to a game by a component-name prefix.
+        return null;
+      }
+      // DOLPHIN_ISOLATION_END: neosync_psp_savedata_game
       final row = await GameRepository.findRomByFilenamePrefix(saveBase);
       if (row == null) return null;
+      // DOLPHIN_ISOLATION_BEGIN: neosync_retain_core_metadata
+      final folder = row['folder_name']?.toString();
+      if (folder != null) {
+        final candidates = (await GameRepository.loadGamesForSystem(folder))
+            .where((item) => item.filename == row['filename']).toList();
+        if (candidates.length == 1) {
+          return GameModel.fromDatabaseModel(candidates.single);
+        }
+      }
+      // DOLPHIN_ISOLATION_END: neosync_retain_core_metadata
       final romname = row['filename']?.toString() ?? saveBase;
       final title = row['title_name']?.toString();
       return GameModel(
@@ -668,28 +709,39 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       );
     }
 
-    String? emulatorSlug;
-    final relative = path.relative(file.path, from: basePath);
-    final segments = relative.split(RegExp(r'[/\\]'));
-    if (!relative.startsWith('..') && segments.length > 1) {
-      final coreFolder = segments.first;
-      if (coreFolder.isNotEmpty) {
-        emulatorSlug = CloudPathBuilder.retroArchCoreSlug(coreFolder);
+    // DOLPHIN_ISOLATION_BEGIN: neosync_flycast_native_key
+    if (systemFolder.toLowerCase() == 'dc') {
+      final systemRoot = await _getRetroArchSystemPath();
+      if (systemRoot != null) {
+        final source = NeoSyncSaveSource.resolve(filePath: file.path,
+            rootPath: path.join(systemRoot, 'dc'),
+            family: NeoSyncSaveFamily.retroArchFlycastSystem);
+        if (source != null) {
+          return CloudPathBuilder.build(system: 'dc', emulatorSlug: 'retroarch.flycast',
+              scope: 'shared', filePath: source.relativePath);
+        }
       }
     }
-
-    if ((emulatorSlug == null || emulatorSlug.isEmpty) &&
-        game.coreName != null &&
-        game.coreName!.trim().isNotEmpty) {
+    // DOLPHIN_ISOLATION_END: neosync_flycast_native_key
+    // DOLPHIN_ISOLATION_BEGIN: neosync_core_identity
+    String? emulatorSlug;
+    final relative = path.relative(file.path, from: basePath);
+    if (game.coreName?.trim().isNotEmpty == true) {
       emulatorSlug = CloudPathBuilder.retroArchCoreSlug(game.coreName!);
+    } else if (game.emulatorName?.trim().isNotEmpty == true) {
+      final candidate = CloudPathBuilder.slugFromEmulatorUniqueId(game.emulatorName!);
+      if (candidate.startsWith('retroarch.')) emulatorSlug = candidate;
     }
-    if ((emulatorSlug == null || emulatorSlug.isEmpty) &&
-        game.emulatorName != null &&
-        game.emulatorName!.trim().isNotEmpty) {
-      emulatorSlug = CloudPathBuilder.slugFromEmulatorUniqueId(
-        game.emulatorName!,
-      );
+    // A native PSP/SAVEDATA/card folder is not a core name. When the library
+    // lacks core metadata, a single-file save's immediate core directory can
+    // still identify its owner; nested native bundles require real metadata.
+    final segments = relative.replaceAll('\\', '/').split('/');
+    if (emulatorSlug == null && segments.length == 2 &&
+        !const ['psp', 'savedata', 'memcards', 'savestates', 'sstates']
+            .contains(segments.first.toLowerCase())) {
+      emulatorSlug = CloudPathBuilder.retroArchCoreSlug(segments.first);
     }
+    // DOLPHIN_ISOLATION_END: neosync_core_identity
     if (emulatorSlug == null || emulatorSlug.isEmpty) {
       throw StateError(
         'NeoSync v2: emulator/core could not be resolved for ${game.romname}',
@@ -703,14 +755,31 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         ((systemLower == 'dc' || systemLower == 'dreamcast') &&
             lowerName.contains('vmu_save'));
 
+    // DOLPHIN_ISOLATION_BEGIN: neosync_native_relative_path
+    // Keep payload directories after the optional core folder. Flattening
+    // PARAM.SFO/main/icon.sys destroys native savedata and card identities.
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw StateError('Save is outside its configured root');
+    }
+    var nativeParts = relative.replaceAll('\\', '/').split('/');
+    if (nativeParts.length > 1 &&
+        CloudPathBuilder.retroArchCoreSlug(nativeParts.first) == emulatorSlug) {
+      nativeParts = nativeParts.sublist(1);
+    }
+    final nativePath = nativeParts.join('/');
+    final directoryCard = systemLower == 'ps2' && !isState &&
+        nativeParts.length > 1;
+    final shared = isSharedCard || directoryCard;
     return CloudPathBuilder.build(
       system: systemFolder,
       emulatorSlug: emulatorSlug,
-      scope: isSharedCard ? 'shared' : 'game',
-      gameName: isSharedCard ? null : path.basenameWithoutExtension(file.path),
-      filePath: path.basename(file.path),
+      scope: shared ? 'shared' : 'game',
+      gameName: shared ? null : nativeParts.length > 1
+          ? game.name : path.basenameWithoutExtension(file.path),
+      filePath: nativePath,
       isState: isState,
     );
+    // DOLPHIN_ISOLATION_END: neosync_native_relative_path
   }
 
   Future<String?> _retroArchCoreFolderForSlug(
@@ -737,24 +806,10 @@ extension NeoSyncPathResolver on NeoSyncProvider {
   }
 
   /// Calcula la ruta relativa para sincronización
-  String _calculateRelativePath(
-    File file,
-    String basePath, {
-    bool isState = false,
-  }) {
-    var relative = path.relative(file.path, from: basePath);
-    String root = isState ? 'states' : 'saves';
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_2
 
-    // Si RetroArch está en la raíz o similar, 'parent' de basePath podría ser útil
-    // Pero por consistencia, NeoSync guarda como 'root/relative' si no es absoluto
-    if (!relative.startsWith('..')) {
-      return path.join(root, relative).replaceAll('\\', '/');
-    }
 
-    // Si está fuera de basePath, usar solo el nombre del archivo
-    return path.join(root, path.basename(file.path)).replaceAll('\\', '/');
-  }
-
+// DOLPHIN_ISOLATION_END: neosync_repair205_0_2
   /// Resuelve la ruta local para un archivo de la nube para un juego específico
   /// Resuelve la ruta local para un archivo de la nube para un juego específico
   /// Puede retornar múltiples rutas si el sistema lo requiere (ej. múltiples emuladores Switch)
@@ -777,14 +832,6 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
     final system = await _getSystemForGame(game);
     if (system == null) return [];
-
-    final resolvedFolders = await resolveUniversalPaths(
-      system,
-      game: game,
-      ensureExists:
-          false, // Permitir carpetas que aún no existen para descargar
-    );
-    if (resolvedFolders.isEmpty) return [];
 
     // DOLPHIN_ISOLATION_BEGIN: neosync_restore_original_path
 final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
@@ -812,16 +859,42 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
         if (root != null && root.isNotEmpty) {
           final titleId = await _meloNXTitleIdForGame(game);
           if (titleId == null) return [];
+          // DOLPHIN_ISOLATION_BEGIN: neosync_melonx_profile_restore
+          final parts = v2Path.filePath.split('/');
+          final native = parts.length >= 5 && parts.first == 'profiles';
+          if (native && parts[2].toLowerCase() != titleId.toLowerCase()) return [];
           final gameSaveRoot = _resolveMeloNXGameSaveDirectory(
             root,
             titleId,
-            allowCreate: true,
+            profileId: native ? parts[1] : null,
+            saveId: native ? parts[3] : null,
           );
           if (gameSaveRoot == null) return [];
-          return [path.join(gameSaveRoot, v2Path.filePath)];
+          final payload = native ? parts.sublist(4).join('/') : v2Path.filePath;
+          return [path.join(gameSaveRoot, payload)];
+          // DOLPHIN_ISOLATION_END: neosync_melonx_profile_restore
         }
       }
     }
+
+    // DOLPHIN_ISOLATION_BEGIN: neosync_flycast_native_restore
+    if (v2Path != null && !v2Path.isState && v2Path.system == 'dc' &&
+        v2Path.emulatorSlug == 'retroarch.flycast' && v2Path.scope == 'shared' &&
+        RegExp(r'^(?:system/dc/)?vmu_save_[A-D][12]\.bin$', caseSensitive: false)
+            .hasMatch(v2Path.filePath)) {
+      final systemRoot = await _getRetroArchSystemPath();
+      return systemRoot == null ? []
+          : [path.join(systemRoot, 'dc', path.basename(v2Path.filePath))];
+    }
+    // DOLPHIN_ISOLATION_END: neosync_flycast_native_restore
+    // DOLPHIN_ISOLATION_BEGIN: neosync_native_restore_boundary
+    if (v2Path != null && const ['armsx2', 'rpcs3', 'melonx']
+        .contains(v2Path.emulatorSlug)) return [];
+    final resolvedFolders = await resolveUniversalPaths(
+      system, game: game, ensureExists: false,
+    );
+    if (resolvedFolders.isEmpty) return [];
+    // DOLPHIN_ISOLATION_END: neosync_native_restore_boundary
 
     // Buscar la carpeta más apropiada.
     String targetFolder = resolvedFolders.first;
@@ -1046,22 +1119,62 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
   Future<List<File>> _getSaveFiles(String directoryPath) async {
     final dir = Directory(directoryPath);
     if (!await dir.exists()) return [];
-
+    // DOLPHIN_ISOLATION_BEGIN: neosync_root_owned_scan
+    final saves = await _getRetroArchSavesPath();
+    final states = await _getRetroArchStatesPath();
+    final systemRoot = await _getRetroArchSystemPath();
+    final flycast = systemRoot == null ? null : path.join(systemRoot, 'dc');
+    final arms = ConfigService.linkedArmsx2FolderPath;
+    final rpcs3 = Rpcs3LibraryService.linkedDataPath;
+    final melonx = ConfigService.linkedMelonxSaveFolderPath;
+    bool contains(String? root) => root != null && root.isNotEmpty &&
+        (path.equals(root, directoryPath) || path.isWithin(root, directoryPath));
+    final NeoSyncSaveFamily? family;
+    final String? root;
+    if (contains(flycast)) {
+      family = NeoSyncSaveFamily.retroArchFlycastSystem;
+      root = flycast;
+    } else if (contains(melonx)) {
+      family = NeoSyncSaveFamily.melonx;
+      root = melonx;
+    } else if (contains(rpcs3)) {
+      family = NeoSyncSaveFamily.rpcs3;
+      root = rpcs3;
+    } else if (contains(arms)) {
+      family = NeoSyncSaveFamily.armsx2;
+      root = arms;
+    } else if (contains(states)) {
+      family = NeoSyncSaveFamily.retroArchStates;
+      root = states;
+    } else if (contains(saves)) {
+      family = NeoSyncSaveFamily.retroArchSaves;
+      root = saves;
+    } else {
+      family = null;
+      root = null;
+    }
+    final scanRoots = family == NeoSyncSaveFamily.melonx
+        ? NeoSyncSavePolicy.melonxSaveRoots(directoryPath) : [directoryPath];
     try {
-      return await dir
-          // DOLPHIN_ISOLATION_BEGIN: neosync_no_symlink_scan
-.list(recursive: true, followLinks: false)
-// DOLPHIN_ISOLATION_END: neosync_no_symlink_scan
-          .where((entity) => entity is File)
-          .cast<File>()
-// DOLPHIN_ISOLATION_BEGIN: neosync_scan_save_policy
-          .where((file) => NeoSyncSavePolicy.classify(file.path) != NeoSyncSaveKind.foreign)
-// DOLPHIN_ISOLATION_END: neosync_scan_save_policy
-          .toList();
+      final result = <File>[];
+      for (final scan in scanRoots) {
+        await for (final entity in Directory(scan).list(
+            recursive: true, followLinks: false)) {
+          if (entity is! File) continue;
+          if (family != null && root != null) {
+            if (NeoSyncSaveSource.resolve(filePath: entity.path,
+                rootPath: root, family: family) != null) result.add(entity);
+          } else if (NeoSyncSavePolicy.classify(entity.path) == NeoSyncSaveKind.save) {
+            result.add(entity);
+          }
+        }
+      }
+      return result;
     } catch (e) {
       NeoSyncProvider._log.e('Error listing save files in $directoryPath: $e');
       return [];
     }
+    // DOLPHIN_ISOLATION_END: neosync_root_owned_scan
   }
 
   /// Calculates relative path for Switch saves

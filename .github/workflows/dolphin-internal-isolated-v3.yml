@@ -1,16 +1,16 @@
 name: Build NeoStation iOS IPA
-run-name: NeoStation NeoSync Dolphin Build ${{ inputs.build_number || '204' }} • ${{ github.ref_name }} • ${{ github.sha }}
+run-name: NeoStation NeoSync Dolphin Build ${{ inputs.build_number || '205' }} • ${{ github.ref_name }} • ${{ github.sha }}
 
 on:
   push:
-    branches: [feature/neosync-dolphin-internal, fix/dolphin-savestates-neosync-build201, fix/dolphin-savestates-stability-build202, fix/dolphin-session-performance-build203, fix/dolphin-relaunch-neosync-build204]
+    branches: [feature/neosync-dolphin-internal, fix/dolphin-savestates-neosync-build201, fix/dolphin-savestates-stability-build202, fix/dolphin-session-performance-build203, fix/dolphin-relaunch-neosync-build204, fix/neosync-native-saves-build205]
   workflow_dispatch:
     inputs:
       build_number:
         description: 'Candidate build number (stable 198 is preserved separately)'
         type: string
         required: true
-        default: '204'
+        default: '205'
 
 permissions:
   contents: read
@@ -22,13 +22,13 @@ concurrency:
 jobs:
   build:
     name: Build and audit NeoStation IPA
-    if: github.ref_name == 'main' || github.ref_name == 'backup' || github.ref_name == 'feature/neosync-dolphin-internal' || github.ref_name == 'fix/dolphin-savestates-neosync-build201' || github.ref_name == 'fix/dolphin-savestates-stability-build202' || github.ref_name == 'fix/dolphin-session-performance-build203' || github.ref_name == 'fix/dolphin-relaunch-neosync-build204'
+    if: github.ref_name == 'main' || github.ref_name == 'backup' || github.ref_name == 'feature/neosync-dolphin-internal' || github.ref_name == 'fix/dolphin-savestates-neosync-build201' || github.ref_name == 'fix/dolphin-savestates-stability-build202' || github.ref_name == 'fix/dolphin-session-performance-build203' || github.ref_name == 'fix/dolphin-relaunch-neosync-build204' || github.ref_name == 'fix/neosync-native-saves-build205'
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '204' }}
-      IPA_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '204' }}
-      ARTIFACT_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '204' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '205' }}
+      IPA_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '205' }}
+      ARTIFACT_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '205' }}
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin

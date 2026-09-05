@@ -5,6 +5,9 @@ import '../services/dolphin_neosync_store.dart';
 import '../services/dolphin_system_files.dart';
 import '../services/neosync/neo_sync_save_policy.dart';
 import '../services/neosync/neo_sync_cloud_cleanup.dart';
+import '../services/neosync/neo_sync_restore_transaction.dart';
+import '../services/neosync/neo_sync_status_rules.dart';
+import '../models/neo_sync_save_units.dart';
 import 'package:crypto/crypto.dart' as saveCrypto;
 // DOLPHIN_ISOLATION_END: neosync_imports
 import 'package:flutter/material.dart';
@@ -78,6 +81,7 @@ class NeoSyncProvider extends ChangeNotifier {
   final DolphinSaveTitleCache _dolphinTitles = DolphinSaveTitleCache();
   String? _saveAuditMessage;
   bool _saveAuditInProgress = false;
+  final Set<String> _processedNativeDownloads = {};
   String? get saveAuditMessage => _saveAuditMessage;
   // DOLPHIN_ISOLATION_END: neosync_queue
 
@@ -184,6 +188,42 @@ class NeoSyncProvider extends ChangeNotifier {
   List<NeoSyncFile> getGameCloudSaves(String gameId) =>
       _gameCloudSaves[gameId] ?? [];
 
+  // DOLPHIN_ISOLATION_BEGIN: neosync_native_units
+  List<NeoSyncLocalSaveUnit> getGameLocalSaveUnits(String gameId) =>
+      NeoSyncSaveUnits.local(getGameLocalSaves(gameId));
+
+  List<NeoSyncCloudSaveUnit> getGameCloudSaveUnits(String gameId) =>
+      NeoSyncSaveUnits.cloud(getGameCloudSaves(gameId));
+
+  bool _supportsNeoSync(SystemModel system) => system.neosync.sync ||
+      (Platform.isIOS && const {'psp', 'pspminis'}.contains(system.folderName.toLowerCase()));
+
+  /// Source ownership comes from the configured emulator folders, never from
+  /// a ROM title or a filename extension alone.
+  Future<NeoSyncSaveSource?> _sourceForLocalFile(File file) async {
+    final roots = <({String? root, NeoSyncSaveFamily family})>[
+      (root: ConfigService.linkedArmsx2FolderPath, family: NeoSyncSaveFamily.armsx2),
+      (root: Rpcs3LibraryService.linkedDataPath, family: NeoSyncSaveFamily.rpcs3),
+      (root: ConfigService.linkedMelonxSaveFolderPath, family: NeoSyncSaveFamily.melonx),
+      (root: await _getRetroArchStatesPath(), family: NeoSyncSaveFamily.retroArchStates),
+      (root: await _getRetroArchSavesPath(), family: NeoSyncSaveFamily.retroArchSaves),
+      (root: await _flycastSystemSaveRoot(), family: NeoSyncSaveFamily.retroArchFlycastSystem),
+    ];
+    for (final entry in roots) {
+      if (entry.root == null || entry.root!.isEmpty) continue;
+      if (!path.isWithin(entry.root!, file.path)) continue;
+      return NeoSyncSaveSource.resolve(
+        filePath: file.path, rootPath: entry.root!, family: entry.family,
+      );
+    }
+    return null;
+  }
+  Future<String?> _flycastSystemSaveRoot() async {
+    final system = await _getRetroArchSystemPath();
+    return system == null ? null : path.join(system, 'dc');
+  }
+  // DOLPHIN_ISOLATION_END: neosync_native_units
+
   /// Internal bridge to allow [part] files to trigger UI updates.
   void notify() {
     notifyListeners();
@@ -247,7 +287,20 @@ class NeoSyncProvider extends ChangeNotifier {
       throw const FormatException('NeoSync returned invalid file data');
     }
     final bytes = List<int>.from(rawData);
-    return cloudFile.fileName.toLowerCase().endsWith('.neosync.gz')
+    // DOLPHIN_ISOLATION_BEGIN: neosync_verified_payload
+    final expectedHash = cloudFile.checksum?.trim().toLowerCase();
+    if (expectedHash != null && expectedHash.isNotEmpty &&
+        _neoSyncService.calculateFileHash(bytes) != expectedHash) {
+      throw StateError('NeoSync download checksum mismatch: ${cloudFile.displayName}');
+    }
+    if (cloudFile.fileSize > 0 && bytes.length != cloudFile.fileSize) {
+      throw StateError('NeoSync download is incomplete: ${cloudFile.displayName}');
+    }
+    // DOLPHIN_ISOLATION_END: neosync_verified_payload
+// DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0
+    return (cloudFile.fileName.toLowerCase().endsWith('.neosync.gz') ||
+        cloudFile.sourceSavePath.toLowerCase().endsWith('.neosync.gz'))
+// DOLPHIN_ISOLATION_END: neosync_repair205_0
         ? gzip.decode(bytes)
         : bytes;
   }
@@ -270,8 +323,15 @@ class NeoSyncProvider extends ChangeNotifier {
     }
     // DOLPHIN_ISOLATION_END: dolphin_download_writer
 
-    final payload = await downloadOnlineFileBytes(cloudFile);
-    await localFile.writeAsBytes(payload);
+    // DOLPHIN_ISOLATION_BEGIN: neosync_staged_write
+    final account = _dolphinAccount;
+    await NeoSyncRestoreTransaction.restore([
+      NeoSyncRestoreEntry(destination: localFile,
+        root: await _restoreRoot(cloudFile, localFile),
+        loadVerifiedBytes: () => downloadOnlineFileBytes(cloudFile),
+        modified: cloudFile.fileModifiedAt),
+    ], isCurrentAccount: () => isNeoSyncAuthenticated && _dolphinAccount == account);
+    // DOLPHIN_ISOLATION_END: neosync_staged_write
 
     try {
       final stat = await localFile.stat();
@@ -286,6 +346,86 @@ class NeoSyncProvider extends ChangeNotifier {
       _log.w('Could not save sync state for ${localFile.path}: $e');
     }
   }
+
+  // DOLPHIN_ISOLATION_BEGIN: neosync_native_restore
+  Future<Directory> _restoreRoot(NeoSyncFile cloud, File destination) async {
+    final parsed = NeoSyncSavePolicy.canonical(cloud.sourceSavePath);
+    final String? root;
+    if (Platform.isIOS && parsed?.emulatorSlug == 'armsx2') {
+      root = ConfigService.linkedArmsx2FolderPath;
+    } else if (Platform.isIOS && parsed?.emulatorSlug == 'rpcs3') {
+      root = Rpcs3LibraryService.linkedDataPath;
+    } else if (Platform.isIOS && parsed?.emulatorSlug == 'melonx') {
+      root = ConfigService.linkedMelonxSaveFolderPath;
+    } else if (parsed?.system == 'dc' && parsed?.filePath.startsWith('system/dc/') == true) {
+      root = await _flycastSystemSaveRoot();
+    } else {
+      root = parsed?.isState == true || cloud.sourceSavePath.startsWith('states/')
+          ? await _getRetroArchStatesPath() : await _getRetroArchSavesPath();
+    }
+    if (root == null || !path.isWithin(root, destination.path)) {
+      throw StateError('NeoSync destination is outside the linked save folder');
+    }
+    return Directory(root);
+  }
+
+  /// Restores all members as one operation, preserving their native paths.
+  /// No destination changes until every download has been checked.
+  Future<void> restoreCloudSaveUnit(List<NeoSyncFile> members, {GameModel? game}) async {
+    if (!isNeoSyncAuthenticated) throw StateError('NeoSync authentication required');
+    if (members.isEmpty) return;
+    final units = NeoSyncSaveUnits.cloud(members);
+    if (units.length != 1) throw StateError('Select one native save at a time');
+    final account = _dolphinAccount;
+    final entries = <NeoSyncRestoreEntry>[];
+    final byDestination = <String, List<NeoSyncFile>>{};
+    final targets = <({NeoSyncFile cloud, File file})>[];
+    for (final cloud in members) {
+      if (cloud.saveKind != NeoSyncSaveKind.save) {
+        throw StateError('NeoSync refuses an unverified save');
+      }
+      if (cloud.dolphinTarget != null) {
+        if (members.length != 1) throw StateError('Invalid Dolphin save unit');
+        await _restoreDolphinCloud(cloud);
+        return;
+      }
+      final owner = game ?? await _findGameForCloudFile(cloud);
+      if (owner == null) throw StateError('Cannot identify the owner of this save');
+      final destinations = await resolveCloudFileToLocalPath(owner, cloud);
+      if (destinations.isEmpty) throw StateError('The native save folder is unavailable');
+      for (final target in destinations) {
+        final file = File(target);
+        final identity = path.normalize(file.absolute.path);
+        final duplicates = byDestination.putIfAbsent(identity, () => []);
+        duplicates.add(cloud);
+        if (duplicates.length > 1) continue;
+        entries.add(NeoSyncRestoreEntry(destination: file,
+          root: await _restoreRoot(cloud, file), modified: cloud.fileModifiedAt,
+          loadVerifiedBytes: () async {
+            final bytes = await downloadOnlineFileBytes(duplicates.first);
+            final hash = saveCrypto.sha256.convert(bytes);
+            for (final duplicate in duplicates.skip(1)) {
+              final other = await downloadOnlineFileBytes(duplicate);
+              if (other.length != bytes.length || saveCrypto.sha256.convert(other) != hash) {
+                throw StateError('Conflicting cloud copies of one native save member');
+              }
+            }
+            return bytes;
+          }));
+        targets.add((cloud: cloud, file: file));
+      }
+    }
+    await NeoSyncRestoreTransaction.restore(entries,
+      isCurrentAccount: () => isNeoSyncAuthenticated && _dolphinAccount == account);
+    for (final target in targets) {
+      final stat = await target.file.stat();
+      await SyncRepository.saveSyncState(target.file.path,
+        stat.modified.millisecondsSinceEpoch,
+        target.cloud.fileModifiedAtTimestamp ?? 0, stat.size,
+        fileHash: target.cloud.checksum);
+    }
+  }
+  // DOLPHIN_ISOLATION_END: neosync_native_restore
 
   /// Resolves the [SystemModel] associated with a specific game.
   ///
