@@ -757,7 +757,7 @@ class _SystemEmulatorSettingsDialogState
       if (Platform.isMacOS && selectedPath.endsWith('.app')) {
         exists = await Directory(selectedPath).exists();
       } else {
-        exists = await originalFileExists(selectedPath);
+        exists = await File(selectedPath).exists();
       }
 
       if (!exists) {
