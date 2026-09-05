@@ -44,7 +44,7 @@
   UIImage* rendered = [renderer imageWithActions:^(UIGraphicsImageRendererContext* context) {
     [overlay.layer renderInContext:context.CGContext];
   }];
-  XCTAssertNotNil(rendered.CGImage);
+  XCTAssertTrue(rendered.CGImage != nullptr);
   XCTAssertEqual(CGImageGetWidth(rendered.CGImage), (size_t)(300 * rendered.scale));
 
   [overlay appendSnapshot:[self snapshotAt:300000 frameTime:20 width:1280]];
