@@ -114,6 +114,10 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
   DolphinRecordingController* recorder = [[DolphinRecordingController alloc] initWithCaptureSource:source];
   XCTestExpectation* start = [self expectationWithDescription:@"cancel start"];
   XCTestExpectation* stop = [self expectationWithDescription:@"stop once"];
+  XCTestExpectation* idle = [self expectationWithDescription:@"cancelled recording became idle"];
+  recorder.statusHandler = ^(DolphinRecordingState state, NSError*) {
+    if (state == DolphinRecordingStateIdle) [idle fulfill];
+  };
   __block NSUInteger stops = 0;
   [recorder startWithCompletion:^(NSError* error) { XCTAssertNotNil(error); [start fulfill]; }];
   XCTAssertFalse(source.isMicrophoneEnabled);
@@ -123,7 +127,7 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
     [stop fulfill];
   }];
   [source completeStart];
-  [self waitForExpectations:@[start, stop] timeout:3];
+  [self waitForExpectations:@[start, stop, idle] timeout:3];
   XCTAssertEqual(stops, 1u); XCTAssertEqual(source.stops, 1u);
   XCTAssertFalse(source.isRecording);
 }
@@ -154,6 +158,10 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
   [self waitForExpectations:@[start] timeout:2];
   XCTAssertFalse(source.isMicrophoneEnabled);
   XCTestExpectation* stopped = [self expectationWithDescription:@"real mp4 finalized"];
+  XCTestExpectation* idle = [self expectationWithDescription:@"encoded recording became idle"];
+  recorder.statusHandler = ^(DolphinRecordingState state, NSError*) {
+    if (state == DolphinRecordingStateIdle) [idle fulfill];
+  };
   __block NSURL* result;
   // A real-time source, including a pause in new pictures: the CFR writer
   // must hold the previous image while app audio continues at its own PTS.
@@ -182,7 +190,7 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
       XCTAssertNotNil(url); result = url; [stopped fulfill];
     }];
   });
-  [self waitForExpectations:@[stopped] timeout:10];
+  [self waitForExpectations:@[stopped, idle] timeout:10];
   XCTAssertFalse(source.isRecording); XCTAssertEqual(source.stops, 1u);
   XCTAssertTrue([result.path containsString:@"/Documents/Recordings/Dolphin/"]);
   if (!result) return;

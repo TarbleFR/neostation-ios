@@ -265,6 +265,11 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
     return;
   }
   [_stopCompletions addObject:[completion copy]];
+#if DEBUG
+  NSLog(@"[DolphinRecording] stop add self=%p generation=%llu state=%ld callbacks=%lu array=%@ main=%d",
+      self, (unsigned long long)_generation.load(), (long)self.state,
+      (unsigned long)_stopCompletions.count, NSStringFromClass(_stopCompletions.class), NSThread.isMainThread);
+#endif
   [self requestStop:nil];
 }
 - (void)signalFailure:(NSError*)error {
@@ -332,8 +337,17 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   __weak DolphinRecordingController* weakSelf = self;
   void (^completed)(NSError*) = ^(NSError* error) {
     DolphinRecordingController* strongSelf = weakSelf;
+#if DEBUG
+    NSLog(@"[DolphinRecording] source completed self=%p generation=%llu error=%@",
+        strongSelf, (unsigned long long)generation, error);
+#endif
     if (!strongSelf) return;
     dispatch_async(strongSelf->_queue, ^{
+#if DEBUG
+      NSLog(@"[DolphinRecording] source queued self=%p generation=%llu current=%llu finalizing=%d delivered=%d writer=%p",
+          strongSelf, (unsigned long long)generation, (unsigned long long)strongSelf->_generation.load(),
+          strongSelf->_finalizing, strongSelf->_finishDelivered, strongSelf->_writer);
+#endif
       if (generation != strongSelf->_generation.load() || strongSelf->_finalizing) return;
       if (error && !strongSelf->_terminalError) strongSelf->_terminalError = error;
       strongSelf->_sourceStopped = YES;
@@ -624,6 +638,12 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   }
 }
 - (void)finishAcceptedFrames {
+#if DEBUG
+  NSLog(@"[DolphinRecording] finish accepted self=%p generation=%llu finalizing=%d delivered=%d writer=%p status=%ld frames=%lld audio=%lu pending=%llu",
+      self, (unsigned long long)_generation.load(), _finalizing, _finishDelivered, _writer,
+      (long)_writer.status, (long long)_timeline.nextIndex(), (unsigned long)_audio.size(),
+      (unsigned long long)_pendingSequence);
+#endif
   if (_finalizing || _finishDelivered) return;
   _finalizing = YES;
   _accepting = false;
@@ -663,6 +683,10 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   _imageContext = nil;
 }
 - (void)deliverFinished:(BOOL)completed {
+#if DEBUG
+  NSLog(@"[DolphinRecording] deliver queued self=%p generation=%llu completed=%d delivered=%d error=%@",
+      self, (unsigned long long)_generation.load(), completed, _finishDelivered, _terminalError);
+#endif
   if (_finishDelivered) return;
   _finishDelivered = YES;
   [self releaseBuffers];
@@ -671,6 +695,11 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   if (!completed && _outputURL) [NSFileManager.defaultManager removeItemAtURL:_outputURL error:nil];
   _adaptor = nil; _videoInput = nil; _audioInput = nil; _writer = nil;
   dispatch_async(dispatch_get_main_queue(), ^{
+#if DEBUG
+    NSLog(@"[DolphinRecording] deliver main self=%p generation=%llu state=%ld callbacks=%lu array=%@",
+        self, (unsigned long long)self->_generation.load(), (long)self.state,
+        (unsigned long)self->_stopCompletions.count, NSStringFromClass(self->_stopCompletions.class));
+#endif
     if (self->_backgroundTask != UIBackgroundTaskInvalid) {
       UIBackgroundTaskIdentifier task = self->_backgroundTask;
       self->_backgroundTask = UIBackgroundTaskInvalid;
@@ -681,11 +710,22 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
     self->_lastError = error;
     NSArray* completions = [self->_stopCompletions copy];
     [self->_stopCompletions removeAllObjects];
+#if DEBUG
+    NSLog(@"[DolphinRecording] deliver copied self=%p callbacks=%lu remaining=%lu",
+        self, (unsigned long)completions.count, (unsigned long)self->_stopCompletions.count);
+#endif
     self->_deliveringFinish = YES;
     [self publishState:DolphinRecordingStateIdle error:error];
     for (id callback in completions) {
+#if DEBUG
+      NSLog(@"[DolphinRecording] invoke callback self=%p callback=%p class=%@",
+          self, callback, NSStringFromClass([callback class]));
+#endif
       void (^completion)(NSURL*, NSError*) = callback;
       completion(url, error);
+#if DEBUG
+      NSLog(@"[DolphinRecording] callback returned self=%p", self);
+#endif
     }
     self->_deliveringFinish = NO;
   });

@@ -37,6 +37,9 @@ tests.source_build_phase.add_file_reference(project.main_group.new_file(File.joi
       'SWIFT_VERSION' => '5.0',
       'OTHER_LDFLAGS' => ['$(inherited)', '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'AVFoundation', '-framework', 'ReplayKit', '-framework', 'CoreImage', '-framework', 'VideoToolbox', '-framework', 'Metal', '-framework', 'CoreMedia', '-framework', 'CoreVideo', '-framework', 'AudioToolbox'],
     })
+    if configuration.name == 'Debug'
+      configuration.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = ['$(inherited)', 'DEBUG=1']
+    end
   end
 end
 app.build_configurations.each do |configuration|
