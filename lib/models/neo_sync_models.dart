@@ -90,6 +90,29 @@ class NeoSyncConfig {
 
 /// Metadata for a file stored on the NeoSync cloud server.
 class NeoSyncFile {
+  // DOLPHIN_ISOLATION_BEGIN: neosync_filename_regression
+  /// Accept the filename spellings used by NeoSync listings. A storage path or
+  /// game title must never be substituted for an operational cloud filename.
+  static String _readFileName(Map<String, dynamic> json) {
+    for (final key in ['file_name', 'filename', 'fileName']) {
+      final value = json[key];
+      if (value is String && value.trim().isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  /// Display fallback only: keep download, restore and delete identities intact
+  /// when historical cloud metadata has no file_name.
+  String get displayName {
+    if (fileName.trim().isNotEmpty) return fileName;
+    final segments = filePath.replaceAll('\\', '/').split('/')
+        .where((segment) => segment.trim().isNotEmpty);
+    if (segments.isNotEmpty) return segments.last;
+    if (gameName.trim().isNotEmpty) return gameName.trim();
+    return id.isNotEmpty ? 'NeoSync · $id' : 'NeoSync';
+  }
+  // DOLPHIN_ISOLATION_END: neosync_filename_regression
+
   /// Unique identifier for the file on the server.
   final String id;
 
@@ -151,7 +174,9 @@ class NeoSyncFile {
 
     return NeoSyncFile(
       id: (json['id'] ?? '').toString(),
-      fileName: (json['file_name'] ?? '').toString(),
+      // DOLPHIN_ISOLATION_BEGIN: neosync_filename_field
+      fileName: _readFileName(json),
+      // DOLPHIN_ISOLATION_END: neosync_filename_field
       filePath: (json['file_path'] ?? '').toString(),
       fileSize: int.tryParse((json['file_size'] ?? '0').toString()) ?? 0,
       gameName: (json['game_name'] ?? '').toString(),

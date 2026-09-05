@@ -1,7 +1,7 @@
 #import "DolphinSessionMenu.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
-  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole
+  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuStates, DOLMenuStateActions
 };
 
 @interface DolphinSessionMenu ()
@@ -46,6 +46,63 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   [super viewWillAppear:animated];
   if (self.page == DOLMenuConsole || self.page == DOLMenuGraphics || self.page == DOLMenuControls)
     [self reloadSettings];
+  if (self.page == DOLMenuStates || self.page == DOLMenuStateActions) [self reloadStates];
+}
+
+- (void)reloadStates {
+  if (self.loading || !self.readStates) return;
+  self.loading = YES;
+  __weak DolphinSessionMenu* weakSelf = self;
+  self.readStates(^(NSDictionary* data) {
+    DolphinSessionMenu* menu = weakSelf;
+    if (!menu) return;
+    menu.loading = NO;
+    menu.snapshot = data;
+    if (menu.page == DOLMenuStateActions) {
+      for (NSDictionary* slot in data[@"slots"])
+        if ([slot[@"slot"] isEqual:menu.binding[@"slot"]]) { menu.binding = slot; break; }
+    }
+    [menu.tableView reloadData];
+    if (!data && menu.view.window) [menu showStateMessage:@"stateFailed"];
+  });
+}
+
+- (void)showStateMessage:(NSString*)key {
+  if (!self.view.window) return;
+  UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:key]
+      message:nil preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"close"] style:UIAlertActionStyleCancel handler:nil]];
+  if ([self.presentedViewController isKindOfClass:UIAlertController.class])
+    [self dismissViewControllerAnimated:NO completion:^{ [self presentViewController:alert animated:YES completion:nil]; }];
+  else [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)operateState:(NSDictionary*)slot load:(BOOL)load {
+  if (self.loading || !self.performStateOperation) return;
+  self.loading = YES;
+  // Disable the whole navigation stack, including Back and Resume, until the
+  // native disk/CPU operation completes. Lifecycle operations use the same queue.
+  self.navigationController.view.userInteractionEnabled = NO;
+  __weak DolphinSessionMenu* weakSelf = self;
+  self.performStateOperation([slot[@"slot"] integerValue], load, ^(BOOL success) {
+    DolphinSessionMenu* menu = weakSelf;
+    if (!menu) return;
+    menu.loading = NO;
+    menu.navigationController.view.userInteractionEnabled = YES;
+    [menu reloadStates];
+    [menu showStateMessage:success ? (load ? @"stateLoaded" : @"stateSaved") : @"stateFailed"];
+  });
+}
+
+- (void)confirmState:(NSDictionary*)slot load:(BOOL)load {
+  if (!load && ![slot[@"exists"] boolValue]) { [self operateState:slot load:NO]; return; }
+  UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:load ? @"loadState" : @"saveState"]
+      message:[self text:load ? @"loadStateHelp" : @"overwriteState"] preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
+  __weak DolphinSessionMenu* weakSelf = self;
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:load ? @"loadState" : @"saveState"]
+      style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) { [weakSelf operateState:slot load:load]; }]];
+  [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)reloadSettings {
@@ -81,6 +138,8 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   child.snapshot = self.snapshot;
   child.readSettings = self.readSettings;
   child.applySettings = self.applySettings;
+  child.readStates = self.readStates;
+  child.performStateOperation = self.performStateOperation;
   child.resumeGame = self.resumeGame;
   child.quitGame = self.quitGame;
   child.restartGame = self.restartGame;
@@ -95,7 +154,9 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
   switch (self.page) {
-    case DOLMenuRoot: return 5;
+    case DOLMenuRoot: return 6;
+    case DOLMenuStates: return [self.snapshot[@"slots"] count];
+    case DOLMenuStateActions: return 2;
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
     case DOLMenuGraphics: return self.snapshot ? 4 : 0;
     case DOLMenuControls:
@@ -112,6 +173,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
+  if (self.page == DOLMenuStates || self.page == DOLMenuStateActions) return [self text:@"savestatesHelp"];
   if (self.page == DOLMenuConsole) return [self text:@"languageHelp"];
   if (self.page == DOLMenuControls && section == 1) return [self text:@"bindingsHelp"];
   return nil;
@@ -134,8 +196,25 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   NSInteger row = indexPath.row;
   if (self.page == DOLMenuRoot) {
-    cell.textLabel.text = [self text:@[@"graphics", @"controls", @"console", @"resume", @"quit"][row]];
-    if (row == 4) cell.textLabel.textColor = UIColor.systemRedColor;
+    cell.textLabel.text = [self text:@[@"graphics", @"controls", @"console", @"savestates", @"resume", @"quit"][row]];
+    if (row == 5) cell.textLabel.textColor = UIColor.systemRedColor;
+  } else if (self.page == DOLMenuStateActions) {
+    cell.textLabel.text = [self text:row == 0 ? @"saveState" : @"loadState"];
+    if (row == 1 && ![self.binding[@"loadable"] boolValue]) {
+      cell.textLabel.textColor = UIColor.secondaryLabelColor;
+      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+      cell.accessoryType = UITableViewCellAccessoryNone;
+      cell.detailTextLabel.text = [self text:[self.binding[@"exists"] boolValue] ? @"stateFailed" : @"stateEmpty"];
+      cell.accessibilityTraits |= UIAccessibilityTraitNotEnabled;
+    }
+  } else if (self.page == DOLMenuStates) {
+    NSDictionary* slot = self.snapshot[@"slots"][row];
+    cell.textLabel.text = [[self text:@"stateSlot"] stringByReplacingOccurrencesOfString:@"{slot}" withString:[slot[@"slot"] stringValue]];
+    if ([slot[@"exists"] boolValue]) {
+      NSDate* date = [NSDate dateWithTimeIntervalSince1970:[slot[@"modified"] doubleValue]];
+      cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@", slot[@"filename"],
+          [NSDateFormatter localizedStringFromDate:date dateStyle:NSDateFormatterShortStyle timeStyle:NSDateFormatterShortStyle]];
+    } else cell.detailTextLabel.text = [self text:@"stateEmpty"];
   } else if (self.page == DOLMenuConsole) {
     cell.textLabel.text = [self text:row == 0 ? @"consoleLanguage" : @"restart"];
     if (row == 0) {
@@ -203,8 +282,8 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   if (self.loading) return;
   NSInteger row = indexPath.row;
   if (self.page == DOLMenuRoot) {
-    if (row == 3) { [self resumePressed]; return; }
-    if (row == 4) {
+    if (row == 4) { [self resumePressed]; return; }
+    if (row == 5) {
       UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:@"quit"]
           message:[self text:@"quitHelp"] preferredStyle:UIAlertControllerStyleAlert];
       [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
@@ -215,8 +294,17 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
       [self presentViewController:alert animated:YES completion:nil];
       return;
     }
-    [self.navigationController pushViewController:[self child:row == 0 ? DOLMenuGraphics : row == 1 ? DOLMenuControls : DOLMenuConsole
-        title:[self text:@[@"graphics", @"controls", @"console"][row]]] animated:YES];
+    [self.navigationController pushViewController:[self child:row == 0 ? DOLMenuGraphics : row == 1 ? DOLMenuControls : row == 2 ? DOLMenuConsole : DOLMenuStates
+        title:[self text:@[@"graphics", @"controls", @"console", @"savestates"][row]]] animated:YES];
+  } else if (self.page == DOLMenuStates) {
+    NSDictionary* slot = self.snapshot[@"slots"][row];
+    NSString* title = [[self text:@"stateSlot"] stringByReplacingOccurrencesOfString:@"{slot}" withString:[slot[@"slot"] stringValue]];
+    DolphinSessionMenu* child = [self child:DOLMenuStateActions title:title];
+    child.binding = slot;
+    [self.navigationController pushViewController:child animated:YES];
+  } else if (self.page == DOLMenuStateActions) {
+    if (row == 1 && ![self.binding[@"loadable"] boolValue]) return;
+    [self confirmState:self.binding load:row == 1];
   } else if (self.page == DOLMenuConsole) {
     if (row == 1) { [self confirmRestart]; return; }
     DolphinSessionMenu* child = [self child:DOLMenuChoices title:[self text:@"consoleLanguage"]];

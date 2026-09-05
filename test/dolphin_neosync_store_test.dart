@@ -22,6 +22,21 @@ void main() {
     return bytes;
   }
 
+  Uint8List state(String id, int marker, {int payloadSize = 128}) {
+    const revision = 'fixture1';
+    final bytes = Uint8List(48 + revision.length + payloadSize);
+    bytes.setRange(0, id.length, ascii.encode(id));
+    final data = ByteData.sublistView(bytes);
+    data.setUint32(24, 0xBAADBABE + 175, Endian.little);
+    data.setUint32(28, revision.length, Endian.little);
+    bytes.setRange(32, 32 + revision.length, ascii.encode(revision));
+    final extended = 32 + revision.length;
+    data.setUint16(extended, 1, Endian.little);
+    data.setUint64(extended + 8, payloadSize, Endian.little);
+    bytes[extended + 16] = marker;
+    return bytes;
+  }
+
   Future<File> put(DolphinNeoSyncStore store, String name, List<int> bytes) async {
     final file = File(p.join(store.userDirectory.path, name));
     await file.parent.create(recursive: true);
@@ -76,6 +91,162 @@ void main() {
     ]) { expect(DolphinSaveTarget.parse(key), isNull, reason: key); }
     expect(DolphinSaveTarget.ownsCloudPath('v2/saves/gc/dolphinios/invalid'), isTrue);
     expect(DolphinSaveTarget.ownsCloudPath('v2/saves/ps2/armsx2/shared/card.ps2'), isFalse);
+  });
+
+  test('savestate keys bind native console and identity to each of ten numbered slots', () {
+    final gcStates = DolphinSaveTarget.statesForGame(gc);
+    final wiiStates = DolphinSaveTarget.statesForGame(wii);
+    expect(gcStates.length, 10);
+    expect(wiiStates.length, 10);
+    expect(gcStates.first.cloudPath, 'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav');
+    expect(wiiStates.last.cloudPath, 'v2/states/wii/dolphinios/game/00010000524d4745/RMGE01.s10.nsav');
+    for (final target in [...gcStates, ...wiiStates]) {
+      expect(target.isState, isTrue);
+      expect(target.shared, isFalse);
+      expect(target.relativeNativePath, 'StateSaves/${target.rawName}');
+      expect(DolphinSaveTarget.parse(target.cloudPath)?.relativeNativePath, target.relativeNativePath);
+      expect(target.matches(target.system == 'gc' ? gc : wii), isTrue);
+      expect(target.matches(target.system == 'gc' ? wii : gc), isFalse);
+    }
+    for (final key in [
+      'v2/saves/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav',
+      'v2/states/gc/dolphinios/game/GZLE01/GMSE01.s01.nsav',
+      'v2/states/wii/dolphinios/game/00010000524d4750/RMGE01.s01.nsav',
+      'v2/states/gc/dolphinios/shared/GMSE01.s01.nsav',
+      'v2/states/gc/retroarch.dolphin/game/GMSE01/GMSE01.s01.nsav',
+      for (final name in ['GMSE01.s00', 'GMSE01.s11', 'GMSE01.s1', 'GMSE01.s001',
+        'GMSE01.s01.tmp', 'GMSE01.s01.dtm', 'lastState.sav', '../GMSE01.s01'])
+        'v2/states/gc/dolphinios/game/GMSE01/$name.nsav',
+    ]) { expect(DolphinSaveTarget.parse(key), isNull, reason: key); }
+  });
+
+  test('four-character Wii channel state IDs must match the native title bytes', () {
+    const channel = DolphinSaveIdentity(system: 'wii', gameId: 'HABA', region: 'USA', titleId: '0001000148414241');
+    final targets = DolphinSaveTarget.statesForGame(channel);
+    expect(targets.length, 10);
+    expect(targets.first.relativeNativePath, 'StateSaves/HABA.s01');
+    expect(DolphinSaveTarget.parse(targets.first.cloudPath)?.matches(channel), isTrue);
+    const mismatched = DolphinSaveIdentity(system: 'wii', gameId: 'HABB', region: 'USA', titleId: '0001000148414241');
+    expect(DolphinSaveTarget.statesForGame(mismatched), isEmpty);
+  });
+
+  test('native scan includes only this games exact state slots, excluding temp undo and backups', () async {
+    final target = DolphinSaveTarget.statesForGame(gc).first;
+    await put(source, target.relativeNativePath, state('GMSE01', 1));
+    for (final name in ['GMSE01.s11', 'GMSE01.s00', 'GMSE01.s01.tmp',
+      'GMSE01.s01.dtm', 'GMSE01.s01.neosync-previous-1', 'GMSE01.s01.incoming-1',
+      'lastState.sav', 'GZLE01.s01', 'RMGE01.s01']) {
+      await put(source, 'StateSaves/$name', state('GMSE01', 99));
+    }
+    final snapshots = <DolphinSaveSnapshot>[];
+    for (final candidate in await source.targetsForGame(gc)) {
+      final snapshot = await source.snapshot(candidate);
+      if (snapshot != null) snapshots.add(snapshot);
+    }
+    expect(snapshots.map((snapshot) => snapshot.target.cloudPath), [target.cloudPath]);
+  });
+
+  for (final game in [gc, wii,
+    const DolphinSaveIdentity(system: 'wii', gameId: 'HABA', region: 'USA', titleId: '0001000148414241')]) {
+    test('${game.gameId} states round-trip exactly, preserve other slots and keep previous bytes', () async {
+      final targets = DolphinSaveTarget.statesForGame(game);
+      final target = targets.first;
+      final content = state(game.gameId, 1);
+      final previous = state(game.gameId, 2);
+      await put(source, target.relativeNativePath, content);
+      await put(destination, target.relativeNativePath, previous);
+      final otherSlot = await put(destination, targets.last.relativeNativePath, state(game.gameId, 3));
+      final neighbor = await put(destination, 'StateSaves/OTHER1.s01', [77]);
+      final snapshot = (await source.snapshot(target))!;
+      await restore(target, await payload(snapshot));
+      expect(await File(p.join(destination.userDirectory.path, target.relativeNativePath)).readAsBytes(), content);
+      expect(await otherSlot.readAsBytes(), state(game.gameId, 3));
+      expect(await neighbor.readAsBytes(), [77]);
+      final backups = await Directory(p.join(destination.userDirectory.path, 'StateSaves')).list()
+          .where((file) => p.basename(file.path).startsWith('${target.rawName}.neosync-previous-')).toList();
+      expect(backups.length, 1);
+      expect(await File(backups.single.path).readAsBytes(), previous);
+      expect((await destination.snapshot(target))!.checksum, snapshot.checksum);
+      expect(snapshot.size, lessThan(content.length + 4096));
+    });
+  }
+
+  test('Wii state larger than the ordinary-save limit survives an exact binary round trip', () async {
+    final target = DolphinSaveTarget.statesForGame(wii).first;
+    final bytes = state(wii.gameId, 8, payloadSize: 41 * 1024 * 1024);
+    bytes[bytes.length - 1] = 9;
+    await put(source, target.relativeNativePath, bytes);
+    final snapshot = (await source.snapshot(target))!;
+    expect(snapshot.size, greaterThan(DolphinNeoSyncStore.maxNativeBytes));
+    expect(snapshot.size, lessThan(bytes.length + 4096));
+    await restore(target, await payload(snapshot));
+    final restored = File(p.join(destination.userDirectory.path, target.relativeNativePath));
+    expect(await restored.length(), bytes.length);
+    expect(await sha256.bind(restored.openRead()).single, sha256.convert(bytes));
+  });
+
+  test('native LZ4-compressed Wii checkpoints retain their exact compressed bytes', () async {
+    final target = DolphinSaveTarget.statesForGame(wii).last;
+    final bytes = state(wii.gameId, 0, payloadSize: 6);
+    final data = ByteData.sublistView(bytes);
+    data.setUint16(42, 1, Endian.little); // LZ4 in the extended header.
+    data.setUint64(48, 1, Endian.little); // One uncompressed byte.
+    data.setUint32(56, 2, Endian.little); // Two-byte compressed block.
+    bytes[60] = 0x10; // One literal.
+    bytes[61] = 0x42;
+    await put(source, target.relativeNativePath, bytes);
+    final snapshot = (await source.snapshot(target))!;
+    await restore(target, await payload(snapshot));
+    expect(await File(p.join(destination.userDirectory.path, target.relativeNativePath)).readAsBytes(), bytes);
+  });
+
+  test('oversized and malformed native state headers are rejected before upload', () async {
+    final target = DolphinSaveTarget.statesForGame(gc).first;
+    for (final corrupt in <void Function(ByteData)>[
+      (header) => header.setUint32(8, 12, Endian.little), // Legacy LZO.
+      (header) => header.setUint32(24, 0, Endian.little),
+      (header) => header.setUint32(28, 2048, Endian.little),
+      (header) => header.setUint16(40, 99, Endian.little),
+      (header) => header.setUint16(42, 99, Endian.little),
+      (header) => header.setUint64(48, DolphinNeoSyncStore.maxStateNativeBytes + 1, Endian.little),
+    ]) {
+      final bytes = state(gc.gameId, 1);
+      corrupt(ByteData.sublistView(bytes));
+      await put(source, target.relativeNativePath, bytes);
+      await expectLater(source.snapshot(target), throwsFormatException);
+    }
+    final file = await File(p.join(source.userDirectory.path, target.relativeNativePath)).open(mode: FileMode.write);
+    try { await file.truncate(DolphinNeoSyncStore.maxStateNativeBytes + 1); }
+    finally { await file.close(); }
+    await expectLater(source.snapshot(target), throwsFormatException);
+  });
+
+  test('state corruption, slot substitution and wrong-game headers never replace a live slot', () async {
+    final target = DolphinSaveTarget.statesForGame(gc).first;
+    final second = DolphinSaveTarget.statesForGame(gc)[1];
+    final keep = await put(destination, second.relativeNativePath, state(gc.gameId, 9));
+    await put(source, target.relativeNativePath, state(gc.gameId, 1));
+    final snapshot = (await source.snapshot(target))!;
+    await expectLater(restore(second, await payload(snapshot)), throwsFormatException);
+    expect(await keep.readAsBytes(), state(gc.gameId, 9));
+    final corrupted = Uint8List.fromList(await payload(snapshot));
+    corrupted[corrupted.length - 1] ^= 0xff;
+    await expectLater(restore(target, corrupted), throwsFormatException);
+    expect(await File(p.join(destination.userDirectory.path, target.relativeNativePath)).exists(), isFalse);
+    await put(source, target.relativeNativePath, state('GZLE01', 2));
+    await expectLater(source.snapshot(target), throwsFormatException);
+    await put(source, target.relativeNativePath, [1, 2, 3]);
+    await expectLater(source.snapshot(target), throwsFormatException);
+  });
+
+  test('state restore rejects a symlinked StateSaves directory before any live write', () async {
+    final target = DolphinSaveTarget.statesForGame(gc).first;
+    await put(source, target.relativeNativePath, state(gc.gameId, 1));
+    final snapshot = (await source.snapshot(target))!;
+    final outside = await Directory(p.join(temporary.path, 'outside-states')).create();
+    await Link(p.join(destination.userDirectory.path, 'StateSaves')).create(outside.path);
+    await expectLater(restore(target, await payload(snapshot)), throwsFormatException);
+    expect(await outside.list().isEmpty, isTrue);
   });
 
   test('first sync with different data is a conflict; common history resolves one-sided changes', () {

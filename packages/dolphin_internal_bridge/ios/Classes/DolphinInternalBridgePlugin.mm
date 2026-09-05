@@ -42,6 +42,8 @@ int32_t neostation_dolphin_set_paused(int32_t paused);
 int32_t neostation_dolphin_stop(const char* log_path);
 char* neostation_dolphin_menu_snapshot(int32_t wii, int32_t slot);
 int32_t neostation_dolphin_menu_apply(const char* request_json);
+char* neostation_dolphin_state_snapshot(void);
+int32_t neostation_dolphin_state_operation(int32_t slot, int32_t load);
 int32_t neostation_dolphin_restart(void);
 int32_t neostation_dolphin_refresh_controllers(void);
 void neostation_dolphin_release_touches(void);
@@ -966,6 +968,36 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           const BOOL success = text && neostation_dolphin_menu_apply(text.UTF8String) != 0;
           dispatch_async(dispatch_get_main_queue(), ^{
             if (!bridge.stopInProgress && bridge.dolphinController == owner) completion(success);
+          });
+        });
+      };
+      menu.readStates = ^(void (^completion)(NSDictionary*)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.stopInProgress || bridge.dolphinController != owner) { completion(nil); return; }
+        dispatch_async(bridge->_runtimeQueue, ^{
+          char* text = neostation_dolphin_state_snapshot();
+          NSDictionary* snapshot = nil;
+          if (text) {
+            NSData* data = [[NSString stringWithUTF8String:text] dataUsingEncoding:NSUTF8StringEncoding];
+            free(text);
+            id decoded = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            if ([decoded isKindOfClass:NSDictionary.class]) snapshot = decoded;
+          }
+          dispatch_async(dispatch_get_main_queue(), ^{
+            if (!bridge.stopInProgress && bridge.dolphinController == owner) completion(snapshot);
+          });
+        });
+      };
+      menu.performStateOperation = ^(NSInteger slot, BOOL load, void (^completion)(BOOL)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.stopInProgress || bridge.menuOpening || bridge.dolphinController != owner) { completion(NO); return; }
+        bridge.menuOpening = YES;
+        dispatch_async(bridge->_runtimeQueue, ^{
+          const BOOL success = neostation_dolphin_state_operation((int32_t)slot, load ? 1 : 0) != 0;
+          dispatch_async(dispatch_get_main_queue(), ^{
+            if (bridge.stopInProgress || bridge.dolphinController != owner) return;
+            bridge.menuOpening = NO;
+            completion(success);
           });
         });
       };

@@ -7,6 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign) NSInteger slot;
 @property(nonatomic, copy) void (^readSettings)(BOOL wii, NSInteger slot, void (^completion)(NSDictionary* _Nullable));
 @property(nonatomic, copy) void (^applySettings)(NSDictionary* request, void (^completion)(BOOL));
+@property(nonatomic, copy) void (^readStates)(void (^completion)(NSDictionary* _Nullable));
+@property(nonatomic, copy) void (^performStateOperation)(NSInteger slot, BOOL load, void (^completion)(BOOL));
 @property(nonatomic, copy) dispatch_block_t resumeGame;
 @property(nonatomic, copy) dispatch_block_t quitGame;
 @property(nonatomic, copy) dispatch_block_t restartGame;

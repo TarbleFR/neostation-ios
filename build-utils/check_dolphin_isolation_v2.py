@@ -15,6 +15,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_FILES = {
+    # User-requested repair of NeoSync filename visibility, scoped by markers.
+    "lib/models/neo_sync_models.dart",
+    "lib/screens/neo_sync_screen/login_screen/neo_sync_content.dart",
     "lib/services/neosync/neo_sync_service.dart",
     "lib/sync/providers/neo_sync_adapter.dart",
     "lib/providers/neo_sync_provider.dart",

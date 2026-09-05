@@ -1,14 +1,19 @@
 # NeoSync for the embedded Dolphin engine
 
-This candidate adds native-save synchronization to the existing NeoSync account
-and UI. It starts from stable Build 198. It does not modify the published stable
-IPA, the StikJIT policy, controls, rendering, or other emulator integrations.
+This candidate extends the Build 200 native-save adapter with numbered Dolphin
+savestates and restores filenames in the NeoSync cloud list. It retains the
+existing account, JIT policy and separate emulator integrations.
 
 ## Use
 
 Enable NeoSync for the GameCube/Wii game using the existing per-game cloud switch.
 The account must be authenticated and its subscription/quota must permit the
 operation. No external DolphiniOS folder or application is required.
+
+The in-game DolphiniOS menu offers save/load actions for slots 1–10 on both Wii
+and GameCube. Creating a checkpoint writes a native Dolphin state; loading a
+checkpoint resumes that exact emulator state. NeoSync synchronizes those slots
+using the same per-game cloud switch as ordinary in-game saves.
 
 With auto-sync enabled, NeoStation checks this game's saves before launch and
 uploads changes after native Dolphin shutdown has joined the emulation thread
@@ -31,10 +36,15 @@ save is not uploaded as an empty replacement.
   files and directories. Disc and supported game-channel title namespaces only.
   Other titles, IOS, installed program content, tickets and device files are not
   part of the snapshot.
+- GameCube and Wii savestates: individual `User/StateSaves/<GAMEID>.s01` through
+  `.s10` files, scoped to the native game identity and numbered slot. Wii game
+  channels with four-character IDs are included when those bytes match the
+  native title ID. State headers must belong to that exact game. Temporary
+  writes, undo states, movie recordings, backups and another game's slots are
+  never uploaded. Missing slots do not become empty uploads or cloud deletions.
 
 Games, IPL, firmware/system content outside the title's save directory, pairing
 files, credentials, JIT data, global configurations and shader caches are excluded.
-Save states / instant emulator checkpoints are **not included** in this version.
 
 DiscIO reads native IDs from the image before core/JIT initialization, including
 supported compressed image formats. Unreadable identities are reported instead
@@ -51,11 +61,25 @@ base64 file bytes and SHA-256 entry checksums. It is not an executable or ZIP.
 The object uses the existing API's MD5 content checksum for sync comparisons.
 No absolute local paths, device IDs or account identifiers are embedded.
 
+Savestates use separate `v2/states/gc/dolphinios/game/<GAMEID>/` and
+`v2/states/wii/dolphinios/game/<TITLEID>/` namespaces. Each object is named
+`<GAMEID>.sNN.nsav` and is uploaded with `is_state=true`. Its deterministic binary
+version-2 envelope contains `NSDSV002`, a little-endian 32-bit JSON-header length,
+a small UTF-8 header (format, version, exact cloud key, native filename, size and
+SHA-256), then the unmodified native state bytes. Snapshot creation streams the
+large native data rather than expanding it into base64. Each native state may be
+up to 192 MiB, covering Wii checkpoints larger than the ordinary-save 40 MiB
+limit. Existing account quotas and transport limits still apply.
+
 These objects can be restored by NeoStation versions implementing this adapter.
 They are not claimed to be automatically compatible with the original desktop
 NeoStation, external DolphiniOS, or RetroArch's existing cloud-save formats.
 The native files inside retain their original format; no cloud migration is
 performed on older objects. A cloud export of `.nsav` preserves the envelope.
+Savestates require a compatible Dolphin state version when loaded; NeoSync does
+not convert emulator state formats. The embedded core reports incompatible
+versions instead of resuming them. Older NeoStation versions without the state
+adapter cannot restore these new objects and must not route them to RetroArch.
 
 ## Integrity and conflicts
 
@@ -72,7 +96,9 @@ all paths before replacing live data. Traversal, symbolic links, case-folded
 collisions and file/directory conflicts are refused. GCI headers and block counts
 are validated. Directory replacements are staged with rollback/recovery; previous
 native snapshots are retained. Raw-card replacement uses a flushed temporary file
-and retains a previous local copy. Large file encoding/restoration runs in an
+and retains a previous local copy. Savestate restore validates the complete
+envelope and native header, retains a previous local slot, then atomically
+renames a flushed temporary file over that slot. Large file encoding/restoration runs in an
 isolate rather than on Flutter's UI isolate.
 
 Cloud listing is paginated for Dolphin and fails closed on transport errors or
@@ -92,6 +118,9 @@ an offline save-directory operation or for reading DiscIO identity.
 Tests cover native-key isolation, deterministic snapshots, multi-file Wii saves,
 GCI ownership, preservation of adjacent games, corruption, unsafe paths, backups,
 interrupted replacements, account-scoped history, and exclusive access.
+State fixtures also cover all ten native slots, Wii game-channel identities,
+exact binary round trips above 40 MiB, corruption, wrong-game/slot rejection,
+temporary/undo/backup exclusion, symlinks and preservation of adjacent slots.
 CI compiles all existing integrations and verifies the native identity ABI in
 the actual IPA. Unit fixtures and compilation do not prove an authenticated
 round trip against a real NeoSync account or a launch on an iPhone/iPad. Those

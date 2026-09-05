@@ -144,7 +144,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
             final response = await _neoSyncService.syncFile(local!.file, game.name,
               customFilename: entry.key, systemId: target.system,
               emulatorId: DolphinSaveTarget.emulator, scope: target.shared ? 'shared' : 'game',
-              isState: false);
+              isState: target.isState);
             if (_dolphinAccount != account) throw StateError('NeoSync account changed during upload');
             if (response['success'] != true) {
               final message = response['message']?.toString() ?? 'Dolphin upload failed';
@@ -162,7 +162,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
             _dolphinLog('upload.complete', '${game.name}: ${target.objectName}');
           } else {
             if (!perform || !download) { hasPendingDownload = true; continue; }
-            if (remote!.fileSize > DolphinNeoSyncStore.maxPayloadBytes) throw StateError('Dolphin cloud snapshot exceeds size limit');
+            if (remote!.fileSize > DolphinNeoSyncStore.payloadLimit(target)) throw StateError('Dolphin cloud snapshot exceeds size limit');
             final payload = await downloadOnlineFileBytes(remote);
             if (!isNeoSyncAuthenticated || _dolphinAccount != account) throw StateError('NeoSync account changed during download');
             // Re-snapshot after network access: a Files edit or other writer
@@ -269,7 +269,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
       if (!current.any((file) => file.id == cloudFile.id && file.fileName == cloudFile.fileName && file.checksum == cloudFile.checksum)) {
         throw StateError('Cloud save changed; refresh NeoSync before restoring');
       }
-      if (cloudFile.fileSize > DolphinNeoSyncStore.maxPayloadBytes) throw const FormatException('Dolphin snapshot too large');
+      if (cloudFile.fileSize > DolphinNeoSyncStore.payloadLimit(target)) throw const FormatException('Dolphin snapshot too large');
       final payload = await downloadOnlineFileBytes(cloudFile);
       if (_dolphinAccount != account || !isNeoSyncAuthenticated) throw StateError('NeoSync account changed');
       await store.restore(target, payload, checksum: cloudFile.checksum?.toLowerCase() ?? '');

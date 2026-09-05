@@ -36,9 +36,71 @@
   [menu endAppearanceTransition];
   [menu.tableView reloadData];
   XCTAssertEqual(reads, 0);
-  XCTAssertEqual([menu.tableView numberOfRowsInSection:0], 5);
-  for (NSInteger row = 0; row < 5; ++row)
+  XCTAssertEqual([menu.tableView numberOfRowsInSection:0], 6);
+  for (NSInteger row = 0; row < 6; ++row)
     XCTAssertNotNil([menu tableView:menu.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:0]]);
+}
+
+- (void)testSavestateSlotsForBothConsolesDisableEmptyLoadAndRefreshAfterSave {
+  for (NSNumber* wii in @[@NO, @YES]) {
+    DolphinSessionMenu* root = [DolphinSessionMenu new];
+    root.wii = wii.boolValue;
+    root.labels = @{@"savestates": @"Save states", @"stateSlot": @"Slot {slot}",
+        @"saveState": @"Save state", @"loadState": @"Load state", @"stateEmpty": @"Empty"};
+    __block BOOL saved = NO;
+    __block NSInteger operationCount = 0;
+    __block void (^finishSave)(BOOL) = nil;
+    root.readStates = ^(void (^completion)(NSDictionary*)) {
+      NSMutableArray* slots = [NSMutableArray array];
+      for (NSInteger slot = 1; slot <= 10; slot++)
+        [slots addObject:@{@"slot": @(slot), @"exists": @(saved && slot == 10),
+            @"loadable": @(saved && slot == 10), @"modified": @1700000000,
+            @"filename": [NSString stringWithFormat:@"%@.s%02ld", wii.boolValue ? @"RMGE01" : @"GMSE01", (long)slot]}];
+      completion(@{@"slots": slots});
+    };
+    root.performStateOperation = ^(NSInteger slot, BOOL load, void (^completion)(BOOL)) {
+      operationCount++;
+      XCTAssertEqual(slot, 10);
+      XCTAssertFalse(load);
+      finishSave = [completion copy];
+    };
+    UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
+    [navigation loadViewIfNeeded];
+    [root loadViewIfNeeded];
+    [root tableView:root.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]];
+    DolphinSessionMenu* states = (DolphinSessionMenu*)navigation.topViewController;
+    [states loadViewIfNeeded];
+    [states beginAppearanceTransition:YES animated:NO]; [states endAppearanceTransition];
+    XCTAssertEqual([states tableView:states.tableView numberOfRowsInSection:0], 10);
+    UITableViewCell* last = [states tableView:states.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:9 inSection:0]];
+    XCTAssertEqualObjects(last.textLabel.text, @"Slot 10");
+    XCTAssertEqualObjects(last.detailTextLabel.text, @"Empty");
+    [states tableView:states.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:9 inSection:0]];
+    DolphinSessionMenu* actions = (DolphinSessionMenu*)navigation.topViewController;
+    [actions loadViewIfNeeded];
+    [actions beginAppearanceTransition:YES animated:NO]; [actions endAppearanceTransition];
+    XCTAssertEqual([actions tableView:actions.tableView numberOfRowsInSection:0], 2);
+    NSIndexPath* loadRow = [NSIndexPath indexPathForRow:1 inSection:0];
+    UITableViewCell* loadCell = [actions tableView:actions.tableView cellForRowAtIndexPath:loadRow];
+    XCTAssertEqualObjects(loadCell.textLabel.text, @"Load state");
+    XCTAssertTrue((loadCell.accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0);
+    [actions tableView:actions.tableView didSelectRowAtIndexPath:loadRow];
+    XCTAssertEqual(operationCount, 0);
+    NSIndexPath* saveRow = [NSIndexPath indexPathForRow:0 inSection:0];
+    [actions tableView:actions.tableView didSelectRowAtIndexPath:saveRow];
+    XCTAssertEqual(operationCount, 1);
+    XCTAssertFalse(navigation.view.userInteractionEnabled);
+    // Repeated input cannot overlap the active native write.
+    [actions tableView:actions.tableView didSelectRowAtIndexPath:saveRow];
+    XCTAssertEqual(operationCount, 1);
+    saved = YES;
+    XCTAssertNotNil(finishSave);
+    finishSave(YES);
+    XCTAssertTrue(navigation.view.userInteractionEnabled);
+    loadCell = [actions tableView:actions.tableView cellForRowAtIndexPath:loadRow];
+    XCTAssertFalse((loadCell.accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0);
+    XCTAssertEqualObjects(loadCell.textLabel.text, @"Load state");
+  }
 }
 
 - (void)testConsoleLanguageUsesSettingsSnapshotAndSavesChoice {

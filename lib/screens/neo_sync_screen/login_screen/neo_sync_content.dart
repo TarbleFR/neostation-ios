@@ -839,9 +839,18 @@ class NeoSyncContentState extends State<NeoSyncContent>
         key =
             'armsx2:${isArmsx2State ? 'states' : 'saves'}:${label.toLowerCase()}';
       } else {
+        // DOLPHIN_ISOLATION_BEGIN: neosync_visible_filenames
         label = file.id.startsWith('v1:')
-            ? '[V1] ${file.fileName}'
-            : file.fileName;
+            ? '[V1] ${file.displayName}'
+            : file.displayName;
+        if ((lowerPath.startsWith('v2/saves/gc/dolphinios/') ||
+             lowerPath.startsWith('v2/states/gc/dolphinios/') ||
+             lowerPath.startsWith('v2/saves/wii/dolphinios/') ||
+             lowerPath.startsWith('v2/states/wii/dolphinios/')) &&
+            file.gameName.trim().isNotEmpty) {
+          label = '${file.gameName.trim()} · ${file.fileName.split('/').last}';
+        }
+        // DOLPHIN_ISOLATION_END: neosync_visible_filenames
         key = 'file:${file.id}';
       }
 
@@ -2735,7 +2744,9 @@ class _DeleteCloudSaveDialogState extends State<_DeleteCloudSaveDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.file.fileName,
+                        // DOLPHIN_ISOLATION_BEGIN: neosync_detail_filename
+                        widget.file.displayName,
+                        // DOLPHIN_ISOLATION_END: neosync_detail_filename
                         style: TextStyle(
                           fontSize: 11.r,
                           fontWeight: FontWeight.w500,
@@ -3409,11 +3420,16 @@ class OnlineSavesListViewState extends State<OnlineSavesListView>
                         .bodyMedium
                         ?.fontFamily,
                   ),
-                  child: Text(
-                    group.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  // DOLPHIN_ISOLATION_BEGIN: neosync_full_filename_tooltip
+                  child: Tooltip(
+                    message: group.files.map((file) => file.displayName).join('\n'),
+                    child: Text(
+                      group.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  // DOLPHIN_ISOLATION_END: neosync_full_filename_tooltip
                 ),
                 SizedBox(height: 1.r),
                 AnimatedDefaultTextStyle(

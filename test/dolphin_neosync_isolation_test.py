@@ -56,12 +56,18 @@ class DolphinNeoSyncIsolationTests(unittest.TestCase):
         self.assertIn('!system.neosync.sync', source)
         self.assertNotIn('contentHashOnly: true', source)
 
-    def test_states_and_other_emulator_paths_never_become_dolphin_targets(self):
+    def test_states_remain_in_numbered_native_slots_and_other_emulators_stay_isolated(self):
         source = read('lib/services/dolphin_neosync_store.dart')
         self.assertIn('parsed.isState', source)
         self.assertIn("emulator = 'dolphinios'", source)
         self.assertNotIn('linkedRetroArchFolderPath', source)
-        self.assertNotIn('StateSaves/', source)
+        self.assertIn("'state' => 'StateSaves/$rawName'", source)
+        self.assertIn('statesForGame', source)
+        self.assertIn('_validStateIdentity', source)
+        self.assertIn('isState: isState', source)
+        provider = read('lib/providers/neosync/neosync_dolphin.dart')
+        self.assertIn('isState: target.isState', provider)
+        self.assertIn('DolphinNeoSyncStore.payloadLimit(target)', provider)
         self.assertIn('DolphinSystemFiles.replaceSnapshot', source)
         self.assertIn('Isolate.run', source)
         download = read('lib/providers/neosync/neosync_download.dart')
