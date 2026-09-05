@@ -412,7 +412,7 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
         AppNotification.showNotification(
           context,
           AppLocale.imageResetDefault.getString(context),
-          type: NotificationType.success,
+          type: NotificationType.info,
         );
       }
     } catch (e) {
@@ -599,30 +599,6 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
   }
 
   Widget _buildEmulatorsTab() {
-    // DOLPHIN_ISOLATION_BEGIN: system_settings_emulator_label
-    // System settings, not the per-game dialog: gc/wii always use the engine
-    // inside NeoStation. Do not display the legacy RetroArch database group.
-    if (Platform.isIOS &&
-        const {
-          'gc', 'gamecube', 'nintendo gamecube', 'ngc',
-          'wii', 'nintendo wii',
-        }.contains(widget.system.folderName.trim().toLowerCase())) {
-      return ListView(
-        padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
-        children: [
-          ListTile(
-            key: const ValueKey('dolphin-system-settings-emulator'),
-            leading: const Icon(Symbols.sports_esports_rounded),
-            title: const Text('Dolphin iOS'),
-            trailing: Icon(
-              Icons.check_circle,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ],
-      );
-    }
-    // DOLPHIN_ISOLATION_END: system_settings_emulator_label
     return _buildCoresList();
   }
 
