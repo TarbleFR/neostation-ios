@@ -1,8 +1,13 @@
 #import "DolphinSessionMenu.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
-  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates
+  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
 };
+
+static void DOLMenuOnMain(dispatch_block_t block) {
+  if (NSThread.isMainThread) block();
+  else dispatch_async(dispatch_get_main_queue(), block);
+}
 
 @interface DolphinSessionMenu ()
 @property(nonatomic, assign) DOLMenuPage page;
@@ -12,6 +17,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 @property(nonatomic, weak) DolphinSessionMenu* returnPage;
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
+@property(nonatomic, copy) NSDictionary* recordingSnapshot;
 @end
 
 @implementation DolphinSessionMenu
@@ -23,9 +29,11 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 }
 
 - (NSArray<NSString*>*)rootKeys {
-  return self.stateActionsAvailable
-      ? @[@"graphics", @"controls", @"console", @"saveState", @"loadState", @"resume", @"quit"]
-      : @[@"graphics", @"controls", @"console", @"resume", @"quit"];
+  NSMutableArray* keys = [NSMutableArray arrayWithArray:@[@"graphics", @"controls", @"console"]];
+  if (self.stateActionsAvailable) [keys addObjectsFromArray:@[@"saveState", @"loadState"]];
+  if (self.readRecording) [keys addObject:@"recording"];
+  [keys addObjectsFromArray:@[@"resume", @"quit"]];
+  return keys;
 }
 
 - (NSString*)text:(NSString*)key {
@@ -56,6 +64,83 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   if (self.page == DOLMenuConsole || self.page == DOLMenuGraphics || self.page == DOLMenuControls)
     [self reloadSettings];
   if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) [self reloadStates];
+  if (self.page == DOLMenuRecording) [self reloadRecording];
+}
+
+- (void)refreshRecordingStatus {
+  if (self.page == DOLMenuRecording) [self reloadRecording];
+}
+
+- (void)reloadRecording {
+  if (self.loading || !self.readRecording) return;
+  self.loading = YES;
+  self.navigationItem.rightBarButtonItem.enabled = NO;
+  [self.tableView reloadData];
+  __weak DolphinSessionMenu* weakSelf = self;
+  self.readRecording(^(NSDictionary* data) {
+    DOLMenuOnMain(^{
+      DolphinSessionMenu* menu = weakSelf;
+      if (!menu) return;
+      menu.loading = NO;
+      menu.recordingSnapshot = data;
+      menu.navigationItem.rightBarButtonItem.enabled = ![data[@"busy"] boolValue];
+      [menu.tableView reloadData];
+      if (!data || [data[@"failed"] boolValue]) [menu showStateMessage:@"recordingFailed"];
+    });
+  });
+}
+
+- (void)finishRecordingOperation:(NSDictionary*)data success:(BOOL)success wasActive:(BOOL)wasActive {
+  self.loading = NO;
+  self.navigationController.view.userInteractionEnabled = YES;
+  self.navigationItem.titleView = nil;
+  if (data) self.recordingSnapshot = data;
+  self.navigationItem.rightBarButtonItem.enabled = ![self.recordingSnapshot[@"busy"] boolValue];
+  [self.tableView reloadData];
+  if (!success) {
+    [self showStateMessage:@"recordingFailed"];
+    return;
+  }
+  // Starting returns straight to the game once native capture is confirmed.
+  // Stopping stays on this page so the finished video can be shared.
+  if (!wasActive && self.navigationController.topViewController == self)
+    [self resumePressed];
+}
+
+- (void)operateRecording {
+  if (self.loading || !self.recordingSnapshot || !self.toggleRecording ||
+      !self.readRecording || [self.recordingSnapshot[@"busy"] boolValue]) return;
+  BOOL wasActive = [self.recordingSnapshot[@"active"] boolValue];
+  self.loading = YES;
+  self.stateMessage = nil;
+  self.navigationItem.prompt = nil;
+  self.navigationController.view.userInteractionEnabled = NO;
+  self.navigationItem.rightBarButtonItem.enabled = NO;
+  UIActivityIndicatorView* activity = [[UIActivityIndicatorView alloc]
+      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+  activity.accessibilityLabel = [self text:@"recordingBusy"];
+  [activity startAnimating];
+  self.navigationItem.titleView = activity;
+  [self.tableView reloadData];
+  __weak DolphinSessionMenu* weakSelf = self;
+  self.toggleRecording(^(BOOL success) {
+    DOLMenuOnMain(^{
+      DolphinSessionMenu* menu = weakSelf;
+      if (!menu) return;
+      // Keep Back, Resume and repeated taps blocked through the confirmation
+      // read, not just until ReplayKit's start/stop callback arrives. Refresh
+      // on failure too: an interrupted stop can still end native capture.
+      menu.readRecording(^(NSDictionary* data) {
+        DOLMenuOnMain(^{
+          DolphinSessionMenu* current = weakSelf;
+          if (!current) return;
+          BOOL confirmed = success && data && ![data[@"busy"] boolValue] &&
+              [data[@"active"] boolValue] != wasActive;
+          [current finishRecordingOperation:data success:confirmed wasActive:wasActive];
+        });
+      });
+    });
+  });
 }
 
 - (void)reloadStates {
@@ -136,7 +221,10 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   });
 }
 
-- (void)resumePressed { if (!self.loading && self.resumeGame) self.resumeGame(); }
+- (void)resumePressed {
+  if (self.page == DOLMenuRecording && [self.recordingSnapshot[@"busy"] boolValue]) return;
+  if (!self.loading && self.resumeGame) self.resumeGame();
+}
 
 - (void)showFailure {
   UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self text:@"settingsFailed"]
@@ -159,6 +247,9 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
   child.applySettings = self.applySettings;
   child.readStates = self.readStates;
   child.performStateOperation = self.performStateOperation;
+  child.readRecording = self.readRecording;
+  child.toggleRecording = self.toggleRecording;
+  child.shareRecording = self.shareRecording;
   child.resumeGame = self.resumeGame;
   child.quitGame = self.quitGame;
   child.restartGame = self.restartGame;
@@ -174,6 +265,7 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
   switch (self.page) {
     case DOLMenuRoot: return self.rootKeys.count;
+    case DOLMenuRecording: return 2;
     case DOLMenuSaveStates:
     case DOLMenuLoadStates: return [self.snapshot[@"slots"] count];
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
@@ -192,6 +284,11 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
 
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
+  if (self.page == DOLMenuRecording) {
+    NSString* help = [self text:@"recordingHelp"];
+    return self.stateMessage ? [NSString stringWithFormat:@"%@\n\n%@",
+        [self text:self.stateMessage], help] : help;
+  }
   if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) {
     NSString* help = [self text:@"savestatesHelp"];
     return self.stateMessage ? [NSString stringWithFormat:@"%@\n\n%@", [self text:self.stateMessage], help] : help;
@@ -221,6 +318,23 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
     NSString* key = self.rootKeys[row];
     cell.textLabel.text = [self text:key];
     if ([key isEqual:@"quit"]) cell.textLabel.textColor = UIColor.systemRedColor;
+  } else if (self.page == DOLMenuRecording) {
+    BOOL busy = self.loading || [self.recordingSnapshot[@"busy"] boolValue];
+    BOOL hasVideo = [self.recordingSnapshot[@"hasVideo"] boolValue];
+    BOOL enabled = !busy && self.recordingSnapshot &&
+        (row == 0 ? self.toggleRecording != nil : hasVideo && self.shareRecording != nil &&
+            ![self.recordingSnapshot[@"active"] boolValue]);
+    cell.textLabel.text = [self text:row == 0
+        ? ([self.recordingSnapshot[@"active"] boolValue] ? @"stopRecording" : @"startRecording")
+        : @"shareRecording"];
+    cell.accessoryType = UITableViewCellAccessoryNone;
+    if (busy) cell.detailTextLabel.text = [self text:@"recordingBusy"];
+    else if (row == 1 && !hasVideo) cell.detailTextLabel.text = [self text:@"recordingNoVideo"];
+    if (!enabled) {
+      cell.textLabel.textColor = UIColor.secondaryLabelColor;
+      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+      cell.accessibilityTraits |= UIAccessibilityTraitNotEnabled;
+    }
   } else if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) {
     NSDictionary* slot = self.snapshot[@"slots"][row];
     NSString* number = [[self text:@"stateSlot"] stringByReplacingOccurrencesOfString:@"{slot}" withString:[slot[@"slot"] stringValue]];
@@ -318,10 +432,19 @@ typedef NS_ENUM(NSInteger, DOLMenuPage) {
       [self presentViewController:alert animated:YES completion:nil];
       return;
     }
-    DOLMenuPage page = row == 0 ? DOLMenuGraphics : row == 1 ? DOLMenuControls :
-        row == 2 ? DOLMenuConsole : row == 3 ? DOLMenuSaveStates : DOLMenuLoadStates;
+    DOLMenuPage page = [key isEqual:@"graphics"] ? DOLMenuGraphics :
+        [key isEqual:@"controls"] ? DOLMenuControls :
+        [key isEqual:@"console"] ? DOLMenuConsole :
+        [key isEqual:@"saveState"] ? DOLMenuSaveStates :
+        [key isEqual:@"loadState"] ? DOLMenuLoadStates : DOLMenuRecording;
     [self.navigationController pushViewController:[self child:page
         title:[self text:key]] animated:YES];
+  } else if (self.page == DOLMenuRecording) {
+    if ([self.recordingSnapshot[@"busy"] boolValue]) return;
+    if (row == 0) [self operateRecording];
+    else if (row == 1 && ![self.recordingSnapshot[@"active"] boolValue] &&
+             [self.recordingSnapshot[@"hasVideo"] boolValue] && self.shareRecording)
+      self.shareRecording();
   } else if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) {
     NSDictionary* slot = self.snapshot[@"slots"][row];
     BOOL load = self.page == DOLMenuLoadStates;

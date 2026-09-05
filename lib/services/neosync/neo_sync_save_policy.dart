@@ -11,6 +11,12 @@ enum NeoSyncSaveKind { save, foreign, unresolved }
 /// identify a PlayStation savedata component. Unknown historical objects must
 /// be investigated, never silently deleted as if they were proven non-saves.
 class NeoSyncSavePolicy {
+  /// The older PSP catalog predates the iOS RetroArch savedata adapter.
+  /// Use the same effective support flag in discovery and the status icon.
+  static bool supportsSystem(String system, bool catalogEnabled, {bool? isIOS}) =>
+      catalogEnabled || ((isIOS ?? Platform.isIOS) &&
+          const {'psp', 'pspminis'}.contains(system.toLowerCase()));
+
   static const playStationComponents = {
     'param.sfo', 'param.pfd', 'icon0.png', 'icon1.pmf', 'pic0.png',
     'pic1.png', 'snd0.at3', 'sysdata', 'playdata',

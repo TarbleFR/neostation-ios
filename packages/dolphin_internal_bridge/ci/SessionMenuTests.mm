@@ -259,6 +259,174 @@
   XCTAssertTrue(navigation.view.userInteractionEnabled);
 }
 
+- (void)testRecordingEntryRequiresNativeCapabilityAndDoesNotReplaceSavestates {
+  for (NSNumber* statesAvailable in @[@YES, @NO]) {
+    DolphinSessionMenu* root = [DolphinSessionMenu new];
+    root.stateActionsAvailable = statesAvailable.boolValue;
+    [root loadViewIfNeeded];
+    NSInteger originalRows = statesAvailable.boolValue ? 7 : 5;
+    XCTAssertEqual([root tableView:root.tableView numberOfRowsInSection:0], originalRows);
+    __block NSInteger reads = 0;
+    root.readRecording = ^(void (^completion)(NSDictionary*)) {
+      reads++;
+      completion(@{@"active": @NO, @"busy": @NO, @"hasVideo": @NO});
+    };
+    XCTAssertEqual([root tableView:root.tableView numberOfRowsInSection:0], originalRows + 1);
+    NSInteger recordingRow = statesAvailable.boolValue ? 5 : 3;
+    XCTAssertEqualObjects([root tableView:root.tableView cellForRowAtIndexPath:
+        [NSIndexPath indexPathForRow:recordingRow inSection:0]].textLabel.text, @"recording");
+    if (statesAvailable.boolValue) {
+      XCTAssertEqualObjects([root tableView:root.tableView cellForRowAtIndexPath:
+          [NSIndexPath indexPathForRow:3 inSection:0]].textLabel.text, @"saveState");
+      XCTAssertEqualObjects([root tableView:root.tableView cellForRowAtIndexPath:
+          [NSIndexPath indexPathForRow:4 inSection:0]].textLabel.text, @"loadState");
+    }
+    XCTAssertEqual(reads, 0, @"Opening the root must not query the recorder");
+  }
+}
+
+- (void)testRecordingStartAndStopAwaitNativeConfirmationForBothConsoles {
+  for (NSNumber* wii in @[@NO, @YES]) {
+    AutoConfirmSessionMenu* root = [AutoConfirmSessionMenu new];
+    root.wii = wii.boolValue;
+    root.labels = @{@"recording": @"Video recording", @"startRecording": @"Start · 50 fps",
+        @"stopRecording": @"Stop recording", @"shareRecording": @"Share last video"};
+    __block void (^finishRead)(NSDictionary*) = nil;
+    __block void (^finishToggle)(BOOL) = nil;
+    __block NSInteger toggles = 0, resumes = 0, shares = 0;
+    root.readRecording = ^(void (^completion)(NSDictionary*)) {
+      XCTAssertNil(finishRead, @"Recording metadata requests must not overlap");
+      finishRead = [completion copy];
+    };
+    root.toggleRecording = ^(void (^completion)(BOOL)) {
+      toggles++;
+      finishToggle = [completion copy];
+    };
+    root.resumeGame = ^{ resumes++; };
+    root.shareRecording = ^{ shares++; };
+    UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
+    [navigation loadViewIfNeeded];
+    AutoConfirmSessionMenu* page = [self openStatePage:5 root:root navigation:navigation];
+    XCTAssertEqualObjects(page.title, @"Video recording");
+    XCTAssertEqual(page.wii, wii.boolValue);
+    NSIndexPath* toggleRow = [NSIndexPath indexPathForRow:0 inSection:0];
+    NSIndexPath* shareRow = [NSIndexPath indexPathForRow:1 inSection:0];
+    [page tableView:page.tableView didSelectRowAtIndexPath:toggleRow];
+    [page tableView:page.tableView didSelectRowAtIndexPath:shareRow];
+    XCTAssertEqual(toggles, 0);
+    XCTAssertEqual(shares, 0);
+    XCTAssertTrue(([page tableView:page.tableView cellForRowAtIndexPath:toggleRow]
+        .accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0);
+
+    void (^readCompletion)(NSDictionary*) = finishRead;
+    XCTAssertNotNil(readCompletion);
+    finishRead = nil;
+    [self completeOnNextMainTurn:^{ readCompletion(@{@"active": @NO, @"busy": @NO, @"hasVideo": @NO}); }];
+    XCTAssertEqualObjects([page tableView:page.tableView cellForRowAtIndexPath:toggleRow]
+        .textLabel.text, @"Start · 50 fps");
+    XCTAssertTrue(([page tableView:page.tableView cellForRowAtIndexPath:shareRow]
+        .accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0);
+    [page tableView:page.tableView didSelectRowAtIndexPath:shareRow];
+    XCTAssertEqual(shares, 0, @"There is no finished video to share");
+
+    for (NSNumber* wasActive in @[@NO, @YES]) {
+      NSInteger expectedToggles = wasActive.boolValue ? 2 : 1;
+      [page tableView:page.tableView didSelectRowAtIndexPath:toggleRow];
+      XCTAssertEqual(toggles, expectedToggles);
+      XCTAssertFalse(navigation.view.userInteractionEnabled);
+      XCTAssertFalse(page.navigationItem.rightBarButtonItem.enabled);
+      [page tableView:page.tableView didSelectRowAtIndexPath:toggleRow];
+      [page tableView:page.tableView didSelectRowAtIndexPath:shareRow];
+      [page resumePressed];
+      XCTAssertEqual(toggles, expectedToggles);
+      XCTAssertEqual(shares, 0);
+      XCTAssertEqual(resumes, wasActive.boolValue ? 1 : 0);
+
+      void (^toggleCompletion)(BOOL) = finishToggle;
+      XCTAssertNotNil(toggleCompletion);
+      finishToggle = nil;
+      [self completeOnNextMainTurn:^{ toggleCompletion(YES); }];
+      XCTAssertFalse(navigation.view.userInteractionEnabled, @"Await the fresh recording snapshot too");
+      [page resumePressed];
+      XCTAssertEqual(resumes, wasActive.boolValue ? 1 : 0);
+      readCompletion = finishRead;
+      XCTAssertNotNil(readCompletion);
+      finishRead = nil;
+      [self completeOnNextMainTurn:^{ readCompletion(@{@"active": @(!wasActive.boolValue),
+          @"busy": @NO, @"hasVideo": wasActive}); }];
+      XCTAssertTrue(navigation.view.userInteractionEnabled);
+      XCTAssertTrue(page.navigationItem.rightBarButtonItem.enabled);
+      XCTAssertEqual(resumes, 1, @"Only a confirmed start automatically resumes the game");
+    }
+    XCTAssertEqualObjects(navigation.topViewController, page, @"Stopping keeps sharing available");
+    XCTAssertFalse(([page tableView:page.tableView cellForRowAtIndexPath:shareRow]
+        .accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0);
+    [page tableView:page.tableView didSelectRowAtIndexPath:shareRow];
+    XCTAssertEqual(shares, 1);
+  }
+}
+
+- (void)testRecordingFailureRestoresNavigationAndRequiresConfirmedStartBeforeResume {
+  AutoConfirmSessionMenu* root = [AutoConfirmSessionMenu new];
+  __block NSDictionary* snapshot = @{@"active": @NO, @"busy": @NO, @"hasVideo": @NO};
+  root.readRecording = ^(void (^completion)(NSDictionary*)) { completion(snapshot); };
+  __block void (^finishToggle)(BOOL) = nil;
+  __block NSInteger toggles = 0, resumes = 0;
+  root.toggleRecording = ^(void (^completion)(BOOL)) { toggles++; finishToggle = [completion copy]; };
+  root.resumeGame = ^{ resumes++; };
+  UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
+  [navigation loadViewIfNeeded];
+  AutoConfirmSessionMenu* page = [self openStatePage:5 root:root navigation:navigation];
+  NSIndexPath* toggleRow = [NSIndexPath indexPathForRow:0 inSection:0];
+  for (NSNumber* nativeSuccess in @[@NO, @YES]) {
+    [page tableView:page.tableView didSelectRowAtIndexPath:toggleRow];
+    XCTAssertFalse(navigation.view.userInteractionEnabled);
+    void (^completion)(BOOL) = finishToggle;
+    finishToggle = nil;
+    [self completeOnNextMainTurn:^{ completion(nativeSuccess.boolValue); }];
+    XCTAssertTrue(navigation.view.userInteractionEnabled);
+    XCTAssertTrue(page.navigationItem.rightBarButtonItem.enabled);
+    XCTAssertEqualObjects(page.lastStateMessage, @"recordingFailed");
+    XCTAssertEqual(resumes, 0, @"A stale inactive snapshot cannot confirm successful recording");
+  }
+  [page tableView:page.tableView didSelectRowAtIndexPath:toggleRow];
+  XCTAssertEqual(toggles, 3, @"Failed capture must remain retryable");
+  snapshot = @{@"active": @YES, @"busy": @NO, @"hasVideo": @NO};
+  void (^completion)(BOOL) = finishToggle;
+  finishToggle = nil;
+  [self completeOnNextMainTurn:^{ completion(YES); }];
+  XCTAssertEqual(resumes, 1);
+}
+
+- (void)testRecordingBusyAndMissingShareCapabilityDisableTheirRows {
+  AutoConfirmSessionMenu* root = [AutoConfirmSessionMenu new];
+  __block NSDictionary* snapshot = @{@"active": @YES, @"busy": @YES, @"hasVideo": @YES};
+  __block NSInteger actions = 0;
+  root.readRecording = ^(void (^completion)(NSDictionary*)) { completion(snapshot); };
+  root.toggleRecording = ^(void (^completion)(BOOL)) { actions++; completion(NO); };
+  root.resumeGame = ^{ actions++; };
+  UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
+  [navigation loadViewIfNeeded];
+  AutoConfirmSessionMenu* page = [self openStatePage:5 root:root navigation:navigation];
+  for (NSInteger row = 0; row < 2; row++) {
+    NSIndexPath* index = [NSIndexPath indexPathForRow:row inSection:0];
+    XCTAssertTrue(([page tableView:page.tableView cellForRowAtIndexPath:index]
+        .accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0);
+    [page tableView:page.tableView didSelectRowAtIndexPath:index];
+  }
+  [page resumePressed];
+  XCTAssertEqual(actions, 0);
+  snapshot = @{@"active": @NO, @"busy": @NO, @"hasVideo": @YES};
+  [page beginAppearanceTransition:YES animated:NO];
+  [page endAppearanceTransition];
+  NSIndexPath* shareRow = [NSIndexPath indexPathForRow:1 inSection:0];
+  XCTAssertTrue(([page tableView:page.tableView cellForRowAtIndexPath:shareRow]
+      .accessibilityTraits & UIAccessibilityTraitNotEnabled) != 0,
+      @"A video alone cannot enable sharing without its native callback");
+  [page tableView:page.tableView didSelectRowAtIndexPath:shareRow];
+  XCTAssertEqual(actions, 0);
+}
+
 - (void)testConsoleLanguageUsesSettingsSnapshotAndSavesChoice {
   DolphinSessionMenu* root = [DolphinSessionMenu new];
   root.wii = YES;

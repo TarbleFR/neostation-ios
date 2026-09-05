@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+// DOLPHIN_ISOLATION_BEGIN: neosync_effective_support_import
+import '../services/neosync/neo_sync_save_policy.dart';
+// DOLPHIN_ISOLATION_END: neosync_effective_support_import
 import '../models/game_model.dart';
 import '../models/neo_sync_models.dart';
 import '../models/system_model.dart';
@@ -52,7 +55,10 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.system.neosync.sync) return const SizedBox.shrink();
+    // DOLPHIN_ISOLATION_BEGIN: neosync_effective_support
+    if (!NeoSyncSavePolicy.supportsSystem(widget.system.folderName,
+        widget.system.neosync.sync)) return const SizedBox.shrink();
+    // DOLPHIN_ISOLATION_END: neosync_effective_support
     if (widget.system.folderName == 'android') return const SizedBox.shrink();
     if (!widget.syncProvider.isAuthenticated) return const SizedBox.shrink();
     if (widget.system.screenscraperId == null ||

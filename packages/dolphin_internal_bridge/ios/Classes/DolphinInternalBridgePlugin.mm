@@ -2,6 +2,7 @@
 #import "DolphinSessionMenu.h"
 #import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
+#import "DolphinRecordingController.h"
 #import <dolphin_internal_bridge/dolphin_internal_bridge-Swift.h>
 #import <GameController/GameController.h>
 
@@ -167,6 +168,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 @property(nonatomic, copy) NSDictionary<NSString*, NSString*>* labels;
 @property(nonatomic, strong) DolphinPerformanceOverlay* performanceOverlay;
 @property(nonatomic, strong) UIButton* performanceButton;
+@property(nonatomic, strong) UILabel* recordingIndicator;
 @property(nonatomic, assign) BOOL showingPerformance;
 @property(nonatomic, assign) NSUInteger performanceGeneration;
 @property(nonatomic, assign) BOOL wii;
@@ -232,6 +234,15 @@ static UIViewController* _Nullable DOLRootViewController(void) {
   [performance addTarget:self action:@selector(performancePressed:) forControlEvents:UIControlEventTouchUpInside];
   self.performanceButton = performance;
   [self.view addSubview:performance];
+  self.recordingIndicator = [UILabel new];
+  self.recordingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+  self.recordingIndicator.text = @"● REC 50";
+  self.recordingIndicator.textColor = UIColor.systemRedColor;
+  self.recordingIndicator.backgroundColor = [UIColor colorWithWhite:0 alpha:0.65];
+  self.recordingIndicator.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightSemibold];
+  self.recordingIndicator.accessibilityLabel = self.labels[@"recording"];
+  self.recordingIndicator.hidden = YES;
+  [self.view addSubview:self.recordingIndicator];
   self.performanceOverlay = [[DolphinPerformanceOverlay alloc] initWithLabels:self.labels];
   self.performanceOverlay.translatesAutoresizingMaskIntoConstraints = NO;
   self.performanceOverlay.hidden = YES;
@@ -241,6 +252,8 @@ static UIViewController* _Nullable DOLRootViewController(void) {
     [performance.centerYAnchor constraintEqualToAnchor:close.centerYAnchor],
     [performance.widthAnchor constraintEqualToConstant:44.0],
     [performance.heightAnchor constraintEqualToConstant:44.0],
+    [self.recordingIndicator.leadingAnchor constraintEqualToAnchor:performance.trailingAnchor constant:8.0],
+    [self.recordingIndicator.centerYAnchor constraintEqualToAnchor:performance.centerYAnchor],
     [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:close.leadingAnchor],
     [self.performanceOverlay.topAnchor constraintEqualToAnchor:close.bottomAnchor constant:8.0],
     [self.performanceOverlay.widthAnchor constraintEqualToConstant:300.0],
@@ -687,6 +700,11 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 @property(nonatomic, copy, nullable) NSString* previousAudioMode;
 @property(nonatomic, assign) AVAudioSessionCategoryOptions previousAudioOptions;
 @property(nonatomic, assign) BOOL audioPolicyCaptured;
+@property(nonatomic, strong) DolphinRecordingController* recorder;
+@property(nonatomic, strong, nullable) NSURL* lastRecordingURL;
+@property(nonatomic, assign) BOOL recordingOperation;
+@property(nonatomic, weak, nullable) DOLDolphinViewController* recordingOwner;
+@property(nonatomic, assign) BOOL recordingFailed;
 @end
 
 @implementation DolphinInternalBridgePlugin {
@@ -705,8 +723,55 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
   self = [super init];
   if (self) {
     _runtimeQueue = dispatch_queue_create("com.neogamelab.neostation.dolphin.runtime", DISPATCH_QUEUE_SERIAL);
+    self.recorder = [DolphinRecordingController new];
+    __weak DolphinInternalBridgePlugin* weakSelf = self;
+    self.recorder.statusHandler = ^(DolphinRecordingState state, NSError* error) {
+      DolphinInternalBridgePlugin* bridge = weakSelf;
+      if (!bridge) return;
+      bridge.recordingOwner.recordingIndicator.hidden = state != DolphinRecordingStateRecording;
+      if (state != DolphinRecordingStateIdle) return;
+      if (bridge.recorder.lastRecordingURL) bridge.lastRecordingURL = bridge.recorder.lastRecordingURL;
+      bridge.recordingFailed = error != nil;
+      [bridge restoreRecordingBudgetForOwner:bridge.recordingOwner completion:nil];
+      UIViewController* page = bridge.sessionMenu.topViewController;
+      if ([page isKindOfClass:DolphinSessionMenu.class]) [(DolphinSessionMenu*)page refreshRecordingStatus];
+      DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"recording.finished", @"Recording finalized.", bridge.recorder.statistics);
+      if (error) DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"recording.failed", error.localizedDescription, nil);
+    };
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(recordingDidEnterBackground)
+        name:UIApplicationDidEnterBackgroundNotification object:nil];
   }
   return self;
+}
+
+- (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
+
+- (void)restoreRecordingBudgetForOwner:(DOLDolphinViewController*)owner completion:(dispatch_block_t)completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (owner && self.dolphinController == owner && !self.stopInProgress)
+      neostation_dolphin_menu_apply("{\"kind\":\"capture\",\"enabled\":false}");
+    if (completion) dispatch_async(dispatch_get_main_queue(), completion);
+  });
+}
+
+- (void)finishRecordingForOwner:(DOLDolphinViewController*)owner completion:(void (^)(BOOL))completion {
+  self.recordingOperation = YES;
+  [self.recorder stopWithCompletion:^(NSURL* url, NSError* error) {
+    if (url) self.lastRecordingURL = url;
+    [self restoreRecordingBudgetForOwner:owner completion:^{
+      self.recordingOperation = NO;
+      UIViewController* page = self.sessionMenu.topViewController;
+      if ([page isKindOfClass:DolphinSessionMenu.class]) [(DolphinSessionMenu*)page refreshRecordingStatus];
+      if (completion) completion(url != nil && error == nil);
+    }];
+  }];
+}
+
+- (void)recordingDidEnterBackground {
+  // The permission sheet resigns active too; only a real background transition
+  // ends capture. Finalization stays asynchronous and never waits on the core.
+  if (self.recorder.active && !self.recordingOperation)
+    [self finishRecordingForOwner:self.dolphinController completion:nil];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -1031,6 +1096,58 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       menu.wii = strongSelf.wiiSession;
       menu.gameTitle = strongSelf.activeGameTitle;
       menu.stateActionsAvailable = !strongSelf.systemMenuSession;
+      menu.readRecording = ^(void (^completion)(NSDictionary*)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        completion(@{@"active": @(bridge.recorder.active),
+          @"busy": @(bridge.recordingOperation || bridge.recorder.state == DolphinRecordingStateStarting ||
+              bridge.recorder.state == DolphinRecordingStateStopping),
+          @"hasVideo": @(bridge.lastRecordingURL != nil), @"failed": @(bridge.recordingFailed)});
+      };
+      menu.toggleRecording = ^(void (^completion)(BOOL)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.recordingOperation || bridge.stopInProgress || bridge.dolphinController != owner) {
+          completion(NO); return;
+        }
+        if (bridge.recorder.active) {
+          [bridge finishRecordingForOwner:owner completion:completion];
+          return;
+        }
+        bridge.recordingOperation = YES;
+        bridge.recordingFailed = NO;
+        bridge.recordingOwner = owner;
+        dispatch_async(bridge->_runtimeQueue, ^{
+          const BOOL ready = bridge.dolphinController == owner && !bridge.stopInProgress &&
+              neostation_dolphin_menu_apply("{\"kind\":\"capture\",\"enabled\":true}") != 0;
+          dispatch_async(dispatch_get_main_queue(), ^{
+            if (!ready || bridge.stopInProgress || bridge.dolphinController != owner) {
+              bridge.recordingOperation = NO; completion(NO); return;
+            }
+            [bridge.recorder startWithCompletion:^(NSError* error) {
+              if (error) {
+                [bridge restoreRecordingBudgetForOwner:owner completion:^{
+                  bridge.recordingOperation = NO; completion(NO);
+                }];
+              } else if (bridge.stopInProgress || bridge.dolphinController != owner ||
+                         UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) {
+                [bridge finishRecordingForOwner:owner completion:^(BOOL success) { completion(NO); }];
+              } else {
+                bridge.recordingOperation = NO; completion(YES);
+              }
+            }];
+          });
+        });
+      };
+      menu.shareRecording = ^{
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        UIViewController* presenter = bridge.sessionMenu.topViewController;
+        if (!bridge.lastRecordingURL || !presenter || presenter.presentedViewController || bridge.recorder.active) return;
+        UIActivityViewController* share = [[UIActivityViewController alloc]
+            initWithActivityItems:@[bridge.lastRecordingURL] applicationActivities:nil];
+        share.popoverPresentationController.sourceView = presenter.view;
+        share.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+            CGRectGetMidY(presenter.view.bounds), 1, 1);
+        [presenter presentViewController:share animated:YES completion:nil];
+      };
       menu.readSettings = ^(BOOL wii, NSInteger slot, void (^completion)(NSDictionary*)) {
         DolphinInternalBridgePlugin* bridge = weakSelf;
         if (!bridge) { completion(nil); return; }
@@ -1127,9 +1244,22 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
         bridge.sessionMenu.view.userInteractionEnabled = NO;
         dispatch_async(bridge->_runtimeQueue, ^{ [bridge stopRuntimeWithReason:@"session_menu_quit"]; });
       };
+      __weak DolphinSessionMenu* weakMenu = menu;
       menu.restartGame = ^{
         DolphinInternalBridgePlugin* bridge = weakSelf;
-        if (!bridge || bridge.stopInProgress || bridge.launchInProgress || bridge.menuOpening) return;
+        if (!bridge || bridge.stopInProgress || bridge.launchInProgress || bridge.menuOpening || bridge.recordingOperation) return;
+        // A restart reuses the same view. Finish and restore its budget first,
+        // so a late encoder callback cannot change the new emulation session.
+        if (bridge.recorder.active) {
+          bridge.menuOpening = YES;
+          bridge.sessionMenu.view.userInteractionEnabled = NO;
+          [bridge finishRecordingForOwner:owner completion:^(BOOL success) {
+            bridge.menuOpening = NO;
+            bridge.sessionMenu.view.userInteractionEnabled = YES;
+            if (weakMenu.restartGame) weakMenu.restartGame();
+          }];
+          return;
+        }
         bridge.launchInProgress = YES;
         bridge.menuOpening = YES;
         ++owner.performanceGeneration;
@@ -1286,6 +1416,8 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       self.runningTimer = nil;
     }
     self.sessionMenu.view.userInteractionEnabled = NO;
+    if (self.recorder.active && !self.recordingOperation)
+      [self finishRecordingForOwner:self.dolphinController completion:nil];
     self.dolphinController.menuHandler = nil;
     self.dolphinController.closeHandler = nil;
     [self.dolphinController suspendTouchInput];

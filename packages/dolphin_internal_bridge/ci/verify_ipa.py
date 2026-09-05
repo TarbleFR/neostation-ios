@@ -173,6 +173,14 @@ def validate(ipa: Path) -> dict:
             demand(app + '/' + resource in names, f'Missing Dolphin system resource: {resource}')
         demand(any(n.startswith(app + '/Sys/Wii/') for n in names), 'Wii system resources absent')
         touch_bundle = app + '/Frameworks/dolphin_internal_bridge.framework/'
+        bridge_image = images.get(touch_bundle + 'dolphin_internal_bridge')
+        demand(bridge_image is not None, 'Dolphin native UI bridge missing')
+        demand(any('DolphinRecordingController' in symbol for symbol in bridge_image['definedSymbols']),
+               'Native recording controller missing from the shipped executable')
+        for framework in ('ReplayKit', 'AVFoundation', 'CoreImage'):
+            demand(any('/' + framework + '.framework/' in dependency['path']
+                       for dependency in bridge_image['dependencies']),
+                   f'Native recording framework not linked: {framework}')
         for layout in ('TCGameCubePad', 'TCWiiPad', 'TCClassicWiiPad'):
             nib = touch_bundle + layout + '.nib'
             demand(nib in names or any(n.startswith(nib + '/') for n in names),

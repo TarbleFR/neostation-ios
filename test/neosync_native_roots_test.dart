@@ -5,6 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/services/neosync/neo_sync_save_policy.dart';
 
 void main() {
+  test('iOS PSP savedata support survives the older disabled system catalog', () {
+    for (final system in ['psp', 'pspminis']) {
+      expect(NeoSyncSavePolicy.supportsSystem(system, false, isIOS: true), isTrue);
+      expect(NeoSyncSavePolicy.supportsSystem(system, false, isIOS: false), isFalse);
+    }
+    expect(NeoSyncSavePolicy.supportsSystem('other', false, isIOS: true), isFalse);
+  });
+
   late Directory root;
   setUp(() { root = Directory.systemTemp.createTempSync('neosync-roots-'); });
   tearDown(() { root.deleteSync(recursive: true); });

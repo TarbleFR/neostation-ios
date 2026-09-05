@@ -195,8 +195,8 @@ class NeoSyncProvider extends ChangeNotifier {
   List<NeoSyncCloudSaveUnit> getGameCloudSaveUnits(String gameId) =>
       NeoSyncSaveUnits.cloud(getGameCloudSaves(gameId));
 
-  bool _supportsNeoSync(SystemModel system) => system.neosync.sync ||
-      (Platform.isIOS && const {'psp', 'pspminis'}.contains(system.folderName.toLowerCase()));
+  bool _supportsNeoSync(SystemModel system) =>
+      NeoSyncSavePolicy.supportsSystem(system.folderName, system.neosync.sync);
 
   /// Source ownership comes from the configured emulator folders, never from
   /// a ROM title or a filename extension alone.

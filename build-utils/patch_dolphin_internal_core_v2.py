@@ -89,6 +89,8 @@ void ApplyConsolePreferences();
 void ApplyGraphicsPreferences();
 void ResetInputProfiles();
 std::atomic<int> g_boot_language{-1};
+// Runtime-only capture budget. Never persist this cap to the user's GFX.ini.
+std::optional<int> g_capture_previous_scale;
 
 void Log(const std::string& stage, const std::string& message)
 {
@@ -143,6 +145,7 @@ void ResetSessionFlags()
   g_metal_surface = nullptr;
   g_metal_scale = 1.0;
   g_boot_language = -1;
+  g_capture_previous_scale.reset();
 }
 
 void ShutdownRuntime(const char* reason)
@@ -158,6 +161,8 @@ void ShutdownRuntime(const char* reason)
     Core::Stop(system);
     Log("cleanup.core_join.begin", "Waiting for the emulation thread.");
     Core::Shutdown(system); // Pinned API joins the real emulation thread.
+    // BootManager::RestoreConfig has cleared CurrentRun, including the capture
+    // cap. Do not recreate this game's override after join for the next game.
     Log("cleanup.core_join.complete", "Emulation thread joined; surface can be detached after cleanup.");
     ApplyConsolePreferences();
     Config::Save();
@@ -740,12 +745,38 @@ int32_t neostation_dolphin_menu_apply(const char* request_json)
   if (![request isKindOfClass:NSDictionary.class]) return 0;
   __block bool success = false;
   DOLHostQueueRunSync(^{
+    if ([request[@"kind"] isEqual:@"capture"])
+    {
+      const bool enabled = [request[@"enabled"] boolValue];
+      if (enabled && !g_capture_previous_scale)
+        g_capture_previous_scale = Config::Get(Config::GFX_EFB_SCALE);
+      if (g_capture_previous_scale)
+      {
+        // Automatic scale (0) can exceed the capture budget on large screens.
+        const int previous = *g_capture_previous_scale;
+        Config::SetCurrent(Config::GFX_EFB_SCALE,
+            enabled ? (previous == 1 ? 1 : 2) : previous);
+        if (!enabled) g_capture_previous_scale.reset();
+        Core::RunOnCPUThread(Core::System::GetInstance(), [] {
+          CPUThreadConfigCallback::CheckForConfigChanges();
+        }, true);
+      }
+      success = g_Config.iEFBScale == Config::Get(Config::GFX_EFB_SCALE);
+      return;
+    }
     if ([request[@"kind"] isEqual:@"graphics"])
     {
       const int value = [request[@"value"] intValue];
       NSString* key = request[@"key"];
       if ([key isEqual:@"resolution"] && value >= 1 && value <= 4)
+      {
         DOLSetGraphics(Config::GFX_EFB_SCALE, value);
+        if (g_capture_previous_scale)
+        {
+          g_capture_previous_scale = value;
+          Config::SetCurrent(Config::GFX_EFB_SCALE, value == 1 ? 1 : 2);
+        }
+      }
       else if ([key isEqual:@"aspect"] && value >= 0 && value <= 3)
         DOLSetGraphics(Config::GFX_ASPECT_RATIO, static_cast<AspectMode>(value));
       else if ([key isEqual:@"vsync"] && value >= 0 && value <= 1)

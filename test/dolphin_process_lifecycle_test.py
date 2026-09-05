@@ -54,15 +54,23 @@ bool g_validated_wii_menu=false;
 void* g_metal_surface=nullptr;
 double g_metal_scale=1;
 std::optional<int> g_devices_callback;
+std::optional<int> g_capture_previous_scale;
+int current_scale=4;
 namespace Core {
 struct System { static System& GetInstance() { static System s; return s; } };
 bool IsUninitialized(System&) { return uninitialized; }
 void Stop(System&) { assert(host_depth); stop_requested=true; }
 void Shutdown(System&) {
  assert(host_depth && stop_requested); ++joins; uninitialized=true; stop_requested=false;
+ // Real BootManager::RestoreConfig clears CurrentRun during core teardown.
+ current_scale=0;
 }
 }
-namespace Config { void Save() { assert(host_depth); } void Load() { assert(host_depth); } }
+namespace Config {
+ constexpr int GFX_EFB_SCALE=0;
+ void SetCurrent(int, int value) { assert(host_depth); current_scale=value; }
+ void Save() { assert(host_depth); } void Load() { assert(host_depth); }
+}
 enum class WindowSystemType { iOS };
 struct WindowSystemInfo { WindowSystemType type; };
 namespace UICommon {
@@ -119,12 +127,14 @@ int main() {
    g_jit_handshake=true; g_executable_probe=true;
    g_metal_surface=reinterpret_cast<void*>(uintptr_t{42});
    g_boot_language=3;
+   g_capture_previous_scale=4; current_scale=2;
    assert(neostation_dolphin_initialize("User","Sys","overlap")==0);
    assert(g_log_path==logfile);
    assert(neostation_dolphin_stop(logfile.c_str())==1);
    assert(uninitialized && !g_running && !g_cleanup_started);
    assert(g_initialized && process_shutdown==0);
    assert(g_metal_surface==nullptr && g_validated_game.empty());
+   assert(current_scale==0 && !g_capture_previous_scale);
    assert(joins==cycle+1);
  }
  // An aborted launch has no running core. Cleanup remains safe and permits
