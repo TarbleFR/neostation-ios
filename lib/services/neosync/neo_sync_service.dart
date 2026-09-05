@@ -320,6 +320,46 @@ class NeoSyncService extends ChangeNotifier {
     }
   }
 
+  // DOLPHIN_ISOLATION_BEGIN: dolphin_complete_cloud_listing
+  /// Dolphin must not treat a file outside the first page as absent. Preserve
+  /// the existing getFiles() contract for every other caller.
+  Future<Map<String, dynamic>> getDolphinSaveFiles() async {
+    try {
+      final headers = await _getHeaders();
+      final files = <NeoSyncFile>[];
+      final seen = <String>{};
+      var offset = 0;
+      for (var page = 0; page < 100; page++) {
+        final uri = Uri.parse('${AppConfig.neoSyncBaseUrl}/api/v2/files')
+            .replace(queryParameters: {'limit': '200', 'offset': '$offset'});
+        final response = await http.get(uri, headers: headers)
+            .timeout(const Duration(seconds: 30));
+        if (response.statusCode != 200) {
+          throw StateError('NeoSync listing HTTP ${response.statusCode}');
+        }
+        final data = jsonDecode(response.body);
+        if (data is! Map || data['files'] is! List) {
+          throw const FormatException('Invalid NeoSync file page');
+        }
+        final batch = (data['files'] as List)
+            .map((item) => NeoSyncFile.fromJson(Map<String, dynamic>.from(item as Map))).toList();
+        for (final file in batch) {
+          if (file.id.isEmpty || !seen.add(file.id)) {
+            throw StateError('NeoSync pagination repeated a file; refusing an incomplete list');
+          }
+          files.add(file);
+        }
+        if (batch.length < 200) return {'success': true, 'files': files};
+        offset += batch.length;
+      }
+      throw StateError('NeoSync listing limit reached; refusing an incomplete list');
+    } catch (error) {
+      _log.e('[NeoSync][DolphiniOS][list.failed] $error');
+      return {'success': false, 'message': '$error'};
+    }
+  }
+  // DOLPHIN_ISOLATION_END: dolphin_complete_cloud_listing
+
   /// Fetches the metadata list of all files currently stored in the user's cloud account.
   Future<Map<String, dynamic>> getFiles() async {
     _isLoading = true;

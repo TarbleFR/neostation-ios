@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'logger_service.dart';
 import 'dolphin_system_files.dart';
+import 'dolphin_neosync_store.dart';
 
 /// IPL slots exposed by the native GameCube playlist.
 enum DolphinIplRegion { usa, eur, jap }
@@ -58,6 +60,66 @@ class DolphinInternalV2Service {
   static bool _systemImportBusy = false;
   static bool _launchInProgress = false;
   static Future<void>? _layoutFuture;
+  static Future<void>? _saveAccessFuture;
+  static String? _saveSessionToken;
+  static Future<void> Function()? _onSaveSessionStopped;
+  static bool _saveHandlerInstalled = false;
+
+  /// Scoped exclusion with launches and system-file imports, not a global JIT
+  /// switch. Failure/unknown native state refuses filesystem synchronization.
+  static Future<T> withSaveAccess<T>(Future<T> Function(DolphinNeoSyncStore store) action) async {
+    final previous = _saveAccessFuture;
+    final done = Completer<void>();
+    _saveAccessFuture = done.future;
+    if (previous != null) await previous;
+    try {
+      return await _withSystemImport(() async {
+        final root = await rootDirectory();
+        final store = DolphinNeoSyncStore(Directory(path.join(root.path, 'User')),
+          Directory(path.join(root.path, 'NeoSync')));
+        await store.recover();
+        return action(store);
+      });
+    } finally {
+      if (identical(_saveAccessFuture, done.future)) _saveAccessFuture = null;
+      done.complete();
+    }
+  }
+
+  static Future<void> logSaveSync(String stage, String message) =>
+      _appendLog('neosync.$stage', message);
+
+  static Future<DolphinSaveIdentity> readSaveIdentity(String folderName, String gamePath) async {
+    final system = _normalizeSystem(folderName);
+    final library = await libraryDirectory(system);
+    final realLibrary = await library.resolveSymbolicLinks();
+    final realGame = await File(gamePath).resolveSymbolicLinks();
+    if (!path.isWithin(realLibrary, realGame)) throw const FormatException('Dolphin save identity: foreign ROM');
+    final data = await _channel.invokeMapMethod<String, dynamic>('saveIdentity',
+      {'system': system, 'gamePath': realGame});
+    if (data == null) throw const FormatException('Dolphin cannot read the native save identity');
+    return DolphinSaveIdentity.fromMap(data);
+  }
+
+  static void _installSaveSessionHandler() {
+    if (_saveHandlerInstalled) return;
+    _saveHandlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method != 'saveSessionStopped' || call.arguments is! Map) return;
+      final data = call.arguments as Map;
+      if (data['savesFlushed'] != true || data['token'] != _saveSessionToken) return;
+      final callback = _onSaveSessionStopped;
+      _saveSessionToken = null;
+      _onSaveSessionStopped = null;
+      final root = await rootDirectory();
+      await _deleteIfExists(File(path.join(root.path, 'CrashMarkers', 'active-session.json')));
+      await _appendLog('neosync.saves_flushed', 'Native Dolphin stopped; save synchronization is now permitted.');
+      if (callback != null) {
+        try { await callback(); }
+        catch (error) { await _appendLog('neosync.after_close_failed', '$error'); }
+      }
+    });
+  }
 
   static const Set<String> _gameCubeExtensions = {
     'iso',
@@ -161,6 +223,8 @@ class DolphinInternalV2Service {
     for (final relative in directories) {
       await Directory(path.join(root.path, relative)).create(recursive: true);
     }
+    await DolphinNeoSyncStore(Directory(path.join(root.path, 'User')),
+      Directory(path.join(root.path, 'NeoSync'))).recover();
     await sharedSystemDirectory('wii');
     await _recoverPreviousCrash(root);
   }
@@ -422,13 +486,32 @@ class DolphinInternalV2Service {
   static Future<DolphinLaunchReport> launch({
     required String folderName,
     required String gamePath,
+    Future<void> Function()? onSessionStopped,
   }) async {
+    // Let an already-started save transaction finish before opening the core.
+    if (_saveAccessFuture != null) await _saveAccessFuture;
     if (_systemImportBusy || _launchInProgress) {
       throw const DolphinSystemFilesException('busy');
     }
     _launchInProgress = true;
+    var ownsSaveCallback = false;
     try {
-      return await _launch(folderName: folderName, gamePath: gamePath);
+      if (await _channel.invokeMethod<bool>('isRunning') != false) {
+        throw const DolphinSystemFilesException('busy');
+      }
+      _installSaveSessionHandler();
+      ownsSaveCallback = true;
+    _saveSessionToken = '${DateTime.now().microsecondsSinceEpoch}';
+    _onSaveSessionStopped = onSessionStopped;
+      final report = await _launch(folderName: folderName, gamePath: gamePath);
+      if (!report.ready) { _saveSessionToken = null; _onSaveSessionStopped = null; }
+      return report;
+    } catch (_) {
+      if (ownsSaveCallback) {
+        _saveSessionToken = null;
+        _onSaveSessionStopped = null;
+      }
+      rethrow;
     } finally {
       _launchInProgress = false;
     }
@@ -506,6 +589,7 @@ class DolphinInternalV2Service {
         'launchGame',
         {
           'system': system,
+          'saveSessionToken': _saveSessionToken,
           'menuLabels': DolphinImportLocale.labelsFor(FlutterLocalization.instance.currentLocale),
           'gamePath': normalizedGame,
           'userDirectory': path.join(root.path, 'User'),

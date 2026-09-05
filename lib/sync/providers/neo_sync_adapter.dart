@@ -157,6 +157,10 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   Future<SyncResult> detectGameSaveFiles(GameModel game) async {
     try {
       await _provider.detectGameSaveFiles(game);
+      // DOLPHIN_ISOLATION_BEGIN: detectGameSaveFiles_result
+      final dolphinError = _provider.dolphinSaveSyncError(game);
+      if (dolphinError != null) return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      // DOLPHIN_ISOLATION_END: detectGameSaveFiles_result
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.unknown, message: e.toString());
@@ -171,6 +175,10 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   Future<SyncResult> syncGameSavesBeforeLaunch(GameModel game) async {
     try {
       await _provider.syncGameSavesBeforeLaunch(game);
+      // DOLPHIN_ISOLATION_BEGIN: syncGameSavesBeforeLaunch_result
+      final dolphinError = _provider.dolphinSaveSyncError(game);
+      if (dolphinError != null) return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      // DOLPHIN_ISOLATION_END: syncGameSavesBeforeLaunch_result
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.unknown, message: e.toString());
@@ -181,6 +189,10 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
   Future<SyncResult> syncGameSavesAfterClose(GameModel game) async {
     try {
       await _provider.syncGameSavesAfterClose(game);
+      // DOLPHIN_ISOLATION_BEGIN: syncGameSavesAfterClose_result
+      final dolphinError = _provider.dolphinSaveSyncError(game);
+      if (dolphinError != null) return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      // DOLPHIN_ISOLATION_END: syncGameSavesAfterClose_result
       return SyncResult.ok();
     } catch (e) {
       return SyncResult.fail(SyncError.unknown, message: e.toString());

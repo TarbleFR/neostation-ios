@@ -21,6 +21,7 @@
 #import <atomic>
 
 extern "C" {
+char* neostation_dolphin_save_identity(const char* game_path, const char* expected_system);
 int32_t neostation_dolphin_initialize(const char* user_directory,
                                       const char* system_directory,
                                       const char* log_path);
@@ -606,6 +607,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 @property(nonatomic, strong, nullable) UINavigationController* sessionMenu;
 @property(nonatomic, assign) BOOL menuOpening;
 @property(nonatomic, assign) BOOL wiiSession;
+@property(nonatomic, copy, nullable) NSString* saveSessionToken;
 @property(nonatomic, copy) NSDictionary<NSString*, NSString*>* menuLabels;
 // These values belong to the Dolphin session, not to the global audio policy.
 @property(nonatomic, copy, nullable) NSString* previousAudioCategory;
@@ -635,6 +637,23 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+  if ([call.method isEqualToString:@"saveIdentity"]) {
+    NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
+    NSString* gamePath = [args[@"gamePath"] isKindOfClass:NSString.class] ? args[@"gamePath"] : @"";
+    NSString* system = [args[@"system"] isKindOfClass:NSString.class] ? args[@"system"] : @"";
+    dispatch_async(_runtimeQueue, ^{
+      char* json = neostation_dolphin_save_identity(gamePath.fileSystemRepresentation, system.UTF8String);
+      NSDictionary* identity = nil;
+      if (json) {
+        NSData* data = [[NSString stringWithUTF8String:json] dataUsingEncoding:NSUTF8StringEncoding];
+        free(json);
+        id decoded = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if ([decoded isKindOfClass:NSDictionary.class]) identity = decoded;
+      }
+      dispatch_async(dispatch_get_main_queue(), ^{ result(identity); });
+    });
+    return;
+  }
   if ([call.method isEqualToString:@"launchGame"]) {
     NSDictionary* arguments = [call.arguments isKindOfClass:NSDictionary.class]
                                   ? call.arguments
@@ -653,7 +672,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     return;
   }
   if ([call.method isEqualToString:@"isRunning"]) {
-    result(@(self.stopInProgress || neostation_dolphin_is_running() != 0));
+    result(@(self.launchInProgress || self.stopInProgress || neostation_dolphin_is_running() != 0));
     return;
   }
   result(FlutterMethodNotImplemented);
@@ -681,6 +700,8 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     self.launchInProgress = YES;
   }
 
+  self.saveSessionToken = [arguments[@"saveSessionToken"] isKindOfClass:NSString.class]
+      ? arguments[@"saveSessionToken"] : nil;
   NSString* gamePath = [arguments[@"gamePath"] isKindOfClass:NSString.class]
                            ? arguments[@"gamePath"] : @"";
   NSString* system = [[arguments[@"system"] isKindOfClass:NSString.class]
@@ -1017,6 +1038,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 }
 
 - (NSDictionary*)finishFailedLaunch:(NSMutableDictionary*)state {
+  self.saveSessionToken = nil;
   [self prepareSessionForStop];
   [self.helperSession close];
   self.helperSession = nil;
@@ -1075,15 +1097,26 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 }
 
 - (void)stopRuntimeWithReason:(NSString*)reason {
+  NSString* saveToken = self.saveSessionToken;
+  self.saveSessionToken = nil;
   [self prepareSessionForStop];
   NSString* logPath = self.activeLogPath ?: @"";
   DOLAppendJSONLog(logPath, @"session.stop_requested", @"Stopping the Dolphin session.",
                    @{ @"reason" : reason ?: @"unknown" });
-  neostation_dolphin_stop(logPath.fileSystemRepresentation);
+  const BOOL savesFlushed = neostation_dolphin_stop(logPath.fileSystemRepresentation) == 1;
   [self.helperSession close];
   self.helperSession = nil;
   [self cleanupSharedResourcesAndUI];
   @synchronized(self) { self.launchInProgress = NO; }
+  if (saveToken.length > 0 && savesFlushed) {
+    // Core shutdown/joins and resource cleanup above have completed. A mere
+    // pause, menu dismissal or app background event must NEVER trigger upload.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self.channel invokeMethod:@"saveSessionStopped" arguments:@{
+        @"token": saveToken, @"reason": reason ?: @"unknown", @"savesFlushed": @YES
+      }];
+    });
+  }
 }
 
 - (void)prepareSessionForStop {

@@ -1,3 +1,8 @@
+// DOLPHIN_ISOLATION_BEGIN: neosync_imports
+import 'dart:async';
+import '../services/dolphin_internal_v2_service.dart';
+import '../services/dolphin_neosync_store.dart';
+// DOLPHIN_ISOLATION_END: neosync_imports
 import 'package:flutter/material.dart';
 
 import 'dart:io';
@@ -32,6 +37,9 @@ part 'neosync/neosync_path_resolver.dart';
 part 'neosync/neosync_upload.dart';
 part 'neosync/neosync_download.dart';
 part 'neosync/neosync_core.dart';
+// DOLPHIN_ISOLATION_BEGIN: neosync_part
+part 'neosync/neosync_dolphin.dart';
+// DOLPHIN_ISOLATION_END: neosync_part
 
 /// Provider responsible for managing the NeoSync cloud save synchronization service.
 ///
@@ -58,6 +66,11 @@ class NeoSyncProvider extends ChangeNotifier {
   final LegacyNeoSyncService _legacyNeoSyncService = LegacyNeoSyncService();
 
   NeoSyncProvider(this._neoSyncService);
+  // DOLPHIN_ISOLATION_BEGIN: neosync_queue
+  Future<void> _dolphinSyncTail = Future<void>.value();
+  int _dolphinBulkChecked = 0;
+  int _dolphinBulkErrors = 0;
+  // DOLPHIN_ISOLATION_END: neosync_queue
 
   /// Whether a global synchronization task is currently active.
   bool _isSyncing = false;
@@ -235,6 +248,12 @@ class NeoSyncProvider extends ChangeNotifier {
   /// Upon successful download, it synchronizes the local database sync state
   /// to match the cloud version.
   Future<void> _downloadCloudFile(NeoSyncFile cloudFile, File localFile) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_download_writer
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
+      await _restoreDolphinCloud(cloudFile); return;
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_download_writer
+
     final payload = await downloadOnlineFileBytes(cloudFile);
     await localFile.writeAsBytes(payload);
 

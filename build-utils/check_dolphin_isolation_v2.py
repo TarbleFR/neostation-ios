@@ -15,6 +15,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_FILES = {
+    "lib/services/neosync/neo_sync_service.dart",
+    "lib/sync/providers/neo_sync_adapter.dart",
+    "lib/providers/neo_sync_provider.dart",
+    "lib/providers/neosync/neosync_core.dart",
+    "lib/providers/neosync/neosync_path_resolver.dart",
+    "lib/providers/neosync/neosync_upload.dart",
+    "lib/providers/neosync/neosync_download.dart",
     "README.md",
     "NOTICE.md",
     "lib/services/game/game_launch_service.dart",
@@ -26,6 +33,9 @@ SHARED_FILES = {
     "lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart",
 }
 ALLOWED_EXACT = {
+    "lib/providers/neosync/neosync_dolphin.dart",
+    "lib/services/dolphin_neosync_store.dart",
+    "docs/DOLPHIN_NEOSYNC.md",
     ".github/workflows/dolphin-internal-isolated-v3.yml",
     "pubspec.yaml",
     "pubspec.lock",

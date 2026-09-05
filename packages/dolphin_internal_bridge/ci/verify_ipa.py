@@ -17,7 +17,7 @@ BRIDGE = {
     '_neostation_dolphin_initialize', '_neostation_dolphin_validate_image',
     '_neostation_dolphin_prepare_legacy_jit', '_neostation_dolphin_launch',
     '_neostation_dolphin_is_running', '_neostation_dolphin_set_paused',
-    '_neostation_dolphin_stop',
+    '_neostation_dolphin_stop', '_neostation_dolphin_save_identity',
     '_neostation_dolphin_menu_snapshot', '_neostation_dolphin_menu_apply',
     '_neostation_dolphin_restart', '_neostation_dolphin_refresh_controllers',
     '_neostation_dolphin_touch_event', '_neostation_dolphin_release_touches',

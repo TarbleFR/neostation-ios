@@ -8,6 +8,16 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     GameModel? game,
     bool ensureExists = true,
   }) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_save_roots
+    if (Platform.isIOS && DolphinInternalV2Service.isDolphinSystem(system.folderName)) {
+      final root = await DolphinInternalV2Service.rootDirectory();
+      final native = system.folderName.trim().toLowerCase() == 'gc'
+          ? path.join(root.path, 'User', 'GC')
+          : path.join(root.path, 'User', 'Wii', 'title');
+      return !ensureExists || await Directory(native).exists() ? [native] : [];
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_save_roots
+
     final folders = system.neosync.getFoldersForCurrentPlatform();
     final List<String> resolvedPaths = [];
 
@@ -775,6 +785,18 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     GameModel game,
     NeoSyncFile cloudFile,
   ) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_restore_path
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) || _isDolphinGame(game)) {
+      if (!_isDolphinGame(game)) return [];
+      final target = DolphinSaveTarget.parse(cloudFile.fileName);
+      if (target == null) return [];
+      return _dolphinExclusive((store) async {
+        final identity = await DolphinInternalV2Service.readSaveIdentity(game.systemFolderName!, game.romPath ?? '');
+        return target.matches(identity) ? [(await store.cacheFile(target)).path] : <String>[];
+      });
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_restore_path
+
     final system = await _getSystemForGame(game);
     if (system == null) return [];
 

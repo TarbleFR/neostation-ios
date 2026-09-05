@@ -79,6 +79,10 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Only checks the synchronization state for a game (no sync actions)
   Future<void> _checkGameSaveStatus(GameModel game) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_status
+    if (_isDolphinGame(game)) { await _syncDolphinGame(game, perform: false); return; }
+    // DOLPHIN_ISOLATION_END: dolphin_status
+
     // Find local save for this game
     final localSave = await _findGameSaveFile(game);
     // Find cloud save for this game
@@ -135,6 +139,15 @@ extension NeoSyncCore on NeoSyncProvider {
 
     try {
       final savesPath = await _getRetroArchSavesPath();
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_full_sync
+      await _syncAllDolphinGames();
+      if (savesPath == null && Platform.isIOS && _dolphinBulkChecked > 0) {
+        _syncProgress = 1.0;
+        _syncStatus = 'Dolphin sync checked: $_uploadedFiles uploaded, $_downloadedFiles downloaded. See per-game status for conflicts or deferred saves.';
+        return;
+      }
+    // DOLPHIN_ISOLATION_END: dolphin_full_sync
+
       if (savesPath == null) {
         _syncStatus = 'RetroArch saves directory not found';
         _processedItems.add('RetroArch saves directory not found');
@@ -168,6 +181,9 @@ extension NeoSyncCore on NeoSyncProvider {
         NeoSyncProvider._log.e('Unified sync error: $e');
       }
     } finally {
+      // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_status
+      _finishDolphinBulkStatus();
+      // DOLPHIN_ISOLATION_END: dolphin_bulk_status
       _setSyncing(false);
     }
   }
@@ -277,6 +293,10 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Gets all local saves with their synchronization state
   Future<List<LocalSaveFile>> getLocalSaveFiles() async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_global_save_list
+    final dolphinFiles = await _allDolphinLocalSaves();
+    if (Platform.isIOS && await _getRetroArchSavesPath() == null) return dolphinFiles;
+    // DOLPHIN_ISOLATION_END: dolphin_global_save_list
     final savesPath = await _getRetroArchSavesPath();
     if (savesPath == null) {
       NeoSyncProvider._log.w('RetroArch saves directory not found');
@@ -359,6 +379,9 @@ extension NeoSyncCore on NeoSyncProvider {
       }
     }
 
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_append_local_saves
+    localSaveFiles.addAll(dolphinFiles);
+    // DOLPHIN_ISOLATION_END: dolphin_append_local_saves
     // Ordenar por fecha de modificación (más recientes primero)
     localSaveFiles.sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
@@ -372,6 +395,10 @@ extension NeoSyncCore on NeoSyncProvider {
   /// Detecta automáticamente archivos de guardado para un juego específico
   /// y realiza sincronización automática cuando es apropiado
   Future<void> detectGameSaveFiles(GameModel game) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_detect
+    if (_isDolphinGame(game)) { await _syncDolphinGame(game); return; }
+    // DOLPHIN_ISOLATION_END: dolphin_detect
+
     // A shared PS2/DC card may have changed since the previous game session.
     // Never carry the processed marker across independent detections.
     _processedMultiEmulatorFilesInSession.clear();
@@ -817,6 +844,10 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Busca TODOS los archivos de guardado locales para un juego específico (saves y states)
   Future<List<LocalSaveFile>> _findGameSaveFiles(GameModel game) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_find_local
+    if (_isDolphinGame(game)) return _dolphinLocalFiles(game);
+    // DOLPHIN_ISOLATION_END: dolphin_find_local
+
     try {
       // 1. Obtener el sistema para resolver sus rutas JSON
       final system = await _getSystemForGame(game);
@@ -1049,6 +1080,10 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Obtiene TODOS los archivos de guardado de la nube para un juego específico
   Future<List<NeoSyncFile>> _getCloudSaveFilesForGame(GameModel game) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_find_cloud
+    if (_isDolphinGame(game)) return _dolphinCloudFiles(game);
+    // DOLPHIN_ISOLATION_END: dolphin_find_cloud
+
     try {
       // 1. Obtener el sistema para resolver sus características
       final system = await _getSystemForGame(game);
@@ -1076,6 +1111,9 @@ extension NeoSyncCore on NeoSyncProvider {
           system.folderName == 'ps2' || system.folderName == 'dc';
 
       for (final cloudFile in _files) {
+        // DOLPHIN_ISOLATION_BEGIN: dolphin_no_foreign_cloud_match
+        if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) continue;
+        // DOLPHIN_ISOLATION_END: dolphin_no_foreign_cloud_match
         final fileName = path.basename(cloudFile.fileName).toLowerCase();
         bool isMatch = false;
 
@@ -1368,6 +1406,13 @@ extension NeoSyncCore on NeoSyncProvider {
   /// Helper to calculate relative path for sync, with special handling for Dreamcast
   /// Sincroniza saves antes de iniciar un juego (al estilo Steam)
   Future<void> syncGameSavesBeforeLaunch(GameModel game) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_prelaunch
+    if (_isDolphinGame(game)) {
+      if (_autoSyncEnabled) await _syncDolphinGame(game);
+      return;
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_prelaunch
+
     if (!isNeoSyncAuthenticated) return;
     if (game.cloudSyncEnabled != true) return;
 
@@ -1431,6 +1476,13 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Sincroniza saves después de cerrar un juego (al estilo Steam)
   Future<void> syncGameSavesAfterClose(GameModel game) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_after_close
+    if (_isDolphinGame(game)) {
+      if (_autoSyncEnabled) await _syncDolphinGame(game, download: false);
+      return;
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_after_close
+
     if (!isNeoSyncAuthenticated) return;
     if (game.cloudSyncEnabled != true) return;
 
@@ -1485,6 +1537,12 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Restaura un backup desde la nube (descarga y sobreescribe local)
   Future<void> restoreCloudBackup(NeoSyncFile cloudFile) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_restore
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
+      await _restoreDolphinCloud(cloudFile); return;
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_restore
+
     try {
       final savesPath = await _getRetroArchSavesPath();
       if (savesPath == null) {

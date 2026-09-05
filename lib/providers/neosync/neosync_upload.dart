@@ -22,6 +22,10 @@ extension NeoSyncUpload on NeoSyncProvider {
 
     try {
       final saveFiles = <File>[];
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_upload
+      await _syncAllDolphinGames(download: false);
+    // DOLPHIN_ISOLATION_END: dolphin_bulk_upload
+
 
       // 1. Collect RetroArch files (Saves and States)
       final savesPath = await _getRetroArchSavesPath();
@@ -210,6 +214,13 @@ extension NeoSyncUpload on NeoSyncProvider {
           retroArchStates.isEmpty &&
           customSaveFiles.isEmpty &&
           saveFiles.isEmpty) {
+        // DOLPHIN_ISOLATION_BEGIN: dolphin_only_upload_summary
+        if (_dolphinBulkChecked > 0) {
+          _syncStatus = 'Dolphin upload checked: $_uploadedFiles uploaded. See per-game status for conflicts or deferred saves.';
+          _syncProgress = 1.0;
+          return;
+        }
+        // DOLPHIN_ISOLATION_END: dolphin_only_upload_summary
         _syncStatus = 'No local save files found';
         _processedItems.add('No local save files found for auto-sync');
         _setSyncing(false);
@@ -281,6 +292,9 @@ extension NeoSyncUpload on NeoSyncProvider {
         _processedItems.add('Auto-sync error: $e');
       }
     } finally {
+      // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_status
+      _finishDolphinBulkStatus();
+      // DOLPHIN_ISOLATION_END: dolphin_bulk_status
       _setSyncing(false);
     }
   }

@@ -20,6 +20,10 @@ extension NeoSyncDownload on NeoSyncProvider {
 
     try {
       final result = await _neoSyncService.getFiles();
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_download
+      await _syncAllDolphinGames(upload: false);
+    // DOLPHIN_ISOLATION_END: dolphin_bulk_download
+
       if (!result['success']) {
         throw Exception('Failed to fetch cloud files: ${result['message']}');
       }
@@ -59,6 +63,9 @@ extension NeoSyncDownload on NeoSyncProvider {
       _processedItems.add('Auto-sync download error: $e');
       NeoSyncProvider._log.e('Auto-sync downloads error: $e');
     } finally {
+      // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_status
+      _finishDolphinBulkStatus();
+      // DOLPHIN_ISOLATION_END: dolphin_bulk_status
       _setSyncing(false);
     }
   }
@@ -95,6 +102,10 @@ extension NeoSyncDownload on NeoSyncProvider {
     NeoSyncFile cloudFile,
     String savesPath,
   ) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_no_generic_download
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) return;
+    // DOLPHIN_ISOLATION_END: dolphin_no_generic_download
+
     try {
       final parsed = CloudPathBuilder.parse(cloudFile.fileName);
       if (Platform.isIOS &&
@@ -362,6 +373,12 @@ extension NeoSyncDownload on NeoSyncProvider {
     NeoSyncFile cloudFile,
     File localFile,
   ) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_download_writer
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) {
+      await _restoreDolphinCloud(cloudFile); return;
+    }
+    // DOLPHIN_ISOLATION_END: dolphin_download_writer
+
     final result = LegacyNeoSyncService.isLegacyId(cloudFile.id)
         ? await _legacyNeoSyncService.downloadFile(cloudFile.id)
         : await _neoSyncService.downloadFile(cloudFile.id);
@@ -399,6 +416,10 @@ extension NeoSyncDownload on NeoSyncProvider {
     NeoSyncFile cloudFile,
     String savesPath,
   ) async {
+    // DOLPHIN_ISOLATION_BEGIN: dolphin_no_generic_download
+    if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName)) return;
+    // DOLPHIN_ISOLATION_END: dolphin_no_generic_download
+
     GameModel? game = await _findGameForCloudFile(cloudFile);
     if (game == null) return;
 

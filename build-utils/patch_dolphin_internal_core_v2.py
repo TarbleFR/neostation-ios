@@ -313,6 +313,41 @@ bool RunExecutableProbe()
 }
 } // namespace
 
+// DiscIO metadata works before core/JIT initialization, including RVZ/WBFS/WAD.
+// The returned identity is never based on the selected file's display name.
+extern "C" __attribute__((visibility("default")))
+char* neostation_dolphin_save_identity(const char* game_path, const char* expected_system)
+{
+  if (!game_path || !expected_system) return nullptr;
+  const std::string system(expected_system);
+  if (system != "gc" && system != "wii") return nullptr;
+  try
+  {
+    const auto volume = DiscIO::CreateVolume(std::string(game_path));
+    if (!volume || !ExpectedPlatform(volume->GetVolumeType(), system)) return nullptr;
+    NSString* region = @"unknown";
+    switch (volume->GetRegion())
+    {
+    case DiscIO::Region::NTSC_J: region = @"JAP"; break;
+    case DiscIO::Region::NTSC_U: region = @"USA"; break;
+    case DiscIO::Region::PAL: region = @"EUR"; break;
+    default: break;
+    }
+    NSMutableDictionary* identity = [@{
+      @"system": [NSString stringWithUTF8String:expected_system],
+      @"gameId": [NSString stringWithUTF8String:volume->GetGameID().c_str()] ?: @"",
+      @"region": region
+    } mutableCopy];
+    if (const auto title_id = volume->GetTitleID())
+      identity[@"titleId"] = [NSString stringWithFormat:@"%016llx", static_cast<unsigned long long>(*title_id)];
+    NSData* data = [NSJSONSerialization dataWithJSONObject:identity options:0 error:nil];
+    if (!data) return nullptr;
+    NSString* json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    return json ? strdup(json.UTF8String) : nullptr;
+  }
+  catch (...) { return nullptr; }
+}
+
 extern "C" __attribute__((visibility("default")))
 int32_t neostation_dolphin_initialize(const char* user_directory, const char* system_directory, const char* log_path)
 {
