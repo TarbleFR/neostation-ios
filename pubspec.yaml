@@ -33,23 +33,23 @@ dependencies:
   dolphin_internal_bridge:
     path: packages/dolphin_internal_bridge
     
-  file_picker: 12.0.0-beta.3
+  file_picker: 12.2.0
   device_info_plus: ^13.2.0
   package_info_plus: ^10.2.1
-  google_fonts: ^8.1.0
+  google_fonts: ^8.2.1
   material_symbols_icons: ^4.2960.0
   provider: ^6.1.5+1
   battery_plus: ^7.1.1
   path: ^1.9.1
   path_provider: ^2.1.6
   xml: ^6.6.1
-  html: ^0.15.6
-  video_player: ^2.13.0
+  html: ^0.15.7
+  video_player: ^2.14.0
   flutter_secure_storage: ^10.3.1
   shared_preferences: ^2.5.5
   http: ^1.6.0
   crypto: ^3.0.7
-  archive: ^4.0.9
+  archive: ^4.2.0
   web_socket_channel: ^3.0.3
   url_launcher: ^6.3.2
   share_plus: ^13.0.0
@@ -57,7 +57,7 @@ dependencies:
   window_manager: ^0.5.2
   permission_handler: ^12.0.3
   pointycastle: ^4.0.0
-  sqlite3: ^3.5.0
+  sqlite3: ^3.5.2
   fullscreen_window: ^1.2.1
   animated_toggle_switch: ^0.8.7
   marquee: ^2.3.0
@@ -65,7 +65,7 @@ dependencies:
   sub_screen: ^0.1.9
   flutter_soloud: ^4.0.12
   audio_metadata_reader: ^1.7.1
-  wakelock_plus: ^1.7.0
+  wakelock_plus: ^1.8.0
   flutter_localization: ^0.4.1
   pdfrx: ^2.4.6
 
