@@ -25,13 +25,35 @@ jobs:
           set -euo pipefail
           flutter precache --linux
           mkdir -p /tmp/icloud-tools
-          tar -C "$FLUTTER_ROOT" --exclude='./.git' --exclude='./bin/cache/artifacts/engine/linux-x64-profile' --exclude='./bin/cache/artifacts/engine/linux-x64-release' --exclude='./bin/cache/artifacts/engine/android*' --exclude='./bin/cache/artifacts/engine/ios*' -czf /tmp/icloud-tools/flutter-linux.tar.gz .
-          tar -C "$HOME/.pub-cache" -czf /tmp/icloud-tools/pub-cache.tar.gz .
-          cp pubspec.lock /tmp/icloud-tools/pubspec.lock
-          sha256sum /tmp/icloud-tools/*.tar.gz > /tmp/icloud-tools/SHA256SUMS.txt
+          tar -C "$FLUTTER_ROOT" --exclude='./.git' --exclude='./bin/cache/artifacts/engine/linux-x64-profile' --exclude='./bin/cache/artifacts/engine/linux-x64-release' --exclude='./bin/cache/artifacts/engine/android*' --exclude='./bin/cache/artifacts/engine/ios*' -czf /tmp/flutter-linux.tar.gz .
+          tar -C "$HOME/.pub-cache" -czf /tmp/pub-cache.tar.gz .
+          ls -lh /tmp/*.tar.gz
+          split -b 200M /tmp/flutter-linux.tar.gz /tmp/icloud-tools/flutter-linux.part-
+          split -b 200M /tmp/pub-cache.tar.gz /tmp/icloud-tools/pub-cache.part-
+          sha256sum /tmp/*.tar.gz > /tmp/icloud-tools/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: icloud-offline-test-tools
-          path: /tmp/icloud-tools/
+          name: icloud-tools-aa
+          path: |
+            /tmp/icloud-tools/*-aa
+            /tmp/icloud-tools/SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icloud-tools-ab
+          path: /tmp/icloud-tools/*-ab
+          compression-level: 0
+          retention-days: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icloud-tools-ac
+          path: /tmp/icloud-tools/*-ac
+          compression-level: 0
+          retention-days: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icloud-tools-ad
+          path: /tmp/icloud-tools/*-ad
           compression-level: 0
           retention-days: 2
