@@ -1,3 +1,4 @@
+import '../../services/cloud_saves/legacy_save_migration.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -3663,25 +3664,9 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration to version 55: Add neosync_json to app_systems
+  /// Add provider-independent save layout metadata, preserving legacy values.
   static Future<void> _migrateToVersion55(Database db) async {
-    _log.i('Migration v55: Adding neosync_json to app_systems');
-
-    try {
-      final tableInfo = db.select('PRAGMA table_info(app_systems)');
-      final columns = tableInfo.map((c) => c['name'].toString()).toList();
-
-      if (!columns.contains('neosync_json')) {
-        db.execute('ALTER TABLE app_systems ADD COLUMN neosync_json TEXT');
-        _log.i('Column neosync_json added to app_systems');
-      }
-
-      _log.i('Migration v55 completed');
-    } catch (e, stackTrace) {
-      _log.e('Error in migration v55: $e');
-      _log.e('   StackTrace: $stackTrace');
-      rethrow;
-    }
+    await LegacySaveMigration.ensureCatalogColumn(db);
   }
 
   /// Migration to version 56: Drop app_emulator_possible_paths
@@ -3714,45 +3699,9 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v58: Adds the [app_neo_sync_state] table for precise cloud save
-  /// synchronization tracking.
-  static Future<void> _migrateToVersion58(Database db) async {
-    _log.i('Migration v58: Adding app_neo_sync_state table');
-
-    try {
-      final tableExists = db.select('''
-        SELECT name FROM sqlite_master 
-        WHERE type='table' AND name='app_neo_sync_state'
-        LIMIT 1
-      ''');
-
-      if (tableExists.isEmpty) {
-        db.execute('''
-          CREATE TABLE app_neo_sync_state (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_path TEXT NOT NULL UNIQUE,
-            local_modified_at INTEGER NOT NULL,
-            cloud_updated_at INTEGER NOT NULL,
-            file_size INTEGER NOT NULL,
-            file_hash TEXT
-          )
-        ''');
-
-        db.execute('''
-          CREATE INDEX idx_neo_sync_state_file_path 
-          ON app_neo_sync_state(file_path)
-        ''');
-
-        _log.i('Table app_neo_sync_state created gracefully');
-      } else {
-        _log.i('Table app_neo_sync_state already exists');
-      }
-    } catch (e, stackTrace) {
-      _log.e('Error in migration v58: $e');
-      _log.e('   StackTrace: $stackTrace');
-      rethrow;
-    }
-  }
+  /// The retired server transfer index is no longer created or used.
+  /// Existing rows remain inert for recovery/rollback; no user data is deleted.
+  static Future<void> _migrateToVersion58(Database db) async {}
 
   /// Migration to version 59: Add color1 and color2 to app_systems
   static Future<void> _migrateToVersion59(Database db) async {
@@ -4233,7 +4182,7 @@ class SqliteMigrations {
 
       if (!columns.contains('active_sync_provider')) {
         db.execute(
-          "ALTER TABLE user_config ADD COLUMN active_sync_provider TEXT DEFAULT 'neosync'",
+          "ALTER TABLE user_config ADD COLUMN active_sync_provider TEXT DEFAULT 'icloud'",
         );
         _log.i('Column active_sync_provider added to user_config');
       }
@@ -4396,7 +4345,7 @@ class SqliteMigrations {
 
       if (!columns.contains('active_sync_provider')) {
         db.execute(
-          "ALTER TABLE user_config ADD COLUMN active_sync_provider TEXT DEFAULT 'neosync'",
+          "ALTER TABLE user_config ADD COLUMN active_sync_provider TEXT DEFAULT 'icloud'",
         );
         _log.i('Column active_sync_provider added to user_config');
       }

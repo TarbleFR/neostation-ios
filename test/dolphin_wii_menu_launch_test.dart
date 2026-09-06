@@ -131,7 +131,7 @@ void main() {
     expect(calls, ['isRunning']);
   });
 
-  test('Wii Menu does not inherit an ordinary game NeoSync upload callback', () async {
+  test('Wii Menu does not inherit an ordinary game iCloud Saves upload callback', () async {
     await installMetadata();
     final library = await DolphinInternalV2Service.libraryDirectory('gc');
     final game = await File(p.join(library.path, 'fixture.rvz')).writeAsString('mock game');

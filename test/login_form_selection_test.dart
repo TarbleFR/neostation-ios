@@ -44,7 +44,7 @@ class _TestFormState extends State<_TestForm>
   }
 }
 
-/// Form whose slot list changes with its mode, the shape the NeoSync login has:
+/// Form whose slot list changes with its mode, the shape the iCloud Saves login has:
 /// register carries a username the login state doesn't, the verification step
 /// is a pair of buttons with no field at all, and both entry modes end in a run
 /// of controls — submit followed by the links that switch mode or start a

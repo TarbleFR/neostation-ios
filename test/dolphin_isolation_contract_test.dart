@@ -10,8 +10,12 @@ void main() {
     expect(launcher, contains('DolphinInternalV2Service.isDolphinSystem'));
     expect(
       launcher.indexOf('DolphinInternalV2Service.isDolphinSystem'),
-      lessThan(launcher.indexOf('if (Platform.isIOS)')),
+      lessThan(launcher.indexOf('if (Platform.isIOS)',
+        launcher.indexOf('// DOLPHIN_ISOLATION_END: explicit_gc_wii_route'))),
     );
+    // The new cloud restore gate precedes every native route; it does not launch a game.
+    expect(launcher.indexOf('syncGameSavesBeforeLaunch'),
+      lessThan(launcher.indexOf('DolphinInternalV2Service.isDolphinSystem')));
     expect(launcher, contains('Rpcs3LaunchService.launchTitle'));
     expect(launcher, contains('MelonxLibraryService.launchGameByRomPath'));
     expect(launcher, contains('Armsx2LibraryService.launchGameByRomPath'));

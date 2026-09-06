@@ -204,7 +204,7 @@ class ConfigModel {
     this.hideTabAchievements = false,
     this.hideTabScraper = false,
     this.hideTabSearch = false,
-    this.activeSyncProvider = 'neosync',
+    this.activeSyncProvider = 'icloud',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
     this.systemGridColumns = 'M',
@@ -336,7 +336,7 @@ class ConfigModel {
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
-                  'neosync')
+                  'icloud')
               .toString(),
       autoUpdateApp:
           (json['autoUpdateApp'] ?? json['auto_update_app'] ?? 1).toString() ==

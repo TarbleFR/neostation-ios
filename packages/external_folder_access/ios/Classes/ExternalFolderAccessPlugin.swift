@@ -68,6 +68,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
         instance.channel = channel
         instance.installAudioSessionObservers()
         registrar.addMethodCallDelegate(instance, channel: channel)
+        ICloudFolderPlugin.register(with: registrar)
         // Lets this plugin receive application(_:open:options:) callbacks —
         // needed to catch RetroArch calling back into neostation://... See
         // the method below and RetroArchLibraryService on the Dart side.
@@ -197,6 +198,13 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     /// NeoStation needs the folder readable for as long as the app runs, and
     /// iOS releases the scope automatically when the process exits.
     private func resolveBookmarkedFolder(key: String, result: @escaping FlutterResult) {
+        // One-time bookmark migration only; never discard the old grant if the
+        // new slot already exists. No cloud provider or backend is retained.
+        let oldKeys = ["armsx2-save-folder": "neosync-armsx2-saves", "melonx-save-folder": "neosync-melonx-saves"]
+        if UserDefaults.standard.data(forKey: Self.bookmarkDefaultsKey(for: key)) == nil,
+           let old = oldKeys[key], let data = UserDefaults.standard.data(forKey: Self.bookmarkDefaultsKey(for: old)) {
+            UserDefaults.standard.set(data, forKey: Self.bookmarkDefaultsKey(for: key))
+        }
         guard
             let bookmarkData = UserDefaults.standard.data(
                 forKey: Self.bookmarkDefaultsKey(for: key)

@@ -1,3 +1,4 @@
+import '../../services/cloud_saves/legacy_save_migration.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
@@ -13,7 +14,7 @@ import '../../models/system_model.dart';
 import '../../models/system_configuration.dart';
 import '../../models/emulator_model.dart';
 import '../../models/core_emulator_model.dart';
-// import '../models/neo_sync_models.dart'; // Removido si no se usa directamente aquí
+// import '../models/cloud_save_models.dart'; // Removido si no se usa directamente aquí
 import '../../models/database_game_model.dart';
 import 'sqlite_migrations.dart';
 import '../../services/config_service.dart'; // Required for ConfigService usage
@@ -553,7 +554,7 @@ class SqliteService {
             'color1': jsonSystem.color1,
             'color2': jsonSystem.color2,
             'multidisc': jsonSystem.multiDisc ? 1 : 0,
-            'neosync_json': json.encode(jsonSystem.neosync.toJson()),
+            'save_sync_json': json.encode(jsonSystem.saveSync.toJson()),
           });
         }
 
@@ -1214,6 +1215,7 @@ class SqliteService {
       await _onDowngrade(adapter, currentVersion, _databaseVersion);
     }
 
+    await LegacySaveMigration.ensureCatalogColumn(adapter.rawDb);
     await adapter.execute('PRAGMA user_version = $_databaseVersion;');
 
     _initialized = true;
@@ -1368,21 +1370,7 @@ class SqliteService {
       }
     }
 
-    // FIX: Ensure app_neo_sync_state exists (legacy support for v58).
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      );
-    ''');
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_neo_sync_state_file_path 
-      ON app_neo_sync_state(file_path);
-    ''');
+
   }
 
   /// Ensures the unique_identifier column exists in app_emulators.
@@ -1689,7 +1677,7 @@ class SqliteService {
           color1 TEXT,
           color2 TEXT,
           multidisc INTEGER NOT NULL DEFAULT 0,
-          neosync_json TEXT
+          save_sync_json TEXT
       );
       ''',
       '''
@@ -1768,7 +1756,7 @@ class SqliteService {
         hide_tab_achievements INTEGER DEFAULT 0,
         hide_tab_scraper INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
-        active_sync_provider TEXT DEFAULT 'neosync',
+        active_sync_provider TEXT DEFAULT 'icloud',
         systems_version TEXT DEFAULT '',
         neostation_app_version TEXT DEFAULT '',
         auto_update_app INTEGER DEFAULT 1,
@@ -1941,16 +1929,6 @@ class SqliteService {
         UNIQUE(app_system_id)
       );
       ''',
-      '''
-      CREATE TABLE IF NOT EXISTS app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      );
-      ''',
     ];
 
     for (final sql in tables) {
@@ -2019,8 +1997,7 @@ class SqliteService {
       // 5. Index for user_emulator_config
       'CREATE INDEX IF NOT EXISTS idx_user_emulator_config_is_user_default ON user_emulator_config(is_user_default);',
 
-      // 6. Index for app_neo_sync_state
-      'CREATE INDEX IF NOT EXISTS idx_neo_sync_state_file_path ON app_neo_sync_state(file_path);',
+      // 6. Index for app_cloud_saves_state
     ];
 
     for (final sql in indexes) {
@@ -2994,10 +2971,10 @@ class SqliteService {
       mutableRow['extensions'] = extensionMap[sid] ?? [];
 
       // Parse cloud sync JSON configuration if available.
-      final neosyncJson = row['neosync_json']?.toString();
-      if (neosyncJson != null && neosyncJson.isNotEmpty) {
+      final saveSyncJson = row['save_sync_json']?.toString();
+      if (saveSyncJson != null && saveSyncJson.isNotEmpty) {
         try {
-          mutableRow['neosync'] = json.decode(neosyncJson);
+          mutableRow['save_sync'] = json.decode(saveSyncJson);
         } catch (e) {
           // Silent failure for malformed JSON.
         }
@@ -4527,53 +4504,7 @@ class SqliteService {
   }
 
   // ==========================================
-  // NeoSync STATE TRACKING
-  // ==========================================
-
-  /// Persists local synchronization state for a file.
-  ///
-  /// This is used to track modifications and versioning for cloud sync, bypassing
-  /// filesystem limitations on Android (e.g., restricted 'lastModified' modification).
-  static Future<void> saveSyncState(
-    String filePath,
-    int localModifiedAt,
-    int cloudUpdatedAt,
-    int fileSize, {
-    String? fileHash,
-  }) async {
-    try {
-      final db = await instance.database;
-      await db.insert('app_neo_sync_state', {
-        'file_path': filePath,
-        'local_modified_at': localModifiedAt,
-        'cloud_updated_at': cloudUpdatedAt,
-        'file_size': fileSize,
-        'file_hash': fileHash,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    } catch (e) {
-      _log.e('Failed to save cloud synchronization state', error: e);
-    }
-  }
-
-  /// Retrieves the recorded synchronization state for a specific file path.
-  static Future<Map<String, dynamic>?> getSyncState(String filePath) async {
-    try {
-      final db = await instance.database;
-      final results = await db.query(
-        'app_neo_sync_state',
-        where: 'file_path = ?',
-        whereArgs: [filePath],
-        limit: 1,
-      );
-      if (results.isNotEmpty) {
-        return results.first;
-      }
-    } catch (e) {
-      _log.e('Failed to retrieve cloud synchronization state', error: e);
-    }
-    return null;
-  }
-
+  // iCloud Saves STATE TRACKING
   /// Deletes all user-specific data, including configurations, ROM metadata, and scraper credentials.
   static Future<void> clearUserData() async {
     final db = await instance.database;

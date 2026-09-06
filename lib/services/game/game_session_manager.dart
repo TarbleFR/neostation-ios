@@ -1,3 +1,4 @@
+import '../../sync/sync_manager.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -186,8 +187,13 @@ class GameSessionManager {
   }
 
   /// Gracefully terminates the active game session and finalizes playtime tracking.
-  static Future<void> endGameSession() async {
+  static Future<void>? _endingSession;
+  static Future<void> endGameSession() => _endingSession ??=
+      _endGameSession().whenComplete(() => _endingSession = null);
+  static Future<void> _endGameSession() async {
     if (!_isGameLaunched) return;
+    final closedGame = _currentGame;
+    final closedSystem = _currentGameSystem;
 
     if (_gameLaunchTime != null &&
         _lastPlaytimeSave != null &&
@@ -222,6 +228,16 @@ class GameSessionManager {
     _launchedEmulatorExe = null;
     _currentGameSystem = null;
     _currentGame = null;
+    // CLOUD_SAVES_BEGIN after_close
+    if (Platform.isIOS && closedGame != null && closedSystem != null) {
+      unawaited(_backupClosedGame(closedGame.copyWith(systemFolderName: closedSystem.folderName)));
+    }
+    // CLOUD_SAVES_END after_close
+  }
+
+  static Future<void> _backupClosedGame(GameModel game) async {
+    try { await SyncManager.instance.active?.syncGameSavesAfterClose(game); }
+    catch (error) { _log.e('Save backup deferred: $error'); }
   }
 
   static Future<void> _savePlayTime(

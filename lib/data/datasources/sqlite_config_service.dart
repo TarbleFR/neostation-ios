@@ -196,7 +196,7 @@ class SqliteConfigService {
                 0) ==
             1,
         activeSyncProvider:
-            userConfig?['active_sync_provider']?.toString() ?? 'neosync',
+            userConfig?['active_sync_provider']?.toString() ?? 'icloud',
         autoUpdateApp:
             (int.tryParse(userConfig?['auto_update_app']?.toString() ?? '1') ??
                 1) ==

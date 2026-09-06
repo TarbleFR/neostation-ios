@@ -14,7 +14,7 @@ class SyncProviderMeta {
   /// Shown as the default recommendation in the provider picker.
   final bool isRecommended;
 
-  /// Path to an asset image (e.g. "assets/icons/neosync.png"), or null.
+  /// Path to an asset image (e.g. "assets/icons/cloud.png"), or null.
   final String? iconAssetPath;
 
   const SyncProviderMeta({
@@ -89,9 +89,6 @@ enum SyncError {
 
   /// Local and remote versions diverged — needs resolution.
   conflictDetected,
-
-  /// Operation requires an active paid plan.
-  planRequired,
 
   /// Provider configuration is missing or invalid.
   configInvalid,

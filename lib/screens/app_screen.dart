@@ -17,7 +17,7 @@ import 'search_screen/search_screen.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
-import 'neo_sync_screen/neo_sync_tab.dart';
+import 'cloud_saves_screen/cloud_saves_tab.dart';
 import 'library_screen/library_screen.dart';
 import '../widgets/scraper_content.dart';
 
@@ -714,11 +714,11 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         });
         return const SearchScreen();
       case AppTabs.sync:
-        // NeoSync tab manages its own focus lifecycle due to complex login flows.
+        // iCloud Saves tab manages its own focus lifecycle for its save list.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _gamepadNav.deactivate();
         });
-        return const NeoSyncTab();
+        return const CloudSavesTab();
       case AppTabs.achievements:
         return RAContent();
       case AppTabs.scraper:

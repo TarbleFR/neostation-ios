@@ -380,7 +380,7 @@ class SwitchSaveDetector {
               } else if (lowerPath.contains('citron')) {
                 emulatorName = 'Citron';
               } else {
-                continue; // Skip unrecognized emulators for NeoSync compatibility.
+                continue; // Skip unrecognized emulators for iCloud Saves compatibility.
               }
 
               results.add(

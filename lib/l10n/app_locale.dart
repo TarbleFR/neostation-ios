@@ -318,112 +318,19 @@ mixin AppLocale {
   static const String loadingAchievements = 'loading_achievements';
 
   // ---------------------------------------------------------------------------
-  // NeoSync
+  // iCloud Saves
   // ---------------------------------------------------------------------------
-  static const String neoSync = 'neo_sync';
-  static const String neoSyncSynchronizing = 'neo_sync_synchronizing';
-  static const String neoSyncNotConnected = 'neo_sync_not_connected';
-  static const String neoSyncSynchronized = 'neo_sync_synchronized';
-  static const String neoSyncSavesSync = 'neo_sync_saves_sync';
-  static const String neoSyncNoSave = 'neo_sync_no_save';
   static const String logout = 'logout';
   static const String logoutConfirm = 'logout_confirm';
-  static const String failedToLoadProfile = 'failed_to_load_profile';
-  static const String verifyEmail = 'verify_email';
-  static const String forgotPassword = 'forgot_password';
-  static const String resetPassword = 'reset_password';
-  static const String joinNeoSync = 'join_neo_sync';
-  static const String verificationToken = 'verification_token';
-  static const String enterTokenFromEmail = 'enter_token_from_email';
-  static const String resendVerificationEmail = 'resend_verification_email';
-  static const String backToLogin = 'back_to_login';
   static const String username = 'username';
-  static const String chooseUsername = 'choose_username';
-  static const String email = 'email';
   static const String password = 'password';
   static const String enterPassword = 'enter_password';
   static const String login = 'login';
-  static const String signUp = 'sign_up';
-  static const String dontHaveAccount = 'dont_have_account';
-  static const String alreadyHaveAccount = 'already_have_account';
-  static const String pleaseEnterUsername = 'please_enter_username';
-  static const String pleaseEnterEmail = 'please_enter_email';
-  static const String pleaseEnterValidEmail = 'please_enter_valid_email';
-  static const String pleaseEnterPassword = 'please_enter_password';
-  static const String passwordTooShort = 'password_too_short';
   static const String anErrorOccurred = 'an_error_occurred';
-  static const String checkEmailVerification = 'check_email_verification';
-  static const String emailVerifiedSuccess = 'email_verified_success';
-  static const String emailVerifiedLoginFailed = 'email_verified_login_failed';
-  static const String emailNotVerified = 'email_not_verified';
-  static const String registrationSuccessCheckEmail =
-      'registration_success_check_email';
-  static const String passwordResetSuccess = 'password_reset_success';
-  static const String pleaseEnterTokenAndPassword =
-      'please_enter_token_and_password';
-  static const String enterTokenFromEmailShort = 'enter_token_from_email_short';
-  static const String emailVerifiedWait = 'email_verified_wait';
-  static const String forgotPasswordQuestion = 'forgot_password_question';
-  static const String helloUser = 'hello_user';
-  static const String enterRegisteredEmail = 'enter_registered_email';
-  static const String sendResetToken = 'send_reset_token';
-  static const String resetTokenLabel = 'reset_token_label';
-  static const String newPassword = 'new_password';
-  static const String atLeast8Characters = 'at_least_8_characters';
 
   // ---------------------------------------------------------------------------
   // Storage quota
   // ---------------------------------------------------------------------------
-  static const String storageQuotaExceeded = 'storage_quota_exceeded';
-  static const String storageQuotaDesc = 'storage_quota_desc';
-  static const String currentStorageUsage = 'current_storage_usage';
-  static const String recommendedSolutions = 'recommended_solutions';
-  static const String upgradePlan = 'upgrade_plan';
-  static const String upgradePlanDesc = 'upgrade_plan_desc';
-  static const String deleteOldSaves = 'delete_old_saves';
-  static const String deleteOldSavesDesc = 'delete_old_saves_desc';
-  static const String downloadAndDelete = 'download_and_delete';
-  static const String downloadAndDeleteDesc = 'download_and_delete_desc';
-  static const String dismiss = 'dismiss';
-  static const String manageFiles = 'manage_files';
-  static const String cloudStorageRefreshed = 'cloud_storage_refreshed';
-  static const String failedToRefreshCloud = 'failed_to_refresh_cloud';
-  static const String onlineSaves = 'online_saves';
-  static const String noOnlineSavesFound = 'no_online_saves_found';
-  static const String whatIsNeoSync = 'what_is_neo_sync';
-  static const String neoSyncDescription = 'neo_sync_description';
-  static const String crossPlatform = 'cross_platform';
-  static const String crossPlatformDesc = 'cross_platform_desc';
-  static const String securePrivate = 'secure_private';
-  static const String securePrivateDesc = 'secure_private_desc';
-  static const String learnMoreEcosystem = 'learn_more_ecosystem';
-  static const String manageYourPlan = 'manage_your_plan';
-  static const String choosePerfectPlan = 'choose_perfect_plan';
-  static const String loadingPlans = 'loading_plans';
-  static const String noPlansAvailable = 'no_plans_available';
-  static const String checkBackLater = 'check_back_later';
-  static const String currentBadge = 'current_badge';
-  static const String monthly = 'monthly';
-  static const String yearly = 'yearly';
-  static const String upgrade = 'upgrade';
-  static const String downgrade = 'downgrade';
-  static const String subscriptionEnding = 'subscription_ending';
-  static const String endsOn = 'ends_on';
-  static const String renewsOn = 'renews_on';
-  static const String endSubscription = 'end_subscription';
-  static const String backWithB = 'back_with_b';
-  static const String cancelSubscription = 'cancel_subscription';
-  static const String cancelSubscriptionConfirm = 'cancel_subscription_confirm';
-  static const String keepSubscription = 'keep_subscription';
-  static const String deleteCloudSave = 'delete_cloud_save';
-  static const String deleteCloudSaveConfirm = 'delete_cloud_save_confirm';
-  static const String alsoDisableNeoSync = 'also_disable_neo_sync';
-  static const String preventsAutoSaves = 'prevents_auto_saves';
-  static const String refreshing = 'refreshing';
-  static const String refreshed = 'refreshed';
-  static const String failedToDisableNeoSync = 'failed_to_disable_neo_sync';
-  static const String saveFileDeleted = 'save_file_deleted';
-  static const String failedToDeleteSave = 'failed_to_delete_save';
 
   // ---------------------------------------------------------------------------
   // Sync conflict
@@ -843,13 +750,13 @@ mixin AppLocale {
   static const String noStorageFound = 'no_storage_found';
 
   // ---------------------------------------------------------------------------
-  // More Game Launch & NeoSync
+  // More Game Launch & iCloud Saves
   // ---------------------------------------------------------------------------
-  static const String neoSyncLocalSavesOnly = 'neo_sync_local_saves_only';
-  static const String neoSyncCloudSavesOnly = 'neo_sync_cloud_saves_only';
-  static const String neoSyncSaveConflict = 'neo_sync_save_conflict';
-  static const String neoSyncCloudSyncDisabled = 'neo_sync_cloud_sync_disabled';
-  static const String neoSyncQuotaExceeded = 'neo_sync_quota_exceeded';
+  static const String cloudSavesLocalSavesOnly = 'cloud_saves_local_saves_only';
+  static const String cloudSavesCloudSavesOnly = 'cloud_saves_cloud_saves_only';
+  static const String cloudSavesSaveConflict = 'cloud_saves_save_conflict';
+  static const String cloudSavesCloudSyncDisabled = 'cloud_saves_cloud_sync_disabled';
+  static const String cloudSavesQuotaExceeded = 'cloud_saves_quota_exceeded';
   static const String packageNameMissing = 'package_name_missing';
   static const String failedToLaunchAndroidApp = 'failed_to_launch_android_app';
   static const String romFileNotFound = 'rom_file_not_found';
@@ -912,14 +819,6 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   // Plan modals
   // ---------------------------------------------------------------------------
-  static const String planWelcomeTitle = 'plan_welcome_title';
-  static const String planWelcomeMessagePre = 'plan_welcome_message_pre';
-  static const String planWelcomeMessagePost = 'plan_welcome_message_post';
-  static const String planFarewellTitle = 'plan_farewell_title';
-  static const String planFarewellMessagePre = 'plan_farewell_message_pre';
-  static const String planFarewellMessageMid = 'plan_farewell_message_mid';
-  static const String planFarewellMessagePost = 'plan_farewell_message_post';
-  static const String planUpgradeAnytime = 'plan_upgrade_anytime';
   static const String pressToClose = 'press_to_close';
 
   // ---------------------------------------------------------------------------
@@ -1096,7 +995,6 @@ mixin AppLocale {
       'remove_rom_folder_confirm_body';
   static const String disconnectRaConfirm = 'disconnect_ra_confirm';
   static const String disconnectRaConfirmBody = 'disconnect_ra_confirm_body';
-  static const String neoSyncLogoutConfirmBody = 'neo_sync_logout_confirm_body';
 
   // RetroAchievements dashboard & achievement comments
   static const String raCompletionsLabel = 'ra_completions_label';

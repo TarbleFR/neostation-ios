@@ -12,7 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'logger_service.dart';
 import 'dolphin_system_files.dart';
-import 'dolphin_neosync_store.dart';
+import 'dolphin_save_store.dart';
 
 /// IPL slots exposed by the native GameCube playlist.
 enum DolphinIplRegion { usa, eur, jap }
@@ -67,7 +67,7 @@ class DolphinInternalV2Service {
 
   /// Scoped exclusion with launches and system-file imports, not a global JIT
   /// switch. Failure/unknown native state refuses filesystem synchronization.
-  static Future<T> withSaveAccess<T>(Future<T> Function(DolphinNeoSyncStore store) action) async {
+  static Future<T> withSaveAccess<T>(Future<T> Function(DolphinSaveStore store) action) async {
     final previous = _saveAccessFuture;
     final done = Completer<void>();
     _saveAccessFuture = done.future;
@@ -75,8 +75,8 @@ class DolphinInternalV2Service {
     try {
       return await _withSystemImport(() async {
         final root = await rootDirectory();
-        final store = DolphinNeoSyncStore(Directory(path.join(root.path, 'User')),
-          Directory(path.join(root.path, 'NeoSync')));
+        final store = DolphinSaveStore(Directory(path.join(root.path, 'User')),
+          Directory(path.join(root.path, 'SaveCache')));
         await store.recover();
         return action(store);
       });
@@ -87,7 +87,7 @@ class DolphinInternalV2Service {
   }
 
   static Future<void> logSaveSync(String stage, String message) =>
-      _appendLog('neosync.$stage', message);
+      _appendLog('cloud-saves.$stage', message);
 
   static Future<DolphinSaveIdentity> readSaveIdentity(String folderName, String gamePath) async {
     final system = _normalizeSystem(folderName);
@@ -113,10 +113,10 @@ class DolphinInternalV2Service {
       _onSaveSessionStopped = null;
       final root = await rootDirectory();
       await _deleteIfExists(File(path.join(root.path, 'CrashMarkers', 'active-session.json')));
-      await _appendLog('neosync.saves_flushed', 'Native Dolphin stopped; save synchronization is now permitted.');
+      await _appendLog('cloud-saves.saves_flushed', 'Native Dolphin stopped; save synchronization is now permitted.');
       if (callback != null) {
         try { await callback(); }
-        catch (error) { await _appendLog('neosync.after_close_failed', '$error'); }
+        catch (error) { await _appendLog('cloud-saves.after_close_failed', '$error'); }
       }
     });
   }
@@ -223,8 +223,8 @@ class DolphinInternalV2Service {
     for (final relative in directories) {
       await Directory(path.join(root.path, relative)).create(recursive: true);
     }
-    await DolphinNeoSyncStore(Directory(path.join(root.path, 'User')),
-      Directory(path.join(root.path, 'NeoSync'))).recover();
+    await DolphinSaveStore(Directory(path.join(root.path, 'User')),
+      Directory(path.join(root.path, 'SaveCache'))).recover();
     await sharedSystemDirectory('wii');
     await _recoverPreviousCrash(root);
   }
@@ -496,7 +496,7 @@ class DolphinInternalV2Service {
   );
 
   /// Boots the user's installed NAND title, with the same JIT and session
-  /// exclusion as a game. A menu session has no ROM identity or NeoSync game
+  /// exclusion as a game. A menu session has no ROM identity or iCloud Saves game
   /// callback, so it cannot be mistaken for the previously played Wii title.
   static Future<DolphinLaunchReport> launchWiiMenu() => _launchSession(
     folderName: 'wii',

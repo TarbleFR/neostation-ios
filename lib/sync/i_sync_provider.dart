@@ -13,7 +13,7 @@ library;
 
 import 'dart:io';
 import 'package:neostation/models/game_model.dart';
-import 'package:neostation/models/neo_sync_models.dart';
+import 'package:neostation/models/cloud_save_models.dart';
 import 'package:neostation/models/sync_models.dart';
 
 export 'package:neostation/models/sync_models.dart';
@@ -21,7 +21,7 @@ export 'package:neostation/models/sync_models.dart';
 abstract class ISyncProvider {
   // ── Identity ───────────────────────────────────────────────────────────────
 
-  /// Short unique key used in config storage (e.g. "neosync", "gdrive").
+  /// Short unique key used in config storage (e.g. "icloud").
   /// Must be stable — changing it loses the user's persisted preference.
   String get providerId;
 
@@ -39,7 +39,7 @@ abstract class ISyncProvider {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  /// Called once at startup. Restore persisted tokens and validate the session.
+  /// Called once at startup. Restore persisted configuration and validate folder access.
   Future<void> initialize();
 
   /// Release resources (HTTP clients, listeners, etc.).
@@ -54,7 +54,7 @@ abstract class ISyncProvider {
   /// - Local providers verify the target path exists.
   Future<SyncResult> login();
 
-  /// Clear credentials and end the session.
+  /// Release access to the cloud folder; retain the stored files.
   Future<void> logout();
 
   // ── Core Sync Operations ───────────────────────────────────────────────────
@@ -73,8 +73,8 @@ abstract class ISyncProvider {
   /// List available saves. Pass [gameId] to filter to a single game.
   Future<List<SyncFile>> listSaves({String? gameId});
 
-  /// Run a full bidirectional sync (upload new local files, download newer
-  /// remote files). Implementations may show conflict dialogs here.
+  /// Back up changed local units and refresh the remote inventory.
+  /// Restoration and conflicting versions require explicit user selection.
   Future<SyncResult> fullSync();
 
   // ── Game-specific sync operations ─────────────────────────────────────────

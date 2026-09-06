@@ -6,7 +6,6 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
-import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/utils/enabled_index_nav.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
@@ -158,21 +157,16 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         value,
       );
 
-      await syncProvider.updateGameCloudSyncEnabled(widget.game.romname, value);
+      await syncProvider.updateGameCloudSyncEnabled('$_targetSystemFolder/${widget.game.romname}', value);
 
       setState(() => _cloudSyncEnabled = value);
 
       if (value) {
         final updatedGame = widget.game.copyWith(cloudSyncEnabled: true);
         if (mounted) {
-          if (syncProvider is NeoSyncProvider) {
-            await (syncProvider as NeoSyncProvider).updateSelectedGame(
-              widget.game.romname,
-              (romname) async => updatedGame,
-            );
-          }
+          await syncProvider.detectGameSaveFiles(updatedGame);
           if (mounted) {
-            // Trigger an immediate sync-down to ensure the ROM is ready for play.
+            // Refresh native identity without overwriting local saves.
             await syncProvider.syncGameSavesBeforeLaunch(updatedGame);
           }
         }

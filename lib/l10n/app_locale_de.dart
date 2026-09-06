@@ -289,128 +289,17 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.localSave: 'Lokaler Spielstand',
   AppLocale.localSaveSubtitle: 'Auf diesem Gerät',
   AppLocale.cloudSaveTitle: 'Cloud-Spielstand',
-  AppLocale.cloudSaveSubtitle: 'Von NeoSync',
+  AppLocale.cloudSaveSubtitle: 'Von iCloud Saves',
   AppLocale.scrapingUnavailableAndroid: 'Scraping auf Android nicht verfügbar.',
   AppLocale.achievements: 'Erfolge',
   AppLocale.loadingAchievements: 'Erfolge werden geladen...',
-
-  AppLocale.neoSync: 'NeoSync',
-  AppLocale.neoSyncSynchronizing: 'NeoSync: Synchronisierung...',
-  AppLocale.neoSyncNotConnected: 'NeoSync: Nicht verbunden',
-  AppLocale.neoSyncSynchronized: 'NeoSync: Spielstände synchronisiert',
-  AppLocale.neoSyncSavesSync: 'Spielstände werden mit NeoSync synchronisiert',
-  AppLocale.neoSyncNoSave: 'NeoSync: Kein Spielstand gefunden',
   AppLocale.logout: 'Abmelden',
   AppLocale.logoutConfirm: 'Abmeldung bestätigen',
-  AppLocale.failedToLoadProfile: 'Profil konnte nicht geladen werden',
-  AppLocale.verifyEmail: 'E-Mail verifizieren',
-  AppLocale.forgotPassword: 'Passwort vergessen?',
-  AppLocale.resetPassword: 'Passwort zurücksetzen',
-  AppLocale.joinNeoSync: 'NeoSync beitreten',
-  AppLocale.verificationToken: 'Verifizierungstoken',
-  AppLocale.enterTokenFromEmail: 'Gib den an deine E-Mail gesendeten Token ein',
-  AppLocale.resendVerificationEmail: 'Verifizierungs-E-Mail erneut senden',
-  AppLocale.backToLogin: 'Zurück zum Login',
   AppLocale.username: 'Benutzername',
-  AppLocale.chooseUsername: 'Wähle einen Benutzernamen',
-  AppLocale.email: 'E-Mail',
   AppLocale.password: 'Passwort',
   AppLocale.enterPassword: 'Gib dein Passwort ein',
   AppLocale.login: 'Anmelden',
-  AppLocale.signUp: 'Registrieren',
-  AppLocale.dontHaveAccount: 'Kein Konto? Registrieren',
-  AppLocale.alreadyHaveAccount: 'Bereits ein Konto? Anmelden',
-  AppLocale.pleaseEnterUsername: 'Bitte gib den Benutzernamen ein',
-  AppLocale.pleaseEnterEmail: 'Bitte gib die E-Mail ein',
-  AppLocale.pleaseEnterValidEmail: 'Bitte gib eine gültige E-Mail ein',
-  AppLocale.pleaseEnterPassword: 'Bitte gib das Passwort ein',
-  AppLocale.passwordTooShort:
-      'Das Passwort muss mindestens 8 Zeichen lang sein',
   AppLocale.anErrorOccurred: 'Ein Fehler ist aufgetreten',
-  AppLocale.checkEmailVerification:
-      'Bitte überprüfe deine E-Mail und klicke auf den Verifizierungslink.',
-  AppLocale.emailVerifiedSuccess:
-      'E-Mail erfolgreich verifiziert! Anmeldung...',
-  AppLocale.emailVerifiedLoginFailed:
-      'E-Mail verifiziert, aber Anmeldung fehlgeschlagen',
-  AppLocale.emailNotVerified:
-      'E-Mail nicht verifiziert. Bitte überprüfe deinen Posteingang.',
-  AppLocale.registrationSuccessCheckEmail: 'Registrierung erfolgreich! Überprüfe deine E-Mail, um das Konto zu aktivieren.',
-  AppLocale.passwordResetSuccess: 'Passwort erfolgreich zurückgesetzt! Melde dich mit deinem neuen Passwort an.',
-  AppLocale.pleaseEnterTokenAndPassword:
-      'Gib den Token und das neue Passwort ein',
-  AppLocale.enterTokenFromEmailShort: 'Gib den Token aus der E-Mail ein',
-  AppLocale.emailVerifiedWait:
-      'E-Mail verifiziert! Bitte warten oder manuell anmelden.',
-  AppLocale.forgotPasswordQuestion: 'Passwort vergessen?',
-  AppLocale.helloUser: 'Hallo, {name}!',
-  AppLocale.enterRegisteredEmail: 'Gib deine registrierte E-Mail ein',
-  AppLocale.sendResetToken: 'Rücksetzungstoken senden',
-  AppLocale.resetTokenLabel: 'Rücksetzungstoken',
-  AppLocale.newPassword: 'Neues Passwort',
-  AppLocale.atLeast8Characters: 'Mindestens 8 Zeichen',
-
-  AppLocale.storageQuotaExceeded: 'Speicherplatzlimit überschritten',
-  AppLocale.storageQuotaDesc: 'Dein Speicher ist voll. Schaffe Platz, um weiterhin Cloud-Spielstände zu synchronisieren.',
-  AppLocale.currentStorageUsage: 'Aktuelle Speichernutzung:',
-  AppLocale.recommendedSolutions: 'Empfohlene Lösungen:',
-  AppLocale.upgradePlan: 'Abonnement aktualisieren',
-  AppLocale.upgradePlanDesc: 'Erhalte mehr Platz für deine Spielstände',
-  AppLocale.deleteOldSaves: 'Alte Spielstände löschen',
-  AppLocale.deleteOldSavesDesc:
-      'Entferne Spielstände, die du nicht mehr benötigst',
-  AppLocale.downloadAndDelete: 'Herunterladen und Löschen',
-  AppLocale.downloadAndDeleteDesc:
-      'Lade den Spielstand lokal herunter und entferne ihn aus der Cloud',
-  AppLocale.dismiss: 'Schließen',
-  AppLocale.manageFiles: 'Dateien verwalten',
-  AppLocale.cloudStorageRefreshed: 'Cloud-Speicher aktualisiert',
-  AppLocale.failedToRefreshCloud:
-      'Cloud-Speicher konnte nicht aktualisiert werden',
-  AppLocale.onlineSaves: 'Online-Spielstände',
-  AppLocale.noOnlineSavesFound: 'Keine Online-Spielstände gefunden',
-  AppLocale.whatIsNeoSync: 'Was ist NeoSync Cloud?',
-  AppLocale.neoSyncDescription:
-      'NeoSync ist der einheitliche Cloud-Partner für dein NeoStation.',
-  AppLocale.crossPlatform: 'Plattformübergreifend',
-  AppLocale.crossPlatformDesc:
-      'Mache da weiter, wo du aufgehört hast, auf jedem NeoStation-Gerät.',
-  AppLocale.securePrivate: 'Sicher und Privat',
-  AppLocale.securePrivateDesc:
-      'Deine Daten sind verschlüsselt und nur für dich zugänglich.',
-  AppLocale.learnMoreEcosystem: 'Erfahre mehr über das Ökosystem auf',
-  AppLocale.manageYourPlan: 'Verwalte dein {plan}-Abonnement',
-  AppLocale.choosePerfectPlan:
-      'Wähle das perfekte Abonnement für deine Bedürfnisse',
-  AppLocale.loadingPlans: 'Abonnementpläne werden geladen...',
-  AppLocale.noPlansAvailable: 'Keine Abonnementpläne verfügbar',
-  AppLocale.checkBackLater:
-      'Versuche es später erneut oder kontaktiere den Support',
-  AppLocale.currentBadge: 'Aktuell',
-  AppLocale.monthly: 'Monatlich',
-  AppLocale.yearly: 'Jährlich',
-  AppLocale.upgrade: 'Aktualisieren',
-  AppLocale.downgrade: 'Herabstufen',
-  AppLocale.subscriptionEnding: 'Abonnement endet',
-  AppLocale.endsOn: 'Endet am {date}',
-  AppLocale.renewsOn: 'Verlängert sich am {date}',
-  AppLocale.endSubscription: 'Abonnement beenden',
-  AppLocale.backWithB: 'Zurück (B)',
-  AppLocale.cancelSubscription: 'Abonnement kündigen',
-  AppLocale.cancelSubscriptionConfirm: 'Bist du sicher, dass du kündigen möchtest? Du behältst den Zugriff bis zum Ende des Zeitraums.',
-  AppLocale.keepSubscription: 'Abonnement behalten',
-  AppLocale.deleteCloudSave: 'Cloud-Spielstand löschen',
-  AppLocale.deleteCloudSaveConfirm:
-      'Diesen Spielstand dauerhaft aus der Cloud löschen?',
-  AppLocale.alsoDisableNeoSync: 'Auch NeoSync deaktivieren',
-  AppLocale.preventsAutoSaves:
-      'Verhindert zukünftige automatische Speichervorgänge für dieses Spiel.',
-  AppLocale.refreshing: 'Wird aktualisiert...',
-  AppLocale.refreshed: 'Aktualisiert',
-  AppLocale.failedToDisableNeoSync:
-      'NeoSync konnte für dieses Spiel nicht deaktiviert werden',
-  AppLocale.saveFileDeleted: 'Spielstand erfolgreich gelöscht',
-  AppLocale.failedToDeleteSave: 'Spielstand konnte nicht gelöscht werden',
 
   AppLocale.syncConflictDetected: 'Synchronisationskonflikt erkannt',
   AppLocale.localVersion: 'Lokale Version',
@@ -784,12 +673,12 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.loadingEmulators: 'Emulatoren werden geladen...',
   AppLocale.selectEmulatorExecutable: 'Programm für {name} auswählen',
 
-  AppLocale.neoSyncLocalSavesOnly: 'NeoSync: Nur lokale Spielstände',
-  AppLocale.neoSyncCloudSavesOnly: 'NeoSync: Nur Cloud-Spielstände',
-  AppLocale.neoSyncSaveConflict: 'NeoSync: Spielstand-Konflikt erkannt',
-  AppLocale.neoSyncCloudSyncDisabled:
-      'NeoSync: Cloud-Synchronisation deaktiviert',
-  AppLocale.neoSyncQuotaExceeded: 'NeoSync: Speicherlimit überschritten',
+  AppLocale.cloudSavesLocalSavesOnly: 'iCloud Saves: Nur lokale Spielstände',
+  AppLocale.cloudSavesCloudSavesOnly: 'iCloud Saves: Nur Cloud-Spielstände',
+  AppLocale.cloudSavesSaveConflict: 'iCloud Saves: Spielstand-Konflikt erkannt',
+  AppLocale.cloudSavesCloudSyncDisabled:
+      'iCloud Saves: Cloud-Synchronisation deaktiviert',
+  AppLocale.cloudSavesQuotaExceeded: 'iCloud Saves: Speicherlimit überschritten',
   AppLocale.packageNameMissing: 'Paketname fehlt',
   AppLocale.failedToLaunchAndroidApp:
       'Android-App konnte nicht gestartet werden',
@@ -846,18 +735,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.storageUsed: '{amount} verwendet',
   AppLocale.storageTotal: '{amount} insgesamt',
   AppLocale.storageUsedPercent: '{percent}% verwendet',
-
-  AppLocale.planWelcomeTitle: 'Willkommen!',
-  AppLocale.planWelcomeMessagePre: 'Danke, dass du dich für das Abonnement ',
-  AppLocale.planWelcomeMessagePost:
-      ' entschieden hast. Viel Spaß mit den neuen Funktionen!',
-  AppLocale.planFarewellTitle: 'Schade, dass du gehst',
-  AppLocale.planFarewellMessagePre:
-      'Wir bedauern deinen Wechsel vom Abonnement ',
-  AppLocale.planFarewellMessageMid: ' zum Abonnement ',
-  AppLocale.planFarewellMessagePost: ' . Wir hoffen, dich bald wiederzusehen!',
-  AppLocale.planUpgradeAnytime:
-      'Denke daran, dass du dein Abonnement jederzeit aktualisieren kannst.',
   AppLocale.pressToClose:
       'Drücke [ESC], [ENTER] oder [LEERTASTE] zum Schließen',
 
@@ -954,8 +831,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.removeRomFolderConfirmBody: 'Dadurch wird dieser ROM-Ordner aus deinen Bibliotheksquellen entfernt. Deine Dateien auf dem Datenträger werden nicht gelöscht.',
   AppLocale.disconnectRaConfirm: 'RetroAchievements trennen',
   AppLocale.disconnectRaConfirmBody: 'Dadurch wirst du abgemeldet und deine gespeicherten RetroAchievements-Anmeldedaten werden von diesem Gerät entfernt.',
-  AppLocale.neoSyncLogoutConfirmBody:
-      'Dadurch wirst du auf diesem Gerät von deinem NeoSync-Konto abgemeldet.',
 
   AppLocale.deleteGame: 'Spiel löschen',
   AppLocale.deleteGameConfirm: 'Endgültig löschen',

@@ -82,7 +82,7 @@ class GameModel {
   /// Abbreviated name of the system (e.g., 'NES').
   final String? systemShortName;
 
-  /// NeoSync: Whether cloud synchronization is active for this specific game's saves.
+  /// iCloud Saves: Whether cloud synchronization is active for this specific game's saves.
   final bool? cloudSyncEnabled;
 
   /// Box2D image aspect ratio (width/height) for grid display.

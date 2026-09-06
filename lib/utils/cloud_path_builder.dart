@@ -1,4 +1,4 @@
-/// Builds and parses the canonical NeoSync cloud paths.
+/// Builds and parses the canonical native save identity keys (not physical iCloud folder paths).
 ///
 /// Format (applies to both saves and states), always under the `v2/` namespace
 /// so it can never collide with legacy v1 paths (`saves/...`):

@@ -368,7 +368,7 @@
       }
     }
   ],
-  "neosync": {
+  "save_sync": {
     "sync": true,
     "android_sync_folder": [
       "{SYNC_DIR}"

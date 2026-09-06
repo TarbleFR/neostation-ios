@@ -77,7 +77,7 @@
       }
     }
   ],
-  "neosync": {
+  "save_sync": {
     "sync": false,
     "android_sync_folder": [],
     "windows_sync_folder": [],

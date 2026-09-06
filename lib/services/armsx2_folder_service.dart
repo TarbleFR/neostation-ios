@@ -4,14 +4,14 @@ import 'package:path/path.dart' as path;
 
 /// Filesystem-only resolver for the ARMSX2 iOS container.
 ///
-/// ARMSX2 owns one security-scoped root bookmark. The PS2 library and NeoSync
+/// ARMSX2 owns one security-scoped root bookmark. The PS2 library and native
 /// save directories are derived from that root without consulting RetroArch,
 /// MeloNX, RPCS3, or any other emulator.
 class Armsx2FolderService {
   Armsx2FolderService._();
 
   static const String bookmarkKey = 'armsx2';
-  static const String legacyNeoSyncBookmarkKey = 'neosync-armsx2-saves';
+  static const String legacySaveBookmarkKey = 'armsx2-save-folder';
 
   static const List<String> gameDirectoryNames = <String>[
     'iso',
@@ -197,7 +197,7 @@ class Armsx2FolderService {
 
   /// True only when [romPath] belongs to ARMSX2's own linked root (or is an
   /// ARMSX2 virtual launch URL). This is the ownership boundary used by both
-  /// game launching and NeoSync routing.
+  /// game launching and iCloud Saves routing.
   static bool ownsRomPath(String? romPath, String? rootPath) {
     if (romPath == null || romPath.trim().isEmpty) return false;
     final uri = Uri.tryParse(romPath);

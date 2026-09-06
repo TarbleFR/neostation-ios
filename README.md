@@ -76,7 +76,7 @@ The existing **Settings → Tools** Pairing File management and optional StikDeb
 
 ## Other frontend features
 
-NeoStation retains ScreenScraper media and metadata, RetroAchievements support, inherited NeoSync account/cloud-save features, iOS external-folder handling, gamepad-oriented landscape navigation, custom backgrounds and menu music. Existing language support and third-party integrations remain in the source tree.
+NeoStation retains ScreenScraper media and metadata, RetroAchievements support, opt-in personal iCloud Drive save folders, iOS external-folder handling, gamepad-oriented landscape navigation, custom backgrounds and menu music. Existing language support and third-party integrations remain in the source tree.
 
 The upstream project supports other platforms. This repository is maintained primarily as the iOS fork; use upstream for canonical non-iOS documentation.
 
@@ -143,3 +143,21 @@ Preserve applicable copyright, license and third-party notices and provide recip
 [GitHub Issues](https://github.com/TarbleFR/neostation-ios/issues) · [TarbleFR on Patreon](https://www.patreon.com/cw/TarbleFR) · [Reddit](https://www.reddit.com/user/Mysterious_Air2053/)
 
 See [ARCHITECTURE.md](ARCHITECTURE.md), [THEMES.md](THEMES.md), [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) for the existing project guidance.
+
+## Personal iCloud Saves (candidate 208)
+
+Cloud save storage now uses a user-authorized **iCloud Drive / NeoStation / Saves**
+folder. Activate iCloud Saves once and authorize its folder in Files. A signed-in
+Apple Account and enabled iCloud Drive are required. No application cloud account,
+subscription or backend token is used. Native emulator save locations remain local.
+
+Changed saves from linked emulators are snapshotted at startup and after returning
+from a game. Immutable revisions keep console/emulator/native identity separate.
+Restoration is explicit, checksummed and preserves the previous local save. A copy
+in the folder is shown as pending until Apple confirms its upload metadata.
+
+DolphiniOS, ARMSX2, MeloNX, RPCS3 and RetroArch have dedicated adapters. Additional
+emulators can use explicitly linked save folders; installing an unrelated app
+alone does not grant access to its private storage. See [iCloud Saves architecture
+and validation](docs/ICLOUD_SAVES.md). Real Apple-account/device testing is required
+before describing this candidate as stable.

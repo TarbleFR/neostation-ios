@@ -17,7 +17,6 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'i_sync_provider.dart';
-import 'providers/neo_sync_adapter.dart';
 
 class SyncManager extends ChangeNotifier {
   SyncManager._();
@@ -25,7 +24,7 @@ class SyncManager extends ChangeNotifier {
   static final SyncManager instance = SyncManager._();
 
   final Map<String, ISyncProvider> _registry = {};
-  String _activeProviderId = NeoSyncAdapter.kProviderId;
+  String _activeProviderId = 'icloud';
 
   // ── Registration ───────────────────────────────────────────────────────────
 
@@ -51,7 +50,7 @@ class SyncManager extends ChangeNotifier {
     }
     _registry.remove(providerId);
     if (_activeProviderId == providerId) {
-      _activeProviderId = NeoSyncAdapter.kProviderId;
+      _activeProviderId = 'icloud';
       notifyListeners();
     }
   }
@@ -82,7 +81,7 @@ class SyncManager extends ChangeNotifier {
   }
 
   /// Restore the user's previously chosen provider from config on startup.
-  /// Falls back to NeoSync if [savedProviderId] is null or not registered.
+  /// Falls back to iCloud Saves if [savedProviderId] is null or not registered.
   void restoreActive(String? savedProviderId) {
     if (savedProviderId != null && _registry.containsKey(savedProviderId)) {
       _activeProviderId = savedProviderId;

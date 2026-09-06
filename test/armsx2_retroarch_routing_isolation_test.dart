@@ -60,19 +60,13 @@ void main() {
     );
   });
 
-  test('PS2 NeoSync resolves ARMSX2 or RetroArch but never both', () {
-    final resolver = File(
-      'lib/providers/neosync/neosync_path_resolver.dart',
-    ).readAsStringSync();
-
-    expect(resolver, contains("system.folderName.toLowerCase() == 'ps2'"));
-    expect(resolver, contains('Armsx2FolderService.ownsRomPath'));
-    expect(
-      resolver,
-      contains('return await Armsx2FolderService.resolveSaveDirectories'),
-    );
-    expect(resolver, contains('final saves = await _getRetroArchSavesPath()'));
-    expect(resolver, contains('final states = await _getRetroArchStatesPath()'));
+  test('PS2 cloud adapters preserve separate native emulator roots', () {
+    final resolver = File('lib/services/cloud_saves/save_source_registry.dart').readAsStringSync();
+    expect(resolver, contains('ConfigService.linkedArmsx2FolderPath'));
+    expect(resolver, contains("_unit('ARMSX2', 'PlayStation 2'"));
+    expect(resolver, contains("_unit('RetroArch',"));
+    expect(resolver, contains('config.savefileDirectory'));
+    expect(resolver, contains('config.savestateDirectory'));
     expect(resolver, isNot(contains('linkedArmsx2SaveFolderPath')));
   });
 
@@ -81,6 +75,5 @@ void main() {
     expect(config, contains('linkedArmsx2FolderPath'));
     expect(config, contains('linkedArmsx2GameFolderPath'));
     expect(config, isNot(contains('linkedArmsx2SaveFolderPath')));
-    expect(config, isNot(contains('armsx2NeoSyncBookmarkKey')));
   });
 }

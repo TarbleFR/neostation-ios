@@ -615,7 +615,7 @@ class DirectoriesSettingsContentState
       // New links use only `armsx2`. The old save-only bookmark is migration
       // data and is removed as soon as the canonical root is linked.
       await ExternalFolderAccess.clearBookmark(
-        key: Armsx2FolderService.legacyNeoSyncBookmarkKey,
+        key: Armsx2FolderService.legacySaveBookmarkKey,
       );
 
       if (!mounted) return;
@@ -656,7 +656,7 @@ class DirectoriesSettingsContentState
     }
   }
 
-  Future<void> _linkNeoSyncSaveFolder({
+  Future<void> _linkEmulatorSaveFolder({
     required String bookmarkKey,
     required String emulatorName,
   }) async {
@@ -671,13 +671,13 @@ class DirectoriesSettingsContentState
         key: bookmarkKey,
       );
       final activePath = resolved ?? selected;
-      if (bookmarkKey == ConfigService.melonxNeoSyncBookmarkKey) {
+      if (bookmarkKey == ConfigService.melonxSaveBookmarkKey) {
         ConfigService.linkedMelonxSaveFolderPath = activePath;
       }
       if (mounted) setState(() {});
-      _log.i('NeoSync $emulatorName save folder linked: $activePath');
+      _log.i('iCloud Saves $emulatorName save folder linked: $activePath');
     } catch (e) {
-      _log.e('NeoSync $emulatorName save-folder link failed: $e');
+      _log.e('iCloud Saves $emulatorName save-folder link failed: $e');
       if (mounted) {
         AppNotification.showNotification(
           context,
@@ -994,10 +994,10 @@ class DirectoriesSettingsContentState
       icon: Symbols.videogame_asset_rounded,
       statusText: statusText,
       isLinked: isSaveLinked,
-      bookmarkKey: ConfigService.melonxNeoSyncBookmarkKey,
+      bookmarkKey: ConfigService.melonxSaveBookmarkKey,
       successMessage: '',
-      onLinkPressed: () => _linkNeoSyncSaveFolder(
-        bookmarkKey: ConfigService.melonxNeoSyncBookmarkKey,
+      onLinkPressed: () => _linkEmulatorSaveFolder(
+        bookmarkKey: ConfigService.melonxSaveBookmarkKey,
         emulatorName: 'MeloNX',
       ),
       trailingAction: Row(

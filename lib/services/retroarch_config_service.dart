@@ -174,14 +174,14 @@ class RetroArchConfigService {
 
     final normalizedRoot = normalizeRetroArchRoot(linkedRoot);
     if (normalizedRoot != null && normalizedRoot != linkedRoot) {
-      _log.i('NeoSync normalized RetroArch root: $linkedRoot -> $normalizedRoot');
+      _log.i('iCloud Saves normalized RetroArch root: $linkedRoot -> $normalizedRoot');
       linkedRoot = normalizedRoot;
       ConfigService.linkedExternalFolderPath = normalizedRoot;
     }
 
     if (linkedRoot == null || linkedRoot.isEmpty) {
       _log.w(
-        'iOS RetroArch folder is not linked; NeoSync local paths unavailable',
+        'iOS RetroArch folder is not linked; iCloud Saves local paths unavailable',
       );
       return null;
     }
@@ -277,7 +277,7 @@ class RetroArchConfigService {
       ),
     );
     _log.i(
-      'iOS RetroArch paths resolved for NeoSync: '
+      'iOS RetroArch paths resolved for iCloud Saves: '
       'saves=${resolved.savefileDirectory}, states=${resolved.savestateDirectory}',
     );
     return resolved;

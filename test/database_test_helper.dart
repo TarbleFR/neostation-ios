@@ -43,7 +43,7 @@ class DatabaseTestHelper {
         color1 TEXT,
         color2 TEXT,
         multidisc INTEGER NOT NULL DEFAULT 0,
-        neosync_json TEXT
+        save_sync_json TEXT
       )
     ''');
 
@@ -275,15 +275,6 @@ class DatabaseTestHelper {
       )
     ''');
 
-    await db.execute('''
-      CREATE TABLE app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      )
-    ''');
+
   }
 }

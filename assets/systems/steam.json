@@ -3,7 +3,7 @@
     "id": "steam",
     "multidisc": false,
     "name": "Steam",
-    "neosync": {
+    "save_sync": {
       "sync": false,
       "sync_folder": null
     },
@@ -53,7 +53,7 @@
       }
     }
   ],
-  "neosync": {
+  "save_sync": {
     "sync": false,
     "android_sync_folder": [],
     "windows_sync_folder": [],

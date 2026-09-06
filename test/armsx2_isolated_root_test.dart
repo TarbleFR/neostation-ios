@@ -56,7 +56,7 @@ void main() {
     expect(await Armsx2FolderService.resolveGameDirectory(temp.path), isNull);
   });
 
-  test('NeoSync resolves only ARMSX2 save folders from the same root', () async {
+  test('iCloud Saves resolves only ARMSX2 save folders from the same root', () async {
     await Directory(path.join(temp.path, 'iso')).create();
     final memcards = await Directory(path.join(temp.path, 'memcards')).create();
     final states = await Directory(path.join(temp.path, 'sstates')).create();

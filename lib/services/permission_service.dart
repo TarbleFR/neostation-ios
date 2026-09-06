@@ -107,7 +107,7 @@ class PermissionService {
   }
 
   /// Requests general storage permissions, delegating to All Files Access on
-  /// Android 11+ for NeoSync and RetroArch compatibility.
+  /// Android 11+ for iCloud Saves and RetroArch compatibility.
   static Future<bool> requestStoragePermissions() async {
     if (Platform.isAndroid) {
       final version = await _getAndroidVersion();

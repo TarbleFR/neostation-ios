@@ -34,9 +34,9 @@ def write_plist(path: Path, data: dict) -> None:
 
 def source_snapshot() -> None:
     paths = ['.github/workflows/dolphin-internal-isolated-v3.yml', 'build-utils',
-             'lib/services/dolphin_neosync_store.dart', 'lib/providers/neo_sync_provider.dart',
-             'lib/providers/neosync', 'lib/services/neosync/neo_sync_service.dart',
-             'lib/sync/providers/neo_sync_adapter.dart', 'docs/DOLPHIN_NEOSYNC.md',
+             'lib/services/dolphin_save_store.dart', 'lib/providers/icloud_save_provider.dart',
+             'lib/services/cloud_saves', 'lib/screens/cloud_saves_screen',
+             'packages/external_folder_access', 'docs/ICLOUD_SAVES.md',
              'native/dolphin_internal_helper', 'packages/dolphin_internal_bridge',
              'packages/dolphin_jit_helper', 'packages/stikjit_bridge',
              'lib/services/dolphin_internal_v2_service.dart',

@@ -3,9 +3,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/dolphin_import_locale.dart';
+import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/screens/game_screen/game_details_card/widgets/game_details_tabs_header.dart';
 
 void main() {
+  // Layout/gesture coverage does not require a native audio engine in unit tests.
+  setUp(() => SfxService().setEnabled(false));
+  tearDown(() => SfxService().setEnabled(true));
   test('all twelve languages cover import, in-game menu and placeholder parameters', () {
     final values = DolphinImportLocale.values;
     expect(values.keys.toSet(), {'en', 'es', 'pt', 'ru', 'zh', 'zh_Hant', 'fr', 'de', 'it', 'id', 'ja', 'ko'});

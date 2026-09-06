@@ -49,7 +49,7 @@ class DatabaseGameModel {
   /// Abbreviated name of the system (e.g., 'NES').
   final String? systemShortName;
 
-  /// NeoSync: Whether cloud synchronization is active for this specific game's saves.
+  /// iCloud Saves: Whether cloud synchronization is active for this specific game's saves.
   final bool? cloudSyncEnabled;
 
   /// The sanitized, human-readable name of the game.

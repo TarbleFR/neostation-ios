@@ -1,26 +1,13 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:neostation/utils/app_config.dart';
 
 void main() {
-  group('AppConfig', () {
-    test('should have default auth base URL', () {
-      expect(AppConfig.authBaseUrl, 'https://auth.neosync.cloud');
-    });
-
-    test('should have default neoSync base URL', () {
-      expect(AppConfig.neoSyncBaseUrl, 'https://sync.neosync.cloud');
-    });
-
-    test('should retain the historical NeoSync v1 migration endpoint', () {
-      expect(AppConfig.legacyNeoSyncBaseUrl, 'https://neosync.neogamelab.com');
-    });
-
-    test('should have default billing base URL', () {
-      expect(AppConfig.billingBaseUrl, 'https://billing.neosync.cloud');
-    });
-
-    test('should have default notify base URL', () {
-      expect(AppConfig.notifyBaseUrl, 'ws://notify.neosync.cloud/ws');
-    });
+  test('cloud save app entry has one folder provider and no server endpoints', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(main, contains('ICloudSaveProvider()'));
+    expect(main, contains('SyncManager.instance.register(cloudSavesProvider)'));
+    for (final removed in ['AuthService()', 'BillingService()', 'NotificationService()']) {
+      expect(main, isNot(contains(removed)));
+    }
   });
 }

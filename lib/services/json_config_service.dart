@@ -1,3 +1,4 @@
+import 'cloud_saves/legacy_save_migration.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -98,7 +99,7 @@ class JsonConfigService {
               'extensions': systemData['extensions'] ?? [],
               'folders': systemData['folders'] ?? [],
               'multidisc': systemData['multidisc'] ?? false,
-              'neosync': jsonMap['neosync'],
+              'save_sync': jsonMap['save_sync'] ?? jsonMap[LegacySaveMigration.catalogKey],
             };
 
             final systemModel = SystemModel.fromJson(flatMap);

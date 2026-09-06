@@ -79,6 +79,13 @@ class GameLaunchService {
     GameModel game,
   ) async {
     try {
+      // CLOUD_SAVES_BEGIN: native_restore_gate
+      if (Platform.isIOS) {
+        await SyncManager.instance.active?.syncGameSavesBeforeLaunch(
+          game.copyWith(systemFolderName: system.folderName));
+        if (!context.mounted) return GameLaunchResult.failure('', '');
+      }
+      // CLOUD_SAVES_END: native_restore_gate
       if (Platform.isAndroid && (system.folderName == 'android')) {
         if (game.romPath == null) {
           return GameLaunchResult.failure(
@@ -164,22 +171,12 @@ class GameLaunchService {
             system.folderName,
           );
         }
-        // Bind the sync hook to the console actually used by this launch.
-        // Some callers supply filesystem-only models without systemFolderName.
-        final syncGame = game.copyWith(systemFolderName: system.folderName);
-        final sync = SyncManager.instance.active;
-        if (sync?.providerId == 'neosync' && sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {
-          await sync!.syncGameSavesBeforeLaunch(syncGame);
-        }
         final report = await DolphinInternalV2Service.launch(
           folderName: system.folderName,
           gamePath: gamePath,
           gameTitle: game.name,
           onSessionStopped: () async {
-            if (identical(SyncManager.instance.active, sync) && sync?.providerId == 'neosync' &&
-                sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {
-              await sync!.syncGameSavesAfterClose(syncGame);
-            }
+            await GameSessionManager.endGameSession();
           },
         );
         if (!context.mounted) return GameLaunchResult.failure('', '');
@@ -1786,6 +1783,9 @@ class GameLaunchService {
   /// Handles application re-entry (foregrounding) to detect session termination.
   static Future<void> handleAppResumed() async {
     if (GameSessionManager.isGameLaunched) {
+      // CLOUD_SAVES_BEGIN: wait_for_native_flush
+      if (Platform.isIOS && GameSessionManager.launchedEmulatorExe == 'ios_dolphin_internal') return;
+      // CLOUD_SAVES_END: wait_for_native_flush
       if (Platform.isLinux) return;
 
       final isDesktop =
