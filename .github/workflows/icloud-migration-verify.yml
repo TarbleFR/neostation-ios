@@ -5,9 +5,9 @@ on:
 permissions:
   contents: read
 jobs:
-  toolchain:
+  native-test-dependencies:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,43 +17,15 @@ jobs:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
-      - name: Resolve locked baseline dependencies
-        run: flutter pub get --enforce-lockfile
-      - name: Prepare portable offline test tools
-        shell: bash
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter test --no-pub test/bounded_concurrency_test.dart
+      - name: Archive cached native dependencies
         run: |
           set -euo pipefail
-          flutter precache --linux
-          mkdir -p /tmp/icloud-tools
-          tar -C "$FLUTTER_ROOT" --exclude='./.git' --exclude='./bin/cache/artifacts/engine/linux-x64-profile' --exclude='./bin/cache/artifacts/engine/linux-x64-release' --exclude='./bin/cache/artifacts/engine/android*' --exclude='./bin/cache/artifacts/engine/ios*' -czf /tmp/flutter-linux.tar.gz .
-          tar -C "$HOME/.pub-cache" -czf /tmp/pub-cache.tar.gz .
-          ls -lh /tmp/*.tar.gz
-          split -b 200M /tmp/flutter-linux.tar.gz /tmp/icloud-tools/flutter-linux.part-
-          split -b 200M /tmp/pub-cache.tar.gz /tmp/icloud-tools/pub-cache.part-
-          sha256sum /tmp/*.tar.gz > /tmp/icloud-tools/SHA256SUMS.txt
+          find .dart_tool/hooks_runner/shared -type f -printf '%p %s bytes\n'
+          tar -C .dart_tool/hooks_runner -czf /tmp/icloud-native-dependencies.tgz shared
       - uses: actions/upload-artifact@v4
         with:
-          name: icloud-tools-aa
-          path: |
-            /tmp/icloud-tools/*-aa
-            /tmp/icloud-tools/SHA256SUMS.txt
-          compression-level: 0
-          retention-days: 2
-      - uses: actions/upload-artifact@v4
-        with:
-          name: icloud-tools-ab
-          path: /tmp/icloud-tools/*-ab
-          compression-level: 0
-          retention-days: 2
-      - uses: actions/upload-artifact@v4
-        with:
-          name: icloud-tools-ac
-          path: /tmp/icloud-tools/*-ac
-          compression-level: 0
-          retention-days: 2
-      - uses: actions/upload-artifact@v4
-        with:
-          name: icloud-tools-ad
-          path: /tmp/icloud-tools/*-ad
-          compression-level: 0
+          name: icloud-native-dependencies
+          path: /tmp/icloud-native-dependencies.tgz
           retention-days: 2
