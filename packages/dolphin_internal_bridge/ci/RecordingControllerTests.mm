@@ -56,7 +56,8 @@ static CMSampleBufferRef TestVideo(int index, int rate, int orientation = 6) CF_
   for (size_t row = 0; row < 640; ++row) {
     for (size_t column = 0; column < 360; ++column) {
       uint8_t* value = bytes + row * stride + column * 4;
-      value[0] = index % 256; value[1] = column % 256; value[2] = row % 256; value[3] = 255;
+      // Blue identifies the source frame with enough contrast to survive H.264.
+      value[0] = (index * 4) % 256; value[1] = column % 256; value[2] = row % 256; value[3] = 255;
     }
   }
   CVPixelBufferUnlockBaseAddress(pixel, 0);
@@ -71,6 +72,30 @@ static CMSampleBufferRef TestVideo(int index, int rate, int orientation = 6) CF_
   CVPixelBufferRelease(pixel);
   return sample;
 }
+
+static double DecodedCenterBlue(CVPixelBufferRef pixel) {
+  if (!pixel || CVPixelBufferGetPixelFormatType(pixel) != kCVPixelFormatType_32BGRA ||
+      CVPixelBufferGetWidth(pixel) < 16 || CVPixelBufferGetHeight(pixel) < 16) return NAN;
+  if (CVPixelBufferLockBaseAddress(pixel, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) return NAN;
+  const uint8_t* bytes = (const uint8_t*)CVPixelBufferGetBaseAddress(pixel);
+  const size_t stride = CVPixelBufferGetBytesPerRow(pixel);
+  const size_t left = CVPixelBufferGetWidth(pixel) / 2 - 8;
+  const size_t top = CVPixelBufferGetHeight(pixel) / 2 - 8;
+  double blue = 0;
+  if (bytes) {
+    for (size_t row = top; row < top + 16; ++row) {
+      for (size_t column = left; column < left + 16; ++column) {
+        blue += bytes[row * stride + column * 4];
+      }
+    }
+    blue /= 16 * 16;
+  } else {
+    blue = NAN;
+  }
+  CVPixelBufferUnlockBaseAddress(pixel, kCVPixelBufferLock_ReadOnly);
+  return blue;
+}
+
 static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_RETAINED {
   AudioStreamBasicDescription stream = {};
   stream.mSampleRate = 48000; stream.mFormatID = kAudioFormatLinearPCM;
@@ -142,12 +167,18 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
   };
   [recorder startWithCompletion:^(NSError* error) { XCTAssertNil(error); [started fulfill]; }];
   [self waitForExpectations:@[started] timeout:2];
-  [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationWillResignActiveNotification object:nil];
-  XCTAssertTrue(recorder.isActive); XCTAssertEqual(source.stops, 0u);
-  [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationDidEnterBackgroundNotification object:nil];
-  [self waitForExpectations:@[stopped] timeout:3];
-  XCTAssertEqual(recorder.state, DolphinRecordingStateIdle);
-  XCTAssertEqual(source.stops, 1u);
+  @try {
+    [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationWillResignActiveNotification object:nil];
+    XCTAssertTrue(recorder.isActive); XCTAssertEqual(source.stops, 0u);
+    [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationDidEnterBackgroundNotification object:nil];
+    [self waitForExpectations:@[stopped] timeout:3];
+    XCTAssertEqual(recorder.state, DolphinRecordingStateIdle);
+    XCTAssertEqual(source.stops, 1u);
+  } @finally {
+    // Other app/framework observers share this process with the next test.
+    [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationWillEnterForegroundNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
+  }
 }
 
 - (void)testRealWriterProduces50HzVideoWithAudioAndFixedOrientation {
@@ -210,13 +241,34 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
     XCTAssertLessThanOrEqual(fabs(displayed.height), 1080);
     AVAssetReader* reader = [[AVAssetReader alloc] initWithAsset:asset error:&error];
     XCTAssertNotNil(reader); XCTAssertNil(error);
-    AVAssetReaderTrackOutput* output = [[AVAssetReaderTrackOutput alloc] initWithTrack:video outputSettings:nil];
+    AVAssetReaderTrackOutput* output = [[AVAssetReaderTrackOutput alloc] initWithTrack:video
+        outputSettings:@{(id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)}];
     [reader addOutput:output]; XCTAssertTrue([reader startReading]);
     NSUInteger frames = 0;
+    double firstBlue = NAN, gapBlue = NAN, lateBlue = NAN;
     CMSampleBufferRef sample;
     while ((sample = [output copyNextSampleBuffer])) {
+      const CMItemCount samples = CMSampleBufferGetNumSamples(sample);
+      CVPixelBufferRef pixel = CMSampleBufferGetImageBuffer(sample);
+      if (samples == 0 && !pixel) {
+#if DEBUG
+        NSLog(@"[DolphinRecordingTest] zero-sample marker pts=%f bytes=%zu image=%p",
+            CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample)),
+            CMSampleBufferGetTotalSampleSize(sample), CMSampleBufferGetImageBuffer(sample));
+#endif
+        CFRelease(sample);
+        continue;
+      }
       const double time = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample));
+      XCTAssertTrue(std::isfinite(time), @"A decoded video frame must have a valid timestamp");
       XCTAssertEqualWithAccuracy(time, frames / 50.0, 0.00002);
+      XCTAssertEqual(samples, (CMItemCount)1);
+      XCTAssertNotEqual(pixel, nullptr);
+      const double blue = DecodedCenterBlue(pixel);
+      XCTAssertTrue(std::isfinite(blue), @"The MP4 must decode to BGRA pixels");
+      if (frames == 0) firstBlue = blue;
+      if (time >= 0.48 && time < 0.60) gapBlue = blue;
+      if (time >= 0.90) lateBlue = blue;
       ++frames; CFRelease(sample);
     }
     XCTAssertEqual(reader.status, AVAssetReaderStatusCompleted);
@@ -224,6 +276,18 @@ static CMSampleBufferRef TestAudio(int index, int offsetSamples = 0) CF_RETURNS_
     XCTAssertLessThan(frames, 80u);
     XCTAssertEqual(frames, recorder.statistics[@"encoded"].unsignedIntegerValue);
     XCTAssertGreaterThan(recorder.statistics[@"duplicated"].unsignedIntegerValue, 5u);
+    // PTS and frame counters alone also pass for a permanently frozen image.
+    // The central blue channel is constant across each source image, so these
+    // comparisons survive orientation changes and tolerate lossy compression.
+    XCTAssertTrue(std::isfinite(firstBlue));
+    XCTAssertTrue(std::isfinite(gapBlue));
+    XCTAssertTrue(std::isfinite(lateBlue));
+    XCTAssertGreaterThan(lateBlue, firstBlue + 40.0, @"The recording must not repeat its first picture forever");
+    XCTAssertGreaterThan(lateBlue, gapBlue + 40.0, @"New pictures must resume after the source pause");
+    XCTAssertGreaterThanOrEqual(lateBlue, 45 * 4.0 - 12.0, @"The final picture must include a late source frame");
+    NSLog(@"[DolphinRecordingTest] decoded frames=%lu video=%f audio=%f firstBlue=%f gapBlue=%f lateBlue=%f stats=%@",
+        (unsigned long)frames, CMTimeGetSeconds(video.timeRange.duration),
+        CMTimeGetSeconds(audioTracks.firstObject.timeRange.duration), firstBlue, gapBlue, lateBlue, recorder.statistics);
     XCTAssertEqualWithAccuracy(CMTimeGetSeconds(video.timeRange.duration), frames / 50.0, 0.021);
     XCTAssertGreaterThanOrEqual(CMTimeGetSeconds(audioTracks.firstObject.timeRange.duration), 0.95);
     XCTAssertLessThan(fabs(CMTimeGetSeconds(asset.duration) - 1.05), 0.25);
