@@ -264,12 +264,10 @@ class NeoSyncService extends ChangeNotifier {
       if (gameHash != null && gameHash.isNotEmpty) {
         request.fields['game_hash'] = gameHash;
       }
-      if (isState != null) {
-        request.fields['is_state'] = isState.toString();
-      }
-      if (scope != null && scope.isNotEmpty) {
-        request.fields['scope'] = scope;
-      }
+      // DOLPHIN_ISOLATION_BEGIN: neosync_wire_metadata_nonnull
+      request.fields['is_state'] = isState.toString();
+      if (scope.isNotEmpty) request.fields['scope'] = scope;
+      // DOLPHIN_ISOLATION_END: neosync_wire_metadata_nonnull
 
       // DOLPHIN_ISOLATION_BEGIN: neosync_upload_timeout
       final response = await request.send().timeout(const Duration(seconds: 60));
