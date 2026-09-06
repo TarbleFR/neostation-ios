@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:neostation/models/game_model.dart';
 import 'package:neostation/providers/icloud_save_provider.dart';
 import 'package:neostation/services/cloud_saves/cloud_folder_access.dart';
 import 'package:neostation/services/cloud_saves/save_snapshot.dart';
@@ -80,10 +81,14 @@ void main(){
   late SaveSourceRegistry sources;
   late ICloudSaveProvider provider;
   bool playing=false;
+  List<GameModel> games=[];
+  GameModel game({bool? cloudSyncEnabled})=>GameModel(
+    romname:'Test.iso',realname:'Test',name:'Test',year:'',developer:'',publisher:'',genre:'',players:'',rating:0,
+    systemId:'ps2',systemFolderName:'ps2',systemRealName:'PlayStation 2',systemShortName:'PS2',cloudSyncEnabled:cloudSyncEnabled);
   ICloudSaveProvider makeProvider()=>ICloudSaveProvider(access:access,sources:sources,
-    supportDirectory:()async=>Directory('${temp.path}/support'),gameIsRunning:()=>playing,loadGames:()async=>[]);
+    supportDirectory:()async=>Directory('${temp.path}/support'),gameIsRunning:()=>playing,loadGames:()async=>games);
   setUp(()async{
-    SharedPreferences.setMockInitialValues({});playing=false;
+    SharedPreferences.setMockInitialValues({});playing=false;games=[];
     temp=await Directory.systemTemp.createTemp('icloud-provider-');
     native=await File('${temp.path}/Mcd001.ps2').writeAsString('native-A');
     await native.setLastModified(DateTime.utc(2025,4,12));
@@ -97,12 +102,14 @@ void main(){
     final dir=Directory('${temp.path}/support/ICloudSaves/outbox/folder-A');
     return !await dir.exists()?[]:await dir.list().where((e)=>e is File && e.path.endsWith('.nssave')).cast<File>().toList();
   }
-  test('disabled until actual folder authorization; native save remains usable',()async{
+  test('authorization immediately exercises local save to cloud transport',()async{
     expect(provider.isAuthenticated,isFalse);
     expect((await provider.fullSync()).success,isFalse);
     expect(access.uploads,0);expect(await native.readAsString(),'native-A');
     expect((await provider.login()).success,isTrue);
     expect(provider.isAuthenticated,isTrue);
+    expect(access.uploads,1);
+    expect(provider.revisions,hasLength(1));
   });
   test('backup lists actual revision and native date without claiming upload completion',()async{
     await provider.login();expect((await provider.fullSync()).success,isTrue);
@@ -113,12 +120,15 @@ void main(){
     access.uploaded=true;await provider.refresh();
     expect(provider.revisions.single.transferState,'uploaded');expect(await outbox(),isEmpty);
   });
-  test('offline startup retains durable outbox for the next launch',()async{
-    await provider.login();access.offline=true;
-    expect((await provider.fullSync()).success,isFalse);expect((await outbox()).length,1);expect(access.uploads,0);
+  test('offline startup retains a changed durable outbox for the next launch',()async{
+    await provider.login();
+    access.uploaded=true;await provider.refresh();
+    await native.writeAsString('native-B');
+    access.offline=true;
+    expect((await provider.fullSync()).success,isFalse);expect((await outbox()).length,1);expect(access.uploads,1);
     provider.dispose();provider=makeProvider();await provider.initialize();
-    access.offline=false;await provider.onAppStart();
-    expect(access.uploads,1);expect(provider.revisions.length,1);
+    access.offline=false;access.uploaded=false;await provider.onAppStart();
+    expect(access.uploads,2);expect(provider.revisions.length,2);
   });
   test('native byte changes create separate revisions; no native overwrite',()async{
     await provider.login();await provider.fullSync();
@@ -134,16 +144,20 @@ void main(){
   test('different folder does not drain the previous private outbox',()async{
     await provider.login();access.offline=true;await provider.fullSync();
     expect((await outbox()).length,1);
+    final uploadsBeforeSwitch=access.uploads;
     // No available native sources for the newly selected account/folder.
     access.offline=false;access.scope='folder-B';sources=SaveSourceRegistry(builtIns:false);
     provider.dispose();provider=makeProvider();await provider.initialize();await provider.fullSync();
-    expect(access.uploads,0);expect((await outbox()).length,1);
+    expect(access.uploads,uploadsBeforeSwitch);expect((await outbox()).length,1);
   });
   test('feature disable cancels an in-flight cloud publish and preserves native bytes',()async{
-    await provider.login();access.holdPut=Completer<void>();access.enteredPut=Completer<void>();
+    await provider.login();access.uploaded=true;await provider.refresh();
+    await native.writeAsString('native-B');
+    final uploadsBefore=access.uploads;
+    access.holdPut=Completer<void>();access.enteredPut=Completer<void>();
     final work=provider.fullSync();await access.enteredPut!.future;
     await provider.setEnabled(false);access.holdPut!.complete();await work;
-    expect(access.uploads,0);expect(await native.readAsString(),'native-A');expect((await outbox()).length,1);
+    expect(access.uploads,uploadsBefore);expect(await native.readAsString(),'native-B');expect((await outbox()).length,1);
   });
   test('running game defers backup and refuses restoration',()async{
     await provider.login();await provider.fullSync();playing=true;
@@ -167,8 +181,21 @@ void main(){
     await native.writeAsString('native-C');await provider.fullSync();expect(access.uploads,2);
   });
   test('unresolved restore recovery blocks new backups instead of uploading partial data',()async{
-    await provider.login();access.recoveryBlocked=true;
-    expect((await provider.fullSync()).success,isFalse);expect(access.uploads,0);
+    await provider.login();final uploadsBefore=access.uploads;access.recoveryBlocked=true;
+    expect((await provider.fullSync()).success,isFalse);expect(access.uploads,uploadsBefore);
     expect(provider.sourceWarnings.containsKey('Recovery'),isTrue);
+  });
+  test('legacy NeoSync disabled flag cannot silently disable iCloud Saves',()async{
+    games=[game(cloudSyncEnabled:false)];
+    provider.dispose();provider=makeProvider();await provider.initialize();
+    expect(provider.isGameCloudSyncEnabled('ps2/Test.iso'),isTrue);
+    expect((await provider.login()).success,isTrue);
+    expect(access.uploads,1,reason:'legacy database flag must not block the iCloud adapter');
+
+    await provider.updateGameCloudSyncEnabled('ps2/Test.iso',false);
+    expect(provider.isGameCloudSyncEnabled('ps2/Test.iso'),isFalse);
+    await native.writeAsString('native-B');
+    await provider.fullSync();
+    expect(access.uploads,1,reason:'an explicit iCloud opt-out must still be respected');
   });
 }
