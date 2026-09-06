@@ -3,6 +3,8 @@
 
 Native cores, JIT, framework packaging, emulator launch implementations, media,
 licensing and dependency versions are not allowed to change with this migration.
+The only native exception is the exact-pinned Dolphin recording finalization hotfix
+that prevents ReplayKit/UIBackgroundTask latency from extending a stopped clip.
 Catalog changes are limited to a save-config key migration. Launch-file changes
 outside explicit cloud/native-Dolphin lifecycle blocks remain fatal.
 
@@ -19,6 +21,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = '09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6'
+RECORDING_HOTFIX = {
+    'packages/dolphin_internal_bridge/ios/Classes/DolphinRecordingController.mm':
+        '8ea47188213aa243060453fb5614442e9d2c73a2',
+}
 
 def git(*args: str) -> str:
     return subprocess.check_output(['git', *args], cwd=ROOT, text=True)
@@ -74,7 +80,7 @@ def main() -> None:
         'packages/external_folder_access/ios/Classes/ICloudFolderPluginV2.swift',
         'test/icloud_activation_contract_test.dart',
     }
-    unexpected = changed - set(review['authorizedPaths']) - activation_hotfix
+    unexpected = changed - set(review['authorizedPaths']) - activation_hotfix - set(RECORDING_HOTFIX)
     assert not unexpected, f'Changes outside reviewed migration scope: {sorted(unexpected)}'
 
     # byte-identical native engines, JIT bridges, framework validation/build code
@@ -82,7 +88,8 @@ def main() -> None:
                  'packages/stikjit_bridge/', 'native/', 'lib/services/retroarch_',
                  'lib/services/armsx2_', 'lib/services/melonx_', 'lib/services/rpcs3_')
     exceptions = {'packages/dolphin_internal_bridge/ci/build_support.py',
-                  'lib/services/armsx2_folder_service.dart', 'lib/services/retroarch_config_service.dart'}
+                  'lib/services/armsx2_folder_service.dart', 'lib/services/retroarch_config_service.dart',
+                  *RECORDING_HOTFIX}
     for path in git('ls-tree', '-r', '--name-only', args.base).splitlines():
         if (path.startswith(protected) and path not in exceptions) or path in {
             'pubspec.yaml', 'pubspec.lock', 'pubspec_overrides.yaml', 'LICENSE.md', 'NOTICE.md',
@@ -94,6 +101,14 @@ def main() -> None:
             assert head_has_file(path), f'Protected source deleted: {path}'
             actual = git('rev-parse', f'HEAD:{path}').strip()
             assert actual == expected, f'Protected source changed: {path}'
+
+    # One unrelated native regression was discovered by this Build 208 CI run.
+    # Keep that repair reviewable by pinning the exact recorder blob; any further
+    # edit to the recorder must explicitly update this audit.
+    for path, expected in RECORDING_HOTFIX.items():
+        assert head_has_file(path), f'Recording hotfix source deleted: {path}'
+        actual = git('rev-parse', f'HEAD:{path}').strip()
+        assert actual == expected, f'Unreviewed recording hotfix change: {path}'
     for path in changed:
         if path.startswith('assets/systems/'):
             before, after = json.loads(previous(args.base, path)), json.loads(text(path))
@@ -155,7 +170,7 @@ def main() -> None:
     require(text('packages/external_folder_access/pubspec.yaml'), 'pluginClass: ExternalFolderAccessPluginBootstrap')
     require(text('lib/services/cloud_saves/cloud_folder_access.dart'), "MethodChannel('neostation/icloud_saves_v2')")
     require(text('lib/services/cloud_saves/save_snapshot.dart'), 'NSCS0001', 'maxMembers', 'noLinks', 'sha256')
-    print(f'iCloud migration scope passed: {len(changed)} reviewed paths; native/JIT/audio/dependency protection preserved.')
+    print(f'iCloud migration scope passed: {len(changed)} reviewed paths; native core/JIT/audio-policy/dependency protection preserved; recording stop hotfix pinned.')
 
 if __name__ == '__main__':
     main()

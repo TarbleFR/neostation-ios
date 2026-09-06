@@ -116,6 +116,7 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
 }
 @property(atomic, readwrite) DolphinRecordingState state;
 @property(atomic, strong, readwrite, nullable) NSURL* lastRecordingURL;
+- (int64_t)requestedStopDurationNs;
 @end
 
 @implementation DolphinRecordingController
@@ -296,6 +297,16 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   if (self.state == DolphinRecordingStateStopping) return;
   _accepting = false;
   const uint64_t generation = _generation.load();
+  // The user-visible stop boundary is the instant Stop was requested. Capture
+  // it before UIKit can synchronously stall while granting background time.
+  // The encoder queue sees this cutoff immediately and must never extend the
+  // CFR timeline merely because ReplayKit/UIBackgroundTask finalization is slow.
+  const CMTime stopHost = HostTime();
+  dispatch_async(_queue, ^{
+    if (generation != self->_generation.load()) return;
+    self->_stopHost = stopHost;
+    [self drain];
+  });
   if (_backgroundTask == UIBackgroundTaskInvalid) {
     __weak DolphinRecordingController* weakSelf = self;
     _backgroundTask = [UIApplication.sharedApplication beginBackgroundTaskWithName:@"DolphinRecordingFinalize"
@@ -319,8 +330,6 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
       });
     }];
   }
-  const CMTime stopHost = HostTime();
-  dispatch_async(_queue, ^{ self->_stopHost = stopHost; });
   [self publishState:DolphinRecordingStateStopping error:error];
   [self completeStart:error ?: RecordingError(5, @"Recording start was cancelled.")];
   if (!_startInFlight) [self stopSource:generation];
@@ -355,9 +364,9 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
       if (error && !strongSelf->_terminalError) strongSelf->_terminalError = error;
       strongSelf->_sourceStopped = YES;
       strongSelf->_finishDurationNs = MAX(strongSelf->_lastVideoEndNs, strongSelf->_lastAudioEndNs);
-      if (CMTIME_IS_NUMERIC(strongSelf->_hostAnchor)) {
-        strongSelf->_finishDurationNs = MAX(strongSelf->_finishDurationNs,
-            strongSelf->_anchorSourceNs + TimeNs(CMTimeSubtract(strongSelf->_stopHost, strongSelf->_hostAnchor)));
+      const int64_t requestedStopNs = [strongSelf requestedStopDurationNs];
+      if (requestedStopNs >= 0) {
+        strongSelf->_finishDurationNs = MAX(strongSelf->_finishDurationNs, requestedStopNs);
       }
       [strongSelf drain];
       if (!strongSelf->_writer) [strongSelf finishAcceptedFrames];
@@ -601,6 +610,12 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
     }
   }
 }
+- (int64_t)requestedStopDurationNs {
+  if (!CMTIME_IS_NUMERIC(_stopHost) || !CMTIME_IS_NUMERIC(_hostAnchor)) return -1;
+  const int64_t delta = TimeNs(CMTimeSubtract(_stopHost, _hostAnchor));
+  if (delta < -_anchorSourceNs) return 0;
+  return MAX((int64_t)0, _anchorSourceNs + delta);
+}
 - (void)drain {
   @autoreleasepool {
     if (_finalizing || !_writer || _writer.status != AVAssetWriterStatusWriting) {
@@ -608,15 +623,22 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
       return;
     }
     [self drainAudio];
+    const int64_t requestedStopNs = [self requestedStopDurationNs];
     unsigned count = 0;
     while (count < DolphinRecording::Timeline::BurstLimit) {
       const BOOL hasIncoming = _pendingSequence != 0;
       const BOOL hasPrevious = _previousSequence != 0;
       if (!hasIncoming && !hasPrevious) break;
-      int64_t horizon = _sourceStopped ? _finishDurationNs :
-          MAX((int64_t)0, _anchorSourceNs + TimeNs(CMTimeSubtract(HostTime(), _hostAnchor)) - 40000000LL);
+      int64_t liveHorizon = MAX((int64_t)0,
+          _anchorSourceNs + TimeNs(CMTimeSubtract(HostTime(), _hostAnchor)) - 40000000LL);
+      // Stop is a logical media boundary, not a ReplayKit completion boundary.
+      // Once requested, keep the real-time CFR timer pinned to that instant
+      // while the capture source and AVAssetWriter finish asynchronously.
+      if (requestedStopNs >= 0) liveHorizon = MIN(liveHorizon, requestedStopNs);
+      int64_t horizon = _sourceStopped ? _finishDurationNs : liveHorizon;
       if (hasIncoming) horizon = MAX(horizon, _pendingTimeNs);
-      if (!_timeline.due(horizon, !_sourceStopped)) break;
+      const BOOL liveInclusive = !_sourceStopped && requestedStopNs < 0;
+      if (!_timeline.due(horizon, liveInclusive)) break;
       if (hasIncoming && _timeline.nextNanoseconds() > _pendingTimeNs) {
         [self promoteIncoming];
         continue;
@@ -643,11 +665,16 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
     const CMTime nowTime = HostTime();
     const int64_t now = TimeNs(nowTime);
     const int64_t elapsed = _anchorSourceNs + TimeNs(CMTimeSubtract(nowTime, _hostAnchor));
-    const BOOL needsFrame = (_previousSequence || _pendingSequence) && _timeline.due(elapsed - 40000000LL);
+    const int64_t progressHorizon = requestedStopNs >= 0 ? MIN(elapsed, requestedStopNs) : elapsed;
+    const BOOL needsFrame = (_previousSequence || _pendingSequence) &&
+        _timeline.due(progressHorizon - 40000000LL);
     if (count || (!needsFrame && _audio.empty())) _blockedSinceNs = 0;
     else if (!_blockedSinceNs) _blockedSinceNs = now;
-    if (!_sourceStopped && ((_blockedSinceNs && now - _blockedSinceNs > Nanoseconds) ||
-        (_previousSequence && elapsed - _timeline.nextNanoseconds() > Nanoseconds))) {
+    // Finalization latency after Stop is not encoder backpressure. ReplayKit can
+    // legitimately take seconds to acknowledge a stop, especially in Simulator.
+    if (requestedStopNs < 0 && !_sourceStopped &&
+        ((_blockedSinceNs && now - _blockedSinceNs > Nanoseconds) ||
+         (_previousSequence && elapsed - _timeline.nextNanoseconds() > Nanoseconds))) {
       [self signalFailure:RecordingError(14, @"Recording stopped because the encoder is too slow.")];
     }
     if (_sourceStopped && _audio.empty() && !_pendingSequence &&
