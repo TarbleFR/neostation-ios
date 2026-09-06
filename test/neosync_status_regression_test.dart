@@ -70,6 +70,7 @@ void main() {
     }
     await http.runWithClient(() => provider.loadOnlineFiles(), () => MockClient((request) async {
       expect(request.method, 'GET');
+      expect(request.url.path, '/api/v2/files');
       return http.Response(jsonEncode({'files': request.url.path == '/api/v2/files'
         ? [{'id': 'native-save', 'file_name': 'Game.srm'},
            {'id': 'unknown-origin', 'file_name': 'SYSDATA'}] : []}), 200);
@@ -95,6 +96,30 @@ void main() {
     await showIcons(tester, adapter, ['psp']);
     expect(find.byIcon(Symbols.error_outline_rounded), findsOneWidget);
     expect(find.byIcon(Symbols.check_circle_outline_rounded), findsNothing);
+  });
+
+  test('typed v2 inventory needs no unavailable legacy deployment', () async {
+    final provider = NeoSyncProvider(NeoSyncService())..setAuthService(_SignedIn());
+    addTearDown(provider.dispose);
+    var requests = 0;
+    await http.runWithClient(() => provider.loadOnlineFiles(),
+      () => MockClient((request) async {
+        requests++;
+        expect(request.url.host, 'sync.neosync.cloud');
+        expect(request.url.path, '/api/v2/files');
+        return http.Response(jsonEncode({'files': [
+          {'id': 'n64-save', 'file_path': 'Mario.srm', 'type': 'save',
+            'system_name': 'n64', 'emulator': 'retroarch.mupen64plus-next',
+            'game_name': 'Mario', 'file_size': 4,
+            'file_hash': '08d6c05a21512a79a1dfeb9d2a8f262f'},
+        ]}), 200);
+      }));
+    expect(requests, 1);
+    expect(provider.onlineFiles, hasLength(1));
+    expect(provider.onlineFiles.single.sourceSavePath,
+        'v2/saves/n64/retroarch.mupen64plus-next/game/Mario/Mario.srm');
+    expect(provider.saveAuditMessage, isNull);
+    expect(provider.error, isNull);
   });
 
   testWidgets('each game keeps its own pending or failed state during another error', (tester) async {

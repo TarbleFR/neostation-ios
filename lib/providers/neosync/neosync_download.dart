@@ -318,8 +318,14 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
     if (v2Path != null && !v2Path.isShared) {
       final saveBase = path.basenameWithoutExtension(v2Path.filePath);
       try {
+        // DOLPHIN_ISOLATION_BEGIN: neosync_structured_owner_guard
+        if (saveBase.trim().isEmpty) return null;
+        // DOLPHIN_ISOLATION_END: neosync_structured_owner_guard
         final row = await GameRepository.findRomByFilenamePrefix(saveBase);
-        if (row != null) {
+        // DOLPHIN_ISOLATION_BEGIN: neosync_structured_owner_guard
+        if (row != null && row['folder_name']?.toString().toLowerCase() ==
+            v2Path.system.toLowerCase()) {
+        // DOLPHIN_ISOLATION_END: neosync_structured_owner_guard
           final romname = row['filename'].toString();
           final title = row['title_name']?.toString();
           return GameModel(
@@ -341,16 +347,21 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
       }
     }
 
-    final parts = cloudFile.fileName.split('/');
+    // DOLPHIN_ISOLATION_BEGIN: neosync_structured_owner_guard
+    final originalPath = cloudFile.sourceSavePath;
+    final parts = originalPath.split('/');
+    // DOLPHIN_ISOLATION_END: neosync_structured_owner_guard
 
     // Identify if it is a Switch file based on known prefixes
     final isSwitchPath =
-        cloudFile.fileName.startsWith('saves/switch/') ||
-        cloudFile.fileName.startsWith('saves/eden/') ||
-        cloudFile.fileName.startsWith('saves/citron/') ||
-        cloudFile.fileName.startsWith('saves/yuzu/') ||
-        cloudFile.fileName.startsWith('saves/suyu/') ||
-        cloudFile.fileName.startsWith('saves/sudachi/');
+        // DOLPHIN_ISOLATION_BEGIN: neosync_structured_owner_guard
+        originalPath.startsWith('saves/switch/') ||
+        originalPath.startsWith('saves/eden/') ||
+        originalPath.startsWith('saves/citron/') ||
+        originalPath.startsWith('saves/yuzu/') ||
+        originalPath.startsWith('saves/suyu/') ||
+        originalPath.startsWith('saves/sudachi/');
+        // DOLPHIN_ISOLATION_END: neosync_structured_owner_guard
 
     if (isSwitchPath && parts.length >= 3) {
       final gameNameInPath = parts[2];
@@ -384,11 +395,17 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
     }
 
     {
-      final name = path.basenameWithoutExtension(cloudFile.fileName);
+      // DOLPHIN_ISOLATION_BEGIN: neosync_structured_owner_guard
+      final name = path.basenameWithoutExtension(originalPath);
+      if (name.trim().isEmpty) return null;
+      // DOLPHIN_ISOLATION_END: neosync_structured_owner_guard
       // Attempt to search in DB
       try {
         final row = await GameRepository.findRomByFilenamePrefix(name);
-        if (row != null) {
+        // DOLPHIN_ISOLATION_BEGIN: neosync_structured_owner_guard
+        if (row != null && (v2Path == null ||
+            row['folder_name']?.toString().toLowerCase() == v2Path.system.toLowerCase())) {
+        // DOLPHIN_ISOLATION_END: neosync_structured_owner_guard
           final romname = row['filename'].toString();
           final title = row['title_name']?.toString();
           final sysFolder = row['folder_name']?.toString() ?? '';
@@ -441,103 +458,8 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
 
 
 // DOLPHIN_ISOLATION_END: neosync_repair205_0_4
-  /// Copies recognizable NeoSync v1 files into the v2 namespace.
-  ///
-  /// This is intentionally non-destructive: the historical object remains in
-  /// v1. Files that cannot be mapped to a local game/emulator are skipped and
-  /// remain visible through the legacy bridge.
-  Future<Set<String>> _migrateLegacyFilesToV2(
-    List<NeoSyncFile> legacyFiles,
-  ) async {
-    final migrated = <String>{};
-
-    for (final legacyFile in legacyFiles) {
-      if (!LegacyNeoSyncService.isLegacyId(legacyFile.id)) continue;
-// DOLPHIN_ISOLATION_BEGIN: neosync_legacy_save_policy
-      if (NeoSyncSavePolicy.classify(legacyFile.sourceSavePath) != NeoSyncSaveKind.save) continue;
-// DOLPHIN_ISOLATION_END: neosync_legacy_save_policy
-      Directory? tempDir;
-      try {
-        final game = await _findGameForCloudFile(legacyFile);
-        final system = game?.systemFolderName?.trim();
-        final emulatorId = game?.emulatorName?.trim();
-        if (game == null ||
-            system == null ||
-            system.isEmpty ||
-            emulatorId == null ||
-            emulatorId.isEmpty) {
-          continue;
-        }
-
-        final emulatorSlug = CloudPathBuilder.slugFromEmulatorUniqueId(
-          emulatorId,
-        );
-        if (emulatorSlug.isEmpty || emulatorSlug == 'standalone') continue;
-
-        final downloaded = await _legacyNeoSyncService.downloadFile(
-          legacyFile.id,
-        );
-        if (downloaded['success'] != true || downloaded['data'] == null) {
-          continue;
-        }
-
-        final bytes = downloaded['data'] as List<int>;
-        final fileName = path.basename(legacyFile.fileName);
-        if (fileName.isEmpty) continue;
-        final lowerName = fileName.toLowerCase();
-        final systemLower = system.toLowerCase();
-        final isState = legacyFile.fileName.startsWith('states/');
-        final isShared =
-            (systemLower == 'ps2' && lowerName.endsWith('.ps2')) ||
-            ((systemLower == 'dc' || systemLower == 'dreamcast') &&
-                lowerName.contains('vmu_save'));
-
-        final v2Name = CloudPathBuilder.build(
-          system: system,
-          emulatorSlug: emulatorSlug,
-          scope: isShared ? 'shared' : 'game',
-          gameName: isShared
-              ? null
-              : path.basenameWithoutExtension(legacyFile.fileName),
-          filePath: fileName,
-          isState: isState,
-        );
-
-        tempDir = await Directory.systemTemp.createTemp('neosync-v1-migrate-');
-        final tempFile = File(path.join(tempDir.path, fileName));
-        await tempFile.parent.create(recursive: true);
-        await tempFile.writeAsBytes(bytes, flush: true);
-        try {
-          await tempFile.setLastModified(
-            legacyFile.fileModifiedAt ?? legacyFile.uploadedAt,
-          );
-        } catch (_) {}
-
-        final result = await _neoSyncService.syncFile(
-          tempFile,
-          game.name,
-          customFilename: v2Name,
-          systemId: system,
-          emulatorId: emulatorSlug,
-          isState: isState,
-          scope: isShared ? 'shared' : 'game',
-        );
-        if (result['success'] == true) {
-          migrated.add(legacyFile.id);
-        }
-      } catch (e) {
-        NeoSyncProvider._log.w(
-          'NeoSync v1 migration skipped ${legacyFile.fileName}: $e',
-        );
-      } finally {
-        if (tempDir != null) {
-          try {
-            await tempDir.delete(recursive: true);
-          } catch (_) {}
-        }
-      }
-    }
-
-    return migrated;
-  }
+  // DOLPHIN_ISOLATION_BEGIN: neosync_no_implicit_legacy_migration
+  // Current synchronization uses v2. Do not silently re-upload guessed v1
+  // objects from an unrelated historical deployment during a list refresh.
+  // DOLPHIN_ISOLATION_END: neosync_no_implicit_legacy_migration
 }

@@ -69,106 +69,52 @@ extension NeoSyncStatus on NeoSyncProvider {
     }
   }
 
-  /// Loads v2 files and also probes the historical v1 account. Recognizable v1
-  /// files are copied into v2 without deleting their originals. Any legacy file
-  /// that cannot be mapped safely remains visible as a `[V1]` entry in the UI.
+  // DOLPHIN_ISOLATION_BEGIN: neosync_current_inventory
+  /// The v2 service is authoritative. Historical manual recovery is separate;
+  /// an unavailable old deployment must not gate current saves or hide audits.
   Future<void> loadOnlineFiles() async {
-// DOLPHIN_ISOLATION_BEGIN: neosync_cleanup_reentry
     if (!isNeoSyncAuthenticated || _saveAuditInProgress) return;
     _saveAuditInProgress = true;
     final auditAccount = _dolphinAccount;
     _saveAuditMessage = null;
     _error = null;
-// DOLPHIN_ISOLATION_END: neosync_cleanup_reentry
     _isLoadingOnlineFiles = true;
     notify();
-
     try {
-      // DOLPHIN_ISOLATION_BEGIN: neosync_purge_before_display
-final v2Result = await _neoSyncService.auditAndPurge(resolveOrigins: _resolveNeoSyncOrigins);
+      final result = await _neoSyncService.auditAndPurge(
+          resolveOrigins: _resolveNeoSyncOrigins);
       if (!isNeoSyncAuthenticated || auditAccount != _dolphinAccount) return;
-      if (v2Result['success'] != true) {
-        // A transport/listing failure prevents synchronization. Cleanup and
-        // provenance warnings concern the audit, not every game's save state.
-        if (v2Result['phase'] == 'listing') _error = '${v2Result['message']}';
-        throw StateError('${v2Result['message']}');
+      if (result['success'] != true) {
+        if (result['phase'] == 'listing') _error = '${result['message']}';
+        throw StateError('${result['message']}');
       }
-// DOLPHIN_ISOLATION_END: neosync_purge_before_display
-      var v2Files = v2Result['success'] == true
-          ? ((v2Result['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[])
-          : <NeoSyncFile>[];
-
-      // DOLPHIN_ISOLATION_BEGIN: neosync_purge_legacy_before_display
-final legacyResult = await _legacyNeoSyncService.auditAndPurge(resolveOrigins: _resolveNeoSyncOrigins);
+      final deleted = result['deleted'] as int? ?? 0;
+      final failed = result['failed'] as int? ?? 0;
+      final unresolved = result['unresolved'] as int? ?? 0;
+      var files = (result['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[];
+      files = await _dolphinDisplayFiles(files);
       if (!isNeoSyncAuthenticated || auditAccount != _dolphinAccount) return;
-      final deleted = (v2Result['deleted'] as int? ?? 0) + (legacyResult['deleted'] as int? ?? 0);
-      final failed = (v2Result['failed'] as int? ?? 0) + (legacyResult['failed'] as int? ?? 0);
-      final unresolved = (v2Result['unresolved'] as int? ?? 0) + (legacyResult['unresolved'] as int? ?? 0);
-      _processedItems.add('NeoSync: $deleted non-save files removed; $failed failed; $unresolved origins unresolved');
-      _saveAuditMessage = deleted + failed + unresolved > 0
-          ? '$deleted fichiers hors sauvegardes supprimés · $unresolved à identifier · $failed suppressions échouées'
-          : null;
-      if (legacyResult['success'] != true && legacyResult['status_code'] != 404) {
-        _saveAuditMessage = 'Sauvegardes v2 vérifiées. Vérification de l’ancien espace indisponible.';
-      }
-      // Unresolved historical files and deferred cleanup remain visible in
-      // saveAuditMessage. They do not mean the emulator saves failed to sync.
-      if (deleted > 0) await loadQuota();
-// DOLPHIN_ISOLATION_END: neosync_purge_legacy_before_display
-      final legacyFiles = legacyResult['success'] == true
-          ? ((legacyResult['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[])
-          : <NeoSyncFile>[];
-
-      Set<String> migratedLegacyIds = <String>{};
-      if (legacyFiles.isNotEmpty) {
-        migratedLegacyIds = await _migrateLegacyFilesToV2(legacyFiles);
-        if (migratedLegacyIds.isNotEmpty) {
-          final refreshed = await _neoSyncService.getFiles();
-          if (refreshed['success'] == true) {
-            v2Files =
-                (refreshed['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[];
-          }
-          final quotaResult = await _neoSyncService.getQuota();
-          if (quotaResult['success'] == true) {
-            _quota = quotaResult['quota'] as NeoSyncQuota;
-          }
-        }
-      }
-
-      // DOLPHIN_ISOLATION_BEGIN: dolphin_online_display_titles
-      if (!isNeoSyncAuthenticated || _dolphinAccount != auditAccount) return;
-      v2Files = await _resolveNeoSyncOrigins(v2Files);
-      v2Files = await _dolphinDisplayFiles(v2Files);
-      if (!isNeoSyncAuthenticated || _dolphinAccount != auditAccount) return;
-      _files = v2Files;
-      // DOLPHIN_ISOLATION_END: dolphin_online_display_titles
-
-      final unresolvedLegacy = legacyFiles
-          .where((file) => !migratedLegacyIds.contains(file.id))
-          .toList();
-      _onlineFiles = <NeoSyncFile>[...v2Files, ...unresolvedLegacy]
+      _files = files;
+      _onlineFiles = List<NeoSyncFile>.of(files)
         ..sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
-
-      if (legacyFiles.isNotEmpty) {
-        NeoSyncProvider._log.i(
-          'NeoSync v1 bridge: ${legacyFiles.length} found, '
-          '${migratedLegacyIds.length} copied to v2, '
-          '${unresolvedLegacy.length} kept as legacy entries',
-        );
-      }
-    } catch (e) {
-      NeoSyncProvider._log.e('Error loading online files: $e');
-// DOLPHIN_ISOLATION_BEGIN: neosync_cleanup_error_visible
-      _saveAuditMessage = 'Vérification NeoSync interrompue : $e';
-// DOLPHIN_ISOLATION_END: neosync_cleanup_error_visible
+      final saves = NeoSyncSaveUnits.cloud(files).length;
+      _processedItems.add('NeoSync v2: ${files.length} objects, $saves saves, '
+          '$deleted non-save files removed, $failed failed, $unresolved unresolved');
+      _saveAuditMessage = deleted + failed + unresolved > 0
+          ? '$saves sauvegardes reconnues · $unresolved à identifier · '
+              '$deleted fichiers hors sauvegardes supprimés · $failed suppressions échouées'
+          : null;
+      if (deleted > 0) await loadQuota();
+    } catch (error) {
+      NeoSyncProvider._log.e('Error loading online files: $error');
+      _saveAuditMessage = 'Vérification NeoSync interrompue : $error';
     } finally {
-      // DOLPHIN_ISOLATION_BEGIN: neosync_cleanup_unlock
       _saveAuditInProgress = false;
-      // DOLPHIN_ISOLATION_END: neosync_cleanup_unlock
       _isLoadingOnlineFiles = false;
       notify();
     }
   }
+  // DOLPHIN_ISOLATION_END: neosync_current_inventory
 
   Future<bool> deleteOnlineFile(String fileId) async {
     try {

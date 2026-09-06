@@ -977,9 +977,12 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
           v2Path.emulatorSlug,
           targetFolder,
         );
-        if (coreFolder != null && coreFolder.isNotEmpty) {
-          relativeName = path.join(coreFolder, relativeName);
+        // DOLPHIN_ISOLATION_BEGIN: neosync_structured_native_core_folder
+        final nativeCoreFolder = coreFolder ?? cloudFile.nativeRetroArchCoreFolder;
+        if (nativeCoreFolder != null && nativeCoreFolder.isNotEmpty) {
+          relativeName = path.join(nativeCoreFolder, relativeName);
         }
+        // DOLPHIN_ISOLATION_END: neosync_structured_native_core_folder
       }
     } else if (isState) {
       relativeName = relativeName.replaceFirst(RegExp(r'^states[/\\]'), '');

@@ -504,7 +504,10 @@ class NeoSyncContentState extends State<NeoSyncContent>
                         borderRadius: BorderRadius.circular(6.r),
                       ),
                       child: Icon(
-                        Symbols.cloud_done_rounded,
+                        // DOLPHIN_ISOLATION_BEGIN: neosync_connection_icon
+                        neoSyncProvider.error != null ? Symbols.cloud_off_rounded
+                            : Symbols.cloud_rounded,
+                        // DOLPHIN_ISOLATION_END: neosync_connection_icon
                         color: Theme.of(context).colorScheme.primary,
                         size: 14.r,
                       ),
@@ -515,7 +518,12 @@ class NeoSyncContentState extends State<NeoSyncContent>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            AppLocale.neoSyncSynchronized.getString(context),
+                            // DOLPHIN_ISOLATION_BEGIN: neosync_honest_global_status
+                            (neoSyncProvider.error != null ? AppLocale.syncError
+                                : neoSyncProvider.isSyncing || neoSyncProvider.isAutoSyncing
+                                    ? AppLocale.neoSyncSynchronizing
+                                    : AppLocale.cloudSyncEnabled).getString(context),
+                            // DOLPHIN_ISOLATION_END: neosync_honest_global_status
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
@@ -541,11 +549,18 @@ class NeoSyncContentState extends State<NeoSyncContent>
                       width: 6.r,
                       height: 6.r,
                       decoration: BoxDecoration(
-                        color: Colors.green.shade400,
+                        // DOLPHIN_ISOLATION_BEGIN: neosync_connection_color
+                        color: neoSyncProvider.error != null
+                            ? theme.colorScheme.error : Colors.green.shade400,
+                        // DOLPHIN_ISOLATION_END: neosync_connection_color
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.green.shade400.withValues(alpha: 0.5),
+                            // DOLPHIN_ISOLATION_BEGIN: neosync_connection_glow
+                            color: (neoSyncProvider.error != null
+                                ? theme.colorScheme.error : Colors.green.shade400)
+                                .withValues(alpha: 0.5),
+                            // DOLPHIN_ISOLATION_END: neosync_connection_glow
                             blurRadius: 4.r,
                             spreadRadius: 1.r,
                           ),
@@ -1541,6 +1556,17 @@ class NeoSyncContentState extends State<NeoSyncContent>
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    // DOLPHIN_ISOLATION_BEGIN: neosync_empty_inventory_evidence
+    final provider = context.read<NeoSyncProvider>();
+    final isFrench = Localizations.localeOf(context).languageCode == 'fr';
+    final message = provider.error != null
+        ? (isFrench ? 'Impossible de vérifier les sauvegardes en ligne. Réessaie avec Actualiser.'
+            : 'Could not check online saves. Try Refresh again.')
+        : provider.onlineFiles.isNotEmpty
+            ? (isFrench ? 'Des fichiers sont présents. Leur origine doit être identifiée avant restauration.'
+                : 'Files are present. Their origin must be identified before restoring them.')
+            : AppLocale.noOnlineSavesFound.getString(context);
+    // DOLPHIN_ISOLATION_END: neosync_empty_inventory_evidence
     return Center(
       child: Padding(
         padding: EdgeInsets.all(12.r),
@@ -1554,7 +1580,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
             ),
             SizedBox(height: 8.r),
             Text(
-              AppLocale.noOnlineSavesFound.getString(context),
+              // DOLPHIN_ISOLATION_BEGIN: neosync_empty_inventory_message
+              message,
+              // DOLPHIN_ISOLATION_END: neosync_empty_inventory_message
               style: TextStyle(
                 fontSize: 16.r,
                 color: Theme.of(context).colorScheme.onSurface

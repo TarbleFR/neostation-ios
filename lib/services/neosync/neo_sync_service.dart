@@ -3,6 +3,7 @@ import 'dart:io';
 // DOLPHIN_ISOLATION_BEGIN: neosync_global_save_policy_imports
 import 'neo_sync_save_policy.dart';
 import 'neo_sync_cloud_cleanup.dart';
+import 'neo_sync_wire_contract.dart';
 // DOLPHIN_ISOLATION_END: neosync_global_save_policy_imports
 
 import 'package:http/http.dart' as http;
@@ -71,13 +72,14 @@ class NeoSyncService extends ChangeNotifier {
       ).timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) throw StateError('NeoSync file check HTTP ${response.statusCode}');
       final data = jsonDecode(response.body);
-      if (data is! Map || data['exists'] is! bool || data['needs_sync'] is! bool ||
+      if (data is! Map || data['exists'] is! bool ||
+          (data['needs_sync'] is! bool && !(data['exists'] == false && data['needs_sync'] == null)) ||
           (data['remote_newer'] != null && data['remote_newer'] is! bool)) {
         throw const FormatException('Invalid NeoSync file check');
       }
       return {
         'success': true,
-        'exists': data['exists'], 'needs_sync': data['needs_sync'],
+        'exists': data['exists'], 'needs_sync': data['needs_sync'] ?? true,
         'remote_newer': data['remote_newer'] ?? false,
         'db_modified_at_timestamp': data['db_modified_at_timestamp'],
         'metadata': data['metadata'],
@@ -150,7 +152,17 @@ class NeoSyncService extends ChangeNotifier {
       }
 // DOLPHIN_ISOLATION_END: neosync_stable_snapshot
       final fileHash = _calculateFileHash(fileBytes);
-      final filename = customFilename ?? file.path;
+      // DOLPHIN_ISOLATION_BEGIN: neosync_wire_contract_206
+      final wire = NeoSyncWireIdentity.fromCloudKey(cloudKey,
+        system: systemId, emulator: emulatorId, isState: isState, scope: scope,
+        nativeRelativePath: source?.relativePath);
+      final filename = wire.filePath;
+      // The verified canonical key outranks optional caller display metadata.
+      systemId = wire.system;
+      emulatorId = wire.emulator;
+      isState = wire.type == 'state';
+      scope = wire.scope;
+      // DOLPHIN_ISOLATION_END: neosync_wire_contract_206
 
       // DOLPHIN_ISOLATION_BEGIN: neosync_snapshot_time
       final localModifiedAt = after.modified;
@@ -227,7 +239,17 @@ class NeoSyncService extends ChangeNotifier {
           ? DateTime.now().millisecondsSinceEpoch
           : localModifiedAt.millisecondsSinceEpoch;
 
-      request.fields['file_name'] = filename;
+      // DOLPHIN_ISOLATION_BEGIN: neosync_wire_upload_206
+      request.fields['file_path'] = wire.filePath;
+      request.fields['type'] = wire.type;
+      // Older deployments can still retain the envelope for compatibility.
+      // Current listings are reconstructed from file_path and typed metadata.
+      request.fields['file_name'] = cloudKey;
+      if (wire.system?.isNotEmpty == true) request.fields['system_id'] = wire.system!;
+      if (wire.emulator?.isNotEmpty == true) request.fields['emulator_id'] = wire.emulator!;
+      request.fields['scope'] = wire.scope;
+      request.fields['is_state'] = (wire.type == 'state').toString();
+      // DOLPHIN_ISOLATION_END: neosync_wire_upload_206
       request.fields['game_name'] = gameName;
       request.fields['file_hash'] = fileHash;
       request.fields['file_size'] = fileBytes.length.toString();
@@ -370,13 +392,26 @@ class NeoSyncService extends ChangeNotifier {
       final fileHash = _calculateFileHash(fileBytes);
       if (await _getToken() != token) throw StateError('NeoSync account changed');
       // DOLPHIN_ISOLATION_END: neosync_forced_snapshot
-      final filename =
-          customFilename ?? file.path.split(Platform.pathSeparator).last;
+      // DOLPHIN_ISOLATION_BEGIN: neosync_forced_wire_206
+      final wire = NeoSyncWireIdentity.fromCloudKey(cloudKey,
+          nativeRelativePath: source?.relativePath);
+      final filename = wire.filePath;
+      // DOLPHIN_ISOLATION_END: neosync_forced_wire_206
       request.files.add(
         http.MultipartFile.fromBytes('file', fileBytes, filename: filename),
       );
 
-      request.fields['file_name'] = filename;
+      // DOLPHIN_ISOLATION_BEGIN: neosync_wire_upload_206
+      request.fields['file_path'] = wire.filePath;
+      request.fields['type'] = wire.type;
+      // Older deployments can still retain the envelope for compatibility.
+      // Current listings are reconstructed from file_path and typed metadata.
+      request.fields['file_name'] = cloudKey;
+      if (wire.system?.isNotEmpty == true) request.fields['system_id'] = wire.system!;
+      if (wire.emulator?.isNotEmpty == true) request.fields['emulator_id'] = wire.emulator!;
+      request.fields['scope'] = wire.scope;
+      request.fields['is_state'] = (wire.type == 'state').toString();
+      // DOLPHIN_ISOLATION_END: neosync_wire_upload_206
       request.fields['game_name'] = gameName;
 
       // DOLPHIN_ISOLATION_BEGIN: neosync_forced_confirmation

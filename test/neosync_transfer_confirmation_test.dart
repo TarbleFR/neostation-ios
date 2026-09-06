@@ -65,7 +65,7 @@ void main() {
       () => MockClient((request) async {
         final check = jsonDecode(request.body) as Map;
         expect(check['hash'], digest);
-        expect(check['filename'], key);
+        expect(check['filename'], 'Game.srm');
         return http.Response(jsonEncode({'exists': true, 'needs_sync': false}), 200);
       }));
     expect(result['synced'], isTrue);

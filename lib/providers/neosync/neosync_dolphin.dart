@@ -83,13 +83,14 @@ extension NeoSyncDolphin on NeoSyncProvider {
     }).toList();
   }
 
-  Future<List<NeoSyncFile>> _dolphinFetchCloud(String account) async {
+  Future<List<NeoSyncFile>> _dolphinFetchCloud(String account, {required DolphinNeoSyncStore store}) async {
     final response = await _neoSyncService.getDolphinSaveFiles();
     if (!isNeoSyncAuthenticated || _dolphinAccount != account) {
       throw StateError('NeoSync account changed during Dolphin synchronization');
     }
     if (response['success'] != true) throw StateError('NeoSync cloud listing failed: ${response['message']}');
-    final result = response['files'] as List<NeoSyncFile>;
+    final result = await _recoverDolphinOrigins(
+        response['files'] as List<NeoSyncFile>, store, account: account);
     _files = result;
     return result;
   }
@@ -114,7 +115,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
     return _dolphinExclusive((store) async {
       final identity = await DolphinInternalV2Service.readSaveIdentity(game.systemFolderName!, game.romPath ?? '');
       _dolphinTitles.remember(identity, game.name);
-      return (await _dolphinFetchCloud(_dolphinAccount)).where((file) =>
+      return (await _dolphinFetchCloud(_dolphinAccount, store: store)).where((file) =>
         file.dolphinTarget?.matches(identity) == true).toList();
     });
   }
@@ -140,7 +141,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
       await _dolphinExclusive((store) async {
         final identity = await DolphinInternalV2Service.readSaveIdentity(system.folderName, game.romPath ?? '');
         _dolphinTitles.remember(identity, game.name);
-        final cloudFiles = await _dolphinFetchCloud(account);
+        final cloudFiles = await _dolphinFetchCloud(account, store: store);
         final cloudByKey = <String, NeoSyncFile>{};
         for (final file in cloudFiles) {
           final target = file.dolphinTarget;
@@ -200,7 +201,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
             }
             // A successful HTTP request may be a skip because the cloud became
             // newer. Confirm its CONTENT before recording success/common history.
-            final refreshed = await _dolphinFetchCloud(account);
+            final refreshed = await _dolphinFetchCloud(account, store: store);
             final confirmed = refreshed.where((f) => f.dolphinTarget?.cloudPath == entry.key && f.checksum?.toLowerCase() == local.checksum);
             if (confirmed.length != 1) throw StateError('Dolphin upload not confirmed; cloud may have changed');
             cloudByKey[entry.key] = confirmed.single;
@@ -312,7 +313,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
     if (target == null) throw const FormatException('Unsupported Dolphin save snapshot');
     final account = _dolphinAccount;
     await _dolphinExclusive((store) async {
-      final current = await _dolphinFetchCloud(account);
+      final current = await _dolphinFetchCloud(account, store: store);
       if (!current.any((file) => file.id == cloudFile.id &&
           file.fileName == cloudFile.fileName && file.checksum == cloudFile.checksum &&
           file.dolphinTarget?.cloudPath == target.cloudPath)) {

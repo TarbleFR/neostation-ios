@@ -4,6 +4,7 @@ import 'dart:io';
 // DOLPHIN_ISOLATION_BEGIN: neosync_presentation_imports
 import '../services/dolphin_neosync_store.dart';
 import '../services/neosync/neo_sync_save_policy.dart';
+import '../utils/cloud_path_builder.dart';
 // DOLPHIN_ISOLATION_END: neosync_presentation_imports
 
 /// Configuration settings for the NeoSync cloud synchronization service.
@@ -112,8 +113,6 @@ class NeoSyncFile {
     if (verifiedSourcePath != null) return verifiedSourcePath!;
     final filename = fileName.replaceAll('\\', '/');
     if (filename.startsWith('v2/')) return filename;
-    // Never reinterpret an existing relative path as a different cloud object.
-    if (filename.contains('/')) return filename;
     final stored = filePath.replaceAll('\\', '/');
     final match = RegExp(r'(?:^|/)(v2/(?:saves|states)/[a-zA-Z0-9_-]+/[^/]+/(?:game|shared)/.+)$')
         .firstMatch(stored);
@@ -123,7 +122,118 @@ class NeoSyncFile {
         (filename.trim().isEmpty || candidate.split('/').last == filename)) {
       return candidate;
     }
+    final structured = _structuredSourcePath;
+    if (structured != null) return structured;
+    // Keep the server's name/path unchanged for requests and exports. Relative
+    // metadata is an identity source, not a replacement API filename.
+    if (filename.isEmpty && stored.isNotEmpty) return stored;
     return filename;
+  }
+
+  /// The September 2026 service returns a native relative file_path with
+  /// system_name/emulator/type, and may omit file_name entirely. Rebuild only
+  /// the app's comparison key; never upload this key as the native wire path.
+  String? get _structuredSourcePath {
+    final system = systemName?.trim().toLowerCase();
+    final engine = emulator?.trim().toLowerCase();
+    final kind = type.toLowerCase();
+    if (system == null || engine == null ||
+        !RegExp(r'^[a-z0-9_-]+$').hasMatch(system) ||
+        !RegExp(r'^[a-z0-9._-]+$').hasMatch(engine) ||
+        !const {'save', 'state', 'shared', 'custom'}.contains(kind)) return null;
+    var native = filePath.replaceAll('\\', '/');
+    if (!NeoSyncSavePolicy.safe(native) || native.contains(':') ||
+        native.startsWith('v2/')) return null;
+    final suppliedName = fileName.replaceAll('\\', '/');
+    if (suppliedName.isNotEmpty && suppliedName != native &&
+        suppliedName != native.split('/').last) return null;
+    final state = kind == 'state' || (kind == 'custom' && RegExp(
+      r'\.(?:state(?:\.?[0-9]+|\.auto)?|p2s|ppst|savestate|ss[0-9]+|st[0-9]+|s[0-9]{2})(?:\.gz)?$',
+      caseSensitive: false,
+    ).hasMatch(NeoSyncSavePolicy.unwrap(native)));
+    var shared = kind == 'shared' || scope == 'shared';
+
+    if (engine == DolphinSaveTarget.emulator) {
+      if (kind == 'custom') return null;
+      // Dolphin snapshot filenames alone do not identify a Wii title or GCI
+      // owner. Their native ID is preserved as a separate relative component.
+      final parts = native.split('/');
+      if ((!shared && parts.length != 2) || (shared && parts.length != 1)) {
+        return null;
+      }
+      final candidate = CloudPathBuilder.build(system: system,
+        emulatorSlug: engine, scope: shared ? 'shared' : 'game',
+        gameName: shared ? null : parts.first,
+        filePath: parts.last, isState: state);
+      return DolphinSaveTarget.parse(candidate)?.cloudPath;
+    }
+
+    if (engine.startsWith('retroarch.')) {
+      final parts = native.split('/');
+      if (parts.length > 1 &&
+          CloudPathBuilder.retroArchCoreSlug(parts.first) == engine) {
+        native = parts.skip(1).join('/');
+      }
+    }
+    if (system == 'ps2' && engine == 'armsx2') shared = true;
+    if (!shared && engine.startsWith('retroarch.') && !state) {
+      shared = (system == 'ps2' && (native.contains('/') ||
+          NeoSyncSavePolicy.unwrap(native).toLowerCase().endsWith('.ps2'))) ||
+          (const {'dc', 'dreamcast'}.contains(system) &&
+           native.split('/').last.toLowerCase().contains('vmu_save'));
+    }
+    var owner = gameName;
+    // The local RetroArch key uses the native ROM basename for a single save,
+    // and the playlist title only for directory saves. Human titles can differ
+    // from a ROM filename (region/revision), so using game_name loses equality.
+    if (engine.startsWith('retroarch.') && !native.contains('/')) {
+      final leaf = NeoSyncSavePolicy.unwrap(native);
+      final dot = leaf.lastIndexOf('.');
+      owner = dot > 0 ? leaf.substring(0, dot) : leaf;
+    }
+    if (!shared && (owner.trim().isEmpty || owner == '.' || owner == '..')) {
+      return null;
+    }
+    final candidate = CloudPathBuilder.build(system: system,
+      emulatorSlug: engine, scope: shared ? 'shared' : 'game',
+      gameName: shared ? null : owner, filePath: native, isState: state);
+    if (kind == 'custom') {
+      // Older user-selected folders used type=custom. This is not proof that
+      // arbitrary content is a save: require a native save format or a known
+      // savedata/container path before reconstructing an owning engine key.
+      final nativeSave = NeoSyncSavePolicy.classify(native) == NeoSyncSaveKind.save;
+      final nativePs3 = NeoSyncSavePolicy.isRpcs3Payload(candidate);
+      final nativeSwitch = system == 'switch' && engine == 'melonx' &&
+          RegExp(r'^profiles/[0-9a-fA-F]{32}/01[0-9a-fA-F]{14}/[0-9a-fA-F]{16}/.+$')
+              .hasMatch(native);
+      final nativePs2 = system == 'ps2' && !state &&
+          RegExp(r'^memcards/[^/]+/[^/]+/.+$').hasMatch(native);
+      if (!nativeSave && !nativePs3 && !nativeSwitch && !nativePs2) return null;
+    }
+    return NeoSyncSavePolicy.canonical(candidate) != null ? candidate : null;
+  }
+
+  final String type;
+  final String? systemName;
+  final String? emulator;
+  final String? gameHash;
+  final String? scope;
+
+  /// A new device may not have created its core directory yet. The service's
+  /// native path can supply that directory only when both its metadata and
+  /// complete remaining payload agree with the resolved canonical identity.
+  String? get nativeRetroArchCoreFolder {
+    final key = NeoSyncSavePolicy.canonical(sourceSavePath);
+    final native = filePath.replaceAll('\\', '/');
+    if (key == null || !key.emulatorSlug.startsWith('retroarch.') ||
+        emulator?.trim().toLowerCase() != key.emulatorSlug ||
+        systemName?.trim().toLowerCase() != key.system ||
+        !NeoSyncSavePolicy.safe(native) || native.contains(':')) return null;
+    final parts = native.split('/');
+    if (parts.length < 2 ||
+        CloudPathBuilder.retroArchCoreSlug(parts.first) != key.emulatorSlug ||
+        NeoSyncSavePolicy.unwrap(parts.skip(1).join('/')) != key.filePath) return null;
+    return parts.first;
   }
 
   DolphinSaveTarget? get dolphinTarget => DolphinSaveTarget.parse(presentationPath);
@@ -142,8 +252,17 @@ class NeoSyncFile {
         NeoSyncSavePolicy.classify(stored) == NeoSyncSaveKind.save) return stored;
     return key;
   }
-  NeoSyncSaveKind get saveKind => verifiedSourcePath != null
-      ? NeoSyncSaveKind.save : NeoSyncSavePolicy.classify(sourceSavePath);
+  NeoSyncSaveKind get saveKind {
+    if (verifiedSourcePath != null) return NeoSyncSaveKind.save;
+    final kind = NeoSyncSavePolicy.classify(sourceSavePath);
+    // Explicit Dolphin ownership must never fall through into a RetroArch
+    // save just because a malformed/unresolved filename happens to end .sav.
+    if (emulator?.trim().toLowerCase() == DolphinSaveTarget.emulator &&
+        dolphinTarget == null && kind != NeoSyncSaveKind.foreign) {
+      return NeoSyncSaveKind.unresolved;
+    }
+    return kind;
+  }
   String get exportSavePath =>
       NeoSyncSavePolicy.rpcs3NativePath(sourceSavePath) ?? sourceSavePath;
   String? get ps3BundleKey {
@@ -163,7 +282,8 @@ class NeoSyncFile {
       fileSize: fileSize, gameName: gameName, uploadedAt: uploadedAt,
       fileModifiedAt: fileModifiedAt, fileModifiedAtTimestamp: fileModifiedAtTimestamp,
       userId: userId, checksum: checksum, dolphinDisplayTitle: dolphinDisplayTitle,
-      verifiedSourcePath: key);
+      verifiedSourcePath: key, type: type, systemName: systemName,
+      emulator: emulator, gameHash: gameHash, scope: scope);
   }
 
   NeoSyncFile withDolphinDisplayTitle(String? title) => NeoSyncFile(
@@ -171,6 +291,8 @@ class NeoSyncFile {
     gameName: gameName, uploadedAt: uploadedAt, fileModifiedAt: fileModifiedAt,
     fileModifiedAtTimestamp: fileModifiedAtTimestamp, userId: userId,
     checksum: checksum, dolphinDisplayTitle: title, verifiedSourcePath: verifiedSourcePath,
+    type: type, systemName: systemName, emulator: emulator,
+    gameHash: gameHash, scope: scope,
   );
 
   static String _readGameName(Map<String, dynamic> json) {
@@ -303,6 +425,11 @@ class NeoSyncFile {
     // DOLPHIN_ISOLATION_BEGIN: neosync_local_title_parameter
     this.dolphinDisplayTitle,
     this.verifiedSourcePath,
+    this.type = '',
+    this.systemName,
+    this.emulator,
+    this.gameHash,
+    this.scope,
     // DOLPHIN_ISOLATION_END: neosync_local_title_parameter
   });
 
@@ -351,6 +478,13 @@ class NeoSyncFile {
       fileModifiedAtTimestamp: finalTimestamp,
       userId: (json['user_id'] ?? '').toString(),
       checksum: (json['file_hash'] ?? json['checksum'])?.toString(),
+      // DOLPHIN_ISOLATION_BEGIN: neosync_structured_metadata
+      type: (json['type'] ?? '').toString(),
+      systemName: (json['system_name'] ?? json['system_id'])?.toString(),
+      emulator: (json['emulator'] ?? json['emulator_id'])?.toString(),
+      gameHash: json['game_hash']?.toString(),
+      scope: json['scope']?.toString(),
+      // DOLPHIN_ISOLATION_END: neosync_structured_metadata
     );
   }
 
@@ -366,6 +500,13 @@ class NeoSyncFile {
       'file_modified_at_timestamp': fileModifiedAtTimestamp,
       'user_id': userId,
       'file_hash': checksum,
+      // DOLPHIN_ISOLATION_BEGIN: neosync_structured_metadata
+      if (type.isNotEmpty) 'type': type,
+      if (systemName != null) 'system_name': systemName,
+      if (emulator != null) 'emulator': emulator,
+      if (gameHash != null) 'game_hash': gameHash,
+      if (scope != null) 'scope': scope,
+      // DOLPHIN_ISOLATION_END: neosync_structured_metadata
     };
   }
 
