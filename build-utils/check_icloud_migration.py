@@ -5,6 +5,10 @@ Native cores, JIT, framework packaging, emulator launch implementations, media,
 licensing and dependency versions are not allowed to change with this migration.
 Catalog changes are limited to a save-config key migration. Launch-file changes
 outside explicit cloud/native-Dolphin lifecycle blocks remain fatal.
+
+The audit intentionally compares the committed HEAD tree with the immutable 207
+baseline. Build steps may legitimately dirty the checkout with generated files;
+those files must not change the reviewed source-scope result.
 """
 from __future__ import annotations
 import argparse
@@ -20,7 +24,7 @@ def git(*args: str) -> str:
     return subprocess.check_output(['git', *args], cwd=ROOT, text=True)
 
 def text(path: str) -> str:
-    return (ROOT / path).read_text()
+    return git('show', f'HEAD:{path}')
 
 def previous(base: str, path: str) -> str:
     return git('show', f'{base}:{path}')
@@ -46,14 +50,24 @@ def require(value: str, *needles: str) -> None:
     for needle in needles:
         assert compact(needle) in compact(value), f'Missing safety invariant: {needle}'
 
+def head_has_file(path: str) -> bool:
+    return subprocess.run(
+        ['git', 'cat-file', '-e', f'HEAD:{path}'],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--base', default=BASE)
     args = parser.parse_args()
     review = json.loads(text('docs/ICLOUD_MIGRATION_SCOPE.json'))
     assert review['base'] == BASE
-    changed = set(git('diff', '--name-only', args.base).splitlines())
-    changed.update(git('ls-files', '--others', '--exclude-standard').splitlines())
+
+    # Review only committed source changes. The build/package stages can dirty
+    # the checkout with generated files and must not create false scope failures.
+    changed = set(git('diff', '--name-only', args.base, 'HEAD').splitlines())
     unexpected = changed - set(review['authorizedPaths'])
     assert not unexpected, f'Changes outside reviewed migration scope: {sorted(unexpected)}'
 
@@ -71,8 +85,9 @@ def main() -> None:
             'build-utils/patch_dolphin_internal_core_v2.py', 'build-utils/configure_dolphin_ios_v2.py',
             'build-utils/materialize_dolphin_isolated_v2.py'}:
             expected = git('rev-parse', f'{args.base}:{path}').strip()
-            assert (ROOT / path).is_file(), f'Protected source deleted: {path}'
-            assert git('hash-object', path).strip() == expected, f'Protected source changed: {path}'
+            assert head_has_file(path), f'Protected source deleted: {path}'
+            actual = git('rev-parse', f'HEAD:{path}').strip()
+            assert actual == expected, f'Protected source changed: {path}'
     for path in changed:
         if path.startswith('assets/systems/'):
             before, after = json.loads(previous(args.base, path)), json.loads(text(path))
@@ -114,10 +129,12 @@ def main() -> None:
         'await _restoring?.future', 'gameIsRunning()', '_deletedKey', 'payloadHash', 'contentHash')
     for removed in ('lib/providers/neo_sync_provider.dart', 'lib/services/neosync', 'lib/providers/neosync',
                     'lib/screens/neo_sync_screen', 'lib/services/notification_service.dart'):
-        assert not (ROOT / removed).exists(), f'Old server/account flow remains: {removed}'
-    for path in (ROOT / 'lib').rglob('*.dart'):
-        if path.name == 'legacy_save_migration.dart': continue
-        assert not re.search(r'neo_?sync', path.read_text(), re.I), f'Old provider reference remains: {path}'
+        assert not head_has_file(removed), f'Old server/account flow remains: {removed}'
+    dart_paths = git('ls-tree', '-r', '--name-only', 'HEAD', '--', 'lib').splitlines()
+    for path in dart_paths:
+        if not path.endswith('.dart') or path.endswith('/legacy_save_migration.dart'):
+            continue
+        assert not re.search(r'neo_?sync', text(path), re.I), f'Old provider reference remains: {path}'
     broker = text('packages/external_folder_access/ios/Classes/ICloudFolderPlugin.swift')
     require(broker, 'NSFileCoordinator()', '.isUbiquitousItemKey', 'startAccessingSecurityScopedResource()',
         'stopAccessingSecurityScopedResource()', 'restoreFolderContents', 'preserveModificationDates',
