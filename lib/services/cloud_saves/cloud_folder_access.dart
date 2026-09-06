@@ -9,7 +9,7 @@ abstract class CloudFolderAccess {
 }
 
 class IOSCloudFolderAccess extends CloudFolderAccess {
-  static const channel = MethodChannel('neostation/icloud_saves');
+  static const channel = MethodChannel('neostation/icloud_saves_v2');
   IOSCloudFolderAccess() {
     if (Platform.isIOS) {
       channel.setMethodCallHandler((call) async {
@@ -24,12 +24,9 @@ class IOSCloudFolderAccess extends CloudFolderAccess {
       throw PlatformException(code: 'UNAVAILABLE', message: 'iCloud Drive requires iOS.');
     }
 
-    // The iCloud folder picker is opened immediately after NeoStation's
-    // confirmation dialog is dismissed. UIKit may silently ignore a second
-    // presentation while that dismissal transition is still active, leaving
-    // the native `connect` call waiting forever and the provider without a
-    // scope. Give the previous route one short frame/transition window to
-    // disappear before asking iOS to present Files.
+    // Keep the route-settle delay added after device testing. The native V2
+    // broker also retries presentation, so a UIKit transition can no longer
+    // leave `connect` pending forever.
     if (method == 'connect') {
       await Future<void>.delayed(const Duration(milliseconds: 350));
     }

@@ -25,4 +25,4 @@ flutter:
   plugin:
     platforms:
       ios:
-        pluginClass: ExternalFolderAccessPlugin
+        pluginClass: ExternalFolderAccessPluginBootstrap
