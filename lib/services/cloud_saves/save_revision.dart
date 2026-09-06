@@ -25,7 +25,27 @@ class SaveRevision {
     final clean = text.replaceAll(RegExp(r'[^a-zA-Z0-9._ -]'), '_').trim();
     return clean.isEmpty || clean == '.' || clean == '..' ? 'Unidentified' : clean.substring(0, clean.length > 100 ? 100 : clean.length);
   }
+
+  /// Stable first-level console directory used inside each emulator folder.
+  /// These names intentionally match the directories created by the native
+  /// iCloud authorization broker so uploads never fork into parallel labels
+  /// such as `ARMSX2/PlayStation 2` beside the expected `ARMSX2/PS2`.
+  static String consoleFolder(String emulator, String system) {
+    if (emulator == 'ARMSX2' && system == 'PlayStation 2') return 'PS2';
+    if (emulator == 'RPCS3' && system == 'PlayStation 3') return 'PS3';
+    if (emulator == 'DolphiniOS' && system == 'GameCube') return 'GameCube';
+    if (emulator == 'DolphiniOS' && system == 'Wii') return 'Wii';
+    if (emulator == 'MeloNX' && system == 'Switch') return 'Switch';
+    return folder(system);
+  }
+
   static String directoryFor(String emulator, String system, String owner, String kind, String key) =>
+      '${folder(emulator)}/${consoleFolder(emulator, system)}/${folder(owner)}/${folder(kind)}/${sha256.convert(utf8.encode(key)).toString().substring(0, 16)}';
+
+  // Build 208 betas could have staged a revision before console-folder names
+  // were canonicalized. Keep those manifests readable/restorable while all new
+  // writes use [directoryFor].
+  static String _legacyDirectoryFor(String emulator, String system, String owner, String kind, String key) =>
       '${folder(emulator)}/${folder(system)}/${folder(owner)}/${folder(kind)}/${sha256.convert(utf8.encode(key)).toString().substring(0, 16)}';
 
   Map<String, Object> toJson() => {'schema': 1, 'unit': unitKey, 'emulator': emulator,
@@ -46,10 +66,12 @@ class SaveRevision {
       contentHash: text('contentHash'), payloadHash: text('payloadHash'), size: value['size'] as int,
       modified: DateTime.parse(text('modified')), relativeDirectory: text('directory'), transferState: state);
     SaveSnapshot.safeRelative(result.relativeDirectory);
+    final canonicalDirectory = directoryFor(result.emulator, result.system, result.owner, result.kind, result.unitKey);
+    final legacyDirectory = _legacyDirectoryFor(result.emulator, result.system, result.owner, result.kind, result.unitKey);
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(result.contentHash) ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(result.payloadHash) || result.size < 1 ||
         result.size > SaveSnapshot.maxBytes + SaveSnapshot.maxHeader + 12 ||
-        result.relativeDirectory != directoryFor(result.emulator, result.system, result.owner, result.kind, result.unitKey) ||
+        result.relativeDirectory != canonicalDirectory && result.relativeDirectory != legacyDirectory ||
         !const {'native-v1', 'dolphin-v2'}.contains(result.format)) {
       throw const FormatException('Invalid save revision');
     }
