@@ -85,8 +85,15 @@ class ICloudSaveProvider extends ChangeNotifier implements ISyncProvider {
       status = SyncProviderStatus.connecting; _notify();
       await access.call('connect'); await _connection();
       if (!isAuthenticated) return SyncResult.fail(SyncError.authRequired, message: 'No iCloud Drive folder was authorized.');
-      lastError = null; await refresh();
-      return SyncResult.ok(message: 'iCloud Drive folder authorized.');
+      lastError = null;
+      // Authorization must exercise the complete local-save -> outbox -> iCloud
+      // pipeline immediately. Previously login() only listed the empty cloud
+      // folder, so existing local saves remained invisible until a later app
+      // re-entry or a manual enable toggle happened to trigger fullSync().
+      final initialSync = await fullSync();
+      return SyncResult.ok(message: initialSync.success
+        ? 'iCloud Drive folder authorized and local saves scanned.'
+        : 'iCloud Drive folder authorized. Some save sources will retry automatically.');
     } catch (error) { lastError = error.toString(); status = SyncProviderStatus.disconnected;
       return SyncResult.fail(SyncError.authRequired, message: lastError);
     } finally { _notify(); }
@@ -169,7 +176,11 @@ class ICloudSaveProvider extends ChangeNotifier implements ISyncProvider {
     }
   }
   static String _switchKey(GameModel game) => '${game.systemFolderName ?? game.systemId ?? "unknown"}/${game.romname}';
-  bool _enabled(GameModel game) => (_overrides[_switchKey(game)] ?? game.cloudSyncEnabled ?? true);
+  // The SQLite flag predates iCloud Saves and may contain a disabled NeoSync
+  // value on upgraded installations. Treat only the iCloud provider's own
+  // persisted switch map as an opt-out; otherwise every game is enabled by
+  // default, which is the contract of the NeoSync -> iCloud replacement.
+  bool _enabled(GameModel game) => _overrides[_switchKey(game)] ?? true;
   bool _belongs(NativeSaveUnit unit, GameModel game) {
     final system = (game.systemFolderName ?? game.systemId ?? '').toLowerCase();
     if (unit.emulator == 'DolphiniOS') {
@@ -302,6 +313,7 @@ class ICloudSaveProvider extends ChangeNotifier implements ISyncProvider {
     _notify(); return SyncResult.ok();
   }
   @override GameSyncState? getGameSyncState(String gameId) => _games[gameId];
+  @override bool? isGameCloudSyncEnabled(String gameId) => _overrides[gameId] ?? true;
   @override Future<void> updateGameCloudSyncEnabled(String gameId, bool enabled) async {
     _overrides[gameId] = enabled;
     await (await SharedPreferences.getInstance()).setString('icloud_saves.game_switches.v1', jsonEncode(_overrides));
