@@ -1,0 +1,101 @@
+name: Publish verified iCloud Saves sources 208
+on:
+  push:
+    branches: [work/icloud-publish-208]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Materialize reviewed sources and verify every changed file
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = 'work/icloud-publish-208'
+          python3 - <<'PY'
+          import hashlib, json, lzma, shutil, subprocess
+          from pathlib import Path
+          base = '09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6'
+          root = Path.cwd()
+          bundle = root / 'build-utils/icloud-publish208'
+          def safe(name):
+              p = Path(name)
+              assert not p.is_absolute() and '..' not in p.parts and p.parts[0] != '.git'
+              return root / p
+          expected = [
+              'ffacb7a1142c44b0ab24a28c6f7cbe7544f5c731198add7170b834ff2e3117dd',
+              '41d9d503a9f004504a76c9760ab31bf946ce7454103e1372f82eb441a8be16f7',
+              '8d0e88afa0c307a58a847aaa8db3a61f1eff1e3da5ac8be6f180d15e9dc54e4d',
+          ]
+          parts = [(bundle / f'base-{i}.bin').read_bytes() for i in range(1,4)]
+          assert [hashlib.sha256(b).hexdigest() for b in parts] == expected
+          # Only complete JSON records are recovered from the earlier interrupted
+          # publication. A separately checksummed supplement completes the source.
+          text = lzma.LZMADecompressor().decompress(b''.join(parts)).decode('utf-8')
+          decoder = json.JSONDecoder()
+          pos = 1
+          records = []
+          while pos < len(text):
+              while pos < len(text) and text[pos] in ', \r\n\t': pos += 1
+              try: row, end = decoder.raw_decode(text, pos)
+              except json.JSONDecodeError: break
+              records.append(row)
+              pos = end
+          assert len(records) == 224, len(records)
+          for row in records:
+              name, mode = row[:2]
+              destination = safe(name)
+              if mode is None:
+                  destination.unlink(missing_ok=True)
+                  continue
+              if mode == 0:
+                  content = row[2]
+              else:
+                  safe(mode)
+                  original = subprocess.check_output(['git', 'show', f'{base}:{mode}']).decode('utf-8')
+                  lines = original.splitlines(keepends=True)
+                  last = len(lines) + 1
+                  for start, end, replacement in reversed(row[2]):
+                      assert 0 <= start <= end <= len(lines) and end < last
+                      lines[start:end] = [replacement] if replacement else []
+                      last = start + 1
+                  content = ''.join(lines)
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_text(content, encoding='utf-8')
+          final = b''.join((bundle / f'final-{i}.bin').read_bytes() for i in range(1,4))
+          assert hashlib.sha256(final).hexdigest() == '83868d363054689a73e719ef86260b34b3c024bfcc91bd7ed74f7b3a889c5b93'
+          supplement = json.loads(lzma.decompress(final))
+          assert len(supplement) == 39
+          for name, content in supplement:
+              destination = safe(name)
+              if content is None: destination.unlink(missing_ok=True)
+              else:
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_text(content, encoding='utf-8')
+          # The candidate contains actual auditable source, not preparation blobs.
+          shutil.rmtree(bundle)
+          (root / '.github/workflows/icloud-publish208.yml').unlink()
+          for folder in sorted((root / 'lib').rglob('*'), reverse=True):
+              if folder.is_dir() and not any(folder.iterdir()): folder.rmdir()
+          subprocess.run(['git', 'add', '-A'], check=True)
+          names = subprocess.check_output(['git','diff','--no-renames','--name-only',base], text=True).splitlines()
+          manifests = [[name, hashlib.sha256(safe(name).read_bytes()).hexdigest() if safe(name).is_file() else None] for name in sorted(names)]
+          encoded = json.dumps(manifests,separators=(',',':'),ensure_ascii=False).encode()
+          assert len(manifests) == 262, len(manifests)
+          assert hashlib.sha256(encoded).hexdigest() == '33de52f41d1c08951b6696ffafd5fdec6d6952229d0b5c1f3890a821c3d1c6ae'
+          print('Verified all 262 changed paths against locally tested source.')
+          PY
+          git diff --cached --check
+          python3 build-utils/check_icloud_migration.py --base 09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Replace cloud account backend with verified personal iCloud Saves (208)'
+          git push origin HEAD:refs/heads/work/icloud-publish-208
