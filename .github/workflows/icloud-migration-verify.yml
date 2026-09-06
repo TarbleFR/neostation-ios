@@ -1,0 +1,37 @@
+name: iCloud migration validation toolchain
+on:
+  push:
+    branches: [work/icloud-saves-208]
+permissions:
+  contents: read
+jobs:
+  toolchain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Resolve locked baseline dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Prepare portable offline test tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter precache --linux
+          mkdir -p /tmp/icloud-tools
+          tar -C "$FLUTTER_ROOT" --exclude='./.git' --exclude='./bin/cache/artifacts/engine/linux-x64-profile' --exclude='./bin/cache/artifacts/engine/linux-x64-release' --exclude='./bin/cache/artifacts/engine/android*' --exclude='./bin/cache/artifacts/engine/ios*' -czf /tmp/icloud-tools/flutter-linux.tar.gz .
+          tar -C "$HOME/.pub-cache" -czf /tmp/icloud-tools/pub-cache.tar.gz .
+          cp pubspec.lock /tmp/icloud-tools/pubspec.lock
+          sha256sum /tmp/icloud-tools/*.tar.gz > /tmp/icloud-tools/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icloud-offline-test-tools
+          path: /tmp/icloud-tools/
+          compression-level: 0
+          retention-days: 2
