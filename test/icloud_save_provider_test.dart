@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/providers/icloud_save_provider.dart';
 import 'package:neostation/services/cloud_saves/cloud_folder_access.dart';
+import 'package:neostation/services/cloud_saves/save_revision.dart';
 import 'package:neostation/services/cloud_saves/save_snapshot.dart';
 import 'package:neostation/services/cloud_saves/save_source_registry.dart';
 
@@ -197,5 +198,15 @@ void main(){
     await native.writeAsString('native-B');
     await provider.fullSync();
     expect(access.uploads,1,reason:'an explicit iCloud opt-out must still be respected');
+  });
+  test('built-in revisions stay under authorization-created emulator folders',() {
+    String directory(String emulator,String system)=>SaveRevision.directoryFor(
+      emulator,system,'Shared','Saves','$emulator/$system/Shared/Saves/sample');
+    expect(directory('DolphiniOS','GameCube'),startsWith('DolphiniOS/GameCube/'));
+    expect(directory('DolphiniOS','Wii'),startsWith('DolphiniOS/Wii/'));
+    expect(directory('ARMSX2','PlayStation 2'),startsWith('ARMSX2/PS2/'));
+    expect(directory('MeloNX','Switch'),startsWith('MeloNX/Switch/'));
+    expect(directory('RPCS3','PlayStation 3'),startsWith('RPCS3/PS3/'));
+    expect(directory('RetroArch','Shared library'),startsWith('RetroArch/Shared library/'));
   });
 }
