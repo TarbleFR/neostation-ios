@@ -1,0 +1,26 @@
+name: Recover prepared iCloud source for review
+on:
+  push:
+    branches: [work/icloud-source-recovery-208]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record recovered object integrity without executing contents
+        run: |
+          set -euo pipefail
+          sha256sum build-utils/icloud-recovery/*.bin > build-utils/icloud-recovery/SHA256SUMS.txt
+          ls -l build-utils/icloud-recovery/
+          file build-utils/icloud-recovery/*.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icloud208-prepared-source-recovery
+          path: build-utils/icloud-recovery/
+          if-no-files-found: error
+          retention-days: 7
