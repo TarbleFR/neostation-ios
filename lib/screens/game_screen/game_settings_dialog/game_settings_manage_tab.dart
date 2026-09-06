@@ -77,7 +77,14 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   @override
   void initState() {
     super.initState();
-    _cloudSyncEnabled = widget.game.cloudSyncEnabled ?? true;
+    final gameId = '$_targetSystemFolder/${widget.game.romname}';
+    // iCloud Saves keeps its explicit per-game switches separately from the
+    // historical NeoSync database flag. Prefer provider state so upgraded
+    // installs do not display a stale "disabled" value while iCloud is active.
+    _cloudSyncEnabled =
+        widget.syncProvider?.isGameCloudSyncEnabled(gameId) ??
+        widget.game.cloudSyncEnabled ??
+        true;
     _selectedIndex = _showCloudSync ? _cloudSyncIdx : _playTimeIdx;
   }
 
