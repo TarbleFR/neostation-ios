@@ -164,9 +164,12 @@ class GameLaunchService {
             system.folderName,
           );
         }
+        // Bind the sync hook to the console actually used by this launch.
+        // Some callers supply filesystem-only models without systemFolderName.
+        final syncGame = game.copyWith(systemFolderName: system.folderName);
         final sync = SyncManager.instance.active;
         if (sync?.providerId == 'neosync' && sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {
-          await sync!.syncGameSavesBeforeLaunch(game);
+          await sync!.syncGameSavesBeforeLaunch(syncGame);
         }
         final report = await DolphinInternalV2Service.launch(
           folderName: system.folderName,
@@ -175,7 +178,7 @@ class GameLaunchService {
           onSessionStopped: () async {
             if (identical(SyncManager.instance.active, sync) && sync?.providerId == 'neosync' &&
                 sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {
-              await sync!.syncGameSavesAfterClose(game);
+              await sync!.syncGameSavesAfterClose(syncGame);
             }
           },
         );

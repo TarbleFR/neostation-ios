@@ -476,11 +476,20 @@ extension NeoSyncUpload on NeoSyncProvider {
       return false;
     }
 
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_armsx2_upload_owner
+    if (preferredGame != null && resolved.isState &&
+        !NeoSyncGameScope.ps2StateMatches(path.relative(file.path, from: root),
+          romName: preferredGame.romname, gameName: preferredGame.name,
+          titleId: preferredGame.titleId)) {
+      _skippedFiles++;
+      return false;
+    }
     final preferredGameName = preferredGame?.name.trim();
-    final displayGameName =
-        preferredGameName != null && preferredGameName.isNotEmpty
-        ? '$preferredGameName — ${resolved.isState ? 'Save State' : 'Memory Card'}'
-        : resolved.gameName;
+    final displayGameName = resolved.isState
+        ? (preferredGameName?.isNotEmpty == true
+            ? '$preferredGameName — Save State' : 'ARMSX2 · ${path.basename(file.path)}')
+        : resolved.gameName; // A shared memory card never belongs to the selected game.
+    // DOLPHIN_ISOLATION_END: neosync207_armsx2_upload_owner
 
     final isMemoryCard =
         resolved.category == 'memcards' &&

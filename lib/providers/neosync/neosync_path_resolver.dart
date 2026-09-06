@@ -537,8 +537,14 @@ extension NeoSyncPathResolver on NeoSyncProvider {
   Future<String?> _meloNXTitleIdForGame(GameModel game) async {
     var titleId = game.titleId?.trim();
     if (titleId == null || titleId.isEmpty) {
-      titleId = await GameRepository.getTitleIdForGame(game.romname, game.name);
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_melonx_exact_lookup
+      final matches = (await GameRepository.loadGamesForSystem('switch')).where((row) =>
+        row.filename == game.romname ||
+        (game.romPath?.isNotEmpty == true && row.romPath == game.romPath)).toList();
+      if (matches.length != 1) return null;
+      titleId = matches.single.titleId;
     }
+    // DOLPHIN_ISOLATION_END: neosync207_melonx_exact_lookup
     if (titleId == null || !_isMeloNXTitleId(titleId)) return null;
     return titleId;
   }
@@ -559,11 +565,12 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     if (preferredGame != null) {
       preferredTitleId = await _meloNXTitleIdForGame(preferredGame);
     }
-    if (preferredGame != null &&
-        preferredTitleId != null &&
-        preferredTitleId.toLowerCase() == location.titleId.toLowerCase()) {
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_melonx_owner
+    if (preferredGame != null) {
+      if (!NeoSyncGameScope.switchTitleMatches(preferredTitleId, location.titleId)) return null;
       gameName = preferredGame.name.trim();
     }
+    // DOLPHIN_ISOLATION_END: neosync207_melonx_owner
 
     if (gameName == null || gameName.isEmpty) {
       final row = await GameRepository.findSwitchGameByTitleId(

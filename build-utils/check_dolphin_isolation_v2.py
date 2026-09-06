@@ -41,6 +41,11 @@ SHARED_FILES = {
     "lib/screens/game_screen/game_settings_dialog/game_settings_emulator_tab.dart",
 }
 ALLOWED_EXACT = {
+    # Build207: user-requested per-game native save ownership repair.
+    "lib/services/neosync/neo_sync_game_scope.dart",
+    "test/neosync_game_scope_test.dart",
+    "test/neosync_session207_test.dart",
+    "docs/NEOSYNC_REPAIR_207.md",
     # Build206: explicit NeoSync protocol compatibility, no native changes.
     "lib/services/neosync/neo_sync_wire_contract.dart",
     "test/neosync_v2_api_contract_test.dart",

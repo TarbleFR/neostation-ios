@@ -1,6 +1,18 @@
 part of '../neo_sync_provider.dart';
 
 extension NeoSyncStatus on NeoSyncProvider {
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_publish_inventory
+  /// The account tab and per-game views must observe the SAME confirmed list.
+  /// Updating only _files leaves newly uploaded Dolphin saves invisible there.
+  void _publishCloudInventory(List<NeoSyncFile> files) {
+    _files = List<NeoSyncFile>.of(files);
+    _onlineFiles = List<NeoSyncFile>.of(files)
+      ..sort((a, b) => (b.fileModifiedAt ?? b.uploadedAt)
+          .compareTo(a.fileModifiedAt ?? a.uploadedAt));
+    notify();
+  }
+    // DOLPHIN_ISOLATION_END: neosync207_publish_inventory
+
   Future<bool> loadFiles() async {
     if (!isNeoSyncAuthenticated) return false;
 // DOLPHIN_ISOLATION_BEGIN: neosync_listing_account
@@ -17,7 +29,9 @@ extension NeoSyncStatus on NeoSyncProvider {
       if (!isNeoSyncAuthenticated || listingAccount != _dolphinAccount) return false;
 // DOLPHIN_ISOLATION_END: neosync_listing_publication
       if (result['success'] == true) {
-        _files = (result['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[];
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_loadfiles_publication
+        _publishCloudInventory((result['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[]);
+    // DOLPHIN_ISOLATION_END: neosync207_loadfiles_publication
         notify();
         return true;
       }

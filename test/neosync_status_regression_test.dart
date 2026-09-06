@@ -141,4 +141,19 @@ void main() {
     expect(find.byIcon(Symbols.cloud_download_rounded), findsOneWidget);
     expect(find.byIcon(Symbols.error_outline_rounded), findsOneWidget);
   });
+  testWidgets('Dolphin deferral is pending, while a real failure stays red', (tester) async {
+    final provider = _PreviouslyCheckedProvider(NeoSyncService())..setAuthService(_SignedIn());
+    final adapter = NeoSyncAdapter(provider);
+    addTearDown(adapter.dispose);
+    addTearDown(provider.dispose);
+    for (final item in {'wii': GameSyncStatus.pending, 'gc': GameSyncStatus.error}.entries) {
+      provider.states[game(item.key).romname] = GameSyncState(gameId: game(item.key).romname,
+        gameName: item.key, status: item.value, cloudEnabled: true);
+    }
+    await showIcons(tester, adapter, ['wii', 'gc']);
+    expect(find.byIcon(Symbols.schedule_rounded), findsOneWidget);
+    expect(find.byIcon(Symbols.error_outline_rounded), findsOneWidget);
+    expect(find.byIcon(Symbols.check_circle_outline_rounded), findsNothing);
+  });
+
 }

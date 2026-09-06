@@ -4,6 +4,7 @@ import '../services/dolphin_internal_v2_service.dart';
 import '../services/dolphin_neosync_store.dart';
 import '../services/dolphin_system_files.dart';
 import '../services/neosync/neo_sync_save_policy.dart';
+import '../services/neosync/neo_sync_game_scope.dart';
 import '../services/neosync/neo_sync_cloud_cleanup.dart';
 import '../services/neosync/neo_sync_restore_transaction.dart';
 import '../services/neosync/neo_sync_status_rules.dart';

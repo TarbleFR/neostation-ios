@@ -168,6 +168,12 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
             color: Colors.lightBlue,
             isSyncing: true,
           );
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_pending_icon
+        case GameSyncStatus.pending:
+          return _NeoSyncStatus(
+            icon: Symbols.schedule_rounded, color: Colors.orange, isSyncing: false,
+          );
+    // DOLPHIN_ISOLATION_END: neosync207_pending_icon
         case GameSyncStatus.disabled:
           return _NeoSyncStatus(
             icon: Symbols.cloud_off_rounded,

@@ -181,6 +181,14 @@ class NeoSyncSaveUnits {
         detailName: dolphin.isState ? dolphin.rawName : dolphin.identity,
       );
     }
+    // Build 206 could label any shared PS2 state with the currently selected
+    // game's name. Historical game_name is not an ownership proof. Keep every
+    // cloud object intact and show its native state/slot, not that unsafe label.
+    if (parsed?.system == 'ps2' && parsed?.emulatorSlug == 'armsx2' && parsed?.isState == true) {
+      return NeoSyncSaveUnitDescriptor(key: key, nativeRoot: '',
+        memberPath: parsed!.filePath, displayName: 'ARMSX2 · $leaf',
+        detailName: parsed.filePath, isState: true, isDirectory: false);
+    }
     final isState = parsed?.isState ?? RegExp(
       r'\.(?:state(?:\.?\d+|\.auto)?|p2s|ppst|ss\d+|st\d+|s\d{2})(?:\.gz)?$',
       caseSensitive: false,

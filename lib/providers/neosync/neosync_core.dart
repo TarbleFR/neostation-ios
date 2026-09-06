@@ -479,7 +479,7 @@ extension NeoSyncCore on NeoSyncProvider {
       }
       final listing = await _neoSyncService.getFiles();
       if (listing['success'] != true) throw StateError('Cannot confirm NeoSync synchronization');
-      _files = listing['files'] as List<NeoSyncFile>;
+      _publishCloudInventory(listing['files'] as List<NeoSyncFile>);
       final verifiedLocals = await _findGameSaveFiles(game);
       final verifiedClouds = await _getCloudSaveFilesForGame(game);
       _gameLocalSaves[game.romname] = verifiedLocals;
@@ -726,7 +726,12 @@ extension NeoSyncCore on NeoSyncProvider {
                 armsx2Root.isNotEmpty &&
                 path.isWithin(armsx2Root, file.path) &&
                 _resolveArmsx2FileForCloud(file, armsx2Root) != null) {
-              isMatch = true;
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_armsx2_local_owner
+              final resolved = _resolveArmsx2FileForCloud(file, armsx2Root)!;
+              isMatch = !resolved.isState || NeoSyncGameScope.ps2StateMatches(
+                path.relative(file.path, from: armsx2Root),
+                romName: game.romname, gameName: game.name, titleId: game.titleId);
+    // DOLPHIN_ISOLATION_END: neosync207_armsx2_local_owner
             } else if (system.folderName == 'ps2' &&
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_11
                 (fileName.endsWith('.ps2') ||
@@ -745,8 +750,10 @@ extension NeoSyncCore on NeoSyncProvider {
             // está en la carpeta contenedora en vez del propio archivo (ej. Switch)
             final fullPathLower = file.path.toLowerCase();
 
-            if (fileName.contains(gameRomName) ||
-                fullPathLower.contains(gameRomName)) {
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_nonempty_local
+            if (gameRomName.isNotEmpty && (fileName.contains(gameRomName) ||
+                fullPathLower.contains(gameRomName))) {
+    // DOLPHIN_ISOLATION_END: neosync207_nonempty_local
               isMatch = true;
             } else if (system.folderName == 'switch' &&
                 game.titleId != null &&
@@ -765,7 +772,9 @@ extension NeoSyncCore on NeoSyncProvider {
                 RegExp(r'[^\w\s]'),
                 '',
               );
-              if (normalizedPath.contains(normalizedGameName)) {
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_nonempty_local_normalized
+              if (normalizedGameName.isNotEmpty && normalizedPath.contains(normalizedGameName)) {
+    // DOLPHIN_ISOLATION_END: neosync207_nonempty_local_normalized
                 isMatch = true;
               }
             }
@@ -922,6 +931,24 @@ extension NeoSyncCore on NeoSyncProvider {
           final armsx2 = Armsx2FolderService.ownsRomPath(game.romPath, ConfigService.linkedArmsx2FolderPath);
           if ((identity.emulatorSlug == 'armsx2') != armsx2) continue;
         }
+        if (identity?.emulatorSlug == 'armsx2' && system.folderName.toLowerCase() == 'ps2') {
+          if (!identity!.isState || NeoSyncGameScope.ps2StateMatches(identity.filePath,
+              romName: game.romname, gameName: game.name, titleId: game.titleId)) {
+            matchingFiles.add(cloudFile);
+          }
+          continue;
+        }
+        if (identity?.emulatorSlug == 'melonx' && system.folderName.toLowerCase() == 'switch') {
+          final expectedTitleId = await _meloNXTitleIdForGame(game);
+          if (NeoSyncGameScope.switchCloudMatches(identity!.filePath,
+              expectedTitleId: expectedTitleId, legacyOwner: identity.gameName,
+              expectedNames: {
+                CloudPathBuilder.sanitizeGameName(game.name),
+                if (game.titleName?.trim().isNotEmpty == true)
+                  CloudPathBuilder.sanitizeGameName(game.titleName!),
+              })) matchingFiles.add(cloudFile);
+          continue;
+        }
         // DOLPHIN_ISOLATION_END: neosync_cloud_scope
         bool isMatch = false;
 
@@ -999,8 +1026,10 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
           final fullCloudPathLower = cloudFile.sourceSavePath.toLowerCase();
 // DOLPHIN_ISOLATION_END: neosync_repair205_17
 
-          if (!isMatch &&
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_nonempty_cloud
+          if (!isMatch && gameRomName.isNotEmpty &&
               (fileName.contains(gameRomName) ||
+    // DOLPHIN_ISOLATION_END: neosync207_nonempty_cloud
                   fullCloudPathLower.contains(gameRomName))) {
             isMatch = true;
           } else if (!isMatch) {
@@ -1013,7 +1042,9 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
               RegExp(r'[^\w\s]'),
               '',
             );
-            if (normalizedCloudPath.contains(normalizedGameName)) {
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_nonempty_cloud_normalized
+            if (normalizedGameName.isNotEmpty && normalizedCloudPath.contains(normalizedGameName)) {
+    // DOLPHIN_ISOLATION_END: neosync207_nonempty_cloud_normalized
               isMatch = true;
             }
           }
@@ -1158,7 +1189,13 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
   Future<void> syncGameSavesAfterClose(GameModel game) async {
     // DOLPHIN_ISOLATION_BEGIN: dolphin_after_close
     if (_isDolphinGame(game)) {
-      if (_autoSyncEnabled) await _syncDolphinGame(game, download: false);
+      if (_autoSyncEnabled) {
+        for (var attempt = 0; attempt < 3; attempt++) {
+          await _syncDolphinGame(game, download: false);
+          if (_gameSyncStates[game.romname]?.status != neo_sync.GameSyncStatus.pending) break;
+          if (attempt < 2) await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        }
+      }
       return;
     }
     // DOLPHIN_ISOLATION_END: dolphin_after_close

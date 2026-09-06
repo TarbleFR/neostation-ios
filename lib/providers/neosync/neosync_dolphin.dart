@@ -91,7 +91,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
     if (response['success'] != true) throw StateError('NeoSync cloud listing failed: ${response['message']}');
     final result = await _recoverDolphinOrigins(
         response['files'] as List<NeoSyncFile>, store, account: account);
-    _files = result;
+    _publishCloudInventory(result);
     return result;
   }
 
@@ -127,11 +127,13 @@ extension NeoSyncDolphin on NeoSyncProvider {
   }) async {
     if (!_isDolphinGame(game)) return;
     if (!isNeoSyncAuthenticated || _dolphinAccount.isEmpty || game.cloudSyncEnabled != true) {
+      _dolphinLog('disabled', '${game.name}: authentication=${isNeoSyncAuthenticated && _dolphinAccount.isNotEmpty}; gameSync=${game.cloudSyncEnabled == true}');
       _dolphinState(game, neo_sync.GameSyncStatus.disabled);
       return;
     }
     final system = await _getSystemForGame(game);
     if (system == null || !system.neosync.sync) {
+      _dolphinLog('disabled.system', '${game.name}: system=${system?.folderName ?? "missing"}; sync=${system?.neosync.sync}');
       _dolphinState(game, neo_sync.GameSyncStatus.disabled);
       return;
     }
@@ -141,6 +143,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
       await _dolphinExclusive((store) async {
         final identity = await DolphinInternalV2Service.readSaveIdentity(system.folderName, game.romPath ?? '');
         _dolphinTitles.remember(identity, game.name);
+        _dolphinLog('identity', '${identity.system}: ${identity.gameId}; title=${identity.titleId ?? "n/a"}; region=${identity.region}');
         final cloudFiles = await _dolphinFetchCloud(account, store: store);
         final cloudByKey = <String, NeoSyncFile>{};
         for (final file in cloudFiles) {
@@ -171,6 +174,7 @@ extension NeoSyncDolphin on NeoSyncProvider {
           }
           final common = await store.lastCommonHash(account, target);
           final decision = dolphinSyncDecision(local?.checksum, remoteHash, common);
+          _dolphinLog('compare', '${target.relativeNativePath}: local=${local?.size ?? 0} B; remote=${remote?.fileSize ?? 0} B; decision=${decision.name}');
           if (local != null) localSaves.add(_dolphinLocal(local, game.name,
             synced: decision == DolphinSyncDecision.equal));
           if (decision == DolphinSyncDecision.empty) continue;
@@ -245,8 +249,11 @@ extension NeoSyncDolphin on NeoSyncProvider {
       });
     } on DolphinSystemFilesException catch (error) {
       _dolphinLog('deferred', '${game.name}: ${error.code}; no live save touched');
-      _dolphinState(game, neo_sync.GameSyncStatus.error,
-        error: 'Dolphin is running or another file operation is active. Save sync is deferred until the game has stopped.');
+      if (error.code == 'busy') {
+        _dolphinState(game, neo_sync.GameSyncStatus.pending);
+      } else {
+        _dolphinState(game, neo_sync.GameSyncStatus.error, error: '${error.code}');
+      }
     } on QuotaExceededException catch (error) {
       _quotaExceededActive = true;
       _dolphinState(game, neo_sync.GameSyncStatus.quotaExceeded, error: error.message);
@@ -303,7 +310,9 @@ extension NeoSyncDolphin on NeoSyncProvider {
 
   void _finishDolphinBulkStatus() {
     if (_dolphinBulkErrors == 0) return;
-    _error = 'Dolphin: $_dolphinBulkErrors save sync operation(s) failed or deferred; see per-game status. Other engines were not blocked.';
+    // Failures stay on the affected games; don't paint unchecked libraries red
+    // or stop other emulators. An actual global listing outage still uses _error.
+    _dolphinLog('bulk.warning', '$_dolphinBulkErrors operation(s) failed; see per-game status.');
     _syncStatus = 'Synchronization finished with Dolphin warnings';
   }
 

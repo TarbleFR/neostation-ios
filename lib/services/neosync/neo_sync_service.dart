@@ -235,9 +235,10 @@ class NeoSyncService extends ChangeNotifier {
         http.MultipartFile.fromBytes('file', fileBytes, filename: filename),
       );
 
-      final fileModifiedAtTimestamp = contentHashOnly
-          ? DateTime.now().millisecondsSinceEpoch
-          : localModifiedAt.millisecondsSinceEpoch;
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_original_save_timestamp
+      // Hash-only changes the comparison policy, not the save's creation time.
+      final fileModifiedAtTimestamp = localModifiedAt.millisecondsSinceEpoch;
+    // DOLPHIN_ISOLATION_END: neosync207_original_save_timestamp
 
       // DOLPHIN_ISOLATION_BEGIN: neosync_wire_upload_206
       request.fields['file_path'] = wire.filePath;

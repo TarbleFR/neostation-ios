@@ -644,6 +644,11 @@ enum GameSyncStatus {
   /// A synchronization operation is currently active.
   syncing,
 
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_pending_status
+  /// A save check is waiting for the native engine/import to release its files.
+  pending,
+    // DOLPHIN_ISOLATION_END: neosync207_pending_status
+
   /// Cloud synchronization is explicitly disabled for this game.
   disabled,
 
@@ -730,6 +735,10 @@ class GameSyncState {
         return 'Up to date';
       case GameSyncStatus.syncing:
         return 'Syncing...';
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_pending_text
+      case GameSyncStatus.pending:
+        return 'Waiting for emulator files';
+    // DOLPHIN_ISOLATION_END: neosync207_pending_text
       case GameSyncStatus.disabled:
         return 'Disabled';
       case GameSyncStatus.quotaExceeded:
@@ -754,6 +763,10 @@ class GameSyncState {
         return Colors.green;
       case GameSyncStatus.syncing:
         return Colors.blue;
+    // DOLPHIN_ISOLATION_BEGIN: neosync207_pending_color
+      case GameSyncStatus.pending:
+        return Colors.orange;
+    // DOLPHIN_ISOLATION_END: neosync207_pending_color
       case GameSyncStatus.disabled:
         return Colors.grey;
       case GameSyncStatus.quotaExceeded:
