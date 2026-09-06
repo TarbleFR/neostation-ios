@@ -37,8 +37,6 @@ jobs:
           ]
           parts = [(bundle / f'base-{i}.bin').read_bytes() for i in range(1,4)]
           assert [hashlib.sha256(b).hexdigest() for b in parts] == expected
-          # Only complete JSON records are recovered from the earlier interrupted
-          # publication. A separately checksummed supplement completes the source.
           text = lzma.LZMADecompressor().decompress(b''.join(parts)).decode('utf-8')
           decoder = json.JSONDecoder()
           pos = 1
@@ -80,7 +78,6 @@ jobs:
               else:
                   destination.parent.mkdir(parents=True, exist_ok=True)
                   destination.write_text(content, encoding='utf-8')
-          # The candidate contains actual auditable source, not preparation blobs.
           shutil.rmtree(bundle)
           (root / '.github/workflows/icloud-publish208.yml').unlink()
           for folder in sorted((root / 'lib').rglob('*'), reverse=True):
@@ -95,6 +92,12 @@ jobs:
           PY
           git diff --cached --check
           python3 build-utils/check_icloud_migration.py --base 09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6
+          # GITHUB_TOKEN can publish source, not workflow changes. Keep workflow
+          # files unchanged here; the authorized connector installs the verified
+          # candidate workflow and removes this preparatory workflow separately.
+          git restore --source=HEAD --staged --worktree .github/workflows/
+          test -z "$(git diff --cached --name-only -- .github/workflows/)"
+          git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Replace cloud account backend with verified personal iCloud Saves (208)'
