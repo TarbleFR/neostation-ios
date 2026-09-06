@@ -176,10 +176,10 @@ class ICloudSaveProvider extends ChangeNotifier implements ISyncProvider {
     }
   }
   static String _switchKey(GameModel game) => '${game.systemFolderName ?? game.systemId ?? "unknown"}/${game.romname}';
-  // The SQLite flag predates iCloud Saves and may contain a disabled NeoSync
-  // value on upgraded installations. Treat only the iCloud provider's own
-  // persisted switch map as an opt-out; otherwise every game is enabled by
-  // default, which is the contract of the NeoSync -> iCloud replacement.
+  // The SQLite flag predates iCloud Saves and may contain a disabled value from
+  // the removed cloud provider on upgraded installations. Treat only the iCloud
+  // provider's own persisted switch map as an opt-out; otherwise every game is
+  // enabled by default, which is the contract of the full iCloud replacement.
   bool _enabled(GameModel game) => _overrides[_switchKey(game)] ?? true;
   bool _belongs(NativeSaveUnit unit, GameModel game) {
     final system = (game.systemFolderName ?? game.systemId ?? '').toLowerCase();
