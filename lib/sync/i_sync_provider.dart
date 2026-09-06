@@ -90,6 +90,11 @@ abstract class ISyncProvider {
   /// Returns the current sync state for [gameId], or null if not tracked.
   GameSyncState? getGameSyncState(String gameId) => null;
 
+  /// Returns the provider-owned per-game cloud switch when the provider keeps
+  /// one independently from the historical database column. `null` means the
+  /// provider has no opinion and callers may fall back to the game model.
+  bool? isGameCloudSyncEnabled(String gameId) => null;
+
   /// Performs pre-launch synchronization (e.g. download cloud saves before
   /// starting the game).
   Future<SyncResult> syncGameSavesBeforeLaunch(GameModel game) async =>
