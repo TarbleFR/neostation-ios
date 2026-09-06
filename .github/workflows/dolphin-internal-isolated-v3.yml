@@ -1,16 +1,16 @@
 name: Build NeoStation iOS IPA
-run-name: NeoStation NeoSync Dolphin Build ${{ inputs.build_number || '207' }} • ${{ github.ref_name }} • ${{ github.sha }}
+run-name: NeoStation iCloud Saves Build ${{ inputs.build_number || '208' }} • ${{ github.ref_name }} • ${{ github.sha }}
 
 on:
   push:
-    branches: [feature/neosync-dolphin-internal, fix/dolphin-savestates-neosync-build201, fix/dolphin-savestates-stability-build202, fix/dolphin-session-performance-build203, fix/dolphin-relaunch-neosync-build204, fix/neosync-native-saves-build205, fix/neosync-wire-contract-build206, fix/neosync-session-scope-build207]
+    branches: [feature/icloud-saves-build208]
   workflow_dispatch:
     inputs:
       build_number:
         description: 'Candidate build number (stable 198 is preserved separately)'
         type: string
         required: true
-        default: '207'
+        default: '208'
 
 permissions:
   contents: read
@@ -22,13 +22,14 @@ concurrency:
 jobs:
   build:
     name: Build and audit NeoStation IPA
-    if: github.ref_name == 'main' || github.ref_name == 'backup' || github.ref_name == 'feature/neosync-dolphin-internal' || github.ref_name == 'fix/dolphin-savestates-neosync-build201' || github.ref_name == 'fix/dolphin-savestates-stability-build202' || github.ref_name == 'fix/dolphin-session-performance-build203' || github.ref_name == 'fix/dolphin-relaunch-neosync-build204' || github.ref_name == 'fix/neosync-native-saves-build205' || github.ref_name == 'fix/neosync-wire-contract-build206' || github.ref_name == 'fix/neosync-session-scope-build207'
+    if: github.ref_name == 'feature/icloud-saves-build208'
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '207' }}
-      IPA_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '207' }}
-      ARTIFACT_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '207' }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      BUILD_NUMBER: ${{ inputs.build_number || '208' }}
+      IPA_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '208' }}
+      ARTIFACT_NAME: NeoStation-iOS-Build-${{ inputs.build_number || '208' }}
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -60,8 +61,8 @@ jobs:
           echo "BUNDLE_PATH=$RUNNER_TEMP/dolphin-ruby-gems" >> "$GITHUB_ENV"
           echo "CCACHE_BASEDIR=$RUNNER_TEMP/dolphin-ios" >> "$GITHUB_ENV"
           python3 packages/dolphin_internal_bridge/ci/build_support.py snapshot
-          git archive --format=zip --output=build/dolphin-ci/neosync-corresponding-source.zip HEAD
-          python3 build-utils/check_dolphin_isolation_v2.py --base origin/main 2>&1 | tee build/dolphin-ci/isolation.txt
+          git archive --format=zip --output=build/dolphin-ci/neostation-corresponding-source.zip HEAD
+          python3 build-utils/check_icloud_migration.py --base 09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6 2>&1 | tee build/dolphin-ci/isolation.txt
           python3 -m unittest discover -s test -p 'dolphin_*test.py' -v 2>&1 | tee build/dolphin-ci/ipa-validator-tests.txt
 
       - name: Upload auditable source snapshot
@@ -70,7 +71,7 @@ jobs:
           name: NeoStation-source-${{ github.run_id }}
           path: |
             build/dolphin-ci/source-review.zip
-            build/dolphin-ci/neosync-corresponding-source.zip
+            build/dolphin-ci/neostation-corresponding-source.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -241,7 +242,7 @@ jobs:
       - name: Audit actual Mach-O linkage and package the IPA
         run: |
           set -euo pipefail
-          python3 build-utils/check_dolphin_isolation_v2.py --base origin/main
+          python3 build-utils/check_icloud_migration.py --base 09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
           python3 - <<'PY'
           import json, os
