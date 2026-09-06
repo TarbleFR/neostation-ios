@@ -108,8 +108,14 @@ class _CloudSaveStatusIconState extends State<CloudSaveStatusIcon>
 
   _CloudSaveStatus _resolveStatus() {
     final game = widget.game!;
-    final cloudSyncEnabled = game.cloudSyncEnabled ?? true;
-    final gameState = widget.syncProvider.getGameSyncState('${widget.system.folderName}/${game.romname}');
+    final gameId = '${widget.system.folderName}/${game.romname}';
+    // iCloud Saves owns its own switch map. The database flag can be a stale
+    // NeoSync value on upgraded installs, so provider state takes precedence.
+    final cloudSyncEnabled =
+        widget.syncProvider.isGameCloudSyncEnabled(gameId) ??
+        game.cloudSyncEnabled ??
+        true;
+    final gameState = widget.syncProvider.getGameSyncState(gameId);
     final isSyncing = gameState?.status == GameSyncStatus.syncing;
 
     if (!cloudSyncEnabled) {
@@ -191,8 +197,6 @@ class _CloudSaveStatusIconState extends State<CloudSaveStatusIcon>
           );
       }
     }
-
-
 
     return _CloudSaveStatus(
       icon: Symbols.schedule_rounded,
