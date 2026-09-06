@@ -124,8 +124,11 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   self = [super init];
   if (!self) return nil;
   _source = source;
-  _queue = dispatch_queue_create("com.neostation.dolphin.recording", DISPATCH_QUEUE_SERIAL);
-  dispatch_set_target_queue(_queue, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+  // Capture has a 20 ms deadline and stopping is an explicit user action.
+  // A Utility target may defer even no-frame finalization under system load.
+  dispatch_queue_attr_t attributes = dispatch_queue_attr_make_with_qos_class(
+      DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0);
+  _queue = dispatch_queue_create("com.neostation.dolphin.recording", attributes);
   _stopCompletions = [NSMutableArray new];
   _state = DolphinRecordingStateIdle;
   _backgroundTask = UIBackgroundTaskInvalid;
@@ -376,6 +379,10 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   _pendingSequence = _previousSequence = _lastEncodedSequence = 0;
 }
 - (BOOL)prepareWriter:(CMSampleBufferRef)sample {
+#if DEBUG
+  NSLog(@"[DolphinRecording] prepare writer enter self=%p generation=%llu",
+      self, (unsigned long long)_generation.load());
+#endif
   CVPixelBufferRef image = CMSampleBufferGetImageBuffer(sample);
   if (!image) { [self signalFailure:RecordingError(7, @"ReplayKit supplied an invalid video frame.")]; return NO; }
   const size_t width = CVPixelBufferGetWidth(image), height = CVPixelBufferGetHeight(image);
@@ -446,6 +453,10 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
   __weak DolphinRecordingController* weakSelf = self;
   dispatch_source_set_event_handler(_timer, ^{ [weakSelf drain]; });
   dispatch_resume(_timer);
+#if DEBUG
+  NSLog(@"[DolphinRecording] prepare writer ready self=%p generation=%llu width=%lu height=%lu",
+      self, (unsigned long long)_generation.load(), (unsigned long)_width, (unsigned long)_height);
+#endif
   return YES;
 }
 - (void)receiveVideo:(CMSampleBufferRef)sample sequence:(uint64_t)sequence gate:(dispatch_semaphore_t)gate {
@@ -504,7 +515,13 @@ CGAffineTransform TrackTransform(CGImagePropertyOrientation orientation, CGFloat
     const CGRect bounds = CGRectMake(0, 0, _width, _height);
     CIImage* black = [[CIImage imageWithColor:[CIColor colorWithRed:0 green:0 blue:0 alpha:1]] imageByCroppingToRect:bounds];
     image = [image imageByCompositingOverImage:black];
+#if DEBUG
+    if (_timeline.nextIndex() == 0) NSLog(@"[DolphinRecording] first CI render begin self=%p", self);
+#endif
     [_imageContext render:image toCVPixelBuffer:pixel bounds:bounds colorSpace:_colorSpace];
+#if DEBUG
+    if (_timeline.nextIndex() == 0) NSLog(@"[DolphinRecording] first CI render end self=%p", self);
+#endif
   } } @catch (NSException* exception) {
     CVPixelBufferRelease(pixel);
     [self signalFailure:RecordingError(11, exception.reason ?: @"Cannot resize the recording frame.")];
