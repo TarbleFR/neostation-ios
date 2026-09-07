@@ -264,7 +264,7 @@ class NeoSyncSaveUnits {
       key: parsed != null ? key : (fallbackKey ?? key), nativeRoot: '',
       memberPath: parsed?.filePath ?? leaf,
       displayName: isState && title != null && title != leaf
-          ? '$title · $leaf' : (leaf.isNotEmpty ? leaf : (title ?? 'NeoSync')),
+          ? 'Save State · $title · $leaf' : (leaf.isNotEmpty ? leaf : (title ?? 'NeoSync')),
       isState: isState, isDirectory: false,
     );
   }
