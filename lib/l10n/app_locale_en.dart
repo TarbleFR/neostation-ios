@@ -179,7 +179,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.permissionGranted: 'Permission granted',
   AppLocale.permissionDisabled: 'Permission disabled',
   AppLocale.allFilesAccessSubtitle:
-      'Required for RetroArch config and Save Sync',
+      'Required for RetroArch configuration access',
   AppLocale.defaultLauncherSubtitle: 'NeoStation is your default launcher',
   AppLocale.isDefaultLauncher: 'NeoStation is your default launcher',
   AppLocale.setAsDefaultLauncher: 'Set NeoStation as your home screen',
@@ -190,8 +190,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.bartopShutdownSubtitle:
       'Shut down the computer when exiting the application',
 
-  AppLocale.showSyncTab: 'Show Sync tab',
-  AppLocale.showSyncTabSubtitle:
   AppLocale.showAchievementsTab: 'Show Achievements tab',
   AppLocale.showAchievementsTabSubtitle:
       'Display the RetroAchievements tab in the navigation bar',

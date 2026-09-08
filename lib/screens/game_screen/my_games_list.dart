@@ -380,7 +380,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
             widget.system.folderName == SystemFolderNames.favorites,
         onGameUpdated: _handleGameUpdated,
         onGameDeleted: _handleGameDeleted,
-      ),
     );
   }
 

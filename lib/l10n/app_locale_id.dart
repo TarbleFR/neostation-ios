@@ -193,9 +193,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.bartopShutdown: 'Matikan BarTOP saat keluar',
   AppLocale.bartopShutdownSubtitle: 'Mematikan komputer saat menutup aplikasi',
 
-  AppLocale.showSyncTab: 'Tampilkan tab Sinkronisasi',
-  AppLocale.showSyncTabSubtitle:
-      'Menampilkan tab sinkronisasi cloud di bilah navigasi',
   AppLocale.showAchievementsTab: 'Tampilkan tab Pencapaian',
   AppLocale.showAchievementsTabSubtitle:
       'Menampilkan tab RetroAchievements di bilah navigasi',

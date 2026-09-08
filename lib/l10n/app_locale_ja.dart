@@ -168,8 +168,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.bartopShutdown: '終了時にBarTOPをシャットダウン',
   AppLocale.bartopShutdownSubtitle: 'アプリ終了時にコンピュータをシャットダウン',
 
-  AppLocale.showSyncTab: '同期タブを表示',
-  AppLocale.showSyncTabSubtitle: 'ナビゲーションバーにクラウド同期タブを表示します',
   AppLocale.showAchievementsTab: '実績タブを表示',
   AppLocale.showAchievementsTabSubtitle: 'ナビゲーションバーにRetroAchievementsタブを表示します',
   AppLocale.showScraperTab: 'スクレイパータブを表示',

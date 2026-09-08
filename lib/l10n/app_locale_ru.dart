@@ -195,9 +195,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.bartopShutdownSubtitle:
       'Выключать компьютер при выходе из приложения',
 
-  AppLocale.showSyncTab: 'Показывать вкладку синхронизации',
-  AppLocale.showSyncTabSubtitle:
-      'Отображает вкладку облачной синхронизации на панели навигации',
   AppLocale.showAchievementsTab: 'Показывать вкладку достижений',
   AppLocale.showAchievementsTabSubtitle:
       'Отображает вкладку RetroAchievements на панели навигации',

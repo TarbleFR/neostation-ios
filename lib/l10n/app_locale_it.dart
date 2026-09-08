@@ -194,9 +194,6 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.bartopShutdown: 'Spegni BarTOP all’uscita',
   AppLocale.bartopShutdownSubtitle: 'Spegne il computer alla chiusura dell’app',
 
-  AppLocale.showSyncTab: 'Mostra scheda Sincronizzazione',
-  AppLocale.showSyncTabSubtitle:
-      'Mostra la scheda di sincronizzazione cloud nella barra di navigazione',
   AppLocale.showAchievementsTab: 'Mostra scheda Obiettivi',
   AppLocale.showAchievementsTabSubtitle:
       'Mostra la scheda RetroAchievements nella barra di navigazione',

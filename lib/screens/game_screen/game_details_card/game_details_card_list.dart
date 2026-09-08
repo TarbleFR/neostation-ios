@@ -9,7 +9,6 @@ import '../../../models/game_model.dart';
 import '../../../providers/file_provider.dart';
 import '../../../providers/retro_achievements_provider.dart';
 import '../../../models/retro_achievements_game_info.dart';
-import '../../../repositories/game_repository.dart';
 import '../../../services/retro_achievements_helper.dart';
 import '../../../utils/artwork_cache.dart';
 import '../../../utils/gamepad_nav.dart';

@@ -193,9 +193,6 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.bartopShutdownSubtitle:
       'Éteint l’ordinateur à la fermeture de l’application',
 
-  AppLocale.showSyncTab: 'Afficher l’onglet Synchronisation',
-  AppLocale.showSyncTabSubtitle:
-      'Affiche l’onglet de synchronisation cloud dans la barre de navigation',
   AppLocale.showAchievementsTab: 'Afficher l’onglet Succès',
   AppLocale.showAchievementsTabSubtitle:
       'Affiche l’onglet RetroAchievements dans la barre de navigation',
