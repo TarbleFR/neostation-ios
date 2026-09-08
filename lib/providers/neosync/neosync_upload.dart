@@ -185,7 +185,6 @@ extension NeoSyncUpload on NeoSyncProvider {
     File file,
     String basePath, {
     bool isState = false,
-    String? customSystem,
     String? customEmulatorSlug,
   }) async {
     try {

@@ -680,7 +680,9 @@ extension NeoSyncCore on NeoSyncProvider {
       if (_isIosNeoSyncGameExcluded(game, system: system)) return [];
 
       final routedGame = _withResolvedSystem(game, system);
-      if (_isDolphinGame(routedGame)) return _dolphinLocalFiles(routedGame);
+      if (_isDolphinGame(routedGame)) {
+        return await _dolphinLocalFiles(routedGame);
+      }
 
       // Verificar si el sistema tiene sync deshabilitado
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_10
@@ -931,7 +933,9 @@ extension NeoSyncCore on NeoSyncProvider {
       if (_isIosNeoSyncGameExcluded(game, system: system)) return [];
 
       final routedGame = _withResolvedSystem(game, system);
-      if (_isDolphinGame(routedGame)) return _dolphinCloudFiles(routedGame);
+      if (_isDolphinGame(routedGame)) {
+        return await _dolphinCloudFiles(routedGame);
+      }
 
       // Verificar si el sistema tiene sync deshabilitado
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_14
