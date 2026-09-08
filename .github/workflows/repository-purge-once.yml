@@ -15,7 +15,7 @@ jobs:
   purge:
     runs-on: ubuntu-latest
     steps:
-      - name: Purge branches and Actions history
+      - name: Delete remaining historical workflow runs
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -24,97 +24,34 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json
-          import os
-          import time
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
+          import json, os, urllib.error, urllib.request
           repo = os.environ['REPOSITORY']
           token = os.environ['GH_TOKEN']
-          current_run = int(os.environ['CURRENT_RUN_ID'])
-          api = f'https://api.github.com/repos/{repo}'
-
-          def request(method, path, *, tolerate=()):
-              req = urllib.request.Request(
-                  api + path,
-                  method=method,
-                  headers={
-                      'Authorization': f'Bearer {token}',
-                      'Accept': 'application/vnd.github+json',
-                      'X-GitHub-Api-Version': '2022-11-28',
-                      'User-Agent': 'neostation-repository-purge',
-                  },
-              )
+          current = int(os.environ['CURRENT_RUN_ID'])
+          base = f'https://api.github.com/repos/{repo}'
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'neostation-final-actions-purge',
+          }
+          def req(method, path):
+              request = urllib.request.Request(base + path, method=method, headers=headers)
               try:
-                  with urllib.request.urlopen(req, timeout=30) as response:
+                  with urllib.request.urlopen(request, timeout=30) as response:
                       body = response.read()
                       return response.status, json.loads(body) if body else None
               except urllib.error.HTTPError as exc:
-                  if exc.code in tolerate:
+                  if exc.code in (403, 404, 409, 422):
                       return exc.code, None
-                  body = exc.read().decode('utf-8', 'replace')
-                  raise RuntimeError(f'{method} {path}: HTTP {exc.code}: {body}') from exc
-
-          # Keep exactly main and backup.
-          _, branches = request('GET', '/branches?per_page=100')
-          keep = {'main', 'backup'}
-          for branch in branches:
-              name = branch['name']
-              if name in keep:
-                  continue
-              encoded = urllib.parse.quote(name, safe='')
-              code, _ = request('DELETE', f'/git/refs/heads/{encoded}', tolerate=(404, 422))
-              print(f'branch {name}: DELETE -> {code}')
-
-          # Snapshot all existing workflow run IDs before deleting any of them.
-          runs = []
-          page = 1
-          while True:
-              _, payload = request('GET', f'/actions/runs?per_page=100&page={page}')
-              batch = payload.get('workflow_runs', [])
-              runs.extend(batch)
-              if len(batch) < 100:
-                  break
-              page += 1
-
-          active_states = {'queued', 'in_progress', 'waiting', 'pending', 'requested'}
-          for run in runs:
+                  raise
+          _, payload = req('GET', '/actions/runs?per_page=100')
+          for run in payload.get('workflow_runs', []):
               run_id = int(run['id'])
-              if run_id == current_run:
+              if run_id == current:
                   continue
-
-              status = run.get('status')
-              if status in active_states:
-                  request('POST', f'/actions/runs/{run_id}/cancel', tolerate=(202, 409, 422))
-                  for _ in range(10):
-                      time.sleep(1)
-                      _, refreshed = request('GET', f'/actions/runs/{run_id}', tolerate=(404,))
-                      if not refreshed or refreshed.get('status') == 'completed':
-                          break
-                  else:
-                      request('POST', f'/actions/runs/{run_id}/force-cancel', tolerate=(202, 409, 422))
-                      for _ in range(10):
-                          time.sleep(1)
-                          _, refreshed = request('GET', f'/actions/runs/{run_id}', tolerate=(404,))
-                          if not refreshed or refreshed.get('status') == 'completed':
-                              break
-
-              code, _ = request(
-                  'DELETE',
-                  f'/actions/runs/{run_id}',
-                  tolerate=(403, 404, 409, 422),
-              )
+              code, _ = req('DELETE', f'/actions/runs/{run_id}')
               print(f'run {run_id}: DELETE -> {code}')
-
-          # GitHub can reject deleting the currently executing run. Attempt it
-          # without failing the cleanup; any completed cleanup run is removed by
-          # the next/final cleanup pass before this file is removed.
-          code, _ = request(
-              'DELETE',
-              f'/actions/runs/{current_run}',
-              tolerate=(403, 404, 409, 422),
-          )
-          print(f'current run {current_run}: DELETE -> {code}')
+          code, _ = req('DELETE', f'/actions/runs/{current}')
+          print(f'current run {current}: DELETE -> {code}')
           PY
