@@ -32,7 +32,7 @@ jobs:
       - name: Checkout exact requested commit
         uses: actions/checkout@v4
         with:
-          ref: 892d5f985063fd3401f644e7a2ed8c16e0a85b34
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -52,7 +52,7 @@ jobs:
           echo "BUNDLE_PATH=$RUNNER_TEMP/dolphin-ruby-gems" >> "$GITHUB_ENV"
           echo "CCACHE_BASEDIR=$RUNNER_TEMP/dolphin-ios" >> "$GITHUB_ENV"
           mkdir -p build/dolphin-ci
-          test "$(git rev-parse HEAD)" = "892d5f985063fd3401f644e7a2ed8c16e0a85b34"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git archive --format=zip --output=build/dolphin-ci/source-review.zip HEAD \
             build-utils docs lib native packages test pubspec.yaml pubspec.lock
           git archive --format=zip --output=build/dolphin-ci/neosync-corresponding-source.zip HEAD

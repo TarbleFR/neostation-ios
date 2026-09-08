@@ -3,8 +3,9 @@ part of '../neo_sync_provider.dart';
 /// Only the internal gc/wii route uses this adapter. Other sync implementations,
 /// authentication, subscription/quota checks and cloud formats remain unchanged.
 extension NeoSyncDolphin on NeoSyncProvider {
-  bool _isDolphinGame(GameModel game) => Platform.isIOS &&
-      DolphinInternalV2Service.isDolphinSystem(game.systemFolderName ?? '');
+  // DolphiniOS remains available as an emulator, but NeoSync is intentionally
+  // disabled for it. RetroArch is the only NeoSync backend on iOS.
+  bool _isDolphinGame(GameModel game) => false;
 
   String get _dolphinAccount => _authService?.currentUser?.id ?? '';
 
@@ -114,8 +115,6 @@ extension NeoSyncDolphin on NeoSyncProvider {
         for (final file in cloudFiles) {
           final target = file.dolphinTarget;
           if (target == null || !target.matches(identity)) continue;
-          // Listings may separate the basename from its canonical source.
-          // Local identity uses the verified path; API transfers keep file.id.
           if (cloudByKey.containsKey(target.cloudPath)) throw StateError('Duplicate Dolphin cloud save key');
           cloudByKey[target.cloudPath] = file;
         }
@@ -155,7 +154,6 @@ extension NeoSyncDolphin on NeoSyncProvider {
           }
           if (decision == DolphinSyncDecision.upload) {
             if (!perform || !upload) { hasPendingUpload = true; continue; }
-            // Existing NeoSync transport enforces the account's real quota.
             final displayTitle =
                 target.system == 'gc' ? 'GC Memory cards' : 'Wii saves';
             final response = await _neoSyncService.syncFile(local!.file, displayTitle,
@@ -168,8 +166,6 @@ extension NeoSyncDolphin on NeoSyncProvider {
               if (_checkQuotaExceeded(message)) throw QuotaExceededException(message, _quotaExceededAttempts);
               throw StateError(message);
             }
-            // A successful HTTP request may be a skip because the cloud became
-            // newer. Confirm its CONTENT before recording success/common history.
             final refreshed = await _dolphinFetchCloud(account, store: store);
             final confirmed = refreshed.where((f) => f.dolphinTarget?.cloudPath == entry.key && f.checksum?.toLowerCase() == local.checksum);
             if (confirmed.length != 1) throw StateError('Dolphin upload not confirmed; cloud may have changed');
@@ -182,8 +178,6 @@ extension NeoSyncDolphin on NeoSyncProvider {
             if (remote!.fileSize > DolphinNeoSyncStore.payloadLimit(target)) throw StateError('Dolphin cloud snapshot exceeds size limit');
             final payload = await downloadOnlineFileBytes(remote);
             if (!isNeoSyncAuthenticated || _dolphinAccount != account) throw StateError('NeoSync account changed during download');
-            // Re-snapshot after network access: a Files edit or other writer
-            // must not be overwritten using the earlier comparison.
             final current = await store.snapshot(target);
             if (current?.checksum != local?.checksum) throw StateError('Dolphin save changed during download');
             await store.restore(target, payload, checksum: remoteHash!);
@@ -234,55 +228,24 @@ extension NeoSyncDolphin on NeoSyncProvider {
     return _gameSyncStates[game.romname]?.errorMessage;
   }
 
-  Future<List<LocalSaveFile>> _allDolphinLocalSaves() async {
-    if (!Platform.isIOS) return [];
-    final files = <String, LocalSaveFile>{};
-    for (final system in ['gc', 'wii']) {
-      try {
-        for (final data in await GameRepository.loadGamesForSystem(system)) {
-          if (data.cloudSyncEnabled != true) continue;
-          for (final file in await _dolphinLocalFiles(GameModel.fromDatabaseModel(data))) {
-            files[file.relativePath] = file;
-          }
-        }
-      } catch (error) { _dolphinLog('scan.deferred', '$system: $error'); }
-    }
-    return files.values.toList();
-  }
+  Future<List<LocalSaveFile>> _allDolphinLocalSaves() async => const [];
 
   Future<void> _syncAllDolphinGames({bool upload = true, bool download = true}) async {
     _dolphinBulkChecked = 0;
     _dolphinBulkErrors = 0;
-    if (!Platform.isIOS || !isNeoSyncAuthenticated) return;
-    for (final system in ['gc', 'wii']) {
-      try {
-        final games = await GameRepository.loadGamesForSystem(system);
-        for (final data in games) {
-          if (data.cloudSyncEnabled != true) continue;
-          _dolphinBulkChecked++;
-          final game = GameModel.fromDatabaseModel(data);
-          await _syncDolphinGame(game, upload: upload, download: download);
-          if (dolphinSaveSyncError(game) != null) _dolphinBulkErrors++;
-        }
-      } catch (error) {
-        // A Dolphin failure stays local: the caller continues syncing all
-        // existing RetroArch integrations.
-        _dolphinBulkErrors++;
-        _dolphinLog('bulk.failed', '$system: $error');
-      }
-    }
   }
 
   void _finishDolphinBulkStatus() {
     if (_dolphinBulkErrors == 0) return;
-    // Failures stay on the affected games; don't paint unchecked libraries red
-    // or stop other emulators. An actual global listing outage still uses _error.
     _dolphinLog('bulk.warning', '$_dolphinBulkErrors operation(s) failed; see per-game status.');
     _syncStatus = 'Synchronization finished with Dolphin warnings';
   }
 
   Future<void> _restoreDolphinCloud(NeoSyncFile cloudFile) async {
-    if (!Platform.isIOS || !isNeoSyncAuthenticated || _dolphinAccount.isEmpty) throw StateError('NeoSync authentication required');
+    if (Platform.isIOS) {
+      throw UnsupportedError('DolphiniOS NeoSync is disabled on iOS');
+    }
+    if (!isNeoSyncAuthenticated || _dolphinAccount.isEmpty) throw StateError('NeoSync authentication required');
     final target = cloudFile.dolphinTarget;
     if (target == null) throw const FormatException('Unsupported Dolphin save snapshot');
     final account = _dolphinAccount;

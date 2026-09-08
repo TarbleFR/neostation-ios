@@ -3,7 +3,7 @@
 The executable Dart policy tests the routing decisions themselves.  These
 checks make sure the policy is actually wired into every user-facing transfer
 boundary while all four emulator launch integrations remain installed and
-DolphiniOS alone has its strict V1 save route enabled.
+all standalone iOS emulator NeoSync routes stay disabled.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def section(source: str, start: str, end: str) -> str:
 
 
 class NeoSyncIosExclusionSourceContractTests(unittest.TestCase):
-    def test_emulator_launch_routes_and_dolphin_neosync_hooks_survive(self):
+    def test_emulator_launch_routes_survive_while_dolphin_neosync_is_disabled(self):
         launcher = read("lib/services/game/game_launch_service.dart")
         dolphin_route = section(
             launcher,
@@ -35,15 +35,13 @@ class NeoSyncIosExclusionSourceContractTests(unittest.TestCase):
             "DOLPHIN_ISOLATION_END: explicit_gc_wii_route",
         )
 
-        for required in (
-            "DolphinInternalV2Service.launch",
-            "syncGameSavesBeforeLaunch",
-            "syncGameSavesAfterClose",
-            "providerId == 'neosync'",
-            "onSessionStopped:",
-            "game.cloudSyncEnabled == true",
-        ):
-            self.assertIn(required, dolphin_route)
+        self.assertIn("DolphinInternalV2Service.launch", dolphin_route)
+        self.assertIn("onSessionStopped:", dolphin_route)
+
+        dolphin_sync = read("lib/providers/neosync/neosync_dolphin.dart")
+        self.assertIn("bool _isDolphinGame(GameModel game) => false;", dolphin_sync)
+        self.assertIn("_allDolphinLocalSaves() async => const [];", dolphin_sync)
+        self.assertIn("DolphiniOS NeoSync is disabled on iOS", dolphin_sync)
 
         # Removing an emulator from NeoSync must not remove it from NeoStation.
         for launch_call in (
@@ -64,9 +62,8 @@ class NeoSyncIosExclusionSourceContractTests(unittest.TestCase):
             "static const iosExcludedEmulatorSlugs = {",
             "};",
         )
-        for emulator in ("rpcs3", "armsx2", "melonx"):
+        for emulator in ("rpcs3", "armsx2", "melonx", "dolphinios"):
             self.assertIn(emulator, excluded_slugs.lower())
-        self.assertNotIn("dolphinios", excluded_slugs.lower())
 
         core = read("lib/providers/neosync/neosync_core.dart")
         upload = read("lib/providers/neosync/neosync_upload.dart")
@@ -124,7 +121,7 @@ class NeoSyncIosExclusionSourceContractTests(unittest.TestCase):
         )
         self.assertIn("_syncAllDolphinGames(upload: false)", active_download)
 
-    def test_transport_wrapper_enables_only_strict_dolphin_and_never_purges_locally(self):
+    def test_transport_wrapper_keeps_native_routes_blocked_and_never_purges_locally(self):
         wrapper = read("lib/services/neosync/neo_sync_service.dart")
         blocked = section(
             wrapper,
@@ -133,7 +130,7 @@ class NeoSyncIosExclusionSourceContractTests(unittest.TestCase):
         )
         for emulator in ("rpcs3", "armsx2", "melonx"):
             self.assertIn(emulator, blocked.lower())
-        self.assertNotIn("dolphinios", blocked.lower())
+        # DolphiniOS is blocked by NeoSyncSavePolicy before transport dispatch.
         self.assertIn("NeoSyncSavePolicy.isIosCloudPathExcluded", wrapper)
         self.assertIn("NeoSyncSavePolicy.isIosCloudFileExcluded", wrapper)
         self.assertIn("tokens.contains(emulator)", wrapper)

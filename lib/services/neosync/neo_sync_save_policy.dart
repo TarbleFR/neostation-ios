@@ -21,6 +21,7 @@ class NeoSyncSavePolicy {
     'armsx2',
     'rpcs3',
     'melonx',
+    'dolphinios',
   };
 
   /// The older PSP catalog predates the iOS RetroArch savedata adapter.
@@ -83,8 +84,16 @@ class NeoSyncSavePolicy {
     // an emulator label, so NeoSync must apply the same precedence.
     if (system == 'ps2' && _isWithinRoot(romPath, armsx2Root)) return true;
 
-    // A selected RetroArch player must not inherit the native adapter's block.
+    // RetroArch is the only NeoSync owner kept active on iOS.
     if (_isRetroArchIdentity(emulatorName)) return false;
+
+    // Any explicitly selected non-RetroArch backend is disabled, including
+    // future standalone integrations not yet listed above.
+    if (emulatorName?.trim().isNotEmpty == true) return true;
+
+    // GC/Wii without an explicit RetroArch player are handled by the embedded
+    // DolphiniOS engine, whose NeoSync integration is disabled.
+    if (const {'gc', 'wii'}.contains(system)) return true;
 
     return false;
   }
@@ -106,9 +115,7 @@ class NeoSyncSavePolicy {
     final slug = _emulatorSlugFromCloudPath(value);
     if (slug != null && iosExcludedEmulatorSlugs.contains(slug)) return true;
     if (slug == DolphinSaveTarget.emulator ||
-        DolphinSaveTarget.ownsCloudPath(value)) {
-      return DolphinSaveTarget.parse(value) == null;
-    }
+        DolphinSaveTarget.ownsCloudPath(value)) return true;
     return false;
   }
 
@@ -122,9 +129,9 @@ class NeoSyncSavePolicy {
       if (_emulatorIdentityContains(file.emulator, slug)) return true;
     }
 
-    var claimsDolphinNamespace =
-        _emulatorIdentityContains(file.emulator, DolphinSaveTarget.emulator);
-    DolphinSaveTarget? supportedDolphinTarget;
+    if (_emulatorIdentityContains(file.emulator, DolphinSaveTarget.emulator)) {
+      return true;
+    }
     for (final value in <String>{
       file.fileName,
       file.filePath,
@@ -134,14 +141,9 @@ class NeoSyncSavePolicy {
       final slug = _emulatorSlugFromCloudPath(value);
       if (slug != null && iosExcludedEmulatorSlugs.contains(slug)) return true;
       if (slug == DolphinSaveTarget.emulator ||
-          DolphinSaveTarget.ownsCloudPath(value)) {
-        claimsDolphinNamespace = true;
-        supportedDolphinTarget ??= DolphinSaveTarget.parse(value);
-      }
+          DolphinSaveTarget.ownsCloudPath(value)) return true;
     }
-    // DolphiniOS is the first native integration restored to NeoSync. Its V1
-    // parser accepts only regional GC raw cards and per-title Wii data.
-    return claimsDolphinNamespace && supportedDolphinTarget == null;
+    return false;
   }
 
   static const playStationComponents = {

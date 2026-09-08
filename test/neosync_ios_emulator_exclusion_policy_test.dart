@@ -123,7 +123,7 @@ void main() {
       );
     });
 
-    test('native GameCube and Wii routes remain eligible for NeoSync', () {
+    test('native GameCube and Wii routes are excluded from NeoSync', () {
       for (final system in ['gc', 'wii']) {
         expect(
           excludesGame(
@@ -131,7 +131,7 @@ void main() {
             emulatorName: '$system.ios.dolphinios',
             romPath: '/NeoStation/Dolphin/Library/$system/Game.rvz',
           ),
-          isFalse,
+          isTrue,
           reason: system,
         );
       }
@@ -180,7 +180,7 @@ void main() {
             romPath: '/RetroArch/Games/$system/Game.rvz',
           ),
           isFalse,
-          reason: 'GC/Wii stay eligible because the native Dolphin route is active',
+          reason: 'explicit RetroArch GC/Wii routes remain eligible',
         );
       }
     });
@@ -208,8 +208,10 @@ void main() {
       }
     });
 
-    test('Dolphin V1 hides legacy GCI/states without excluding DolphiniOS', () {
+    test('all DolphiniOS cloud objects are excluded', () {
       const unsupported = [
+        'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
+        'v2/saves/wii/dolphinios/game/00010000524d4745/wii-data.nsav',
         'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
         'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav',
         'v2/states/wii/dolphinios/game/00010000524d4350/RMCP01.s01.nsav',
@@ -231,7 +233,7 @@ void main() {
           emulatorName: 'gc.ios.dolphinios',
           romPath: '/NeoStation/Dolphin/Library/gc/Game.rvz',
         ),
-        isFalse,
+        isTrue,
       );
     });
 
@@ -272,8 +274,6 @@ void main() {
         'v2/saves/dc/retroarch.flycast/shared/system/dc/vmu_save_A1.bin',
         'v2/saves/ps2/retroarch.play/shared/Mcd001.ps2',
         'v2/saves/gc/retroarch.dolphin/game/GMSE01/GMSE01.srm',
-        'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
-        'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
       ];
       for (final key in allowed) {
         expect(
@@ -302,6 +302,10 @@ void main() {
       );
       expect(
         NeoSyncSavePolicy.isIosCloudFileExcluded(dolphin, isIOS: true),
+        isTrue,
+      );
+      expect(
+        NeoSyncSavePolicy.isIosCloudFileExcluded(dolphin, isIOS: false),
         isFalse,
       );
     });

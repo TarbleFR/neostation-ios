@@ -29,8 +29,7 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
     id: kProviderId,
     name: 'NeoSync',
     description:
-        'Official NeoStation cloud sync. On iOS, supports RetroArch and '
-        'DolphiniOS V1 saves.',
+        'Official NeoStation cloud sync. On iOS, supports RetroArch only.',
     author: 'NeoGameLab',
     isOfficial: true,
     isRecommended: true,
