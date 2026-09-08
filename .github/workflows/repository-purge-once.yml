@@ -58,7 +58,7 @@ jobs:
                   raise RuntimeError(f'{method} {path}: HTTP {exc.code}: {body}') from exc
 
           # Keep exactly main and backup.
-          status, branches = request('GET', '/branches?per_page=100')
+          _, branches = request('GET', '/branches?per_page=100')
           keep = {'main', 'backup'}
           for branch in branches:
               name = branch['name']
@@ -79,24 +79,42 @@ jobs:
                   break
               page += 1
 
+          active_states = {'queued', 'in_progress', 'waiting', 'pending', 'requested'}
           for run in runs:
               run_id = int(run['id'])
               if run_id == current_run:
                   continue
+
               status = run.get('status')
-              if status in {'queued', 'in_progress', 'waiting', 'pending', 'requested'}:
+              if status in active_states:
                   request('POST', f'/actions/runs/{run_id}/cancel', tolerate=(202, 409, 422))
-                  for _ in range(30):
+                  for _ in range(10):
                       time.sleep(1)
                       _, refreshed = request('GET', f'/actions/runs/{run_id}', tolerate=(404,))
                       if not refreshed or refreshed.get('status') == 'completed':
                           break
-              code, _ = request('DELETE', f'/actions/runs/{run_id}', tolerate=(404, 409, 422))
+                  else:
+                      request('POST', f'/actions/runs/{run_id}/force-cancel', tolerate=(202, 409, 422))
+                      for _ in range(10):
+                          time.sleep(1)
+                          _, refreshed = request('GET', f'/actions/runs/{run_id}', tolerate=(404,))
+                          if not refreshed or refreshed.get('status') == 'completed':
+                              break
+
+              code, _ = request(
+                  'DELETE',
+                  f'/actions/runs/{run_id}',
+                  tolerate=(403, 404, 409, 422),
+              )
               print(f'run {run_id}: DELETE -> {code}')
 
-          # Best-effort removal of this run as well. GitHub may reject deletion
-          # while it is still executing; the repository will still contain no
-          # historical runs after the completed run is removed externally.
-          code, _ = request('DELETE', f'/actions/runs/{current_run}', tolerate=(404, 409, 422))
+          # GitHub can reject deleting the currently executing run. Attempt it
+          # without failing the cleanup; any completed cleanup run is removed by
+          # the next/final cleanup pass before this file is removed.
+          code, _ = request(
+              'DELETE',
+              f'/actions/runs/{current_run}',
+              tolerate=(403, 404, 409, 422),
+          )
           print(f'current run {current_run}: DELETE -> {code}')
           PY
