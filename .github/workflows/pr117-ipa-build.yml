@@ -30,16 +30,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          helper='build-utils/.retired-cloud-cleanup.b64'
-          if [[ -f "$helper" ]]; then
+          if compgen -G 'build-utils/.retired-cloud-cleanup-*.part' > /dev/null; then
+            cat build-utils/.retired-cloud-cleanup-*.part > /tmp/retired_cleanup.b64
             python3 - <<'PY'
-          import base64, gzip
+          import base64, gzip, hashlib
           from pathlib import Path
-          payload = Path('build-utils/.retired-cloud-cleanup.b64').read_text().strip()
-          Path('/tmp/retired_cleanup.py').write_bytes(gzip.decompress(base64.b64decode(payload)))
+          payload = Path('/tmp/retired_cleanup.b64').read_text().strip()
+          raw = gzip.decompress(base64.b64decode(payload, validate=True))
+          expected = '69f4d86f4a17920d7508ff5125331f459aad70dbe6d927ab5b88f6e4dd4ff87f'
+          actual = hashlib.sha256(raw).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'Cleanup payload checksum mismatch: {actual}')
+          Path('/tmp/retired_cleanup.py').write_bytes(raw)
           PY
             python3 /tmp/retired_cleanup.py
-            rm -f "$helper" /tmp/retired_cleanup.py
+            rm -f build-utils/.retired-cloud-cleanup-*.part /tmp/retired_cleanup.py /tmp/retired_cleanup.b64
           fi
 
           python3 - <<'PY'
