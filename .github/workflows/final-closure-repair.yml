@@ -1,0 +1,40 @@
+name: Finish cleaned details panel
+
+on:
+  push:
+    branches: [fix/disable-ios-standalone-neosync]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Remove obsolete wrapper closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/screens/game_screen/my_games_list.dart')
+          text = p.read_text()
+          old = "        onGameUpdated: _handleGameUpdated, // Sync UI after metadata edits.\n        onFavoriteToggled: _handleFavoriteToggledFromCard,\n        onGameDeleted: _handleGameDeleted,\n      ),\n    );\n  }"
+          new = "        onGameUpdated: _handleGameUpdated, // Refresh UI after metadata edits.\n        onFavoriteToggled: _handleFavoriteToggledFromCard,\n        onGameDeleted: _handleGameDeleted,\n    );\n  }"
+          if old not in text:
+              raise SystemExit('Expected details-panel closure anchor not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+          rm .github/workflows/final-closure-repair.yml
+          git config user.name "Tarble FR"
+          git config user.email "f9wynyv9qy@privaterelay.appleid.com"
+          git add -A
+          git commit -m "fix: remove obsolete details panel wrapper closure"
+          git push origin HEAD:"$GITHUB_REF_NAME"
