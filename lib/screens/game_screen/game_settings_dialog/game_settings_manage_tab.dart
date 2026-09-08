@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -61,14 +63,37 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   GlobalKey _itemKey(int navIndex) =>
       _itemKeys.putIfAbsent(navIndex, () => GlobalKey());
 
-  // Navigation layout. Indices are fixed so focus doesn't jump around when
-  // cloud sync visibility or the grid options change.
   int get _cloudSyncIdx => 0;
   int get _playTimeIdx => 1;
   int get _deleteIdx => 2;
   int get _totalItems => 3;
 
-  bool get _showCloudSync => widget.syncProvider?.isAuthenticated == true;
+  bool get _showCloudSync {
+    if (widget.syncProvider?.isAuthenticated != true) return false;
+    if (!Platform.isIOS) return true;
+
+    final emulator = (widget.game.emulatorName ?? '').trim().toLowerCase();
+    final core = (widget.game.coreName ?? '').trim().toLowerCase();
+    final romPath = (widget.game.romPath ?? '').trim().toLowerCase();
+    final system = (widget.game.systemFolderName ?? widget.system.folderName)
+        .trim()
+        .toLowerCase();
+
+    if (emulator.contains('retroarch') || core.isNotEmpty) return true;
+    if (emulator.contains('armsx2') ||
+        emulator.contains('melonx') ||
+        emulator.contains('rpcs3') ||
+        emulator.contains('dolphin')) {
+      return false;
+    }
+    if (romPath.startsWith('armsx2://') ||
+        romPath.startsWith('melonx://') ||
+        romPath.startsWith('rpcs3-library://')) {
+      return false;
+    }
+    if (system == 'gc' || system == 'wii') return false;
+    return true;
+  }
 
   String get _targetSystemFolder =>
       widget.isAllMode && widget.game.systemFolderName != null
@@ -88,13 +113,11 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     super.dispose();
   }
 
-  /// Returns whether [idx] can receive focus in the current state.
   bool _isEnabledIndex(int idx) {
     if (idx == _cloudSyncIdx && !_showCloudSync) return false;
     return idx >= 0 && idx < _totalItems;
   }
 
-  // Clamp at the ends like the other tabs (no wrap); just skip disabled rows.
   int _previousEnabledIndex() =>
       previousEnabledIndex(_selectedIndex, _totalItems, _isEnabledIndex);
 
@@ -144,12 +167,9 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     });
   }
 
-  // ── Cloud sync ──────────────────────────────────────────────────────────
-
-  /// Updates the cloud synchronization authorization for the current ROM.
   Future<void> _toggleCloudSync(bool value) async {
     final syncProvider = widget.syncProvider;
-    if (_isUpdatingCloudSync || syncProvider == null) return;
+    if (_isUpdatingCloudSync || syncProvider == null || !_showCloudSync) return;
     setState(() => _isUpdatingCloudSync = true);
     try {
       await GameRepository.updateCloudSyncEnabled(
@@ -157,9 +177,7 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         widget.game.romname,
         value,
       );
-
       await syncProvider.updateGameCloudSyncEnabled(widget.game.romname, value);
-
       setState(() => _cloudSyncEnabled = value);
 
       if (value) {
@@ -172,7 +190,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
             );
           }
           if (mounted) {
-            // Trigger an immediate sync-down to ensure the ROM is ready for play.
             await syncProvider.syncGameSavesBeforeLaunch(updatedGame);
           }
         }
@@ -185,8 +202,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     }
   }
 
-  // ── Play time ───────────────────────────────────────────────────────────
-
   Future<void> _confirmResetPlayTime() async {
     SfxService().playNavSound();
     final confirmed = await ConfirmActionDialog.show(
@@ -196,9 +211,7 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       confirmLabel: AppLocale.reset.getString(context),
       icon: Symbols.timer_off_rounded,
     );
-    if (confirmed == true && mounted) {
-      _resetPlayTime();
-    }
+    if (confirmed == true && mounted) _resetPlayTime();
   }
 
   Future<void> _resetPlayTime() async {
@@ -224,8 +237,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     }
   }
 
-  // ── Delete ──────────────────────────────────────────────────────────────
-
   Future<void> _confirmDeleteGame() async {
     SfxService().playNavSound();
     final confirmed = await showDialog<bool>(
@@ -236,9 +247,7 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         romName: widget.game.romname,
       ),
     );
-    if (confirmed == true && mounted) {
-      _deleteGame();
-    }
+    if (confirmed == true && mounted) _deleteGame();
   }
 
   Future<void> _deleteGame() async {
@@ -247,7 +256,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
     final targetSystemId = widget.game.systemId ?? widget.system.id;
     final deletedRomname = widget.game.romname;
-
     try {
       await GameRepository.deleteGame(
         appSystemId: targetSystemId,
@@ -262,23 +270,13 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
-
-    if (mounted) {
-      widget.onGameDeleted?.call(deletedRomname);
-    }
+    if (mounted) widget.onGameDeleted?.call(deletedRomname);
   }
-
-  // ── Build helpers ───────────────────────────────────────────────────────
-
-  // ── Build ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final canReset = (widget.game.playTime ?? 0) > 0 && !_isResettingPlayTime;
-
-    // If the current selection became disabled (e.g. cloud sync hidden), move to
-    // the nearest enabled row without triggering a scroll animation.
     _ensureSelectedIndexEnabled();
 
     return SingleChildScrollView(
@@ -288,7 +286,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cloud Synchronization Option.
           if (_showCloudSync)
             GestureDetector(
               onTap: () {
@@ -328,8 +325,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
           else
             SizedBox.shrink(key: _itemKey(_cloudSyncIdx)),
           SizedBox(height: _showCloudSync ? 12.r : 0.r),
-
-          // Play-time reset.
           GestureDetector(
             onTap: () {
               SfxService().playNavSound();
@@ -358,16 +353,12 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
                       decoration: BoxDecoration(
                         color: canReset
                             ? theme.colorScheme.error.withValues(alpha: 0.15)
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.05,
-                              ),
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(4.r),
                         border: Border.all(
                           color: canReset
                               ? theme.colorScheme.error.withValues(alpha: 0.4)
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.1,
-                                ),
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
                           width: 1.r,
                         ),
                       ),
@@ -378,18 +369,13 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
                           fontWeight: FontWeight.w600,
                           color: canReset
                               ? theme.colorScheme.error
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.3,
-                                ),
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.3),
                         ),
                       ),
                     ),
             ),
           ),
-
           SizedBox(height: 12.r),
-
-          // Delete game.
           GestureDetector(
             onTap: () {
               SfxService().playNavSound();

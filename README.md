@@ -1,69 +1,102 @@
-<div align="center">
-
 # NeoStation iOS
 
-<h4>An iPhone and iPad emulation frontend with embedded DolphiniOS and integrated StikJIT</h4>
+#### iOS/iPadOS emulation frontend
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.md)
-[![Platform](https://img.shields.io/badge/Platform-iOS%2018%2B-blue)](https://github.com/TarbleFR/neostation-ios)
+NeoStation iOS is an iPhone and iPad port of NeoStation. It keeps the Flutter frontend while adding iOS-specific library linking, sideloading, launch flows and an embedded DolphiniOS engine.
 
-![NeoStation iOS Preview](assets/readme/neostation-ios-preview.png)
+> Modified version notice — August 2026  
+> This repository contains a modified version of NeoStation. The upstream project and its contributors retain credit for the original work. The iOS-specific port and adaptations in this repository are developed and maintained independently by @TarbleFR.
 
-</div>
+## Highlights
 
-NeoStation iOS is an independent iOS fork of [NeoStation](https://github.com/misobadev/neostation-frontend), maintained by [TarbleFR](https://github.com/TarbleFR). It combines the original Flutter library frontend with iPhone/iPad file handling, emulator-library synchronization, sideloading and dedicated JIT bridges.
+- Embedded **DolphiniOS** engine for GameCube and Wii.
+- **RetroArch** library linking/synchronization and direct launching.
+- **MeloNX** library synchronization, media association and JIT-oriented launch flows.
+- **ARMSX2** PS2 library synchronization, direct launching and JIT-oriented launch flows.
+- **RPCS3** PS3 Data-folder library synchronization, PARAM.SFO metadata repair and JIT-assisted launch flow.
+- **StikJIT** integration for supported iOS emulator workflows.
+- ScreenScraper metadata/media scraping and RetroAchievements.
+- Gamepad-focused landscape navigation and multi-language UI.
 
-## Current baseline — Build 207
+## NeoSync on iOS
 
-The maintained project is based on Build 207 with NeoSync and the embedded DolphiniOS integration.
+NeoSync remains available for **RetroArch saves and states**.
 
-- Source baseline: `09b3fb3ac851b327732aeb8aa8f6e3e4749dfce6`
-- Active branches: `main` and `backup`
-- GameCube/Wii: embedded Dolphin/DolphiniOS engine
-- Cloud saves: NeoSync
-- JIT: integrated StikJIT path for Dolphin
+NeoSync is deliberately disabled for the following iOS emulator integrations:
 
-No IPA or GitHub Release is published automatically. Any IPA upload or GitHub Release requires explicit approval from the maintainer before publication.
+- **DolphiniOS**
+- **ARMSX2**
+- **MeloNX**
+- **RPCS3**
 
-## Embedded GameCube and Wii
-
-GameCube and Wii run through an embedded Dolphin/DolphiniOS engine inside NeoStation. A separate DolphiniOS application is not required for these systems.
-
-NeoStation keeps the existing RetroArch, MeloNX, ARMSX2 and RPCS3 integrations for the other supported systems.
-
-## Features
-
-- Embedded DolphiniOS engine for GameCube and Wii.
-- StikJIT integration for the embedded Dolphin execution path.
-- NeoSync cloud-save support.
-- RetroArch, MeloNX, ARMSX2 and RPCS3 integrations.
-- ScreenScraper media and metadata.
-- RetroAchievements support.
-- iOS external-folder handling.
-- Gamepad-oriented landscape navigation.
-- Custom backgrounds and menu music.
+NeoStation does not scan, upload, download, restore or track save folders from those four integrations. Their library, launch and JIT functionality is independent from NeoSync.
 
 ## Requirements
 
-- iPhone or iPad running iOS/iPadOS 18 or newer.
-- A compatible sideload signing method with the required entitlements.
-- Your own legally obtained game and system files.
-- Pairing File and LocalDevVPN/RSD preparation when required for JIT.
+### To run
 
-## Build and distribution policy
+- iOS 18 or newer.
+- An IPA signing/sideloading method such as SideStore or another compatible installer, or Apple Developer signing.
+- RetroArch, MeloNX, ARMSX2 or RPCS3 when using the corresponding external integration.
 
-The repository is not an automatic public IPA distribution channel. Builds may be produced for development and device validation, but an IPA must not be uploaded to GitHub and a GitHub Release must not be created unless the maintainer explicitly authorizes it.
+### To build locally
 
-## Credits and licenses
+- macOS with a compatible Xcode installation.
+- Flutter SDK compatible with the version pinned by the project.
+- ScreenScraper developer credentials when building with ScreenScraper enabled.
 
-NeoStation iOS is based on [NeoStation](https://github.com/misobadev/neostation-frontend). Credit remains with Miguel Soto / misobadev and the upstream contributors.
+## Build from source
 
-The embedded GameCube/Wii engine uses work from the [Dolphin Emulator and DolphiniOS contributors](https://github.com/OatmealDome/dolphin-ios). StikJIT integration uses the [StikJIT framework](https://github.com/StikDebug/StikJIT). Preserve all applicable upstream copyright, license and third-party notices.
+```bash
+git clone https://github.com/TarbleFR/neostation-ios.git
+cd neostation-ios
+flutter pub get
+```
 
-See [LICENSE.md](LICENSE.md) and [NOTICE.md](NOTICE.md) for project and third-party licensing information.
+The generated `ios/` Xcode scaffold is intentionally not committed. Create it when needed:
 
-No copyrighted games, BIOS/IPL, firmware or device Pairing Files are distributed with this project.
+```bash
+flutter create --platforms=ios --org com.neogamelab --project-name neostation .
+```
 
-## Support
+Create your local build environment file from `.env.example`, provide the required ScreenScraper values and build with the project's normal iOS release process. `.env` must never be committed.
 
-[GitHub Issues](https://github.com/TarbleFR/neostation-ios/issues) · [Patreon](https://www.patreon.com/cw/TarbleFR) · [Reddit](https://www.reddit.com/user/Mysterious_Air2053/)
+## Books and manga
+
+NeoStation iOS allows users to import, organize and read books and manga. Users must add their own files or independently find and configure compatible sources. NeoStation iOS does not provide or host copyrighted content sources.
+
+## Project structure
+
+```text
+assets/       bundled images, data, sounds, shaders and system resources
+lib/          Flutter application source
+packages/     vendored/local Flutter packages used by the workspace
+test/         automated Flutter/Dart tests
+build-utils/  auxiliary build/source tooling
+```
+
+## Upstream project and attribution
+
+NeoStation iOS is based on the upstream NeoStation project:
+
+- Upstream repository: https://github.com/misobadev/neostation-frontend
+- Lead: @misobadev
+- Official co-maintainer: @androosio
+- Official collaborator: @ItsRetroPup
+
+All upstream authors and contributors retain attribution for their contributions.
+
+### iOS port
+
+- iOS port developer / maintainer: @TarbleFR
+- Modified iOS version maintained since August 2026.
+
+## GPL-3.0 and corresponding source
+
+NeoStation and this modified iOS port are distributed under the GNU General Public License v3.0 (GPL-3.0). See `LICENSE.md` and `NOTICE.md` for the applicable license and attribution notices.
+
+Third-party components, packages, artwork, trademarks and emulator projects can have their own licenses or terms. Preserve their notices where applicable.
+
+## License
+
+GNU General Public License v3.0.
