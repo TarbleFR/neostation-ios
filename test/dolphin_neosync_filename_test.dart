@@ -4,6 +4,7 @@ import 'package:neostation/models/neo_sync_models.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/services/dolphin_neosync_store.dart';
 import 'package:neostation/services/neosync/neo_sync_service.dart';
+import 'package:neostation/services/neosync/neo_sync_save_policy.dart';
 
 class _NoTransferNeoSyncService implements NeoSyncService {
   @override
