@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/logger_service.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -73,7 +72,7 @@ part 'my_games_list/launch_flow.dart';
 /// A high-fidelity list component for browsing games within a specific system.
 ///
 /// Handles complex navigation, media previews (video/audio), secondary display
-/// synchronization, and game metadata orchestration.
+/// lifecycle management, and game metadata orchestration.
 class SystemGamesList extends StatefulWidget {
   final SystemModel system;
   final FileProvider fileProvider;
@@ -155,7 +154,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
       false; // Critical flag to suppress media tasks during transitions.
 
   // Task orchestration timers.
-  Timer? _saveDetectionTimer;
   Timer? _musicExtractionTimer;
   Timer? _fastNavEndTimer; // Detects the end of rapid scrolling.
 
@@ -377,7 +375,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
         game: game,
         system: widget.system,
         fileProvider: _fileProvider,
-        syncProvider: context.read<SyncManager>().active,
         isAllMode:
             widget.system.folderName == SystemFolderNames.all ||
             widget.system.folderName == SystemFolderNames.favorites,
@@ -392,7 +389,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
     GamepadNavigationManager.popLayer('system_games_list');
 
     _videoTimer?.cancel();
-    _saveDetectionTimer?.cancel();
     _musicExtractionTimer?.cancel();
 
     if (_videoController != null) {
@@ -1257,23 +1253,18 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.topLeft,
-                  child: Consumer<SyncManager>(
-                    builder: (context, syncManager, child) {
-                      return GameActionButtons(
-                        system: widget.system,
-                        selectedGame: _selectedGame,
-                        syncProvider: syncManager.active,
-                        onBack: _goBack,
-                        onFavorite: _toggleFavorite,
-                        onViewMode: () => GameViewModeDropdown
-                            .globalKey
-                            .currentState
-                            ?.showDropdown(),
-                        onSettings: _openGameSettingsDialog,
-                        onRandom: _showRandomGameDialog,
-                        onScrape: () => _scrapeAction?.call(),
-                      );
-                    },
+                  child: GameActionButtons(
+                    system: widget.system,
+                    selectedGame: _selectedGame,
+                    onBack: _goBack,
+                    onFavorite: _toggleFavorite,
+                    onViewMode: () => GameViewModeDropdown
+                        .globalKey
+                        .currentState
+                        ?.showDropdown(),
+                    onSettings: _openGameSettingsDialog,
+                    onRandom: _showRandomGameDialog,
+                    onScrape: () => _scrapeAction?.call(),
                   ),
                 ),
               ),
@@ -1458,8 +1449,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       );
     }
 
-    return Consumer<SyncManager>(
-      builder: (context, syncManager, child) => GameDetailsCardList(
+    return GameDetailsCardList(
         // DOLPHIN_ISOLATION_BEGIN: import_action_in_tabs
         dolphinImportAction: Platform.isIOS &&
             DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)
@@ -1475,7 +1465,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
             widget.system.folderName == 'all' ||
             widget.system.folderName == SystemFolderNames.favorites,
         retroAchievementsProvider: _retroAchievementsProvider,
-        syncProvider: syncManager.active!,
         localizedDescription: _localizedDescription,
         artworkVersion: _artworkVersion,
         isExternallyScraping: _scrapingGameRomnames.contains(

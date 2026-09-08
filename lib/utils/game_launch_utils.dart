@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
 import '../providers/file_provider.dart';
-import '../sync/i_sync_provider.dart';
 import '../services/game_service.dart';
 import '../services/game_launch_manager.dart';
 import '../widgets/game_launch_dialog.dart';
@@ -17,7 +16,7 @@ import '../widgets/game_launch_dialog.dart';
 ///
 /// Responsibility requirements for the caller:
 /// - Deactivate gamepad/keyboard navigation BEFORE calling this function.
-/// - Implement [onGameClosed] to reactive navigation and refresh application state (DB, sync status, etc.).
+/// - Implement [onGameClosed] to reactive navigation and refresh application state.
 /// - Handle [onLaunchFailed] to display error messages and perform state cleanup.
 ///
 /// Throws:
@@ -27,7 +26,6 @@ Future<void> launchGameWithDialog({
   required GameModel game,
   required SystemModel system,
   required FileProvider fileProvider,
-  required ISyncProvider syncProvider,
   required VoidCallback onGameClosed,
   Future<void> Function(BuildContext context, GameLaunchResult result)?
   onLaunchFailed,
@@ -51,7 +49,6 @@ Future<void> launchGameWithDialog({
       game: game,
       system: system,
       fileProvider: fileProvider,
-      syncProvider: syncProvider,
       onGameClosed: onGameClosed,
     ),
   );

@@ -234,20 +234,5 @@
         }
       }
     }
-  ],
-  "neosync": {
-    "sync": true,
-    "android_sync_folder": [
-      "{SWITCH_NAND}"
-    ],
-    "windows_sync_folder": [
-      "{SWITCH_NAND}"
-    ],
-    "linux_sync_folder": [
-      "{SWITCH_NAND}"
-    ],
-    "macos_sync_folder": [
-      "{SWITCH_NAND}"
-    ]
-  }
+  ]
 }

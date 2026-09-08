@@ -33,18 +33,15 @@ def write_plist(path: Path, data: dict) -> None:
 
 
 def source_snapshot() -> None:
-    paths = ['.github/workflows/dolphin-internal-isolated-v3.yml', 'build-utils',
-             'lib/services/dolphin_neosync_store.dart', 'lib/providers/neo_sync_provider.dart',
-             'lib/providers/neosync', 'lib/services/neosync/neo_sync_service.dart',
-             'lib/sync/providers/neo_sync_adapter.dart', 'docs/DOLPHIN_NEOSYNC.md',
-             'native/dolphin_internal_helper', 'packages/dolphin_internal_bridge',
-             'packages/dolphin_jit_helper', 'packages/stikjit_bridge',
-             'lib/services/dolphin_internal_v2_service.dart',
+    paths = ['build-utils', 'native/dolphin_internal_helper',
+             'packages/dolphin_internal_bridge', 'packages/dolphin_jit_helper',
+             'packages/stikjit_bridge', 'lib/services/dolphin_internal_v2_service.dart',
              'lib/widgets/dolphin_internal_playlist_actions.dart',
              'lib/services/game/game_launch_service.dart',
              'lib/providers/sqlite_config_provider.dart',
              'lib/providers/sqlite_config_provider/scanning.dart',
-             'lib/screens/game_screen/my_games_list.dart', 'test', 'pubspec.yaml', 'pubspec.lock']
+             'lib/screens/game_screen/my_games_list.dart', 'test',
+             'pubspec.yaml', 'pubspec.lock']
     run('git', 'archive', '--format=zip', '--output=' + str(LOGS / 'source-review.zip'), 'HEAD', *paths)
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     demand(sha == os.environ['GITHUB_SHA'], 'Build checkout does not match the triggering SHA')

@@ -9,7 +9,7 @@ import 'package:neostation/models/config_model.dart';
 /// (`_selectedTabIndex`, `_buildCurrentTabContent`, the secondary-display tab
 /// names). Append new tabs at the end — inserting one renumbers every existing
 /// tab and silently repoints all of that dispatch.
-enum NavTab { systems, search, sync, achievements, scraper, settings, library }
+enum NavTab { systems, search, achievements, scraper, settings, library }
 
 /// Static description of one navigation tab: how it is drawn, whether the user
 /// may hide it, and how that preference is read and written.
@@ -79,14 +79,6 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
     settingsTitleKey: AppLocale.showSearchTab,
     settingsSubtitleKey: AppLocale.showSearchTabSubtitle,
   ),
-  NavTab.sync: NavTabSpec(
-    icon: 'assets/images/icons/cloud-add.webp',
-    labelKey: AppLocale.cloudSync,
-    hidden: _hideTabSync,
-    withHidden: _withHideTabSync,
-    settingsTitleKey: AppLocale.showSyncTab,
-    settingsSubtitleKey: AppLocale.showSyncTabSubtitle,
-  ),
   NavTab.achievements: NavTabSpec(
     icon: 'assets/images/icons/enhance-prize.webp',
     labelKey: AppLocale.achievements,
@@ -115,13 +107,10 @@ const Map<NavTab, NavTabSpec> navTabSpecs = {
 };
 
 // Torn out as top-level functions so [navTabSpecs] can stay `const`.
-bool _hideTabSync(ConfigModel c) => c.hideTabSync;
 bool _hideTabAchievements(ConfigModel c) => c.hideTabAchievements;
 bool _hideTabScraper(ConfigModel c) => c.hideTabScraper;
 bool _hideTabSearch(ConfigModel c) => c.hideTabSearch;
 
-ConfigModel _withHideTabSync(ConfigModel c, bool hidden) =>
-    c.copyWith(hideTabSync: hidden);
 ConfigModel _withHideTabAchievements(ConfigModel c, bool hidden) =>
     c.copyWith(hideTabAchievements: hidden);
 ConfigModel _withHideTabScraper(ConfigModel c, bool hidden) =>

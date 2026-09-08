@@ -14,7 +14,6 @@ import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
 // DOLPHIN_ISOLATION_BEGIN: launcher_import
 import '../dolphin_internal_v2_service.dart';
-import '../../sync/sync_manager.dart';
 // DOLPHIN_ISOLATION_END: launcher_import
 import 'package:neostation/services/logger_service.dart';
 
@@ -164,23 +163,10 @@ class GameLaunchService {
             system.folderName,
           );
         }
-        // Bind the sync hook to the console actually used by this launch.
-        // Some callers supply filesystem-only models without systemFolderName.
-        final syncGame = game.copyWith(systemFolderName: system.folderName);
-        final sync = SyncManager.instance.active;
-        if (sync?.providerId == 'neosync' && sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {
-          await sync!.syncGameSavesBeforeLaunch(syncGame);
-        }
         final report = await DolphinInternalV2Service.launch(
           folderName: system.folderName,
           gamePath: gamePath,
           gameTitle: game.name,
-          onSessionStopped: () async {
-            if (identical(SyncManager.instance.active, sync) && sync?.providerId == 'neosync' &&
-                sync?.isAuthenticated == true && game.cloudSyncEnabled == true) {
-              await sync!.syncGameSavesAfterClose(syncGame);
-            }
-          },
         );
         if (!context.mounted) return GameLaunchResult.failure('', '');
         if (!report.ready) {

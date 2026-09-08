@@ -20,7 +20,6 @@ import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
 import 'package:neostation/constants/system_folder_names.dart';
@@ -443,11 +442,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can slide it without invalidating this memoized subtree.
-    _chromeLegend = Consumer<SyncManager>(
-      builder: (context, syncManager, child) => GameActionButtons(
+    _chromeLegend = GameActionButtons(
         system: widget.system,
         selectedGame: settledGame,
-        syncProvider: syncManager.active,
         onBack: widget.onBack,
         onFavorite: widget.onFavorite ?? () {},
         onViewMode: () =>
@@ -455,7 +452,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
         onSettings: widget.onSettings ?? () {},
         onRandom: widget.onRandom,
         onScrape: widget.onScrape,
-      ),
     );
   }
 

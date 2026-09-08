@@ -5,24 +5,21 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
 import '../services/game_legend_visibility.dart';
-import '../sync/i_sync_provider.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../themes/corner_radii.dart';
 import '../utils/gamepad_nav.dart';
 import 'game_action_button.dart';
 import 'horizontal_swipe.dart';
-import 'neo_sync_status_icon.dart';
 import 'neo_glass.dart';
 
 /// Vertical action button column shared by the game list, grid, and carousel.
 ///
 /// Normally renders back, view-mode, favorite, the game-settings shortcut and
-/// an optional NeoSync status icon. While Select (View) is held it swaps to the
+/// the game-settings shortcut. While Select (View) is held it swaps to the
 /// chord shortcuts it unlocks — A scrapes and Y picks a random game.
 class GameActionButtons extends StatelessWidget {
   final SystemModel system;
   final GameModel? selectedGame;
-  final ISyncProvider? syncProvider;
   final VoidCallback onBack;
   final VoidCallback onFavorite;
   final VoidCallback onViewMode;
@@ -38,7 +35,6 @@ class GameActionButtons extends StatelessWidget {
     super.key,
     required this.system,
     this.selectedGame,
-    this.syncProvider,
     required this.onBack,
     required this.onFavorite,
     required this.onViewMode,
@@ -86,35 +82,7 @@ class GameActionButtons extends StatelessWidget {
           ),
         );
 
-        // Snapshot nullable public fields into local variables. Dart can safely
-        // promote locals after the null check, whereas public widget properties
-        // cannot be promoted because they may theoretically change between reads.
-        final currentSyncProvider = syncProvider;
-        final currentSelectedGame = selectedGame;
-
-        // NeoSync is a status, not an action. Keeping it as a positioned badge
-        // means systems that support NeoSync no longer get a taller action rail
-        // than systems that do not. The action rail therefore keeps the exact
-        // same geometry on every console playlist.
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            rail,
-            if (!selectHeld &&
-                currentSyncProvider != null &&
-                currentSelectedGame != null)
-              Positioned(
-                right: -3.r,
-                bottom: -3.r,
-                child: NeoSyncStatusIcon(
-                  system: system,
-                  game: currentSelectedGame,
-                  syncProvider: currentSyncProvider,
-                  size: 18.0,
-                ),
-              ),
-          ],
-        );
+        return rail;
       },
     );
   }

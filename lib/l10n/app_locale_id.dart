@@ -270,11 +270,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.leadMaintainer: 'Pengelola Utama',
 
   AppLocale.gameSettings: 'Pengaturan Game',
-  AppLocale.cloudSync: 'Sinkronisasi Cloud',
-  AppLocale.cloudSyncEnabled: 'Sinkronisasi cloud diaktifkan',
-  AppLocale.cloudSyncDisabled: 'Sinkronisasi cloud dinonaktifkan',
-  AppLocale.cloudSyncOn: 'Simpanan akan disinkronkan ke cloud',
-  AppLocale.cloudSyncOff: 'Sinkronisasi cloud dinonaktifkan untuk game ini',
   AppLocale.playTime: 'Waktu bermain',
   AppLocale.systemDefault: 'Default Sistem',
   AppLocale.emulator: 'Emulator',
@@ -282,24 +277,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.localSave: 'Simpanan Lokal',
   AppLocale.localSaveSubtitle: 'Di perangkat ini',
   AppLocale.cloudSaveTitle: 'Simpanan Cloud',
-  AppLocale.cloudSaveSubtitle: 'Dari NeoSync',
   AppLocale.scrapingUnavailableAndroid: 'Scraping tidak tersedia di Android.',
   AppLocale.achievements: 'Pencapaian',
   AppLocale.loadingAchievements: 'Memuat pencapaian...',
 
-  AppLocale.neoSync: 'NeoSync',
-  AppLocale.neoSyncSynchronizing: 'NeoSync: Menyingkronkan...',
-  AppLocale.neoSyncNotConnected: 'NeoSync: Tidak terhubung',
-  AppLocale.neoSyncSynchronized: 'NeoSync: Simpanan disinkronkan',
-  AppLocale.neoSyncSavesSync: 'File simpanan akan disinkronkan dengan NeoSync',
-  AppLocale.neoSyncNoSave: 'NeoSync: Tidak ada simpanan ditemukan',
   AppLocale.logout: 'Keluar',
   AppLocale.logoutConfirm: 'Konfirmasi Keluar',
   AppLocale.failedToLoadProfile: 'Gagal memuat profil',
   AppLocale.verifyEmail: 'Verifikasi Email',
   AppLocale.forgotPassword: 'Lupa kata sandi?',
   AppLocale.resetPassword: 'Atur Ulang Kata Sandi',
-  AppLocale.joinNeoSync: 'Bergabung dengan NeoSync',
   AppLocale.verificationToken: 'Token Verifikasi',
   AppLocale.enterTokenFromEmail: 'Masukkan token yang dikirim ke email Anda',
   AppLocale.resendVerificationEmail: 'Kirim ulang email verifikasi',
@@ -358,9 +345,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.failedToRefreshCloud: 'Gagal memperbarui penyimpanan cloud',
   AppLocale.onlineSaves: 'Simpanan Online',
   AppLocale.noOnlineSavesFound: 'Tidak ada simpanan online ditemukan',
-  AppLocale.whatIsNeoSync: 'Apa itu NeoSync Cloud?',
-  AppLocale.neoSyncDescription:
-      'NeoSync adalah mitra cloud terpadu untuk NeoStation Anda.',
   AppLocale.crossPlatform: 'Lintas platform',
   AppLocale.crossPlatformDesc: 'Lanjutkan dari tempat terakhir Anda berhenti di perangkat NeoStation mana pun.',
   AppLocale.securePrivate: 'Aman dan Pribadi',
@@ -388,13 +372,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.deleteCloudSave: 'Hapus Simpanan Cloud',
   AppLocale.deleteCloudSaveConfirm:
       'Hapus simpanan ini secara permanen dari cloud?',
-  AppLocale.alsoDisableNeoSync: 'Juga nonaktifkan NeoSync',
   AppLocale.preventsAutoSaves:
       'Mencegah penyimpanan otomatis di masa mendatang untuk game ini.',
   AppLocale.refreshing: 'Menyegarkan...',
   AppLocale.refreshed: 'Segar',
-  AppLocale.failedToDisableNeoSync:
-      'Gagal menonaktifkan NeoSync untuk game ini',
   AppLocale.saveFileDeleted: 'Simpanan berhasil dihapus',
   AppLocale.failedToDeleteSave: 'Gagal menghapus simpanan',
 
@@ -768,12 +749,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.loadingEmulators: 'Memuat emulator...',
   AppLocale.selectEmulatorExecutable: 'Pilih eksekusi untuk {name}',
 
-  AppLocale.neoSyncLocalSavesOnly: 'NeoSync: Hanya simpanan lokal',
-  AppLocale.neoSyncCloudSavesOnly: 'NeoSync: Hanya simpanan cloud',
-  AppLocale.neoSyncSaveConflict: 'NeoSync: Konflik simpanan terdeteksi',
-  AppLocale.neoSyncCloudSyncDisabled:
-      'NeoSync: Sinkronisasi cloud dinonaktifkan',
-  AppLocale.neoSyncQuotaExceeded: 'NeoSync: Kuota penyimpanan terlampaui',
   AppLocale.packageNameMissing: 'Nama paket hilang',
   AppLocale.failedToLaunchAndroidApp: 'Gagal menjalankan aplikasi Android',
   AppLocale.romFileNotFound: 'File ROM tidak ditemukan',
@@ -934,9 +909,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.removeRomFolderConfirmBody: 'Ini akan menghapus folder ROM ini dari sumber pustaka Anda. File Anda di disk tidak akan dihapus.',
   AppLocale.disconnectRaConfirm: 'Putuskan RetroAchievements',
   AppLocale.disconnectRaConfirmBody: 'Ini akan mengeluarkan Anda dan menghapus kredensial RetroAchievements yang tersimpan dari perangkat ini.',
-  AppLocale.neoSyncLogoutConfirmBody:
-      'Ini akan mengeluarkan Anda dari akun NeoSync di perangkat ini.',
-
   AppLocale.deleteGame: 'Hapus Game',
   AppLocale.deleteGameConfirm: 'Hapus Secara Permanen',
   AppLocale.deleteGameConfirmBody: 'Ini akan menghapus permanen ROM game, data scraping, dan file media. Tindakan ini tidak dapat dibatalkan.',

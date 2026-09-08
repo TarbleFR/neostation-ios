@@ -20,7 +20,6 @@ REQUIRED = (
     "native/dolphin_internal_helper/DolphinJITExtensionEntry.swift",
     "build-utils/configure_dolphin_ios_v2.py",
     "build-utils/patch_dolphin_internal_core_v2.py",
-    "build-utils/check_dolphin_isolation_v2.py",
     "build-utils/Gemfile.dolphin",
     "lib/services/dolphin_internal_v2_service.dart",
     "lib/widgets/dolphin_internal_playlist_actions.dart",

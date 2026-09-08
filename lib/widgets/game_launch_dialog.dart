@@ -5,7 +5,6 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'dart:io';
 import 'dart:async';
-import '../sync/i_sync_provider.dart';
 import '../providers/file_provider.dart';
 import '../models/system_model.dart';
 import '../models/game_model.dart';
@@ -19,7 +18,6 @@ class GameLaunchDialog extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
   final FileProvider fileProvider;
-  final ISyncProvider syncProvider;
   final VoidCallback onGameClosed;
 
   const GameLaunchDialog({
@@ -27,7 +25,6 @@ class GameLaunchDialog extends StatefulWidget {
     required this.game,
     required this.system,
     required this.fileProvider,
-    required this.syncProvider,
     required this.onGameClosed,
   });
 
@@ -40,7 +37,7 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
 
   bool _closeCalled = false;
   bool _onGameClosedFired = false;
-  bool _postSyncStarted = false;
+  bool _cleanupStarted = false;
   String _gameStatus = '';
 
   @override
@@ -102,9 +99,9 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
     if (!mounted) return;
     final phase = GameLaunchManager().phase;
 
-    if (phase == GameLaunchPhase.syncing && !_postSyncStarted) {
-      _postSyncStarted = true;
-      _performPostSync();
+    if (phase == GameLaunchPhase.closing && !_cleanupStarted) {
+      _cleanupStarted = true;
+      _performCleanup();
     }
 
     if (phase == GameLaunchPhase.closed) {
@@ -120,7 +117,7 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
           case GameLaunchPhase.playing:
             _gameStatus = AppLocale.gameExecuting.getString(context);
             break;
-          case GameLaunchPhase.syncing:
+          case GameLaunchPhase.closing:
           case GameLaunchPhase.closed:
             _gameStatus = AppLocale.closingGame.getString(context);
             break;
@@ -135,7 +132,7 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
   // Post-game cleanup
   // ---------------------------------------------------------------------------
 
-  Future<void> _performPostSync() async {
+  Future<void> _performCleanup() async {
     // End game session (saves playtime, unblocks Android native gamepad, clears state).
     await GameService.endGameSession();
     // Signal manager that everything is done → triggers closed phase → _closeDialog.

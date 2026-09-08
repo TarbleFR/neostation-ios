@@ -30,22 +30,6 @@ extension _LaunchFlow on _SystemGamesListState {
     }
   }
 
-  /// Initiates game save detection with a 600ms debounce to optimize rapid scrolling.
-  void _detectGameSavesForSelectedGame() {
-    _saveDetectionTimer?.cancel();
-
-    _saveDetectionTimer = Timer(const Duration(milliseconds: 600), () async {
-      if (_selectedGame == null || !mounted) return;
-
-      try {
-        final syncProvider = context.read<SyncManager>().active!;
-        await syncProvider.detectGameSaveFiles(_selectedGame!);
-      } catch (e) {
-        _SystemGamesListState._log.e('Game save detection failed: $e');
-      }
-    });
-  }
-
   /// Restores UI state and input focus after an external emulator process terminates.
   /// Resolves the effective system folder name for a game, accounting for the
   /// aggregate "all"/favorites views where each game carries its own system.
@@ -128,17 +112,6 @@ extension _LaunchFlow on _SystemGamesListState {
       _refreshAchievementsCallback?.call();
     });
 
-    // Trigger sync after returning from game so local save gets uploaded.
-    if (_selectedGame != null && mounted) {
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-      try {
-        final syncProvider = context.read<SyncManager>().active!;
-        await syncProvider.detectGameSaveFiles(_selectedGame!);
-      } catch (e) {
-        _SystemGamesListState._log.e('Post-game save sync failed: $e');
-      }
-    }
   }
 
   /// Orchestrates the complex sequence for launching a game through an external emulator.
@@ -221,7 +194,6 @@ extension _LaunchFlow on _SystemGamesListState {
     try {
       if (!mounted) return;
 
-      final syncProvider = context.read<SyncManager>().active!;
       final selectedGame = _selectedGame!;
 
       await launchGameWithDialog(
@@ -229,7 +201,6 @@ extension _LaunchFlow on _SystemGamesListState {
         game: selectedGame,
         system: systemToLaunch,
         fileProvider: _fileProvider,
-        syncProvider: syncProvider,
         onGameClosed: _reactivateGamepadNavigation,
         onLaunchFailed: (ctx, result) async {
           // Restore memory on failed launch.

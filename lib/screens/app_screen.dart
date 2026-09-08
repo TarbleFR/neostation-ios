@@ -17,7 +17,6 @@ import 'search_screen/search_screen.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
 import 'scraper_screen/new_scraper_options_screen.dart';
-import 'neo_sync_screen/neo_sync_tab.dart';
 import 'library_screen/library_screen.dart';
 import '../widgets/scraper_content.dart';
 
@@ -32,7 +31,7 @@ import 'dart:io';
 /// The root screen of the application, managing high-level navigation tabs.
 ///
 /// Coordinates the lifecycle of main features including the System library,
-/// Cloud Sync, Achievements, Metadata Scraper, and Global Settings.
+/// Achievements, Metadata Scraper, and Global Settings.
 class AppScreen extends StatefulWidget {
   const AppScreen({super.key});
 
@@ -49,14 +48,13 @@ class AppScreen extends StatefulWidget {
 abstract final class AppTabs {
   static const int systems = 0;
   static const int search = 1;
-  static const int sync = 2;
-  static const int achievements = 3;
-  static const int scraper = 4;
-  static const int settings = 5;
-  static const int library = 6;
+  static const int achievements = 2;
+  static const int scraper = 3;
+  static const int settings = 4;
+  static const int library = 5;
 
   /// Total number of tabs, used for wrap-around when cycling with the bumpers.
-  static const int count = 7;
+  static const int count = 6;
 }
 
 /// Bridge class providing static access to the main application navigation state.
@@ -546,9 +544,6 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         case AppTabs.search:
           tabName = 'Search';
           break;
-        case AppTabs.sync:
-          tabName = 'Sync';
-          break;
         case AppTabs.achievements:
           tabName = 'Achievements';
           break;
@@ -713,12 +708,6 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
           _gamepadNav.deactivate();
         });
         return const SearchScreen();
-      case AppTabs.sync:
-        // NeoSync tab manages its own focus lifecycle due to complex login flows.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _gamepadNav.deactivate();
-        });
-        return const NeoSyncTab();
       case AppTabs.achievements:
         return RAContent();
       case AppTabs.scraper:

@@ -309,23 +309,6 @@ class GameRepository {
     ]);
   }
 
-  /// Returns whether cloud sync is enabled for a ROM.
-  static Future<bool> isCloudSyncEnabled(
-    String systemFolderName,
-    String romname,
-  ) => SqliteService.isRomCloudSyncEnabled(systemFolderName, romname);
-
-  /// Sets cloud sync enabled state for a ROM.
-  static Future<void> updateCloudSyncEnabled(
-    String systemFolderName,
-    String romname,
-    bool enabled,
-  ) => SqliteService.updateRomCloudSyncEnabled(
-    systemFolderName,
-    romname,
-    enabled,
-  );
-
   /// Resets play time and last played timestamp for a ROM.
   static Future<void> resetPlayTime(String systemFolderName, String romname) =>
       SqliteService.resetRomPlayTime(systemFolderName, romname);

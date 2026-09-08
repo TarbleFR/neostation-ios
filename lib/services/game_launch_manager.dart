@@ -14,8 +14,8 @@ enum GameLaunchPhase {
   /// The game is currently running.
   playing,
 
-  /// The game process has exited; performing cloud save synchronization.
-  syncing,
+  /// The game process has exited and final cleanup is running.
+  closing,
 
   /// The session has fully terminated.
   closed,
@@ -24,7 +24,7 @@ enum GameLaunchPhase {
 /// Controller responsible for managing the lifecycle of a game session and its associated UI state.
 ///
 /// Acts as the single source of truth for platform process monitoring, audio management
-/// (music and SFX), and state transitions between launching, playing, and syncing.
+/// (music and SFX), and state transitions between launching, playing, and closing.
 /// Implements [WidgetsBindingObserver] to track app lifecycle changes on Android.
 class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   static final GameLaunchManager _instance = GameLaunchManager._internal();
@@ -111,18 +111,18 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     _triggerClose();
   }
 
-  /// Internal trigger to begin the termination and synchronization flow.
+  /// Internal trigger to begin the termination flow.
   void _triggerClose() {
     if (_isClosing) return;
     _isClosing = true;
     _monitoringTimer?.cancel();
     _monitoringTimer = null;
-    _phase = GameLaunchPhase.syncing;
+    _phase = GameLaunchPhase.closing;
     notifyListeners();
-    _log.i('[GameLaunchManager] Close triggered — entering syncing phase.');
+    _log.i('[GameLaunchManager] Close triggered — entering closing phase.');
   }
 
-  /// Marks the post-game synchronization as finished.
+  /// Marks the post-game cleanup as finished.
   void completeClose() {
     _phase = GameLaunchPhase.closed;
     notifyListeners();

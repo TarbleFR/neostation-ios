@@ -60,30 +60,11 @@ void main() {
     );
   });
 
-  test('PS2 NeoSync ignores ARMSX2 while RetroArch remains available', () {
-    final resolver = File(
-      'lib/providers/neosync/neosync_path_resolver.dart',
-    ).readAsStringSync();
-
-    expect(resolver, contains("system.folderName.toLowerCase() == 'ps2'"));
-    expect(
-      resolver,
-      isNot(contains('Armsx2FolderService.ownsRomPath')),
-    );
-    expect(
-      resolver,
-      isNot(contains('Armsx2FolderService.resolveSaveDirectories')),
-    );
-    expect(resolver, contains('final saves = await _getRetroArchSavesPath()'));
-    expect(resolver, contains('final states = await _getRetroArchStatesPath()'));
-    expect(resolver, isNot(contains('linkedArmsx2SaveFolderPath')));
-  });
 
   test('ARMSX2 has one ConfigService root and no save-only bookmark', () {
     final config = File('lib/services/config_service.dart').readAsStringSync();
     expect(config, contains('linkedArmsx2FolderPath'));
     expect(config, contains('linkedArmsx2GameFolderPath'));
     expect(config, isNot(contains('linkedArmsx2SaveFolderPath')));
-    expect(config, isNot(contains('armsx2NeoSyncBookmarkKey')));
   });
 }

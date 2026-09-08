@@ -5,14 +5,7 @@ import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
-import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/screens/main_screen.dart';
-import 'package:neostation/services/neosync/auth_service.dart';
-import 'package:neostation/services/neosync/neo_sync_service.dart';
-import 'package:neostation/services/neosync/billing_service.dart';
-import 'package:neostation/sync/sync_manager.dart';
-import 'package:neostation/sync/providers/neo_sync_adapter.dart';
-import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/repositories/config_repository.dart';
@@ -290,16 +283,11 @@ void main() async {
     ConfigService.linkedExternalFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder();
 
-    // ARMSX2 keeps its security-scoped library root. NeoSync does not scan it.
-    final canonicalArmsx2Path =
+    // Restore the security-scoped ARMSX2 library root.
+    final linkedArmsx2Path =
         await ExternalFolderAccess.resolveBookmarkedFolder(
           key: Armsx2FolderService.bookmarkKey,
         );
-    final legacyArmsx2Path =
-        await ExternalFolderAccess.resolveBookmarkedFolder(
-          key: Armsx2FolderService.legacyNeoSyncBookmarkKey,
-        );
-    final linkedArmsx2Path = canonicalArmsx2Path ?? legacyArmsx2Path;
     if (linkedArmsx2Path != null && linkedArmsx2Path.trim().isNotEmpty) {
       final root = await Armsx2FolderService.resolveRoot(linkedArmsx2Path);
       ConfigService.linkedArmsx2FolderPath = root;
@@ -313,10 +301,6 @@ void main() async {
       ConfigService.linkedArmsx2FolderPath = null;
       ConfigService.linkedArmsx2GameFolderPath = null;
     }
-    // Keep the saved MeloNX bookmark for a future NeoSync re-enable, but do
-    // not reactivate access to that save-only folder in this release.
-    ConfigService.linkedMelonxSaveFolderPath = null;
-
     // Load the last exported emulator libraries so direct-launch matching
     // works immediately after a cold start without forcing a fresh sync.
     await RetroArchLibraryService.loadCachedLibrary();
@@ -438,10 +422,6 @@ void main() async {
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
 
-  // Inicializar AuthService antes de mostrar la app
-  final authService = AuthService();
-  await authService.initialize();
-
   // Inicializar providers criticos
   final sqliteConfigProvider = SqliteConfigProvider();
   final sqliteDatabaseProvider = SqliteDatabaseProvider();
@@ -510,28 +490,11 @@ void main() async {
   // light brightness (the Steam Deck does) for a user on a dark theme.
   final themeProvider = await ThemeProvider.create();
 
-  // Build NeoSync provider graph before runApp so SyncManager can register it.
-  final neoSyncService = NeoSyncService();
-  final neoSyncProvider = NeoSyncProvider(neoSyncService);
-  neoSyncProvider.setAuthService(authService);
-  authService.addListener(() {
-    neoSyncProvider.setAuthService(authService);
-  });
-
-  final neoSyncAdapter = NeoSyncAdapter(neoSyncProvider);
-  SyncManager.instance.register(neoSyncAdapter);
-  SyncManager.instance.restoreActive(
-    sqliteConfigProvider.config.activeSyncProvider,
-  );
-
   runApp(
     MyApp(
       fileProvider: fileProvider,
-      authService: authService,
       sqliteConfigProvider: sqliteConfigProvider,
       sqliteDatabaseProvider: sqliteDatabaseProvider,
-      neoSyncService: neoSyncService,
-      neoSyncProvider: neoSyncProvider,
       themeProvider: themeProvider,
     ),
   );
@@ -945,11 +908,8 @@ class FallbackMaterialLocalizationsDelegate
 
 class MyApp extends StatefulWidget {
   final FileProvider fileProvider;
-  final AuthService authService;
   final SqliteConfigProvider sqliteConfigProvider;
   final SqliteDatabaseProvider sqliteDatabaseProvider;
-  final NeoSyncService neoSyncService;
-  final NeoSyncProvider neoSyncProvider;
 
   /// Built in `main()` with the saved theme already resolved, so the first
   /// frame paints in the user's theme rather than the brightness fallback.
@@ -958,11 +918,8 @@ class MyApp extends StatefulWidget {
   const MyApp({
     super.key,
     required this.fileProvider,
-    required this.authService,
     required this.sqliteConfigProvider,
     required this.sqliteDatabaseProvider,
-    required this.neoSyncService,
-    required this.neoSyncProvider,
     required this.themeProvider,
   });
 
@@ -996,12 +953,6 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider.value(value: widget.sqliteConfigProvider),
         ChangeNotifierProvider.value(value: widget.sqliteDatabaseProvider),
         ChangeNotifierProvider.value(value: widget.fileProvider),
-        ChangeNotifierProvider.value(value: widget.authService),
-        ChangeNotifierProvider.value(value: widget.neoSyncService),
-        ChangeNotifierProvider.value(value: widget.neoSyncProvider),
-        ChangeNotifierProvider.value(value: SyncManager.instance),
-        ChangeNotifierProvider(create: (context) => BillingService()),
-        ChangeNotifierProvider(create: (context) => NotificationService()),
         ChangeNotifierProvider.value(value: widget.themeProvider),
         ChangeNotifierProvider(create: (context) => ScrapingProvider()),
         ChangeNotifierProvider(

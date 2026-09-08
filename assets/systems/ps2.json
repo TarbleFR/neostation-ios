@@ -340,25 +340,5 @@
         }
       }
     }
-  ],
-  "neosync": {
-    "sync": true,
-    "android_sync_folder": [
-      "{SYNC_DIR}",
-      "{NETHERSX2_MEMCARDS}"
-    ],
-    "windows_sync_folder": [
-      "{SYNC_DIR}",
-      "{PCSX2_MEMCARDS}"
-    ],
-    "linux_sync_folder": [
-      "{SYNC_DIR}"
-    ],
-    "macos_sync_folder": [
-      "{SYNC_DIR}"
-    ],
-    "ios_sync_folder": [
-      "{SYNC_DIR}"
-    ]
-  }
+  ]
 }

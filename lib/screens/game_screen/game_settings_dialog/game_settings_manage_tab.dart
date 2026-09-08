@@ -6,27 +6,21 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
-import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/repositories/game_repository.dart';
-import 'package:neostation/utils/enabled_index_nav.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:neostation/sync/i_sync_provider.dart';
+import 'package:neostation/utils/enabled_index_nav.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
-import 'package:neostation/widgets/custom_toggle_switch.dart';
 import 'package:neostation/widgets/delete_game_dialog.dart';
 
-/// Manage tab for [GameSettingsDialog]: cloud sync, grid size/style,
-/// play-time reset, and permanent game deletion. View mode is selected from the
-/// game view itself (X button), not here.
+/// Manage tab for play-time reset and permanent game deletion.
 class GameSettingsManageTab extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
   final FileProvider fileProvider;
-  final ISyncProvider? syncProvider;
   final bool isAllMode;
   final VoidCallback? onGameUpdated;
   final void Function(String romname)? onGameDeleted;
@@ -36,7 +30,6 @@ class GameSettingsManageTab extends StatefulWidget {
     required this.game,
     required this.system,
     required this.fileProvider,
-    this.syncProvider,
     required this.isAllMode,
     this.onGameUpdated,
     this.onGameDeleted,
@@ -50,8 +43,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   static final _log = LoggerService.instance;
 
   int _selectedIndex = 0;
-  late bool _cloudSyncEnabled;
-  bool _isUpdatingCloudSync = false;
   bool _isResettingPlayTime = false;
   bool _isDeleting = false;
 
@@ -61,29 +52,14 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   GlobalKey _itemKey(int navIndex) =>
       _itemKeys.putIfAbsent(navIndex, () => GlobalKey());
 
-  int get _cloudSyncIdx => 0;
-  int get _playTimeIdx => 1;
-  int get _deleteIdx => 2;
-  int get _totalItems => 3;
-
-  bool get _showCloudSync {
-    final syncProvider = widget.syncProvider;
-    return syncProvider != null &&
-        syncProvider.isAuthenticated &&
-        syncProvider.supportsGame(widget.game, widget.system);
-  }
+  int get _playTimeIdx => 0;
+  int get _deleteIdx => 1;
+  int get _totalItems => 2;
 
   String get _targetSystemFolder =>
       widget.isAllMode && widget.game.systemFolderName != null
-      ? widget.game.systemFolderName!
-      : widget.system.folderName;
-
-  @override
-  void initState() {
-    super.initState();
-    _cloudSyncEnabled = widget.game.cloudSyncEnabled ?? true;
-    _selectedIndex = _showCloudSync ? _cloudSyncIdx : _playTimeIdx;
-  }
+          ? widget.game.systemFolderName!
+          : widget.system.folderName;
 
   @override
   void dispose() {
@@ -91,42 +67,36 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     super.dispose();
   }
 
-  bool _isEnabledIndex(int idx) {
-    if (idx == _cloudSyncIdx && !_showCloudSync) return false;
-    return idx >= 0 && idx < _totalItems;
-  }
-
-  int _previousEnabledIndex() =>
-      previousEnabledIndex(_selectedIndex, _totalItems, _isEnabledIndex);
-
-  int _nextEnabledIndex() =>
-      nextEnabledIndex(_selectedIndex, _totalItems, _isEnabledIndex);
-
-  void _ensureSelectedIndexEnabled() {
-    if (!_isEnabledIndex(_selectedIndex)) {
-      _selectedIndex = _nextEnabledIndex();
-    }
-  }
+  bool _isEnabledIndex(int idx) => idx >= 0 && idx < _totalItems;
 
   void moveUp() {
-    setState(() => _selectedIndex = _previousEnabledIndex());
+    setState(() {
+      _selectedIndex = previousEnabledIndex(
+        _selectedIndex,
+        _totalItems,
+        _isEnabledIndex,
+      );
+    });
     _scrollToSelectedItem();
   }
 
   void moveDown() {
-    setState(() => _selectedIndex = _nextEnabledIndex());
+    setState(() {
+      _selectedIndex = nextEnabledIndex(
+        _selectedIndex,
+        _totalItems,
+        _isEnabledIndex,
+      );
+    });
     _scrollToSelectedItem();
   }
 
   void trigger() {
-    final idx = _selectedIndex;
-    if (_showCloudSync && idx == _cloudSyncIdx) {
-      if (!_isUpdatingCloudSync) _toggleCloudSync(!_cloudSyncEnabled);
-    } else if (idx == _playTimeIdx) {
+    if (_selectedIndex == _playTimeIdx) {
       if ((widget.game.playTime ?? 0) > 0 && !_isResettingPlayTime) {
         _confirmResetPlayTime();
       }
-    } else if (idx == _deleteIdx) {
+    } else if (_selectedIndex == _deleteIdx) {
       _confirmDeleteGame();
     }
   }
@@ -143,41 +113,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         );
       }
     });
-  }
-
-  Future<void> _toggleCloudSync(bool value) async {
-    final syncProvider = widget.syncProvider;
-    if (_isUpdatingCloudSync || syncProvider == null || !_showCloudSync) return;
-    setState(() => _isUpdatingCloudSync = true);
-    try {
-      await GameRepository.updateCloudSyncEnabled(
-        _targetSystemFolder,
-        widget.game.romname,
-        value,
-      );
-      await syncProvider.updateGameCloudSyncEnabled(widget.game.romname, value);
-      setState(() => _cloudSyncEnabled = value);
-
-      if (value) {
-        final updatedGame = widget.game.copyWith(cloudSyncEnabled: true);
-        if (mounted) {
-          if (syncProvider is NeoSyncProvider) {
-            await (syncProvider as NeoSyncProvider).updateSelectedGame(
-              widget.game.romname,
-              (romname) async => updatedGame,
-            );
-          }
-          if (mounted) {
-            await syncProvider.syncGameSavesBeforeLaunch(updatedGame);
-          }
-        }
-      }
-      widget.onGameUpdated?.call();
-    } catch (e) {
-      _log.e('Cloud-sync status update failed: $e');
-    } finally {
-      if (mounted) setState(() => _isUpdatingCloudSync = false);
-    }
   }
 
   Future<void> _confirmResetPlayTime() async {
@@ -255,7 +190,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final canReset = (widget.game.playTime ?? 0) > 0 && !_isResettingPlayTime;
-    _ensureSelectedIndexEnabled();
 
     return SingleChildScrollView(
       controller: _scrollController,
@@ -264,45 +198,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_showCloudSync)
-            GestureDetector(
-              onTap: () {
-                SfxService().playNavSound();
-                setState(() => _selectedIndex = _cloudSyncIdx);
-                if (!_isUpdatingCloudSync) {
-                  _toggleCloudSync(!_cloudSyncEnabled);
-                }
-              },
-              child: SettingRow(
-                key: _itemKey(_cloudSyncIdx),
-                focused: _selectedIndex == _cloudSyncIdx,
-                title: AppLocale.cloudSync.getString(context),
-                subtitle: _cloudSyncEnabled
-                    ? AppLocale.cloudSyncOn.getString(context)
-                    : AppLocale.cloudSyncOff.getString(context),
-                trailing: _isUpdatingCloudSync
-                    ? SizedBox(
-                        width: 20.r,
-                        height: 20.r,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      )
-                    : ExcludeFocus(
-                        child: CustomToggleSwitch(
-                          value: _cloudSyncEnabled,
-                          onChanged: !_isUpdatingCloudSync
-                              ? (v) => _toggleCloudSync(v)
-                              : null,
-                          activeColor: theme.colorScheme.primary,
-                        ),
-                      ),
-              ),
-            )
-          else
-            SizedBox.shrink(key: _itemKey(_cloudSyncIdx)),
-          SizedBox(height: _showCloudSync ? 12.r : 0.r),
           GestureDetector(
             onTap: () {
               SfxService().playNavSound();

@@ -16,7 +16,6 @@ import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/screens/search_screen/search_filter.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/secondary_achievements_controller.dart';
 import 'package:neostation/services/sfx_service.dart';
@@ -693,9 +692,6 @@ class _SearchScreenState extends State<SearchScreen> {
     if (folder == null || folder.isEmpty) return;
 
     final fileProvider = context.read<FileProvider>();
-    final syncProvider = context.read<SyncManager>().active;
-    if (syncProvider == null) return;
-
     final system = await SqliteService.getSystemByFolderName(folder);
     if (!mounted) return;
 
@@ -726,7 +722,6 @@ class _SearchScreenState extends State<SearchScreen> {
       game: game,
       system: system,
       fileProvider: fileProvider,
-      syncProvider: syncProvider,
       onGameClosed: () {
         // Stop the poll and hide the panel; search pushes no display state of
         // its own, so the secondary fades back to whatever art is underneath.

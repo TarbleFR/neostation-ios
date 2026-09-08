@@ -373,7 +373,7 @@ int32_t neostation_dolphin_initialize(const char* user_directory, const char* sy
         g_initialized = true;
         DolphinAnalytics::Instance().ReportDolphinStart("neostation-ios");
       }
-      // Import/NeoSync may have replaced config or NAND files while idle.
+      // Import may have replaced config or NAND files while idle.
       Config::Load();
       ApplyConsolePreferences();
       g_devices_changed = true;

@@ -114,11 +114,6 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
-  Future<void> updateActiveSyncProvider(String providerId) async {
-    _config = _config.copyWith(activeSyncProvider: providerId);
-    await SqliteConfigService.saveConfig(_config);
-    _notify();
-  }
 
   /// Toggles the visibility of detailed game metadata in the UI.
   Future<void> updateShowGameInfo(bool show) async {

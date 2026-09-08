@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -42,14 +41,6 @@ void main() {
     }
   }
 
-  Future<void> notifyStopped(String token) async {
-    final completed = Completer<void>();
-    // ignore: deprecated_member_use
-    await messenger.handlePlatformMessage(host.name, host.codec.encodeMethodCall(
-      MethodCall('saveSessionStopped', {'token': token, 'savesFlushed': true}),
-    ), (_) => completed.complete());
-    await completed.future;
-  }
 
   setUpAll(() async {
     root = await Directory.systemTemp.createTemp('dolphin-wii-menu-');
@@ -57,6 +48,7 @@ void main() {
     messenger.setMockMethodCallHandler(host, (call) async {
       calls.add(call.method);
       if (call.method == 'isRunning') return running;
+      if (call.method == 'stop') return null;
       if (call.method != 'launchGame') {
         throw PlatformException(code: 'unexpectedNativeCall', message: call.method);
       }
@@ -102,13 +94,12 @@ void main() {
     expect(arguments!.containsKey('gamePath'), isFalse);
     expect(arguments!['gameTitle'], isNotEmpty);
     expect(arguments!['pairingFilePath'], endsWith('pairingfile.plist'));
-    expect(arguments!['saveSessionToken'], isNotEmpty);
     expect(calls, ['isRunning', 'launchGame']);
     final marker = File(p.join(dolphin.path, 'CrashMarkers', 'active-session.json'));
     final payload = jsonDecode(await marker.readAsString()) as Map;
     expect(payload['bootKind'], 'wiiSystemMenu');
     expect(payload.containsKey('gamePath'), isFalse);
-    await notifyStopped(arguments!['saveSessionToken'] as String);
+    await DolphinInternalV2Service.stop();
     expect(await marker.exists(), isFalse);
   });
 
@@ -121,7 +112,7 @@ void main() {
     expect(await File(p.join(dolphin.path, 'CrashMarkers', 'active-session.json')).exists(), isFalse);
     accepted = true;
     expect((await DolphinInternalV2Service.launchWiiMenu()).ready, isTrue);
-    await notifyStopped(arguments!['saveSessionToken'] as String);
+    await DolphinInternalV2Service.stop();
   });
 
   test('a running console prevents a Wii Menu launch', () async {
@@ -131,38 +122,4 @@ void main() {
     expect(calls, ['isRunning']);
   });
 
-  test('Wii Menu does not inherit an ordinary game NeoSync upload callback', () async {
-    await installMetadata();
-    final library = await DolphinInternalV2Service.libraryDirectory('gc');
-    final game = await File(p.join(library.path, 'fixture.rvz')).writeAsString('mock game');
-    var uploaded = 0;
-    expect((await DolphinInternalV2Service.launch(folderName: 'gc', gamePath: game.path,
-        onSessionStopped: () async { uploaded++; })).ready, isTrue);
-    final gameToken = arguments!['saveSessionToken'] as String;
-    await notifyStopped(gameToken);
-    expect(uploaded, 1);
-    expect((await DolphinInternalV2Service.launchWiiMenu()).ready, isTrue);
-    final menuToken = arguments!['saveSessionToken'] as String;
-    await notifyStopped(gameToken);
-    await notifyStopped(menuToken);
-    expect(uploaded, 1);
-  });
-
-  test('Wii Menu waits for an in-progress save access transaction', () async {
-    await installMetadata();
-    final entered = Completer<void>();
-    final release = Completer<void>();
-    final saving = DolphinInternalV2Service.withSaveAccess((_) async {
-      entered.complete();
-      await release.future;
-    });
-    await entered.future;
-    final launching = DolphinInternalV2Service.launchWiiMenu();
-    await Future<void>.delayed(Duration.zero);
-    expect(calls.where((call) => call == 'launchGame'), isEmpty);
-    release.complete();
-    await saving;
-    expect((await launching).ready, isTrue);
-    await notifyStopped(arguments!['saveSessionToken'] as String);
-  });
 }

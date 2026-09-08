@@ -371,20 +371,5 @@
         }
       }
     }
-  ],
-  "neosync": {
-    "sync": true,
-    "android_sync_folder": [
-      "{SYNC_DIR}"
-    ],
-    "windows_sync_folder": [
-      "{SYNC_DIR}"
-    ],
-    "linux_sync_folder": [
-      "{SYNC_DIR}"
-    ],
-    "macos_sync_folder": [
-      "{SYNC_DIR}"
-    ]
-  }
+  ]
 }

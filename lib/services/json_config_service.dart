@@ -97,9 +97,7 @@ class JsonConfigService {
                   : null,
               'extensions': systemData['extensions'] ?? [],
               'folders': systemData['folders'] ?? [],
-              'multidisc': systemData['multidisc'] ?? false,
-              'neosync': jsonMap['neosync'],
-            };
+              'multidisc': systemData['multidisc'] ?? false,            };
 
             final systemModel = SystemModel.fromJson(flatMap);
 

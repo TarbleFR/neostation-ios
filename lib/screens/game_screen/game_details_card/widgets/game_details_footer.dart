@@ -8,7 +8,6 @@ import 'package:neostation/themes/app_themes.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../models/retro_achievements_game_info.dart';
-import '../../../../sync/i_sync_provider.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../../../../themes/corner_radii.dart';
 import '../../music/music_player.dart';
@@ -24,9 +23,6 @@ class GameDetailsFooter extends StatelessWidget {
   final bool isMusicSystem;
   final bool hasScreenScraper;
   final bool isSecondaryScreenActive;
-  final bool cloudSyncEnabled;
-  final ISyncProvider syncProvider;
-  final AnimationController? syncIconController;
   final VoidCallback onPlayGame;
   final VoidCallback onShowAchievements;
   final bool hasRetroAchievements;
@@ -40,9 +36,6 @@ class GameDetailsFooter extends StatelessWidget {
     required this.isMusicSystem,
     required this.hasScreenScraper,
     required this.isSecondaryScreenActive,
-    required this.cloudSyncEnabled,
-    required this.syncProvider,
-    this.syncIconController,
     required this.onPlayGame,
     required this.onShowAchievements,
     required this.hasRetroAchievements,

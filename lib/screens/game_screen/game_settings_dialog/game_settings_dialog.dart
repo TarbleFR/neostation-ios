@@ -8,7 +8,6 @@ import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/sfx_service.dart';
-import 'package:neostation/sync/i_sync_provider.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/core_footer.dart';
 import 'package:neostation/widgets/neo_glass.dart';
@@ -33,10 +32,6 @@ class GameSettingsDialog extends StatefulWidget {
   final SystemModel system;
   final FileProvider fileProvider;
 
-  /// Active cloud-sync provider; when authenticated, the Manage tab shows
-  /// the per-game cloud sync toggle.
-  final ISyncProvider? syncProvider;
-
   /// True when the parent list is a virtual system ('all' / 'favorites'), so
   /// per-game paths resolve against the game's real system folder.
   final bool isAllMode;
@@ -54,7 +49,6 @@ class GameSettingsDialog extends StatefulWidget {
     required this.game,
     required this.system,
     required this.fileProvider,
-    this.syncProvider,
     this.isAllMode = false,
     this.onGameUpdated,
     this.onGameDeleted,
@@ -239,7 +233,6 @@ class _GameSettingsDialogState extends State<GameSettingsDialog> {
                     game: widget.game,
                     system: widget.system,
                     fileProvider: widget.fileProvider,
-                    syncProvider: widget.syncProvider,
                     isAllMode: widget.isAllMode,
                     onGameUpdated: widget.onGameUpdated,
                     onGameDeleted: _handleGameDeleted,

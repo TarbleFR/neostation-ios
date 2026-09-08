@@ -49,9 +49,6 @@ class DatabaseGameModel {
   /// Abbreviated name of the system (e.g., 'NES').
   final String? systemShortName;
 
-  /// NeoSync: Whether cloud synchronization is active for this specific game's saves.
-  final bool? cloudSyncEnabled;
-
   /// The sanitized, human-readable name of the game.
   final String? realName;
 
@@ -107,7 +104,6 @@ class DatabaseGameModel {
     this.systemFolderName,
     this.systemRealName,
     this.systemShortName,
-    this.cloudSyncEnabled,
     this.realName,
     this.descriptions,
     this.rating,
@@ -187,14 +183,6 @@ class DatabaseGameModel {
           ?.toString(),
       systemShortName: (json['system_short_name'] ?? json['systemShortName'])
           ?.toString(),
-      cloudSyncEnabled:
-          (json['cloud_sync_enabled'] ?? json['cloudSyncEnabled'] ?? 0)
-                  .toString()
-                  .toLowerCase() ==
-              'true' ||
-          (json['cloud_sync_enabled'] ?? json['cloudSyncEnabled'] ?? 0)
-                  .toString() ==
-              '1',
       realName:
           (json['game_display_name'] ?? json['real_name'] ?? json['realName'])
               ?.toString(),
@@ -240,7 +228,6 @@ class DatabaseGameModel {
       'systemFolderName': systemFolderName,
       'systemRealName': systemRealName,
       'systemShortName': systemShortName,
-      'cloudSyncEnabled': cloudSyncEnabled,
       'realName': realName,
       'description': getDescriptionForLanguage('en'),
       'descriptions': descriptions,
@@ -275,7 +262,6 @@ class DatabaseGameModel {
     String? systemFolderName,
     String? systemRealName,
     String? systemShortName,
-    bool? cloudSyncEnabled,
     String? realName,
     Map<String, String?>? descriptions,
     double? rating,
@@ -306,7 +292,6 @@ class DatabaseGameModel {
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,
       systemShortName: systemShortName ?? this.systemShortName,
-      cloudSyncEnabled: cloudSyncEnabled ?? this.cloudSyncEnabled,
       realName: realName ?? this.realName,
       descriptions: descriptions ?? this.descriptions,
       rating: rating ?? this.rating,

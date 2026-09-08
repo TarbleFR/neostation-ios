@@ -26,7 +26,6 @@ import 'widgets/grid_empty_state.dart';
 import 'my_systems_carousel.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
@@ -290,8 +289,6 @@ class MySystems extends StatelessWidget {
         MySystems.gridLaunchNotifier.value = true;
 
         final fileProvider = Provider.of<FileProvider>(context, listen: false);
-        final syncProvider = context.read<SyncManager>().active!;
-
         // Free maximum RAM before handing off to the emulator.
         imageCache.clear();
         imageCache.clearLiveImages();
@@ -324,7 +321,6 @@ class MySystems extends StatelessWidget {
           game: systemInfo.gameModel!,
           system: gameSystemModel,
           fileProvider: fileProvider,
-          syncProvider: syncProvider,
           onGameClosed: () {
             // Stop the poll and hide the panel so it fades back to the art.
             achievementsController.stop(hidePanel: true);

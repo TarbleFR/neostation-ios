@@ -17,7 +17,6 @@ import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -1309,11 +1308,9 @@ class _GamesGridState extends State<GamesGrid> {
     );
     // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
     // so Select + B can animate it without invalidating this memoized subtree.
-    _chromeLegend = Consumer<SyncManager>(
-      builder: (context, syncManager, child) => GameActionButtons(
+    _chromeLegend = GameActionButtons(
         system: widget.system,
         selectedGame: settledGame,
-        syncProvider: syncManager.active,
         onBack: widget.onBack,
         onFavorite: widget.onFavorite,
         onViewMode: () =>
@@ -1321,7 +1318,6 @@ class _GamesGridState extends State<GamesGrid> {
         onSettings: widget.onSettings ?? () {},
         onRandom: widget.onRandom,
         onScrape: widget.onScrape,
-      ),
     );
   }
 

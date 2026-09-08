@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'neo_sync_models.dart';
 
 /// Represents a physical or virtual emulation system (e.g., 'NES', 'Recently Played').
 ///
@@ -96,8 +95,6 @@ class SystemModel {
   /// List of absolute directory paths monitored for ROM files.
   final List<String> folders;
 
-  /// Cloud synchronization configuration specific to this system.
-  final NeoSyncConfig neosync;
 
   /// Internal version counter to force image cache invalidation.
   final int imageVersion;
@@ -133,7 +130,6 @@ class SystemModel {
     this.preferFileName = false,
     this.extensions = const [],
     this.folders = const [],
-    this.neosync = NeoSyncConfig.empty,
     this.imageVersion = 0,
   });
 
@@ -313,9 +309,6 @@ class SystemModel {
           (json['extensions'] as List?)?.map((e) => e.toString()).toList() ??
           [],
       folders: foldersList,
-      neosync: json['neosync'] != null
-          ? NeoSyncConfig.fromJson(json['neosync'])
-          : NeoSyncConfig.empty,
       imageVersion: 0,
     );
   }
@@ -353,7 +346,6 @@ class SystemModel {
       'prefer_file_name': preferFileName ? 1 : 0,
       'extensions': extensions,
       'folders': folders,
-      'neosync': neosync.toJson(),
     };
   }
 
@@ -389,7 +381,6 @@ class SystemModel {
     bool? preferFileName,
     List<String>? extensions,
     List<String>? folders,
-    NeoSyncConfig? neosync,
     int? imageVersion,
   }) {
     return SystemModel(
@@ -423,7 +414,6 @@ class SystemModel {
       preferFileName: preferFileName ?? this.preferFileName,
       extensions: extensions ?? this.extensions,
       folders: folders ?? this.folders,
-      neosync: neosync ?? this.neosync,
       imageVersion: imageVersion ?? this.imageVersion,
     );
   }

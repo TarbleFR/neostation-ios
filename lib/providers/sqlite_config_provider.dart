@@ -416,7 +416,7 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   ///
   /// [notifyListeners] is `@protected`/`@visibleForTesting`, so an extension
   /// (e.g. [SqliteConfigMutators]) can't call it directly. Mirrors the `notify()`
-  /// bridge in [neo_sync_provider]. Behaviourally identical to a direct call.
+  /// bridge for same-library extensions. Behaviourally identical to a direct call.
   void _notify() => notifyListeners();
 
   void _setLoading(bool loading) {

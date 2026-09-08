@@ -75,9 +75,8 @@ class DirectoriesSettingsContentState
   String? _currentUserDataPath;
   bool _isLoading = true;
 
-  // iOS-only security-scoped roots. RetroArch and ARMSX2 are completely
-  // independent bookmarks; MeloNX library sync does not expose its dormant
-  // save-only NeoSync bookmark.
+  // iOS-only security-scoped roots. RetroArch and ARMSX2 use independent
+  // bookmarks.
   String? _linkingFolderKey;
 
   // Migration progress state (shown inline, no dialog).
@@ -612,12 +611,6 @@ class DirectoriesSettingsContentState
 
       ConfigService.linkedArmsx2FolderPath = root;
       ConfigService.linkedArmsx2GameFolderPath = gameDir;
-
-      // New links use only `armsx2`. The old save-only bookmark is migration
-      // data and is removed as soon as the canonical root is linked.
-      await ExternalFolderAccess.clearBookmark(
-        key: Armsx2FolderService.legacyNeoSyncBookmarkKey,
-      );
 
       if (!mounted) return;
       final configProvider = Provider.of<SqliteConfigProvider>(

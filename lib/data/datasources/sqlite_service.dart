@@ -13,7 +13,6 @@ import '../../models/system_model.dart';
 import '../../models/system_configuration.dart';
 import '../../models/emulator_model.dart';
 import '../../models/core_emulator_model.dart';
-// import '../models/neo_sync_models.dart'; // Removido si no se usa directamente aquí
 import '../../models/database_game_model.dart';
 import 'sqlite_migrations.dart';
 import '../../services/config_service.dart'; // Required for ConfigService usage
@@ -553,7 +552,6 @@ class SqliteService {
             'color1': jsonSystem.color1,
             'color2': jsonSystem.color2,
             'multidisc': jsonSystem.multiDisc ? 1 : 0,
-            'neosync_json': json.encode(jsonSystem.neosync.toJson()),
           });
         }
 
@@ -1367,22 +1365,6 @@ class SqliteService {
         _log.e('Minor fix for emulator default core column failed: $e');
       }
     }
-
-    // FIX: Ensure app_neo_sync_state exists (legacy support for v58).
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      );
-    ''');
-    await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_neo_sync_state_file_path 
-      ON app_neo_sync_state(file_path);
-    ''');
   }
 
   /// Ensures the unique_identifier column exists in app_emulators.
@@ -1689,7 +1671,6 @@ class SqliteService {
           color1 TEXT,
           color2 TEXT,
           multidisc INTEGER NOT NULL DEFAULT 0,
-          neosync_json TEXT
       );
       ''',
       '''
@@ -1764,11 +1745,9 @@ class SqliteService {
         hide_recent_card INTEGER DEFAULT 0,
         legend_hidden INTEGER DEFAULT 0,
         game_details_tab TEXT DEFAULT 'wheel',
-        hide_tab_sync INTEGER DEFAULT 0,
         hide_tab_achievements INTEGER DEFAULT 0,
         hide_tab_scraper INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
-        active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         neostation_app_version TEXT DEFAULT '',
         auto_update_app INTEGER DEFAULT 1,
@@ -1829,7 +1808,6 @@ class SqliteService {
         is_favorite INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,
         last_played TEXT,
-        cloud_sync_enabled INTEGER DEFAULT 1,
         title_id TEXT,
         title_name TEXT,
         description TEXT,
@@ -1941,16 +1919,6 @@ class SqliteService {
         UNIQUE(app_system_id)
       );
       ''',
-      '''
-      CREATE TABLE IF NOT EXISTS app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
-      );
-      ''',
     ];
 
     for (final sql in tables) {
@@ -2018,9 +1986,6 @@ class SqliteService {
 
       // 5. Index for user_emulator_config
       'CREATE INDEX IF NOT EXISTS idx_user_emulator_config_is_user_default ON user_emulator_config(is_user_default);',
-
-      // 6. Index for app_neo_sync_state
-      'CREATE INDEX IF NOT EXISTS idx_neo_sync_state_file_path ON app_neo_sync_state(file_path);',
     ];
 
     for (final sql in indexes) {
@@ -2536,11 +2501,9 @@ class SqliteService {
     int? hideRecentCard,
     int? legendHidden,
     String? gameDetailsTab,
-    int? hideTabSync,
     int? hideTabAchievements,
     int? hideTabScraper,
     int? hideTabSearch,
-    String? activeSyncProvider,
     String? systemsVersion,
     String? neostationAppVersion,
     int? autoUpdateApp,
@@ -2621,9 +2584,6 @@ class SqliteService {
     if (gameDetailsTab != null) {
       newConfig['game_details_tab'] = gameDetailsTab;
     }
-    if (hideTabSync != null) {
-      newConfig['hide_tab_sync'] = hideTabSync;
-    }
     if (hideTabAchievements != null) {
       newConfig['hide_tab_achievements'] = hideTabAchievements;
     }
@@ -2632,9 +2592,6 @@ class SqliteService {
     }
     if (hideTabSearch != null) {
       newConfig['hide_tab_search'] = hideTabSearch;
-    }
-    if (activeSyncProvider != null) {
-      newConfig['active_sync_provider'] = activeSyncProvider;
     }
     if (systemsVersion != null) {
       newConfig['systems_version'] = systemsVersion;
@@ -2993,15 +2950,6 @@ class SqliteService {
       mutableRow['folders'] = folderMap[sid] ?? [];
       mutableRow['extensions'] = extensionMap[sid] ?? [];
 
-      // Parse cloud sync JSON configuration if available.
-      final neosyncJson = row['neosync_json']?.toString();
-      if (neosyncJson != null && neosyncJson.isNotEmpty) {
-        try {
-          mutableRow['neosync'] = json.decode(neosyncJson);
-        } catch (e) {
-          // Silent failure for malformed JSON.
-        }
-      }
 
       return SystemModel.fromJson(mutableRow);
     }).toList();
@@ -4055,7 +4003,7 @@ class SqliteService {
       '''
       SELECT
         ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
-        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
         s.short_name as system_short_name,
@@ -4098,7 +4046,7 @@ class SqliteService {
     final results = await db.rawQuery('''
       SELECT
         ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
-        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
         s.short_name as system_short_name,
@@ -4130,7 +4078,7 @@ class SqliteService {
     final results = await db.rawQuery('''
       SELECT
         ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
-        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
         s.short_name as system_short_name,
@@ -4166,7 +4114,7 @@ class SqliteService {
       '''
       SELECT
         ur.filename, ur.rom_path, ur.is_favorite, ur.play_time, ur.last_played,
-        ur.cloud_sync_enabled, ur.title_id, ur.title_name,
+        ur.title_id, ur.title_name,
         ur.app_emulator_unique_id as emulator_name,
         s.id as system_id, s.real_name as system_real_name, s.folder_name as system_folder_name,
         s.short_name as system_short_name,
@@ -4279,41 +4227,6 @@ class SqliteService {
         );
       }
     }
-  }
-
-  /// Determines if cloud synchronization is enabled for a specific game.
-  static Future<bool> isRomCloudSyncEnabled(
-    String systemFolderName,
-    String filename,
-  ) async {
-    final system = await getSystemByFolderName(systemFolderName);
-    final db = await instance.database;
-    final results = await db.query(
-      'user_roms',
-      columns: ['cloud_sync_enabled'],
-      where: 'app_system_id = ? AND filename = ?',
-      whereArgs: [system.id, filename],
-    );
-    return results.isNotEmpty &&
-        (int.tryParse(results.first['cloud_sync_enabled']?.toString() ?? '1') ??
-                1) ==
-            1;
-  }
-
-  /// Updates the cloud synchronization toggle for a specific game.
-  static Future<void> updateRomCloudSyncEnabled(
-    String systemFolderName,
-    String filename,
-    bool enabled,
-  ) async {
-    final db = await instance.database;
-    final system = await getSystemByFolderName(systemFolderName);
-    await db.update(
-      'user_roms',
-      {'cloud_sync_enabled': enabled ? 1 : 0},
-      where: 'app_system_id = ? AND filename = ?',
-      whereArgs: [system.id, filename],
-    );
   }
 
   /// Resets a game's play statistics (time and last played) to zero.
@@ -4524,54 +4437,6 @@ class SqliteService {
     return results
         .map((row) => (row['extension'].toString()).toLowerCase())
         .toSet();
-  }
-
-  // ==========================================
-  // NeoSync STATE TRACKING
-  // ==========================================
-
-  /// Persists local synchronization state for a file.
-  ///
-  /// This is used to track modifications and versioning for cloud sync, bypassing
-  /// filesystem limitations on Android (e.g., restricted 'lastModified' modification).
-  static Future<void> saveSyncState(
-    String filePath,
-    int localModifiedAt,
-    int cloudUpdatedAt,
-    int fileSize, {
-    String? fileHash,
-  }) async {
-    try {
-      final db = await instance.database;
-      await db.insert('app_neo_sync_state', {
-        'file_path': filePath,
-        'local_modified_at': localModifiedAt,
-        'cloud_updated_at': cloudUpdatedAt,
-        'file_size': fileSize,
-        'file_hash': fileHash,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    } catch (e) {
-      _log.e('Failed to save cloud synchronization state', error: e);
-    }
-  }
-
-  /// Retrieves the recorded synchronization state for a specific file path.
-  static Future<Map<String, dynamic>?> getSyncState(String filePath) async {
-    try {
-      final db = await instance.database;
-      final results = await db.query(
-        'app_neo_sync_state',
-        where: 'file_path = ?',
-        whereArgs: [filePath],
-        limit: 1,
-      );
-      if (results.isNotEmpty) {
-        return results.first;
-      }
-    } catch (e) {
-      _log.e('Failed to retrieve cloud synchronization state', error: e);
-    }
-    return null;
   }
 
   /// Deletes all user-specific data, including configurations, ROM metadata, and scraper credentials.

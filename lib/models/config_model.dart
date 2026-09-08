@@ -112,21 +112,14 @@ class ConfigModel {
   /// comes back on a game that supports it.
   final String gameDetailsTab;
 
-  /// Whether the Sync navigation tab is hidden from the header strip and the
-  /// L1/R1 tab cycle.
-  ///
-  /// Stored as "hidden" rather than "shown" so the default (`false`) is
-  /// visible: a tab added in a future version appears for upgrading users
-  /// instead of silently staying hidden. See `NavTab` in utils/nav_tabs.dart.
-  final bool hideTabSync;
 
-  /// Whether the Achievements navigation tab is hidden. See [hideTabSync].
+  /// Whether the Achievements navigation tab is hidden.
   final bool hideTabAchievements;
 
-  /// Whether the Scraper navigation tab is hidden. See [hideTabSync].
+  /// Whether the Scraper navigation tab is hidden.
   final bool hideTabScraper;
 
-  /// Whether the Search navigation tab is hidden. See [hideTabSync].
+  /// Whether the Search navigation tab is hidden.
   final bool hideTabSearch;
 
   /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
@@ -153,8 +146,6 @@ class ConfigModel {
   /// [dockMaxSlotCount]. Slots beyond this stay persisted but hidden.
   final int dockSlotCount;
 
-  /// ID of the active sync provider (matches [ISyncProvider.providerId]).
-  final String activeSyncProvider;
 
   /// Whether to automatically check and prompt for new app versions on startup.
   final bool autoUpdateApp;
@@ -200,11 +191,9 @@ class ConfigModel {
     this.hideRecentCard = false,
     this.legendHidden = false,
     this.gameDetailsTab = 'wheel',
-    this.hideTabSync = false,
     this.hideTabAchievements = false,
     this.hideTabScraper = false,
     this.hideTabSearch = false,
-    this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
     this.systemGridColumns = 'M',
@@ -312,12 +301,6 @@ class ConfigModel {
       gameDetailsTab:
           (json['gameDetailsTab'] ?? json['game_details_tab'] ?? 'wheel')
               .toString(),
-      // Absent key => false => tab visible. Keeps a config written by an older
-      // build (or restored from cloud sync) from hiding tabs it never knew about.
-      hideTabSync:
-          (json['hideTabSync'] ?? json['hide_tab_sync'] ?? 0).toString() ==
-              '1' ||
-          (json['hideTabSync'] ?? false).toString().toLowerCase() == 'true',
       hideTabAchievements:
           (json['hideTabAchievements'] ?? json['hide_tab_achievements'] ?? 0)
                   .toString() ==
@@ -333,11 +316,6 @@ class ConfigModel {
           (json['hideTabSearch'] ?? json['hide_tab_search'] ?? 0).toString() ==
               '1' ||
           (json['hideTabSearch'] ?? false).toString().toLowerCase() == 'true',
-      activeSyncProvider:
-          (json['activeSyncProvider'] ??
-                  json['active_sync_provider'] ??
-                  'neosync')
-              .toString(),
       autoUpdateApp:
           (json['autoUpdateApp'] ?? json['auto_update_app'] ?? 1).toString() ==
               '1' ||
@@ -424,11 +402,9 @@ class ConfigModel {
       'hideRecentCard': hideRecentCard,
       'legendHidden': legendHidden,
       'gameDetailsTab': gameDetailsTab,
-      'hideTabSync': hideTabSync,
       'hideTabAchievements': hideTabAchievements,
       'hideTabScraper': hideTabScraper,
       'hideTabSearch': hideTabSearch,
-      'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
       'autoUpdateSystems': autoUpdateSystems,
       'systemGridColumns': systemGridColumns,
@@ -469,11 +445,9 @@ class ConfigModel {
     bool? hideRecentCard,
     bool? legendHidden,
     String? gameDetailsTab,
-    bool? hideTabSync,
     bool? hideTabAchievements,
     bool? hideTabScraper,
     bool? hideTabSearch,
-    String? activeSyncProvider,
     bool? autoUpdateApp,
     bool? autoUpdateSystems,
     String? systemGridColumns,
@@ -511,11 +485,9 @@ class ConfigModel {
       hideRecentCard: hideRecentCard ?? this.hideRecentCard,
       legendHidden: legendHidden ?? this.legendHidden,
       gameDetailsTab: gameDetailsTab ?? this.gameDetailsTab,
-      hideTabSync: hideTabSync ?? this.hideTabSync,
       hideTabAchievements: hideTabAchievements ?? this.hideTabAchievements,
       hideTabScraper: hideTabScraper ?? this.hideTabScraper,
       hideTabSearch: hideTabSearch ?? this.hideTabSearch,
-      activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
       autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,
       systemGridColumns: systemGridColumns ?? this.systemGridColumns,

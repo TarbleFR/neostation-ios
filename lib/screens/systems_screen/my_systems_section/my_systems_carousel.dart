@@ -19,7 +19,6 @@ import '../../../providers/system_background_provider.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/system_emulator_settings_dialog.dart';
 import '../../game_screen/android_apps/android_apps_grid.dart';
-import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
@@ -291,8 +290,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
           context.read<SystemBackgroundProvider>().clear();
         }
 
-        final syncProvider = context.read<SyncManager>().active!;
-
         // Push the in-game RetroAchievements panel to the secondary display.
         // Fired without awaiting so it never blocks the emulator handoff; it
         // lands during launchGameWithDialog's foreground window, overlaying the
@@ -316,7 +313,6 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
           game: systemInfo.gameModel!,
           system: gameSystemModel,
           fileProvider: fileProvider,
-          syncProvider: syncProvider,
           onGameClosed: () {
             // Stop the poll and hide the panel so it fades back to the art.
             _achievementsController.stop(hidePanel: true);

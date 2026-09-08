@@ -296,11 +296,6 @@ mixin AppLocale {
   // Game settings panel
   // ---------------------------------------------------------------------------
   static const String gameSettings = 'game_settings';
-  static const String cloudSync = 'cloud_sync';
-  static const String cloudSyncEnabled = 'cloud_sync_enabled';
-  static const String cloudSyncDisabled = 'cloud_sync_disabled';
-  static const String cloudSyncOn = 'cloud_sync_on';
-  static const String cloudSyncOff = 'cloud_sync_off';
   static const String playTime = 'play_time';
   static const String systemDefault = 'system_default';
   static const String emulator = 'emulator';
@@ -311,28 +306,19 @@ mixin AppLocale {
   static const String localSave = 'local_save';
   static const String localSaveSubtitle = 'local_save_subtitle';
   static const String cloudSaveTitle = 'cloud_save_title';
-  static const String cloudSaveSubtitle = 'cloud_save_subtitle';
   static const String scrapingUnavailableAndroid =
       'scraping_unavailable_android';
   static const String achievements = 'achievements';
   static const String loadingAchievements = 'loading_achievements';
 
   // ---------------------------------------------------------------------------
-  // NeoSync
   // ---------------------------------------------------------------------------
-  static const String neoSync = 'neo_sync';
-  static const String neoSyncSynchronizing = 'neo_sync_synchronizing';
-  static const String neoSyncNotConnected = 'neo_sync_not_connected';
-  static const String neoSyncSynchronized = 'neo_sync_synchronized';
-  static const String neoSyncSavesSync = 'neo_sync_saves_sync';
-  static const String neoSyncNoSave = 'neo_sync_no_save';
   static const String logout = 'logout';
   static const String logoutConfirm = 'logout_confirm';
   static const String failedToLoadProfile = 'failed_to_load_profile';
   static const String verifyEmail = 'verify_email';
   static const String forgotPassword = 'forgot_password';
   static const String resetPassword = 'reset_password';
-  static const String joinNeoSync = 'join_neo_sync';
   static const String verificationToken = 'verification_token';
   static const String enterTokenFromEmail = 'enter_token_from_email';
   static const String resendVerificationEmail = 'resend_verification_email';
@@ -390,8 +376,6 @@ mixin AppLocale {
   static const String failedToRefreshCloud = 'failed_to_refresh_cloud';
   static const String onlineSaves = 'online_saves';
   static const String noOnlineSavesFound = 'no_online_saves_found';
-  static const String whatIsNeoSync = 'what_is_neo_sync';
-  static const String neoSyncDescription = 'neo_sync_description';
   static const String crossPlatform = 'cross_platform';
   static const String crossPlatformDesc = 'cross_platform_desc';
   static const String securePrivate = 'secure_private';
@@ -417,11 +401,9 @@ mixin AppLocale {
   static const String keepSubscription = 'keep_subscription';
   static const String deleteCloudSave = 'delete_cloud_save';
   static const String deleteCloudSaveConfirm = 'delete_cloud_save_confirm';
-  static const String alsoDisableNeoSync = 'also_disable_neo_sync';
   static const String preventsAutoSaves = 'prevents_auto_saves';
   static const String refreshing = 'refreshing';
   static const String refreshed = 'refreshed';
-  static const String failedToDisableNeoSync = 'failed_to_disable_neo_sync';
   static const String saveFileDeleted = 'save_file_deleted';
   static const String failedToDeleteSave = 'failed_to_delete_save';
 
@@ -843,13 +825,7 @@ mixin AppLocale {
   static const String noStorageFound = 'no_storage_found';
 
   // ---------------------------------------------------------------------------
-  // More Game Launch & NeoSync
   // ---------------------------------------------------------------------------
-  static const String neoSyncLocalSavesOnly = 'neo_sync_local_saves_only';
-  static const String neoSyncCloudSavesOnly = 'neo_sync_cloud_saves_only';
-  static const String neoSyncSaveConflict = 'neo_sync_save_conflict';
-  static const String neoSyncCloudSyncDisabled = 'neo_sync_cloud_sync_disabled';
-  static const String neoSyncQuotaExceeded = 'neo_sync_quota_exceeded';
   static const String packageNameMissing = 'package_name_missing';
   static const String failedToLaunchAndroidApp = 'failed_to_launch_android_app';
   static const String romFileNotFound = 'rom_file_not_found';
@@ -1096,7 +1072,6 @@ mixin AppLocale {
       'remove_rom_folder_confirm_body';
   static const String disconnectRaConfirm = 'disconnect_ra_confirm';
   static const String disconnectRaConfirmBody = 'disconnect_ra_confirm_body';
-  static const String neoSyncLogoutConfirmBody = 'neo_sync_logout_confirm_body';
 
   // RetroAchievements dashboard & achievement comments
   static const String raCompletionsLabel = 'ra_completions_label';

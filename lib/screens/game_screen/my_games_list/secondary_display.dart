@@ -99,7 +99,6 @@ extension _SecondaryDisplay on _SystemGamesListState {
       return;
     }
 
-    _detectGameSavesForSelectedGame();
     _loadLocalizedDescription();
     _startVideoTimer();
     _updateBackground(_selectedGame!);

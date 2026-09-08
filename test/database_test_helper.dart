@@ -43,7 +43,6 @@ class DatabaseTestHelper {
         color1 TEXT,
         color2 TEXT,
         multidisc INTEGER NOT NULL DEFAULT 0,
-        neosync_json TEXT
       )
     ''');
 
@@ -80,7 +79,6 @@ class DatabaseTestHelper {
         is_favorite INTEGER DEFAULT 0,
         play_time INTEGER DEFAULT 0,
         last_played TEXT,
-        cloud_sync_enabled INTEGER DEFAULT 0,
         created_at TEXT,
         updated_at TEXT,
         app_emulator_unique_id TEXT,
@@ -111,7 +109,6 @@ class DatabaseTestHelper {
         app_language TEXT,
         active_theme TEXT,
         hide_recent_card INTEGER,
-        active_sync_provider TEXT,
         game_view_mode TEXT,
         rom_folders TEXT,
         systems_version TEXT,
@@ -272,17 +269,6 @@ class DatabaseTestHelper {
         esde_imported INTEGER DEFAULT 0,
         updated_at TEXT,
         UNIQUE(app_system_id, filename)
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE app_neo_sync_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_path TEXT NOT NULL UNIQUE,
-        local_modified_at INTEGER NOT NULL,
-        cloud_updated_at INTEGER NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_hash TEXT
       )
     ''');
   }

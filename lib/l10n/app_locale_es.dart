@@ -272,11 +272,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.leadMaintainer: 'Mantenedor Principal',
 
   AppLocale.gameSettings: 'Ajustes del Juego',
-  AppLocale.cloudSync: 'Sincronización en la Nube',
-  AppLocale.cloudSyncEnabled: 'Sincronización Activa',
-  AppLocale.cloudSyncDisabled: 'Sincronización Desactivada',
-  AppLocale.cloudSyncOn: 'Las partidas se sincronizan con la nube',
-  AppLocale.cloudSyncOff: 'La sincronización está desactivada para este juego',
   AppLocale.playTime: 'Tiempo de Juego',
   AppLocale.systemDefault: 'Por Defecto del Sistema',
   AppLocale.emulator: 'Emulador',
@@ -284,25 +279,17 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.localSave: 'Guardado Local',
   AppLocale.localSaveSubtitle: 'En este dispositivo',
   AppLocale.cloudSaveTitle: 'Guardado en la Nube',
-  AppLocale.cloudSaveSubtitle: 'Desde NeoSync',
   AppLocale.scrapingUnavailableAndroid:
       'Scraping no disponible para apps de Android.',
   AppLocale.achievements: 'Logros',
   AppLocale.loadingAchievements: 'Cargando logros...',
 
-  AppLocale.neoSync: 'NeoSync',
-  AppLocale.neoSyncSynchronizing: 'NeoSync: Sincronizando...',
-  AppLocale.neoSyncNotConnected: 'NeoSync: No conectado',
-  AppLocale.neoSyncSynchronized: 'NeoSync: Partidas sincronizadas',
-  AppLocale.neoSyncSavesSync: 'Las partidas se sincronizarán con NeoSync',
-  AppLocale.neoSyncNoSave: 'NeoSync: No se encontraron partidas',
   AppLocale.logout: 'Cerrar sesión',
   AppLocale.logoutConfirm: 'Cerrar sesión',
   AppLocale.failedToLoadProfile: 'Error al cargar perfil',
   AppLocale.verifyEmail: 'Verificar Correo',
   AppLocale.forgotPassword: 'Olvidé mi contraseña',
   AppLocale.resetPassword: 'Restablecer contraseña',
-  AppLocale.joinNeoSync: 'Unirse a NeoSync',
   AppLocale.verificationToken: 'Token de verificación',
   AppLocale.enterTokenFromEmail: 'Introduce el token de tu correo',
   AppLocale.resendVerificationEmail: 'Reenviar correo de verificación',
@@ -359,8 +346,6 @@ const Map<String, dynamic> appLocaleEs = {
       'Error al actualizar el almacenamiento en la nube',
   AppLocale.onlineSaves: 'Partidas en la Nube',
   AppLocale.noOnlineSavesFound: 'No se encontraron partidas en la nube',
-  AppLocale.whatIsNeoSync: '¿Qué es NeoSync Cloud?',
-  AppLocale.neoSyncDescription: 'NeoSync es tu compañero unificado en la nube para NeoStation. Sincroniza de forma segura tus partidas y estados de juego en todos tus dispositivos, asegurando que nunca pierdas tu progreso.',
   AppLocale.crossPlatform: 'Multiplataforma',
   AppLocale.crossPlatformDesc: 'Continúa exactamente donde lo dejaste en cualquier dispositivo con NeoStation.',
   AppLocale.securePrivate: 'Seguro y Privado',
@@ -388,13 +373,10 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.deleteCloudSave: 'Eliminar Partida en la Nube',
   AppLocale.deleteCloudSaveConfirm:
       '¿Eliminar permanentemente este archivo de la nube?',
-  AppLocale.alsoDisableNeoSync: 'También desactivar NeoSync',
   AppLocale.preventsAutoSaves:
       'Evita futuros guardados automáticos para este juego.',
   AppLocale.refreshing: 'Actualizando...',
   AppLocale.refreshed: 'Actualizado',
-  AppLocale.failedToDisableNeoSync:
-      'Error al desactivar NeoSync para este juego',
   AppLocale.saveFileDeleted: 'Archivo eliminado correctamente',
   AppLocale.failedToDeleteSave: 'Error al eliminar el archivo',
 
@@ -774,11 +756,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.loadingEmulators: 'Cargando emuladores...',
   AppLocale.selectEmulatorExecutable: 'Seleccionar ejecutable de {name}',
 
-  AppLocale.neoSyncLocalSavesOnly: 'NeoSync: Solo partidas locales',
-  AppLocale.neoSyncCloudSavesOnly: 'NeoSync: Solo partidas en la nube',
-  AppLocale.neoSyncSaveConflict: 'NeoSync: Conflicto de guardado detectado',
-  AppLocale.neoSyncCloudSyncDisabled: 'NeoSync: Sincronización desactivada',
-  AppLocale.neoSyncQuotaExceeded: 'NeoSync: Cuota de almacenamiento superada',
   AppLocale.packageNameMissing: 'Falta el nombre del paquete',
   AppLocale.failedToLaunchAndroidApp: 'Error al iniciar la aplicación Android',
   AppLocale.romFileNotFound: 'Archivo ROM no encontrado',
@@ -939,9 +916,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.removeRomFolderConfirmBody: 'Esto eliminará esta carpeta de ROM de las fuentes de tu biblioteca. Tus archivos en el disco no se eliminarán.',
   AppLocale.disconnectRaConfirm: 'Desconectar RetroAchievements',
   AppLocale.disconnectRaConfirmBody: 'Esto cerrará tu sesión y eliminará tus credenciales guardadas de RetroAchievements de este dispositivo.',
-  AppLocale.neoSyncLogoutConfirmBody:
-      'Esto cerrará la sesión de tu cuenta de NeoSync en este dispositivo.',
-
   AppLocale.deleteGame: 'Eliminar Juego',
   AppLocale.deleteGameConfirm: 'Eliminar Permanentemente',
   AppLocale.deleteGameConfirmBody: 'Esto eliminará permanentemente el ROM del juego, sus datos escrapeados y archivos multimedia. Esta acción no se puede deshacer.',

@@ -32,12 +32,5 @@
       "ogg"
     ]
   },
-  "emulators": [],
-  "neosync": {
-    "sync": false,
-    "android_sync_folder": [],
-    "windows_sync_folder": [],
-    "linux_sync_folder": [],
-    "macos_sync_folder": []
-  }
+  "emulators": []
 }

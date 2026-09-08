@@ -42,11 +42,6 @@ class ConfigService {
   /// Physical PS2 library derived from the one ARMSX2 root bookmark.
   static String? linkedArmsx2GameFolderPath;
 
-  /// MeloNX keeps its own existing NeoSync bookmark. ARMSX2 does not: its
-  /// NeoSync paths are always derived from [linkedArmsx2FolderPath].
-  static const String melonxNeoSyncBookmarkKey = 'neosync-melonx-saves';
-  static String? linkedMelonxSaveFolderPath;
-
   /// Determines the base execution path for Windows installations.
   ///
   /// In development mode (`flutter run`), it targets the project root.

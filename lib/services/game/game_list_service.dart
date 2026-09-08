@@ -204,7 +204,6 @@ class GameListService {
             systemId: dbGame.appSystemId,
             systemFolderName: dbGame.systemFolderName,
             systemRealName: dbGame.systemRealName,
-            cloudSyncEnabled: dbGame.cloudSyncEnabled,
             titleId: dbGame.titleId,
             titleName: dbGame.titleName,
           );
@@ -261,7 +260,6 @@ class GameListService {
           raHash: dbGame.raHash,
           systemId: dbGame.appSystemId,
           systemFolderName: system.folderName,
-          cloudSyncEnabled: dbGame.cloudSyncEnabled,
           titleId: dbGame.titleId,
           titleName: dbGame.titleName,
         );
@@ -330,7 +328,6 @@ class GameListService {
         systemId: dbGame.appSystemId,
         systemFolderName: dbGame.systemFolderName,
         systemRealName: dbGame.systemRealName,
-        cloudSyncEnabled: dbGame.cloudSyncEnabled,
         titleId: dbGame.titleId,
         titleName: dbGame.titleName,
       );
@@ -390,7 +387,6 @@ class GameListService {
         raHash: dbGame.raHash,
         systemId: dbGame.appSystemId,
         systemFolderName: system.folderName,
-        cloudSyncEnabled: dbGame.cloudSyncEnabled,
         titleId: dbGame.titleId,
         titleName: dbGame.titleName,
       );

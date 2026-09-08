@@ -82,9 +82,6 @@ class GameModel {
   /// Abbreviated name of the system (e.g., 'NES').
   final String? systemShortName;
 
-  /// NeoSync: Whether cloud synchronization is active for this specific game's saves.
-  final bool? cloudSyncEnabled;
-
   /// Box2D image aspect ratio (width/height) for grid display.
   final String? box2dAspectRatio;
 
@@ -114,7 +111,6 @@ class GameModel {
     this.systemFolderName,
     this.systemRealName,
     this.systemShortName,
-    this.cloudSyncEnabled,
     this.titleId,
     this.titleName,
     this.box2dAspectRatio,
@@ -244,7 +240,6 @@ class GameModel {
       systemFolderName: db.systemFolderName,
       systemRealName: db.systemRealName,
       systemShortName: db.systemShortName,
-      cloudSyncEnabled: db.cloudSyncEnabled,
       titleId: db.titleId,
       titleName: db.titleName,
       box2dAspectRatio: db.box2dAspectRatio,
@@ -293,7 +288,6 @@ class GameModel {
     String? systemFolderName,
     String? systemRealName,
     String? systemShortName,
-    bool? cloudSyncEnabled,
     String? titleId,
     String? titleName,
     String? box2dAspectRatio,
@@ -322,7 +316,6 @@ class GameModel {
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,
       systemShortName: systemShortName ?? this.systemShortName,
-      cloudSyncEnabled: cloudSyncEnabled ?? this.cloudSyncEnabled,
       titleId: titleId ?? this.titleId,
       titleName: titleName ?? this.titleName,
       box2dAspectRatio: box2dAspectRatio ?? this.box2dAspectRatio,
@@ -657,7 +650,7 @@ class GameModel {
 
   @override
   String toString() {
-    return 'GameModel(romname: $romname, name: $name, year: $formattedYear, system: $systemRealName, cloudSyncEnabled: $cloudSyncEnabled)';
+    return 'GameModel(romname: $romname, name: $name, year: $formattedYear, system: $systemRealName)';
   }
 
   @override

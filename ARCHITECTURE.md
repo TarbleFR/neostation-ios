@@ -25,7 +25,6 @@ The iOS port adds Apple-specific external-folder access, emulator discovery/laun
 │ lib/repositories/  lib/data/datasources/   │
 ├─────────────────────────────────────────────┤
 │ External APIs / Native Integrations        │
-│ RetroAchievements  ScreenScraper  NeoSync  │
 │ RetroArch  MeloNX  ARMSX2                  │
 └─────────────────────────────────────────────┘
 ```
@@ -53,7 +52,6 @@ Key providers include:
 
 - `SqliteConfigProvider` — main application state, system detection and scanning.
 - `SqliteDatabaseProvider` — game-library data.
-- `NeoSyncProvider` — cloud-save synchronization state.
 - `ThemeProvider` — built-in/custom UI themes plus custom main-menu background persistence.
 - `RetroAchievementsProvider` — RetroAchievements user data and achievements.
 
@@ -64,7 +62,6 @@ Key providers include:
 
 Key services include:
 
-- `NeoSyncService` — NeoSync backend integration.
 - `SyncManager` — save-sync orchestration.
 - `RetroAchievementsService` — RetroAchievements API integration.
 - `ScreenScraperService` — metadata scraping with bounded concurrency.
@@ -107,7 +104,6 @@ Key repositories include:
 |---|---|---|
 | RetroAchievements | Achievements, leaderboards, game hashes | Per-user runtime credentials |
 | ScreenScraper | Game metadata, media and descriptions | Developer ID/password at build time + per-user runtime account credentials |
-| NeoSync | Authentication and cloud-save features | Runtime tokens |
 
 ## iOS / iPadOS integration
 

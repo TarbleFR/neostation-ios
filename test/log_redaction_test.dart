@@ -56,10 +56,10 @@ void main() {
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'
           '.eyJzdWIiOiIxMjM0NTY3ODkwIn0'
           '.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk';
-      final redacted = redactSecrets('NeoSync session restored: $jwt');
+      final redacted = redactSecrets('Cloud session restored: $jwt');
       expect(redacted, isNot(contains('eyJhbGci')));
       expect(redacted, contains('<redacted>'));
-      expect(redacted, contains('NeoSync session restored'));
+      expect(redacted, contains('Cloud session restored'));
     });
 
     test('redacts credentials embedded in a URL', () {

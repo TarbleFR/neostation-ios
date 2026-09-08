@@ -277,11 +277,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.leadMaintainer: 'Hauptbetreuer',
 
   AppLocale.gameSettings: 'Spieleinstellungen',
-  AppLocale.cloudSync: 'Cloud-Synchronisation',
-  AppLocale.cloudSyncEnabled: 'Cloud-Synchronisation aktiviert',
-  AppLocale.cloudSyncDisabled: 'Cloud-Synchronisation deaktiviert',
-  AppLocale.cloudSyncOn: 'Spielstände werden mit der Cloud synchronisiert',
-  AppLocale.cloudSyncOff: 'Cloud-Synchronisation für dieses Spiel deaktiviert',
   AppLocale.playTime: 'Spielzeit',
   AppLocale.systemDefault: 'Systemstandard',
   AppLocale.emulator: 'Emulator',
@@ -289,24 +284,16 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.localSave: 'Lokaler Spielstand',
   AppLocale.localSaveSubtitle: 'Auf diesem Gerät',
   AppLocale.cloudSaveTitle: 'Cloud-Spielstand',
-  AppLocale.cloudSaveSubtitle: 'Von NeoSync',
   AppLocale.scrapingUnavailableAndroid: 'Scraping auf Android nicht verfügbar.',
   AppLocale.achievements: 'Erfolge',
   AppLocale.loadingAchievements: 'Erfolge werden geladen...',
 
-  AppLocale.neoSync: 'NeoSync',
-  AppLocale.neoSyncSynchronizing: 'NeoSync: Synchronisierung...',
-  AppLocale.neoSyncNotConnected: 'NeoSync: Nicht verbunden',
-  AppLocale.neoSyncSynchronized: 'NeoSync: Spielstände synchronisiert',
-  AppLocale.neoSyncSavesSync: 'Spielstände werden mit NeoSync synchronisiert',
-  AppLocale.neoSyncNoSave: 'NeoSync: Kein Spielstand gefunden',
   AppLocale.logout: 'Abmelden',
   AppLocale.logoutConfirm: 'Abmeldung bestätigen',
   AppLocale.failedToLoadProfile: 'Profil konnte nicht geladen werden',
   AppLocale.verifyEmail: 'E-Mail verifizieren',
   AppLocale.forgotPassword: 'Passwort vergessen?',
   AppLocale.resetPassword: 'Passwort zurücksetzen',
-  AppLocale.joinNeoSync: 'NeoSync beitreten',
   AppLocale.verificationToken: 'Verifizierungstoken',
   AppLocale.enterTokenFromEmail: 'Gib den an deine E-Mail gesendeten Token ein',
   AppLocale.resendVerificationEmail: 'Verifizierungs-E-Mail erneut senden',
@@ -369,9 +356,6 @@ const Map<String, dynamic> appLocaleDe = {
       'Cloud-Speicher konnte nicht aktualisiert werden',
   AppLocale.onlineSaves: 'Online-Spielstände',
   AppLocale.noOnlineSavesFound: 'Keine Online-Spielstände gefunden',
-  AppLocale.whatIsNeoSync: 'Was ist NeoSync Cloud?',
-  AppLocale.neoSyncDescription:
-      'NeoSync ist der einheitliche Cloud-Partner für dein NeoStation.',
   AppLocale.crossPlatform: 'Plattformübergreifend',
   AppLocale.crossPlatformDesc:
       'Mache da weiter, wo du aufgehört hast, auf jedem NeoStation-Gerät.',
@@ -402,13 +386,10 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.deleteCloudSave: 'Cloud-Spielstand löschen',
   AppLocale.deleteCloudSaveConfirm:
       'Diesen Spielstand dauerhaft aus der Cloud löschen?',
-  AppLocale.alsoDisableNeoSync: 'Auch NeoSync deaktivieren',
   AppLocale.preventsAutoSaves:
       'Verhindert zukünftige automatische Speichervorgänge für dieses Spiel.',
   AppLocale.refreshing: 'Wird aktualisiert...',
   AppLocale.refreshed: 'Aktualisiert',
-  AppLocale.failedToDisableNeoSync:
-      'NeoSync konnte für dieses Spiel nicht deaktiviert werden',
   AppLocale.saveFileDeleted: 'Spielstand erfolgreich gelöscht',
   AppLocale.failedToDeleteSave: 'Spielstand konnte nicht gelöscht werden',
 
@@ -784,12 +765,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.loadingEmulators: 'Emulatoren werden geladen...',
   AppLocale.selectEmulatorExecutable: 'Programm für {name} auswählen',
 
-  AppLocale.neoSyncLocalSavesOnly: 'NeoSync: Nur lokale Spielstände',
-  AppLocale.neoSyncCloudSavesOnly: 'NeoSync: Nur Cloud-Spielstände',
-  AppLocale.neoSyncSaveConflict: 'NeoSync: Spielstand-Konflikt erkannt',
-  AppLocale.neoSyncCloudSyncDisabled:
-      'NeoSync: Cloud-Synchronisation deaktiviert',
-  AppLocale.neoSyncQuotaExceeded: 'NeoSync: Speicherlimit überschritten',
   AppLocale.packageNameMissing: 'Paketname fehlt',
   AppLocale.failedToLaunchAndroidApp:
       'Android-App konnte nicht gestartet werden',
@@ -954,9 +929,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.removeRomFolderConfirmBody: 'Dadurch wird dieser ROM-Ordner aus deinen Bibliotheksquellen entfernt. Deine Dateien auf dem Datenträger werden nicht gelöscht.',
   AppLocale.disconnectRaConfirm: 'RetroAchievements trennen',
   AppLocale.disconnectRaConfirmBody: 'Dadurch wirst du abgemeldet und deine gespeicherten RetroAchievements-Anmeldedaten werden von diesem Gerät entfernt.',
-  AppLocale.neoSyncLogoutConfirmBody:
-      'Dadurch wirst du auf diesem Gerät von deinem NeoSync-Konto abgemeldet.',
-
   AppLocale.deleteGame: 'Spiel löschen',
   AppLocale.deleteGameConfirm: 'Endgültig löschen',
   AppLocale.deleteGameConfirmBody: 'Die ROM-Datei, gescrapte Daten und Mediendateien werden dauerhaft gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.',

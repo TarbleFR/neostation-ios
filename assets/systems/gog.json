@@ -3,10 +3,6 @@
     "id": "gog",
     "multidisc": false,
     "name": "GOG",
-    "neosync": {
-      "sync": false,
-      "sync_folder": null
-    },
     "short_name": "GOG",
     "details": {
       "manufacturer": "GOG",
@@ -46,12 +42,5 @@
         }
       }
     }
-  ],
-  "neosync": {
-    "sync": false,
-    "android_sync_folder": [],
-    "windows_sync_folder": [],
-    "linux_sync_folder": [],
-    "macos_sync_folder": []
-  }
+  ]
 }

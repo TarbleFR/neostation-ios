@@ -980,7 +980,6 @@ class SqliteMigrations {
             is_favorite INTEGER DEFAULT 0,
             play_time INTEGER DEFAULT 0,
             last_played TEXT,
-            cloud_sync_enabled INTEGER DEFAULT 1,
             title_id TEXT,
             title_name TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -995,10 +994,10 @@ class SqliteMigrations {
           INSERT INTO user_roms 
           (app_system_id, app_emulators_id, app_alternative_emulators_id, virtual_folder_name, 
            filename, rom_path, ra_hash, ss_hash, id_ra, is_favorite, play_time, last_played, 
-           cloud_sync_enabled, created_at, updated_at)
+           created_at, updated_at)
           SELECT app_system_id, app_emulators_id, app_alternative_emulators_id, virtual_folder_name,
                  filename, rom_path, ra_hash, ss_hash, id_ra, is_favorite, play_time, last_played,
-                 cloud_sync_enabled, created_at, updated_at
+                 created_at, updated_at
           FROM user_roms_old
         ''');
 
@@ -2734,7 +2733,6 @@ class SqliteMigrations {
           is_favorite INTEGER DEFAULT 0,
           play_time INTEGER DEFAULT 0,
           last_played TEXT,
-          cloud_sync_enabled INTEGER DEFAULT 1,
           title_id TEXT,
           title_name TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -2756,7 +2754,7 @@ class SqliteMigrations {
         SELECT 
           app_system_id, app_emulators_id, app_alternative_emulators_id, 
           virtual_folder_name, filename, rom_path, ra_hash, ss_hash, 
-          id_ra, is_favorite, play_time, last_played, cloud_sync_enabled, 
+          id_ra, is_favorite, play_time, last_played, 
           title_id, title_name, created_at, updated_at, description, 
           year, developer, publisher, genre, players
         FROM user_roms_temp
@@ -3163,7 +3161,6 @@ class SqliteMigrations {
             is_favorite INTEGER DEFAULT 0,
             play_time INTEGER DEFAULT 0,
             last_played TEXT,
-            cloud_sync_enabled INTEGER DEFAULT 1,
             title_id TEXT,
             title_name TEXT,
             description TEXT,
@@ -3191,13 +3188,13 @@ class SqliteMigrations {
         INSERT INTO user_roms_new (
           app_system_id, app_emulators_id, app_alternative_emulators_id, virtual_folder_name, 
           filename, rom_path, ra_hash, ss_hash, id_ra, is_favorite, play_time, last_played, 
-          cloud_sync_enabled, title_id, title_name, description, year, developer, publisher, 
+          title_id, title_name, description, year, developer, publisher, 
           genre, players, created_at, updated_at
         )
         SELECT 
           s.folder_name, r.app_emulators_id, r.app_alternative_emulators_id, r.virtual_folder_name, 
           r.filename, r.rom_path, r.ra_hash, r.ss_hash, r.id_ra, r.is_favorite, r.play_time, 
-          r.last_played, r.cloud_sync_enabled, ${col('title_id')}, ${col('title_name')}, 
+          r.last_played, ${col('title_id')}, ${col('title_name')}, 
           ${col('description')}, ${col('year')}, ${col('developer')}, ${col('publisher')}, 
           ${col('genre')}, ${col('players')}, r.created_at, r.updated_at
         FROM user_roms r
@@ -3438,7 +3435,6 @@ class SqliteMigrations {
           is_favorite INTEGER DEFAULT 0,
           play_time INTEGER DEFAULT 0,
           last_played TEXT,
-          cloud_sync_enabled INTEGER DEFAULT 1,
           title_id TEXT,
           title_name TEXT,
           description TEXT,
@@ -3478,7 +3474,6 @@ class SqliteMigrations {
           r.is_favorite,
           r.play_time,
           r.last_played,
-          r.cloud_sync_enabled,
           ${col49('title_id')},
           ${col49('title_name')},
           ${col49('description')},
@@ -3663,26 +3658,8 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration to version 55: Add neosync_json to app_systems
-  static Future<void> _migrateToVersion55(Database db) async {
-    _log.i('Migration v55: Adding neosync_json to app_systems');
-
-    try {
-      final tableInfo = db.select('PRAGMA table_info(app_systems)');
-      final columns = tableInfo.map((c) => c['name'].toString()).toList();
-
-      if (!columns.contains('neosync_json')) {
-        db.execute('ALTER TABLE app_systems ADD COLUMN neosync_json TEXT');
-        _log.i('Column neosync_json added to app_systems');
-      }
-
-      _log.i('Migration v55 completed');
-    } catch (e, stackTrace) {
-      _log.e('Error in migration v55: $e');
-      _log.e('   StackTrace: $stackTrace');
-      rethrow;
-    }
-  }
+  /// Compatibility migration retained for schema version 55.
+  static Future<void> _migrateToVersion55(Database db) async {}
 
   /// Migration to version 56: Drop app_emulator_possible_paths
   static Future<void> _migrateToVersion56(Database db) async {
@@ -3714,45 +3691,8 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v58: Adds the [app_neo_sync_state] table for precise cloud save
-  /// synchronization tracking.
-  static Future<void> _migrateToVersion58(Database db) async {
-    _log.i('Migration v58: Adding app_neo_sync_state table');
-
-    try {
-      final tableExists = db.select('''
-        SELECT name FROM sqlite_master 
-        WHERE type='table' AND name='app_neo_sync_state'
-        LIMIT 1
-      ''');
-
-      if (tableExists.isEmpty) {
-        db.execute('''
-          CREATE TABLE app_neo_sync_state (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_path TEXT NOT NULL UNIQUE,
-            local_modified_at INTEGER NOT NULL,
-            cloud_updated_at INTEGER NOT NULL,
-            file_size INTEGER NOT NULL,
-            file_hash TEXT
-          )
-        ''');
-
-        db.execute('''
-          CREATE INDEX idx_neo_sync_state_file_path 
-          ON app_neo_sync_state(file_path)
-        ''');
-
-        _log.i('Table app_neo_sync_state created gracefully');
-      } else {
-        _log.i('Table app_neo_sync_state already exists');
-      }
-    } catch (e, stackTrace) {
-      _log.e('Error in migration v58: $e');
-      _log.e('   StackTrace: $stackTrace');
-      rethrow;
-    }
-  }
+  /// Compatibility migration retained for schema version 58.
+  static Future<void> _migrateToVersion58(Database db) async {}
 
   /// Migration to version 59: Add color1 and color2 to app_systems
   static Future<void> _migrateToVersion59(Database db) async {
@@ -4225,26 +4165,7 @@ class SqliteMigrations {
     }
   }
 
-  static Future<void> _migrateToVersion76(Database db) async {
-    _log.i('Migration v76: Add active_sync_provider column to user_config');
-    try {
-      final tableInfo = db.select('PRAGMA table_info(user_config)');
-      final columns = tableInfo.map((c) => c['name'].toString()).toList();
-
-      if (!columns.contains('active_sync_provider')) {
-        db.execute(
-          "ALTER TABLE user_config ADD COLUMN active_sync_provider TEXT DEFAULT 'neosync'",
-        );
-        _log.i('Column active_sync_provider added to user_config');
-      }
-
-      _log.i('Migration v76 completed');
-    } catch (e, stackTrace) {
-      _log.e('Error in migration v76: $e');
-      _log.e('   StackTrace: $stackTrace');
-      rethrow;
-    }
-  }
+  static Future<void> _migrateToVersion76(Database db) async {}
 
   static Future<void> _migrateToVersion74(Database db) async {
     _log.i('Migration v74: Add manufacturer and type columns to app_systems');
@@ -4392,13 +4313,6 @@ class SqliteMigrations {
           'ALTER TABLE user_config ADD COLUMN hide_recent_card INTEGER DEFAULT 0',
         );
         _log.i('Column hide_recent_card added to user_config');
-      }
-
-      if (!columns.contains('active_sync_provider')) {
-        db.execute(
-          "ALTER TABLE user_config ADD COLUMN active_sync_provider TEXT DEFAULT 'neosync'",
-        );
-        _log.i('Column active_sync_provider added to user_config');
       }
 
       _log.i('Migration v77 completed');
@@ -5092,7 +5006,6 @@ class SqliteMigrations {
       final columns = tableInfo.map((c) => c['name'].toString()).toList();
 
       const newColumns = [
-        'hide_tab_sync',
         'hide_tab_achievements',
         'hide_tab_scraper',
       ];

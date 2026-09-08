@@ -177,26 +177,6 @@ class SqliteConfigService {
             ? userConfig!['game_details_tab'].toString()
             : 'wheel',
         // Missing column/row => '0' => tab visible (see migration v106).
-        hideTabSync:
-            (int.tryParse(userConfig?['hide_tab_sync']?.toString() ?? '0') ??
-                0) ==
-            1,
-        hideTabAchievements:
-            (int.tryParse(
-                  userConfig?['hide_tab_achievements']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        hideTabScraper:
-            (int.tryParse(userConfig?['hide_tab_scraper']?.toString() ?? '0') ??
-                0) ==
-            1,
-        hideTabSearch:
-            (int.tryParse(userConfig?['hide_tab_search']?.toString() ?? '0') ??
-                0) ==
-            1,
-        activeSyncProvider:
-            userConfig?['active_sync_provider']?.toString() ?? 'neosync',
         autoUpdateApp:
             (int.tryParse(userConfig?['auto_update_app']?.toString() ?? '1') ??
                 1) ==
@@ -275,11 +255,9 @@ class SqliteConfigService {
         hideRecentCard: config.hideRecentCard ? 1 : 0,
         legendHidden: config.legendHidden ? 1 : 0,
         gameDetailsTab: config.gameDetailsTab,
-        hideTabSync: config.hideTabSync ? 1 : 0,
         hideTabAchievements: config.hideTabAchievements ? 1 : 0,
         hideTabScraper: config.hideTabScraper ? 1 : 0,
         hideTabSearch: config.hideTabSearch ? 1 : 0,
-        activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
         autoUpdateSystems: config.autoUpdateSystems ? 1 : 0,
         systemGridColumns: config.systemGridColumns,
