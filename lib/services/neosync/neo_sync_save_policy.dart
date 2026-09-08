@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
+import '../../models/neo_sync_models.dart';
 import '../../utils/cloud_path_builder.dart';
 import '../dolphin_neosync_store.dart';
 
@@ -11,11 +12,137 @@ enum NeoSyncSaveKind { save, foreign, unresolved }
 /// identify a PlayStation savedata component. Unknown historical objects must
 /// be investigated, never silently deleted as if they were proven non-saves.
 class NeoSyncSavePolicy {
+  /// Native iOS integrations that are intentionally dormant in NeoSync.
+  ///
+  /// Their libraries and launchers stay available; this list only gates save
+  /// discovery and cloud operations so the feature can be re-enabled without
+  /// migrating or deleting a user's local or remote data.
+  static const iosExcludedEmulatorSlugs = {
+    'armsx2',
+    'rpcs3',
+    'melonx',
+  };
+
   /// The older PSP catalog predates the iOS RetroArch savedata adapter.
   /// Use the same effective support flag in discovery and the status icon.
   static bool supportsSystem(String system, bool catalogEnabled, {bool? isIOS}) =>
       catalogEnabled || ((isIOS ?? Platform.isIOS) &&
           const {'psp', 'pspminis'}.contains(system.toLowerCase()));
+
+  static bool _emulatorIdentityContains(String? value, String slug) {
+    final normalized = value?.trim().toLowerCase() ?? '';
+    if (normalized.isEmpty) return false;
+    return normalized == slug || normalized
+        .split(RegExp(r'[^a-z0-9]+'))
+        .contains(slug);
+  }
+
+  static bool _isRetroArchIdentity(String? value) {
+    final normalized = value?.trim().toLowerCase() ?? '';
+    return normalized.contains('retroarch') ||
+        normalized.split(RegExp(r'[^a-z0-9]+')).contains('ra');
+  }
+
+  static bool _isWithinRoot(String? candidate, String? root) {
+    if (candidate == null || candidate.trim().isEmpty ||
+        root == null || root.trim().isEmpty) return false;
+    final normalizedCandidate = path.normalize(candidate);
+    final normalizedRoot = path.normalize(root);
+    return normalizedCandidate == normalizedRoot ||
+        path.isWithin(normalizedRoot, normalizedCandidate);
+  }
+
+  /// Returns whether a game is owned by one of the temporarily disabled native
+  /// iOS NeoSync adapters. Explicit RetroArch routes remain supported.
+  static bool isIosEmulatorExcluded({
+    required String systemFolder,
+    String? emulatorName,
+    String? romPath,
+    String? titleId,
+    String? armsx2Root,
+    bool? isIOS,
+  }) {
+    if (!(isIOS ?? Platform.isIOS)) return false;
+
+    final system = systemFolder.trim().toLowerCase();
+    final rom = romPath?.trim().toLowerCase() ?? '';
+
+    if (rom.startsWith('armsx2://') ||
+        rom.startsWith('rpcs3-library://') ||
+        rom.startsWith('melonx://')) return true;
+
+    // Keep this in lockstep with GameLaunchService: every iOS PS3 row with a
+    // title ID is routed to RPCS3 before RetroArch, even for a physical ROM.
+    if (system == 'ps3' && (titleId?.trim().isNotEmpty ?? false)) return true;
+
+    for (final slug in iosExcludedEmulatorSlugs) {
+      if (_emulatorIdentityContains(emulatorName, slug)) return true;
+    }
+
+    // GameLaunchService gives the linked ARMSX2 bookmark hard ownership over
+    // an emulator label, so NeoSync must apply the same precedence.
+    if (system == 'ps2' && _isWithinRoot(romPath, armsx2Root)) return true;
+
+    // A selected RetroArch player must not inherit the native adapter's block.
+    if (_isRetroArchIdentity(emulatorName)) return false;
+
+    return false;
+  }
+
+  static String? _emulatorSlugFromCloudPath(String value) {
+    final parsed = canonical(value);
+    if (parsed != null) return parsed.emulatorSlug.toLowerCase();
+    final normalized = unwrap(value).replaceFirst(RegExp(r'^/+'), '');
+    final match = RegExp(
+      r'^v2/(?:saves|states)/[a-z0-9_-]+/([a-z0-9._-]+)/',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+    return match?.group(1)?.toLowerCase();
+  }
+
+  /// Low-level upload guard for a canonical or reserved cloud key.
+  static bool isIosCloudPathExcluded(String value, {bool? isIOS}) {
+    if (!(isIOS ?? Platform.isIOS)) return false;
+    final slug = _emulatorSlugFromCloudPath(value);
+    if (slug != null && iosExcludedEmulatorSlugs.contains(slug)) return true;
+    if (slug == DolphinSaveTarget.emulator ||
+        DolphinSaveTarget.ownsCloudPath(value)) {
+      return DolphinSaveTarget.parse(value) == null;
+    }
+    return false;
+  }
+
+  /// Cloud counterpart to [isIosEmulatorExcluded]. Matching objects remain on
+  /// the server but are never listed as active saves, downloaded, restored or
+  /// considered by automatic cleanup on iOS.
+  static bool isIosCloudFileExcluded(NeoSyncFile file, {bool? isIOS}) {
+    if (!(isIOS ?? Platform.isIOS)) return false;
+
+    for (final slug in iosExcludedEmulatorSlugs) {
+      if (_emulatorIdentityContains(file.emulator, slug)) return true;
+    }
+
+    var claimsDolphinNamespace =
+        _emulatorIdentityContains(file.emulator, DolphinSaveTarget.emulator);
+    DolphinSaveTarget? supportedDolphinTarget;
+    for (final value in <String>{
+      file.fileName,
+      file.filePath,
+      file.sourceSavePath,
+      if (file.verifiedSourcePath != null) file.verifiedSourcePath!,
+    }) {
+      final slug = _emulatorSlugFromCloudPath(value);
+      if (slug != null && iosExcludedEmulatorSlugs.contains(slug)) return true;
+      if (slug == DolphinSaveTarget.emulator ||
+          DolphinSaveTarget.ownsCloudPath(value)) {
+        claimsDolphinNamespace = true;
+        supportedDolphinTarget ??= DolphinSaveTarget.parse(value);
+      }
+    }
+    // DolphiniOS is the first native integration restored to NeoSync. Its V1
+    // parser accepts only regional GC raw cards and per-title Wii data.
+    return claimsDolphinNamespace && supportedDolphinTarget == null;
+  }
 
   static const playStationComponents = {
     'param.sfo', 'param.pfd', 'icon0.png', 'icon1.pmf', 'pic0.png',
@@ -227,6 +354,7 @@ class NeoSyncSavePolicy {
   static bool allowsUpload(String sourcePath, String cloudPath, {
     NeoSyncSaveSource? source,
   }) {
+    if (isIosCloudPathExcluded(cloudPath)) return false;
     if (source != null) return source.matches(sourcePath, cloudPath);
     final p = canonical(cloudPath);
     if (p?.system == 'switch' && p?.emulatorSlug == 'melonx') {

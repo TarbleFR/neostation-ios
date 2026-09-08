@@ -1,92 +1,64 @@
-import 'dart:async';
 import 'dart:io';
 
-import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/models/neo_sync_models.dart';
 import 'package:neostation/services/neosync/neo_sync_save_policy.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 
 import 'neo_sync_service_base.dart' as base;
 
 /// Public NeoSync service boundary.
 ///
-/// On iOS, NeoSync is intentionally limited to RetroArch. Objects and upload
-/// requests owned by the embedded DolphiniOS engine or the standalone ARMSX2,
+/// On iOS, NeoSync supports RetroArch plus the strict DolphiniOS V1 save
+/// contract. Objects and upload requests owned by the standalone ARMSX2,
 /// RPCS3 and MeloNX integrations are filtered at the transport boundary so an
 /// old caller cannot accidentally re-enable those save routes.
 class NeoSyncService extends base.NeoSyncService {
   static const Set<String> _blockedIosEmulators = <String>{
-    'dolphinios',
     'armsx2',
     'rpcs3',
     'melonx',
   };
 
-  NeoSyncService() : super() {
-    if (Platform.isIOS) unawaited(_cleanupLegacyIosArtifacts());
-  }
-
-  /// Removes only artifacts created for the retired native-emulator NeoSync
-  /// routes. Emulator library bookmarks and actual save data are never removed.
-  Future<void> _cleanupLegacyIosArtifacts() async {
-    for (final key in const <String>[
-      'neosync-armsx2-saves',
-      'neosync-melonx-saves',
-    ]) {
-      try {
-        await ExternalFolderAccess.clearBookmark(key: key);
-      } catch (_) {}
-    }
-
-    try {
-      final support = await getApplicationSupportDirectory();
-      final dolphin = Directory(
-        path.join(support.path, 'NeoStation', 'Dolphin'),
-      );
-      final cache = Directory(path.join(dolphin.path, 'NeoSync'));
-      if (await cache.exists()) await cache.delete(recursive: true);
-
-      final user = Directory(path.join(dolphin.path, 'User'));
-      if (!await user.exists()) return;
-      final stale = <FileSystemEntity>[];
-      await for (final entity in user.list(recursive: true, followLinks: false)) {
-        final name = path.basename(entity.path).toLowerCase();
-        if (name.contains('.neosync-previous-') ||
-            name.contains('.neosync-stage-')) {
-          stale.add(entity);
-        }
-      }
-      stale.sort((a, b) => b.path.length.compareTo(a.path.length));
-      for (final entity in stale) {
-        try {
-          if (entity is Directory) {
-            if (await entity.exists()) await entity.delete(recursive: true);
-          } else if (entity is File) {
-            if (await entity.exists()) await entity.delete();
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
   bool _blockedKey(String? value) {
+    return NeoSyncSavePolicy.isIosCloudPathExcluded(value ?? '');
+  }
+
+  bool _blockedNativeKey(String? value) {
     if (!Platform.isIOS) return false;
     final normalized = (value ?? '').replaceAll('\\', '/').toLowerCase();
     if (normalized.isEmpty) return false;
-    for (final emulator in _blockedIosEmulators) {
-      if (normalized.contains('/$emulator/')) return true;
-    }
-    return false;
+    return _blockedIosEmulators.any(
+      (emulator) => normalized.contains('/$emulator/'),
+    );
+  }
+
+  bool _blockedIdentity(String? value) {
+    if (!Platform.isIOS) return false;
+    final normalized = value?.trim().toLowerCase() ?? '';
+    if (normalized.isEmpty) return false;
+    final tokens = normalized.split(RegExp(r'[^a-z0-9]+'));
+    return _blockedIosEmulators.any(
+      (emulator) => normalized == emulator || tokens.contains(emulator),
+    );
   }
 
   bool _blockedFile(NeoSyncFile file) {
     if (!Platform.isIOS) return false;
-    final emulator = file.emulator?.trim().toLowerCase() ?? '';
-    return _blockedIosEmulators.contains(emulator) ||
-        _blockedKey(file.fileName) ||
-        _blockedKey(file.sourceSavePath);
+    return _blockedIdentity(file.emulator) ||
+        _blockedNativeKey(file.fileName) ||
+        _blockedNativeKey(file.filePath) ||
+        _blockedNativeKey(file.sourceSavePath);
   }
+
+  bool _inactiveFile(NeoSyncFile file) =>
+      NeoSyncSavePolicy.isIosCloudFileExcluded(file);
+
+  bool _blockedSource(NeoSyncSaveSource? source) =>
+      Platform.isIOS &&
+      const {
+        NeoSyncSaveFamily.armsx2,
+        NeoSyncSaveFamily.rpcs3,
+        NeoSyncSaveFamily.melonx,
+      }.contains(source?.family);
 
   Map<String, dynamic> _filterListing(Map<String, dynamic> result) {
     if (!Platform.isIOS || result['success'] != true) return result;
@@ -119,9 +91,10 @@ class NeoSyncService extends base.NeoSyncService {
     bool contentHashOnly = false,
     NeoSyncSaveSource? source,
   }) async {
-    final emulator = emulatorId?.trim().toLowerCase() ?? '';
     if (Platform.isIOS &&
-        (_blockedIosEmulators.contains(emulator) ||
+        (_blockedIdentity(emulatorId) ||
+            _blockedNativeKey(file.path) ||
+            _blockedSource(source) ||
             _blockedKey(customFilename))) {
       return <String, dynamic>{
         'success': true,
@@ -152,7 +125,10 @@ class NeoSyncService extends base.NeoSyncService {
     String? customFilename,
     NeoSyncSaveSource? source,
   }) async {
-    if (Platform.isIOS && _blockedKey(customFilename)) {
+    if (Platform.isIOS &&
+        (_blockedNativeKey(file.path) ||
+            _blockedSource(source) ||
+            _blockedKey(customFilename))) {
       return <String, dynamic>{
         'success': true,
         'skipped': true,
@@ -169,24 +145,28 @@ class NeoSyncService extends base.NeoSyncService {
     );
   }
 
-  /// The iOS fork no longer performs automatic server-side cleanup while
-  /// listing NeoSync. This prevents historical native-emulator objects from
-  /// being modified or deleted after their integrations were retired.
+  /// Audits the complete inventory while preserving inactive iOS emulator
+  /// objects and filtering them from the public listing. On iOS, historical
+  /// objects may be identified but are never automatically deleted.
   @override
   Future<Map<String, dynamic>> auditAndPurge({
     required Future<List<NeoSyncFile>> Function(List<NeoSyncFile>) resolveOrigins,
+    bool Function(NeoSyncFile)? preserve,
   }) async {
+    final bool Function(NeoSyncFile)? effectivePreserve;
     if (!Platform.isIOS) {
-      return super.auditAndPurge(resolveOrigins: resolveOrigins);
+      effectivePreserve = preserve;
+    } else {
+      effectivePreserve = (file) =>
+          file.saveKind == NeoSyncSaveKind.foreign ||
+          _blockedFile(file) ||
+          (preserve?.call(file) ?? _inactiveFile(file));
     }
-    final listing = await getFiles();
-    if (listing['success'] != true) return listing;
-    return <String, dynamic>{
-      'success': true,
-      'files': listing['files'] as List<NeoSyncFile>,
-      'deleted': 0,
-      'failed': 0,
-      'unresolved': 0,
-    };
+    return _filterListing(
+      await super.auditAndPurge(
+        resolveOrigins: resolveOrigins,
+        preserve: effectivePreserve,
+      ),
+    );
   }
 }

@@ -60,16 +60,19 @@ void main() {
     );
   });
 
-  test('PS2 NeoSync resolves ARMSX2 or RetroArch but never both', () {
+  test('PS2 NeoSync ignores ARMSX2 while RetroArch remains available', () {
     final resolver = File(
       'lib/providers/neosync/neosync_path_resolver.dart',
     ).readAsStringSync();
 
     expect(resolver, contains("system.folderName.toLowerCase() == 'ps2'"));
-    expect(resolver, contains('Armsx2FolderService.ownsRomPath'));
     expect(
       resolver,
-      contains('return await Armsx2FolderService.resolveSaveDirectories'),
+      isNot(contains('Armsx2FolderService.ownsRomPath')),
+    );
+    expect(
+      resolver,
+      isNot(contains('Armsx2FolderService.resolveSaveDirectories')),
     );
     expect(resolver, contains('final saves = await _getRetroArchSavesPath()'));
     expect(resolver, contains('final states = await _getRetroArchStatesPath()'));

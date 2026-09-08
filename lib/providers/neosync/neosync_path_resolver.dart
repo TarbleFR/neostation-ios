@@ -8,38 +8,24 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     GameModel? game,
     bool ensureExists = true,
   }) async {
+    if (game != null &&
+        _isIosNeoSyncGameExcluded(game, system: system)) return [];
+
     // DOLPHIN_ISOLATION_BEGIN: dolphin_save_roots
     if (Platform.isIOS && DolphinInternalV2Service.isDolphinSystem(system.folderName)) {
-      final root = await DolphinInternalV2Service.rootDirectory();
-      final native = system.folderName.trim().toLowerCase() == 'gc'
-          ? path.join(root.path, 'User', 'GC')
-          : path.join(root.path, 'User', 'Wii', 'title');
-      return !ensureExists || await Directory(native).exists() ? [native] : [];
+      // DolphinNeoSyncStore is the only reader for these systems. Exposing a
+      // directory here would let the generic scanner see GCI, savestates or
+      // unrelated Wii NAND data outside the V1 contract.
+      return [];
     }
     // DOLPHIN_ISOLATION_END: dolphin_save_roots
 
     final folders = system.neosync.getFoldersForCurrentPlatform();
     final List<String> resolvedPaths = [];
 
-    // PS2 on iOS must never merge RetroArch and ARMSX2 save roots. Ownership
-    // comes from the ROM path: a ROM inside the ARMSX2 bookmark (or an armsx2://
-    // row) is ARMSX2-owned; every other PS2 row remains RetroArch-owned.
+    // ARMSX2 is dormant in NeoSync on iOS. PS2 games explicitly routed to
+    // RetroArch keep the generic save/state roots.
     if (Platform.isIOS && system.folderName.toLowerCase() == 'ps2') {
-      final armsx2Root = ConfigService.linkedArmsx2FolderPath;
-      final isArmsx2Game = Armsx2FolderService.ownsRomPath(
-        game?.romPath,
-        armsx2Root,
-      );
-      if (isArmsx2Game && armsx2Root != null && armsx2Root.isNotEmpty) {
-        // DOLPHIN_ISOLATION_BEGIN: neosync_armsx2_selected_category
-        if (const ['memcards', 'savestates', 'sstates']
-            .contains(path.basename(armsx2Root).toLowerCase())) {
-          return [armsx2Root];
-        }
-        // DOLPHIN_ISOLATION_END: neosync_armsx2_selected_category
-        return await Armsx2FolderService.resolveSaveDirectories(armsx2Root);
-      }
-
       final retroPaths = <String>[];
       final saves = await _getRetroArchSavesPath();
       final states = await _getRetroArchStatesPath();
@@ -51,11 +37,8 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     // DOLPHIN_ISOLATION_BEGIN: neosync_native_switch_roots
     // MeloNX owns its Switch save tree. Never merge it with RetroArch's roots
     // or scan the linked app/bis root (which also contains DLC and firmware).
-    if (Platform.isIOS && system.folderName.toLowerCase() == 'switch') {
-      final root = ConfigService.linkedMelonxSaveFolderPath;
-      return root == null || root.isEmpty
-          ? [] : NeoSyncSavePolicy.melonxSaveRoots(root);
-    }
+    // MeloNX is temporarily dormant in NeoSync. Explicit RetroArch Switch
+    // routes continue through the generic iOS fallback below.
     // DOLPHIN_ISOLATION_END: neosync_native_switch_roots
 
     // System JSON predates iOS NeoSync and has no ios_sync_folder entries.
@@ -112,35 +95,14 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       return paths;
     }
 
-    // 2. iOS ARMSX2 NeoSync root. This never falls back to Android paths.
+    // Tombstones for existing databases that still contain the retired iOS
+    // native placeholders. Never reinterpret them as relative directories.
     if (pathStr == '{ARMSX2_IOS_SAVES}' && Platform.isIOS) {
-      final root = ConfigService.linkedArmsx2FolderPath;
-      if (root == null || root.isEmpty) return [];
-      final saves = await Armsx2FolderService.resolveSaveDirectories(root);
-      if (!ensureExists) return saves;
-      return saves.where((p) => Directory(p).existsSync()).toList();
+      return [];
     }
 
-    // RPCS3 iOS native PS3 save-data roots. Reuse the existing security-
-    // scoped bookmark for RPCS3 > Data; no second folder picker is required.
     if (pathStr == '{RPCS3_IOS_SAVEDATA}' && Platform.isIOS) {
-      final dataRoot = Rpcs3LibraryService.linkedDataPath;
-      if (dataRoot == null || dataRoot.isEmpty) return [];
-      final home = Directory(path.join(dataRoot, 'dev_hdd0', 'home'));
-      if (!home.existsSync()) return [];
-      final paths = <String>[];
-      try {
-        for (final userDir
-            in home.listSync(followLinks: false).whereType<Directory>()) {
-          final savedata = path.join(userDir.path, 'savedata');
-          if (Directory(savedata).existsSync()) paths.add(savedata);
-        }
-      } catch (e) {
-        NeoSyncProvider._log.w(
-          'Could not enumerate RPCS3 savedata profiles: $e',
-        );
-      }
-      return paths;
+      return [];
     }
 
     // 3. Placeholder {NETHERSX2_MEMCARDS} (AetherSX2/NetherSX2 memcards)
@@ -863,6 +825,9 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     GameModel game,
     NeoSyncFile cloudFile,
   ) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile) ||
+        _isIosNeoSyncGameExcluded(game)) return [];
+
     // DOLPHIN_ISOLATION_BEGIN: dolphin_restore_path
     if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
         DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath) || _isDolphinGame(game)) {

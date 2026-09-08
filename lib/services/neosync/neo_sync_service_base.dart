@@ -540,6 +540,7 @@ class NeoSyncService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> auditAndPurge({
     required Future<List<NeoSyncFile>> Function(List<NeoSyncFile>) resolveOrigins,
+    bool Function(NeoSyncFile)? preserve,
   }) async {
     try {
       final token = await _getToken();
@@ -547,10 +548,22 @@ class NeoSyncService extends ChangeNotifier {
       final headers = {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
       final listing = await _getCompleteFiles(headers);
       if (listing['success'] != true) return listing;
-      final inventory = await resolveOrigins(listing['files'] as List<NeoSyncFile>);
+      final listed = listing['files'] as List<NeoSyncFile>;
+      // Do not investigate inactive emulator objects: native origin recovery
+      // can traverse their native save trees. Retain those rows in the
+      // authoritative inventory so cleanup can preserve them unchanged.
+      final protected = preserve == null
+          ? const <NeoSyncFile>[]
+          : listed.where(preserve).toList(growable: false);
+      final auditable = preserve == null
+          ? listed
+          : listed.where((file) => !preserve(file)).toList(growable: false);
+      final resolved = await resolveOrigins(auditable);
+      final inventory = <NeoSyncFile>[...resolved, ...protected];
       final result = await NeoSyncCloudCleanup.run(
         inventory: inventory,
         isCurrentAccount: () async => await _getToken() == token,
+        preserve: preserve,
         delete: (file) async {
           final response = await http.delete(
             Uri.parse('${AppConfig.neoSyncBaseUrl}/api/v2/files/${Uri.encodeComponent(file.id)}'),

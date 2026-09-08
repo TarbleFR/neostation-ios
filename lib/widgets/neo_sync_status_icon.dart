@@ -55,19 +55,22 @@ class _NeoSyncStatusIconState extends State<NeoSyncStatusIcon>
 
   @override
   Widget build(BuildContext context) {
+    final game = widget.game;
+    if (game == null) return const SizedBox.shrink();
+
     // DOLPHIN_ISOLATION_BEGIN: neosync_effective_support
     if (!NeoSyncSavePolicy.supportsSystem(widget.system.folderName,
         widget.system.neosync.sync)) return const SizedBox.shrink();
     // DOLPHIN_ISOLATION_END: neosync_effective_support
+    if (!widget.syncProvider.supportsGame(game, widget.system)) {
+      return const SizedBox.shrink();
+    }
     if (widget.system.folderName == 'android') return const SizedBox.shrink();
     if (!widget.syncProvider.isAuthenticated) return const SizedBox.shrink();
     if (widget.system.screenscraperId == null ||
         widget.system.screenscraperId == 0) {
       return const SizedBox.shrink();
     }
-
-    final game = widget.game;
-    if (game == null) return const SizedBox.shrink();
 
     final status = _resolveStatus();
     if (status.isSyncing && !_rotationController.isAnimating) {

@@ -1,12 +1,17 @@
 part of '../neo_sync_provider.dart';
 
 extension NeoSyncStatus on NeoSyncProvider {
+  List<NeoSyncFile> _visibleCloudInventory(List<NeoSyncFile> files) => files
+      .where((file) => !_isIosNeoSyncCloudFileExcluded(file))
+      .toList(growable: false);
+
     // DOLPHIN_ISOLATION_BEGIN: neosync207_publish_inventory
   /// The account tab and per-game views must observe the SAME confirmed list.
-  /// Updating only _files leaves newly uploaded Dolphin saves invisible there.
+  /// Updating only _files leaves newly uploaded saves invisible there.
   void _publishCloudInventory(List<NeoSyncFile> files) {
-    _files = List<NeoSyncFile>.of(files);
-    _onlineFiles = List<NeoSyncFile>.of(files)
+    final visible = _visibleCloudInventory(files);
+    _files = List<NeoSyncFile>.of(visible);
+    _onlineFiles = List<NeoSyncFile>.of(visible)
       ..sort((a, b) => (b.fileModifiedAt ?? b.uploadedAt)
           .compareTo(a.fileModifiedAt ?? a.uploadedAt));
     notify();
@@ -96,7 +101,9 @@ extension NeoSyncStatus on NeoSyncProvider {
     notify();
     try {
       final result = await _neoSyncService.auditAndPurge(
-          resolveOrigins: _resolveNeoSyncOrigins);
+        resolveOrigins: _resolveNeoSyncOrigins,
+        preserve: _preserveIosInactiveCloudFile,
+      );
       if (!isNeoSyncAuthenticated || auditAccount != _dolphinAccount) return;
       if (result['success'] != true) {
         if (result['phase'] == 'listing') _error = '${result['message']}';
@@ -105,12 +112,12 @@ extension NeoSyncStatus on NeoSyncProvider {
       final deleted = result['deleted'] as int? ?? 0;
       final failed = result['failed'] as int? ?? 0;
       final unresolved = result['unresolved'] as int? ?? 0;
-      var files = (result['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[];
+      var files =
+          (result['files'] as List<NeoSyncFile>?) ?? <NeoSyncFile>[];
       files = await _dolphinDisplayFiles(files);
+      files = _visibleCloudInventory(files);
       if (!isNeoSyncAuthenticated || auditAccount != _dolphinAccount) return;
-      _files = files;
-      _onlineFiles = List<NeoSyncFile>.of(files)
-        ..sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
+      _publishCloudInventory(files);
       final saves = NeoSyncSaveUnits.cloud(files).length;
       _processedItems.add('NeoSync v2: ${files.length} objects, $saves saves, '
           '$deleted non-save files removed, $failed failed, $unresolved unresolved');

@@ -173,12 +173,17 @@ class NeoSyncSaveUnits {
     final dolphin = DolphinSaveTarget.parse(key);
     if (dolphin != null) {
       return NeoSyncSaveUnitDescriptor(key: dolphin.cloudPath, nativeRoot: '',
-        memberPath: dolphin.rawName, isState: dolphin.isState, isDirectory: false,
+        memberPath: dolphin.kind == 'raw'
+            ? dolphin.rawName
+            : dolphin.objectName,
+        isState: dolphin.isState, isDirectory: false,
         displayName: dolphin.isState
             ? (title != null && title != dolphin.identity
                 ? '$title · Slot ${int.parse(dolphin.slot)}' : dolphin.rawName)
             : (dolphin.system == 'gc' ? 'GC Memory cards' : 'Wii saves'),
-        detailName: dolphin.isState ? dolphin.rawName : dolphin.identity,
+        detailName: dolphin.kind == 'raw' || dolphin.isState
+            ? dolphin.rawName
+            : dolphin.identity,
       );
     }
     // Build 206 could label any shared PS2 state with the currently selected

@@ -120,7 +120,7 @@ extension NeoSyncSaveAudit on NeoSyncProvider {
     }
 
     final ps3Root = Rpcs3LibraryService.linkedDataPath;
-    if (ps3Root != null && ps3Root.isNotEmpty) {
+    if (!Platform.isIOS && ps3Root != null && ps3Root.isNotEmpty) {
       final home = Directory(path.join(ps3Root, 'dev_hdd0', 'home'));
       if (await home.exists()) {
         await for (final profile in home.list(followLinks: false)) {
@@ -139,7 +139,7 @@ extension NeoSyncSaveAudit on NeoSyncProvider {
     }
 
     final melonxRoot = ConfigService.linkedMelonxSaveFolderPath;
-    if (melonxRoot != null && melonxRoot.isNotEmpty) {
+    if (!Platform.isIOS && melonxRoot != null && melonxRoot.isNotEmpty) {
       final root = Directory(melonxRoot);
       if (await root.exists()) {
         // The folder link may point to bis, user/save, an account, or one title.

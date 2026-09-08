@@ -111,6 +111,7 @@ class NeoSyncCloudCleanup {
     required List<NeoSyncFile> inventory,
     required Future<bool> Function() isCurrentAccount,
     required Future<bool> Function(NeoSyncFile) delete,
+    bool Function(NeoSyncFile)? preserve,
   }) async {
     final ids = <String>{};
     for (final file in inventory) {
@@ -126,6 +127,13 @@ class NeoSyncCloudCleanup {
     for (final file in inventory) {
       if (!await isCurrentAccount()) {
         throw StateError('NeoSync account changed; cleanup stopped');
+      }
+      // Temporarily unsupported emulator inventories must remain recoverable.
+      // They are intentionally ignored by the audit instead of being
+      // classified as foreign/unresolved and potentially deleted.
+      if (preserve?.call(file) == true) {
+        kept.add(file);
+        continue;
       }
       final kind = file.saveKind;
       if (kind == NeoSyncSaveKind.foreign) {

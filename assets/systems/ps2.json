@@ -358,8 +358,7 @@
       "{SYNC_DIR}"
     ],
     "ios_sync_folder": [
-      "{SYNC_DIR}",
-      "{ARMSX2_IOS_SAVES}"
+      "{SYNC_DIR}"
     ]
   }
 }

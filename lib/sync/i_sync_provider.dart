@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/neo_sync_models.dart';
 import 'package:neostation/models/sync_models.dart';
+import 'package:neostation/models/system_model.dart';
 
 export 'package:neostation/models/sync_models.dart';
 
@@ -89,6 +90,11 @@ abstract class ISyncProvider {
 
   /// Returns the current sync state for [gameId], or null if not tracked.
   GameSyncState? getGameSyncState(String gameId) => null;
+
+  /// Whether this provider supports the concrete emulator route used by a
+  /// game. Providers that do not need route-specific filtering support all
+  /// games by default.
+  bool supportsGame(GameModel game, SystemModel system) => true;
 
   /// Performs pre-launch synchronization (e.g. download cloud saves before
   /// starting the game).

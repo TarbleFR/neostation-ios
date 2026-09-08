@@ -43,12 +43,12 @@ void main() {
       path: 'Mario.srm', type: 'save', system: 'n64', emulator: 'retroarch.mupen64plus-next'),
     (key: 'v2/states/n64/retroarch.mupen64plus-next/game/Mario/Mario.state1',
       path: 'Mario.state1', type: 'state', system: 'n64', emulator: 'retroarch.mupen64plus-next'),
-    (key: 'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
-      path: 'GMSE01/gci-USA-A.nsav', type: 'save', system: 'gc', emulator: 'dolphinios'),
+    (key: 'v2/saves/gc/dolphinios/shared/MemoryCardB.USA.raw.nsav',
+      path: 'MemoryCardB.USA.raw.nsav', type: 'shared', system: 'gc', emulator: 'dolphinios'),
     (key: 'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
       path: '00010000524d4350/wii-data.nsav', type: 'save', system: 'wii', emulator: 'dolphinios'),
-    (key: 'v2/states/wii/dolphinios/game/00010000524d4350/RMCP01.s01.nsav',
-      path: '00010000524d4350/RMCP01.s01.nsav', type: 'state', system: 'wii', emulator: 'dolphinios'),
+    (key: 'v2/saves/wii/dolphinios/game/000100005a454c44/wii-data.nsav',
+      path: '000100005a454c44/wii-data.nsav', type: 'save', system: 'wii', emulator: 'dolphinios'),
     (key: 'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
       path: 'MemoryCardA.USA.raw.nsav', type: 'shared', system: 'gc', emulator: 'dolphinios'),
     (key: 'v2/saves/ps3/rpcs3/game/Game/00000001/BLUS12345-SAVE/PARAM.SFO',
@@ -65,7 +65,7 @@ void main() {
       final result = await http.runWithClient(() => NeoSyncService().syncFile(
           file, title, customFilename: fixture.key,
           systemId: 'stale-system', emulatorId: 'stale-emulator',
-          isState: fixture.type != 'state', scope: 'stale-scope'),
+          isState: fixture.type == 'state', scope: 'stale-scope'),
         () => MockClient((request) async {
           expect(request.headers['Authorization'], 'Bearer account-one');
           if (request.url.path == '/api/v2/files/check') {
@@ -84,6 +84,7 @@ void main() {
             'file_path': fixture.path, 'type': fixture.type,
             'system_id': fixture.system, 'emulator_id': fixture.emulator,
             'file_hash': hash, 'game_name': title,
+            'is_state': '${fixture.type == 'state'}',
           }.entries) {
             expect(request.body, contains('name="${field.key}"\r\n\r\n${field.value}\r\n'));
           }
@@ -151,10 +152,10 @@ void main() {
     expect(wire.type, 'shared');
   });
 
-  test('Dolphin games never collapse onto one shared snapshot filename', () {
-    final first = NeoSyncWireIdentity.fromCloudKey(cases[2].key);
+  test('Wii games never collapse onto one shared snapshot filename', () {
+    final first = NeoSyncWireIdentity.fromCloudKey(cases[3].key);
     final second = NeoSyncWireIdentity.fromCloudKey(
-        cases[2].key.replaceFirst('GMSE01', 'GZLE01'));
+        cases[3].key.replaceFirst('00010000524d4350', '000100005a454c44'));
     expect(first.filePath, isNot(second.filePath));
   });
 

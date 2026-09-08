@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -69,30 +67,10 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   int get _totalItems => 3;
 
   bool get _showCloudSync {
-    if (widget.syncProvider?.isAuthenticated != true) return false;
-    if (!Platform.isIOS) return true;
-
-    final emulator = (widget.game.emulatorName ?? '').trim().toLowerCase();
-    final core = (widget.game.coreName ?? '').trim().toLowerCase();
-    final romPath = (widget.game.romPath ?? '').trim().toLowerCase();
-    final system = (widget.game.systemFolderName ?? widget.system.folderName)
-        .trim()
-        .toLowerCase();
-
-    if (emulator.contains('retroarch') || core.isNotEmpty) return true;
-    if (emulator.contains('armsx2') ||
-        emulator.contains('melonx') ||
-        emulator.contains('rpcs3') ||
-        emulator.contains('dolphin')) {
-      return false;
-    }
-    if (romPath.startsWith('armsx2://') ||
-        romPath.startsWith('melonx://') ||
-        romPath.startsWith('rpcs3-library://')) {
-      return false;
-    }
-    if (system == 'gc' || system == 'wii') return false;
-    return true;
+    final syncProvider = widget.syncProvider;
+    return syncProvider != null &&
+        syncProvider.isAuthenticated &&
+        syncProvider.supportsGame(widget.game, widget.system);
   }
 
   String get _targetSystemFolder =>

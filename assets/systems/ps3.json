@@ -82,8 +82,6 @@
     "windows_sync_folder": [],
     "linux_sync_folder": [],
     "macos_sync_folder": [],
-    "ios_sync_folder": [
-      "{RPCS3_IOS_SAVEDATA}"
-    ]
+    "ios_sync_folder": []
   }
 }

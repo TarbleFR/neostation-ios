@@ -115,21 +115,30 @@ void main() {
     expect(units.where((unit) => unit.descriptor.isState), hasLength(2));
   });
 
-  test('Dolphin keeps game names on states and the requested shared GC card label', () {
+  test('Dolphin V1 keeps only shared GC card and Wii title-data labels', () {
     final paths = [
-      'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav',
-      'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s02.nsav',
       'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
       'v2/saves/gc/dolphinios/shared/MemoryCardB.USA.raw.nsav',
+      'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
     ];
     final units = NeoSyncSaveUnits.cloud([
       for (var i = 0; i < paths.length; i++) cloud('$i', paths[i], title: 'Super Mario Sunshine'),
     ]);
-    expect(units, hasLength(4));
+    expect(units, hasLength(3));
     expect(units.map((unit) => unit.displayName), containsAll([
-      'Super Mario Sunshine · Slot 1', 'Super Mario Sunshine · Slot 2',
-      'GC Memory cards', 'GC Memory cards',
+      'GC Memory cards', 'GC Memory cards', 'Wii saves',
     ]));
+    expect(units.map((unit) => unit.detailName), containsAll([
+      'MemoryCardA.USA.raw',
+      'MemoryCardB.USA.raw',
+      '00010000524d4350',
+    ]));
+    expect(
+      units.singleWhere((unit) => unit.detailName == '00010000524d4350')
+          .descriptor
+          .memberPath,
+      'wii-data.nsav',
+    );
   });
 
   test('foreign objects and unresolved flat components are not presented as saves', () {

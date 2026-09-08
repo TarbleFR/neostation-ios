@@ -79,6 +79,16 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Only checks the synchronization state for a game (no sync actions)
   Future<void> _checkGameSaveStatus(GameModel game) async {
+    if (_isIosNeoSyncGameExcluded(game)) {
+      _gameLocalSaves.remove(game.romname);
+      _gameCloudSaves.remove(game.romname);
+      _updateGameSyncState(
+        game.romname,
+        game.name,
+        neo_sync.GameSyncStatus.disabled,
+      );
+      return;
+    }
     // DOLPHIN_ISOLATION_BEGIN: dolphin_status
     if (_isDolphinGame(game)) { await _syncDolphinGame(game, perform: false); return; }
     // DOLPHIN_ISOLATION_END: dolphin_status
@@ -322,6 +332,16 @@ extension NeoSyncCore on NeoSyncProvider {
   /// Detecta automáticamente archivos de guardado para un juego específico
   /// y realiza sincronización automática cuando es apropiado
   Future<void> detectGameSaveFiles(GameModel game) async {
+    if (_isIosNeoSyncGameExcluded(game)) {
+      _gameLocalSaves.remove(game.romname);
+      _gameCloudSaves.remove(game.romname);
+      _updateGameSyncState(
+        game.romname,
+        game.name,
+        neo_sync.GameSyncStatus.disabled,
+      );
+      return;
+    }
     // DOLPHIN_ISOLATION_BEGIN: dolphin_detect
     if (_isDolphinGame(game)) { await _syncDolphinGame(game); return; }
     // DOLPHIN_ISOLATION_END: dolphin_detect
@@ -345,14 +365,23 @@ extension NeoSyncCore on NeoSyncProvider {
 
     // Verificar si el sistema tiene sync deshabilitado
     final system = await _getSystemForGame(game);
+    final routedGame = system == null ? game : _withResolvedSystem(game, system);
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0
-    if (system != null && !_supportsNeoSync(system)) {
+    if (system != null &&
+        (!_supportsNeoSync(system) ||
+            _isIosNeoSyncGameExcluded(routedGame, system: system))) {
 // DOLPHIN_ISOLATION_END: neosync_repair205_0
       _updateGameSyncState(
         game.romname,
         game.name,
         neo_sync.GameSyncStatus.disabled,
       );
+      return;
+    }
+    // Lightweight callers may omit systemFolderName. Resolve it before any
+    // generic directory scan so Dolphin always uses its strict V1 store.
+    if (system != null && _isDolphinGame(routedGame)) {
+      await _syncDolphinGame(routedGame);
       return;
     }
 
@@ -364,8 +393,6 @@ extension NeoSyncCore on NeoSyncProvider {
     );
 
     try {
-      // Identificar si es un sistema de "memory cards compartidas"
-      final system = await _getSystemForGame(game);
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_1
 
 // DOLPHIN_ISOLATION_END: neosync_repair205_1
@@ -410,7 +437,7 @@ extension NeoSyncCore on NeoSyncProvider {
           // Para RetroArch y otros sistemas, verificar si las rutas se pueden resolver.
           final resolvedPaths = await resolveUniversalPaths(
             system,
-            game: game,
+            game: routedGame,
             ensureExists: false,
           );
           if (resolvedPaths.isEmpty) {
@@ -432,8 +459,8 @@ extension NeoSyncCore on NeoSyncProvider {
       }
 
       // DOLPHIN_ISOLATION_BEGIN: neosync_native_unit_sync
-      final locals = await _findGameSaveFiles(game);
-      final clouds = await _getCloudSaveFilesForGame(game);
+      final locals = await _findGameSaveFiles(routedGame);
+      final clouds = await _getCloudSaveFilesForGame(routedGame);
       _gameLocalSaves[game.romname] = locals;
       _gameCloudSaves[game.romname] = clouds;
       final localUnits = {for (final unit in NeoSyncSaveUnits.local(locals)) unit.key: unit};
@@ -464,10 +491,10 @@ extension NeoSyncCore on NeoSyncProvider {
             // The existing local directory is authoritative as a unit. Do not
             // restore an older remote companion over a different local member.
             for (final member in localMembers) {
-              if (!await _autoUploadLocalSave(game, member)) failed = true;
+              if (!await _autoUploadLocalSave(routedGame, member)) failed = true;
             }
           } else if (needsDownload) {
-            await restoreCloudSaveUnit(cloudMembers, game: game);
+            await restoreCloudSaveUnit(cloudMembers, game: routedGame);
           }
         } on QuotaExceededException {
           quotaFailed = true;
@@ -480,8 +507,8 @@ extension NeoSyncCore on NeoSyncProvider {
       final listing = await _neoSyncService.getFiles();
       if (listing['success'] != true) throw StateError('Cannot confirm NeoSync synchronization');
       _publishCloudInventory(listing['files'] as List<NeoSyncFile>);
-      final verifiedLocals = await _findGameSaveFiles(game);
-      final verifiedClouds = await _getCloudSaveFilesForGame(game);
+      final verifiedLocals = await _findGameSaveFiles(routedGame);
+      final verifiedClouds = await _getCloudSaveFilesForGame(routedGame);
       _gameLocalSaves[game.romname] = verifiedLocals;
       _gameCloudSaves[game.romname] = verifiedClouds;
       final verified = await _aggregateGameSyncStatus(verifiedLocals, verifiedClouds);
@@ -525,6 +552,8 @@ extension NeoSyncCore on NeoSyncProvider {
       // 1. Obtener el sistema para resolver sus rutas JSON
       final system = await _getSystemForGame(game);
       if (system == null) return false;
+
+      if (_isIosNeoSyncGameExcluded(game, system: system)) return false;
 
       // Verificar si el sistema tiene sync deshabilitado
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_3
@@ -638,6 +667,7 @@ extension NeoSyncCore on NeoSyncProvider {
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_0
   Future<List<LocalSaveFile>> _findGameSaveFiles(GameModel game) async {
 // DOLPHIN_ISOLATION_END: neosync_repair205_0_0
+    if (_isIosNeoSyncGameExcluded(game)) return [];
     // DOLPHIN_ISOLATION_BEGIN: dolphin_find_local
     if (_isDolphinGame(game)) return _dolphinLocalFiles(game);
     // DOLPHIN_ISOLATION_END: dolphin_find_local
@@ -646,6 +676,11 @@ extension NeoSyncCore on NeoSyncProvider {
       // 1. Obtener el sistema para resolver sus rutas JSON
       final system = await _getSystemForGame(game);
       if (system == null) return [];
+
+      if (_isIosNeoSyncGameExcluded(game, system: system)) return [];
+
+      final routedGame = _withResolvedSystem(game, system);
+      if (_isDolphinGame(routedGame)) return _dolphinLocalFiles(routedGame);
 
       // Verificar si el sistema tiene sync deshabilitado
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_10
@@ -883,6 +918,7 @@ extension NeoSyncCore on NeoSyncProvider {
 
   /// Obtiene TODOS los archivos de guardado de la nube para un juego específico
   Future<List<NeoSyncFile>> _getCloudSaveFilesForGame(GameModel game) async {
+    if (_isIosNeoSyncGameExcluded(game)) return [];
     // DOLPHIN_ISOLATION_BEGIN: dolphin_find_cloud
     if (_isDolphinGame(game)) return _dolphinCloudFiles(game);
     // DOLPHIN_ISOLATION_END: dolphin_find_cloud
@@ -891,6 +927,11 @@ extension NeoSyncCore on NeoSyncProvider {
       // 1. Obtener el sistema para resolver sus características
       final system = await _getSystemForGame(game);
       if (system == null) return [];
+
+      if (_isIosNeoSyncGameExcluded(game, system: system)) return [];
+
+      final routedGame = _withResolvedSystem(game, system);
+      if (_isDolphinGame(routedGame)) return _dolphinCloudFiles(routedGame);
 
       // Verificar si el sistema tiene sync deshabilitado
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_14
@@ -901,7 +942,7 @@ extension NeoSyncCore on NeoSyncProvider {
       if (_files.isEmpty) {
         final result = await _neoSyncService.getFiles();
         if (result['success']) {
-          _files = result['files'];
+          _publishCloudInventory(result['files'] as List<NeoSyncFile>);
         } else {
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_15
           throw StateError('NeoSync cloud listing failed: ${result['message']}');
@@ -918,6 +959,7 @@ extension NeoSyncCore on NeoSyncProvider {
           system.folderName == 'ps2' || system.folderName == 'dc';
 
       for (final cloudFile in _files) {
+        if (_isIosNeoSyncCloudFileExcluded(cloudFile)) continue;
         // DOLPHIN_ISOLATION_BEGIN: dolphin_no_foreign_cloud_match
         if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
             DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) continue;
@@ -1156,6 +1198,7 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
   /// Helper to calculate relative path for sync, with special handling for Dreamcast
   /// Sincroniza saves antes de iniciar un juego (al estilo Steam)
   Future<void> syncGameSavesBeforeLaunch(GameModel game) async {
+    if (_isIosNeoSyncGameExcluded(game)) return;
     // DOLPHIN_ISOLATION_BEGIN: dolphin_prelaunch
     if (_isDolphinGame(game)) {
       if (_autoSyncEnabled) await _syncDolphinGame(game);
@@ -1187,6 +1230,7 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
 
   /// Sincroniza saves después de cerrar un juego (al estilo Steam)
   Future<void> syncGameSavesAfterClose(GameModel game) async {
+    if (_isIosNeoSyncGameExcluded(game)) return;
     // DOLPHIN_ISOLATION_BEGIN: dolphin_after_close
     if (_isDolphinGame(game)) {
       if (_autoSyncEnabled) {
@@ -1225,6 +1269,11 @@ final parsed = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
 
   /// Restaura un backup desde la nube (descarga y sobreescribe local)
   Future<void> restoreCloudBackup(NeoSyncFile cloudFile) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) {
+      throw UnsupportedError(
+        'This emulator is temporarily unavailable in NeoSync on iOS',
+      );
+    }
     // DOLPHIN_ISOLATION_BEGIN: dolphin_restore
     if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
         DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) {

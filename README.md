@@ -20,16 +20,23 @@ NeoStation iOS is an iPhone and iPad port of NeoStation. It keeps the Flutter fr
 
 ## NeoSync on iOS
 
-NeoSync remains available for **RetroArch saves and states**.
+NeoSync remains available for **RetroArch saves and states**, with **DolphiniOS** restored as the first native iOS integration in V1.
+
+DolphiniOS V1 synchronizes only:
+
+- GameCube regional memory cards under `DolphiniOS/GC/`, named `MemoryCardA.<USA|EUR|JAP>.raw` or `MemoryCardB.<USA|EUR|JAP>.raw`.
+- Wii save data under `DolphiniOS/Wii/title/00010000/<8-lowercase-hex>/data/**`.
+
+GameCube GCI files and DolphiniOS savestates remain local and are not handled by NeoSync.
 
 NeoSync is deliberately disabled for the following iOS emulator integrations:
 
-- **DolphiniOS**
 - **ARMSX2**
 - **MeloNX**
 - **RPCS3**
 
-NeoStation does not scan, upload, download, restore or track save folders from those four integrations. Their library, launch and JIT functionality is independent from NeoSync.
+NeoStation does not scan, upload, download, restore or track save folders from those three integrations. Their library, launch and JIT functionality is independent from NeoSync.
+Existing local saves, bookmarks and cloud objects are kept intact; disabling an integration does not delete them.
 
 ## Requirements
 

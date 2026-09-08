@@ -61,18 +61,23 @@ void main() {
     expect(NeoSyncSavePolicy.classify('$ps3/../ICON0.PNG'), NeoSyncSaveKind.unresolved);
   });
 
-  test('native saves, memory cards and actual savestates pass the common gate', () {
+  test('native saves and the strict Dolphin V1 formats pass the common gate', () {
     for (final leaf in ['Mario.srm', 'Mario.sav', 'Mario.rtc', 'Mario.state',
       'Mario.state3', 'Mario.state.auto', 'Mario.state.1', 'Mario.s01',
       'MemoryCardA.USA.raw', 'Saturn.bkr', 'Saturn.smpc', 'vmu_save_A1.bin', 'card.mcr', 'card.ps2.neosync.gz', 'Mario.p2s', 'Mario.ppst']) {
       expect(NeoSyncSavePolicy.allowsUpload('/saves/$leaf', 'v2/saves/ps2/retroarch/game/Game/$leaf'), isTrue, reason: leaf);
     }
     for (final key in [
-      'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav',
       'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
       'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
     ]) {
       expect(NeoSyncSavePolicy.allowsUpload('/snapshot/save.nsav', key), isTrue);
+    }
+    for (final key in [
+      'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav',
+      'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
+    ]) {
+      expect(NeoSyncSavePolicy.allowsUpload('/snapshot/save.nsav', key), isFalse);
     }
     for (final leaf in ['game.iso', 'settings.cfg', 'image.png', 'unknown.bin']) {
       expect(NeoSyncSavePolicy.allowsUpload('/folder/$leaf', 'v2/saves/nes/retroarch/game/Game/$leaf'), isFalse);
@@ -119,6 +124,27 @@ void main() {
     expect(result.failedIds, ['failed']);
     expect(result.unresolved, 1);
     expect(result.remaining.map((f) => f.id), ['save', 'unknown', 'failed', 'local']);
+  });
+
+  test('cleanup preserve keeps an excluded object without delete or unresolved audit', () async {
+    final preserved = cloud('preserved-native', 'ICON0.PNG');
+    var deleteCalls = 0;
+
+    final result = await NeoSyncCloudCleanup.run(
+      inventory: [preserved],
+      isCurrentAccount: () async => true,
+      delete: (_) async {
+        deleteCalls++;
+        return true;
+      },
+      preserve: (file) => file.id == preserved.id,
+    );
+
+    expect(deleteCalls, 0);
+    expect(result.remaining, [preserved]);
+    expect(result.deletedIds, isEmpty);
+    expect(result.failedIds, isEmpty);
+    expect(result.unresolved, 0);
   });
 
   test('cleanup stops on account switch and validates inventory before any deletion', () async {

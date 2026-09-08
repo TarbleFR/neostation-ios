@@ -6,11 +6,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/neo_sync_models.dart';
+import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
-import 'package:neostation/services/armsx2_folder_service.dart';
-import 'package:neostation/services/config_service.dart';
-import 'package:neostation/services/neosync/neo_sync_save_policy.dart';
-
 import '../i_sync_provider.dart';
 
 /// Official & Recommended — maintained by NeoGameLab.
@@ -31,8 +28,8 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
     id: kProviderId,
     name: 'NeoSync',
     description:
-        'Official NeoStation cloud sync. On iOS, NeoSync is limited to '
-        'RetroArch saves and states.',
+        'Official NeoStation cloud sync. On iOS, supports RetroArch and '
+        'DolphiniOS V1 saves.',
     author: 'NeoGameLab',
     isOfficial: true,
     isRecommended: true,
@@ -52,36 +49,6 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
 
   @override
   String? get lastError => _provider.error;
-
-  bool _iosNativeNeoSyncDisabled(GameModel game) {
-    if (!Platform.isIOS) return false;
-
-    final emulator = (game.emulatorName ?? '').trim().toLowerCase();
-    final core = (game.coreName ?? '').trim().toLowerCase();
-    final romPath = (game.romPath ?? '').trim().toLowerCase();
-    final system = (game.systemFolderName ?? '').trim().toLowerCase();
-
-    // RetroArch remains the supported iOS NeoSync owner, including when it is
-    // used for a system that also has a standalone integration.
-    if (emulator.contains('retroarch') || core.isNotEmpty) return false;
-
-    if (Armsx2FolderService.ownsRomPath(
-      game.romPath,
-      ConfigService.linkedArmsx2FolderPath,
-    )) {
-      return true;
-    }
-    if (romPath.startsWith('armsx2://') ||
-        romPath.startsWith('melonx://') ||
-        romPath.startsWith('rpcs3-library://')) {
-      return true;
-    }
-
-    // GameCube/Wii are launched by the embedded DolphiniOS engine when no
-    // RetroArch core is explicitly selected.
-    if (system == 'gc' || system == 'wii') return true;
-    return false;
-  }
 
   @override
   Future<void> initialize() async {}
@@ -178,11 +145,12 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
 
   @override
   Future<SyncResult> detectGameSaveFiles(GameModel game) async {
-    if (_iosNativeNeoSyncDisabled(game)) {
-      return SyncResult.ok(message: 'NeoSync disabled for this iOS emulator');
-    }
     try {
       await _provider.detectGameSaveFiles(game);
+      final dolphinError = _provider.dolphinSaveSyncError(game);
+      if (dolphinError != null) {
+        return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      }
       final gameFailure = _gameFailure(game.romname);
       if (gameFailure != null) return gameFailure;
       return SyncResult.ok();
@@ -196,12 +164,17 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
       _provider.getGameSyncState(gameId);
 
   @override
+  bool supportsGame(GameModel game, SystemModel system) =>
+      _provider.supportsGame(game, system);
+
+  @override
   Future<SyncResult> syncGameSavesBeforeLaunch(GameModel game) async {
-    if (_iosNativeNeoSyncDisabled(game)) {
-      return SyncResult.ok(message: 'NeoSync disabled for this iOS emulator');
-    }
     try {
       await _provider.syncGameSavesBeforeLaunch(game);
+      final dolphinError = _provider.dolphinSaveSyncError(game);
+      if (dolphinError != null) {
+        return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      }
       final gameFailure = _gameFailure(game.romname);
       if (gameFailure != null) return gameFailure;
       return SyncResult.ok();
@@ -212,11 +185,12 @@ class NeoSyncAdapter extends ChangeNotifier implements ISyncProvider {
 
   @override
   Future<SyncResult> syncGameSavesAfterClose(GameModel game) async {
-    if (_iosNativeNeoSyncDisabled(game)) {
-      return SyncResult.ok(message: 'NeoSync disabled for this iOS emulator');
-    }
     try {
       await _provider.syncGameSavesAfterClose(game);
+      final dolphinError = _provider.dolphinSaveSyncError(game);
+      if (dolphinError != null) {
+        return SyncResult.fail(SyncError.unknown, message: dolphinError);
+      }
       final gameFailure = _gameFailure(game.romname);
       if (gameFailure != null) return gameFailure;
       return SyncResult.ok();

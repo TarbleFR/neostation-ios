@@ -23,15 +23,17 @@ extension NeoSyncDownload on NeoSyncProvider {
 
     try {
       final result = await _neoSyncService.getFiles();
-    // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_download
+      // DOLPHIN_ISOLATION_BEGIN: dolphin_bulk_download
       await _syncAllDolphinGames(upload: false);
-    // DOLPHIN_ISOLATION_END: dolphin_bulk_download
+      // DOLPHIN_ISOLATION_END: dolphin_bulk_download
 
       if (!result['success']) {
         throw Exception('Failed to fetch cloud files: ${result['message']}');
       }
 
-      final cloudFiles = result['files'] as List<NeoSyncFile>;
+      final cloudFiles = (result['files'] as List<NeoSyncFile>)
+          .where((file) => !_isIosNeoSyncCloudFileExcluded(file))
+          .toList(growable: false);
 // DOLPHIN_ISOLATION_BEGIN: neosync_repair205_0_1
       _files = cloudFiles;
 // DOLPHIN_ISOLATION_END: neosync_repair205_0_1
@@ -86,6 +88,8 @@ extension NeoSyncDownload on NeoSyncProvider {
     NeoSyncFile cloudFile,
     String savesPath,
   ) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) return;
+
     // DOLPHIN_ISOLATION_BEGIN: dolphin_no_generic_download
     if (DolphinSaveTarget.ownsCloudPath(cloudFile.fileName) ||
         DolphinSaveTarget.ownsCloudPath(cloudFile.sourceSavePath)) return;
@@ -198,6 +202,8 @@ if (cloudFile.saveKind != NeoSyncSaveKind.save) return;
 
   // DOLPHIN_ISOLATION_BEGIN: neosync_whole_directory_download
   Future<bool> _processNativeDirectoryDownload(NeoSyncFile cloudFile) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) return true;
+
     final selected = NeoSyncSaveUnits.cloud(_files).where((unit) =>
         unit.members.any((file) => file.id == cloudFile.id));
     if (selected.length != 1) return false;
@@ -236,6 +242,8 @@ if (cloudFile.saveKind != NeoSyncSaveKind.save) return;
 
   /// Helper para encontrar el juego de un archivo de nube
   Future<GameModel?> _findGameForCloudFile(NeoSyncFile cloudFile) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) return null;
+
     // DOLPHIN_ISOLATION_BEGIN: neosync_restore_original_path
 final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
 // DOLPHIN_ISOLATION_END: neosync_restore_original_path
@@ -435,6 +443,12 @@ final v2Path = NeoSyncSavePolicy.canonical(cloudFile.sourceSavePath);
     NeoSyncFile cloudFile,
     File localFile,
   ) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) {
+      throw StateError(
+        'NeoSync restore is disabled for this emulator on iOS',
+      );
+    }
+
 // DOLPHIN_ISOLATION_BEGIN: neosync_save_only_restore
     if (cloudFile.saveKind != NeoSyncSaveKind.save) {
       throw StateError('NeoSync refuses to restore an unverified save');

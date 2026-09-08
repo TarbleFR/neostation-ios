@@ -37,6 +37,7 @@ import '../services/config_service.dart';
 import '../services/armsx2_folder_service.dart';
 import '../services/retroarch_config_service.dart';
 import '../services/rpcs3_library_service.dart';
+import '../services/melonx_library_service.dart';
 import '../utils/cloud_path_builder.dart';
 
 part 'neosync/neosync_exceptions.dart';
@@ -199,13 +200,69 @@ class NeoSyncProvider extends ChangeNotifier {
   bool _supportsNeoSync(SystemModel system) =>
       NeoSyncSavePolicy.supportsSystem(system.folderName, system.neosync.sync);
 
+  /// Whether NeoSync is available for this concrete game route.
+  /// Emulator libraries and launch support are intentionally independent.
+  bool supportsGame(GameModel game, SystemModel system) =>
+      !_isIosNeoSyncGameExcluded(game, system: system);
+
+  GameModel _withResolvedSystem(GameModel game, SystemModel system) {
+    final folder = system.folderName.trim();
+    if (folder.isEmpty ||
+        game.systemFolderName?.trim().toLowerCase() == folder.toLowerCase()) {
+      return game;
+    }
+    return game.copyWith(systemFolderName: folder);
+  }
+
+  bool _isIosNeoSyncGameExcluded(
+    GameModel game, {
+    SystemModel? system,
+  }) {
+    final gameSystem = game.systemFolderName?.trim();
+    final resolvedSystem = system?.folderName.trim() ?? '';
+    // In aggregate views the surrounding model is "all"/"favorites"; the
+    // concrete game's system remains authoritative for route ownership.
+    final routedSystem = gameSystem?.isNotEmpty == true
+        ? gameSystem!
+        : resolvedSystem;
+    if (Platform.isIOS &&
+        routedSystem.toLowerCase() == 'switch' &&
+        MelonxLibraryService.ownsGameRoute(
+          game.romPath,
+          titleId: game.titleId,
+          titleName: game.titleName,
+        )) {
+      return true;
+    }
+    return NeoSyncSavePolicy.isIosEmulatorExcluded(
+      systemFolder: routedSystem,
+      emulatorName: game.emulatorName,
+      romPath: game.romPath,
+      titleId: game.titleId,
+      armsx2Root: ConfigService.linkedArmsx2FolderPath,
+    );
+  }
+
+  bool _isIosNeoSyncCloudFileExcluded(NeoSyncFile file) =>
+      NeoSyncSavePolicy.isIosCloudFileExcluded(file);
+
+  /// Unresolved historical Dolphin rows may be investigated by the strict V1
+  /// store. They still remain undeletable if no exact local snapshot proves a
+  /// supported RAW/Wii origin.
+  bool _preserveIosInactiveCloudFile(NeoSyncFile file) =>
+      _isIosNeoSyncCloudFileExcluded(file) &&
+      !NeoSyncOriginIndex.isDolphinCandidate(file);
+
   /// Source ownership comes from the configured emulator folders, never from
   /// a ROM title or a filename extension alone.
   Future<NeoSyncSaveSource?> _sourceForLocalFile(File file) async {
     final roots = <({String? root, NeoSyncSaveFamily family})>[
-      (root: ConfigService.linkedArmsx2FolderPath, family: NeoSyncSaveFamily.armsx2),
-      (root: Rpcs3LibraryService.linkedDataPath, family: NeoSyncSaveFamily.rpcs3),
-      (root: ConfigService.linkedMelonxSaveFolderPath, family: NeoSyncSaveFamily.melonx),
+      if (!Platform.isIOS)
+        (root: ConfigService.linkedArmsx2FolderPath, family: NeoSyncSaveFamily.armsx2),
+      if (!Platform.isIOS)
+        (root: Rpcs3LibraryService.linkedDataPath, family: NeoSyncSaveFamily.rpcs3),
+      if (!Platform.isIOS)
+        (root: ConfigService.linkedMelonxSaveFolderPath, family: NeoSyncSaveFamily.melonx),
       (root: await _getRetroArchStatesPath(), family: NeoSyncSaveFamily.retroArchStates),
       (root: await _getRetroArchSavesPath(), family: NeoSyncSaveFamily.retroArchSaves),
       (root: await _flycastSystemSaveRoot(), family: NeoSyncSaveFamily.retroArchFlycastSystem),
@@ -277,6 +334,11 @@ class NeoSyncProvider extends ChangeNotifier {
   /// NeoSync stores some payloads as `.neosync.gz`; exports must contain the
   /// original emulator save bytes so the archive is independently recoverable.
   Future<List<int>> downloadOnlineFileBytes(NeoSyncFile cloudFile) async {
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) {
+      throw UnsupportedError(
+        'This emulator is temporarily unavailable in NeoSync on iOS',
+      );
+    }
     final result = LegacyNeoSyncService.isLegacyId(cloudFile.id)
         ? await _legacyNeoSyncService.downloadFile(cloudFile.id)
         : await _neoSyncService.downloadFile(cloudFile.id);
@@ -312,6 +374,11 @@ class NeoSyncProvider extends ChangeNotifier {
   /// to match the cloud version.
   Future<void> _downloadCloudFile(NeoSyncFile cloudFile, File localFile) async {
 // DOLPHIN_ISOLATION_BEGIN: neosync_save_only_restore
+    if (_isIosNeoSyncCloudFileExcluded(cloudFile)) {
+      throw UnsupportedError(
+        'This emulator is temporarily unavailable in NeoSync on iOS',
+      );
+    }
     if (cloudFile.saveKind != NeoSyncSaveKind.save) {
       throw StateError('NeoSync refuses to restore an unverified save');
     }
@@ -373,8 +440,14 @@ class NeoSyncProvider extends ChangeNotifier {
   /// Restores all members as one operation, preserving their native paths.
   /// No destination changes until every download has been checked.
   Future<void> restoreCloudSaveUnit(List<NeoSyncFile> members, {GameModel? game}) async {
-    if (!isNeoSyncAuthenticated) throw StateError('NeoSync authentication required');
     if (members.isEmpty) return;
+    if (members.any(_isIosNeoSyncCloudFileExcluded) ||
+        (game != null && _isIosNeoSyncGameExcluded(game))) {
+      throw UnsupportedError(
+        'This emulator is temporarily unavailable in NeoSync on iOS',
+      );
+    }
+    if (!isNeoSyncAuthenticated) throw StateError('NeoSync authentication required');
     final units = NeoSyncSaveUnits.cloud(members);
     if (units.length != 1) throw StateError('Select one native save at a time');
     final account = _dolphinAccount;

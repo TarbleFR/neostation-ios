@@ -76,7 +76,8 @@ class DirectoriesSettingsContentState
   bool _isLoading = true;
 
   // iOS-only security-scoped roots. RetroArch and ARMSX2 are completely
-  // independent bookmarks; MeloNX keeps its existing save-only bookmark.
+  // independent bookmarks; MeloNX library sync does not expose its dormant
+  // save-only NeoSync bookmark.
   String? _linkingFolderKey;
 
   // Migration progress state (shown inline, no dialog).
@@ -656,42 +657,6 @@ class DirectoriesSettingsContentState
     }
   }
 
-  Future<void> _linkNeoSyncSaveFolder({
-    required String bookmarkKey,
-    required String emulatorName,
-  }) async {
-    if (_linkingFolderKey != null) return;
-    setState(() => _linkingFolderKey = bookmarkKey);
-    try {
-      final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
-        key: bookmarkKey,
-      );
-      if (selected == null || !mounted) return;
-      final resolved = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: bookmarkKey,
-      );
-      final activePath = resolved ?? selected;
-      if (bookmarkKey == ConfigService.melonxNeoSyncBookmarkKey) {
-        ConfigService.linkedMelonxSaveFolderPath = activePath;
-      }
-      if (mounted) setState(() {});
-      _log.i('NeoSync $emulatorName save folder linked: $activePath');
-    } catch (e) {
-      _log.e('NeoSync $emulatorName save-folder link failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.iosEmuLinkingFailed
-              .getString(context)
-              .replaceFirst('{error}', e.toString()),
-          type: NotificationType.error,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _linkingFolderKey = null);
-    }
-  }
-
   Future<void> _syncWithRetroArch() async {
     final opened = await RetroArchLibraryService.requestLibrarySync();
     if (!mounted) return;
@@ -982,7 +947,6 @@ class DirectoriesSettingsContentState
 
   Widget _buildIOSMeloNXSection(ThemeData theme) {
     final hasSynced = MelonxLibraryService.hasSyncedLibrary;
-    final isSaveLinked = ConfigService.linkedMelonxSaveFolderPath != null;
 
     final statusText = hasSynced
         ? AppLocale.iosMelonxStatusSynced.getString(context)
@@ -993,13 +957,10 @@ class DirectoriesSettingsContentState
       name: 'MeloNX',
       icon: Symbols.videogame_asset_rounded,
       statusText: statusText,
-      isLinked: isSaveLinked,
-      bookmarkKey: ConfigService.melonxNeoSyncBookmarkKey,
+      isLinked: hasSynced,
+      bookmarkKey: 'melonx-library-sync',
       successMessage: '',
-      onLinkPressed: () => _linkNeoSyncSaveFolder(
-        bookmarkKey: ConfigService.melonxNeoSyncBookmarkKey,
-        emulatorName: 'MeloNX',
-      ),
+      showLinkButton: false,
       trailingAction: Row(
         children: [
           Expanded(

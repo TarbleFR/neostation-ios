@@ -30,14 +30,20 @@ class DolphinSaveIdentity {
   }
 
   bool get isValid => system == 'gc'
-      ? RegExp(r'^[A-Z0-9]{6}$').hasMatch(gameId) && {'USA', 'EUR', 'JAP'}.contains(region)
-      : system == 'wii' && RegExp(r'^0001000[014][0-9a-f]{8}$').hasMatch(titleId ?? '');
+      ? RegExp(r'^[A-Z0-9]{6}$').hasMatch(gameId) &&
+          const {'USA', 'EUR', 'JAP'}.contains(region)
+      : system == 'wii' &&
+          RegExp(r'^0001000[014][0-9a-f]{8}$').hasMatch(titleId ?? '');
 }
 
-/// Each object is a complete, versioned native save snapshot. GCI objects contain
-/// one game's files in one slot; raw cards are explicitly shared; Wii objects
-/// contain only a single title's data directory (never NAND/system content).
-/// State objects contain exactly one numbered native checkpoint for one game.
+/// Strict NeoSync V1 scope for the embedded DolphiniOS core:
+///
+/// * GameCube synchronizes only the two regional memory-card `.raw` files.
+/// * Wii synchronizes only one verified title's `00010000/<title>/data` tree.
+///
+/// GCI folders, savestates and the rest of the Wii NAND are intentionally not
+/// addressable. Historical cloud objects remain reserved by [ownsCloudPath],
+/// but cannot be parsed into a live restore target.
 class DolphinSaveTarget {
   static const emulator = 'dolphinios';
   final String system;
@@ -49,37 +55,37 @@ class DolphinSaveTarget {
   const DolphinSaveTarget._(this.system, this.kind, this.identity,
     this.region, this.slot, this.rawName);
 
-  static final rawPattern = RegExp(r'^MemoryCard([AB])\.(USA|EUR|JAP)(?:\.[0-9]+)?\.raw$');
+  static final rawPattern =
+      RegExp(r'^MemoryCard([AB])\.(USA|EUR|JAP)\.raw$');
+
+  static bool _supportsWiiV1(DolphinSaveIdentity game) {
+    if (game.system != 'wii' ||
+        !RegExp(r'^[A-Z0-9]{4}(?:[A-Z0-9]{2})?$').hasMatch(game.gameId) ||
+        !RegExp(r'^00010000[0-9a-f]{8}$').hasMatch(game.titleId ?? '')) {
+      return false;
+    }
+    final gameIdHex = game.gameId.substring(0, 4).codeUnits
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return game.titleId!.substring(8) == gameIdHex;
+  }
 
   static List<DolphinSaveTarget> forGame(DolphinSaveIdentity game) {
     if (!game.isValid) return [];
     if (game.system == 'gc') {
-      return [for (final slot in ['A', 'B'])
-        DolphinSaveTarget._('gc', 'gci', game.gameId, game.region, slot, '')];
+      return [
+        for (final slot in ['A', 'B'])
+          DolphinSaveTarget.raw('MemoryCard$slot.${game.region}.raw')!,
+      ];
     }
+    if (!_supportsWiiV1(game)) return [];
     return [DolphinSaveTarget._('wii', 'wii-data', game.titleId!, '', '', '')];
   }
 
-  static bool _validStateIdentity(String system, String identity, String gameId) {
-    if (system == 'gc') {
-      return RegExp(r'^[A-Z0-9]{6}$').hasMatch(gameId) && identity == gameId;
-    }
-    // Wii discs use six-character IDs; installed game channels can use four.
-    // In either case the first four native ID bytes must match the title ID.
-    return system == 'wii' &&
-        RegExp(r'^0001000[014][0-9a-f]{8}$').hasMatch(identity) &&
-        RegExp(r'^[A-Z0-9]{4}(?:[A-Z0-9]{2})?$').hasMatch(gameId) &&
-        gameId.substring(0, 4).codeUnits
-            .map((byte) => byte.toRadixString(16).padLeft(2, '0')).join() == identity.substring(8);
-  }
-
-  static List<DolphinSaveTarget> statesForGame(DolphinSaveIdentity game) {
-    final identity = game.system == 'gc' ? game.gameId : game.titleId ?? '';
-    if (!game.isValid || !_validStateIdentity(game.system, identity, game.gameId)) return [];
-    return [for (var slot = 1; slot <= 10; slot++)
-      DolphinSaveTarget._(game.system, 'state', identity, '',
-        slot.toString().padLeft(2, '0'), '${game.gameId}.s${slot.toString().padLeft(2, '0')}')];
-  }
+  /// Kept as a dormant compatibility seam. NeoSync V1 never creates or
+  /// restores Dolphin savestate targets.
+  static List<DolphinSaveTarget> statesForGame(DolphinSaveIdentity game) =>
+      const <DolphinSaveTarget>[];
 
   static DolphinSaveTarget? raw(String name) {
     final match = rawPattern.firstMatch(name);
@@ -88,49 +94,37 @@ class DolphinSaveTarget {
   }
 
   bool get shared => kind == 'raw';
-  bool get isState => kind == 'state';
+  bool get isState => false;
   String get objectName => switch (kind) {
-    'gci' => 'gci-$region-$slot.nsav',
     'raw' => '$rawName.nsav',
-    'state' => '$rawName.nsav',
     _ => 'wii-data.nsav',
   };
   String get relativeNativePath => switch (kind) {
-    'gci' => 'GC/$region/Card $slot',
     'raw' => 'GC/$rawName',
-    'state' => 'StateSaves/$rawName',
     _ => 'Wii/title/${identity.substring(0, 8)}/${identity.substring(8)}/data',
   };
   String get cloudPath => CloudPathBuilder.build(system: system,
     emulatorSlug: emulator, scope: shared ? 'shared' : 'game',
     gameName: shared ? null : identity, filePath: objectName, isState: isState);
 
-  bool matches(DolphinSaveIdentity game) => system == game.system &&
-      (isState ? identity == (system == 'gc' ? game.gameId : game.titleId) &&
-          rawName == '${game.gameId}.s$slot' :
-       kind == 'wii-data' ? identity == game.titleId :
-       region == game.region && (shared || identity == game.gameId));
+  bool matches(DolphinSaveIdentity game) => game.isValid &&
+      system == game.system &&
+      (kind == 'wii-data'
+          ? _supportsWiiV1(game) && identity == game.titleId
+          : kind == 'raw' && region == game.region);
 
   /// A strict round trip rejects traversal, extra components and unknown slots.
   static DolphinSaveTarget? parse(String cloudPath) {
     final parsed = CloudPathBuilder.parse(cloudPath);
-    if (parsed == null || parsed.emulatorSlug != emulator) return null;
+    if (parsed == null || parsed.emulatorSlug != emulator || parsed.isState) {
+      return null;
+    }
     DolphinSaveTarget? target;
-    if (parsed.isState) {
-      final match = RegExp(r'^([A-Z0-9]{4}(?:[A-Z0-9]{2})?)\.s(0[1-9]|10)\.nsav$').firstMatch(parsed.filePath);
-      if (!parsed.isShared && match != null &&
-          _validStateIdentity(parsed.system, parsed.gameName ?? '', match[1]!)) {
-        target = DolphinSaveTarget._(parsed.system, 'state', parsed.gameName!, '',
-          match[2]!, '${match[1]}.s${match[2]}');
-      }
-    } else if (parsed.system == 'gc' && parsed.isShared && parsed.filePath.endsWith('.nsav')) {
+    if (parsed.system == 'gc' && parsed.isShared &&
+        parsed.filePath.endsWith('.nsav')) {
       target = raw(parsed.filePath.substring(0, parsed.filePath.length - 5));
-    } else if (parsed.system == 'gc' && !parsed.isShared &&
-        RegExp(r'^[A-Z0-9]{6}$').hasMatch(parsed.gameName ?? '')) {
-      final match = RegExp(r'^gci-(USA|EUR|JAP)-([AB])\.nsav$').firstMatch(parsed.filePath);
-      if (match != null) target = DolphinSaveTarget._('gc', 'gci', parsed.gameName!, match[1]!, match[2]!, '');
     } else if (parsed.system == 'wii' && !parsed.isShared &&
-        RegExp(r'^0001000[014][0-9a-f]{8}$').hasMatch(parsed.gameName ?? '') &&
+        RegExp(r'^00010000[0-9a-f]{8}$').hasMatch(parsed.gameName ?? '') &&
         parsed.filePath == 'wii-data.nsav') {
       target = DolphinSaveTarget._('wii', 'wii-data', parsed.gameName!, '', '', '');
     }
@@ -190,13 +184,7 @@ class DolphinNeoSyncStore {
   final Directory cacheDirectory;
   static const maxPayloadBytes = 64 * 1024 * 1024;
   static const maxNativeBytes = 40 * 1024 * 1024;
-  // Wii states can exceed the ordinary-save limit. Store native compressed
-  // bytes directly rather than multiplying their memory footprint with base64.
-  static const maxStateNativeBytes = 192 * 1024 * 1024;
-  static const _stateHeaderLimit = 4096;
-  static const _stateMagic = 'NSDSV002';
-  static int payloadLimit(DolphinSaveTarget target) => target.isState
-      ? maxStateNativeBytes + _stateHeaderLimit + 12 : maxPayloadBytes;
+  static int payloadLimit(DolphinSaveTarget target) => maxPayloadBytes;
   static const maxFiles = 2048;
   DolphinNeoSyncStore(this.userDirectory, this.cacheDirectory);
 
@@ -244,19 +232,16 @@ class DolphinNeoSyncStore {
   /// Recovery runs before the core starts, including after a process kill
   /// between directory renames. Old native snapshots are retained locally.
   Future<void> recover() async {
-    final targets = <String>[
-      for (final region in ['USA', 'EUR', 'JAP'])
-        for (final slot in ['A', 'B']) 'GC/$region/Card $slot',
-    ];
-    final titles = Directory(p.join(userDirectory.path, 'Wii/title'));
+    final targets = <String>[];
+    final titles = Directory(p.join(userDirectory.path, 'Wii/title/00010000'));
     await _noLinks(userDirectory.path, titles.path);
     if (await titles.exists()) {
-      await for (final type in titles.list(followLinks: false)) {
-        if (type is! Directory || !RegExp(r'^0001000[014]$').hasMatch(p.basename(type.path))) continue;
-        await for (final title in type.list(followLinks: false)) {
-          if (title is Directory && RegExp(r'^[0-9a-f]{8}$').hasMatch(p.basename(title.path))) {
-            targets.add(p.relative(p.join(title.path, 'data'), from: userDirectory.path));
-          }
+      await for (final title in titles.list(followLinks: false)) {
+        if (title is Directory &&
+            RegExp(r'^[0-9a-f]{8}$').hasMatch(p.basename(title.path))) {
+          targets.add(
+            p.relative(p.join(title.path, 'data'), from: userDirectory.path),
+          );
         }
       }
     }
@@ -269,37 +254,17 @@ class DolphinNeoSyncStore {
     }
   }
 
-  Future<List<DolphinSaveTarget>> targetsForGame(DolphinSaveIdentity game) async {
-    final result = [...DolphinSaveTarget.forGame(game), ...DolphinSaveTarget.statesForGame(game)];
-    if (game.system == 'gc') {
-      final gc = Directory(p.join(userDirectory.path, 'GC'));
-      await _noLinks(userDirectory.path, gc.path);
-      if (await gc.exists()) {
-        await for (final file in gc.list(followLinks: false)) {
-          final target = DolphinSaveTarget.raw(p.basename(file.path));
-          if (file is File && target != null && target.matches(game)) result.add(target);
-        }
-      }
-    }
-    return result;
-  }
-
-  static bool _gciOwned(List<int> bytes, String gameId) => bytes.length >= 6 &&
-      String.fromCharCodes(bytes.take(6)) == gameId;
+  Future<List<DolphinSaveTarget>> targetsForGame(DolphinSaveIdentity game) async =>
+      DolphinSaveTarget.forGame(game);
 
   static void _validateFile(DolphinSaveTarget target, String name, List<int> bytes) {
     _safeName(name);
-    if (target.kind == 'gci') {
-      if (name.contains('/') || !name.toLowerCase().endsWith('.gci') ||
-          !_gciOwned(bytes, target.identity) || bytes.length < 64 ||
-          bytes.length != 64 + ((bytes[0x38] << 8) | bytes[0x39]) * 8192 ||
-          bytes.length == 64) {
-        throw const FormatException('Invalid or wrong-game GameCube GCI');
-      }
-    } else if (target.kind == 'raw') {
+    if (target.kind == 'raw') {
       if (name != target.rawName || !{524288, 1048576, 2097152, 4194304, 8388608, 16777216}.contains(bytes.length)) {
         throw const FormatException('Invalid GameCube raw memory card size');
       }
+    } else if (target.kind != 'wii-data') {
+      throw const FormatException('Unsupported Dolphin NeoSync target');
     }
   }
 
@@ -307,30 +272,23 @@ class DolphinNeoSyncStore {
       Isolate.run(() => _snapshot(target));
 
   Future<DolphinSaveSnapshot?> _snapshot(DolphinSaveTarget target) async {
-    if (target.isState) return _snapshotState(target);
     final native = await nativePath(target);
     final paths = <File>[];
     final directories = <String>[];
     if (target.shared) {
       if (await File(native).exists()) paths.add(File(native));
-    } else if (await Directory(native).exists()) {
-      await for (final item in Directory(native).list(recursive: target.kind == 'wii-data', followLinks: false)) {
+    } else if (target.kind == 'wii-data' && await Directory(native).exists()) {
+      await for (final item in Directory(native).list(
+          recursive: true, followLinks: false)) {
         if (item is Link) throw const FormatException('Symlink in Dolphin save');
         final name = p.relative(item.path, from: native).replaceAll('\\', '/');
         if (p.basename(name) == '.DS_Store' || p.basename(name).startsWith('._')) continue;
-        if (item is Directory && target.kind == 'wii-data') {
+        if (item is Directory) {
           _safeName(name);
           directories.add(name);
           if (directories.length > maxFiles) throw const FormatException('Too many Dolphin save directories');
         }
         if (item is! File) continue;
-        if (target.kind == 'gci') {
-          if (name.contains('/') || !name.toLowerCase().endsWith('.gci')) continue;
-          final input = await item.open();
-          List<int> header;
-          try { header = await input.read(6); } finally { await input.close(); }
-          if (!_gciOwned(header, target.identity)) continue;
-        }
         paths.add(item);
         if (paths.length > maxFiles) throw const FormatException('Too many Dolphin save files');
       }
@@ -369,120 +327,6 @@ class DolphinNeoSyncStore {
     return DolphinSaveSnapshot(target, output, md5.convert(bytes).toString(), modified, bytes.length);
   }
 
-  static void _validateStateHeader(DolphinSaveTarget target, Uint8List bytes, int size) {
-    if (!target.isState || size < 49 || size > maxStateNativeBytes || bytes.length < 48) {
-      throw const FormatException('Invalid Dolphin savestate size');
-    }
-    final gameId = target.rawName.split('.').first;
-    final expectedId = Uint8List(6)..setRange(0, gameId.length, ascii.encode(gameId));
-    for (var index = 0; index < 6; index++) {
-      if (bytes[index] != expectedId[index]) throw const FormatException('Wrong-game Dolphin savestate');
-    }
-    // Native modern Dolphin StateHeaderLegacy + StateHeaderVersion. Old LZO
-    // checkpoints are deliberately unsupported; the core checks state version
-    // compatibility when the user loads the restored slot.
-    final data = ByteData.sublistView(bytes);
-    final cookie = data.getUint32(24, Endian.little);
-    final versionLength = data.getUint32(28, Endian.little);
-    if (data.getUint32(8, Endian.little) != 0 || cookie <= 0xBAADBABE ||
-        cookie > 0xBAADBABE + 10000 || versionLength > 1024 ||
-        bytes.length < 48 + versionLength || size <= 48 + versionLength) {
-      throw const FormatException('Invalid Dolphin savestate header');
-    }
-    final extended = 32 + versionLength;
-    final compression = data.getUint16(extended + 2, Endian.little);
-    final offset = data.getUint32(extended + 4, Endian.little);
-    final uncompressedSize = data.getUint64(extended + 8, Endian.little);
-    final contentOffset = extended + 16 + offset;
-    if (data.getUint16(extended, Endian.little) != 1 || compression > 1 ||
-        uncompressedSize == 0 || uncompressedSize > maxStateNativeBytes ||
-        contentOffset >= size ||
-        (compression == 0 && size - contentOffset != uncompressedSize)) {
-      throw const FormatException('Invalid Dolphin savestate payload header');
-    }
-  }
-
-  Future<DolphinSaveSnapshot?> _snapshotState(DolphinSaveTarget target) async {
-    final native = File(await nativePath(target));
-    if (!await native.exists()) return null;
-    final before = await native.stat();
-    final input = await native.open();
-    try {
-      _validateStateHeader(target, await input.read(4096), before.size);
-    } finally { await input.close(); }
-    final nativeHash = (await sha256.bind(native.openRead()).single).toString();
-    final header = utf8.encode(jsonEncode({
-      'format': 'neostation.dolphin.state', 'version': 2,
-      'key': target.cloudPath, 'path': target.rawName,
-      'size': before.size, 'sha256': nativeHash,
-    }));
-    if (header.length > _stateHeaderLimit) throw const FormatException('Dolphin state envelope header too large');
-    final prefix = Uint8List(12)..setRange(0, 8, ascii.encode(_stateMagic));
-    ByteData.sublistView(prefix).setUint32(8, header.length, Endian.little);
-    final output = await cacheFile(target);
-    final temp = File('${output.path}.incoming-${DateTime.now().microsecondsSinceEpoch}');
-    await _noLinks(cacheDirectory.path, temp.path);
-    try {
-      final sink = temp.openWrite();
-      try {
-        sink.add(prefix);
-        sink.add(header);
-        await sink.addStream(native.openRead());
-        await sink.flush();
-      } finally { await sink.close(); }
-      final after = await native.stat();
-      final nativeOffset = 12 + header.length;
-      if (before.size != after.size || before.modified != after.modified ||
-          await temp.length() != nativeOffset + before.size ||
-          (await sha256.bind(temp.openRead(nativeOffset)).single).toString() != nativeHash) {
-        throw const FileSystemException('Dolphin savestate changed during snapshot');
-      }
-      final checksum = (await md5.bind(temp.openRead()).single).toString();
-      final unchanged = await output.exists() &&
-          (await md5.bind(output.openRead()).single).toString() == checksum;
-      if (!unchanged) {
-        await temp.rename(output.path);
-        await output.setLastModified(before.modified);
-      }
-      return DolphinSaveSnapshot(target, output, checksum, before.modified, nativeOffset + before.size);
-    } finally {
-      if (await temp.exists()) await temp.delete();
-    }
-  }
-
-  Future<void> _restoreState(DolphinSaveTarget target, List<int> payload) async {
-    // The single Uint8List view avoids copying a Wii state or decoding a
-    // base64 string while the authenticated transport already owns the bytes.
-    final bytes = payload is Uint8List ? payload : Uint8List.fromList(payload);
-    if (bytes.length < 12 || ascii.decode(bytes.sublist(0, 8), allowInvalid: true) != _stateMagic) {
-      throw const FormatException('Incompatible Dolphin state envelope');
-    }
-    final headerLength = ByteData.sublistView(bytes).getUint32(8, Endian.little);
-    if (headerLength == 0 || headerLength > _stateHeaderLimit || bytes.length <= 12 + headerLength) {
-      throw const FormatException('Invalid Dolphin state envelope length');
-    }
-    final header = jsonDecode(utf8.decode(Uint8List.sublistView(bytes, 12, 12 + headerLength)));
-    final nativeBytes = Uint8List.sublistView(bytes, 12 + headerLength);
-    if (header is! Map || header['format'] != 'neostation.dolphin.state' ||
-        header['version'] != 2 || header['key'] != target.cloudPath ||
-        header['path'] != target.rawName || header['size'] != nativeBytes.length ||
-        header['sha256'] != sha256.convert(nativeBytes).toString()) {
-      throw const FormatException('Corrupt or wrong-game Dolphin state envelope');
-    }
-    _validateStateHeader(target, nativeBytes, nativeBytes.length);
-    final native = await nativePath(target);
-    final live = File(native);
-    await live.parent.create(recursive: true);
-    if (await live.exists()) {
-      final backup = File('$native.neosync-previous-${DateTime.now().microsecondsSinceEpoch}');
-      await _noLinks(userDirectory.path, backup.path);
-      await live.copy(backup.path);
-    }
-    // A same-directory rename atomically replaces only this slot. Backups and
-    // unfinished temporary writes are never candidates for synchronization.
-    await _atomicFile(live, nativeBytes);
-  }
-
   Future<void> restore(DolphinSaveTarget target, List<int> payload, {required String checksum}) =>
       Isolate.run(() => _restore(target, payload, checksum: checksum));
 
@@ -490,10 +334,6 @@ class DolphinNeoSyncStore {
     if (payload.isEmpty || payload.length > payloadLimit(target) ||
         !RegExp(r'^[a-f0-9]{32}$').hasMatch(checksum) || md5.convert(payload).toString() != checksum) {
       throw const FormatException('Dolphin cloud snapshot checksum or size is invalid');
-    }
-    if (target.isState) {
-      await _restoreState(target, payload);
-      return;
     }
     final doc = jsonDecode(utf8.decode(payload));
     if (doc is! Map || doc['format'] != 'neostation.dolphin.save' || doc['version'] != 1 || doc['key'] != target.cloudPath) {
@@ -547,30 +387,14 @@ class DolphinNeoSyncStore {
       for (final suffix in ['.previous', '.incoming']) {
         await _noLinks(userDirectory.path, '$native$suffix');
       }
-      // A GCI slot may contain other games. Copy them verbatim, but replace all
-      // files belonging to THIS game's header identity as one transaction.
+      // The target is one verified Wii title's data directory. The staged
+      // directory swap cannot alter an adjacent title or any other NAND path.
       await DolphinSystemFiles.replaceSnapshot(Directory(native), (stage) async {
-        if (target.kind == 'gci' && await Directory(native).exists()) {
-          await DolphinSystemFiles.copyTree(Directory(native), stage.path);
-          await for (final file in stage.list(followLinks: false)) {
-            if (file is File && file.path.toLowerCase().endsWith('.gci')) {
-              final input = await file.open();
-              List<int> header;
-              try { header = await input.read(6); } finally { await input.close(); }
-              if (_gciOwned(header, target.identity)) await file.delete();
-            }
-          }
-        }
         for (final directory in directories.cast<String>()) {
           await Directory(p.join(stage.path, directory)).create(recursive: true);
         }
         for (final entry in files.entries) {
           final destination = File(p.join(stage.path, entry.key));
-          // Do not overwrite another game's GCI just because its filename is
-          // identical to the incoming file. Header ownership is authoritative.
-          if (target.kind == 'gci' && await destination.exists()) {
-            throw const FormatException('GCI filename belongs to another game');
-          }
           await destination.parent.create(recursive: true);
           await destination.writeAsBytes(entry.value, flush: true);
         }

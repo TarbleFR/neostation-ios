@@ -21,27 +21,31 @@ NeoSyncFile structured(String system, String engine, String native, {
 });
 
 void main() {
-  test('structured Wii and GC native saves/states remain visible without file_name', () {
+  test('structured Dolphin V1 saves remain visible while GCI/states stay inactive', () {
     final files = [
       structured('wii', 'dolphinios', '00010000524d4350/wii-data.nsav',
         title: 'Wii saves', id: 'wii'),
-      structured('gc', 'dolphinios', 'GMSE01/gci-USA-A.nsav',
-        title: 'GC Memory cards', id: 'gci'),
       structured('gc', 'dolphinios', 'MemoryCardA.USA.raw.nsav',
         kind: 'shared', title: 'GC Memory cards', id: 'raw'),
+    ];
+    final unsupported = [
+      structured('gc', 'dolphinios', 'GMSE01/gci-USA-A.nsav',
+        title: 'GC Memory cards', id: 'gci'),
       structured('gc', 'dolphinios', 'GMSE01/GMSE01.s01.nsav',
         kind: 'state', title: 'Super Mario Sunshine', id: 'state'),
       structured('wii', 'dolphinios', '00010000524d4350/RMCP01.s02.nsav',
         kind: 'state', title: 'Mario Kart Wii', id: 'wii-state'),
     ];
     expect(files.map((file) => file.saveKind), everyElement(NeoSyncSaveKind.save));
-    expect(NeoSyncSaveUnits.cloud(files), hasLength(5));
+    expect(NeoSyncSaveUnits.cloud(files), hasLength(2));
+    expect(
+      unsupported.map((file) => file.saveKind),
+      everyElement(NeoSyncSaveKind.unresolved),
+    );
+    expect(unsupported.map((file) => file.dolphinTarget), everyElement(isNull));
     expect(files[0].sourceSavePath,
       'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav');
     expect(files[1].displayName, 'GC Memory cards');
-    expect(files[2].displayName, 'GC Memory cards');
-    expect(files[3].displayName, 'Super Mario Sunshine · Slot 1');
-    expect(files[4].displayName, 'Mario Kart Wii · Slot 2');
     expect(files[0].fileName, isEmpty);
     expect(files[0].filePath, '00010000524d4350/wii-data.nsav');
   });
@@ -139,8 +143,14 @@ void main() {
   });
 
   test('copies and JSON serialization preserve wire metadata and raw filenames', () {
-    final original = structured('gc', 'dolphinios', 'GMSE01/GMSE01.s01.nsav',
-      kind: 'state', title: 'Mario', id: 'server-id');
+    final original = structured(
+      'gc',
+      'dolphinios',
+      'MemoryCardA.USA.raw.nsav',
+      kind: 'shared',
+      title: 'GC Memory cards',
+      id: 'server-id',
+    );
     for (final copy in [original, original.withDolphinDisplayTitle('Sunshine'),
       original.withVerifiedSourcePath(original.sourceSavePath),
       NeoSyncFile.fromJson(original.toJson())]) {
@@ -150,7 +160,7 @@ void main() {
       expect(copy.systemName, 'gc');
       expect(copy.emulator, 'dolphinios');
       expect(copy.gameHash, 'rom-hash');
-      expect(copy.type, 'state');
+      expect(copy.type, 'shared');
       expect(copy.sourceSavePath, original.sourceSavePath);
     }
   });

@@ -12,19 +12,23 @@ class _NoTransferNeoSyncService implements NeoSyncService {
 }
 
 void main() {
+  const gcCard =
+      'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav';
+  const wiiData =
+      'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav';
   const gcState = 'v2/states/gc/dolphinios/game/GMSE01/GMSE01.s01.nsav';
   const wiiState = 'v2/states/wii/dolphinios/game/00010000524d4350/RMCP01.s10.nsav';
 
   test('NeoSync listings preserve current, alternate and historical filenames', () {
     for (final field in ['file_name', 'filename', 'fileName']) {
       final file = NeoSyncFile.fromJson({
-        'id': '42', field: gcState,
+        'id': '42', field: gcCard,
         'game_name': 'Super Mario Sunshine', 'file_size': 4096,
       });
-      expect(file.fileName, gcState);
-      expect(file.displayName, 'Super Mario Sunshine · Slot 1');
-      expect(file.dolphinDetailName, 'GMSE01.s01');
-      expect(file.toJson()['file_name'], gcState);
+      expect(file.fileName, gcCard);
+      expect(file.displayName, 'GC Memory cards');
+      expect(file.dolphinDetailName, 'MemoryCardA.USA.raw');
+      expect(file.toJson()['file_name'], gcCard);
     }
     expect(NeoSyncFile.fromJson({
       'file_name': 'saves/Été à Hyrule.srm', 'filename': 'wrong.srm',
@@ -34,15 +38,17 @@ void main() {
     }).fileName, 'saves/Mario.srm');
   });
 
-  test('titles are shown only on numbered Dolphin states, including aliases', () {
+  test('unsupported Dolphin states never acquire an active target or title', () {
     for (final path in [gcState, wiiState]) {
       for (final field in ['game_name', 'gameName']) {
         final file = NeoSyncFile.fromJson({
           'id': '42', 'file_name': path, field: ' Mario — Édition française ',
           'file_hash': 'abc123', 'file_path': '/account/$path',
         });
-        final slot = path == gcState ? 1 : 10;
-        expect(file.displayName, 'Mario — Édition française · Slot $slot');
+        expect(file.displayName, path);
+        expect(file.dolphinTarget, isNull);
+        expect(file.dolphinDetailName, isNull);
+        expect(file.hasDolphinGameTitle, isFalse);
         expect(file.id, '42');
         expect(file.checksum, 'abc123');
         expect(file.toJson()['file_name'], path);
@@ -59,10 +65,10 @@ void main() {
     }
   });
 
-  test('internal GC saves keep the exact card label, region and slot remain visible', () {
+  test('GC V1 keeps exact RAW card labels while GCI remains unsupported', () {
     for (final path in [
-      'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
-      'v2/saves/gc/dolphinios/game/GZLE01/gci-USA-B.nsav',
+      gcCard,
+      'v2/saves/gc/dolphinios/shared/MemoryCardB.USA.raw.nsav',
       'v2/saves/gc/dolphinios/shared/MemoryCardA.EUR.raw.nsav',
     ]) {
       final file = NeoSyncFile.fromJson({'file_name': path, 'game_name': 'Mario'});
@@ -71,8 +77,14 @@ void main() {
       expect(file.toJson()['file_name'], path);
       expect(file.withDolphinDisplayTitle('Zelda').displayName, 'GC Memory cards');
     }
+    final gci = NeoSyncFile.fromJson({
+      'file_name': 'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
+      'game_name': 'Mario',
+    });
+    expect(gci.dolphinTarget, isNull);
+    expect(gci.saveKind, NeoSyncSaveKind.unresolved);
     final wii = NeoSyncFile.fromJson({
-      'file_name': 'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
+      'file_name': wiiData,
       'game_name': 'Mario Kart Wii',
     });
     expect(wii.displayName, 'Wii saves');
@@ -80,24 +92,27 @@ void main() {
   });
 
   test('split basename and cloud path recover native identity and preserve transport data', () {
-    for (final filename in ['GMSE01.s01.nsav', '']) {
+    for (final filename in ['MemoryCardA.USA.raw.nsav', '']) {
       final data = {
-        'id': 'file-1', 'file_name': filename, 'file_path': '/account/$gcState',
+        'id': 'file-1', 'file_name': filename, 'file_path': '/account/$gcCard',
         'gameName': 'Super Mario Sunshine', 'file_hash': 'abc123',
       };
       final file = NeoSyncFile.fromJson(data);
-      expect(file.presentationPath, gcState);
-      expect(file.sourceSavePath, gcState);
-      expect(file.dolphinTarget?.cloudPath, gcState);
-      expect(file.displayName, 'Super Mario Sunshine · Slot 1');
+      expect(file.presentationPath, gcCard);
+      expect(file.sourceSavePath, gcCard);
+      expect(file.dolphinTarget?.cloudPath, gcCard);
+      expect(file.displayName, 'GC Memory cards');
       expect(file.fileName, filename);
       expect(file.filePath, data['file_path']);
       expect(file.id, 'file-1');
       expect(file.checksum, 'abc123');
     }
-    for (final filename in ['GZLE01.s01.nsav', 'foreign/GMSE01.s01.nsav']) {
+    for (final filename in [
+      'MemoryCardB.USA.raw.nsav',
+      'foreign/MemoryCardA.USA.raw.nsav',
+    ]) {
       final file = NeoSyncFile.fromJson({
-        'file_name': filename, 'file_path': '/account/$gcState', 'game_name': 'Mario',
+        'file_name': filename, 'file_path': '/account/$gcCard', 'game_name': 'Mario',
       });
       expect(file.dolphinTarget, isNull);
       expect(file.displayName, filename);
@@ -112,11 +127,7 @@ void main() {
       year: '', developer: '', publisher: '', genre: '', players: '', rating: 0,
       systemFolderName: 'ps2', systemId: 'ps2',
     );
-    for (final key in [gcState, wiiState,
-      'v2/saves/gc/dolphinios/shared/MemoryCardA.USA.raw.nsav',
-      'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav',
-      'v2/saves/wii/dolphinios/game/00010000524d4350/wii-data.nsav',
-    ]) {
+    for (final key in [gcCard, wiiData]) {
       for (final name in [key.split('/').last, '']) {
         final file = NeoSyncFile.fromJson({
           'id': 'unchanged-id', 'file_name': name,
@@ -134,31 +145,38 @@ void main() {
         expect(file.toJson(), before);
       }
     }
+    for (final key in [gcState, wiiState,
+      'v2/saves/gc/dolphinios/game/GMSE01/gci-USA-A.nsav']) {
+      final file = NeoSyncFile.fromJson({
+        'file_name': key,
+        'file_path': '/storage/account/$key',
+      });
+      expect(file.dolphinTarget, isNull, reason: key);
+      expect(file.saveKind, NeoSyncSaveKind.unresolved, reason: key);
+    }
   });
 
-  test('old unnamed states get native-identity playlist titles without modifying cloud metadata', () {
+  test('V1 card and Wii labels ignore playlist titles without modifying metadata', () {
     final titles = DolphinSaveTitleCache();
     titles.remember(const DolphinSaveIdentity(system: 'gc', gameId: 'GMSE01', region: 'USA'),
       'Super Mario Sunshine');
     titles.remember(const DolphinSaveIdentity(system: 'wii', gameId: 'RMCP01', region: 'EUR',
       titleId: '00010000524d4350'), 'Mario Kart Wii');
-    for (final path in [gcState, wiiState]) {
-      for (final oldTitle in ['', path == gcState ? 'GMSE01' : '00010000524d4350']) {
+    for (final path in [gcCard, wiiData]) {
+      for (final oldTitle in ['', 'Historical title']) {
         final original = NeoSyncFile.fromJson({'id': '12', 'file_name': path,
           'game_name': oldTitle, 'file_hash': 'abc'});
         expect(original.hasDolphinGameTitle, isFalse);
         final shown = original.withDolphinDisplayTitle(titles.titleFor(original.dolphinTarget!));
-        expect(shown.displayName, path == gcState ? 'Super Mario Sunshine · Slot 1' : 'Mario Kart Wii · Slot 10');
+        expect(shown.displayName, path == gcCard ? 'GC Memory cards' : 'Wii saves');
         expect(shown.toJson(), original.toJson());
       }
     }
-    final foreign = DolphinSaveTarget.statesForGame(
-      const DolphinSaveIdentity(system: 'gc', gameId: 'GZLE01', region: 'USA')).first;
-    expect(titles.titleFor(foreign), isNull);
     final card = DolphinSaveTarget.raw('MemoryCardA.USA.raw')!;
     expect(titles.titleFor(card), isNull);
-    final unknown = NeoSyncFile.fromJson({'file_name': foreign.cloudPath});
-    expect(unknown.displayName, 'GZLE01.s01');
+    final unknown = NeoSyncFile.fromJson({'file_name': gcState});
+    expect(unknown.dolphinTarget, isNull);
+    expect(unknown.displayName, gcState);
   });
 
   test('PlayStation savedata components remain visible with proven console and game context', () {
@@ -192,7 +210,7 @@ void main() {
     for (final value in [source.millisecondsSinceEpoch,
       '${source.millisecondsSinceEpoch}', source.millisecondsSinceEpoch ~/ 1000]) {
       final file = NeoSyncFile.fromJson({
-        'file_name': gcState, 'file_modified_at_timestamp': value,
+        'file_name': gcCard, 'file_modified_at_timestamp': value,
       });
       expect(file.fileModifiedAt, source);
       expect(file.uploadedAt, source);
@@ -201,12 +219,12 @@ void main() {
     final upload = DateTime.utc(2025, 1, 2);
     final created = DateTime.utc(2025, 1, 3);
     expect(NeoSyncFile.fromJson({
-      'file_name': gcState, 'created_at': 'invalid',
+      'file_name': gcCard, 'created_at': 'invalid',
       'uploaded_at': upload.toIso8601String(),
       'file_modified_at_timestamp': source.millisecondsSinceEpoch,
     }).uploadedAt, upload);
     expect(NeoSyncFile.fromJson({
-      'file_name': gcState, 'created_at': created.toIso8601String(),
+      'file_name': gcCard, 'created_at': created.toIso8601String(),
       'uploaded_at': upload.toIso8601String(),
     }).uploadedAt, created);
     expect(NeoSyncFile.fromJson({'file_modified_at_timestamp': 0}).fileModifiedAt,

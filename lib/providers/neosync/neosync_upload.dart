@@ -2,8 +2,8 @@ part of '../neo_sync_provider.dart';
 
 extension NeoSyncUpload on NeoSyncProvider {
   /// Uploads only save roots that remain supported by NeoSync on the current
-  /// platform. On iOS the standalone ARMSX2, RPCS3, MeloNX and embedded
-  /// DolphiniOS save trees are deliberately not enumerated.
+  /// platform. On iOS, DolphiniOS uses its strict V1 store while the
+  /// standalone ARMSX2, RPCS3 and MeloNX save trees are not enumerated.
   Future<void> autoSyncUploads() async {
     if (!isNeoSyncAuthenticated || _isSyncing) return;
 
@@ -21,6 +21,7 @@ extension NeoSyncUpload on NeoSyncProvider {
 
     try {
       final saveFiles = <File>[];
+      await _syncAllDolphinGames(download: false);
 
       final savesPath = await _getRetroArchSavesPath();
       List<File> retroArchSaves = [];
@@ -116,6 +117,13 @@ extension NeoSyncUpload on NeoSyncProvider {
       if (retroArchSaves.isEmpty &&
           retroArchStates.isEmpty &&
           saveFiles.isEmpty) {
+        if (_dolphinBulkChecked > 0) {
+          _syncStatus =
+              'Dolphin upload checked: $_uploadedFiles uploaded. '
+              'See per-game status for conflicts or deferred saves.';
+          _syncProgress = 1.0;
+          return;
+        }
         _syncStatus = 'No local save files found';
         _processedItems.add('No local save files found for auto-sync');
         return;
@@ -168,6 +176,7 @@ extension NeoSyncUpload on NeoSyncProvider {
       }
       _processedItems.add(_syncStatus);
     } finally {
+      _finishDolphinBulkStatus();
       _setSyncing(false);
     }
   }
@@ -183,7 +192,7 @@ extension NeoSyncUpload on NeoSyncProvider {
       // Standalone iOS emulator callers are intentionally inert even if an
       // older code path still holds a reference to this helper.
       if (Platform.isIOS &&
-          const {'armsx2', 'rpcs3', 'melonx', 'dolphinios'}
+          const {'armsx2', 'rpcs3', 'melonx'}
               .contains(customEmulatorSlug?.toLowerCase())) {
         _skippedFiles++;
         return;
@@ -202,6 +211,10 @@ extension NeoSyncUpload on NeoSyncProvider {
         _skippedFiles++;
         return;
       }
+      if (_isIosNeoSyncGameExcluded(game)) {
+        _skippedFiles++;
+        return;
+      }
 
       final relativePath = await _calculateSyncRelativePath(
         game,
@@ -216,7 +229,7 @@ extension NeoSyncUpload on NeoSyncProvider {
       }
 
       if (Platform.isIOS &&
-          const {'armsx2', 'rpcs3', 'melonx', 'dolphinios'}
+          const {'armsx2', 'rpcs3', 'melonx'}
               .contains(v2Path.emulatorSlug.toLowerCase())) {
         _skippedFiles++;
         return;

@@ -603,6 +603,26 @@ class MelonxLibraryService {
   /// Whether a non-empty MeloNX library has been received at least once.
   static bool get hasSyncedLibrary => (_cache?.isNotEmpty ?? false);
 
+  /// Whether the same cached library lookup used by launch routing assigns a
+  /// game to MeloNX. This does not open MeloNX or access its save directory.
+  static bool ownsGameRoute(
+    String? romPath, {
+    String? titleId,
+    String? titleName,
+  }) {
+    final value = romPath?.trim() ?? '';
+    if (isVirtualLibraryPath(value)) return true;
+    final cache = _cache;
+    if (cache == null || cache.isEmpty) return false;
+    final id = titleId?.trim() ?? '';
+    final name = titleName?.trim() ?? '';
+    return (id.isNotEmpty &&
+            (cache.containsKey(id) || cache.containsKey(id.toLowerCase()))) ||
+        (name.isNotEmpty &&
+            (cache.containsKey(name) ||
+                cache.containsKey(name.toLowerCase())));
+  }
+
   /// Launches a Nintendo Switch title in MeloNX.
   ///
   /// Virtual rows already contain the exact `melonx://game?...` URL. For a

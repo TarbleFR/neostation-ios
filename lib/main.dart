@@ -290,7 +290,7 @@ void main() async {
     ConfigService.linkedExternalFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder();
 
-    // ARMSX2 has one security-scoped root for library + NeoSync.
+    // ARMSX2 keeps its security-scoped library root. NeoSync does not scan it.
     final canonicalArmsx2Path =
         await ExternalFolderAccess.resolveBookmarkedFolder(
           key: Armsx2FolderService.bookmarkKey,
@@ -313,10 +313,9 @@ void main() async {
       ConfigService.linkedArmsx2FolderPath = null;
       ConfigService.linkedArmsx2GameFolderPath = null;
     }
-    ConfigService.linkedMelonxSaveFolderPath =
-        await ExternalFolderAccess.resolveBookmarkedFolder(
-          key: ConfigService.melonxNeoSyncBookmarkKey,
-        );
+    // Keep the saved MeloNX bookmark for a future NeoSync re-enable, but do
+    // not reactivate access to that save-only folder in this release.
+    ConfigService.linkedMelonxSaveFolderPath = null;
 
     // Load the last exported emulator libraries so direct-launch matching
     // works immediately after a cold start without forcing a fresh sync.
