@@ -1,0 +1,117 @@
+name: Complete retired cloud cleanup
+
+on:
+  push:
+    branches: [fix/disable-ios-standalone-neosync]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Repair cleanup cuts and remove obsolete tab strings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'Missing repair anchor: {path}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Imports that became unused after the retired cloud feature was removed.
+          for path, line in [
+              ('lib/data/datasources/sqlite_service.dart', "import 'dart:convert';\n"),
+              ('lib/screens/game_screen/game_details_card/game_details_card_list.dart', "import '../../../repositories/game_repository.dart';\n"),
+          ]:
+              p = Path(path)
+              text = p.read_text()
+              if line in text:
+                  p.write_text(text.replace(line, '', 1))
+
+          # The removed wrapper left one extra close in the details card return.
+          replace_once(
+              'lib/screens/game_screen/my_games_list.dart',
+              '        onGameDeleted: _handleGameDeleted,\n      ),\n    );',
+              '        onGameDeleted: _handleGameDeleted,\n    );',
+          )
+
+          # The permission is for RetroArch filesystem configuration now, not cloud saves.
+          p = Path('lib/l10n/app_locale_en.dart')
+          text = p.read_text().replace(
+              "      'Required for RetroArch config and Save Sync',",
+              "      'Required for RetroArch configuration access',",
+              1,
+          )
+          p.write_text(text)
+
+          # Remove the obsolete Sync-tab localization pair from every language map.
+          for p in Path('lib/l10n').glob('app_locale_*.dart'):
+              lines = p.read_text().splitlines(keepends=True)
+              out = []
+              i = 0
+              while i < len(lines):
+                  if 'AppLocale.showSyncTab:' in lines[i]:
+                      i += 1
+                      if i < len(lines) and 'AppLocale.showSyncTabSubtitle:' in lines[i]:
+                          subtitle = lines[i]
+                          i += 1
+                          tail = subtitle.split(':', 1)[1].strip()
+                          if not tail and i < len(lines) and 'AppLocale.' not in lines[i]:
+                              i += 1
+                      continue
+                  out.append(lines[i])
+                  i += 1
+              p.write_text(''.join(out))
+
+          # Remove the corresponding keys from the locale key registry.
+          p = Path('lib/l10n/app_locale.dart')
+          text = p.read_text()
+          text = text.replace("  static const String showSyncTab = 'show_sync_tab';\n", '')
+          text = text.replace("  static const String showSyncTabSubtitle = 'show_sync_tab_subtitle';\n", '')
+          p.write_text(text)
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          forbidden = ('Neo' + 'Sync', ('Neo' + 'Sync').lower(), 'neo' + '_sync',
+                       'showSyncTab', 'show_sync_tab')
+          hits = []
+          for root in [Path('lib'), Path('test'), Path('assets')]:
+              if not root.exists():
+                  continue
+              for p in root.rglob('*'):
+                  if not p.is_file():
+                      continue
+                  if any(x in p.as_posix() for x in forbidden):
+                      hits.append(p.as_posix())
+                      continue
+                  try:
+                      text = p.read_text()
+                  except UnicodeDecodeError:
+                      continue
+                  if any(x in text for x in forbidden):
+                      hits.append(p.as_posix())
+          if hits:
+              raise SystemExit('Cleanup remnants: ' + ', '.join(sorted(set(hits))))
+          PY
+
+          git diff --check
+          rm .github/workflows/cleanup-repair.yml
+          git config user.name "Tarble FR"
+          git config user.email "f9wynyv9qy@privaterelay.appleid.com"
+          git add -A
+          git commit -m "fix: complete retired cloud removal"
+          git push origin HEAD:"$GITHUB_REF_NAME"
