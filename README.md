@@ -1,30 +1,38 @@
+<div align="center">
+
 # NeoStation iOS
 
 #### iOS/iPadOS emulation frontend
 
-NeoStation iOS is an iPhone and iPad port of NeoStation. It keeps the Flutter frontend while adding iOS-specific library linking, sideloading, launch flows and an embedded DolphiniOS engine.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.md)
+[![Platform](https://img.shields.io/badge/Platform-iOS%2018%2B-blue)](https://github.com/TarbleFR/neostation-ios)
 
-> Modified version notice — August 2026  
-> This repository contains a modified version of NeoStation. The upstream project and its contributors retain credit for the original work. The iOS-specific port and adaptations in this repository are developed and maintained independently by @TarbleFR.
+![NeoStation iOS Preview](assets/readme/neostation-ios-preview.png)
+
+</div>
+
+NeoStation iOS is an iPhone and iPad port of [NeoStation](https://github.com/misobadev/neostation-frontend). It keeps the Flutter frontend while adding iOS-specific library linking, sideloading, launch flows and an embedded [DolphiniOS](https://github.com/OatmealDome/dolphin-ios) engine.
+
+> **Modified version notice — August 2026**  
+> This repository contains a modified version of NeoStation. The upstream project and its contributors retain credit for the original work. The iOS-specific port and adaptations in this repository are developed and maintained independently by [@TarbleFR](https://github.com/TarbleFR).
 
 ## Highlights
 
-- Embedded **DolphiniOS** engine for GameCube and Wii.
-- **RetroArch** library linking/synchronization and direct launching.
+- Embedded **[DolphiniOS](https://github.com/OatmealDome/dolphin-ios)** engine for GameCube and Wii.
+- **[RetroArch](https://www.retroarch.com/)** library linking/synchronization and direct launching.
 - **MeloNX** library synchronization, media association and JIT-oriented launch flows.
 - **ARMSX2** PS2 library synchronization, direct launching and JIT-oriented launch flows.
 - **RPCS3** PS3 Data-folder library synchronization, PARAM.SFO metadata repair and JIT-assisted launch flow.
-- **StikJIT** integration for supported iOS emulator workflows.
-- ScreenScraper metadata/media scraping and RetroAchievements.
+- **[StikJIT](https://github.com/StikDebug/StikJIT)** integration for supported iOS emulator workflows.
+- [ScreenScraper](https://www.screenscraper.fr/) metadata/media scraping and [RetroAchievements](https://retroachievements.org/).
 - Gamepad-focused landscape navigation and multi-language UI.
-
 
 ## Requirements
 
 ### To run
 
 - iOS 18 or newer.
-- An IPA signing/sideloading method such as SideStore or another compatible installer, or Apple Developer signing.
+- An IPA signing/sideloading method such as [SideStore](https://sidestore.io/) or another compatible installer, or Apple Developer signing.
 - RetroArch, MeloNX, ARMSX2 or RPCS3 when using the corresponding external integration.
 
 ### To build locally
@@ -65,26 +73,35 @@ build-utils/  auxiliary build/source tooling
 
 ## Upstream project and attribution
 
-NeoStation iOS is based on the upstream NeoStation project:
+NeoStation iOS is based on the upstream [NeoStation repository](https://github.com/misobadev/neostation-frontend).
 
-- Upstream repository: https://github.com/misobadev/neostation-frontend
-- Lead: @misobadev
-- Official co-maintainer: @androosio
-- Official collaborator: @ItsRetroPup
+- Lead: [@misobadev](https://github.com/misobadev)
+- Official co-maintainer: [@androosio](https://github.com/androosio)
+- Official collaborator: [@ItsRetroPup](https://github.com/ItsRetroPup)
 
 All upstream authors and contributors retain attribution for their contributions.
 
 ### iOS port
 
-- iOS port developer / maintainer: @TarbleFR
+- iOS port developer / maintainer: [@TarbleFR](https://github.com/TarbleFR)
 - Modified iOS version maintained since August 2026.
 
-## GPL-3.0 and corresponding source
+## Licenses and third-party components
 
-NeoStation and this modified iOS port are distributed under the GNU General Public License v3.0 (GPL-3.0). See `LICENSE.md` and `NOTICE.md` for the applicable license and attribution notices.
+### NeoStation iOS
 
-Third-party components, packages, artwork, trademarks and emulator projects can have their own licenses or terms. Preserve their notices where applicable.
+NeoStation and this modified iOS port are distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE.md](LICENSE.md) and [NOTICE.md](NOTICE.md) for the applicable license and attribution notices.
+
+### StikJIT
+
+NeoStation iOS integrates **[StikJIT](https://github.com/StikDebug/StikJIT)** for supported JIT workflows. StikJIT is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See the upstream [StikJIT LICENSE](https://github.com/StikDebug/StikJIT/blob/main/LICENSE). Bundled or referenced third-party components inside StikJIT retain their own applicable licenses.
+
+### DolphiniOS / Dolphin
+
+The embedded GameCube/Wii engine uses code from **[DolphiniOS](https://github.com/OatmealDome/dolphin-ios)** and the Dolphin Emulator project. The DolphiniOS repository states that most original Dolphin source code is licensed under **GNU GPL v2 or later (GPLv2+)**, while individual files may use other compatible licenses identified through SPDX tags; the repository as a whole is compatible with GPLv3. See the upstream [DolphiniOS COPYING notice](https://github.com/OatmealDome/dolphin-ios/blob/master/COPYING) and [LICENSES directory](https://github.com/OatmealDome/dolphin-ios/tree/master/LICENSES).
+
+Third-party packages, artwork, trademarks and emulator projects may have their own licenses or terms. Their copyright, attribution and license notices must be preserved where applicable.
 
 ## License
 
-GNU General Public License v3.0.
+**GNU General Public License v3.0.** See [LICENSE.md](LICENSE.md).
