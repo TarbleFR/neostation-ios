@@ -28,10 +28,13 @@ class _Rpcs3InternalPlaylistActionsState
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
   String get _import => _fr ? 'Importer' : 'Import';
   String get _games => _fr ? 'Importer des jeux' : 'Import games';
-  String get _folder => _fr ? 'Importer un dossier de jeu' : 'Import game folder';
-  String get _firmware => _fr ? 'Importer le firmware PS3' : 'Import PS3 firmware';
+  String get _folder =>
+      _fr ? 'Importer un dossier de jeu' : 'Import game folder';
+  String get _firmware =>
+      _fr ? 'Importer le firmware PS3' : 'Import PS3 firmware';
   String get _firmwareMissing => _fr ? 'Firmware requis' : 'Firmware required';
-  String get _failed => _fr ? 'Échec de l’importation RPCS3.' : 'RPCS3 import failed.';
+  String get _failed =>
+      _fr ? 'Échec de l’importation RPCS3.' : 'RPCS3 import failed.';
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
@@ -47,7 +50,9 @@ class _Rpcs3InternalPlaylistActionsState
 
   void _notice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _selected(String action) async {
@@ -131,7 +136,9 @@ class _Rpcs3InternalPlaylistActionsState
             child: Row(
               children: [
                 Icon(
-                  _firmwareVersion.isEmpty ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                  _firmwareVersion.isEmpty
+                      ? Icons.warning_amber_rounded
+                      : Icons.check_circle_outline,
                   size: 18.r,
                 ),
                 SizedBox(width: 8.r),

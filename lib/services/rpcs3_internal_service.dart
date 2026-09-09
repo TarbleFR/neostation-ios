@@ -69,11 +69,7 @@ class Rpcs3InternalService {
   static Future<Map<String, dynamic>> diagnostics() async {
     final core = await Rpcs3InternalBridge.diagnostics();
     final jit = await Rpcs3InternalBridge.jitStatus();
-    return <String, dynamic>{
-      ...core,
-      'jit': jit,
-      'jitPrepared': _jitPrepared,
-    };
+    return <String, dynamic>{...core, 'jit': jit, 'jitPrepared': _jitPrepared};
   }
 
   static Future<void> _ensureJit() async {
@@ -136,8 +132,7 @@ class Rpcs3InternalService {
       if (report['success'] != true) {
         throw Rpcs3InternalException(
           'coreInitializeFailed',
-          report['message']?.toString() ??
-              'RPCS3 Core could not initialize.',
+          report['message']?.toString() ?? 'RPCS3 Core could not initialize.',
         );
       }
 
@@ -184,8 +179,7 @@ class Rpcs3InternalService {
     if (report['success'] != true) {
       throw Rpcs3InternalException(
         'firmwareInstallFailed',
-        report['message']?.toString() ??
-            'RPCS3 rejected the PS3 firmware.',
+        report['message']?.toString() ?? 'RPCS3 rejected the PS3 firmware.',
       );
     }
 
@@ -272,18 +266,14 @@ class Rpcs3InternalService {
     if (report['success'] != true) {
       throw Rpcs3InternalException(
         'gameImportFailed',
-        report['message']?.toString() ??
-            'RPCS3 rejected the selected folder.',
+        report['message']?.toString() ?? 'RPCS3 rejected the selected folder.',
       );
     }
     await Rpcs3LibraryService.syncInternalLibrary();
     return true;
   }
 
-  static Future<bool> launchTitle(
-    String titleId, {
-    String? savestateId,
-  }) async {
+  static Future<bool> launchTitle(String titleId, {String? savestateId}) async {
     final normalized = titleId.trim().toUpperCase();
     if (normalized.isEmpty) return false;
 
@@ -305,8 +295,7 @@ class Rpcs3InternalService {
     if (report['success'] != true) {
       throw Rpcs3InternalException(
         'bootFailed',
-        report['message']?.toString() ??
-            'RPCS3 could not boot this game.',
+        report['message']?.toString() ?? 'RPCS3 could not boot this game.',
       );
     }
     return true;
