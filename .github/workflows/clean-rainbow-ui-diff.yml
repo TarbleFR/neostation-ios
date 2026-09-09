@@ -32,9 +32,7 @@ jobs:
           import subprocess
 
           def main_file(path: str) -> str:
-              return subprocess.check_output(
-                  ['git', 'show', f'origin/main:{path}'], text=True
-              )
+              return subprocess.check_output(['git', 'show', f'origin/main:{path}'], text=True)
 
           def replace_once(text: str, old: str, new: str, label: str) -> str:
               count = text.count(old)
@@ -42,99 +40,87 @@ jobs:
                   raise SystemExit(f'{label}: expected one match, found {count}')
               return text.replace(old, new, 1)
 
-          # Keep the mature grid implementation byte-for-byte from main except
-          # for the reusable rainbow selection painter.
           grid_path = 'lib/screens/game_screen/my_games_grid.dart'
           grid = main_file(grid_path)
-          grid = replace_once(
-              grid,
-              "import 'package:neostation/widgets/game_view_footer.dart';\n",
-              "import 'package:neostation/widgets/game_view_footer.dart';\n"
-              "import 'package:neostation/widgets/rainbow_selection_border.dart';\n",
-              'grid import',
-          )
-          grid = replace_once(
-              grid,
-              "                    final borderColor = theme.colorScheme.secondary;\n\n",
-              "",
-              'grid old border color',
-          )
-          grid = replace_once(
-              grid,
-              """                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: borderColor,
-                                        width: 4.r,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.r),
-                                    ),
-                                  ),""",
-              """                                  child: RainbowSelectionBorder(
-                                    key: ValueKey(
-                                      'grid-rainbow-${widget.games[idx].romname}',
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.r),
-                                    borderWidth: 4.r,
-                                    glowWidth: 7.r,
-                                    glowBlur: 4.r,
-                                    child: const SizedBox.expand(),
-                                  ),""",
-              'grid selection border',
-          )
+          grid = replace_once(grid, "import 'package:neostation/widgets/game_view_footer.dart';\n", "import 'package:neostation/widgets/game_view_footer.dart';\nimport 'package:neostation/widgets/rainbow_selection_border.dart';\n", 'grid import')
+          grid = replace_once(grid, "                    final borderColor = theme.colorScheme.secondary;\n\n", "", 'grid old border color')
+          old_grid_border = "\n".join([
+              "                                  child: DecoratedBox(",
+              "                                    decoration: BoxDecoration(",
+              "                                      border: Border.all(",
+              "                                        color: borderColor,",
+              "                                        width: 4.r,",
+              "                                      ),",
+              "                                      borderRadius: BorderRadius.circular(12.r),",
+              "                                    ),",
+              "                                  ),",
+          ])
+          new_grid_border = "\n".join([
+              "                                  child: RainbowSelectionBorder(",
+              "                                    key: ValueKey(",
+              "                                      'grid-rainbow-${widget.games[idx].romname}',",
+              "                                    ),",
+              "                                    borderRadius: BorderRadius.circular(12.r),",
+              "                                    borderWidth: 4.r,",
+              "                                    glowWidth: 7.r,",
+              "                                    glowBlur: 4.r,",
+              "                                    child: const SizedBox.expand(),",
+              "                                  ),",
+          ])
+          grid = replace_once(grid, old_grid_border, new_grid_border, 'grid selection border')
           Path(grid_path).write_text(grid)
 
-          # Restore the existing DolphiniOS action logic and change only its
-          # visual chrome so it matches NeoStation's standard action buttons.
           dolphin_path = 'lib/widgets/dolphin_internal_playlist_actions.dart'
           dolphin = main_file(dolphin_path)
-          dolphin = replace_once(
-              dolphin,
-              """    return SizedBox(
-      width: 36.r,
-      height: 36.r,
-      child: PopupMenuButton<String>(""",
-              """    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      width: 36.r,
-      height: 36.r,
-      decoration: BoxDecoration(
-        color: scheme.tertiaryFixed,
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: scheme.tertiaryFixed, width: 2.r),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.3),
-            blurRadius: 3.r,
-            offset: Offset(1.5.r, 1.5.r),
-          ),
-        ],
-      ),
-      child: PopupMenuButton<String>(""",
-              'dolphin themed container',
-          )
-          dolphin = replace_once(
-              dolphin,
-              """        icon: _busy
-            ? SizedBox(width: 18.r, height: 18.r, child: const CircularProgressIndicator(strokeWidth: 2))
-            : Icon(Icons.file_upload_outlined, size: 18.r),""",
-              """        icon: _busy
-            ? SizedBox(
-                width: 18.r,
-                height: 18.r,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: scheme.onTertiaryFixed,
-                ),
-              )
-            : Icon(
-                Icons.file_upload_outlined,
-                size: 18.r,
-                color: scheme.onTertiaryFixed,
-              ),""",
-              'dolphin icon',
-          )
+          old_container = "\n".join([
+              "    return SizedBox(",
+              "      width: 36.r,",
+              "      height: 36.r,",
+              "      child: PopupMenuButton<String>(",
+          ])
+          new_container = "\n".join([
+              "    final scheme = Theme.of(context).colorScheme;",
+              "",
+              "    return Container(",
+              "      width: 36.r,",
+              "      height: 36.r,",
+              "      decoration: BoxDecoration(",
+              "        color: scheme.tertiaryFixed,",
+              "        borderRadius: BorderRadius.circular(10.r),",
+              "        border: Border.all(color: scheme.tertiaryFixed, width: 2.r),",
+              "        boxShadow: [",
+              "          BoxShadow(",
+              "            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.3),",
+              "            blurRadius: 3.r,",
+              "            offset: Offset(1.5.r, 1.5.r),",
+              "          ),",
+              "        ],",
+              "      ),",
+              "      child: PopupMenuButton<String>(",
+          ])
+          dolphin = replace_once(dolphin, old_container, new_container, 'dolphin themed container')
+          old_icon = "\n".join([
+              "        icon: _busy",
+              "            ? SizedBox(width: 18.r, height: 18.r, child: const CircularProgressIndicator(strokeWidth: 2))",
+              "            : Icon(Icons.file_upload_outlined, size: 18.r),",
+          ])
+          new_icon = "\n".join([
+              "        icon: _busy",
+              "            ? SizedBox(",
+              "                width: 18.r,",
+              "                height: 18.r,",
+              "                child: CircularProgressIndicator(",
+              "                  strokeWidth: 2,",
+              "                  color: scheme.onTertiaryFixed,",
+              "                ),",
+              "              )",
+              "            : Icon(",
+              "                Icons.file_upload_outlined,",
+              "                size: 18.r,",
+              "                color: scheme.onTertiaryFixed,",
+              "              ),",
+          ])
+          dolphin = replace_once(dolphin, old_icon, new_icon, 'dolphin icon')
           Path(dolphin_path).write_text(dolphin)
           PY
 
@@ -147,9 +133,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            lib/screens/game_screen/my_games_grid.dart \
-            lib/widgets/dolphin_internal_playlist_actions.dart
+          git add lib/screens/game_screen/my_games_grid.dart lib/widgets/dolphin_internal_playlist_actions.dart
           git commit -m "chore: keep rainbow UI diff focused"
           git push origin HEAD:feature/dolphin-rainbow-selection-ui
 
