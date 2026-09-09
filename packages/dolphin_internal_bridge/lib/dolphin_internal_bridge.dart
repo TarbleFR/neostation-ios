@@ -1,10 +1,10 @@
 import 'package:flutter/services.dart';
 
-/// Native channel owned by NeoStation's in-process Dolphin integration.
+/// Native channel owned exclusively by NeoStation's GameCube/Wii integration.
 ///
-/// The embedded JIT helper targets NeoStation's own PID. `prepareHostJit` is
-/// intentionally reusable by another in-process engine such as RPCS3; it does
-/// not launch, inspect or modify an external emulator application.
+/// Application code normally uses `DolphinEmbeddedService`; this minimal API is
+/// kept public so diagnostics and lifecycle tests can query the native runtime
+/// without touching the launch contracts of other emulators.
 class DolphinInternalBridge {
   DolphinInternalBridge._();
 
@@ -15,19 +15,6 @@ class DolphinInternalBridge {
   static Future<Map<String, dynamic>> status() async {
     return Map<String, dynamic>.from(
       await _channel.invokeMapMethod<String, dynamic>('status') ??
-          const <String, dynamic>{},
-    );
-  }
-
-  static Future<Map<String, dynamic>> prepareHostJit({
-    required String pairingFilePath,
-    String mode = 'legacy',
-  }) async {
-    return Map<String, dynamic>.from(
-      await _channel.invokeMapMethod<String, dynamic>('prepareHostJit', {
-            'pairingFilePath': pairingFilePath,
-            'mode': mode,
-          }) ??
           const <String, dynamic>{},
     );
   }
