@@ -82,6 +82,7 @@ static UIViewController* RPCS3RootViewController(void) {
 @property(nonatomic, strong) FlutterMethodChannel* channel;
 @property(nonatomic, strong) RPCS3GameViewController* gameController;
 @property(nonatomic, assign) BOOL initialized;
+@property(nonatomic, assign) BOOL initializedWithExpandedJit;
 @property(nonatomic, assign) BOOL operationBusy;
 @end
 
@@ -206,7 +207,9 @@ static void RPCS3Progress(void* context,
       if (value) build = [NSString stringWithUTF8String:value] ?: @"";
     }
     result(@{@"coreLoaded": @(loaded), @"abi": @(abi), @"build": build,
-             @"initialized": @(self.initialized), @"message": error ?: @""});
+             @"initialized": @(self.initialized),
+             @"expandedJitRegion": @(self.initializedWithExpandedJit),
+             @"message": error ?: @""});
     return;
   }
 
@@ -218,7 +221,14 @@ static void RPCS3Progress(void* context,
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
       if (![self loadCore:&error]) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"message": error ?: @"Core unavailable"}); }); return; }
-      if (self.initialized) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @YES, @"alreadyInitialized": @YES}); }); return; }
+      if (self.initialized) {
+        if (self.initializedWithExpandedJit == expanded) {
+          dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @YES, @"alreadyInitialized": @YES, @"expandedJitRegion": @(expanded)}); });
+        } else {
+          dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"modeMismatch": @YES, @"message": @"RPCS3 Core must be restarted to change runtime mode."}); });
+        }
+        return;
+      }
       rpcs3_ios_init_options options = {};
       options.abi_version = kExpectedAbi;
       options.size = sizeof(options);
@@ -230,9 +240,37 @@ static void RPCS3Progress(void* context,
       options.expanded_jit_region = expanded ? 1 : 0;
       options.reserved = 0;
       rpcs3_ios_status status = self->_api.initialize(&options);
-      if (status == 0) self.initialized = YES;
-      NSDictionary* payload = [self statusPayload:status];
+      if (status == 0) {
+        self.initialized = YES;
+        self.initializedWithExpandedJit = expanded;
+      }
+      NSMutableDictionary* payload = [[self statusPayload:status] mutableCopy];
+      payload[@"expandedJitRegion"] = @(expanded);
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"shutdown"]) {
+    dispatch_async(_runtimeQueue, ^{
+      if (!self.initialized) {
+        dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @YES, @"alreadyShutdown": @YES}); });
+        return;
+      }
+      if (self.gameController && self->_api.stop_emulation) self->_api.stop_emulation();
+      if (self->_api.set_display_surface) self->_api.set_display_surface(NULL);
+      rpcs3_ios_status status = self->_api.shutdown ? self->_api.shutdown() : 0;
+      if (status == 0) {
+        self.initialized = NO;
+        self.initializedWithExpandedJit = NO;
+      }
+      NSDictionary* payload = [self statusPayload:status];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        RPCS3GameViewController* controller = self.gameController;
+        self.gameController = nil;
+        [controller dismissViewControllerAnimated:NO completion:nil];
+        result(payload);
+      });
     });
     return;
   }
@@ -279,7 +317,10 @@ static void RPCS3Progress(void* context,
     NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
     NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class] ? args[@"titleId"] : @"";
     NSString* savestateId = [args[@"savestateId"] isKindOfClass:NSString.class] ? args[@"savestateId"] : nil;
-    if (!self.initialized || !titleId.length || self.gameController) { result(@{@"success": @NO, @"message": @"RPCS3 is not ready to boot this title."}); return; }
+    if (!self.initialized || !self.initializedWithExpandedJit || !titleId.length || self.gameController) {
+      result(@{@"success": @NO, @"message": @"RPCS3 is not ready to boot this title with JIT."});
+      return;
+    }
     __block RPCS3GameViewController* controller = nil;
     dispatch_sync(dispatch_get_main_queue(), ^{
       UIViewController* root = RPCS3RootViewController();

@@ -44,6 +44,12 @@ class Rpcs3InternalBridge {
         const <String, dynamic>{},
   );
 
+  static Future<Map<String, dynamic>> shutdown() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMapMethod<String, dynamic>('shutdown') ??
+            const <String, dynamic>{},
+      );
+
   static Future<String> firmwareVersion() async =>
       (await _channel.invokeMethod<String>('firmwareVersion')) ?? '';
 
