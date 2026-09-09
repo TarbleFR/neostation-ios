@@ -122,12 +122,33 @@ class Rpcs3InternalBridge {
 
   static Future<Map<String, dynamic>> prepareJit({
     required String pairingFilePath,
-  }) async => Map<String, dynamic>.from(
-    await _jitChannel.invokeMapMethod<String, dynamic>('prepareJit', {
-          'pairingFilePath': pairingFilePath,
-        }) ??
-        const <String, dynamic>{},
-  );
+  }) async {
+    // The standalone RPCS3 app already has its Core image mapped when
+    // StikDebug attaches universal.js. Do the same in NeoStation. Loading the
+    // image does not initialize RPCS3 and does not allocate its executable
+    // arena; it only makes the Core/trap image visible to the debugger before
+    // vAttach, avoiding the attach-time crash seen when the dylib appeared only
+    // after the helper was already driving the target process.
+    final preload = preloadCoreImage(expandedJitRegion: true);
+    if (preload['success'] != true) {
+      return <String, dynamic>{
+        'success': false,
+        'message': preload['message']?.toString() ??
+            'RPCS3 Core could not be mapped before JIT attachment.',
+        'corePreload': preload,
+      };
+    }
+
+    final response = Map<String, dynamic>.from(
+      await _jitChannel.invokeMapMethod<String, dynamic>('prepareJit', {
+            'pairingFilePath': pairingFilePath,
+          }) ??
+          const <String, dynamic>{},
+    );
+    response['corePreloaded'] = true;
+    response['corePreloadAbi'] = preload['abi'];
+    return response;
+  }
 
   static Future<Map<String, dynamic>> initialize({
     required String supportPath,
