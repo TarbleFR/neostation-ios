@@ -8,8 +8,11 @@ void main() {
       final podspec = File(
         'packages/rpcs3_internal_bridge/ios/rpcs3_internal_bridge.podspec',
       ).readAsStringSync();
-      expect(podspec, isNot(contains('vendored_libraries')));
-      expect(podspec, contains("s.preserve_paths   = 'Frameworks/libRPCS3Core.dylib'"));
+      expect(podspec, isNot(contains('s.vendored_libraries')));
+      expect(
+        podspec,
+        contains("s.preserve_paths   = 'Frameworks/libRPCS3Core.dylib'"),
+      );
     });
 
     test('RPCS3 Core is opened only by the native bridge', () {
