@@ -1,16 +1,16 @@
-name: NeoStation iOS Build 230
-run-name: NeoStation iOS Build 230 (RPCS3 progressive import + SPU boot) • ${{ github.sha }}
+name: NeoStation iOS Build 231
+run-name: NeoStation iOS Build 231 (RPCS3 PPU boot + multi-delete) • ${{ github.sha }}
 
 on:
   push:
     branches:
-      - fix/rpcs3-import-spu-cache-build230
+      - fix/rpcs3-ppu-delete-build231
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-230
+  group: neostation-ios-build-231
   cancel-in-progress: true
 
 jobs:
@@ -19,9 +19,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '230'
-      IPA_NAME: 'NeoStation-iOS-Build-230'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-230'
+      BUILD_NUMBER: '231'
+      IPA_NAME: 'NeoStation-iOS-Build-231'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-231'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -122,8 +122,19 @@ jobs:
       - name: Materialize verified RPCS3 Core
         run: |
           set -euo pipefail
+          CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           python3 build-utils/materialize_rpcs3_internal.py core
-          test -s packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
+          test -s "$CORE"
+          for symbol in \
+            _rpcs3_ios_set_game_setting \
+            _rpcs3_ios_get_boot_progress \
+            _rpcs3_ios_stop_emulation \
+            _rpcs3_ios_delete_game; do
+            nm -g "$CORE" | grep -q " $symbol$" || {
+              echo "Required Build 231 RPCS3 symbol missing: $symbol" >&2
+              exit 1
+            }
+          done
 
       - name: Analyze and test
         run: |
@@ -282,9 +293,9 @@ jobs:
           missing = [key for key in required if payload.get(key) is not True]
           if missing:
               raise SystemExit(
-                  'Build 230 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
+                  'Build 231 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
               )
-          print(f'RPCS3 Build 230 IPA validation passed: {cores[0]} + RPCS3JITHelper; progressive import and mobile boot profile compiled')
+          print(f'RPCS3 Build 231 IPA validation passed: {cores[0]} + RPCS3JITHelper; safe per-title PPU/SPU boot profile and native multi-delete compiled')
           PY
           ls -lah dist
 
