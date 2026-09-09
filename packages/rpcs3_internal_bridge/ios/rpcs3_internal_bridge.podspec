@@ -11,7 +11,11 @@ NeoStation. The standalone RPCS3 SwiftUI application is not embedded.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
-  s.vendored_libraries = 'Frameworks/libRPCS3Core.dylib'
+  # libRPCS3Core.dylib is intentionally NOT declared as a vendored library.
+  # Declaring it here makes CocoaPods link it into Runner and the plugin, which
+  # forces dyld to load RPCS3 before NeoStation reaches Flutter. The bridge
+  # already owns a dlopen/dlsym path and loads the Core only when PS3 is used.
+  s.preserve_paths   = 'Frameworks/libRPCS3Core.dylib'
   s.dependency 'Flutter'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
