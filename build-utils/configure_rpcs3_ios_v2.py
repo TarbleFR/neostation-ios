@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Configure the RPCS3 helper without forcing host entitlements.
+"""Configure NeoStation for the lazy RPCS3 runtime and its required entitlements.
 
-Build 216 intentionally ships a neutral NeoStation entitlement file. Users may
-apply get-task-allow / memory capabilities when they sign the IPA themselves
-(e.g. developer account or a compatible sideloading workflow). RPCS3 remains a
-lazy-loaded optional engine and must never prevent NeoStation from reaching its
-menus when those capabilities are absent.
+RPCS3 iOS 0.8.1 is still lazy-loaded, so it cannot crash NeoStation before a
+PS3 action is requested. Once requested, however, the Core requires the same
+host capabilities as the standalone RPCS3 IPA: get-task-allow, extended virtual
+addressing and the increased memory limits. These are emitted into
+Runner.entitlements and copied to NeoStation-signing.entitlements by the IPA
+packager so the sideloading/signing step can preserve them.
 """
 from __future__ import annotations
 
@@ -21,21 +22,20 @@ from configure_rpcs3_ios_v1 import (
     configure_xcode_project,
 )
 
-FORCED_RUNTIME_ENTITLEMENTS = (
-    'get-task-allow',
-    'com.apple.developer.kernel.extended-virtual-addressing',
-    'com.apple.developer.kernel.increased-memory-limit',
-    'com.apple.developer.kernel.increased-debugging-memory-limit',
-)
+REQUIRED_RUNTIME_ENTITLEMENTS = {
+    'get-task-allow': True,
+    'com.apple.developer.kernel.extended-virtual-addressing': True,
+    'com.apple.developer.kernel.increased-memory-limit': True,
+    'com.apple.developer.kernel.increased-debugging-memory-limit': True,
+}
 
 
-def neutralize_runner_entitlements() -> None:
+def configure_runner_entitlements() -> None:
     path = RUNNER / 'Runner.entitlements'
     payload = plistlib.loads(path.read_bytes()) if path.is_file() else {}
     if not isinstance(payload, dict):
         raise SystemExit('Existing Runner entitlements are not a dictionary')
-    for key in FORCED_RUNTIME_ENTITLEMENTS:
-        payload.pop(key, None)
+    payload.update(REQUIRED_RUNTIME_ENTITLEMENTS)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False))
 
@@ -53,11 +53,8 @@ def main() -> None:
     configure_helper_files()
     configure_podfile()
     configure_xcode_project()
-    # Run this last because the Dolphin configurator legitimately prepares its
-    # own host files first. We do not modify Dolphin code; we only ensure the
-    # distributed NeoStation IPA does not force user-specific capabilities.
-    neutralize_runner_entitlements()
-    print('Configured RPCS3 lazy runtime with neutral NeoStation entitlements.')
+    configure_runner_entitlements()
+    print('Configured RPCS3 lazy runtime with required NeoStation JIT/memory entitlements.')
 
 
 if __name__ == '__main__':
