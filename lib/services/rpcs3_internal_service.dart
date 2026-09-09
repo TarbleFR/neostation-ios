@@ -162,7 +162,7 @@ class Rpcs3InternalService {
   }
 
   static Future<bool> importFirmware() async {
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       dialogTitle: 'Select official PS3UPDAT.PUP firmware',
       allowMultiple: false,
       type: FileType.custom,
@@ -200,7 +200,7 @@ class Rpcs3InternalService {
   }
 
   static Future<Rpcs3ImportResult> importGames() async {
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       dialogTitle: 'Import PlayStation 3 games',
       allowMultiple: true,
       type: FileType.custom,
@@ -262,7 +262,7 @@ class Rpcs3InternalService {
   }
 
   static Future<bool> importExtractedGameFolder() async {
-    final folder = await FilePicker.platform.getDirectoryPath(
+    final folder = await FilePicker.getDirectoryPath(
       dialogTitle: 'Import extracted PlayStation 3 game folder',
     );
     if (folder == null) return false;
