@@ -202,6 +202,27 @@ class Rpcs3InternalBridge {
         const <String, dynamic>{},
   );
 
+  static Future<Map<String, dynamic>> setGameSetting(
+    String titleId,
+    String key,
+    String value,
+  ) async => Map<String, dynamic>.from(
+    await _tuningChannel.invokeMapMethod<String, dynamic>('setGameSetting', {
+          'titleId': titleId,
+          'key': key,
+          'value': value,
+        }) ??
+        const <String, dynamic>{},
+  );
+
+  static Future<Map<String, dynamic>> deleteGame(String titleId) async =>
+      Map<String, dynamic>.from(
+        await _tuningChannel.invokeMapMethod<String, dynamic>('deleteGame', {
+              'titleId': titleId,
+            }) ??
+            const <String, dynamic>{},
+      );
+
   static Future<Map<String, dynamic>> bootProgress() async =>
       Map<String, dynamic>.from(
         await _tuningChannel.invokeMapMethod<String, dynamic>('bootProgress') ??
