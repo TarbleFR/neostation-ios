@@ -1,5 +1,5 @@
 name: NeoStation iOS Build 223
-run-name: NeoStation iOS Build 223 • ${{ github.sha }}
+run-name: NeoStation iOS Build 223 (firmware UI) • ${{ github.sha }}
 
 on:
   push:

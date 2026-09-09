@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -91,35 +90,38 @@ void main() {
     VoidCallback? onBack,
   }) async {
     final states = <bool>[];
-    final checked = Completer<void>();
-    final instanceKey = UniqueKey();
-    await tester.runAsync(() async {
-      await tester.pumpWidget(
-        ScreenUtilInit(
-          designSize: const Size(800, 600),
-          builder: (_, _) => MaterialApp(
-            home: Scaffold(
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            ScreenUtil.init(context, designSize: const Size(800, 600));
+            return Scaffold(
               body: Stack(
                 children: [
                   Positioned.fill(
                     child: Rpcs3InternalPlaylistActions(
-                      key: instanceKey,
                       onLibraryChanged: () async {},
-                      onFirmwareChanged: (value) {
-                        states.add(value);
-                        if (!checked.isCompleted) checked.complete();
-                      },
+                      onFirmwareChanged: states.add,
                       onBack: onBack ?? () {},
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
+            );
+          },
         ),
+      ),
+    );
+    // Filesystem callbacks run on the real event loop, while widget callbacks
+    // need the test clock to pump. Waiting on one completer inside runAsync
+    // starves the fake microtask queue and cannot finish the firmware check.
+    for (var frame = 0; states.isEmpty && frame < 200; frame++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
-      await checked.future.timeout(const Duration(seconds: 5));
-    });
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(states, isNotEmpty, reason: 'The firmware check must finish');
     await tester.pumpAndSettle();
     return states;
   }
