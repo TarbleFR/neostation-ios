@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 214
-run-name: NeoStation iOS Build 214 • ${{ github.sha }}
+name: NeoStation iOS Build 215
+run-name: NeoStation iOS Build 215 • ${{ github.sha }}
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-214
+  group: neostation-ios-build-215
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '214'
-      IPA_NAME: 'NeoStation-iOS-Build-214'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-214'
+      BUILD_NUMBER: '215'
+      IPA_NAME: 'NeoStation-iOS-Build-215'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-215'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -111,8 +111,6 @@ jobs:
               'NEOSTATION_MELONX_BUNDLE_ID': 'com.nur.nx',
               'NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2': 'true',
               'NEOSTATION_ARMSX2_BUNDLE_ID': 'xyz.aethersx2.AetherSX2',
-              'NEOSTATION_EXPERIMENTAL_STIKJIT_RPCS3': 'true',
-              'NEOSTATION_RPCS3_BUNDLE_ID': 'com.xitrix.RPCS3',
           })
           Path('.dart-defines.json').write_text(json.dumps(values))
           PY
@@ -122,6 +120,12 @@ jobs:
           set -euo pipefail
           curl -fL --retry 3 --retry-delay 2 'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' -o "$RUNNER_TEMP/StikJIT.xcframework.zip"
           python3 packages/dolphin_internal_bridge/ci/build_support.py stik "$RUNNER_TEMP/StikJIT.xcframework.zip"
+
+      - name: Materialize verified RPCS3 Core
+        run: |
+          set -euo pipefail
+          python3 build-utils/materialize_rpcs3_internal.py core
+          test -s packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
 
       - name: Analyze and test
         run: |
@@ -208,6 +212,7 @@ jobs:
           flutter build ios --release --no-codesign --config-only --no-pub \
             --build-number="$BUILD_NUMBER" --dart-define-from-file=.dart-defines.json
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          python3 build-utils/configure_rpcs3_ios_v1.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
@@ -229,6 +234,38 @@ jobs:
           set -euo pipefail
           git diff --check
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 - <<'PY'
+          import glob
+          import plistlib
+          import zipfile
+          from pathlib import Path
+
+          matches = sorted(glob.glob('dist/*.ipa'))
+          if len(matches) != 1:
+              raise SystemExit(f'Expected exactly one IPA, found {matches}')
+          ipa = Path(matches[0])
+          with zipfile.ZipFile(ipa) as archive:
+              names = archive.namelist()
+              cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
+              helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
+              if len(cores) != 1:
+                  raise SystemExit(f'Embedded RPCS3 Core missing or duplicated: {cores}')
+              if archive.getinfo(cores[0]).file_size < 60_000_000:
+                  raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
+              if not helpers:
+                  raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
+          entitlements = Path('dist/NeoStation-signing.entitlements')
+          payload = plistlib.loads(entitlements.read_bytes())
+          for key in (
+              'get-task-allow',
+              'com.apple.developer.kernel.extended-virtual-addressing',
+              'com.apple.developer.kernel.increased-memory-limit',
+              'com.apple.developer.kernel.increased-debugging-memory-limit',
+          ):
+              if payload.get(key) is not True:
+                  raise SystemExit(f'Missing RPCS3 entitlement: {key}')
+          print(f'RPCS3 IPA validation passed: {cores[0]} + RPCS3JITHelper')
+          PY
           ls -lah dist
 
       - name: Upload IPA

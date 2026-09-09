@@ -10,10 +10,8 @@ import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
-import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
-import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
@@ -553,8 +551,7 @@ class DirectoriesSettingsContentState
       final availableSystems = configProvider.availableSystems.isNotEmpty
           ? configProvider.availableSystems
           : await ConfigService.loadAvailableSystems();
-      final scanRoot =
-          bookmarkKey == ExternalFolderAccess.defaultBookmarkKey
+      final scanRoot = bookmarkKey == ExternalFolderAccess.defaultBookmarkKey
           ? await IosRomLibraryRootResolver.resolveRetroArchScanRoot(
               linkedRoot: activePath,
               systemFolderNames: availableSystems.expand(
@@ -605,7 +602,9 @@ class DirectoriesSettingsContentState
       final bookmarked = await ExternalFolderAccess.resolveBookmarkedFolder(
         key: Armsx2FolderService.bookmarkKey,
       );
-      final root = await Armsx2FolderService.resolveRoot(bookmarked ?? selected);
+      final root = await Armsx2FolderService.resolveRoot(
+        bookmarked ?? selected,
+      );
       final gameDir = await Armsx2FolderService.resolveGameDirectory(root);
       final previousGameDir = ConfigService.linkedArmsx2GameFolderPath;
 
@@ -633,7 +632,9 @@ class DirectoriesSettingsContentState
       if (!mounted) return;
       await _loadCurrentPaths();
       if (mounted) setState(() {});
-      _log.i('ARMSX2 isolated root linked: root=$root gameDir=${gameDir ?? "none"}');
+      _log.i(
+        'ARMSX2 isolated root linked: root=$root gameDir=${gameDir ?? "none"}',
+      );
     } catch (e) {
       _log.e('ARMSX2 root link failed: $e');
       if (mounted) {
@@ -676,7 +677,10 @@ class DirectoriesSettingsContentState
     final gameDir = await Armsx2FolderService.resolveGameDirectory(root);
     ConfigService.linkedArmsx2GameFolderPath = gameDir;
     if (!mounted) return;
-    final configProvider = Provider.of<SqliteConfigProvider>(context, listen: false);
+    final configProvider = Provider.of<SqliteConfigProvider>(
+      context,
+      listen: false,
+    );
     if (gameDir != null && gameDir.isNotEmpty) {
       if (configProvider.config.romFolders.contains(gameDir)) {
         await configProvider.scanSystems();
@@ -729,80 +733,11 @@ class DirectoriesSettingsContentState
     );
   }
 
-  Future<void> _linkRpcs3DataFolder() async {
-    if (_linkingFolderKey != null) return;
-
-    setState(() => _linkingFolderKey = Rpcs3LibraryService.bookmarkKey);
-    try {
-      final result = await Rpcs3LibraryService.linkAndSync();
-      if (result == null || !mounted) return;
-
-      setState(() {});
-      AppNotification.showNotification(
-        context,
-        result.discoveredGames == 0
-            ? Rpcs3LibraryLocale.noGames(context)
-            : Rpcs3LibraryLocale.syncComplete(context, result.discoveredGames),
-        type: result.discoveredGames == 0
-            ? NotificationType.info
-            : NotificationType.success,
-      );
-    } on FormatException {
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          Rpcs3LibraryLocale.invalidFolder(context),
-          type: NotificationType.error,
-        );
-      }
-    } catch (e) {
-      _log.e('RPCS3 folder link/sync failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          Rpcs3LibraryLocale.syncFailed(context, e),
-          type: NotificationType.error,
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _linkingFolderKey = null);
-      }
-    }
-  }
-
-  Future<void> _syncWithRpcs3() async {
-    try {
-      final result = await Rpcs3LibraryService.syncLinkedLibrary();
-      if (!mounted) return;
-      setState(() {});
-      AppNotification.showNotification(
-        context,
-        result.discoveredGames == 0
-            ? Rpcs3LibraryLocale.noGames(context)
-            : Rpcs3LibraryLocale.syncComplete(context, result.discoveredGames),
-        type: result.discoveredGames == 0
-            ? NotificationType.info
-            : NotificationType.success,
-      );
-    } catch (e) {
-      _log.e('RPCS3 library sync failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          Rpcs3LibraryLocale.syncFailed(context, e),
-          type: NotificationType.error,
-        );
-      }
-    }
-  }
-
   List<Widget> _iosEmulatorCards(ThemeData theme) {
     if (!Platform.isIOS) return const [];
 
     return [
       _buildIOSRetroArchSection(theme),
-      _buildIOSRpcs3Section(theme),
       _buildIOSArmsx2Section(theme),
       _buildIOSMeloNXSection(theme),
     ];
@@ -833,45 +768,6 @@ class DirectoriesSettingsContentState
         height: 48.r,
         child: FilledButton.icon(
           onPressed: !isLinked ? null : _syncWithRetroArch,
-          icon: Icon(Symbols.bolt_rounded, size: 20.r),
-          label: Text(
-            hasSynced
-                ? AppLocale.iosEmuResync.getString(context)
-                : AppLocale.iosEmuSync.getString(context),
-            style: TextStyle(fontSize: 14.r),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIOSRpcs3Section(ThemeData theme) {
-    final isLinked = Rpcs3LibraryService.isLinked;
-    final hasSynced = Rpcs3LibraryService.hasSyncedLibrary;
-    final count = Rpcs3LibraryService.syncedGameCount;
-
-    final String statusText;
-    if (!isLinked) {
-      statusText = Rpcs3LibraryLocale.statusNeedsLink(context);
-    } else if (!hasSynced) {
-      statusText = Rpcs3LibraryLocale.statusNeedsSync(context);
-    } else {
-      statusText = Rpcs3LibraryLocale.statusSynced(context, count);
-    }
-
-    return _buildIOSEmulatorCard(
-      theme: theme,
-      name: 'RPCS3',
-      icon: Symbols.sports_esports_rounded,
-      statusText: statusText,
-      isLinked: isLinked,
-      bookmarkKey: Rpcs3LibraryService.bookmarkKey,
-      successMessage: '',
-      onLinkPressed: _linkRpcs3DataFolder,
-      trailingAction: SizedBox(
-        height: 48.r,
-        child: FilledButton.icon(
-          onPressed: _linkingFolderKey == null ? _syncWithRpcs3 : null,
           icon: Icon(Symbols.bolt_rounded, size: 20.r),
           label: Text(
             hasSynced

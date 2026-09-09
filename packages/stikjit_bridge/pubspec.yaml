@@ -16,4 +16,4 @@ flutter:
   plugin:
     platforms:
       ios:
-        pluginClass: NeoStationStikjitBridgePluginV2
+        pluginClass: NeoStationStikjitBridgePlugin

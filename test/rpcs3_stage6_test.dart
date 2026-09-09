@@ -36,16 +36,20 @@ void main() {
       );
     });
 
-    test('launcher validates serials and uses Universal JIT', () {
+    test('launcher validates serials and uses the internal engine', () {
       expect(Rpcs3LaunchService.normalizeTitleId('bles00412'), 'BLES00412');
       expect(Rpcs3LaunchService.normalizeTitleId(''), isNull);
 
       final service = File(
         'lib/services/rpcs3_launch_service.dart',
       ).readAsStringSync();
-      expect(service, contains('openJitRequest'));
-      expect(service, contains("scriptName: 'universal.js'"));
-      expect(service, contains('rpcs3_launch_debug.txt'));
+      final internal = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
+      expect(service, contains('Rpcs3InternalService.launchTitle'));
+      expect(service, isNot(contains('openJitRequest')));
+      expect(internal, contains('Rpcs3InternalBridge.prepareJit'));
+      expect(internal, contains("'firmwareRequired'"));
     });
   });
 }

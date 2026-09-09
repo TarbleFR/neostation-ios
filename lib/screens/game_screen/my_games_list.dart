@@ -21,6 +21,7 @@ import 'dart:ui';
 // DOLPHIN_ISOLATION_BEGIN: playlist_import
 import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
+import 'package:neostation/widgets/rpcs3_internal_playlist_actions.dart';
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
 import '../../utils/game_launch_utils.dart';
@@ -645,13 +646,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
             GameViewModeDropdown(),
 
             // DOLPHIN_ISOLATION_BEGIN: playlist_actions
-            if (!_isGameLaunching && Platform.isIOS &&
-                DolphinInternalV2Service.isDolphinSystem(widget.system.folderName))
+            if (!_isGameLaunching &&
+                Platform.isIOS &&
+                DolphinInternalV2Service.isDolphinSystem(
+                  widget.system.folderName,
+                ))
               Consumer<SqliteConfigProvider>(
                 builder: (context, config, child) {
                   final mode = config.config.gameViewMode;
-                  if (!_isLoading && _games.isNotEmpty && _selectedGame != null &&
-                      mode != 'grid' && mode != 'carousel') {
+                  if (!_isLoading &&
+                      _games.isNotEmpty &&
+                      _selectedGame != null &&
+                      mode != 'grid' &&
+                      mode != 'carousel') {
                     return const SizedBox.shrink();
                   }
                   return Positioned(
@@ -668,6 +675,35 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 },
               ),
             // DOLPHIN_ISOLATION_END: playlist_actions
+            // RPCS3_INTERNAL_BEGIN: playlist_actions
+            if (!_isGameLaunching &&
+                Platform.isIOS &&
+                widget.system.folderName.toLowerCase() == 'ps3')
+              Positioned(
+                top: 8.r,
+                right: 10.r,
+                child: SafeArea(
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12.r),
+                    child: Rpcs3InternalPlaylistActions(
+                      onInteractionChanged: (active) {
+                        if (!mounted) return;
+                        if (active) {
+                          _gamepadNav.deactivate();
+                        } else {
+                          _gamepadNav.activate();
+                        }
+                      },
+                      onLibraryChanged: () async {
+                        if (!mounted) return;
+                        await _loadGames();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            // RPCS3_INTERNAL_END: playlist_actions
           ],
         ),
       ),
@@ -687,8 +723,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
     },
     onLibraryChanged: () async {
       if (!mounted) return;
-      await context.read<SqliteConfigProvider>()
-          .refreshDolphinInternalLibrary(widget.system.folderName);
+      await context.read<SqliteConfigProvider>().refreshDolphinInternalLibrary(
+        widget.system.folderName,
+      );
     },
   );
   // DOLPHIN_ISOLATION_END: import_action_builder
@@ -722,8 +759,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
             style: TextStyle(
               fontSize: 14.r,
               fontWeight: FontWeight.w400,
-              color: Theme.of(context).colorScheme.onSurface
-                  .withValues(alpha: 0.7),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.7),
               letterSpacing: 0.3,
             ),
           ),
@@ -754,21 +792,24 @@ class _SystemGamesListState extends State<SystemGamesList> {
           borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.shadow
-                  .withValues(alpha: 0.3),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.3),
               blurRadius: 16.r,
               offset: const Offset(0, 8),
             ),
             BoxShadow(
-              color: Theme.of(context).colorScheme.shadow
-                  .withValues(alpha: 0.1),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withValues(alpha: 0.1),
               blurRadius: 32.r,
               offset: const Offset(0, 16),
             ),
           ],
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline
-                .withValues(alpha: 0.15),
+            color: Theme.of(
+              context,
+            ).colorScheme.outline.withValues(alpha: 0.15),
             width: 1.r,
           ),
         ),
@@ -796,8 +837,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
               style: TextStyle(
                 fontSize: 11.r,
                 fontWeight: FontWeight.w400,
-                color: Theme.of(context).colorScheme.onSurface
-                    .withValues(alpha: 0.5),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.5),
                 letterSpacing: 0.2,
               ),
               textAlign: TextAlign.center,
@@ -856,9 +898,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                           SizedBox(width: 16.r),
                           Switch(
                             value: currentScanValue,
-                            activeThumbColor: Theme.of(context)
-                                .colorScheme
-                                .primary,
+                            activeThumbColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
                             onChanged: (value) async {
                               final oldSystem = widget.system;
                               setStateBuilder(() {
@@ -918,8 +960,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                             color: Colors.black.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12.r),
                             border: Border.all(
-                              color: Theme.of(context).colorScheme.primary
-                                  .withValues(alpha: 0.2),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.2),
                               width: 1.r,
                             ),
                           ),
@@ -938,9 +981,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                                         ?.copyWith(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10.r,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                   ),
                                   Text(
@@ -949,9 +992,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                                         ?.copyWith(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10.r,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                   ),
                                 ],
@@ -962,10 +1005,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                                 child: LinearProgressIndicator(
                                   value: provider.scanProgress,
                                   minHeight: 6.r,
-                                  backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withValues(alpha: 0.1),
+                                  backgroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.1),
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                     Theme.of(context).colorScheme.primary,
                                   ),
@@ -1020,13 +1062,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       right: 12.r,
                     ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary
-                          .withValues(alpha: 0.9),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(8.r),
                       boxShadow: [
                         BoxShadow(
-                          color: Theme.of(context).colorScheme.primary
-                              .withValues(alpha: 0.3),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.3),
                           blurRadius: 8.r,
                           offset: const Offset(0, 2),
                         ),
@@ -1148,8 +1192,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                     artworkVersion: _artworkVersion,
                   ),
                   Container(
-                    color: Theme.of(context).colorScheme.shadow
-                        .withValues(alpha: 0.2),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.2),
                   ),
                 ],
               ),
@@ -1180,9 +1225,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 // pane laid over the artwork instead of a cut-out block.
                 gradient: ChromeSurface.fade(context),
                 borderRadius:
-                    Theme.of(context)
-                        .extension<CornerRadii>()
-                        ?.radiusExternal ??
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
                     BorderRadius.circular(14.r),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outline,
@@ -1190,8 +1235,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.shadow
-                        .withValues(alpha: 0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.5),
                     blurRadius: 3.r,
                     offset: Offset(2.r, 2.r),
                   ),
@@ -1199,9 +1245,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
               ),
               child: ClipRRect(
                 borderRadius:
-                    Theme.of(context)
-                        .extension<CornerRadii>()
-                        ?.radiusInternal ??
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusInternal ??
                     BorderRadius.circular(9.r),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(
@@ -1386,9 +1432,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
               decoration: BoxDecoration(
                 color: ChromeSurface.fill(context),
                 borderRadius:
-                    Theme.of(context)
-                        .extension<CornerRadii>()
-                        ?.radiusExternal ??
+                    Theme.of(
+                      context,
+                    ).extension<CornerRadii>()?.radiusExternal ??
                     BorderRadius.circular(14.r),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outline,
@@ -1396,8 +1442,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.shadow
-                        .withValues(alpha: 0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.shadow.withValues(alpha: 0.5),
                     blurRadius: 3.r,
                     offset: Offset(2.r, 2.r),
                   ),
@@ -1450,73 +1497,75 @@ class _SystemGamesListState extends State<SystemGamesList> {
     }
 
     return GameDetailsCardList(
-        // DOLPHIN_ISOLATION_BEGIN: import_action_in_tabs
-        dolphinImportAction: Platform.isIOS &&
-            DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)
-            ? _buildDolphinImportAction() : null,
-        // DOLPHIN_ISOLATION_END: import_action_in_tabs
-        game: _selectedGame!,
-        system: widget.system,
-        fileProvider: _fileProvider,
-        showVideo: _showVideo,
-        videoController: _videoController,
-        isVideoLoading: _isVideoLoading,
-        isAllMode:
-            widget.system.folderName == 'all' ||
-            widget.system.folderName == SystemFolderNames.favorites,
-        retroAchievementsProvider: _retroAchievementsProvider,
-        localizedDescription: _localizedDescription,
-        artworkVersion: _artworkVersion,
-        isExternallyScraping: _scrapingGameRomnames.contains(
-          _selectedGame!.romname,
-        ),
-        externalScrapeProgress: _scrapeProgress[_selectedGame!.romname],
-        externalScrapeStatus: _selectedScrapeStatus,
-        isNavigatingFast: _isNavigatingFast,
-        isSecondaryScreenActive:
-            _secondaryDisplayState?.value?.isSecondaryActive ?? false,
-        onDeactivateNavigation: () => _gamepadNav.deactivate(),
-        onReactivateNavigation: () => _gamepadNav.activate(),
-        onRegisterOverlayState: (isOverlayOpen, isAchievementsOpen) {
-          _isAchievementsOpen = isAchievementsOpen;
-        },
-        onRegisterNavigation:
-            ({
-              required moveUp,
-              required moveDown,
-              required moveLeft,
-              required moveRight,
-            }) {
-              _moveAchievementUp = moveUp;
-              _moveAchievementDown = moveDown;
-              _moveAchievementLeft = moveLeft;
-              _moveAchievementRight = moveRight;
-            },
-        onRegisterCloseOverlays: null,
-        onRegisterTriggerAction: (triggerAction) {
-          _triggerOverlayAction = triggerAction;
-        },
-        onRegisterSecondaryAction: (secondaryAction) {
-          _secondaryOverlayAction = secondaryAction;
-        },
-        onRegisterTabNavigation: (tabNav) {
-          _tabNavigationAction = tabNav;
-        },
-        onRegisterSelectButton: (action) {
-          _selectButtonAction = action;
-        },
-        onRegisterScrapeAction: (action) {
-          _scrapeAction = action;
-        },
-        onRegisterIsPlayingGameBlocked: (isBlocked) {
-          _isPlayingGameBlocked = isBlocked;
-        },
-        onPlayGame: _selectCurrentGame,
-        onShowRandomGame: _showRandomGameDialog,
-        onBack: _goBack,
-        onGameUpdated: _handleGameUpdated, // Refresh UI after metadata edits.
-        onFavoriteToggled: _handleFavoriteToggledFromCard,
-        onGameDeleted: _handleGameDeleted,
+      // DOLPHIN_ISOLATION_BEGIN: import_action_in_tabs
+      dolphinImportAction:
+          Platform.isIOS &&
+              DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)
+          ? _buildDolphinImportAction()
+          : null,
+      // DOLPHIN_ISOLATION_END: import_action_in_tabs
+      game: _selectedGame!,
+      system: widget.system,
+      fileProvider: _fileProvider,
+      showVideo: _showVideo,
+      videoController: _videoController,
+      isVideoLoading: _isVideoLoading,
+      isAllMode:
+          widget.system.folderName == 'all' ||
+          widget.system.folderName == SystemFolderNames.favorites,
+      retroAchievementsProvider: _retroAchievementsProvider,
+      localizedDescription: _localizedDescription,
+      artworkVersion: _artworkVersion,
+      isExternallyScraping: _scrapingGameRomnames.contains(
+        _selectedGame!.romname,
+      ),
+      externalScrapeProgress: _scrapeProgress[_selectedGame!.romname],
+      externalScrapeStatus: _selectedScrapeStatus,
+      isNavigatingFast: _isNavigatingFast,
+      isSecondaryScreenActive:
+          _secondaryDisplayState?.value?.isSecondaryActive ?? false,
+      onDeactivateNavigation: () => _gamepadNav.deactivate(),
+      onReactivateNavigation: () => _gamepadNav.activate(),
+      onRegisterOverlayState: (isOverlayOpen, isAchievementsOpen) {
+        _isAchievementsOpen = isAchievementsOpen;
+      },
+      onRegisterNavigation:
+          ({
+            required moveUp,
+            required moveDown,
+            required moveLeft,
+            required moveRight,
+          }) {
+            _moveAchievementUp = moveUp;
+            _moveAchievementDown = moveDown;
+            _moveAchievementLeft = moveLeft;
+            _moveAchievementRight = moveRight;
+          },
+      onRegisterCloseOverlays: null,
+      onRegisterTriggerAction: (triggerAction) {
+        _triggerOverlayAction = triggerAction;
+      },
+      onRegisterSecondaryAction: (secondaryAction) {
+        _secondaryOverlayAction = secondaryAction;
+      },
+      onRegisterTabNavigation: (tabNav) {
+        _tabNavigationAction = tabNav;
+      },
+      onRegisterSelectButton: (action) {
+        _selectButtonAction = action;
+      },
+      onRegisterScrapeAction: (action) {
+        _scrapeAction = action;
+      },
+      onRegisterIsPlayingGameBlocked: (isBlocked) {
+        _isPlayingGameBlocked = isBlocked;
+      },
+      onPlayGame: _selectCurrentGame,
+      onShowRandomGame: _showRandomGameDialog,
+      onBack: _goBack,
+      onGameUpdated: _handleGameUpdated, // Refresh UI after metadata edits.
+      onFavoriteToggled: _handleFavoriteToggledFromCard,
+      onGameDeleted: _handleGameDeleted,
     );
   }
 

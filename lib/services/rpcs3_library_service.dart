@@ -99,14 +99,11 @@ class Rpcs3SyncResult {
   final int totalPs3Rows;
 }
 
-/// Imports the game list exposed by the unofficial RPCS3 iOS port.
+/// Imports the game list owned by NeoStation's embedded RPCS3 Core.
 ///
-/// RPCS3 exposes its persistent directory through Files at:
-/// `On My iPhone/iPad > RPCS3 > Data`.
-///
-/// The iOS build does not currently expose a library-export URL scheme, so
-/// NeoStation bookmarks that Data directory and mirrors RPCS3's own discovery
-/// rules. Metadata comes from `PARAM.SFO` under:
+/// The authoritative PS3 data root is private NeoStation Application Support at
+/// `NeoStation/RPCS3/Data`. Existing PARAM.SFO discovery and metadata fallback
+/// rules are preserved. Metadata comes from `PARAM.SFO` under:
 ///
 /// - `Data/dev_hdd0/game/`
 /// - `Data/games/ExtractedGames/`
@@ -117,8 +114,8 @@ class Rpcs3SyncResult {
 /// RPCS3's `games.yml` is deliberately not used to create rows because it
 /// can retain stale or cross-linked registrations after a game is removed.
 ///
-/// Imported rows intentionally use an internal `rpcs3-library://` URI. They are
-/// display-only until RPCS3 publishes a supported direct-game deeplink.
+/// Imported rows keep the internal `rpcs3-library://` URI. Launching resolves
+/// the title ID and boots it directly through the embedded RPCS3 Core.
 class Rpcs3LibraryService {
   Rpcs3LibraryService._();
 
@@ -156,21 +153,18 @@ class Rpcs3LibraryService {
         uri.host.toLowerCase() == 'game';
   }
 
-  /// Restores the security-scoped bookmark and the last lightweight cache.
+  /// Restores the lightweight cache and prepares NeoStation's private RPCS3
+  /// data root. No separately installed RPCS3 application is required.
   static Future<void> initialize() async {
     await loadCachedLibrary();
     if (!Platform.isIOS) return;
 
-    try {
-      final selected = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: bookmarkKey,
-      );
-      if (selected != null) {
-        _linkedDataPath = await _normalizeDataRoot(selected);
-      }
-    } catch (e) {
-      _log.w('Rpcs3LibraryService: could not restore linked Data folder: $e');
-    }
+    final support = await getApplicationSupportDirectory();
+    final dataRoot = Directory(
+      path.join(support.path, 'NeoStation', 'RPCS3', 'Data'),
+    );
+    await dataRoot.create(recursive: true);
+    _linkedDataPath = path.normalize(dataRoot.path);
   }
 
   /// Restores cached virtual PS3 rows after SQLite providers are ready.
@@ -323,11 +317,17 @@ class Rpcs3LibraryService {
     return syncLinkedLibrary();
   }
 
+  /// Synchronizes the PS3 library owned by the embedded RPCS3 Core.
+  static Future<Rpcs3SyncResult> syncInternalLibrary() async {
+    await initialize();
+    return syncLinkedLibrary();
+  }
+
   /// Reads the currently linked RPCS3 Data directory and imports its PS3 rows.
   static Future<Rpcs3SyncResult> syncLinkedLibrary() async {
     final dataRoot = await _resolveLinkedDataRoot();
     if (dataRoot == null) {
-      throw StateError('RPCS3 Data folder is not linked.');
+      throw StateError('RPCS3 internal Data directory is unavailable.');
     }
 
     final discovered = await discoverLibrary(dataRoot);
@@ -494,19 +494,8 @@ class Rpcs3LibraryService {
     final current = linkedDataPath;
     if (current != null) return current;
     if (!Platform.isIOS) return null;
-
-    try {
-      final selected = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: bookmarkKey,
-      );
-      if (selected == null) return null;
-      final normalized = await _normalizeDataRoot(selected);
-      _linkedDataPath = normalized;
-      return normalized;
-    } catch (error) {
-      _log.w('Rpcs3LibraryService: linked Data folder resolve failed: $error');
-      return null;
-    }
+    await initialize();
+    return linkedDataPath;
   }
 
   static Future<void> _replaceCache(List<Rpcs3LibraryGame> games) async {
@@ -1018,7 +1007,6 @@ class Rpcs3LibraryService {
     return text.trim();
   }
 
-
   static void _putPreferred(
     Map<String, Rpcs3LibraryGame> target,
     Rpcs3LibraryGame candidate,
@@ -1405,8 +1393,9 @@ class Rpcs3LibraryService {
         }
         if (hasExisting) continue;
 
-        await File(path.join(directory.path, '$mediaKey.$extension'))
-            .writeAsBytes(bytes, flush: true);
+        await File(
+          path.join(directory.path, '$mediaKey.$extension'),
+        ).writeAsBytes(bytes, flush: true);
         written++;
       }
     }

@@ -21,12 +21,16 @@ void main() {
     expect(resolved.hasMeaningfulScrapedName, isFalse);
   });
 
-  test('RPCS3 launch uses the basic Universal JIT handoff', () {
+  test('RPCS3 launch bypasses the standalone Start screen', () {
     final service = File(
       'lib/services/rpcs3_launch_service.dart',
     ).readAsStringSync();
-    expect(service, contains('openJitRequest'));
-    expect(service, contains("scriptName: 'universal.js'"));
-    expect(service, contains('rpcs3_launch_debug.txt'));
+    final plugin = File(
+      'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+    ).readAsStringSync();
+    expect(service, contains('Rpcs3InternalService.launchTitle'));
+    expect(service, isNot(contains('openJitRequest')));
+    expect(plugin, contains('@"launchGame"'));
+    expect(plugin, contains('self->_api.boot_game'));
   });
 }
