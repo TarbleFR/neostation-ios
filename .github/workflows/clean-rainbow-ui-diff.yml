@@ -122,6 +122,133 @@ jobs:
           ])
           dolphin = replace_once(dolphin, old_icon, new_icon, 'dolphin icon')
           Path(dolphin_path).write_text(dolphin)
+
+          carousel_path = 'lib/screens/game_screen/my_games_carousel.dart'
+          carousel = main_file(carousel_path)
+          carousel = replace_once(carousel, "import 'package:neostation/widgets/game_view_footer.dart';\n", "import 'package:neostation/widgets/game_view_footer.dart';\nimport 'package:neostation/widgets/rainbow_selection_border.dart';\n", 'carousel import')
+          helper_anchor = "\n".join([
+              "  Widget _buildFanartCard(GameModel game, bool isSelected) {",
+          ])
+          helper = "\n".join([
+              "  Widget _withRainbowSelection({",
+              "    required Widget child,",
+              "    required bool isSelected,",
+              "    required BorderRadius borderRadius,",
+              "    EdgeInsetsGeometry padding = EdgeInsets.zero,",
+              "  }) {",
+              "    if (!isSelected) return child;",
+              "    return Stack(",
+              "      fit: StackFit.passthrough,",
+              "      children: [",
+              "        child,",
+              "        Positioned.fill(",
+              "          child: Padding(",
+              "            padding: padding,",
+              "            child: IgnorePointer(",
+              "              child: RainbowSelectionBorder(",
+              "                borderRadius: borderRadius,",
+              "                borderWidth: 4.r,",
+              "                glowWidth: 7.r,",
+              "                glowBlur: 4.r,",
+              "                child: const SizedBox.expand(),",
+              "              ),",
+              "            ),",
+              "          ),",
+              "        ),",
+              "      ],",
+              "    );",
+              "  }",
+              "",
+              "  Widget _buildFanartCard(GameModel game, bool isSelected) {",
+          ])
+          carousel = replace_once(carousel, helper_anchor, helper, 'carousel helper')
+          carousel = replace_once(carousel, "    return Container(\n      clipBehavior: Clip.antiAlias,\n      margin: EdgeInsets.all(5.r),", "    final card = Container(\n      clipBehavior: Clip.antiAlias,\n      margin: EdgeInsets.all(5.r),", 'carousel fanart card start')
+          fanart_end = "\n".join([
+              "    );",
+              "  }",
+              "",
+              "  Widget _buildScrapeProgress(GameModel game) {",
+          ])
+          fanart_new_end = "\n".join([
+              "    );",
+              "",
+              "    return _withRainbowSelection(",
+              "      child: card,",
+              "      isSelected: isSelected,",
+              "      borderRadius: BorderRadius.circular(24.r),",
+              "      padding: EdgeInsets.all(5.r),",
+              "    );",
+              "  }",
+              "",
+              "  Widget _buildScrapeProgress(GameModel game) {",
+          ])
+          carousel = replace_once(carousel, fanart_end, fanart_new_end, 'carousel fanart card end')
+          no_box_start = "\n".join([
+              "    if (!hasBox) {",
+              "      return Center(",
+              "        child: Stack(",
+          ])
+          no_box_new_start = "\n".join([
+              "    if (!hasBox) {",
+              "      return Center(",
+              "        child: _withRainbowSelection(",
+              "          isSelected: isSelected,",
+              "          borderRadius: BorderRadius.circular(8.r),",
+              "          child: Stack(",
+          ])
+          carousel = replace_once(carousel, no_box_start, no_box_new_start, 'carousel empty box start')
+          no_box_end = "\n".join([
+              "            if (widget.scrapingGameRomnames.contains(game.romname))",
+              "              _buildScrapeProgress(game),",
+              "          ],",
+              "        ),",
+              "      );",
+              "    }",
+          ])
+          no_box_new_end = "\n".join([
+              "            if (widget.scrapingGameRomnames.contains(game.romname))",
+              "              _buildScrapeProgress(game),",
+              "          ],",
+              "        ),",
+              "      ),",
+              "      );",
+              "    }",
+          ])
+          carousel = replace_once(carousel, no_box_end, no_box_new_end, 'carousel empty box end')
+          box_start = "\n".join([
+              "        return Center(",
+              "          child: Container(",
+              "            width: cardW,",
+          ])
+          box_new_start = "\n".join([
+              "        return Center(",
+              "          child: _withRainbowSelection(",
+              "            isSelected: isSelected,",
+              "            borderRadius: BorderRadius.circular(8.r),",
+              "            padding: EdgeInsets.all(5.r),",
+              "            child: Container(",
+              "            width: cardW,",
+          ])
+          carousel = replace_once(carousel, box_start, box_new_start, 'carousel box start')
+          box_end = "\n".join([
+              "                ],",
+              "              ),",
+              "            ),",
+              "          ),",
+              "        );",
+              "      },",
+          ])
+          box_new_end = "\n".join([
+              "                ],",
+              "              ),",
+              "            ),",
+              "          ),",
+              "          ),",
+              "        );",
+              "      },",
+          ])
+          carousel = replace_once(carousel, box_end, box_new_end, 'carousel box end')
+          Path(carousel_path).write_text(carousel)
           PY
 
       - name: Commit focused cleanup
@@ -133,7 +260,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/screens/game_screen/my_games_grid.dart lib/widgets/dolphin_internal_playlist_actions.dart
+          git add lib/screens/game_screen/my_games_grid.dart lib/screens/game_screen/my_games_carousel.dart lib/widgets/dolphin_internal_playlist_actions.dart
           git commit -m "chore: keep rainbow UI diff focused"
           git push origin HEAD:feature/dolphin-rainbow-selection-ui
 
