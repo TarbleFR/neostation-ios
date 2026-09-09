@@ -26,8 +26,7 @@ class DolphinInternalPlaylistActions extends StatefulWidget {
       _DolphinInternalPlaylistActionsState();
 }
 
-class _DolphinInternalPlaylistActionsState
-    extends State<DolphinInternalPlaylistActions> {
+class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylistActions> {
   bool _busy = false;
   bool _interacting = false;
   Set<DolphinIplRegion> _regions = const {};
@@ -64,24 +63,15 @@ class _DolphinInternalPlaylistActionsState
           title: Text(title ?? _text('replaceTitle')),
           content: SingleChildScrollView(child: Text(message)),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(_text('cancel')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(_text('continue')),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(_text('cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(_text('continue'))),
           ],
         ),
-      ) ??
-      false;
+      ) ?? false;
 
   void _notice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _selected(String action) async {
@@ -92,18 +82,12 @@ class _DolphinInternalPlaylistActionsState
       if (action == 'wiiMenu' && !_isGameCube) {
         final report = await DolphinInternalV2Service.launchWiiMenu();
         if (!report.ready) {
-          _notice(
-            report.failedStage == 'wii.menu_missing'
-                ? _text('wiiMenuMissing')
-                : report.message.isNotEmpty
-                ? report.message
-                : _text('wiiMenuFailed'),
-          );
+          _notice(report.failedStage == 'wii.menu_missing'
+              ? _text('wiiMenuMissing')
+              : report.message.isNotEmpty ? report.message : _text('wiiMenuFailed'));
         }
       } else if (action == 'games') {
-        final result = await DolphinInternalV2Service.importGames(
-          widget.systemFolder,
-        );
+        final result = await DolphinInternalV2Service.importGames(widget.systemFolder);
         if (result.imported > 0) await widget.onLibraryChanged();
         if (!mounted) return;
         if (result.rejected > 0) _notice(_text('failed'));
@@ -117,29 +101,20 @@ class _DolphinInternalPlaylistActionsState
       } else {
         final fromShared = action == 'shared';
         if (fromShared) {
-          await DolphinInternalV2Service.sharedSystemDirectory(
-            widget.systemFolder,
-          );
+          await DolphinInternalV2Service.sharedSystemDirectory(widget.systemFolder);
           if (!mounted) return;
           if (!await _confirm(
-                _text(
-                  'sharedHelp',
-                ).replaceAll('{system}', _isGameCube ? 'GameCube' : 'Wii'),
-                title: _text('shared'),
-              ) ||
-              !mounted)
-            return;
+            _text('sharedHelp').replaceAll('{system}', _isGameCube ? 'GameCube' : 'Wii'),
+            title: _text('shared'),
+          ) || !mounted) return;
         }
-        if (!_isGameCube && (!await _confirm(_text('replaceWii')) || !mounted))
-          return;
+        if (!_isGameCube && (!await _confirm(_text('replaceWii')) || !mounted)) return;
         count = await DolphinInternalV2Service.importSystemFolder(
-          widget.systemFolder,
-          fromShared: fromShared,
+          widget.systemFolder, fromShared: fromShared,
         );
       }
       if (!mounted) return;
-      if (count != null)
-        _notice(_text('imported').replaceAll('{count}', '$count'));
+      if (count != null) _notice(_text('imported').replaceAll('{count}', '$count'));
     } catch (error) {
       LoggerService.instance.w('Dolphin playlist action failed: $error');
       if (!mounted) return;
@@ -163,26 +138,23 @@ class _DolphinInternalPlaylistActionsState
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isIOS ||
-        !DolphinInternalV2Service.isDolphinSystem(widget.systemFolder)) {
+    if (!Platform.isIOS || !DolphinInternalV2Service.isDolphinSystem(widget.systemFolder)) {
       return const SizedBox.shrink();
     }
-
-    final theme = Theme.of(context);
-    final actionColor = theme.colorScheme.primary.withValues(alpha: 0.9);
-    final foregroundColor = theme.colorScheme.onPrimary;
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       width: 36.r,
       height: 36.r,
       decoration: BoxDecoration(
-        color: actionColor,
+        color: scheme.tertiaryFixed,
         borderRadius: BorderRadius.circular(10.r),
+        border: Border.all(color: scheme.tertiaryFixed, width: 2.r),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.primary.withValues(alpha: 0.3),
-            blurRadius: 8.r,
-            offset: Offset(0, 2.r),
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.3),
+            blurRadius: 3.r,
+            offset: Offset(1.5.r, 1.5.r),
           ),
         ],
       ),
@@ -200,13 +172,13 @@ class _DolphinInternalPlaylistActionsState
                 height: 18.r,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: foregroundColor,
+                  color: scheme.onTertiaryFixed,
                 ),
               )
             : Icon(
                 Icons.file_upload_outlined,
                 size: 18.r,
-                color: foregroundColor,
+                color: scheme.onTertiaryFixed,
               ),
         itemBuilder: (context) => [
           PopupMenuItem(value: 'games', child: Text(_text('games'))),
@@ -224,9 +196,7 @@ class _DolphinInternalPlaylistActionsState
             for (final region in DolphinIplRegion.values)
               PopupMenuItem(
                 value: 'ipl:${region.name}',
-                child: Text(
-                  '${_regions.contains(region) ? '✓ ' : ''}${_text('ipl').replaceAll('{region}', region.name.toUpperCase())}',
-                ),
+                child: Text('${_regions.contains(region) ? '✓ ' : ''}${_text('ipl').replaceAll('{region}', region.name.toUpperCase())}'),
               ),
           ],
           const PopupMenuDivider(),
