@@ -26,7 +26,7 @@ class Rpcs3ContentImportProgress {
 
   double? get fraction {
     if (total <= 0) return null;
-    return (current / total).clamp(0.0, 1.0);
+    return (current / total).clamp(0.0, 1.0).toDouble();
   }
 }
 
@@ -173,19 +173,19 @@ class Rpcs3ContentImportService {
   }
 
   static Future<String?> _resolveUnpackedGameFolder(String selectedPath) async {
-    Future<bool> directLayout(String root) async {
+    bool directLayout(String root) {
       return File(path.join(root, 'PARAM.SFO')).existsSync() &&
           File(path.join(root, 'USRDIR', 'EBOOT.BIN')).existsSync();
     }
 
-    Future<bool> discLayout(String root) async {
+    bool discLayout(String root) {
       return File(path.join(root, 'PS3_GAME', 'PARAM.SFO')).existsSync() &&
           File(
             path.join(root, 'PS3_GAME', 'USRDIR', 'EBOOT.BIN'),
           ).existsSync();
     }
 
-    if (await directLayout(selectedPath) || await discLayout(selectedPath)) {
+    if (directLayout(selectedPath) || discLayout(selectedPath)) {
       return selectedPath;
     }
 
@@ -200,7 +200,7 @@ class Rpcs3ContentImportService {
           .take(16)
           .toList();
       for (final child in children) {
-        if (await directLayout(child.path) || await discLayout(child.path)) {
+        if (directLayout(child.path) || discLayout(child.path)) {
           return child.path;
         }
       }
