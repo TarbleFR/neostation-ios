@@ -38,14 +38,11 @@ class _Rpcs3InternalPlaylistActionsState
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
+  // Opening the menu must never initialize or dlopen RPCS3. The Core stays
+  // dormant until the user explicitly chooses a PS3 action (game/firmware) or
+  // launches a PS3 title.
   Future<void> _opened() async {
     _interaction(true);
-    try {
-      if (await Rpcs3InternalService.hasFirmware() && mounted) {
-        final version = await Rpcs3InternalService.firmwareVersion();
-        if (mounted) setState(() => _firmwareVersion = version);
-      }
-    } catch (_) {}
   }
 
   void _notice(String message) {
