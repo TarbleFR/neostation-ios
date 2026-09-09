@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Wire the embedded RPCS3 engine into NeoStation's existing PS3 UI/library.
 
-This patch intentionally does not read or modify any Dolphin source file.
+This patch is deliberately surgical: it does not read or modify any Dolphin
+source file, and it preserves the mature RPCS3 metadata/catalog helpers.
 """
 from pathlib import Path
 
@@ -13,47 +14,45 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def replace_region(
-    text: str,
-    start_marker: str,
-    end_marker: str,
-    replacement: str,
-    label: str,
-) -> str:
-    start = text.find(start_marker)
-    if start < 0:
-        raise SystemExit(f'{label}: start marker missing')
-    end = text.find(end_marker, start)
-    if end < 0:
-        raise SystemExit(f'{label}: end marker missing')
-    return text[:start] + replacement + text[end:]
-
-
-# RPCS3 library data is now owned by NeoStation rather than bookmarked from a
-# separately installed application container.
+# ---------------------------------------------------------------------------
+# RPCS3 library: keep all discovery/catalog/cache code, but make NeoStation's
+# private Application Support directory the authoritative Data root.
+# ---------------------------------------------------------------------------
 library_path = Path('lib/services/rpcs3_library_service.dart')
 library = library_path.read_text()
-library = library.replace(
-    "import 'package:external_folder_access/external_folder_access.dart';\n",
-    '',
-)
+
 library = library.replace(
     "/// Imports the game list exposed by the unofficial RPCS3 iOS port.\n///\n/// RPCS3 exposes its persistent directory through Files at:\n/// `On My iPhone/iPad > RPCS3 > Data`.\n///\n/// The iOS build does not currently expose a library-export URL scheme, so\n/// NeoStation bookmarks that Data directory and mirrors RPCS3's own discovery\n/// rules. Metadata comes from `PARAM.SFO` under:\n",
-    "/// Imports the game list owned by NeoStation's embedded RPCS3 Core.\n///\n/// The persistent PS3 data root is private NeoStation Application Support at\n/// `NeoStation/RPCS3/Data`. Metadata comes from `PARAM.SFO` under:\n",
+    "/// Imports the game list owned by NeoStation's embedded RPCS3 Core.\n///\n/// The authoritative PS3 data root is private NeoStation Application Support at\n/// `NeoStation/RPCS3/Data`. Existing PARAM.SFO discovery and metadata fallback\n/// rules are preserved. Metadata comes from `PARAM.SFO` under:\n",
 )
 library = library.replace(
     "/// Imported rows intentionally use an internal `rpcs3-library://` URI. They are\n/// display-only until RPCS3 publishes a supported direct-game deeplink.\n",
-    "/// Imported rows use the existing internal `rpcs3-library://` URI. Launching\n/// resolves the title ID and boots it directly through the embedded RPCS3 Core.\n",
+    "/// Imported rows keep the internal `rpcs3-library://` URI. Launching resolves\n/// the title ID and boots it directly through the embedded RPCS3 Core.\n",
 )
-library = replace_region(
-    library,
-    '  /// Restores the security-scoped bookmark and the last lightweight cache.\n  static Future<void> initialize() async {',
-    '  /// Restores cached virtual PS3 rows',
-    '''  /// Restores the last lightweight cache and creates NeoStation's private
-  /// RPCS3 data root.
+
+old_initialize = '''  /// Restores the security-scoped bookmark and the last lightweight cache.
   static Future<void> initialize() async {
     await loadCachedLibrary();
     if (!Platform.isIOS) return;
+
+    try {
+      final selected = await ExternalFolderAccess.resolveBookmarkedFolder(
+        key: bookmarkKey,
+      );
+      if (selected != null) {
+        _linkedDataPath = await _normalizeDataRoot(selected);
+      }
+    } catch (e) {
+      _log.w('Rpcs3LibraryService: could not restore linked Data folder: $e');
+    }
+  }
+'''
+new_initialize = '''  /// Restores the lightweight cache and prepares NeoStation's private RPCS3
+  /// data root. No separately installed RPCS3 application is required.
+  static Future<void> initialize() async {
+    await loadCachedLibrary();
+    if (!Platform.isIOS) return;
+
     final support = await getApplicationSupportDirectory();
     final dataRoot = Directory(
       path.join(support.path, 'NeoStation', 'RPCS3', 'Data'),
@@ -61,42 +60,75 @@ library = replace_region(
     await dataRoot.create(recursive: true);
     _linkedDataPath = path.normalize(dataRoot.path);
   }
+'''
+if old_initialize in library:
+    library = replace_once(
+        library,
+        old_initialize,
+        new_initialize,
+        'RPCS3 internal initialize',
+    )
+elif "NeoStation's private RPCS3" not in library:
+    raise SystemExit('RPCS3 initialize block is not in a recognized state')
 
-''',
-    'RPCS3 internal initialize',
-)
-library = replace_region(
-    library,
-    "  /// Lets the user select RPCS3's folder, bookmarks it, then performs a sync.",
-    '  /// Reads the currently linked RPCS3 Data directory and imports its PS3 rows.',
-    '''  /// Compatibility entry point retained for callers that previously linked
-  /// an external RPCS3 folder. The data root is now owned by NeoStation.
-  static Future<Rpcs3SyncResult?> linkAndSync() async {
-    if (!Platform.isIOS) return null;
-    return syncInternalLibrary();
-  }
-
+# Preserve the old linkAndSync method only as a dormant compatibility method;
+# the PS3 UI no longer calls it. Add a new explicit internal sync entry point
+# without deleting any catalog/cache helpers that follow it.
+sync_anchor = '''  /// Reads the currently linked RPCS3 Data directory and imports its PS3 rows.
+  static Future<Rpcs3SyncResult> syncLinkedLibrary() async {
+'''
+if 'static Future<Rpcs3SyncResult> syncInternalLibrary() async {' not in library:
+    internal_sync = '''  /// Synchronizes the PS3 library owned by the embedded RPCS3 Core.
   static Future<Rpcs3SyncResult> syncInternalLibrary() async {
     await initialize();
     return syncLinkedLibrary();
   }
 
-''',
-    'RPCS3 external link retirement',
-)
-library = replace_region(
-    library,
-    '  static Future<String?> _resolveLinkedDataRoot() async {',
-    '  static Future<bool> _canReadDataRoot(String dataRoot) async {',
-    '''  static Future<String?> _resolveLinkedDataRoot() async {
-    if (!Platform.isIOS) return linkedDataPath;
-    if (linkedDataPath == null) await initialize();
+'''
+    library = replace_once(
+        library,
+        sync_anchor,
+        internal_sync + sync_anchor,
+        'RPCS3 internal sync entry point',
+    )
+
+old_resolver = '''  static Future<String?> _resolveLinkedDataRoot() async {
+    final current = linkedDataPath;
+    if (current != null) return current;
+    if (!Platform.isIOS) return null;
+
+    try {
+      final selected = await ExternalFolderAccess.resolveBookmarkedFolder(
+        key: bookmarkKey,
+      );
+      if (selected == null) return null;
+      final normalized = await _normalizeDataRoot(selected);
+      _linkedDataPath = normalized;
+      return normalized;
+    } catch (error) {
+      _log.w('Rpcs3LibraryService: linked Data folder resolve failed: $error');
+      return null;
+    }
+  }
+'''
+new_resolver = '''  static Future<String?> _resolveLinkedDataRoot() async {
+    final current = linkedDataPath;
+    if (current != null) return current;
+    if (!Platform.isIOS) return null;
+    await initialize();
     return linkedDataPath;
   }
+'''
+if old_resolver in library:
+    library = replace_once(
+        library,
+        old_resolver,
+        new_resolver,
+        'RPCS3 private data-root resolver',
+    )
+elif "await initialize();\n    return linkedDataPath;" not in library:
+    raise SystemExit('RPCS3 data-root resolver is not in a recognized state')
 
-''',
-    'RPCS3 internal data root resolver',
-)
 library = library.replace(
     "throw StateError('RPCS3 Data folder is not linked.');",
     "throw StateError('RPCS3 internal Data directory is unavailable.');",
@@ -104,7 +136,9 @@ library = library.replace(
 library_path.write_text(library)
 
 
-# RPCS3 import actions belong directly to the PS3 library screen.
+# ---------------------------------------------------------------------------
+# PS3 library UI: expose the dedicated import popup directly in the game view.
+# ---------------------------------------------------------------------------
 games_path = Path('lib/screens/game_screen/my_games_list.dart')
 games = games_path.read_text()
 if "rpcs3_internal_playlist_actions.dart" not in games:
@@ -156,42 +190,23 @@ if 'RPCS3_INTERNAL_BEGIN: playlist_actions' not in games:
 games_path.write_text(games)
 
 
-# Remove the obsolete RPCS3 external-directory UI. Other emulator directory
-# cards remain unchanged.
+# ---------------------------------------------------------------------------
+# Settings: hide only the obsolete external-RPCS3 directory card. Keep the
+# surrounding directory code byte-for-byte intact; dormant compatibility
+# helpers can be removed in a later cleanup after device validation.
+# ---------------------------------------------------------------------------
 settings_path = Path(
     'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart'
 )
 settings = settings_path.read_text()
-settings = settings.replace(
-    "import 'package:neostation/services/rpcs3_library_service.dart';\n",
-    '',
-)
-settings = settings.replace(
-    "import 'package:neostation/l10n/rpcs3_library_locale.dart';\n",
-    '',
-)
-if 'Future<void> _linkRpcs3DataFolder() async {' in settings:
-    settings = replace_region(
-        settings,
-        '  Future<void> _linkRpcs3DataFolder() async {',
-        '  List<Widget> _iosEmulatorCards(ThemeData theme) {',
-        '  List<Widget> _iosEmulatorCards(ThemeData theme) {',
-        'RPCS3 directory actions',
-    )
 settings = settings.replace('      _buildIOSRpcs3Section(theme),\n', '')
-if 'Widget _buildIOSRpcs3Section(ThemeData theme) {' in settings:
-    settings = replace_region(
-        settings,
-        '  Widget _buildIOSRpcs3Section(ThemeData theme) {',
-        '  Widget _buildIOSArmsx2Section(ThemeData theme) {',
-        '  Widget _buildIOSArmsx2Section(ThemeData theme) {',
-        'RPCS3 directory card',
-    )
 settings_path.write_text(settings)
 
 
-# The game launch path now describes an in-process RPCS3 session and surfaces
-# the precise firmware/JIT/Core error produced by the internal service.
+# ---------------------------------------------------------------------------
+# Launch surface: identify the session as internal and propagate precise
+# firmware/JIT/Core failures from Rpcs3LaunchService.
+# ---------------------------------------------------------------------------
 launch_path = Path('lib/services/game/game_launch_service.dart')
 launch = launch_path.read_text().replace(
     "'ios_rpcs3_stikdebug'",
@@ -227,4 +242,4 @@ if entry not in ignore:
         ignore += '\n'
     gitignore.write_text(ignore + entry)
 
-print('RPCS3 internal UI/library wiring applied without touching Dolphin.')
+print('RPCS3 internal UI/library wiring applied; metadata helpers preserved; Dolphin untouched.')
