@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 216
-run-name: NeoStation iOS Build 216 • ${{ github.sha }}
+name: NeoStation iOS Build 217
+run-name: NeoStation iOS Build 217 • ${{ github.sha }}
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-216
+  group: neostation-ios-build-217
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '216'
-      IPA_NAME: 'NeoStation-iOS-Build-216'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-216'
+      BUILD_NUMBER: '217'
+      IPA_NAME: 'NeoStation-iOS-Build-217'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-217'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -271,7 +271,7 @@ jobs:
           present = [key for key in forbidden if key in payload]
           if present:
               raise SystemExit(
-                  'Build 216 must not force user-specific entitlements: ' + ', '.join(present)
+                  'Build 217 must not force user-specific entitlements: ' + ', '.join(present)
               )
           print(f'RPCS3 lazy IPA validation passed: {cores[0]} + RPCS3JITHelper; neutral entitlements')
           PY
