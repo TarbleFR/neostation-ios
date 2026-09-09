@@ -16,4 +16,4 @@ flutter:
   plugin:
     platforms:
       ios:
-        pluginClass: Rpcs3InternalBridgePlugin
+        pluginClass: Rpcs3CompositeBridgePlugin
