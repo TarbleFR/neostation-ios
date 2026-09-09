@@ -15,6 +15,7 @@ import '../../providers/sqlite_config_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../widgets/dolphin_multi_delete_dialog.dart';
+import '../../widgets/rpcs3_multi_delete_dialog.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
 import '../../widgets/rainbow_selection_border.dart';
@@ -199,8 +200,20 @@ class GameListViewState extends State<GameListView>
   }
 
   Future<void> _handleLongPress(GameModel game) async {
-    if (!Platform.isIOS ||
-        !DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)) {
+    if (!Platform.isIOS) return;
+
+    if (widget.system.folderName.toLowerCase() == 'ps3') {
+      SfxService().playNavSound();
+      await Rpcs3MultiDeleteDialog.show(
+        context: context,
+        system: widget.system,
+        games: widget.games,
+        initialGame: game,
+      );
+      return;
+    }
+
+    if (!DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)) {
       return;
     }
     SfxService().playNavSound();
