@@ -9,7 +9,7 @@ void main() {
         'lib/services/rpcs3_internal_service.dart',
       ).readAsStringSync();
       final hostJit = File(
-        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3HostJit.mm',
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
       ).readAsStringSync();
       final helper = File(
         'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift',
