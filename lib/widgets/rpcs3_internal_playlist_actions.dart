@@ -35,6 +35,7 @@ class _Rpcs3InternalPlaylistActionsState
   String _firmwareVersion = '';
   String? _error;
   Rpcs3RuntimePhase _phase = Rpcs3RuntimePhase.idle;
+  String _progressMessage = '';
 
   bool get _firmwareInstalled => _firmwareVersion.isNotEmpty;
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
@@ -45,7 +46,12 @@ class _Rpcs3InternalPlaylistActionsState
   void initState() {
     super.initState();
     _runtimeSubscription = Rpcs3InternalService.runtimeStates.listen((state) {
-      if (mounted && _busy) setState(() => _phase = state.phase);
+      if (mounted && _busy) {
+        setState(() {
+          _phase = state.phase;
+          _progressMessage = state.message;
+        });
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _checkFirmware();
@@ -103,6 +109,7 @@ class _Rpcs3InternalPlaylistActionsState
       _busy = true;
       _error = null;
       _phase = Rpcs3RuntimePhase.idle;
+      _progressMessage = '';
     });
     _interaction(true);
     try {
@@ -182,7 +189,9 @@ class _Rpcs3InternalPlaylistActionsState
     final checkingLabel = _fr
         ? 'Vérification du firmware PS3…'
         : 'Checking PS3 firmware…';
-    final progressLabel = _phase == Rpcs3RuntimePhase.installingFirmware
+    final progressLabel = _progressMessage.isNotEmpty
+        ? _progressMessage
+        : _phase == Rpcs3RuntimePhase.installingFirmware
         ? (_fr ? 'Installation du firmware PS3…' : 'Installing PS3 firmware…')
         : (_fr ? 'Préparation de l’installation…' : 'Preparing installation…');
 

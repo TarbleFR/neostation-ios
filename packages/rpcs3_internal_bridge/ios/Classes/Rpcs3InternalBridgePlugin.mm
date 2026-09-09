@@ -1,4 +1,5 @@
 #import "Rpcs3InternalBridgePlugin.h"
+#import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
 
 #import <Metal/Metal.h>
@@ -45,11 +46,15 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
   return enabled;
 }
 
-// RPCS3 0.8.1 performs the same kind of readiness check before it dlopens its
-// Core. A successful debugger attach is not sufficient if iOS still rejects
-// the RW -> RX transition that the JIT arena needs. Probe that transition here
-// so NeoStation can report an error instead of letting the Core abort at load.
+// Only the legacy Core backend uses an ordinary RW -> RX transition. On
+// iOS 26 the Core itself prepares RX pages through the attached Universal
+// debugger and creates mirrored RW aliases; this legacy probe cannot test it.
 static BOOL RPCS3ProbeExecutableMemory(NSString** error) {
+  if (@available(iOS 26.0, *)) {
+    if (RPCS3JitHasActiveCoreHandshake()) return YES;
+    if (error) *error = @"RPCS3 requires a fresh Universal JIT attachment before loading its Core.";
+    return NO;
+  }
   size_t pageSize = (size_t)getpagesize();
   void* page = mmap(NULL,
                     pageSize,

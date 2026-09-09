@@ -5,9 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('RPCS3 internal engine contracts', () {
     test('RPCS3 JIT path is isolated from Dolphin and standalone RPCS3', () {
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
-      ).readAsStringSync();
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
       final hostJit = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
       ).readAsStringSync();
@@ -26,12 +25,13 @@ void main() {
       expect(helper, isNot(contains('com.xitrix.RPCS3')));
     });
 
-    test('existing process JIT is reused before launching StikJIT again', () {
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
-      ).readAsStringSync();
+    test('only legacy JIT may reuse the persistent debugged flag', () {
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
 
-      final statusIndex = service.indexOf('final current = await _jitStatus();');
+      final statusIndex = service.indexOf(
+        'final current = await _jitStatus();',
+      );
       final debuggedIndex = service.indexOf("current['debugged'] == true");
       final pairingIndex = service.indexOf(
         'PairingFileService.hasStoredPairingFile',
@@ -44,29 +44,43 @@ void main() {
       expect(prepareIndex, greaterThan(pairingIndex));
       expect(service, contains('static Future<void>? _jitPreparation'));
       expect(service, contains("'jitTimeout'"));
-      expect(service, contains('Duration(seconds: 90)'));
+      expect(service, contains("current['requiresCoreHandshake'] != true"));
+      expect(service, contains('Duration(minutes: 11)'));
+      expect(service, isNot(contains('Duration(seconds: 90)')));
     });
 
     test('JIT and arena policy are ready before RPCS3 Core dlopen', () {
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
-      ).readAsStringSync();
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
       final bridge = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
 
-      final serviceJit = service.indexOf('await ensureJitReady();');
-      final serviceInitialize = service.indexOf('Rpcs3InternalBridge.initialize');
+      final serviceJit = service.indexOf('await _attachJitForCore();');
+      final serviceInitialize = service.indexOf(
+        'Rpcs3InternalBridge.initialize',
+      );
+      final serviceComplete = service.indexOf(
+        'Rpcs3InternalBridge.completeJit',
+      );
       expect(serviceJit, greaterThanOrEqualTo(0));
       expect(serviceInitialize, greaterThan(serviceJit));
+      expect(serviceComplete, greaterThan(serviceInitialize));
+      expect(
+        service.indexOf('_initialized = true;'),
+        greaterThan(serviceComplete),
+      );
 
       expect(bridge, contains('RPCS3HostIsDebugged'));
       expect(bridge, contains('RPCS3ProbeExecutableMemory'));
+      expect(bridge, contains('RPCS3JitHasActiveCoreHandshake()'));
       expect(bridge, contains('RPCS3_IOS_EXPANDED_JIT_ARENA'));
       final setenvIndex = bridge.indexOf(
         'setenv("RPCS3_IOS_EXPANDED_JIT_ARENA"',
       );
-      final dlopenIndex = bridge.indexOf('dlopen(path.fileSystemRepresentation');
+      final dlopenIndex = bridge.indexOf(
+        'dlopen(path.fileSystemRepresentation',
+      );
       expect(setenvIndex, greaterThanOrEqualTo(0));
       expect(dlopenIndex, greaterThan(setenvIndex));
 
@@ -76,32 +90,64 @@ void main() {
       final initializeStart = bridge.indexOf(
         'if ([call.method isEqualToString:@"initialize"])',
       );
-      final diagnosticsBlock = bridge.substring(diagnosticsStart, initializeStart);
+      final diagnosticsBlock = bridge.substring(
+        diagnosticsStart,
+        initializeStart,
+      );
       expect(diagnosticsBlock, isNot(contains('loadCoreWithExpandedJit')));
     });
 
-    test('manager pre-warms JIT without loading RPCS3 Core', () {
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
-      ).readAsStringSync();
-      final manager = File(
-        'lib/screens/rpcs3_manager_screen.dart',
-      ).readAsStringSync();
+    test('manager inspection does not leave a Universal helper waiting', () {
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
+      final manager = File('lib/screens/rpcs3_manager_screen.dart')
+          .readAsStringSync();
 
-      expect(service, contains('static Future<void> prepareManager() => ensureJitReady();'));
+      final start = service.indexOf('static Future<void> prepareManager()');
+      final end = service.indexOf(
+        'static Future<void> ensureJitReady()',
+        start,
+      );
+      final inspection = service.substring(start, end);
+      expect(inspection, contains('await _jitStatus()'));
+      expect(inspection, isNot(contains('_attachJitForCore')));
+      expect(inspection, isNot(contains('_ensureRuntime')));
       expect(manager, contains('Rpcs3InternalService.prepareManager()'));
       expect(manager, contains('RPCS3 Core'));
       expect(manager, contains('À la demande'));
-      expect(manager, isNot(contains('const Center(child: CircularProgressIndicator())')));
+      expect(
+        manager,
+        isNot(contains('const Center(child: CircularProgressIndicator())')),
+      );
       expect(manager, contains('LinearProgressIndicator'));
       expect(manager, contains('Réessayer'));
     });
 
-    test('firmware picker is shown before RPCS3 runtime initialization', () {
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
+    test('Universal attach returns before completion and forces the matching script', () {
+      final host = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
       ).readAsStringSync();
-      final methodStart = service.indexOf('static Future<bool> importFirmware()');
+      final helper = File(
+        'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift',
+      ).readAsStringSync();
+      final prepare = host.substring(
+        host.indexOf('if (![call.method isEqualToString:@"prepareJit"])'),
+      );
+      expect(prepare, contains('waitUntilAttached:kRpcs3AttachTimeout'));
+      expect(prepare, isNot(contains('waitUntilFinished:')));
+      expect(prepare, contains('response[@"requiresCompletion"] = @YES'));
+      expect(host, contains('isEqualToString:@"completeJit"'));
+      expect(host, contains('waitUntilFinished:kRpcs3CompletionTimeout'));
+      expect(helper, contains('forceScript: requiresCoreHandshake'));
+      expect(host, contains('cancelExtensionRequestWithIdentifier:'));
+    });
+
+    test('firmware picker is shown before RPCS3 runtime initialization', () {
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
+      final methodStart = service.indexOf(
+        'static Future<bool> importFirmware()',
+      );
       final methodEnd = service.indexOf(
         'static Future<Rpcs3ImportResult> importGames()',
         methodStart,
@@ -117,14 +163,15 @@ void main() {
     });
 
     test('RPCS3 signing capabilities match the original iOS runtime needs', () {
-      final config = File(
-        'build-utils/configure_rpcs3_ios_v2.py',
-      ).readAsStringSync();
+      final config = File('build-utils/configure_rpcs3_ios_v2.py')
+          .readAsStringSync();
 
       expect(config, contains("'get-task-allow': True"));
       expect(
         config,
-        contains("'com.apple.developer.kernel.extended-virtual-addressing': True"),
+        contains(
+          "'com.apple.developer.kernel.extended-virtual-addressing': True",
+        ),
       );
       expect(
         config,
@@ -132,7 +179,9 @@ void main() {
       );
       expect(
         config,
-        contains("'com.apple.developer.kernel.increased-debugging-memory-limit': True"),
+        contains(
+          "'com.apple.developer.kernel.increased-debugging-memory-limit': True",
+        ),
       );
     });
 
@@ -140,12 +189,10 @@ void main() {
       final plugin = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
-      final launcher = File(
-        'lib/services/rpcs3_launch_service.dart',
-      ).readAsStringSync();
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
-      ).readAsStringSync();
+      final launcher = File('lib/services/rpcs3_launch_service.dart')
+          .readAsStringSync();
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
 
       expect(plugin, contains('rpcs3_ios_boot_game'));
       expect(plugin, contains('self->_api.boot_game'));
@@ -161,10 +208,11 @@ void main() {
     });
 
     test('firmware remains mandatory before direct boot', () {
-      final service = File(
-        'lib/services/rpcs3_internal_service.dart',
-      ).readAsStringSync();
-      final gameplayInit = service.indexOf('await ensureGameplayInitialized();');
+      final service = File('lib/services/rpcs3_internal_service.dart')
+          .readAsStringSync();
+      final gameplayInit = service.indexOf(
+        'await ensureGameplayInitialized();',
+      );
       final firmwareCheck = service.indexOf("'firmwareRequired'");
       final launchCall = service.indexOf('Rpcs3InternalBridge.launchGame');
 
@@ -174,12 +222,10 @@ void main() {
     });
 
     test('PS3 library exposes emulator manager and all import actions', () {
-      final widget = File(
-        'lib/widgets/rpcs3_internal_playlist_actions.dart',
-      ).readAsStringSync();
-      final manager = File(
-        'lib/screens/rpcs3_manager_screen.dart',
-      ).readAsStringSync();
+      final widget = File('lib/widgets/rpcs3_internal_playlist_actions.dart')
+          .readAsStringSync();
+      final manager = File('lib/screens/rpcs3_manager_screen.dart')
+          .readAsStringSync();
 
       expect(widget, contains("value: 'open'"));
       expect(widget, contains('Ouvrir RPCS3'));

@@ -44,6 +44,13 @@ class Rpcs3InternalBridge {
         const <String, dynamic>{},
   );
 
+  /// Call only after initialize has prepared and sealed the Core JIT arena.
+  static Future<Map<String, dynamic>> completeJit() async =>
+      Map<String, dynamic>.from(
+        await _jitChannel.invokeMapMethod<String, dynamic>('completeJit') ??
+            const <String, dynamic>{},
+      );
+
   static Future<Map<String, dynamic>> shutdown() async =>
       Map<String, dynamic>.from(
         await _channel.invokeMapMethod<String, dynamic>('shutdown') ??

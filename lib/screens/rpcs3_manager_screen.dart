@@ -9,10 +9,7 @@ import '../services/rpcs3_internal_service.dart';
 /// Opening this screen pre-warms JIT in the background but deliberately keeps
 /// libRPCS3Core.dylib dormant until a firmware/content/game action needs it.
 class Rpcs3ManagerScreen extends StatefulWidget {
-  const Rpcs3ManagerScreen({
-    super.key,
-    required this.onLibraryChanged,
-  });
+  const Rpcs3ManagerScreen({super.key, required this.onLibraryChanged});
 
   final Future<void> Function() onLibraryChanged;
 
@@ -44,7 +41,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
         _coreReady = state.coreReady;
         _statusMessage = state.message;
         _error = state.error;
-        _preparing = state.phase == Rpcs3RuntimePhase.checkingJit ||
+        _preparing =
+            state.phase == Rpcs3RuntimePhase.checkingJit ||
             state.phase == Rpcs3RuntimePhase.enablingJit ||
             state.phase == Rpcs3RuntimePhase.initializingCore;
       });
@@ -61,9 +59,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
 
   void _notice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _readDiagnostics() async {
@@ -72,7 +69,11 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       final jit = diagnostics['jit'];
       if (!mounted) return;
       setState(() {
-        _jitReady = jit is Map && jit['debugged'] == true;
+        _jitReady =
+            jit is Map &&
+            jit['debugged'] == true &&
+            (jit['requiresCoreHandshake'] != true ||
+                diagnostics['initialized'] == true);
         _coreReady = diagnostics['initialized'] == true;
         _build = diagnostics['build']?.toString() ?? '';
         _abi = (diagnostics['abi'] as num?)?.toInt() ?? 0;
@@ -91,7 +92,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       _error = null;
     });
 
-    // Render the manager immediately, then warm up only JIT in the background.
+    // Inspection only: Universal JIT must attach as part of Core startup.
     try {
       await _refreshFirmwareVersion();
       await _readDiagnostics();
@@ -99,10 +100,9 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       await _readDiagnostics();
       if (!mounted) return;
       setState(() {
-        _jitReady = true;
         _statusMessage = _fr
-            ? 'JIT prêt. RPCS3 Core sera chargé uniquement quand une action le demande.'
-            : 'JIT ready. RPCS3 Core will load only when an action needs it.';
+            ? 'Le JIT et RPCS3 Core seront préparés lors de l’importation ou du lancement.'
+            : 'JIT and RPCS3 Core will be prepared when importing or launching.';
       });
     } on Rpcs3InternalException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -287,19 +287,19 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                           icon: _jitReady
                               ? Icons.check_circle
                               : _preparing
-                                  ? Icons.hourglass_top
-                                  : Icons.radio_button_unchecked,
+                              ? Icons.hourglass_top
+                              : Icons.radio_button_unchecked,
                           label: 'JIT',
                           value: _jitReady
                               ? (_fr ? 'Activé' : 'Enabled')
                               : _preparing
-                                  ? (_fr ? 'Activation…' : 'Enabling…')
-                                  : (_fr ? 'Inactif' : 'Inactive'),
+                              ? (_fr ? 'Activation…' : 'Enabling…')
+                              : (_fr ? 'Inactif' : 'Inactive'),
                           color: _jitReady
                               ? scheme.primary
                               : _preparing
-                                  ? scheme.tertiary
-                                  : scheme.onSurfaceVariant,
+                              ? scheme.tertiary
+                              : scheme.onSurfaceVariant,
                         ),
                         _statusRow(
                           icon: _coreReady
@@ -342,37 +342,37 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                       !firmwareChecked
                           ? Icons.help_outline
                           : firmwareInstalled
-                              ? Icons.check_circle
-                              : Icons.warning_amber_rounded,
+                          ? Icons.check_circle
+                          : Icons.warning_amber_rounded,
                       color: !firmwareChecked
                           ? scheme.onSurfaceVariant
                           : firmwareInstalled
-                              ? scheme.primary
-                              : scheme.error,
+                          ? scheme.primary
+                          : scheme.error,
                     ),
                     title: Text(
                       !firmwareChecked
                           ? (_fr
-                              ? 'Firmware PS3 non vérifié'
-                              : 'PS3 firmware not checked')
+                                ? 'Firmware PS3 non vérifié'
+                                : 'PS3 firmware not checked')
                           : firmwareInstalled
-                              ? (_fr
-                                  ? 'Firmware PS3 installé'
-                                  : 'PS3 firmware installed')
-                              : (_fr
-                                  ? 'Firmware PS3 requis'
-                                  : 'PS3 firmware required'),
+                          ? (_fr
+                                ? 'Firmware PS3 installé'
+                                : 'PS3 firmware installed')
+                          : (_fr
+                                ? 'Firmware PS3 requis'
+                                : 'PS3 firmware required'),
                     ),
                     subtitle: Text(
                       !firmwareChecked
                           ? (_fr
-                              ? 'Vérification des fichiers du firmware…'
-                              : 'Checking the installed firmware files…')
+                                ? 'Vérification des fichiers du firmware…'
+                                : 'Checking the installed firmware files…')
                           : firmwareInstalled
-                              ? _firmwareVersion!
-                              : (_fr
-                                  ? 'Installez le fichier officiel PS3UPDAT.PUP.'
-                                  : 'Install the official PS3UPDAT.PUP file.'),
+                          ? _firmwareVersion!
+                          : (_fr
+                                ? 'Installez le fichier officiel PS3UPDAT.PUP.'
+                                : 'Install the official PS3UPDAT.PUP file.'),
                     ),
                   ),
                 ),
@@ -422,9 +422,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                   onPressed: _busy ? null : _importFolder,
                   icon: const Icon(Icons.folder_open),
                   label: Text(
-                    _fr
-                        ? 'Importer un dossier de jeu'
-                        : 'Import a game folder',
+                    _fr ? 'Importer un dossier de jeu' : 'Import a game folder',
                   ),
                 ),
               ],
