@@ -1,10 +1,10 @@
-name: NeoStation iOS Build 221
-run-name: NeoStation iOS Build 221 • ${{ github.sha }}
+name: NeoStation iOS Build 224
+run-name: NeoStation iOS Build 224 (RPCS3 JIT handshake) • ${{ github.sha }}
 
 on:
   push:
     branches:
-      - main
+      - fix/rpcs3-firmware-library-build223
     paths:
       - .github/workflows/build-ipa-once.yml
 
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-221
+  group: neostation-ios-build-224
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '221'
-      IPA_NAME: 'NeoStation-iOS-Build-221'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-221'
+      BUILD_NUMBER: '224'
+      IPA_NAME: 'NeoStation-iOS-Build-224'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-224'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -133,6 +133,7 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
           flutter test --no-pub
+          python3 test/rpcs3_jit_handshake_test.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -271,7 +272,7 @@ jobs:
           missing = [key for key in required if payload.get(key) is not True]
           if missing:
               raise SystemExit(
-                  'Build 221 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
+                  'Build 224 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
               )
           print(f'RPCS3 lazy IPA validation passed: {cores[0]} + RPCS3JITHelper; required JIT/memory entitlements emitted')
           PY

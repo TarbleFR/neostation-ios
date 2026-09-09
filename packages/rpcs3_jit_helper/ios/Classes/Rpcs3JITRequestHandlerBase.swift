@@ -96,6 +96,10 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
       }
 
       let targetPID = targetPIDNumber.int32Value
+      // RPCS3 selects its mirrored Universal arena by OS version, not TXM
+      // detection. Even a non-TXM device on iOS 26 needs this script running
+      // when Core constructors request their executable regions.
+      let requiresCoreHandshake = object["requiresCoreHandshake"] as? Bool ?? false
       reporter = try Rpcs3HelperReporter(
         port: portNumber.uint16Value,
         token: token
@@ -153,7 +157,7 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         ddiPaths: ddiPaths,
         configuration: configuration,
         script: .universal,
-        forceScript: false,
+        forceScript: requiresCoreHandshake,
         preparationProgress: { stage in
           try? reporter?.send(
             event: "log",

@@ -106,6 +106,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // Navigation & State orchestration.
   bool _isLoading = true;
   bool _isLoadingGames = false; // Prevents redundant reload triggers.
+  bool _rpcs3FirmwareReady = false;
+  bool get _isRpcs3Library =>
+      Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps3';
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -618,7 +621,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
               ),
 
             // Content Layer: hide entirely while game dialog is active.
-            if (!_isGameLaunching)
+            if (!_isGameLaunching && (!_isRpcs3Library || _rpcs3FirmwareReady))
               SizedBox(
                 child: _isLoading
                     ? _buildLoadingState()
@@ -643,7 +646,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
             // Navigation Layer: Visual alphabetical feedback for rapid scrolling.
             if (_currentLetter != null && !_isGameLaunching)
               _buildLetterIndicator(),
-            GameViewModeDropdown(),
+            if (!_isRpcs3Library || _rpcs3FirmwareReady) GameViewModeDropdown(),
 
             // DOLPHIN_ISOLATION_BEGIN: playlist_actions
             if (!_isGameLaunching &&
@@ -676,31 +679,28 @@ class _SystemGamesListState extends State<SystemGamesList> {
               ),
             // DOLPHIN_ISOLATION_END: playlist_actions
             // RPCS3_INTERNAL_BEGIN: playlist_actions
-            if (!_isGameLaunching &&
-                Platform.isIOS &&
-                widget.system.folderName.toLowerCase() == 'ps3')
-              Positioned(
-                top: 8.r,
-                right: 10.r,
-                child: SafeArea(
-                  child: Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12.r),
-                    child: Rpcs3InternalPlaylistActions(
-                      onInteractionChanged: (active) {
-                        if (!mounted) return;
-                        if (active) {
-                          _gamepadNav.deactivate();
-                        } else {
-                          _gamepadNav.activate();
-                        }
-                      },
-                      onLibraryChanged: () async {
-                        if (!mounted) return;
-                        await _loadGames();
-                      },
-                    ),
-                  ),
+            if (!_isGameLaunching && _isRpcs3Library)
+              Positioned.fill(
+                child: Rpcs3InternalPlaylistActions(
+                  onBack: _goBack,
+                  onFirmwareChanged: (installed) {
+                    if (!mounted) return;
+                    final wasReady = _rpcs3FirmwareReady;
+                    setState(() => _rpcs3FirmwareReady = installed);
+                    if (installed && !wasReady) _loadGames();
+                  },
+                  onInteractionChanged: (active) {
+                    if (!mounted) return;
+                    if (active || !_rpcs3FirmwareReady) {
+                      _gamepadNav.deactivate();
+                    } else {
+                      _gamepadNav.activate();
+                    }
+                  },
+                  onLibraryChanged: () async {
+                    if (!mounted) return;
+                    await _loadGames();
+                  },
                 ),
               ),
             // RPCS3_INTERNAL_END: playlist_actions
@@ -773,6 +773,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// specialized view for systems with zero detected media files.
   /// includes controls for recursive scanning and directory management.
   Widget _buildEmptyState() {
+    final isRpcs3Library =
+        Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps3';
     bool currentScanValue = widget.system.recursiveScan;
 
     return Center(
@@ -833,7 +835,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 4.r),
             Text(
-              AppLocale.checkRomFiles.getString(context),
+              isRpcs3Library
+                  ? (Localizations.localeOf(context).languageCode == 'fr'
+                        ? 'Utilisez le menu d’import pour ajouter des jeux PS3.'
+                        : 'Use the import menu to add PS3 games.')
+                  : AppLocale.checkRomFiles.getString(context),
               style: TextStyle(
                 fontSize: 11.r,
                 fontWeight: FontWeight.w400,
@@ -846,202 +852,205 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 16.r),
 
-            // Configuration Component: Recursive Library Scanning.
-            StatefulBuilder(
-              builder: (context, setStateBuilder) {
-                return Column(
-                  children: [
-                    Container(
-                      margin: EdgeInsets.only(bottom: 12.r),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12.r,
-                        vertical: 8.r,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12.r),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.05),
+            // PS3 content is managed by the embedded RPCS3 engine. Recursive
+            // ROM scanning is not a meaningful onboarding step for this system;
+            // firmware/import actions live in the dedicated RPCS3 menu instead.
+            if (!isRpcs3Library)
+              StatefulBuilder(
+                builder: (context, setStateBuilder) {
+                  return Column(
+                    children: [
+                      Container(
+                        margin: EdgeInsets.only(bottom: 12.r),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.r,
+                          vertical: 8.r,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.05),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Symbols.folder_shared_rounded,
+                              color: Colors.white.withValues(alpha: 0.7),
+                              size: 16.r,
+                            ),
+                            SizedBox(width: 8.r),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppLocale.recursiveScan.getString(context),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.r,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  AppLocale.recursiveScanSubtitle.getString(
+                                    context,
+                                  ),
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    fontSize: 10.r,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(width: 16.r),
+                            Switch(
+                              value: currentScanValue,
+                              activeThumbColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              onChanged: (value) async {
+                                final oldSystem = widget.system;
+                                setStateBuilder(() {
+                                  currentScanValue = value;
+                                });
+
+                                try {
+                                  await SystemRepository.setRecursiveScan(
+                                    oldSystem.id!,
+                                    value,
+                                  );
+
+                                  if (!context.mounted) return;
+                                  final configProvider = context
+                                      .read<SqliteConfigProvider>();
+
+                                  await configProvider.scanSystems();
+                                  if (!context.mounted) return;
+
+                                  await Provider.of<SqliteDatabaseProvider>(
+                                    context,
+                                    listen: false,
+                                  ).loadDatabase();
+                                  if (!context.mounted) return;
+
+                                  await _loadGames();
+                                } catch (e) {
+                                  _log.e('Error toggling recursive scan: $e');
+                                  if (!context.mounted) return;
+                                  AppNotification.showNotification(
+                                    context,
+                                    AppLocale.failedToSaveSetting.getString(
+                                      context,
+                                    ),
+                                    type: NotificationType.error,
+                                  );
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Symbols.folder_shared_rounded,
-                            color: Colors.white.withValues(alpha: 0.7),
-                            size: 16.r,
-                          ),
-                          SizedBox(width: 8.r),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppLocale.recursiveScan.getString(context),
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12.r,
-                                  fontWeight: FontWeight.w500,
-                                ),
+
+                      // Real-time Scan Progress Feedback.
+                      Consumer<SqliteConfigProvider>(
+                        builder: (context, provider, child) {
+                          if (!provider.isScanning ||
+                              provider.totalSystemsToScan <= 0) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Container(
+                            width: 320.r,
+                            margin: EdgeInsets.only(bottom: 12.r),
+                            padding: EdgeInsets.all(12.r),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12.r),
+                              border: Border.all(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.2),
+                                width: 1.r,
                               ),
-                              Text(
-                                AppLocale.recursiveScanSubtitle.getString(
-                                  context,
-                                ),
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                  fontSize: 10.r,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(width: 16.r),
-                          Switch(
-                            value: currentScanValue,
-                            activeThumbColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                            onChanged: (value) async {
-                              final oldSystem = widget.system;
-                              setStateBuilder(() {
-                                currentScanValue = value;
-                              });
-
-                              try {
-                                await SystemRepository.setRecursiveScan(
-                                  oldSystem.id!,
-                                  value,
-                                );
-
-                                if (!context.mounted) return;
-                                final configProvider = context
-                                    .read<SqliteConfigProvider>();
-
-                                await configProvider.scanSystems();
-                                if (!context.mounted) return;
-
-                                await Provider.of<SqliteDatabaseProvider>(
-                                  context,
-                                  listen: false,
-                                ).loadDatabase();
-                                if (!context.mounted) return;
-
-                                await _loadGames();
-                              } catch (e) {
-                                _log.e('Error toggling recursive scan: $e');
-                                if (!context.mounted) return;
-                                AppNotification.showNotification(
-                                  context,
-                                  AppLocale.failedToSaveSetting.getString(
-                                    context,
-                                  ),
-                                  type: NotificationType.error,
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Real-time Scan Progress Feedback.
-                    Consumer<SqliteConfigProvider>(
-                      builder: (context, provider, child) {
-                        if (!provider.isScanning ||
-                            provider.totalSystemsToScan <= 0) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Container(
-                          width: 320.r,
-                          margin: EdgeInsets.only(bottom: 12.r),
-                          padding: EdgeInsets.all(12.r),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(12.r),
-                            border: Border.all(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.2),
-                              width: 1.r,
                             ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    provider.scanStatus,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10.r,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                  ),
-                                  Text(
-                                    '${(provider.scanProgress * 100).toInt()}%',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10.r,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 8.r),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4.r),
-                                child: LinearProgressIndicator(
-                                  value: provider.scanProgress,
-                                  minHeight: 6.r,
-                                  backgroundColor: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.1),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).colorScheme.primary,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      provider.scanStatus,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10.r,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          ),
+                                    ),
+                                    Text(
+                                      '${(provider.scanProgress * 100).toInt()}%',
+                                      style: Theme.of(context).textTheme.bodySmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10.r,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 8.r),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4.r),
+                                  child: LinearProgressIndicator(
+                                    value: provider.scanProgress,
+                                    minHeight: 6.r,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withValues(alpha: 0.1),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).colorScheme.primary,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              SizedBox(height: 4.r),
-                              Text(
-                                AppLocale.scanningSystemOf
-                                    .getString(context)
-                                    .replaceFirst(
-                                      '{current}',
-                                      provider.scannedSystemsCount.toString(),
-                                    )
-                                    .replaceFirst(
-                                      '{total}',
-                                      provider.totalSystemsToScan.toString(),
-                                    ),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      fontSize: 9.r,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.6,
+                                SizedBox(height: 4.r),
+                                Text(
+                                  AppLocale.scanningSystemOf
+                                      .getString(context)
+                                      .replaceFirst(
+                                        '{current}',
+                                        provider.scannedSystemsCount.toString(),
+                                      )
+                                      .replaceFirst(
+                                        '{total}',
+                                        provider.totalSystemsToScan.toString(),
                                       ),
-                                    ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontSize: 9.r,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
 
             // Navigation Component: Exit Action.
             Material(

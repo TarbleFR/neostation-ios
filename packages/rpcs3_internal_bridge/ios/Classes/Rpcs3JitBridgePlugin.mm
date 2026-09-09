@@ -15,7 +15,9 @@
 static NSString* const kRpcs3JitChannel = @"neostation/rpcs3_jit";
 static NSString* const kRpcs3JitRequestType = @"com.neogamelab.neostation.rpcs3-jit-request";
 static NSTimeInterval const kRpcs3HelperConnectTimeout = 30.0;
-static NSTimeInterval const kRpcs3AttachTimeout = 240.0;
+// First use may download and mount a DDI. Dart allows this native deadline
+// (plus the connection deadline) to finish and report its actual error.
+static NSTimeInterval const kRpcs3AttachTimeout = 600.0;
 static NSTimeInterval const kRpcs3CompletionTimeout = 120.0;
 
 extern "C" {
@@ -53,6 +55,11 @@ static BOOL RPCS3HostIsDebugged(void) {
   return (flags & CS_DEBUGGED) != 0;
 }
 
+static BOOL RPCS3RequiresCoreHandshake(void) {
+  if (@available(iOS 26.0, *)) return YES;
+  return NO;
+}
+
 @interface RPCS3JitSession : NSObject
 @property(nonatomic, readonly) uint16_t port;
 @property(nonatomic, readonly) NSString* token;
@@ -62,6 +69,8 @@ static BOOL RPCS3HostIsDebugged(void) {
 @property(nonatomic, readonly) BOOL success;
 @property(nonatomic, readonly) NSString* finalMessage;
 @property(nonatomic, readonly) NSArray<NSString*>* logs;
+@property(nonatomic, readonly) BOOL closed;
+@property(nonatomic, assign) BOOL requiresCoreHandshake;
 @property(nonatomic, strong, nullable) id extensionObject;
 @property(nonatomic, strong, nullable) id requestIdentifier;
 - (nullable instancetype)initWithError:(NSError**)error;
@@ -82,6 +91,7 @@ static BOOL RPCS3HostIsDebugged(void) {
   BOOL _attached;
   BOOL _finished;
   BOOL _success;
+  BOOL _closed;
   NSString* _finalMessage;
   NSMutableArray<NSString*>* _mutableLogs;
   dispatch_queue_t _readerQueue;
@@ -145,6 +155,27 @@ static BOOL RPCS3HostIsDebugged(void) {
 
 - (uint16_t)port { return _port; }
 - (NSString*)token { return _token; }
+
+- (BOOL)closed {
+  [_condition lock];
+  BOOL value = _closed;
+  [_condition unlock];
+  return value;
+}
+
+- (void)cancelExtensionRequest {
+  id extension = self.extensionObject;
+  id identifier = self.requestIdentifier;
+  if (!extension || !identifier) return;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    SEL selector = NSSelectorFromString(@"cancelExtensionRequestWithIdentifier:");
+    if ([extension respondsToSelector:selector]) {
+      void (*cancelMessage)(id, SEL, id) =
+          reinterpret_cast<void (*)(id, SEL, id)>(objc_msgSend);
+      cancelMessage(extension, selector, identifier);
+    }
+  });
+}
 
 - (BOOL)connected {
   [_condition lock];
@@ -214,20 +245,30 @@ static BOOL RPCS3HostIsDebugged(void) {
       return;
     }
 
-    strongSelf->_client = accept(strongSelf->_listener, NULL, NULL);
-    if (strongSelf->_client < 0) {
+    int accepted = accept(strongSelf->_listener, NULL, NULL);
+    if (accepted < 0) {
       [strongSelf markFinished:NO
                        message:@"The RPCS3 JIT helper socket could not be accepted."];
       return;
     }
 
-    FILE* stream = fdopen(strongSelf->_client, "r");
+    FILE* stream = fdopen(accepted, "r");
     if (stream == NULL) {
+      close(accepted);
       [strongSelf markFinished:NO
                        message:@"The RPCS3 JIT helper stream could not be opened."];
       return;
     }
-    strongSelf->_client = -1;
+    // Keep a duplicate solely for shutdown. fclose owns the original fd;
+    // closing a timed-out session must also unblock its fgets reader.
+    [strongSelf->_condition lock];
+    if (strongSelf->_closed) {
+      [strongSelf->_condition unlock];
+      fclose(stream);
+      return;
+    }
+    strongSelf->_client = dup(fileno(stream));
+    [strongSelf->_condition unlock];
 
     char buffer[65536];
     while (fgets(buffer, sizeof(buffer), stream) != NULL) {
@@ -306,7 +347,10 @@ static BOOL RPCS3HostIsDebugged(void) {
   [self waitForPredicate:^BOOL {
     return self->_attached || self->_finished;
   } timeout:timeout];
-  return self.attached;
+  // StikJIT's pre-TXM attach/detach path does not log a universal vAttach
+  // reply. Its successful completion is sufficient only on the legacy Core.
+  return self.attached ||
+      (!self.requiresCoreHandshake && self.connected && self.finished && self.success);
 }
 
 - (BOOL)waitUntilFinished:(NSTimeInterval)timeout {
@@ -316,6 +360,12 @@ static BOOL RPCS3HostIsDebugged(void) {
 }
 
 - (void)close {
+  [_condition lock];
+  if (_closed) {
+    [_condition unlock];
+    return;
+  }
+  _closed = YES;
   if (_listener >= 0) {
     shutdown(_listener, SHUT_RDWR);
     close(_listener);
@@ -326,6 +376,9 @@ static BOOL RPCS3HostIsDebugged(void) {
     close(_client);
     _client = -1;
   }
+  [_condition broadcast];
+  [_condition unlock];
+  if (!self.finished) [self cancelExtensionRequest];
 }
 
 - (void)dealloc {
@@ -379,6 +432,7 @@ static BOOL RPCS3LaunchJitHelper(
     @"port" : @(session.port),
     @"token" : session.token,
     @"pairingData" : [pairingData base64EncodedStringWithOptions:0],
+    @"requiresCoreHandshake" : @(session.requiresCoreHandshake),
   };
   NSData* requestData = [NSJSONSerialization dataWithJSONObject:request
                                                         options:0
@@ -418,10 +472,11 @@ static BOOL RPCS3LaunchJitHelper(
   }
   session.extensionObject = extensionObject;
 
-  __weak RPCS3JitSession* weakSession = session;
+  // Retain until launch returns its request identifier, even if the connection
+  // timed out first, so that a late extension can still be cancelled.
   void (^completion)(id) = ^(id requestIdentifier) {
-    RPCS3JitSession* strongSession = weakSession;
-    strongSession.requestIdentifier = requestIdentifier;
+    session.requestIdentifier = requestIdentifier;
+    if (session.closed) [session cancelExtensionRequest];
   };
   void (*beginMessage)(id, SEL, NSArray*, id) =
       reinterpret_cast<void (*)(id, SEL, NSArray*, id)>(objc_msgSend);
@@ -431,9 +486,18 @@ static BOOL RPCS3LaunchJitHelper(
 
 @interface Rpcs3JitBridgePlugin ()
 @property(nonatomic, strong) FlutterMethodChannel* channel;
-@property(nonatomic, strong, nullable) RPCS3JitSession* activeSession;
+@property(atomic, strong, nullable) RPCS3JitSession* activeSession;
 @property(nonatomic, assign) BOOL operationInProgress;
+@property(nonatomic, assign) BOOL completionInProgress;
 @end
+
+static __weak Rpcs3JitBridgePlugin* gRpcs3JitBridge;
+
+BOOL RPCS3JitHasActiveCoreHandshake(void) {
+  RPCS3JitSession* session = gRpcs3JitBridge.activeSession;
+  return session != nil && session.requiresCoreHandshake &&
+      session.attached && !session.finished && !session.closed;
+}
 
 @implementation Rpcs3JitBridgePlugin {
   dispatch_queue_t _jitQueue;
@@ -444,6 +508,7 @@ static BOOL RPCS3LaunchJitHelper(
       methodChannelWithName:kRpcs3JitChannel
             binaryMessenger:registrar.messenger];
   Rpcs3JitBridgePlugin* instance = [Rpcs3JitBridgePlugin new];
+  gRpcs3JitBridge = instance;
   instance.channel = channel;
   [registrar addMethodCallDelegate:instance channel:channel];
 }
@@ -464,6 +529,38 @@ static BOOL RPCS3LaunchJitHelper(
       @"getTaskAllow" : @(RPCS3HostHasGetTaskAllow()),
       @"debugged" : @(RPCS3HostIsDebugged()),
       @"busy" : @(self.operationInProgress),
+      @"requiresCoreHandshake" : @(RPCS3RequiresCoreHandshake()),
+      @"message" : self.activeSession.logs.lastObject ?: @"",
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"completeJit"]) {
+    RPCS3JitSession* session = self.activeSession;
+    if (session == nil || self.completionInProgress) {
+      result(@{@"success": @NO, @"message": @"No RPCS3 JIT transaction is ready to complete."});
+      return;
+    }
+    self.completionInProgress = YES;
+    dispatch_async(_jitQueue, ^{
+      BOOL completed = [session waitUntilFinished:kRpcs3CompletionTimeout];
+      BOOL success = completed && session.success && RPCS3HostIsDebugged();
+      NSDictionary* response = @{
+        @"success": @(success),
+        @"logs": session.logs,
+        @"message": success ? @"RPCS3 JIT arena prepared and helper detached." :
+            (session.finalMessage.length ? session.finalMessage :
+             @"RPCS3 JIT helper did not confirm completion. Relaunch NeoStation before retrying."),
+      };
+      // A failed/incomplete handshake may still own a debugger. Keep the
+      // transaction locked in that case instead of starting another attach.
+      if (completed) {
+        [session close];
+        self.activeSession = nil;
+        self.operationInProgress = NO;
+      }
+      self.completionInProgress = NO;
+      dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
     });
     return;
   }
@@ -555,6 +652,7 @@ static BOOL RPCS3LaunchJitHelper(
       return;
     }
     self.activeSession = session;
+    session.requiresCoreHandshake = RPCS3RequiresCoreHandshake();
     [session startReader];
 
     NSError* launchError = nil;
@@ -583,8 +681,7 @@ static BOOL RPCS3LaunchJitHelper(
     }
     response[@"pidAttached"] = @YES;
 
-    if (![session waitUntilFinished:kRpcs3CompletionTimeout] ||
-        !session.success) {
+    if (session.finished && !session.success) {
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
           : @"The RPCS3 JIT transaction did not complete successfully.";
@@ -602,9 +699,13 @@ static BOOL RPCS3LaunchJitHelper(
       return;
     }
 
+    // Do NOT wait for universal.js to finish here. Core constructors and
+    // initialize prepare the RX arena and issue BRK #0xf00d / command 0.
+    // Waiting before dlopen deadlocks host and helper (the old 90s failure).
     response[@"success"] = @YES;
-    response[@"message"] = @"RPCS3 JIT is enabled for the NeoStation process.";
-    finish();
+    response[@"requiresCompletion"] = @YES;
+    response[@"message"] = @"RPCS3 helper attached; initialize the Core before completing JIT.";
+    dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
   });
 }
 

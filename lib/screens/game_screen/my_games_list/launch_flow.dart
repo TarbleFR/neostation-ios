@@ -116,6 +116,7 @@ extension _LaunchFlow on _SystemGamesListState {
 
   /// Orchestrates the complex sequence for launching a game through an external emulator.
   Future<void> _selectCurrentGame() async {
+    if (_isRpcs3Library && !_rpcs3FirmwareReady) return;
     if (_selectedGame == null) return;
 
     // Special handling for the Integrated Music Player.
