@@ -61,7 +61,8 @@ void main() {
       final widget = File(
         'lib/widgets/rpcs3_internal_playlist_actions.dart',
       ).readAsStringSync();
-      expect(widget, contains('_ensureFirmwareForLibrary'));
+      expect(widget, contains('rpcs3-library-firmware-gate'));
+      expect(widget, isNot(contains('SharedPreferences')));
       expect(widget, contains('WidgetsBinding.instance.addPostFrameCallback'));
       expect(widget, contains('Rpcs3InternalService.firmwareVersion()'));
       expect(widget, contains('Rpcs3InternalService.importFirmware()'));

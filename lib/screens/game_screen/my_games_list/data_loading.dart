@@ -61,6 +61,7 @@ extension _DataLoading on _SystemGamesListState {
 
   Future<void> _loadGames() async {
     if (!mounted || _isLoadingGames) return;
+    if (_isRpcs3Library && !_rpcs3FirmwareReady) return;
     _isLoadingGames = true;
 
     final isInitialLoad = _games.isEmpty;

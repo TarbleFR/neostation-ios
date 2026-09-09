@@ -92,8 +92,9 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     });
 
     // Render the manager immediately, then warm up only JIT in the background.
-    await _readDiagnostics();
     try {
+      await _refreshFirmwareVersion();
+      await _readDiagnostics();
       await Rpcs3InternalService.prepareManager();
       await _readDiagnostics();
       if (!mounted) return;
@@ -365,8 +366,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                     subtitle: Text(
                       !firmwareChecked
                           ? (_fr
-                              ? 'Il sera vérifié dès que RPCS3 Core sera chargé.'
-                              : 'It will be checked as soon as RPCS3 Core is loaded.')
+                              ? 'Vérification des fichiers du firmware…'
+                              : 'Checking the installed firmware files…')
                           : firmwareInstalled
                               ? _firmwareVersion!
                               : (_fr

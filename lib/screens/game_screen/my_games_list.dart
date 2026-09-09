@@ -106,6 +106,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // Navigation & State orchestration.
   bool _isLoading = true;
   bool _isLoadingGames = false; // Prevents redundant reload triggers.
+  bool _rpcs3FirmwareReady = false;
+  bool get _isRpcs3Library =>
+      Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps3';
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -618,7 +621,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
               ),
 
             // Content Layer: hide entirely while game dialog is active.
-            if (!_isGameLaunching)
+            if (!_isGameLaunching && (!_isRpcs3Library || _rpcs3FirmwareReady))
               SizedBox(
                 child: _isLoading
                     ? _buildLoadingState()
@@ -643,7 +646,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
             // Navigation Layer: Visual alphabetical feedback for rapid scrolling.
             if (_currentLetter != null && !_isGameLaunching)
               _buildLetterIndicator(),
-            GameViewModeDropdown(),
+            if (!_isRpcs3Library || _rpcs3FirmwareReady) GameViewModeDropdown(),
 
             // DOLPHIN_ISOLATION_BEGIN: playlist_actions
             if (!_isGameLaunching &&
@@ -676,31 +679,28 @@ class _SystemGamesListState extends State<SystemGamesList> {
               ),
             // DOLPHIN_ISOLATION_END: playlist_actions
             // RPCS3_INTERNAL_BEGIN: playlist_actions
-            if (!_isGameLaunching &&
-                Platform.isIOS &&
-                widget.system.folderName.toLowerCase() == 'ps3')
-              Positioned(
-                top: 8.r,
-                right: 10.r,
-                child: SafeArea(
-                  child: Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12.r),
-                    child: Rpcs3InternalPlaylistActions(
-                      onInteractionChanged: (active) {
-                        if (!mounted) return;
-                        if (active) {
-                          _gamepadNav.deactivate();
-                        } else {
-                          _gamepadNav.activate();
-                        }
-                      },
-                      onLibraryChanged: () async {
-                        if (!mounted) return;
-                        await _loadGames();
-                      },
-                    ),
-                  ),
+            if (!_isGameLaunching && _isRpcs3Library)
+              Positioned.fill(
+                child: Rpcs3InternalPlaylistActions(
+                  onBack: _goBack,
+                  onFirmwareChanged: (installed) {
+                    if (!mounted) return;
+                    final wasReady = _rpcs3FirmwareReady;
+                    setState(() => _rpcs3FirmwareReady = installed);
+                    if (installed && !wasReady) _loadGames();
+                  },
+                  onInteractionChanged: (active) {
+                    if (!mounted) return;
+                    if (active || !_rpcs3FirmwareReady) {
+                      _gamepadNav.deactivate();
+                    } else {
+                      _gamepadNav.activate();
+                    }
+                  },
+                  onLibraryChanged: () async {
+                    if (!mounted) return;
+                    await _loadGames();
+                  },
                 ),
               ),
             // RPCS3_INTERNAL_END: playlist_actions
@@ -835,7 +835,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 4.r),
             Text(
-              AppLocale.checkRomFiles.getString(context),
+              isRpcs3Library
+                  ? (Localizations.localeOf(context).languageCode == 'fr'
+                        ? 'Utilisez le menu d’import pour ajouter des jeux PS3.'
+                        : 'Use the import menu to add PS3 games.')
+                  : AppLocale.checkRomFiles.getString(context),
               style: TextStyle(
                 fontSize: 11.r,
                 fontWeight: FontWeight.w400,

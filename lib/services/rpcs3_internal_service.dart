@@ -372,14 +372,30 @@ class Rpcs3InternalService {
   static Future<void> closeManagementRuntime() async {}
 
   static Future<String> firmwareVersion() async {
-    await ensureManagementInitialized();
-    return (await _bounded(
-      Rpcs3InternalBridge.firmwareVersion(),
-      _statusTimeout,
-      'firmwareStatusTimeout',
-      'RPCS3 did not return the firmware state.',
-    ))
-        .trim();
+    // RPCS3's utils::get_firmware_version reads this same file under dev_flash.
+    // Opening a library must not dlopen the Core or request JIT just to read it.
+    // Read the actual install every time, including installs from older builds
+    // or the manager, instead of trusting a preference flag.
+    final data = await dataDirectory();
+    final file = File(
+      path.join(data.path, 'dev_flash', 'vsh', 'etc', 'version.txt'),
+    );
+    if (!await file.exists()) return '';
+    final size = await file.length();
+    if (size == 0 || size > 65536) return '';
+    final record = await file.readAsString();
+    final match = RegExp(
+      r'^release:(\d+)\.(\d+):',
+      multiLine: true,
+    ).firstMatch(record.trim());
+    if (match == null) return '';
+    final major = int.tryParse(match.group(1)!);
+    if (major == null) return '';
+    var minor = match.group(2)!;
+    while (minor.length > 2 && minor.endsWith('0')) {
+      minor = minor.substring(0, minor.length - 1);
+    }
+    return '$major.${minor.padRight(2, '0')}';
   }
 
   static Future<bool> hasFirmware() async {
