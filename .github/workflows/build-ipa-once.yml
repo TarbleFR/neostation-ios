@@ -1,10 +1,10 @@
-name: NeoStation iOS Build 225
-run-name: NeoStation iOS Build 225 (RPCS3 firmware + Dolphin routing) • ${{ github.sha }}
+name: NeoStation iOS Build 226
+run-name: NeoStation iOS Build 226 (RPCS3 preload + Dolphin delete) • ${{ github.sha }}
 
 on:
   push:
     branches:
-      - fix/rpcs3-firmware-dolphin-routing-build225
+      - fix/rpcs3-preload-dolphin-delete-build226
     paths:
       - .github/workflows/build-ipa-once.yml
 
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-225
+  group: neostation-ios-build-226
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '225'
-      IPA_NAME: 'NeoStation-iOS-Build-225'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-225'
+      BUILD_NUMBER: '226'
+      IPA_NAME: 'NeoStation-iOS-Build-226'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-226'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -272,9 +272,9 @@ jobs:
           missing = [key for key in required if payload.get(key) is not True]
           if missing:
               raise SystemExit(
-                  'Build 225 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
+                  'Build 226 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
               )
-          print(f'RPCS3 lazy IPA validation passed: {cores[0]} + RPCS3JITHelper; required JIT/memory entitlements emitted')
+          print(f'RPCS3 preloaded IPA validation passed: {cores[0]} + RPCS3JITHelper; required JIT/memory entitlements emitted')
           PY
           ls -lah dist
 
