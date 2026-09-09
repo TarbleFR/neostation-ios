@@ -1,10 +1,11 @@
-name: NeoStation iOS Build 215
-run-name: NeoStation iOS Build 215 • ${{ github.sha }}
+name: NeoStation iOS Build 216
+run-name: NeoStation iOS Build 216 • ${{ github.sha }}
 
 on:
   push:
     branches:
       - main
+      - fix/rpcs3-lazy-load-startup-crash
     paths:
       - .github/workflows/build-ipa-once.yml
 
@@ -12,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-215
+  group: neostation-ios-build-216
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +22,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '215'
-      IPA_NAME: 'NeoStation-iOS-Build-215'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-215'
+      BUILD_NUMBER: '216'
+      IPA_NAME: 'NeoStation-iOS-Build-216'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-216'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -229,6 +230,34 @@ jobs:
             DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
             COMPILER_INDEX_STORE_ENABLE=NO build
 
+      - name: Enforce lazy RPCS3 startup and embed Core payload
+        run: |
+          set -euo pipefail
+          PRODUCTS='build/ios/DolphinDerivedData/Build/Products/Release-iphoneos'
+          APP="$(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$APP"
+          test -x "$APP/Runner"
+          BRIDGE="$APP/Frameworks/rpcs3_internal_bridge.framework/rpcs3_internal_bridge"
+          CORE_SOURCE='packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib'
+          test -x "$BRIDGE"
+          test -s "$CORE_SOURCE"
+
+          if otool -L "$APP/Runner" | grep -F 'libRPCS3Core.dylib'; then
+            echo 'Runner still links libRPCS3Core.dylib at process startup.' >&2
+            exit 1
+          fi
+          if otool -L "$BRIDGE" | grep -F 'libRPCS3Core.dylib'; then
+            echo 'rpcs3_internal_bridge still links libRPCS3Core.dylib at process startup.' >&2
+            exit 1
+          fi
+
+          mkdir -p "$APP/Frameworks"
+          cp -p "$CORE_SOURCE" "$APP/Frameworks/libRPCS3Core.dylib"
+          chmod 755 "$APP/Frameworks/libRPCS3Core.dylib"
+          cmp "$CORE_SOURCE" "$APP/Frameworks/libRPCS3Core.dylib"
+          otool -L "$APP/Frameworks/libRPCS3Core.dylib"
+          echo 'RPCS3 Core is payload-only and will be loaded by dlopen on PS3 use.'
+
       - name: Package IPA
         run: |
           set -euo pipefail
@@ -264,7 +293,7 @@ jobs:
           ):
               if payload.get(key) is not True:
                   raise SystemExit(f'Missing RPCS3 entitlement: {key}')
-          print(f'RPCS3 IPA validation passed: {cores[0]} + RPCS3JITHelper')
+          print(f'RPCS3 IPA validation passed: lazy Core {cores[0]} + RPCS3JITHelper')
           PY
           ls -lah dist
 
