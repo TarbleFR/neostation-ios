@@ -238,16 +238,12 @@ static void RPCS3Progress(void* context,
     return NO;
   }
 
-  if (expanded) {
-    if (!RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing")) ||
-        !RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))) {
-      if (error) {
-        *error = @"RPCS3 requires extended-virtual-addressing and increased-memory-limit entitlements in the signed NeoStation IPA.";
-      }
-      return NO;
-    }
-  }
-
+  // libRPCS3Core.dylib is loaded into NeoStation itself, not a child process.
+  // The Core therefore executes with the entitlements of the signed NeoStation
+  // host process. Do not gate dlopen on a second SecTask entitlement lookup:
+  // some sideload signing paths can make that diagnostic lookup report a false
+  // negative even though the kernel has already granted the host capabilities.
+  // The executable-memory probe below remains the runtime source of truth.
   NSString* readinessError = nil;
   if (!RPCS3ProbeExecutableMemory(&readinessError)) {
     if (error) *error = readinessError;
