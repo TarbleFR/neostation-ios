@@ -15,7 +15,7 @@ class Rpcs3InstallProgress {
 
   double? get fraction {
     if (total <= 0) return null;
-    return (current / total).clamp(0.0, 1.0);
+    return (current / total).clamp(0.0, 1.0).toDouble();
   }
 }
 
