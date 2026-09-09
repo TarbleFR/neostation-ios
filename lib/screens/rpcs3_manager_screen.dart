@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/rpcs3_content_import_service.dart';
 import '../services/rpcs3_internal_service.dart';
 
 /// User-facing management surface for the embedded RPCS3 engine.
@@ -19,6 +20,7 @@ class Rpcs3ManagerScreen extends StatefulWidget {
 
 class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
   StreamSubscription<Rpcs3RuntimeState>? _runtimeSubscription;
+  StreamSubscription<Rpcs3ContentImportProgress>? _contentProgressSubscription;
   bool _busy = false;
   bool _preparing = false;
   bool _jitReady = false;
@@ -28,6 +30,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
   int _abi = 0;
   String _statusMessage = '';
   String? _error;
+  Rpcs3ContentImportProgress? _contentProgress;
 
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
 
@@ -47,12 +50,17 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
             state.phase == Rpcs3RuntimePhase.initializingCore;
       });
     });
+    _contentProgressSubscription = Rpcs3ContentImportService.progress.listen((event) {
+      if (!mounted || !_busy) return;
+      setState(() => _contentProgress = event);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
   @override
   void dispose() {
     _runtimeSubscription?.cancel();
+    _contentProgressSubscription?.cancel();
     unawaited(Rpcs3InternalService.closeManagementRuntime());
     super.dispose();
   }
@@ -129,6 +137,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _contentProgress = null;
     });
     try {
       if (await Rpcs3InternalService.importFirmware()) {
@@ -156,9 +165,11 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _contentProgress = null;
+      _statusMessage = _fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…';
     });
     try {
-      final result = await Rpcs3InternalService.importGames();
+      final result = await Rpcs3ContentImportService.importGames();
       if (result.imported > 0) {
         await widget.onLibraryChanged();
         _notice(
@@ -182,7 +193,12 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (mounted) setState(() => _error = error.toString());
       _notice(error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _contentProgress = null;
+        });
+      }
     }
   }
 
@@ -191,12 +207,18 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _contentProgress = null;
+      _statusMessage = _fr
+          ? 'Sélection du dossier PS3 décrypté…'
+          : 'Selecting decrypted PS3 game folder…';
     });
     try {
-      if (await Rpcs3InternalService.importExtractedGameFolder()) {
+      if (await Rpcs3ContentImportService.importExtractedGameFolder()) {
         await widget.onLibraryChanged();
         _notice(
-          _fr ? 'Dossier de jeu PS3 importé.' : 'PS3 game folder imported.',
+          _fr
+              ? 'Dossier de jeu PS3 décrypté importé.'
+              : 'Decrypted PS3 game folder imported.',
         );
       }
       await _readDiagnostics();
@@ -207,7 +229,12 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (mounted) setState(() => _error = error.toString());
       _notice(error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _contentProgress = null;
+        });
+      }
     }
   }
 
@@ -237,6 +264,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     final firmwareInstalled = _firmwareVersion?.isNotEmpty == true;
     final currentState = Rpcs3InternalService.runtimeState;
     final working = _busy || _preparing || currentState.busy;
+    final progress = _contentProgress;
+    final fraction = progress?.fraction;
 
     return Scaffold(
       appBar: AppBar(
@@ -329,7 +358,26 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                         ],
                         if (working) ...[
                           const SizedBox(height: 12),
-                          const LinearProgressIndicator(),
+                          LinearProgressIndicator(value: fraction),
+                          if (progress != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              progress.itemCount > 1
+                                  ? '${progress.itemIndex}/${progress.itemCount} • ${progress.itemName}'
+                                  : progress.itemName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (progress.detail.isNotEmpty)
+                              Text(
+                                progress.detail,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            if (fraction != null)
+                              Text('${(fraction * 100).round()} %'),
+                          ],
                         ],
                       ],
                     ),
@@ -422,7 +470,9 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                   onPressed: _busy ? null : _importFolder,
                   icon: const Icon(Icons.folder_open),
                   label: Text(
-                    _fr ? 'Importer un dossier de jeu' : 'Import a game folder',
+                    _fr
+                        ? 'Importer un dossier de jeu décrypté'
+                        : 'Import a decrypted game folder',
                   ),
                 ),
               ],
