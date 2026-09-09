@@ -16,7 +16,7 @@ void main() {
       expect(bridge, contains('Stream<Rpcs3InstallProgress> get installProgress'));
       expect(playlist, contains('rpcs3-import-progress-overlay'));
       expect(playlist, contains('LinearProgressIndicator(value: fraction)'));
-      expect(playlist, contains("'$percent %'"));
+      expect(playlist, contains('(fraction * 100).round()'));
     });
 
     test('large PS3 files are selected open-in-place and released afterwards', () {
