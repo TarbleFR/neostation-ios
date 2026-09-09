@@ -22,6 +22,7 @@ import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
+import 'package:neostation/widgets/rainbow_selection_border.dart';
 import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
@@ -1076,8 +1077,6 @@ class _GamesGridState extends State<GamesGrid> {
                         ? decodeBucket
                         : bucketed;
 
-                    final borderColor = theme.colorScheme.secondary;
-
                     // Row-cache gate: when the layout/decode/theme signature is
                     // unchanged, buildRow returns the exact same Row instances it
                     // built last time, so a selection/settle/RA/legend setState
@@ -1128,14 +1127,15 @@ class _GamesGridState extends State<GamesGrid> {
                               cell,
                               Positioned.fill(
                                 child: IgnorePointer(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: borderColor,
-                                        width: 4.r,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.r),
+                                  child: RainbowSelectionBorder(
+                                    key: ValueKey(
+                                      'grid-rainbow-${widget.games[idx].romname}',
                                     ),
+                                    borderRadius: BorderRadius.circular(12.r),
+                                    borderWidth: 4.r,
+                                    glowWidth: 7.r,
+                                    glowBlur: 4.r,
+                                    child: const SizedBox.expand(),
                                   ),
                                 ),
                               ),

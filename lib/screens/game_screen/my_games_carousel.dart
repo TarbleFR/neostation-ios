@@ -22,6 +22,7 @@ import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
+import 'package:neostation/widgets/rainbow_selection_border.dart';
 import 'package:neostation/constants/system_folder_names.dart';
 import 'package:neostation/models/retro_achievements_game_info.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
@@ -698,6 +699,35 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return '';
   }
 
+  Widget _withRainbowSelection({
+    required Widget child,
+    required bool isSelected,
+    required BorderRadius borderRadius,
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
+  }) {
+    if (!isSelected) return child;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: Padding(
+            padding: padding,
+            child: IgnorePointer(
+              child: RainbowSelectionBorder(
+                borderRadius: borderRadius,
+                borderWidth: 4.r,
+                glowWidth: 7.r,
+                glowBlur: 4.r,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFanartCard(GameModel game, bool isSelected) {
     final theme = Theme.of(context);
     final folder = _folderForGame(game);
@@ -713,7 +743,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
         ? fanartPath
         : (hasScreenshot ? screenshotPath : '');
 
-    return Container(
+    final card = Container(
       clipBehavior: Clip.antiAlias,
       margin: EdgeInsets.all(5.r),
       decoration: BoxDecoration(
@@ -791,6 +821,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
           ],
         ),
       ),
+    );
+
+    return _withRainbowSelection(
+      child: card,
+      isSelected: isSelected,
+      borderRadius: BorderRadius.circular(24.r),
+      padding: EdgeInsets.all(5.r),
     );
   }
 
@@ -889,7 +926,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
     if (!hasBox) {
       return Center(
-        child: Stack(
+        child: _withRainbowSelection(
+          isSelected: isSelected,
+          borderRadius: BorderRadius.circular(8.r),
+          child: Stack(
           children: [
             _buildBoxFallback(game, theme),
             if (game.isFavorite == true)
@@ -914,6 +954,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
               _buildScrapeProgress(game),
           ],
         ),
+      ),
       );
     }
 
@@ -932,7 +973,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
         }
 
         return Center(
-          child: Container(
+          child: _withRainbowSelection(
+            isSelected: isSelected,
+            borderRadius: BorderRadius.circular(8.r),
+            padding: EdgeInsets.all(5.r),
+            child: Container(
             width: cardW,
             height: cardH,
             clipBehavior: Clip.antiAlias,
@@ -988,6 +1033,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 ],
               ),
             ),
+          ),
           ),
         );
       },

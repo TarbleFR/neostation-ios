@@ -15,6 +15,7 @@ import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
+import '../../widgets/rainbow_selection_border.dart';
 
 /// A high-performance list view specialized for game browsing with gamepad support.
 ///
@@ -229,6 +230,9 @@ class GameListViewState extends State<GameListView>
                       (currentSelection * totalItemHeight) + 2.r - scrollOffset;
 
                   final highlightColor = theme.colorScheme.primary;
+                  final highlightRadius =
+                      theme.extension<CornerRadii>()?.radiusInternal ??
+                      BorderRadius.circular(14.r);
 
                   return Positioned(
                     top: topPosition,
@@ -236,23 +240,25 @@ class GameListViewState extends State<GameListView>
                     right: 8.r,
                     height: itemHeight,
                     child: RepaintBoundary(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: highlightColor,
-                          borderRadius:
-                              Theme.of(
-                                context,
-                              ).extension<CornerRadii>()?.radiusInternal ??
-                              BorderRadius.circular(14.r),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.shadow.withValues(alpha: 0.1),
-                              blurRadius: 4.r,
-                              offset: Offset(2.0.r, 2.0.r),
-                            ),
-                          ],
+                      child: RainbowSelectionBorder(
+                        borderRadius: highlightRadius,
+                        borderWidth: 2.r,
+                        glowWidth: 4.r,
+                        glowBlur: 3.r,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: highlightColor,
+                            borderRadius: highlightRadius,
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.colorScheme.shadow.withValues(
+                                  alpha: 0.1,
+                                ),
+                                blurRadius: 4.r,
+                                offset: Offset(2.0.r, 2.0.r),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

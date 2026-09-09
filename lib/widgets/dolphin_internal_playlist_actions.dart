@@ -141,9 +141,23 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
     if (!Platform.isIOS || !DolphinInternalV2Service.isDolphinSystem(widget.systemFolder)) {
       return const SizedBox.shrink();
     }
-    return SizedBox(
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
       width: 36.r,
       height: 36.r,
+      decoration: BoxDecoration(
+        color: scheme.tertiaryFixed,
+        borderRadius: BorderRadius.circular(10.r),
+        border: Border.all(color: scheme.tertiaryFixed, width: 2.r),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.3),
+            blurRadius: 3.r,
+            offset: Offset(1.5.r, 1.5.r),
+          ),
+        ],
+      ),
       child: PopupMenuButton<String>(
         key: const ValueKey('dolphin-import-menu'),
         tooltip: _text('import'),
@@ -153,8 +167,19 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
         onCanceled: () => _interaction(false),
         onSelected: _selected,
         icon: _busy
-            ? SizedBox(width: 18.r, height: 18.r, child: const CircularProgressIndicator(strokeWidth: 2))
-            : Icon(Icons.file_upload_outlined, size: 18.r),
+            ? SizedBox(
+                width: 18.r,
+                height: 18.r,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: scheme.onTertiaryFixed,
+                ),
+              )
+            : Icon(
+                Icons.file_upload_outlined,
+                size: 18.r,
+                color: scheme.onTertiaryFixed,
+              ),
         itemBuilder: (context) => [
           PopupMenuItem(value: 'games', child: Text(_text('games'))),
           const PopupMenuDivider(),
