@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('RPCS3 Build 230 import and boot contracts', () {
+  group('RPCS3 Build 231 import, boot and deletion contracts', () {
     test('native install progress is exposed to Flutter', () {
       final bridge = File(
         'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
@@ -35,7 +35,12 @@ void main() {
       expect(picker, contains('startAccessingSecurityScopedResource'));
       expect(importer, contains('releaseScopedResources'));
       expect(importer, contains("const {'.pkg', '.zip', '.iso'}"));
-      expect(importer, contains('if (imported > 0) await Rpcs3LibraryService.syncInternalLibrary();'));
+      expect(
+        importer,
+        contains(
+          'if (imported > 0) await Rpcs3LibraryService.syncInternalLibrary();',
+        ),
+      );
     });
 
     test('decrypted PS3 folders use the security-scoped folder path', () {
@@ -54,7 +59,7 @@ void main() {
       expect(importer, isNot(contains('copyWithProgress')));
     });
 
-    test('iOS launch uses the mobile SPU profile and detects a stalled cache', () {
+    test('iOS boot profile is persisted per title and covers PPU stalls', () {
       final launcher = File(
         'lib/services/rpcs3_launch_service.dart',
       ).readAsStringSync();
@@ -69,16 +74,48 @@ void main() {
       expect(launcher, contains("'emulator.max_llvm_threads': '0'"));
       expect(
         launcher,
-        contains("'experimental.mobile_spu_scheduling': 'Enabled'"),
+        contains("'experimental.mobile_spu_scheduling': 'Automatic'"),
       );
-      expect(launcher, contains("'cpu.spu_block_size': 'Mega'"));
-      expect(launcher, contains('await _applyMobileBootProfile();'));
+      expect(launcher, contains("'cpu.spu_block_size': 'Safe'"));
+      expect(launcher, isNot(contains("'cpu.spu_block_size': 'Mega'")));
+      expect(launcher, contains('_applyMobileBootProfile(String titleId)'));
+      expect(launcher, contains('Rpcs3InternalBridge.setGameSetting('));
+      expect(launcher, contains("value.contains('ppu')"));
+      expect(launcher, contains("value.contains('applying')"));
       expect(launcher, contains('Rpcs3InternalBridge.bootProgress()'));
-      expect(launcher, contains("'spuCacheStalled'"));
+      expect(launcher, contains("'bootPreparationStalled'"));
       expect(launcher, contains('Rpcs3InternalBridge.stop()'));
+      expect(
+        bridge,
+        contains("invokeMapMethod<String, dynamic>('setGameSetting'"),
+      );
       expect(bridge, contains("invokeMapMethod<String, dynamic>('bootProgress')"));
-      expect(tuning, contains('rpcs3_ios_set_setting'));
+      expect(tuning, contains('rpcs3_ios_set_game_setting'));
       expect(tuning, contains('rpcs3_ios_get_boot_progress'));
+    });
+
+    test('PS3 long press opens native RPCS3 multi-delete', () {
+      final list = File(
+        'lib/screens/game_screen/game_list_view.dart',
+      ).readAsStringSync();
+      final dialog = File(
+        'lib/widgets/rpcs3_multi_delete_dialog.dart',
+      ).readAsStringSync();
+      final bridge = File(
+        'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
+      ).readAsStringSync();
+      final tuning = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3RuntimeTuningPlugin.mm',
+      ).readAsStringSync();
+
+      expect(list, contains("widget.system.folderName.toLowerCase() == 'ps3'"));
+      expect(list, contains('Rpcs3MultiDeleteDialog.show'));
+      expect(dialog, contains('Set<String> _selected'));
+      expect(dialog, contains('Rpcs3InternalBridge.deleteGame(titleId)'));
+      expect(dialog, contains('Rpcs3LibraryService.syncInternalLibrary()'));
+      expect(dialog, contains('deleteNeoStationScrapedMedia'));
+      expect(bridge, contains("invokeMapMethod<String, dynamic>('deleteGame'"));
+      expect(tuning, contains('rpcs3_ios_delete_game'));
     });
   });
 }
