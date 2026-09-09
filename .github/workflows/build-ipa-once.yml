@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 218
-run-name: NeoStation iOS Build 218 • ${{ github.sha }}
+name: NeoStation iOS Build 219
+run-name: NeoStation iOS Build 219 • ${{ github.sha }}
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-218
+  group: neostation-ios-build-219
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '218'
-      IPA_NAME: 'NeoStation-iOS-Build-218'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-218'
+      BUILD_NUMBER: '219'
+      IPA_NAME: 'NeoStation-iOS-Build-219'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-219'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -262,18 +262,18 @@ jobs:
 
           entitlements = Path('dist/NeoStation-signing.entitlements')
           payload = plistlib.loads(entitlements.read_bytes())
-          forbidden = (
+          required = (
               'get-task-allow',
               'com.apple.developer.kernel.extended-virtual-addressing',
               'com.apple.developer.kernel.increased-memory-limit',
               'com.apple.developer.kernel.increased-debugging-memory-limit',
           )
-          present = [key for key in forbidden if key in payload]
-          if present:
+          missing = [key for key in required if payload.get(key) is not True]
+          if missing:
               raise SystemExit(
-                  'Build 218 must not force user-specific entitlements: ' + ', '.join(present)
+                  'Build 219 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
               )
-          print(f'RPCS3 lazy IPA validation passed: {cores[0]} + RPCS3JITHelper; neutral entitlements')
+          print(f'RPCS3 lazy IPA validation passed: {cores[0]} + RPCS3JITHelper; required JIT/memory entitlements emitted')
           PY
           ls -lah dist
 
