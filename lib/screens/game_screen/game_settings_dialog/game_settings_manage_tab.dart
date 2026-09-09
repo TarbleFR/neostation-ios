@@ -201,13 +201,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       deleted = true;
     } catch (e) {
       _log.e('Game deletion failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.deleteFailed.getString(context),
-          type: NotificationType.error,
-        );
-      }
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
