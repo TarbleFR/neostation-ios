@@ -105,13 +105,17 @@ void main() {
       );
     });
 
-    test('RPCS3 launcher uses the stable Universal JIT handoff', () {
+    test('RPCS3 launcher boots through the embedded Core', () {
       final service = File(
         'lib/services/rpcs3_launch_service.dart',
       ).readAsStringSync();
-      expect(service, contains('openJitRequest'));
-      expect(service, contains("scriptName: 'universal.js'"));
-      expect(service, contains('rpcs3_launch_debug.txt'));
+      final plugin = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+      ).readAsStringSync();
+      expect(service, contains('Rpcs3InternalService.launchTitle'));
+      expect(service, isNot(contains('openJitRequest')));
+      expect(plugin, contains('rpcs3_ios_boot_game'));
+      expect(plugin, contains('self->_api.boot_game'));
     });
 
     test('invalid RPCS3 title IDs are rejected', () {
