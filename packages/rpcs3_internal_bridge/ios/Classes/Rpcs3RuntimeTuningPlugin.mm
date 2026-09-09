@@ -12,6 +12,10 @@ static NSString* const kRpcs3TuningChannel = @"neostation/rpcs3_tuning";
 #endif
 
 typedef int32_t (*rpcs3_set_setting_fn)(const char* key, const char* value);
+typedef int32_t (*rpcs3_set_game_setting_fn)(const char* title_id,
+                                              const char* key,
+                                              const char* value);
+typedef int32_t (*rpcs3_delete_game_fn)(const char* title_id);
 typedef int32_t (*rpcs3_get_boot_progress_fn)(uint32_t* current,
                                                uint32_t* total,
                                                char* stage,
@@ -104,6 +108,105 @@ static NSString* RPCS3TuningLastError(void* handle) {
       dispatch_async(dispatch_get_main_queue(), ^{
         result(status == 0
             ? @{@"success": @YES}
+            : @{@"success": @NO,
+                @"status": @(status),
+                @"message": message});
+      });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"setGameSetting"]) {
+    NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class]
+        ? call.arguments
+        : @{};
+    NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class]
+        ? args[@"titleId"]
+        : @"";
+    NSString* key = [args[@"key"] isKindOfClass:NSString.class]
+        ? args[@"key"]
+        : @"";
+    NSString* value = [args[@"value"] isKindOfClass:NSString.class]
+        ? args[@"value"]
+        : @"";
+    if (titleId.length == 0 || key.length == 0 || value.length == 0) {
+      result(@{@"success": @NO,
+               @"message": @"A RPCS3 title ID, setting key and value are required."});
+      return;
+    }
+
+    dispatch_async(self.queue, ^{
+      void* handle = RPCS3OpenLoadedCore();
+      if (!handle) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"RPCS3 Core must be initialized before changing game settings."});
+        });
+        return;
+      }
+      auto setGameSetting = reinterpret_cast<rpcs3_set_game_setting_fn>(
+          dlsym(handle, "rpcs3_ios_set_game_setting"));
+      if (!setGameSetting) {
+        dlclose(handle);
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"This RPCS3 Core does not expose per-game runtime settings."});
+        });
+        return;
+      }
+      int32_t status = setGameSetting(
+          titleId.UTF8String, key.UTF8String, value.UTF8String);
+      NSString* message = status == 0 ? @"" : RPCS3TuningLastError(handle);
+      dlclose(handle);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(status == 0
+            ? @{@"success": @YES}
+            : @{@"success": @NO,
+                @"status": @(status),
+                @"message": message});
+      });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"deleteGame"]) {
+    NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class]
+        ? call.arguments
+        : @{};
+    NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class]
+        ? args[@"titleId"]
+        : @"";
+    if (titleId.length == 0) {
+      result(@{@"success": @NO,
+               @"message": @"A RPCS3 title ID is required for deletion."});
+      return;
+    }
+
+    dispatch_async(self.queue, ^{
+      void* handle = RPCS3OpenLoadedCore();
+      if (!handle) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"RPCS3 Core must be initialized before deleting a game."});
+        });
+        return;
+      }
+      auto deleteGame = reinterpret_cast<rpcs3_delete_game_fn>(
+          dlsym(handle, "rpcs3_ios_delete_game"));
+      if (!deleteGame) {
+        dlclose(handle);
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"This RPCS3 Core does not expose installed-game deletion."});
+        });
+        return;
+      }
+      int32_t status = deleteGame(titleId.UTF8String);
+      NSString* message = status == 0 ? @"" : RPCS3TuningLastError(handle);
+      dlclose(handle);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(status == 0
+            ? @{@"success": @YES, @"titleId": titleId}
             : @{@"success": @NO,
                 @"status": @(status),
                 @"message": message});
