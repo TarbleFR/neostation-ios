@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import '../screens/rpcs3_manager_screen.dart';
 import '../services/rpcs3_internal_service.dart';
 
 class Rpcs3InternalPlaylistActions extends StatefulWidget {
@@ -26,7 +27,8 @@ class _Rpcs3InternalPlaylistActionsState
   String _firmwareVersion = '';
 
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
-  String get _import => _fr ? 'Importer' : 'Import';
+  String get _import => _fr ? 'RPCS3 / Importer' : 'RPCS3 / Import';
+  String get _open => _fr ? 'Ouvrir RPCS3' : 'Open RPCS3';
   String get _games => _fr ? 'Importer des jeux' : 'Import games';
   String get _folder =>
       _fr ? 'Importer un dossier de jeu' : 'Import game folder';
@@ -34,13 +36,13 @@ class _Rpcs3InternalPlaylistActionsState
       _fr ? 'Importer le firmware PS3' : 'Import PS3 firmware';
   String get _firmwareMissing => _fr ? 'Firmware requis' : 'Firmware required';
   String get _failed =>
-      _fr ? 'Échec de l’importation RPCS3.' : 'RPCS3 import failed.';
+      _fr ? 'Échec de l’opération RPCS3.' : 'RPCS3 operation failed.';
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
-  // Opening the menu must never initialize or dlopen RPCS3. The Core stays
-  // dormant until the user explicitly chooses a PS3 action (game/firmware) or
-  // launches a PS3 title.
+  // Opening the popup alone must not initialize or dlopen RPCS3. The Core is
+  // loaded only after the user explicitly opens RPCS3, imports content, or
+  // launches a PS3 game.
   Future<void> _opened() async {
     _interaction(true);
   }
@@ -52,8 +54,36 @@ class _Rpcs3InternalPlaylistActionsState
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _openManager() async {
+    _interaction(false);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Rpcs3ManagerScreen(
+          onLibraryChanged: widget.onLibraryChanged,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    try {
+      if (await Rpcs3InternalService.hasFirmware()) {
+        _firmwareVersion = await Rpcs3InternalService.firmwareVersion();
+      }
+    } catch (_) {
+      // Firmware state is shown again the next time the manager is opened.
+    } finally {
+      await Rpcs3InternalService.closeManagementRuntime();
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> _selected(String action) async {
     if (_busy) return;
+
+    if (action == 'open') {
+      await _openManager();
+      return;
+    }
+
     setState(() => _busy = true);
     try {
       if (action == 'games') {
@@ -144,10 +174,20 @@ class _Rpcs3InternalPlaylistActionsState
             ),
           ),
           const PopupMenuDivider(),
-          PopupMenuItem(value: 'games', child: Text(_games)),
-          PopupMenuItem(value: 'folder', child: Text(_folder)),
+          PopupMenuItem(
+            value: 'open',
+            child: Row(
+              children: [
+                const Icon(Icons.memory),
+                SizedBox(width: 8.r),
+                Text(_open),
+              ],
+            ),
+          ),
           const PopupMenuDivider(),
           PopupMenuItem(value: 'firmware', child: Text(_firmware)),
+          PopupMenuItem(value: 'games', child: Text(_games)),
+          PopupMenuItem(value: 'folder', child: Text(_folder)),
         ],
       ),
     );
