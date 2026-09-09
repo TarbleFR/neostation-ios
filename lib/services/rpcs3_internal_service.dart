@@ -346,6 +346,19 @@ class Rpcs3InternalService {
       // Core initialization so the Universal script can service its BRKs.
       final data = await dataDirectory();
       final cache = await cacheDirectory();
+      final preflight = await _bounded(
+        Rpcs3InternalBridge.preflight(),
+        _statusTimeout,
+        'memoryPreflightTimeout',
+        'La vérification mémoire RPCS3 ne répond pas.',
+      );
+      if (preflight['success'] != true) {
+        throw Rpcs3InternalException(
+          'memoryUnavailable',
+          preflight['message']?.toString() ??
+              'iOS refuse l’espace mémoire requis par RPCS3.',
+        );
+      }
       await _attachJitForCore();
       _emit(
         Rpcs3RuntimePhase.initializingCore,
@@ -358,7 +371,7 @@ class Rpcs3InternalService {
         Rpcs3InternalBridge.initialize(
           supportPath: data.path,
           cachePath: cache.path,
-          expandedJitRegion: true,
+          expandedJitRegion: false,
         ),
         _coreTimeout,
         'coreInitializeTimeout',
@@ -394,7 +407,7 @@ class Rpcs3InternalService {
         jitReady: true,
         coreReady: true,
       );
-      _log.i('RPCS3 internal Core initialized with validated expanded JIT.');
+      _log.i('RPCS3 internal Core initialized with validated standard JIT.');
     } on Rpcs3InternalException catch (error) {
       _restartRequired =
           _jitCompletionPending ||

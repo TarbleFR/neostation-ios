@@ -22,6 +22,12 @@ class Rpcs3InternalBridge {
             const <String, dynamic>{},
       );
 
+  static Future<Map<String, dynamic>> preflight() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMapMethod<String, dynamic>('preflight') ??
+            const <String, dynamic>{},
+      );
+
   static Future<Map<String, dynamic>> prepareJit({
     required String pairingFilePath,
   }) async => Map<String, dynamic>.from(
@@ -39,11 +45,7 @@ class Rpcs3InternalBridge {
     await _channel.invokeMapMethod<String, dynamic>('initialize', {
           'supportPath': supportPath,
           'cachePath': cachePath,
-          // Firmware installation does not need RPCS3's optional expanded JIT
-          // region. Keep the regular arena for the management/runtime startup
-          // path so iOS does not reserve the larger executable region while
-          // NeoStation is still establishing its first Universal JIT session.
-          'expandedJitRegion': false,
+          'expandedJitRegion': expandedJitRegion,
         }) ??
         const <String, dynamic>{},
   );

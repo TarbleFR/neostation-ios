@@ -1,18 +1,16 @@
-name: NeoStation iOS Build 228
-run-name: NeoStation iOS Build 228 (RPCS3 regular arena + Dolphin multi-delete) • ${{ github.sha }}
+name: NeoStation iOS Build 229
+run-name: NeoStation iOS Build 229 (RPCS3 firmware memory and IPA entitlements) • ${{ github.sha }}
 
 on:
   push:
     branches:
-      - fix/rpcs3-regular-arena-dolphin-multidelete-build227
-    paths:
-      - .github/workflows/build-ipa-once.yml
+      - fix/rpcs3-firmware-import-build229
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-228
+  group: neostation-ios-build-229
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +19,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '228'
-      IPA_NAME: 'NeoStation-iOS-Build-228'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-228'
+      BUILD_NUMBER: '229'
+      IPA_NAME: 'NeoStation-iOS-Build-229'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-229'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -134,6 +132,8 @@ jobs:
           flutter analyze --no-fatal-infos
           flutter test --no-pub
           python3 test/rpcs3_jit_handshake_test.py
+          python3 test/rpcs3_memory_preflight_test.py
+          python3 test/rpcs3_host_entitlements_test.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -235,6 +235,9 @@ jobs:
           set -euo pipefail
           python3 build-utils/embed_rpcs3_core_lazy.py
 
+      - name: Embed RPCS3 entitlements in Runner for sideloading
+        run: python3 build-utils/embed_rpcs3_host_entitlements.py
+
       - name: Package IPA
         run: |
           set -euo pipefail
@@ -242,9 +245,13 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
           python3 - <<'PY'
           import glob
+          import sys
           import plistlib
           import zipfile
           from pathlib import Path
+
+          sys.path.insert(0, 'build-utils')
+          from embed_rpcs3_host_entitlements import embedded_entitlements, require_runtime_entitlements
 
           matches = sorted(glob.glob('dist/*.ipa'))
           if len(matches) != 1:
@@ -252,6 +259,9 @@ jobs:
           ipa = Path(matches[0])
           with zipfile.ZipFile(ipa) as archive:
               names = archive.namelist()
+              app_info = plistlib.loads(archive.read('Payload/NeoStation.app/Info.plist'))
+              runner = archive.read('Payload/NeoStation.app/' + app_info['CFBundleExecutable'])
+              require_runtime_entitlements(embedded_entitlements(runner))
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
               if len(cores) != 1:
@@ -272,9 +282,9 @@ jobs:
           missing = [key for key in required if payload.get(key) is not True]
           if missing:
               raise SystemExit(
-                  'Build 228 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
+                  'Build 229 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
               )
-          print(f'RPCS3 regular-arena IPA validation passed: {cores[0]} + RPCS3JITHelper; required JIT/memory entitlements emitted')
+          print(f'RPCS3 embedded-entitlements IPA validation passed: {cores[0]} + RPCS3JITHelper; required JIT/memory entitlements emitted')
           PY
           ls -lah dist
 

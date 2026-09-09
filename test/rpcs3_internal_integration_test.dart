@@ -197,7 +197,8 @@ void main() {
       expect(plugin, contains('rpcs3_ios_boot_game'));
       expect(plugin, contains('self->_api.boot_game'));
       expect(plugin, contains('@"launchGame"'));
-      expect(plugin, contains('!self.initializedWithExpandedJit'));
+      // The standard arena also supports gameplay; expansion is optional.
+      expect(plugin, isNot(contains('!self.initializedWithExpandedJit')));
       expect(launcher, contains('Rpcs3InternalService.launchTitle'));
       expect(launcher, isNot(contains('openJitRequest')));
       expect(launcher, isNot(contains('com.xitrix.RPCS3')));

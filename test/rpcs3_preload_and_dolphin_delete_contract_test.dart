@@ -11,7 +11,8 @@ void main() {
     expect(bridge, isNot(contains('DynamicLibrary.open')));
     expect(bridge, isNot(contains('preloadCoreImage')));
     expect(bridge, contains("invokeMapMethod<String, dynamic>('prepareJit'"));
-    expect(bridge, contains("'expandedJitRegion': false"));
+    expect(bridge, contains("'expandedJitRegion': expandedJitRegion"));
+    expect(bridge, contains('bool expandedJitRegion = false'));
   });
 
   test('Dolphin game deletion refreshes only its private playlist', () {
