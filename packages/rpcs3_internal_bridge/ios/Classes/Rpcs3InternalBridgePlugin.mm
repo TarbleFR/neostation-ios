@@ -3,11 +3,85 @@
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <Security/Security.h>
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
+#import <errno.h>
+#import <sys/mman.h>
+#import <unistd.h>
 
 static NSString* const kRpcs3Channel = @"neostation/rpcs3_internal";
 static const uint32_t kExpectedAbi = 30;
+
+extern "C" {
+void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
+CFTypeRef SecTaskCopyValueForEntitlement(
+    void* task,
+    CFStringRef entitlement,
+    CFErrorRef* error);
+int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
+}
+
+#ifndef CS_OPS_STATUS
+#define CS_OPS_STATUS 0
+#endif
+#ifndef CS_DEBUGGED
+#define CS_DEBUGGED 0x10000000
+#endif
+
+static BOOL RPCS3HostIsDebugged(void) {
+  uint32_t flags = 0;
+  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0) return NO;
+  return (flags & CS_DEBUGGED) != 0;
+}
+
+static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
+  void* task = SecTaskCreateFromSelf(NULL);
+  if (task == NULL) return NO;
+  CFTypeRef value = SecTaskCopyValueForEntitlement(task, entitlement, NULL);
+  BOOL enabled = value == kCFBooleanTrue;
+  if (value != NULL) CFRelease(value);
+  CFRelease(task);
+  return enabled;
+}
+
+// RPCS3 0.8.1 performs the same kind of readiness check before it dlopens its
+// Core. A successful debugger attach is not sufficient if iOS still rejects
+// the RW -> RX transition that the JIT arena needs. Probe that transition here
+// so NeoStation can report an error instead of letting the Core abort at load.
+static BOOL RPCS3ProbeExecutableMemory(NSString** error) {
+  size_t pageSize = (size_t)getpagesize();
+  void* page = mmap(NULL,
+                    pageSize,
+                    PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANON,
+                    -1,
+                    0);
+  if (page == MAP_FAILED) {
+    if (error) {
+      *error = [NSString stringWithFormat:
+          @"RPCS3 JIT readiness allocation failed (errno %d).", errno];
+    }
+    return NO;
+  }
+
+  ((volatile unsigned char*)page)[0] = 0;
+  if (mprotect(page, pageSize, PROT_READ | PROT_EXEC) != 0) {
+    int savedErrno = errno;
+    munmap(page, pageSize);
+    if (error) {
+      *error = [NSString stringWithFormat:
+          @"JIT is attached, but iOS rejected RPCS3 executable memory (errno %d).",
+          savedErrno];
+    }
+    return NO;
+  }
+
+  // Restore writable permissions before releasing the test page.
+  mprotect(page, pageSize, PROT_READ | PROT_WRITE);
+  munmap(page, pageSize);
+  return YES;
+}
 
 static UIViewController* RPCS3RootViewController(void) {
   UIWindow* keyWindow = nil;
@@ -83,6 +157,7 @@ static UIViewController* RPCS3RootViewController(void) {
 @property(nonatomic, strong) RPCS3GameViewController* gameController;
 @property(nonatomic, assign) BOOL initialized;
 @property(nonatomic, assign) BOOL initializedWithExpandedJit;
+@property(nonatomic, assign) BOOL coreLoadedWithExpandedJit;
 @property(nonatomic, assign) BOOL operationBusy;
 @end
 
@@ -146,14 +221,57 @@ static void RPCS3Progress(void* context,
   return @"Unknown RPCS3 error";
 }
 
-- (BOOL)loadCore:(NSString**)error {
-  if (_api.handle) return YES;
+- (BOOL)loadCoreWithExpandedJit:(BOOL)expanded error:(NSString**)error {
+  if (_api.handle) {
+    if (self.coreLoadedWithExpandedJit != expanded) {
+      if (error) {
+        *error = @"RPCS3 JIT arena policy cannot change after the Core is loaded; relaunch NeoStation.";
+      }
+      return NO;
+    }
+    return YES;
+  }
+
+  // The original RPCS3 iOS loader requires JIT to be active before dlopen.
+  if (!RPCS3HostIsDebugged()) {
+    if (error) *error = @"JIT must be ready before loading RPCS3 Core.";
+    return NO;
+  }
+
+  if (expanded) {
+    if (!RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing")) ||
+        !RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))) {
+      if (error) {
+        *error = @"RPCS3 requires extended-virtual-addressing and increased-memory-limit entitlements in the signed NeoStation IPA.";
+      }
+      return NO;
+    }
+  }
+
+  NSString* readinessError = nil;
+  if (!RPCS3ProbeExecutableMemory(&readinessError)) {
+    if (error) *error = readinessError;
+    return NO;
+  }
+
+  // RPCS3 reads this policy while the dylib is being loaded, before
+  // rpcs3_ios_initialize is ever called. Setting it afterwards is too late.
+  if (setenv("RPCS3_IOS_EXPANDED_JIT_ARENA", expanded ? "1" : "0", 1) != 0) {
+    if (error) {
+      *error = [NSString stringWithFormat:
+          @"Unable to configure the RPCS3 JIT arena before loading (errno %d).",
+          errno];
+    }
+    return NO;
+  }
+
   NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
   NSArray<NSString*>* candidates = @[
     [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"],
     [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks/libRPCS3Core.dylib"],
   ];
   void* handle = NULL;
+  dlerror();
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
       handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
@@ -164,8 +282,9 @@ static void RPCS3Progress(void* context,
     if (error) *error = [NSString stringWithFormat:@"libRPCS3Core.dylib is missing or could not load: %s", dlerror() ?: "unknown"];
     return NO;
   }
-#define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"Missing RPCS3 symbol %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); return NO; } } while (0)
+#define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"Missing RPCS3 symbol %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); self.coreLoadedWithExpandedJit = NO; return NO; } } while (0)
   _api.handle = handle;
+  self.coreLoadedWithExpandedJit = expanded;
   LOAD("rpcs3_ios_abi_version", abi_version);
   LOAD("rpcs3_ios_build_info", build_info);
   LOAD("rpcs3_ios_initialize", initialize);
@@ -184,7 +303,9 @@ static void RPCS3Progress(void* context,
 #undef LOAD
   if (_api.abi_version() != kExpectedAbi) {
     if (error) *error = [NSString stringWithFormat:@"Unsupported RPCS3 iOS ABI %u (expected %u).", _api.abi_version(), kExpectedAbi];
-    dlclose(handle); memset(&_api, 0, sizeof(_api));
+    dlclose(handle);
+    memset(&_api, 0, sizeof(_api));
+    self.coreLoadedWithExpandedJit = NO;
     return NO;
   }
   return YES;
@@ -197,19 +318,28 @@ static void RPCS3Progress(void* context,
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([call.method isEqualToString:@"diagnostics"]) {
-    NSString* error = nil;
-    BOOL loaded = [self loadCore:&error];
+    NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
+    NSString* corePath = [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"];
+    BOOL present = [NSFileManager.defaultManager fileExistsAtPath:corePath];
     NSString* build = @"";
     uint32_t abi = 0;
-    if (loaded) {
+    if (_api.handle) {
       abi = _api.abi_version();
       const char* value = _api.build_info();
       if (value) build = [NSString stringWithUTF8String:value] ?: @"";
     }
-    result(@{@"coreLoaded": @(loaded), @"abi": @(abi), @"build": build,
-             @"initialized": @(self.initialized),
-             @"expandedJitRegion": @(self.initializedWithExpandedJit),
-             @"message": error ?: @""});
+    result(@{
+      @"corePresent": @(present),
+      @"coreLoaded": @(_api.handle != NULL),
+      @"abi": @(abi),
+      @"build": build,
+      @"initialized": @(self.initialized),
+      @"expandedJitRegion": @(self.initializedWithExpandedJit),
+      @"jitReady": @(RPCS3HostIsDebugged()),
+      @"extendedVirtualAddressing": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing"))),
+      @"increasedMemoryLimit": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))),
+      @"message": @"",
+    });
     return;
   }
 
@@ -220,7 +350,12 @@ static void RPCS3Progress(void* context,
     BOOL expanded = [args[@"expandedJitRegion"] boolValue];
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
-      if (![self loadCore:&error]) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"message": error ?: @"Core unavailable"}); }); return; }
+      if (![self loadCoreWithExpandedJit:expanded error:&error]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO, @"message": error ?: @"Core unavailable"});
+        });
+        return;
+      }
       if (self.initialized) {
         if (self.initializedWithExpandedJit == expanded) {
           dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @YES, @"alreadyInitialized": @YES, @"expandedJitRegion": @(expanded)}); });
