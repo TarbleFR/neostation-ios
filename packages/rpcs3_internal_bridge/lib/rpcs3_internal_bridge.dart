@@ -3,11 +3,32 @@ import 'package:flutter/services.dart';
 class Rpcs3InternalBridge {
   Rpcs3InternalBridge._();
 
-  static const MethodChannel _channel = MethodChannel('neostation/rpcs3_internal');
+  static const MethodChannel _channel = MethodChannel(
+    'neostation/rpcs3_internal',
+  );
+  static const MethodChannel _jitChannel = MethodChannel(
+    'neostation/rpcs3_jit',
+  );
 
   static Future<Map<String, dynamic>> diagnostics() async =>
       Map<String, dynamic>.from(
         await _channel.invokeMapMethod<String, dynamic>('diagnostics') ??
+            const <String, dynamic>{},
+      );
+
+  static Future<Map<String, dynamic>> jitStatus() async =>
+      Map<String, dynamic>.from(
+        await _jitChannel.invokeMapMethod<String, dynamic>('status') ??
+            const <String, dynamic>{},
+      );
+
+  static Future<Map<String, dynamic>> prepareJit({
+    required String pairingFilePath,
+  }) async =>
+      Map<String, dynamic>.from(
+        await _jitChannel.invokeMapMethod<String, dynamic>('prepareJit', {
+              'pairingFilePath': pairingFilePath,
+            }) ??
             const <String, dynamic>{},
       );
 
