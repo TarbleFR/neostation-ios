@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../screens/rpcs3_manager_screen.dart';
+import '../services/rpcs3_content_import_service.dart';
 import '../services/rpcs3_internal_service.dart';
 
 /// Owns the PS3 firmware gate and, once installed, the library import menu.
@@ -30,12 +31,14 @@ class Rpcs3InternalPlaylistActions extends StatefulWidget {
 class _Rpcs3InternalPlaylistActionsState
     extends State<Rpcs3InternalPlaylistActions> {
   StreamSubscription<Rpcs3RuntimeState>? _runtimeSubscription;
+  StreamSubscription<Rpcs3ContentImportProgress>? _contentProgressSubscription;
   bool _checking = true;
   bool _busy = false;
   String _firmwareVersion = '';
   String? _error;
   Rpcs3RuntimePhase _phase = Rpcs3RuntimePhase.idle;
   String _progressMessage = '';
+  Rpcs3ContentImportProgress? _contentProgress;
 
   bool get _firmwareInstalled => _firmwareVersion.isNotEmpty;
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
@@ -53,6 +56,11 @@ class _Rpcs3InternalPlaylistActionsState
         });
       }
     });
+    _contentProgressSubscription = Rpcs3ContentImportService.progress.listen((event) {
+      if (mounted && _busy) {
+        setState(() => _contentProgress = event);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _checkFirmware();
     });
@@ -61,6 +69,7 @@ class _Rpcs3InternalPlaylistActionsState
   @override
   void dispose() {
     _runtimeSubscription?.cancel();
+    _contentProgressSubscription?.cancel();
     super.dispose();
   }
 
@@ -110,6 +119,7 @@ class _Rpcs3InternalPlaylistActionsState
       _error = null;
       _phase = Rpcs3RuntimePhase.idle;
       _progressMessage = '';
+      _contentProgress = null;
     });
     _interaction(true);
     try {
@@ -159,17 +169,23 @@ class _Rpcs3InternalPlaylistActionsState
       return;
     }
 
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _contentProgress = null;
+      _progressMessage = action == 'folder'
+          ? (_fr ? 'Ouverture du dossier PS3…' : 'Opening PS3 game folder…')
+          : (_fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…');
+    });
     _interaction(true);
     try {
       if (action == 'games') {
-        final result = await Rpcs3InternalService.importGames();
+        final result = await Rpcs3ContentImportService.importGames();
         if (result.imported > 0) await widget.onLibraryChanged();
         if (result.rejected > 0) {
           _notice(result.errors.isNotEmpty ? result.errors.first : _failed);
         }
       } else if (action == 'folder') {
-        if (await Rpcs3InternalService.importExtractedGameFolder()) {
+        if (await Rpcs3ContentImportService.importExtractedGameFolder()) {
           await widget.onLibraryChanged();
         }
       }
@@ -179,7 +195,10 @@ class _Rpcs3InternalPlaylistActionsState
       _notice('$_failed $error');
     } finally {
       if (mounted) {
-        setState(() => _busy = false);
+        setState(() {
+          _busy = false;
+          _contentProgress = null;
+        });
         _interaction(false);
       }
     }
@@ -266,6 +285,83 @@ class _Rpcs3InternalPlaylistActionsState
     );
   }
 
+  Widget _buildOperationOverlay(ColorScheme scheme) {
+    final progress = _contentProgress;
+    final fraction = progress?.fraction;
+    final itemLabel = progress == null || progress.itemName.isEmpty
+        ? (_progressMessage.isNotEmpty
+              ? _progressMessage
+              : (_fr ? 'Import RPCS3 en cours…' : 'RPCS3 import in progress…'))
+        : progress.itemCount > 1
+        ? '${_fr ? 'Import' : 'Import'} ${progress.itemIndex}/${progress.itemCount} • ${progress.itemName}'
+        : progress.itemName;
+    final detail = progress?.detail.trim() ?? '';
+    final percent = fraction == null ? null : (fraction * 100).round();
+
+    return Positioned.fill(
+      key: const ValueKey('rpcs3-import-progress-overlay'),
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.68),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Material(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(18.r),
+              child: Padding(
+                padding: EdgeInsets.all(24.r),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.downloading_rounded, size: 42.r),
+                    SizedBox(height: 14.r),
+                    Text(
+                      _fr ? 'Importation du jeu PS3' : 'Importing PS3 game',
+                      style: Theme.of(context).textTheme.titleLarge,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 12.r),
+                    Text(
+                      itemLabel,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 14.r),
+                    LinearProgressIndicator(value: fraction),
+                    SizedBox(height: 10.r),
+                    if (percent != null)
+                      Text(
+                        '$percent %',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    if (detail.isNotEmpty) ...[
+                      SizedBox(height: 8.r),
+                      Text(
+                        detail,
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    SizedBox(height: 10.r),
+                    Text(
+                      _fr
+                          ? 'Laissez NeoStation ouvert pendant l’importation.'
+                          : 'Keep NeoStation open while the import completes.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_checking || !_firmwareInstalled) return _buildFirmwareGate();
@@ -317,8 +413,8 @@ class _Rpcs3InternalPlaylistActionsState
                       value: 'folder',
                       child: Text(
                         _fr
-                            ? 'Importer un dossier de jeu'
-                            : 'Import game folder',
+                            ? 'Importer un dossier de jeu décrypté'
+                            : 'Import decrypted game folder',
                       ),
                     ),
                     PopupMenuItem(
@@ -353,6 +449,7 @@ class _Rpcs3InternalPlaylistActionsState
               ),
             ),
           ),
+        if (_busy) _buildOperationOverlay(scheme),
       ],
     );
   }
