@@ -2,9 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/dolphin_import_locale.dart';
+import '../providers/sqlite_config_provider.dart';
 import '../services/dolphin_internal_v2_service.dart';
+import '../services/dolphin_smart_import_service.dart';
 import '../services/dolphin_system_files.dart';
 import '../services/logger_service.dart';
 
@@ -26,13 +29,23 @@ class DolphinInternalPlaylistActions extends StatefulWidget {
       _DolphinInternalPlaylistActionsState();
 }
 
-class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylistActions> {
+class _DolphinInternalPlaylistActionsState
+    extends State<DolphinInternalPlaylistActions> {
   bool _busy = false;
   bool _interacting = false;
   Set<DolphinIplRegion> _regions = const {};
 
   bool get _isGameCube => widget.systemFolder.toLowerCase() == 'gc';
   String _text(String key) => DolphinImportLocale.text(context, key);
+
+  @override
+  void initState() {
+    super.initState();
+    // Older builds could copy a valid GameCube image into Wii (or the reverse).
+    // Repair those private-library placements silently as soon as either
+    // Dolphin playlist is opened, before the user can launch the wrong entry.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _repairPlacement());
+  }
 
   void _interaction(bool active) {
     _interacting = active;
@@ -43,6 +56,34 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
   void dispose() {
     if (_interacting) widget.onInteractionChanged?.call(false);
     super.dispose();
+  }
+
+  Future<void> _refreshChangedSystems(Set<String> systems) async {
+    if (!mounted || systems.isEmpty) return;
+    final current = widget.systemFolder.toLowerCase();
+    final provider = context.read<SqliteConfigProvider>();
+
+    // Refresh the opposite playlist explicitly. The callback refreshes the
+    // currently visible playlist and reloads its local game list.
+    for (final system in systems) {
+      if (system == current) continue;
+      await provider.refreshDolphinInternalLibrary(system);
+    }
+    if (!mounted) return;
+    await widget.onLibraryChanged();
+  }
+
+  Future<void> _repairPlacement() async {
+    try {
+      final changed = await DolphinSmartImportService.repairLibraryPlacement();
+      if (changed.isNotEmpty && mounted) {
+        await _refreshChangedSystems(changed);
+      }
+    } catch (error) {
+      // Placement repair is deliberately silent. A damaged/unknown image is
+      // left untouched rather than interrupting library navigation.
+      LoggerService.instance.w('Dolphin placement repair skipped: $error');
+    }
   }
 
   Future<void> _opened() async {
@@ -63,15 +104,24 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
           title: Text(title ?? _text('replaceTitle')),
           content: SingleChildScrollView(child: Text(message)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(_text('cancel'))),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(_text('continue'))),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_text('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_text('continue')),
+            ),
           ],
         ),
-      ) ?? false;
+      ) ??
+      false;
 
   void _notice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _selected(String action) async {
@@ -82,13 +132,21 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
       if (action == 'wiiMenu' && !_isGameCube) {
         final report = await DolphinInternalV2Service.launchWiiMenu();
         if (!report.ready) {
-          _notice(report.failedStage == 'wii.menu_missing'
-              ? _text('wiiMenuMissing')
-              : report.message.isNotEmpty ? report.message : _text('wiiMenuFailed'));
+          _notice(
+            report.failedStage == 'wii.menu_missing'
+                ? _text('wiiMenuMissing')
+                : report.message.isNotEmpty
+                ? report.message
+                : _text('wiiMenuFailed'),
+          );
         }
       } else if (action == 'games') {
-        final result = await DolphinInternalV2Service.importGames(widget.systemFolder);
-        if (result.imported > 0) await widget.onLibraryChanged();
+        final result = await DolphinSmartImportService.importGames(
+          requestedSystem: widget.systemFolder,
+        );
+        if (result.imported > 0) {
+          await _refreshChangedSystems(result.changedSystems);
+        }
         if (!mounted) return;
         if (result.rejected > 0) _notice(_text('failed'));
         if (result.imported > 0) count = result.imported;
@@ -101,20 +159,34 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
       } else {
         final fromShared = action == 'shared';
         if (fromShared) {
-          await DolphinInternalV2Service.sharedSystemDirectory(widget.systemFolder);
+          await DolphinInternalV2Service.sharedSystemDirectory(
+            widget.systemFolder,
+          );
           if (!mounted) return;
           if (!await _confirm(
-            _text('sharedHelp').replaceAll('{system}', _isGameCube ? 'GameCube' : 'Wii'),
-            title: _text('shared'),
-          ) || !mounted) return;
+                _text('sharedHelp').replaceAll(
+                  '{system}',
+                  _isGameCube ? 'GameCube' : 'Wii',
+                ),
+                title: _text('shared'),
+              ) ||
+              !mounted) {
+            return;
+          }
         }
-        if (!_isGameCube && (!await _confirm(_text('replaceWii')) || !mounted)) return;
+        if (!_isGameCube &&
+            (!await _confirm(_text('replaceWii')) || !mounted)) {
+          return;
+        }
         count = await DolphinInternalV2Service.importSystemFolder(
-          widget.systemFolder, fromShared: fromShared,
+          widget.systemFolder,
+          fromShared: fromShared,
         );
       }
       if (!mounted) return;
-      if (count != null) _notice(_text('imported').replaceAll('{count}', '$count'));
+      if (count != null) {
+        _notice(_text('imported').replaceAll('{count}', '$count'));
+      }
     } catch (error) {
       LoggerService.instance.w('Dolphin playlist action failed: $error');
       if (!mounted) return;
@@ -138,7 +210,8 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isIOS || !DolphinInternalV2Service.isDolphinSystem(widget.systemFolder)) {
+    if (!Platform.isIOS ||
+        !DolphinInternalV2Service.isDolphinSystem(widget.systemFolder)) {
       return const SizedBox.shrink();
     }
     final scheme = Theme.of(context).colorScheme;
@@ -196,7 +269,9 @@ class _DolphinInternalPlaylistActionsState extends State<DolphinInternalPlaylist
             for (final region in DolphinIplRegion.values)
               PopupMenuItem(
                 value: 'ipl:${region.name}',
-                child: Text('${_regions.contains(region) ? '✓ ' : ''}${_text('ipl').replaceAll('{region}', region.name.toUpperCase())}'),
+                child: Text(
+                  '${_regions.contains(region) ? '✓ ' : ''}${_text('ipl').replaceAll('{region}', region.name.toUpperCase())}',
+                ),
               ),
           ],
           const PopupMenuDivider(),
