@@ -21,7 +21,9 @@ jobs:
           fetch-depth: 0
 
       - name: Wire RPCS3 into NeoStation
-        run: python3 build-utils/finalize_rpcs3_internal_v1.py
+        run: |
+          python3 build-utils/finalize_rpcs3_internal_v1.py
+          python3 build-utils/fix_rpcs3_jit_isolation_v2.py
 
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
@@ -36,13 +38,17 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Format RPCS3-owned Dart files
+      - name: Format RPCS3-owned Dart files and tests
         run: |
           dart format \
             packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart \
             lib/services/rpcs3_internal_service.dart \
             lib/services/rpcs3_launch_service.dart \
-            lib/widgets/rpcs3_internal_playlist_actions.dart
+            lib/widgets/rpcs3_internal_playlist_actions.dart \
+            test/rpcs3_stage3_test.dart \
+            test/rpcs3_stage6_test.dart \
+            test/rpcs3_stage7_test.dart \
+            test/rpcs3_internal_integration_test.dart
 
       - name: Enforce Dolphin isolation
         run: |
@@ -52,10 +58,17 @@ jobs:
             packages/dolphin_jit_helper \
             native/dolphin_internal_helper
 
-      - name: Analyze and test
+      - name: Analyze RPCS3 integration
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test RPCS3 and Dolphin isolation contracts
         run: |
-          flutter analyze --no-fatal-infos
-          flutter test --no-pub
+          flutter test --no-pub \
+            test/rpcs3_stage3_test.dart \
+            test/rpcs3_stage6_test.dart \
+            test/rpcs3_stage7_test.dart \
+            test/rpcs3_internal_integration_test.dart \
+            test/dolphin_isolation_contract_test.dart
 
       - name: Commit validated source wiring
         shell: bash
@@ -67,11 +80,12 @@ jobs:
           rm -f build-utils/fix_rpcs3_dart_patch_v1.py
           rm -f build-utils/repair_rpcs3_apply_script_v1.py
           rm -f build-utils/finalize_rpcs3_internal_v1.py
+          rm -f build-utils/fix_rpcs3_jit_isolation_v2.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A -- ':!.github/workflows/rpcs3-internal-apply.yml'
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "feat(rpcs3): wire internal PS3 engine into NeoStation"
+          git commit -m "feat(rpcs3): isolate internal JIT and direct boot"
           git push origin HEAD:feature/rpcs3-internal-engine-v1
