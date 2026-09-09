@@ -14,6 +14,49 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def remove_function(text: str, signature: str, label: str) -> str:
+    """Remove exactly one Dart method using balanced braces, not line ranges."""
+    start = text.find(signature)
+    if start < 0:
+        return text
+    brace = text.find('{', start + len(signature))
+    if brace < 0:
+        raise SystemExit(f'{label}: opening brace missing')
+    depth = 0
+    quote = None
+    escaped = False
+    i = brace
+    while i < len(text):
+        ch = text[i]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif ch == '\\':
+                escaped = True
+            elif ch == quote:
+                quote = None
+        else:
+            if ch in ("'", '"'):
+                quote = ch
+            elif ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    while end < len(text) and text[end] in ' \t':
+                        end += 1
+                    if end < len(text) and text[end] == '\r':
+                        end += 1
+                    if end < len(text) and text[end] == '\n':
+                        end += 1
+                    if end < len(text) and text[end] == '\n':
+                        end += 1
+                    return text[:start] + text[end:]
+        i += 1
+    raise SystemExit(f'{label}: closing brace missing')
+
+
 # ---------------------------------------------------------------------------
 # RPCS3 library: keep all discovery/catalog/cache code, but make NeoStation's
 # private Application Support directory the authoritative Data root.
@@ -71,9 +114,6 @@ if old_initialize in library:
 elif "NeoStation's private RPCS3" not in library:
     raise SystemExit('RPCS3 initialize block is not in a recognized state')
 
-# Preserve the old linkAndSync method only as a dormant compatibility method;
-# the PS3 UI no longer calls it. Add a new explicit internal sync entry point
-# without deleting any catalog/cache helpers that follow it.
 sync_anchor = '''  /// Reads the currently linked RPCS3 Data directory and imports its PS3 rows.
   static Future<Rpcs3SyncResult> syncLinkedLibrary() async {
 '''
@@ -191,15 +231,38 @@ games_path.write_text(games)
 
 
 # ---------------------------------------------------------------------------
-# Settings: hide only the obsolete external-RPCS3 directory card. Keep the
-# surrounding directory code byte-for-byte intact; dormant compatibility
-# helpers can be removed in a later cleanup after device validation.
+# Settings: remove the obsolete external RPCS3 Data-folder controls using
+# brace-balanced method removal. This does not touch the surrounding emulator
+# cards and therefore cannot truncate ARMSX2/MeloNX settings.
 # ---------------------------------------------------------------------------
 settings_path = Path(
     'lib/screens/settings_screen/new_settings_options/directories_settings_content.dart'
 )
 settings = settings_path.read_text()
+settings = settings.replace(
+    "import 'package:neostation/services/rpcs3_library_service.dart';\n",
+    '',
+)
+settings = settings.replace(
+    "import 'package:neostation/l10n/rpcs3_library_locale.dart';\n",
+    '',
+)
 settings = settings.replace('      _buildIOSRpcs3Section(theme),\n', '')
+settings = remove_function(
+    settings,
+    '  Future<void> _linkRpcs3DataFolder() async ',
+    'RPCS3 external link action',
+)
+settings = remove_function(
+    settings,
+    '  Future<void> _syncWithRpcs3() async ',
+    'RPCS3 external sync action',
+)
+settings = remove_function(
+    settings,
+    '  Widget _buildIOSRpcs3Section(ThemeData theme) ',
+    'RPCS3 external directory card',
+)
 settings_path.write_text(settings)
 
 
