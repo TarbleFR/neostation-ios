@@ -15,7 +15,10 @@ abstract final class Rpcs3LaunchService {
   static final RegExp _titleIdPattern = RegExp(r'^[A-Z0-9._-]{3,32}$');
 
   static const Duration _bootPollInterval = Duration(seconds: 1);
-  static const Duration _spuNoProgressLimit = Duration(seconds: 75);
+  static const Duration _bootStageGrace = Duration(seconds: 12);
+  static const Duration _spuNoProgressLimit = Duration(seconds: 90);
+  static const Duration _ppuNoProgressLimit = Duration(seconds: 120);
+  static const Duration _finishedStageLimit = Duration(seconds: 45);
 
   static String? _lastError;
   static String? _lastErrorCode;
@@ -33,54 +36,102 @@ abstract final class Rpcs3LaunchService {
     await Rpcs3InternalService.rootDirectory();
   }
 
-  /// Applies the mobile boot policy exported by our RPCS3 iOS Core.
+  /// Applies an iOS-safe boot policy both globally and to the title itself.
   ///
-  /// The Core exposes these settings through `rpcs3_ios_set_setting`. Keep the
-  /// normal on-disk cache, but avoid the long up-front LLVM pass, use RPCS3's
-  /// iOS memory-safe automatic compiler-thread limit, enable the mobile SPU
-  /// scheduler, and compile larger SPU blocks so first boot has less work.
-  static Future<void> _applyMobileBootProfile() async {
+  /// RPCS3 reloads a title's own configuration during boot, so a global-only
+  /// override can be replaced just before PPU/SPU preparation begins. Build 230
+  /// could therefore still enter the long "Compiling PPU Modules" path even
+  /// though LLVM precompilation had been disabled globally. Persist the same
+  /// policy through `rpcs3_ios_set_game_setting` before boot so the title cannot
+  /// re-enable the blocking precompile when its configuration is loaded.
+  ///
+  /// `Safe` deliberately replaces the previous forced `Mega` SPU block size,
+  /// and mobile SPU scheduling returns to `Automatic` for compatibility. The
+  /// existing on-disk caches remain reusable; only the aggressive boot policy
+  /// is changed.
+  static Future<void> _applyMobileBootProfile(String titleId) async {
     await Rpcs3InternalService.ensureGameplayInitialized();
     const settings = <String, String>{
       'advanced.llvm_precompilation': 'false',
       'emulator.max_llvm_threads': '0',
-      'experimental.mobile_spu_scheduling': 'Enabled',
-      'cpu.spu_block_size': 'Mega',
+      'experimental.mobile_spu_scheduling': 'Automatic',
+      'cpu.spu_block_size': 'Safe',
     };
 
     for (final entry in settings.entries) {
-      final report = await Rpcs3InternalBridge.setSetting(entry.key, entry.value);
-      if (report['success'] != true) {
+      final global = await Rpcs3InternalBridge.setSetting(entry.key, entry.value);
+      if (global['success'] != true) {
         _log.i(
-          'RPCS3 mobile boot setting ${entry.key}=${entry.value} was not applied: '
-          '${report['message'] ?? 'unknown Core response'}',
+          'RPCS3 global mobile boot setting ${entry.key}=${entry.value} was not applied: '
+          '${global['message'] ?? 'unknown Core response'}',
+        );
+      }
+
+      final perGame = await Rpcs3InternalBridge.setGameSetting(
+        titleId,
+        entry.key,
+        entry.value,
+      );
+      if (perGame['success'] != true) {
+        _log.i(
+          'RPCS3 per-title boot setting $titleId ${entry.key}=${entry.value} was not applied: '
+          '${perGame['message'] ?? 'unknown Core response'}',
         );
       }
     }
   }
 
-  /// Watches the native boot progress only while RPCS3 reports an active boot
-  /// stage. This is not a fixed boot timeout: slow games may keep compiling as
-  /// long as the counters move. It only aborts the known failure mode where
-  /// "Building SPU Cache" stops advancing for an extended period.
+  static Duration? _stallLimitForStage(String stage) {
+    final value = stage.toLowerCase();
+    final ppuStage = value.contains('ppu') &&
+        (value.contains('compil') ||
+            value.contains('applying') ||
+            value.contains('linking') ||
+            value.contains('code'));
+    if (ppuStage) return _ppuNoProgressLimit;
+
+    final spuStage = value.contains('spu') &&
+        (value.contains('cache') || value.contains('compil'));
+    if (spuStage) return _spuNoProgressLimit;
+    return null;
+  }
+
+  /// Watches the native boot preparation without imposing a total boot limit.
+  ///
+  /// Slow titles may compile for as long as they need while progress moves.
+  /// The guard only aborts the known deadlock cases where PPU compilation,
+  /// "Applying PPU Code", or SPU cache building reports the same stage/counter
+  /// for an extended period. A completed counter (for example 46/46) gets a
+  /// shorter transition grace so the UI can never sit at 100% forever.
   static Future<void> _waitForBootOrDetectStall(String titleId) async {
     String lastStage = '';
     int lastCurrent = -1;
     int lastTotal = -1;
     var lastMovement = DateTime.now();
+    final started = DateTime.now();
+    var sawActiveStage = false;
 
     while (true) {
       final report = await Rpcs3InternalBridge.bootProgress();
       if (report['success'] != true) {
-        // Older Core revisions may not expose progress. Boot normally rather
-        // than turning an optional diagnostic API into a launch requirement.
+        // Boot-progress support is diagnostic. Never make an older compatible
+        // Core fail to launch solely because that optional symbol is absent.
         return;
       }
 
       final stage = report['stage']?.toString().trim() ?? '';
       final current = (report['current'] as num?)?.toInt() ?? 0;
       final total = (report['total'] as num?)?.toInt() ?? 0;
-      if (stage.isEmpty) return;
+
+      if (stage.isEmpty) {
+        if (!sawActiveStage &&
+            DateTime.now().difference(started) < _bootStageGrace) {
+          await Future<void>.delayed(_bootPollInterval);
+          continue;
+        }
+        return;
+      }
+      sawActiveStage = true;
 
       if (stage != lastStage || current != lastCurrent || total != lastTotal) {
         lastStage = stage;
@@ -93,15 +144,26 @@ abstract final class Rpcs3LaunchService {
         );
       }
 
-      final spuStage = stage.toLowerCase().contains('spu') &&
-          (stage.toLowerCase().contains('cache') ||
-              stage.toLowerCase().contains('compil'));
-      if (spuStage && DateTime.now().difference(lastMovement) > _spuNoProgressLimit) {
-        await Rpcs3InternalBridge.stop();
-        throw const Rpcs3InternalException(
-          'spuCacheStalled',
-          'La préparation du cache SPU n’avance plus. RPCS3 a arrêté ce démarrage au lieu de rester bloqué indéfiniment. Relancez le jeu : le profil SPU mobile et le cache déjà créé seront réutilisés.',
-        );
+      final limit = _stallLimitForStage(stage);
+      if (limit != null) {
+        final noMovement = DateTime.now().difference(lastMovement);
+        final stageComplete = total > 0 && current >= total;
+        final effectiveLimit = stageComplete ? _finishedStageLimit : limit;
+        if (noMovement > effectiveLimit) {
+          try {
+            await Rpcs3InternalBridge.stop().timeout(const Duration(seconds: 12));
+          } catch (_) {
+            // The error below is the useful user-facing outcome even if an old
+            // Core revision takes longer to acknowledge stop during teardown.
+          }
+          final progress = total > 0 ? ' ($current/$total)' : '';
+          throw Rpcs3InternalException(
+            'bootPreparationStalled',
+            'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
+                'Le démarrage a été arrêté au lieu de rester figé. Le profil '
+                'PPU/SPU sûr est maintenant enregistré pour ce jeu ; relancez-le.',
+          );
+        }
       }
 
       await Future<void>.delayed(_bootPollInterval);
@@ -128,7 +190,7 @@ abstract final class Rpcs3LaunchService {
     );
 
     try {
-      await _applyMobileBootProfile();
+      await _applyMobileBootProfile(titleId);
       final launched = await Rpcs3InternalService.launchTitle(titleId);
       if (!launched) return false;
       await _waitForBootOrDetectStall(titleId);
