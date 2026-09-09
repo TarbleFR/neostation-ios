@@ -6,7 +6,7 @@ on:
       - feature/dolphin-rainbow-selection-ui
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   analyze:
@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
@@ -26,14 +28,30 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check formatting
+      - name: Format changed UI files
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
             lib/widgets/rainbow_selection_border.dart \
             lib/widgets/dolphin_internal_playlist_actions.dart \
             lib/screens/game_screen/game_list_view.dart \
             lib/screens/game_screen/my_games_grid.dart \
             lib/screens/game_screen/my_games_carousel.dart
+
+      - name: Commit formatting if needed
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            lib/widgets/rainbow_selection_border.dart \
+            lib/widgets/dolphin_internal_playlist_actions.dart \
+            lib/screens/game_screen/game_list_view.dart \
+            lib/screens/game_screen/my_games_grid.dart \
+            lib/screens/game_screen/my_games_carousel.dart
+          git commit -m "style: format rainbow selection UI"
+          git push origin HEAD:feature/dolphin-rainbow-selection-ui
 
       - name: Analyze changed UI files
         run: |
