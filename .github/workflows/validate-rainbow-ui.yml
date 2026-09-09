@@ -1,0 +1,45 @@
+name: Validate Rainbow Selection UI
+
+on:
+  push:
+    branches:
+      - feature/dolphin-rainbow-selection-ui
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/widgets/rainbow_selection_border.dart \
+            lib/widgets/dolphin_internal_playlist_actions.dart \
+            lib/screens/game_screen/game_list_view.dart \
+            lib/screens/game_screen/my_games_grid.dart \
+            lib/screens/game_screen/my_games_carousel.dart
+
+      - name: Analyze changed UI files
+        run: |
+          flutter analyze --no-fatal-infos \
+            lib/widgets/rainbow_selection_border.dart \
+            lib/widgets/dolphin_internal_playlist_actions.dart \
+            lib/screens/game_screen/game_list_view.dart \
+            lib/screens/game_screen/my_games_grid.dart \
+            lib/screens/game_screen/my_games_carousel.dart
