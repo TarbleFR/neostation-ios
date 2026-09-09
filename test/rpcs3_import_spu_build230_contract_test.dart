@@ -35,6 +35,7 @@ void main() {
       expect(picker, contains('startAccessingSecurityScopedResource'));
       expect(importer, contains('releaseScopedResources'));
       expect(importer, contains("const {'.pkg', '.zip', '.iso'}"));
+      expect(importer, contains('if (imported > 0) await Rpcs3LibraryService.syncInternalLibrary();'));
     });
 
     test('decrypted PS3 folders use the security-scoped folder path', () {
@@ -50,11 +51,15 @@ void main() {
       );
       expect(importer, contains("path.join(root, 'USRDIR', 'EBOOT.BIN')"));
       expect(importer, contains('Rpcs3InternalBridge.installFolder(folder)'));
+      expect(importer, isNot(contains('copyWithProgress')));
     });
 
-    test('iOS launch skips blocking PPU SPU LLVM precompilation', () {
+    test('iOS launch uses the mobile SPU profile and detects a stalled cache', () {
       final launcher = File(
         'lib/services/rpcs3_launch_service.dart',
+      ).readAsStringSync();
+      final bridge = File(
+        'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
       ).readAsStringSync();
       final tuning = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3RuntimeTuningPlugin.mm',
@@ -62,7 +67,16 @@ void main() {
 
       expect(launcher, contains("'advanced.llvm_precompilation': 'false'"));
       expect(launcher, contains("'emulator.max_llvm_threads': '0'"));
+      expect(
+        launcher,
+        contains("'experimental.mobile_spu_scheduling': 'Enabled'"),
+      );
+      expect(launcher, contains("'cpu.spu_block_size': 'Mega'"));
       expect(launcher, contains('await _applyMobileBootProfile();'));
+      expect(launcher, contains('Rpcs3InternalBridge.bootProgress()'));
+      expect(launcher, contains("'spuCacheStalled'"));
+      expect(launcher, contains('Rpcs3InternalBridge.stop()'));
+      expect(bridge, contains("invokeMapMethod<String, dynamic>('bootProgress')"));
       expect(tuning, contains('rpcs3_ios_set_setting'));
       expect(tuning, contains('rpcs3_ios_get_boot_progress'));
     });
