@@ -96,14 +96,19 @@ abstract final class Rpcs3LaunchService {
     return null;
   }
 
-  /// Watches the native boot preparation without imposing a total boot limit.
+  /// Watches native boot preparation while `rpcs3_ios_boot_game` itself may
+  /// still be executing on the Core queue.
   ///
-  /// Slow titles may compile for as long as they need while progress moves.
-  /// The guard only aborts the known deadlock cases where PPU compilation,
-  /// "Applying PPU Code", or SPU cache building reports the same stage/counter
-  /// for an extended period. A completed counter (for example 46/46) gets a
-  /// shorter transition grace so the UI can never sit at 100% forever.
-  static Future<void> _waitForBootOrDetectStall(String titleId) async {
+  /// This matters for PPU compilation: RPCS3 can spend the synchronous part of
+  /// BootGame inside "Compiling PPU Modules" or "Applying PPU Code". Waiting
+  /// for the method call to return before starting a watchdog cannot detect
+  /// that failure mode. The progress API is independent, so poll it in parallel
+  /// and use the Core's stop symbol on a separate control queue if it stops
+  /// advancing.
+  static Future<void> _waitForBootOrDetectStall(
+    String titleId, {
+    required bool Function() launchCompleted,
+  }) async {
     String lastStage = '';
     int lastCurrent = -1;
     int lastTotal = -1;
@@ -124,12 +129,14 @@ abstract final class Rpcs3LaunchService {
       final total = (report['total'] as num?)?.toInt() ?? 0;
 
       if (stage.isEmpty) {
-        if (!sawActiveStage &&
-            DateTime.now().difference(started) < _bootStageGrace) {
-          await Future<void>.delayed(_bootPollInterval);
-          continue;
+        if (launchCompleted()) {
+          if (sawActiveStage ||
+              DateTime.now().difference(started) >= _bootStageGrace) {
+            return;
+          }
         }
-        return;
+        await Future<void>.delayed(_bootPollInterval);
+        continue;
       }
       sawActiveStage = true;
 
@@ -150,12 +157,20 @@ abstract final class Rpcs3LaunchService {
         final stageComplete = total > 0 && current >= total;
         final effectiveLimit = stageComplete ? _finishedStageLimit : limit;
         if (noMovement > effectiveLimit) {
+          // The normal `stop` path is serialized behind BootGame. First use the
+          // Core stop symbol through the independent tuning queue so a PPU
+          // compile that has not returned can actually be interrupted.
           try {
-            await Rpcs3InternalBridge.stop().timeout(const Duration(seconds: 12));
-          } catch (_) {
-            // The error below is the useful user-facing outcome even if an old
-            // Core revision takes longer to acknowledge stop during teardown.
-          }
+            await Rpcs3InternalBridge.abortBoot().timeout(
+              const Duration(seconds: 8),
+            );
+          } catch (_) {}
+          try {
+            await Rpcs3InternalBridge.stop().timeout(
+              const Duration(seconds: 12),
+            );
+          } catch (_) {}
+
           final progress = total > 0 ? ' ($current/$total)' : '';
           throw Rpcs3InternalException(
             'bootPreparationStalled',
@@ -168,6 +183,45 @@ abstract final class Rpcs3LaunchService {
 
       await Future<void>.delayed(_bootPollInterval);
     }
+  }
+
+  static Future<bool> _launchWithBootWatchdog(String titleId) async {
+    final launchFuture = Rpcs3InternalService.launchTitle(titleId);
+    var completed = false;
+    bool? launched;
+    Object? launchError;
+    StackTrace? launchStackTrace;
+
+    unawaited(
+      launchFuture.then(
+        (value) {
+          launched = value;
+          completed = true;
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          launchError = error;
+          launchStackTrace = stackTrace;
+          completed = true;
+        },
+      ),
+    );
+
+    await _waitForBootOrDetectStall(
+      titleId,
+      launchCompleted: () => completed,
+    );
+
+    if (!completed) {
+      // The progress API may be unavailable on a compatible older Core.
+      return launchFuture;
+    }
+    if (launchError != null) {
+      Error.throwWithStackTrace(
+        launchError!,
+        launchStackTrace ?? StackTrace.current,
+      );
+    }
+    return launched ?? false;
   }
 
   static Future<bool> launchTitle(
@@ -191,10 +245,7 @@ abstract final class Rpcs3LaunchService {
 
     try {
       await _applyMobileBootProfile(titleId);
-      final launched = await Rpcs3InternalService.launchTitle(titleId);
-      if (!launched) return false;
-      await _waitForBootOrDetectStall(titleId);
-      return true;
+      return await _launchWithBootWatchdog(titleId);
     } on Rpcs3InternalException catch (error, stackTrace) {
       _lastError = error.message;
       _lastErrorCode = error.code;
