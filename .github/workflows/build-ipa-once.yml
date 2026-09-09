@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 212
-run-name: NeoStation iOS Build 212 • ${{ github.sha }}
+name: NeoStation iOS Build 213
+run-name: NeoStation iOS Build 213 • ${{ github.sha }}
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-212
+  group: neostation-ios-build-213
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 180
     env:
-      BUILD_NUMBER: '212'
-      IPA_NAME: 'NeoStation-iOS-Build-212'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-212'
+      BUILD_NUMBER: '213'
+      IPA_NAME: 'NeoStation-iOS-Build-213'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-213'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -85,7 +85,8 @@ jobs:
       - name: Prepare build tools
         run: |
           set -euo pipefail
-          echo "BUNDLE_PATH=$RUNNER_TEMP/dolphin-ruby-gems" >> "$GITHUB_ENV"
+          export BUNDLE_PATH="$RUNNER_TEMP/dolphin-ruby-gems"
+          echo "BUNDLE_PATH=$BUNDLE_PATH" >> "$GITHUB_ENV"
           echo "CCACHE_BASEDIR=$RUNNER_TEMP/dolphin-ios" >> "$GITHUB_ENV"
           mkdir -p build/dolphin-ci
           bundle install
