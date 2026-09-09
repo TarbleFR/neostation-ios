@@ -3,31 +3,15 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('RPCS3 maps its embedded Core before Universal JIT attachment', () {
+  test('RPCS3 keeps Core loading behind the Universal JIT gate', () {
     final bridge = File(
       'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
     ).readAsStringSync();
 
-    expect(bridge, contains('DynamicLibrary.open(corePath)'));
-    expect(bridge, contains('RPCS3_IOS_EXPANDED_JIT_ARENA'));
-    expect(bridge, contains('Frameworks/libRPCS3Core.dylib'));
-
-    final prepareStart = bridge.indexOf(
-      'static Future<Map<String, dynamic>> prepareJit',
-    );
-    final initializeStart = bridge.indexOf(
-      'static Future<Map<String, dynamic>> initialize',
-      prepareStart,
-    );
-    expect(prepareStart, greaterThanOrEqualTo(0));
-    expect(initializeStart, greaterThan(prepareStart));
-
-    final prepare = bridge.substring(prepareStart, initializeStart);
-    final preloadCall = prepare.indexOf('preloadCoreImage(');
-    final helperCall = prepare.indexOf("invokeMapMethod<String, dynamic>('prepareJit'");
-    expect(preloadCall, greaterThanOrEqualTo(0));
-    expect(helperCall, greaterThan(preloadCall));
-    expect(prepare, contains("response['corePreloaded'] = true"));
+    expect(bridge, isNot(contains('DynamicLibrary.open')));
+    expect(bridge, isNot(contains('preloadCoreImage')));
+    expect(bridge, contains("invokeMapMethod<String, dynamic>('prepareJit'"));
+    expect(bridge, contains("'expandedJitRegion': false"));
   });
 
   test('Dolphin game deletion refreshes only its private playlist', () {
