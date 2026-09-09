@@ -46,7 +46,7 @@ static NSString* RPCS3TuningLastError(void* handle) {
 
 @interface Rpcs3RuntimeTuningPlugin ()
 @property(nonatomic, strong) FlutterMethodChannel* channel;
-@property(nonatomic, assign) dispatch_queue_t queue;
+@property(nonatomic, strong) dispatch_queue_t queue;
 @end
 
 @implementation Rpcs3RuntimeTuningPlugin
