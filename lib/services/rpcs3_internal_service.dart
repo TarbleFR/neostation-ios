@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,52 @@ import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 import 'logger_service.dart';
 import 'pairing_file_service.dart';
 import 'rpcs3_library_service.dart';
+
+enum Rpcs3RuntimePhase {
+  idle,
+  checkingJit,
+  enablingJit,
+  jitReady,
+  initializingCore,
+  ready,
+  installingFirmware,
+  importingContent,
+  launching,
+  error,
+}
+
+class Rpcs3RuntimeState {
+  const Rpcs3RuntimeState({
+    required this.phase,
+    required this.message,
+    required this.jitReady,
+    required this.coreReady,
+    this.error,
+  });
+
+  const Rpcs3RuntimeState.idle()
+    : phase = Rpcs3RuntimePhase.idle,
+      message = '',
+      jitReady = false,
+      coreReady = false,
+      error = null;
+
+  final Rpcs3RuntimePhase phase;
+  final String message;
+  final bool jitReady;
+  final bool coreReady;
+  final String? error;
+
+  bool get busy => switch (phase) {
+    Rpcs3RuntimePhase.checkingJit ||
+    Rpcs3RuntimePhase.enablingJit ||
+    Rpcs3RuntimePhase.initializingCore ||
+    Rpcs3RuntimePhase.installingFirmware ||
+    Rpcs3RuntimePhase.importingContent ||
+    Rpcs3RuntimePhase.launching => true,
+    _ => false,
+  };
+}
 
 class Rpcs3ImportResult {
   const Rpcs3ImportResult({
@@ -33,22 +80,63 @@ class Rpcs3InternalException implements Exception {
 
 /// Owns the in-process PlayStation 3 engine embedded in NeoStation iOS.
 ///
-/// RPCS3 iOS 0.8.1 requires JIT to be active before libRPCS3Core.dylib is
-/// dlopened, including for firmware/content management. NeoStation therefore
-/// prepares and validates JIT first, loads one expanded RPCS3 runtime, and then
-/// uses that same runtime for firmware installation, game import and direct
-/// title boot. The standalone RPCS3 SwiftUI application is never launched.
+/// RPCS3 iOS 0.8.1 requires JIT before libRPCS3Core.dylib is dlopened. The
+/// runtime therefore checks whether NeoStation is already JIT-enabled first,
+/// reuses that state when possible, and only invokes StikJIT when necessary.
 class Rpcs3InternalService {
   Rpcs3InternalService._();
 
   static final _log = LoggerService.instance;
+  static final _stateController =
+      StreamController<Rpcs3RuntimeState>.broadcast(sync: true);
+
+  static const _statusTimeout = Duration(seconds: 5);
+  static const _jitTimeout = Duration(seconds: 90);
+  static const _coreTimeout = Duration(seconds: 60);
+  static const _firmwareInstallTimeout = Duration(minutes: 10);
+  static const _contentInstallTimeout = Duration(minutes: 30);
+
   static bool _initializing = false;
   static bool _initialized = false;
   static bool _jitPrepared = false;
+  static Future<void>? _jitPreparation;
+  static Rpcs3RuntimeState _state = const Rpcs3RuntimeState.idle();
 
   static bool get supported => Platform.isIOS;
   static bool get initialized => _initialized;
   static bool get gameplayMode => _initialized;
+  static Rpcs3RuntimeState get runtimeState => _state;
+  static Stream<Rpcs3RuntimeState> get runtimeStates => _stateController.stream;
+
+  static void _emit(
+    Rpcs3RuntimePhase phase,
+    String message, {
+    bool? jitReady,
+    bool? coreReady,
+    String? error,
+  }) {
+    _state = Rpcs3RuntimeState(
+      phase: phase,
+      message: message,
+      jitReady: jitReady ?? _state.jitReady,
+      coreReady: coreReady ?? _initialized,
+      error: error,
+    );
+    _stateController.add(_state);
+  }
+
+  static Future<T> _bounded<T>(
+    Future<T> future,
+    Duration timeout,
+    String code,
+    String message,
+  ) async {
+    try {
+      return await future.timeout(timeout);
+    } on TimeoutException {
+      throw Rpcs3InternalException(code, message);
+    }
+  }
 
   static Future<Directory> rootDirectory() async {
     final support = await getApplicationSupportDirectory();
@@ -71,9 +159,23 @@ class Rpcs3InternalService {
     return directory;
   }
 
+  static Future<Map<String, dynamic>> _jitStatus() => _bounded(
+    Rpcs3InternalBridge.jitStatus(),
+    _statusTimeout,
+    'jitStatusTimeout',
+    'RPCS3 could not read the current JIT state.',
+  );
+
   static Future<Map<String, dynamic>> diagnostics() async {
-    final core = await Rpcs3InternalBridge.diagnostics();
-    final jit = await Rpcs3InternalBridge.jitStatus();
+    final core = await _bounded(
+      Rpcs3InternalBridge.diagnostics(),
+      _statusTimeout,
+      'diagnosticsTimeout',
+      'RPCS3 diagnostics did not respond.',
+    );
+    final jit = await _jitStatus();
+    final jitReady = jit['debugged'] == true;
+    if (jitReady) _jitPrepared = true;
     return <String, dynamic>{
       ...core,
       'jit': jit,
@@ -82,23 +184,49 @@ class Rpcs3InternalService {
     };
   }
 
-  static Future<void> _ensureJit() async {
-    if (_jitPrepared) {
-      final current = await Rpcs3InternalBridge.jitStatus();
-      if (current['debugged'] == true) return;
-      _jitPrepared = false;
+  static Future<void> _prepareJitInternal() async {
+    _emit(
+      Rpcs3RuntimePhase.checkingJit,
+      'Vérification du JIT RPCS3…',
+      coreReady: _initialized,
+    );
+
+    // Always inspect the real process state first. A signed/JIT-enabled
+    // NeoStation must never start another StikJIT transaction unnecessarily.
+    final current = await _jitStatus();
+    if (current['debugged'] == true) {
+      _jitPrepared = true;
+      _emit(
+        Rpcs3RuntimePhase.jitReady,
+        'JIT RPCS3 déjà actif.',
+        jitReady: true,
+        coreReady: _initialized,
+      );
+      _log.i('RPCS3 is reusing the JIT state already active on NeoStation.');
+      return;
     }
 
+    _jitPrepared = false;
     if (!await PairingFileService.hasStoredPairingFile()) {
       throw const Rpcs3InternalException(
         'pairingRequired',
-        'Import the NeoStation Pairing File before opening RPCS3 or installing PS3 firmware/games.',
+        'Import the NeoStation Pairing File before starting RPCS3 JIT.',
       );
     }
 
+    _emit(
+      Rpcs3RuntimePhase.enablingJit,
+      'Activation du JIT RPCS3 avec StikJIT…',
+      jitReady: false,
+      coreReady: _initialized,
+    );
+
     final pairing = await PairingFileService.storedFile();
-    final jit = await Rpcs3InternalBridge.prepareJit(
-      pairingFilePath: pairing.path,
+    final jit = await _bounded(
+      Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
+      _jitTimeout,
+      'jitTimeout',
+      'L’activation JIT RPCS3 a dépassé 90 secondes. Réessayez après avoir vérifié le Pairing File et StikJIT.',
     );
     if (jit['success'] != true) {
       throw Rpcs3InternalException(
@@ -108,7 +236,7 @@ class Rpcs3InternalService {
       );
     }
 
-    final status = await Rpcs3InternalBridge.jitStatus();
+    final status = await _jitStatus();
     if (status['debugged'] != true) {
       throw const Rpcs3InternalException(
         'jitNotPersistent',
@@ -117,9 +245,38 @@ class Rpcs3InternalService {
     }
 
     _jitPrepared = true;
+    _emit(
+      Rpcs3RuntimePhase.jitReady,
+      'JIT RPCS3 activé.',
+      jitReady: true,
+      coreReady: _initialized,
+    );
     _log.i(
       'RPCS3 internal JIT prepared for NeoStation pid=${jit['pid'] ?? 'unknown'}.',
     );
+  }
+
+  /// Ensures exactly one JIT transaction can be active at a time.
+  static Future<void> ensureJitReady() async {
+    final pending = _jitPreparation;
+    if (pending != null) return pending;
+
+    final future = _prepareJitInternal();
+    _jitPreparation = future;
+    try {
+      await future;
+    } on Rpcs3InternalException catch (error) {
+      _emit(
+        Rpcs3RuntimePhase.error,
+        error.message,
+        jitReady: false,
+        coreReady: _initialized,
+        error: error.message,
+      );
+      rethrow;
+    } finally {
+      if (identical(_jitPreparation, future)) _jitPreparation = null;
+    }
   }
 
   static Future<void> _ensureRuntime() async {
@@ -129,28 +286,52 @@ class Rpcs3InternalService {
         'RPCS3 internal is available on iOS only.',
       );
     }
-    if (_initialized) return;
+    if (_initialized) {
+      _emit(
+        Rpcs3RuntimePhase.ready,
+        'RPCS3 Core prêt.',
+        jitReady: true,
+        coreReady: true,
+      );
+      return;
+    }
 
     if (_initializing) {
-      while (_initializing) {
+      final deadline = DateTime.now().add(_coreTimeout);
+      while (_initializing && DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
       if (_initialized) return;
+      if (_initializing) {
+        throw const Rpcs3InternalException(
+          'coreInitializeTimeout',
+          'RPCS3 Core initialization is still blocked. Restart NeoStation and retry.',
+        );
+      }
       return _ensureRuntime();
     }
 
     _initializing = true;
     try {
-      // RPCS3's own iOS loader requires JIT before dlopen. Do not move this
-      // below initialize(): the Core reserves its JIT arena while loading.
-      await _ensureJit();
+      await ensureJitReady();
+      _emit(
+        Rpcs3RuntimePhase.initializingCore,
+        'Initialisation du Core RPCS3…',
+        jitReady: true,
+        coreReady: false,
+      );
 
       final data = await dataDirectory();
       final cache = await cacheDirectory();
-      final report = await Rpcs3InternalBridge.initialize(
-        supportPath: data.path,
-        cachePath: cache.path,
-        expandedJitRegion: true,
+      final report = await _bounded(
+        Rpcs3InternalBridge.initialize(
+          supportPath: data.path,
+          cachePath: cache.path,
+          expandedJitRegion: true,
+        ),
+        _coreTimeout,
+        'coreInitializeTimeout',
+        'RPCS3 Core n’a pas répondu dans les 60 secondes.',
       );
       if (report['success'] != true) {
         throw Rpcs3InternalException(
@@ -160,28 +341,45 @@ class Rpcs3InternalService {
       }
 
       _initialized = true;
+      _emit(
+        Rpcs3RuntimePhase.ready,
+        'RPCS3 Core prêt.',
+        jitReady: true,
+        coreReady: true,
+      );
       _log.i('RPCS3 internal Core initialized with validated expanded JIT.');
+    } on Rpcs3InternalException catch (error) {
+      _emit(
+        Rpcs3RuntimePhase.error,
+        error.message,
+        jitReady: _jitPrepared,
+        coreReady: false,
+        error: error.message,
+      );
+      rethrow;
     } finally {
       _initializing = false;
     }
   }
 
-  /// Opens the internal RPCS3 runtime for firmware/content management.
-  /// RPCS3 0.8.1 still requires JIT before its Core can be loaded.
+  /// Opening the RPCS3 manager pre-warms only JIT. The Core stays dormant until
+  /// an explicit firmware/content/game action actually needs it.
+  static Future<void> prepareManager() => ensureJitReady();
+
   static Future<void> ensureManagementInitialized() => _ensureRuntime();
-
   static Future<void> ensureInitialized() => _ensureRuntime();
-
   static Future<void> ensureGameplayInitialized() => _ensureRuntime();
-
-  /// Closing the manager only closes NeoStation's manager UI. The Core remains
-  /// loaded with the same JIT-arena policy so a later game can boot directly;
-  /// RPCS3 itself treats changing that policy after dlopen as relaunch-only.
   static Future<void> closeManagementRuntime() async {}
 
   static Future<String> firmwareVersion() async {
     await ensureManagementInitialized();
-    return (await Rpcs3InternalBridge.firmwareVersion()).trim();
+    return (await _bounded(
+      Rpcs3InternalBridge.firmwareVersion(),
+      _statusTimeout,
+      'firmwareStatusTimeout',
+      'RPCS3 did not return the firmware state.',
+    ))
+        .trim();
   }
 
   static Future<bool> hasFirmware() async {
@@ -207,11 +405,8 @@ class Rpcs3InternalService {
   }
 
   static Future<bool> importFirmware() async {
-    // Prepare RPCS3 before presenting the document picker. This mirrors the
-    // standalone loader and ensures the selected security-scoped file is used
-    // immediately instead of waiting for a long JIT transaction afterwards.
-    await ensureManagementInitialized();
-
+    // Present the picker immediately. JIT/Core preparation happens only after
+    // the user has actually selected a firmware file.
     final picked = await FilePicker.pickFiles(
       dialogTitle: 'Select official PS3UPDAT.PUP firmware',
       allowMultiple: false,
@@ -231,10 +426,20 @@ class Rpcs3InternalService {
 
     String? stagedPath;
     try {
-      // Keep a private copy while the native installer runs. This avoids the
-      // iOS document-picker security scope disappearing mid-install.
       stagedPath = await _stageFirmware(sourcePath);
-      final report = await Rpcs3InternalBridge.installFirmware(stagedPath);
+      await ensureManagementInitialized();
+      _emit(
+        Rpcs3RuntimePhase.installingFirmware,
+        'Installation du firmware PS3…',
+        jitReady: true,
+        coreReady: true,
+      );
+      final report = await _bounded(
+        Rpcs3InternalBridge.installFirmware(stagedPath),
+        _firmwareInstallTimeout,
+        'firmwareInstallTimeout',
+        'L’installation du firmware RPCS3 a dépassé 10 minutes.',
+      );
       if (report['success'] != true) {
         throw Rpcs3InternalException(
           'firmwareInstallFailed',
@@ -242,13 +447,25 @@ class Rpcs3InternalService {
         );
       }
 
-      final version = (await Rpcs3InternalBridge.firmwareVersion()).trim();
+      final version = (await _bounded(
+        Rpcs3InternalBridge.firmwareVersion(),
+        _statusTimeout,
+        'firmwareStatusTimeout',
+        'RPCS3 did not confirm the installed firmware.',
+      ))
+          .trim();
       if (version.isEmpty) {
         throw const Rpcs3InternalException(
           'firmwareVerificationFailed',
           'RPCS3 did not report an installed firmware after import.',
         );
       }
+      _emit(
+        Rpcs3RuntimePhase.ready,
+        'Firmware PS3 installé. RPCS3 est prêt.',
+        jitReady: true,
+        coreReady: true,
+      );
       _log.i('RPCS3 firmware installed successfully: $version');
       return true;
     } finally {
@@ -261,8 +478,6 @@ class Rpcs3InternalService {
   }
 
   static Future<Rpcs3ImportResult> importGames() async {
-    await ensureManagementInitialized();
-
     final picked = await FilePicker.pickFiles(
       dialogTitle: 'Import PlayStation 3 games',
       allowMultiple: true,
@@ -273,6 +488,14 @@ class Rpcs3InternalService {
     if (picked == null) {
       return const Rpcs3ImportResult(imported: 0, rejected: 0);
     }
+
+    await ensureManagementInitialized();
+    _emit(
+      Rpcs3RuntimePhase.importingContent,
+      'Import des jeux PS3…',
+      jitReady: true,
+      coreReady: true,
+    );
 
     var imported = 0;
     var rejected = 0;
@@ -288,14 +511,29 @@ class Rpcs3InternalService {
       final extension = path.extension(item.name).toLowerCase();
       Map<String, dynamic> report;
       if (extension == '.pkg') {
-        report = await Rpcs3InternalBridge.installPackage(sourcePath);
+        report = await _bounded(
+          Rpcs3InternalBridge.installPackage(sourcePath),
+          _contentInstallTimeout,
+          'gameImportTimeout',
+          '${item.name}: RPCS3 import timed out.',
+        );
       } else if (extension == '.zip') {
-        report = await Rpcs3InternalBridge.installZip(sourcePath);
+        report = await _bounded(
+          Rpcs3InternalBridge.installZip(sourcePath),
+          _contentInstallTimeout,
+          'gameImportTimeout',
+          '${item.name}: RPCS3 import timed out.',
+        );
       } else if (extension == '.iso') {
         final key = File(path.setExtension(sourcePath, '.key'));
-        report = await Rpcs3InternalBridge.installIso(
-          sourcePath,
-          keyPath: await key.exists() ? key.path : null,
+        report = await _bounded(
+          Rpcs3InternalBridge.installIso(
+            sourcePath,
+            keyPath: await key.exists() ? key.path : null,
+          ),
+          _contentInstallTimeout,
+          'gameImportTimeout',
+          '${item.name}: RPCS3 import timed out.',
         );
       } else {
         report = const <String, dynamic>{
@@ -315,6 +553,12 @@ class Rpcs3InternalService {
     }
 
     await Rpcs3LibraryService.syncInternalLibrary();
+    _emit(
+      Rpcs3RuntimePhase.ready,
+      'RPCS3 prêt.',
+      jitReady: true,
+      coreReady: true,
+    );
     return Rpcs3ImportResult(
       imported: imported,
       rejected: rejected,
@@ -323,14 +567,24 @@ class Rpcs3InternalService {
   }
 
   static Future<bool> importExtractedGameFolder() async {
-    await ensureManagementInitialized();
-
     final folder = await FilePicker.getDirectoryPath(
       dialogTitle: 'Import extracted PlayStation 3 game folder',
     );
     if (folder == null) return false;
 
-    final report = await Rpcs3InternalBridge.installFolder(folder);
+    await ensureManagementInitialized();
+    _emit(
+      Rpcs3RuntimePhase.importingContent,
+      'Import du dossier PS3…',
+      jitReady: true,
+      coreReady: true,
+    );
+    final report = await _bounded(
+      Rpcs3InternalBridge.installFolder(folder),
+      _contentInstallTimeout,
+      'gameImportTimeout',
+      'RPCS3 folder import timed out.',
+    );
     if (report['success'] != true) {
       throw Rpcs3InternalException(
         'gameImportFailed',
@@ -338,6 +592,12 @@ class Rpcs3InternalService {
       );
     }
     await Rpcs3LibraryService.syncInternalLibrary();
+    _emit(
+      Rpcs3RuntimePhase.ready,
+      'RPCS3 prêt.',
+      jitReady: true,
+      coreReady: true,
+    );
     return true;
   }
 
@@ -346,7 +606,13 @@ class Rpcs3InternalService {
     if (normalized.isEmpty) return false;
 
     await ensureGameplayInitialized();
-    final firmware = (await Rpcs3InternalBridge.firmwareVersion()).trim();
+    final firmware = (await _bounded(
+      Rpcs3InternalBridge.firmwareVersion(),
+      _statusTimeout,
+      'firmwareStatusTimeout',
+      'RPCS3 did not return the firmware state.',
+    ))
+        .trim();
     if (firmware.isEmpty) {
       throw const Rpcs3InternalException(
         'firmwareRequired',
@@ -354,8 +620,12 @@ class Rpcs3InternalService {
       );
     }
 
-    // Direct Core boot: no standalone RPCS3 Start/Commencer screen is ever
-    // presented. NeoStation calls rpcs3_ios_boot_game for the selected title.
+    _emit(
+      Rpcs3RuntimePhase.launching,
+      'Lancement du jeu PS3…',
+      jitReady: true,
+      coreReady: true,
+    );
     final report = await Rpcs3InternalBridge.launchGame(
       titleId: normalized,
       savestateId: savestateId,
@@ -366,6 +636,12 @@ class Rpcs3InternalService {
         report['message']?.toString() ?? 'RPCS3 could not boot this game.',
       );
     }
+    _emit(
+      Rpcs3RuntimePhase.ready,
+      'RPCS3 en cours d’exécution.',
+      jitReady: true,
+      coreReady: true,
+    );
     return true;
   }
 
