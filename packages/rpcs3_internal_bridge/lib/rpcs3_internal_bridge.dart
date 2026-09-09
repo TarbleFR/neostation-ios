@@ -223,6 +223,12 @@ class Rpcs3InternalBridge {
             const <String, dynamic>{},
       );
 
+  static Future<Map<String, dynamic>> abortBoot() async =>
+      Map<String, dynamic>.from(
+        await _tuningChannel.invokeMapMethod<String, dynamic>('abortBoot') ??
+            const <String, dynamic>{},
+      );
+
   static Future<Map<String, dynamic>> bootProgress() async =>
       Map<String, dynamic>.from(
         await _tuningChannel.invokeMapMethod<String, dynamic>('bootProgress') ??
