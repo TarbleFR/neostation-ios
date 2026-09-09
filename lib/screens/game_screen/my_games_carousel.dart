@@ -275,6 +275,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
     if (widget.artworkVersion != oldWidget.artworkVersion) {
       _fileExistsCache.clear();
       _lastBgIndex = -1;
+      // A scrape can add a preview video to the settled game, which changes
+      // whether the footer's mute pill applies — the cache above no longer
+      // answers it, so let the chrome rebuild against the new media too.
       _chromeSig = null;
       WidgetsBinding.instance.addPostFrameCallback((_) => _updateBackground());
     }
@@ -293,6 +296,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Theme / MediaQuery / ScreenUtil may have changed; drop memoized chrome.
     _chromeSig = null;
   }
 
@@ -318,13 +322,13 @@ class _GamesCarouselState extends State<GamesCarousel> {
           GameViewModeDropdown.globalKey.currentState?.showDropdown();
         } catch (_) {}
       },
-      onLetterJump: _letterJump,
+      onLetterJump: _letterJump, // Held D-pad left/right → alphabet skipping.
       letterJumpAxis: LetterJumpAxis.horizontal,
       onLeftStickClick: widget.onRandom,
-      onSelectButton: _toggleVideoMute,
-      onSelectModifierA: widget.onScrape,
-      onSelectModifierB: _toggleLegend,
-      onSelectModifierY: widget.onRandom,
+      onSelectButton: _toggleVideoMute, // Select tap - Mute preview video.
+      onSelectModifierA: widget.onScrape, // Select + A - Scrape.
+      onSelectModifierB: _toggleLegend, // Select + B - Hide/show legend.
+      onSelectModifierY: widget.onRandom, // Select + Y - Random game.
       onSettings: widget.onSettings,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
@@ -342,6 +346,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
     });
   }
 
+  /// Skips to the neighbouring alphabetical group once left/right has been
+  /// held long enough (ES-DE style). Returns false at the ends of the alphabet
+  /// so the caller falls back to a normal page step.
   bool _letterJump(bool forward) {
     if (widget.games.isEmpty) return false;
 
@@ -353,10 +360,15 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
     if (target == null) return false;
 
+    // Jump rather than animate: at letter-jump cadence an animated page slide
+    // across dozens of entries would still be running when the next hop fires.
     _carouselKey.currentState?.jumpToPage(target);
     return true;
   }
 
+  /// Select tap — toggles global video sound. The preview plays on the
+  /// secondary display in this view; the config mutator propagates the new
+  /// mute state to it, so there is nothing local to re-apply.
   void _toggleVideoMute() {
     if (!mounted) return;
     context.read<SqliteConfigProvider>().toggleVideoSound();
@@ -388,6 +400,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
     _updateBackground();
   }
 
+  /// Advances the footer/legend's settled selection. A single (slow) page
+  /// change updates it immediately; during a fast-swipe burst it is deferred
+  /// until navigation settles, so the chrome isn't rebuilt every frame.
   void _scheduleChromeSettle() {
     _settleTimer?.cancel();
     if (!_isNavigatingFast) {
@@ -403,6 +418,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
     });
   }
 
+  /// (Re)builds the footer pill + action-button legend only when the settled
+  /// selection or its achievement/favorite state changes, so a fast-swipe
+  /// burst reuses cached widget instances instead of rebuilding this chrome.
   void _buildSettledChrome() {
     final settledGame = widget.games[_settledIndex.clamp(0, _gamesLength - 1)];
     final hasRa = _hasRetroAchievementsFor(settledGame);
@@ -423,19 +441,22 @@ class _GamesCarouselState extends State<GamesCarousel> {
       onToggleMute: _toggleVideoMute,
       hasVideo: _hasVideoFor(settledGame),
     );
+    // Positioning/visibility is applied at the Stack level (AnimatedPositioned)
+    // so Select + B can slide it without invalidating this memoized subtree.
     _chromeLegend = GameActionButtons(
-      system: widget.system,
-      selectedGame: settledGame,
-      onBack: widget.onBack,
-      onFavorite: widget.onFavorite ?? () {},
-      onViewMode: () =>
-          GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-      onSettings: widget.onSettings ?? () {},
-      onRandom: widget.onRandom,
-      onScrape: widget.onScrape,
+        system: widget.system,
+        selectedGame: settledGame,
+        onBack: widget.onBack,
+        onFavorite: widget.onFavorite ?? () {},
+        onViewMode: () =>
+            GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+        onSettings: widget.onSettings ?? () {},
+        onRandom: widget.onRandom,
+        onScrape: widget.onScrape,
     );
   }
 
+  /// Select + B — toggles the (session-global) vertical action-button legend.
   void _toggleLegend() {
     SfxService().playNavSound();
     GameLegendVisibility.toggle();
@@ -470,6 +491,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return system.raId != null && system.raId != '0' && system.raId!.isNotEmpty;
   }
 
+  /// Debounced entry point — coalesces rapid moves into a single load once the
+  /// user stops on a game.
   void _scheduleAchievementsLoad() {
     final selectedRomname = widget.games.isEmpty
         ? null
@@ -649,6 +672,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return widget.system.primaryFolderName;
   }
 
+  /// Whether the game has a preview video, so the footer knows whether a mute
+  /// control is worth showing.
+  ///
+  /// Scraped media lives on the plain filesystem (unlike SAF ROM paths), so a
+  /// sync stat is safe, and this only runs when the selection settles — not
+  /// per frame. Cached alongside the background lookups.
   bool _hasVideoFor(GameModel game) {
     final videoPath = game.getVideoPath(
       _folderForGame(game),
@@ -670,18 +699,32 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return '';
   }
 
-  Widget _selectionFrame({
+  Widget _withRainbowSelection({
     required Widget child,
     required bool isSelected,
     required BorderRadius borderRadius,
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
   }) {
     if (!isSelected) return child;
-    return RainbowSelectionBorder(
-      borderRadius: borderRadius,
-      borderWidth: 4.r,
-      glowWidth: 7.r,
-      glowBlur: 4.r,
-      child: child,
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: Padding(
+            padding: padding,
+            child: IgnorePointer(
+              child: RainbowSelectionBorder(
+                borderRadius: borderRadius,
+                borderWidth: 4.r,
+                glowWidth: 7.r,
+                glowBlur: 4.r,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -699,12 +742,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final bgPath = hasFanart
         ? fanartPath
         : (hasScreenshot ? screenshotPath : '');
-    final radius = BorderRadius.circular(24.r);
 
     final card = Container(
       clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.all(5.r),
       decoration: BoxDecoration(
-        borderRadius: radius,
+        borderRadius: BorderRadius.circular(24.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.5),
@@ -714,7 +757,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
         ],
       ),
       child: ClipRRect(
-        borderRadius: radius,
+        borderRadius: BorderRadius.circular(24.r),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -780,13 +823,11 @@ class _GamesCarouselState extends State<GamesCarousel> {
       ),
     );
 
-    return Padding(
+    return _withRainbowSelection(
+      child: card,
+      isSelected: isSelected,
+      borderRadius: BorderRadius.circular(24.r),
       padding: EdgeInsets.all(5.r),
-      child: _selectionFrame(
-        child: card,
-        isSelected: isSelected,
-        borderRadius: radius,
-      ),
     );
   }
 
@@ -882,43 +923,38 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final boxPath = _resolveImagePath(game, 'box2d');
     final hasBox = boxPath.isNotEmpty;
     final ratio = _boxAspectRatio(game) ?? 1.0;
-    final radius = BorderRadius.circular(8.r);
 
     if (!hasBox) {
-      final fallback = Stack(
-        children: [
-          _buildBoxFallback(game, theme),
-          if (game.isFavorite == true)
-            Positioned(
-              top: 8.r,
-              right: 8.r,
-              child: Container(
-                width: 32.r,
-                height: 32.r,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Symbols.favorite_rounded,
-                  size: 18.r,
-                  color: Colors.redAccent,
+      return Center(
+        child: _withRainbowSelection(
+          isSelected: isSelected,
+          borderRadius: BorderRadius.circular(8.r),
+          child: Stack(
+          children: [
+            _buildBoxFallback(game, theme),
+            if (game.isFavorite == true)
+              Positioned(
+                top: 8.r,
+                right: 8.r,
+                child: Container(
+                  width: 32.r,
+                  height: 32.r,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Symbols.favorite_rounded,
+                    size: 18.r,
+                    color: Colors.redAccent,
+                  ),
                 ),
               ),
-            ),
-          if (widget.scrapingGameRomnames.contains(game.romname))
-            _buildScrapeProgress(game),
-        ],
-      );
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(5.r),
-          child: _selectionFrame(
-            child: fallback,
-            isSelected: isSelected,
-            borderRadius: radius,
-          ),
+            if (widget.scrapingGameRomnames.contains(game.romname))
+              _buildScrapeProgress(game),
+          ],
         ),
+      ),
       );
     }
 
@@ -936,71 +972,68 @@ class _GamesCarouselState extends State<GamesCarousel> {
           cardW = maxH * ratio;
         }
 
-        final card = Container(
-          width: cardW,
-          height: cardH,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: radius,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isSelected ? 0.6 : 0.3),
-                blurRadius: isSelected ? 12.r : 6.r,
-                offset: Offset(2.r, 2.r),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: radius,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.file(
-                  File(boxPath),
-                  key: ValueKey(boxPath),
-                  fit: BoxFit.cover,
-                  cacheWidth: 1024,
-                  errorBuilder: (ctx, e, s) => _buildBoxFallback(game, theme),
+        return Center(
+          child: _withRainbowSelection(
+            isSelected: isSelected,
+            borderRadius: BorderRadius.circular(8.r),
+            padding: EdgeInsets.all(5.r),
+            child: Container(
+            width: cardW,
+            height: cardH,
+            clipBehavior: Clip.antiAlias,
+            margin: EdgeInsets.all(5.r),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isSelected ? 0.6 : 0.3),
+                  blurRadius: isSelected ? 12.r : 6.r,
+                  offset: Offset(2.r, 2.r),
                 ),
-                if (game.isFavorite == true)
-                  Positioned(
-                    top: 8.r,
-                    right: 8.r,
-                    child: Container(
-                      width: 32.r,
-                      height: 32.r,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Symbols.favorite_rounded,
-                        size: 18.r,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                  ),
-                if (widget.scrapingGameRomnames.contains(game.romname))
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _buildScrapeProgress(game),
-                  ),
               ],
             ),
-          ),
-        );
-
-        return Center(
-          child: Padding(
-            padding: EdgeInsets.all(5.r),
-            child: _selectionFrame(
-              child: card,
-              isSelected: isSelected,
-              borderRadius: radius,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8.r),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.file(
+                    File(boxPath),
+                    key: ValueKey(boxPath),
+                    fit: BoxFit.cover,
+                    cacheWidth: 1024,
+                    errorBuilder: (ctx, e, s) => _buildBoxFallback(game, theme),
+                  ),
+                  if (game.isFavorite == true)
+                    Positioned(
+                      top: 8.r,
+                      right: 8.r,
+                      child: Container(
+                        width: 32.r,
+                        height: 32.r,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Symbols.favorite_rounded,
+                          size: 18.r,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                  if (widget.scrapingGameRomnames.contains(game.romname))
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _buildScrapeProgress(game),
+                    ),
+                ],
+              ),
             ),
+          ),
           ),
         );
       },
@@ -1052,6 +1085,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
       children: [
         Column(
           children: [
+            // #188 layout: drop the top spacer so the carousel gets the full
+            // height (bigger cards sit closer together). Pad symmetrically so
+            // the centered card stays centered on-screen while still clearing
+            // the vertical legend on the left.
             Expanded(
               child: Padding(
                 padding: EdgeInsets.only(
@@ -1068,6 +1105,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
                     return KeyedSubtree(
                       key: ValueKey(game.romname),
                       child: GestureDetector(
+                        // Tapping an off-centre card brings it to the middle;
+                        // tapping the centred one plays it, so touch users
+                        // never need the footer's A button.
                         onTap: () {
                           if (isCentred) {
                             SfxService().playEnterSound();
@@ -1087,6 +1127,10 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 ),
               ),
             ),
+            // Tight letter-bar box (chip height, no vertical slack) sits low
+            // against the footer. Reclaiming the old slack in real layout (vs a
+            // visual translate) lets the carousel above grow into it, so the
+            // artwork gets slightly bigger with no gap beneath it.
             SizedBox(
               height: 30.r,
               child: SingleChildScrollView(
@@ -1154,9 +1198,18 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 ),
               ),
             ),
+            // Footer pill driven by the debounced settled selection and
+            // memoized (see _buildSettledChrome) so it is not rebuilt on every
+            // fast-swipe frame.
+            // Flush to the bottom (no trailing spacer) so the footer sits at
+            // the same vertical position as the grid view's footer.
             _chromeFooter!,
           ],
         ),
+        // Vertical action-button legend (shared with the game list view);
+        // also memoized on the settled selection. Select + B slides it off the
+        // left edge. The centered carousel itself is left in place (there is no
+        // left-gutter to reflow into for a centered PageView).
         AnimatedPositioned(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
@@ -1178,6 +1231,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
             ),
           ),
         ),
+        // Touch: swipe-right from the left edge reveals a hidden legend.
         const LegendEdgeReshowZone(),
       ],
     );
