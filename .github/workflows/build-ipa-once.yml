@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - fix/rpcs3-firmware-import-build229
-    paths:
-      - .github/workflows/build-ipa-once.yml
 
 permissions:
   contents: read
