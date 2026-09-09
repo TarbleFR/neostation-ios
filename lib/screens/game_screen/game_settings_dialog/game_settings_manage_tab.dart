@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -6,8 +8,10 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
+import 'package:neostation/services/dolphin_internal_v2_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/enabled_index_nav.dart';
@@ -15,6 +19,7 @@ import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/delete_game_dialog.dart';
+import 'package:provider/provider.dart';
 
 /// Manage tab for play-time reset and permanent game deletion.
 class GameSettingsManageTab extends StatefulWidget {
@@ -169,6 +174,11 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
     final targetSystemId = widget.game.systemId ?? widget.system.id;
     final deletedRomname = widget.game.romname;
+    final isDolphinInternal =
+        Platform.isIOS &&
+        DolphinInternalV2Service.isDolphinSystem(_targetSystemFolder);
+    var deleted = false;
+
     try {
       await GameRepository.deleteGame(
         appSystemId: targetSystemId,
@@ -178,12 +188,34 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         romPath: widget.game.romPath,
         fileProvider: widget.fileProvider,
       );
+
+      // GameCube/Wii use NeoStation's private Dolphin playlists rather than a
+      // user-selected global ROM root. Refresh that one playlist immediately
+      // after the physical image and DB row are removed so no ghost entry is
+      // left until the next app scan/restart.
+      if (isDolphinInternal && mounted) {
+        await context
+            .read<SqliteConfigProvider>()
+            .refreshDolphinInternalLibrary(_targetSystemFolder);
+      }
+      deleted = true;
     } catch (e) {
       _log.e('Game deletion failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.deleteFailed.getString(context),
+          type: NotificationType.error,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
-    if (mounted) widget.onGameDeleted?.call(deletedRomname);
+
+    // Do not remove the card from the visible list when disk/DB deletion did
+    // not actually complete. Dolphin refresh above has already synchronized
+    // the authoritative playlist before this local UI callback runs.
+    if (mounted && deleted) widget.onGameDeleted?.call(deletedRomname);
   }
 
   @override
