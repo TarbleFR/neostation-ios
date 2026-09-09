@@ -16,6 +16,7 @@ typedef int32_t (*rpcs3_set_game_setting_fn)(const char* title_id,
                                               const char* key,
                                               const char* value);
 typedef int32_t (*rpcs3_delete_game_fn)(const char* title_id);
+typedef int32_t (*rpcs3_stop_emulation_fn)(void);
 typedef int32_t (*rpcs3_get_boot_progress_fn)(uint32_t* current,
                                                uint32_t* total,
                                                char* stage,
@@ -207,6 +208,40 @@ static NSString* RPCS3TuningLastError(void* handle) {
       dispatch_async(dispatch_get_main_queue(), ^{
         result(status == 0
             ? @{@"success": @YES, @"titleId": titleId}
+            : @{@"success": @NO,
+                @"status": @(status),
+                @"message": message});
+      });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"abortBoot"]) {
+    dispatch_async(self.queue, ^{
+      void* handle = RPCS3OpenLoadedCore();
+      if (!handle) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"RPCS3 Core is not loaded."});
+        });
+        return;
+      }
+      auto stopEmulation = reinterpret_cast<rpcs3_stop_emulation_fn>(
+          dlsym(handle, "rpcs3_ios_stop_emulation"));
+      if (!stopEmulation) {
+        dlclose(handle);
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"This RPCS3 Core cannot interrupt a stalled boot."});
+        });
+        return;
+      }
+      int32_t status = stopEmulation();
+      NSString* message = status == 0 ? @"" : RPCS3TuningLastError(handle);
+      dlclose(handle);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(status == 0
+            ? @{@"success": @YES}
             : @{@"success": @NO,
                 @"status": @(status),
                 @"message": message});
