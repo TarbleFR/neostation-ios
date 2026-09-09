@@ -22,6 +22,7 @@ jobs:
 
       - name: Apply RPCS3 internal routing
         run: |
+          python3 build-utils/repair_rpcs3_apply_script_v1.py
           python3 build-utils/apply_rpcs3_internal_v1.py
           python3 build-utils/fix_rpcs3_internal_plugin_v1.py
           python3 build-utils/fix_rpcs3_dart_patch_v1.py
@@ -63,6 +64,7 @@ jobs:
           rm -f build-utils/apply_rpcs3_internal_v1.py
           rm -f build-utils/fix_rpcs3_internal_plugin_v1.py
           rm -f build-utils/fix_rpcs3_dart_patch_v1.py
+          rm -f build-utils/repair_rpcs3_apply_script_v1.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
