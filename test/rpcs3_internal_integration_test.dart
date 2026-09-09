@@ -26,7 +26,7 @@ void main() {
       expect(helper, isNot(contains('com.xitrix.RPCS3')));
     });
 
-    test('maintenance mode installs firmware/content without requiring JIT', () {
+    test('JIT and arena policy are ready before RPCS3 Core dlopen', () {
       final service = File(
         'lib/services/rpcs3_internal_service.dart',
       ).readAsStringSync();
@@ -34,14 +34,63 @@ void main() {
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
 
+      final serviceJit = service.indexOf('await _ensureJit();');
+      final serviceInitialize = service.indexOf('Rpcs3InternalBridge.initialize');
+      expect(serviceJit, greaterThanOrEqualTo(0));
+      expect(serviceInitialize, greaterThan(serviceJit));
+
+      expect(bridge, contains('RPCS3HostIsDebugged'));
+      expect(bridge, contains('RPCS3ProbeExecutableMemory'));
+      expect(bridge, contains('RPCS3_IOS_EXPANDED_JIT_ARENA'));
+      final setenvIndex = bridge.indexOf(
+        'setenv("RPCS3_IOS_EXPANDED_JIT_ARENA"',
+      );
+      final dlopenIndex = bridge.indexOf('dlopen(path.fileSystemRepresentation');
+      expect(setenvIndex, greaterThanOrEqualTo(0));
+      expect(dlopenIndex, greaterThan(setenvIndex));
+
+      // Diagnostics must never be the first code path that loads RPCS3.
+      final diagnosticsStart = bridge.indexOf(
+        'if ([call.method isEqualToString:@"diagnostics"])',
+      );
+      final initializeStart = bridge.indexOf(
+        'if ([call.method isEqualToString:@"initialize"])',
+      );
+      final diagnosticsBlock = bridge.substring(diagnosticsStart, initializeStart);
+      expect(diagnosticsBlock, isNot(contains('loadCoreWithExpandedJit')));
+    });
+
+    test('firmware and game imports use the same validated RPCS3 runtime', () {
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
+
       expect(service, contains('ensureManagementInitialized'));
-      expect(service, contains('if (gameplay) await _ensureJit();'));
-      expect(service, contains('expandedJitRegion: gameplay'));
-      expect(service, contains('await ensureManagementInitialized();'));
+      expect(service, contains('expandedJitRegion: true'));
       expect(service, contains('Rpcs3InternalBridge.installFirmware'));
       expect(service, contains('_stageFirmware'));
-      expect(bridge, contains('@"shutdown"'));
-      expect(bridge, contains('initializedWithExpandedJit'));
+      expect(service, isNot(contains('expandedJitRegion: gameplay')));
+      expect(service, isNot(contains('if (gameplay) await _ensureJit();')));
+    });
+
+    test('RPCS3 signing capabilities match the original iOS runtime needs', () {
+      final config = File(
+        'build-utils/configure_rpcs3_ios_v2.py',
+      ).readAsStringSync();
+
+      expect(config, contains("'get-task-allow': True"));
+      expect(
+        config,
+        contains("'com.apple.developer.kernel.extended-virtual-addressing': True"),
+      );
+      expect(
+        config,
+        contains("'com.apple.developer.kernel.increased-memory-limit': True"),
+      );
+      expect(
+        config,
+        contains("'com.apple.developer.kernel.increased-debugging-memory-limit': True"),
+      );
     });
 
     test('launch boots the selected title directly through RPCS3 Core', () {
@@ -75,13 +124,13 @@ void main() {
       final service = File(
         'lib/services/rpcs3_internal_service.dart',
       ).readAsStringSync();
-      final firmwareCheck = service.indexOf("'firmwareRequired'");
       final gameplayInit = service.indexOf('await ensureGameplayInitialized();');
+      final firmwareCheck = service.indexOf("'firmwareRequired'");
       final launchCall = service.indexOf('Rpcs3InternalBridge.launchGame');
 
-      expect(firmwareCheck, greaterThanOrEqualTo(0));
-      expect(gameplayInit, greaterThan(firmwareCheck));
-      expect(launchCall, greaterThan(gameplayInit));
+      expect(gameplayInit, greaterThanOrEqualTo(0));
+      expect(firmwareCheck, greaterThan(gameplayInit));
+      expect(launchCall, greaterThan(firmwareCheck));
     });
 
     test('PS3 library exposes emulator manager and all import actions', () {
