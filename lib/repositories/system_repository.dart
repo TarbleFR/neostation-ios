@@ -55,7 +55,7 @@ class SystemRepository {
 
     // Filter detected systems to only include those present in the JSON configuration
     // AND platform-specific systems (like Android) only on their respective platforms.
-    return detected.where((d) {
+    final visible = detected.where((d) {
       final isPresent = allSystems.any((s) => s.folderName == d.folderName);
       if (!isPresent) return false;
 
@@ -66,6 +66,22 @@ class SystemRepository {
 
       return true;
     }).toList();
+
+    // RPCS3 is an internal NeoStation iOS library. It must remain reachable
+    // from the main menu even before the first PS3 game has been imported;
+    // otherwise the RPCS3 import/firmware actions are trapped behind a system
+    // tile that cannot appear yet. Exposing the playlist here does not load or
+    // initialize the dormant RPCS3 Core.
+    if (Platform.isIOS && !visible.any((system) => system.folderName == 'ps3')) {
+      for (final system in allSystems) {
+        if (system.folderName == 'ps3') {
+          visible.add(system);
+          break;
+        }
+      }
+    }
+
+    return visible;
   }
 
   /// Check if a system is detected
