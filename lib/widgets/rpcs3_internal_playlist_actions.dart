@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/rpcs3_manager_screen.dart';
 import '../services/rpcs3_internal_service.dart';
@@ -23,8 +24,13 @@ class Rpcs3InternalPlaylistActions extends StatefulWidget {
 
 class _Rpcs3InternalPlaylistActionsState
     extends State<Rpcs3InternalPlaylistActions> {
+  static const _firmwareInstalledKey =
+      'rpcs3_internal_firmware_installed_v1';
+  static const _firmwareVersionKey = 'rpcs3_internal_firmware_version_v1';
+
   bool _busy = false;
-  bool _firmwareBootstrapStarted = false;
+  bool _onboardingShown = false;
+  bool _firmwareKnownInstalled = false;
   String _firmwareVersion = '';
 
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
@@ -43,20 +49,18 @@ class _Rpcs3InternalPlaylistActionsState
   void initState() {
     super.initState();
 
-    // The PS3 library itself is now the entry point. On first display, verify
-    // the embedded Core's firmware and ask for PS3UPDAT.PUP immediately when
-    // it is missing. Once the firmware exists, the user remains in the normal
-    // NeoStation library and uses this compact menu only for imports/updates.
+    // Do not initialize or query RPCS3 Core just to decide whether onboarding
+    // should be shown. Build 222 did that through firmwareVersion(), which can
+    // wait on JIT/Core startup before the user ever sees the PUP picker. Load a
+    // lightweight local marker instead and present the firmware CTA immediately
+    // on a fresh PS3 library.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _ensureFirmwareForLibrary();
+      if (mounted) _restoreFirmwareStateAndShowOnboarding();
     });
   }
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
-  // Opening the popup alone must not initialize or dlopen RPCS3. The Core is
-  // loaded only after the user explicitly opens RPCS3, imports content, or
-  // when this library performs its one-time firmware readiness check.
   Future<void> _opened() async {
     _interaction(true);
   }
@@ -68,30 +72,99 @@ class _Rpcs3InternalPlaylistActionsState
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _ensureFirmwareForLibrary() async {
-    if (_firmwareBootstrapStarted || _busy) return;
-    _firmwareBootstrapStarted = true;
+  Future<void> _restoreFirmwareStateAndShowOnboarding() async {
+    final preferences = await SharedPreferences.getInstance();
+    final installed = preferences.getBool(_firmwareInstalledKey) ?? false;
+    final version = preferences.getString(_firmwareVersionKey) ?? '';
 
+    if (!mounted) return;
+    setState(() {
+      _firmwareKnownInstalled = installed;
+      _firmwareVersion = version;
+    });
+
+    if (!installed) {
+      await _showFirmwareOnboarding();
+    }
+  }
+
+  Future<void> _showFirmwareOnboarding() async {
+    if (!mounted || _onboardingShown || _busy || _firmwareKnownInstalled) {
+      return;
+    }
+    _onboardingShown = true;
+    _interaction(true);
+
+    final install = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(_fr ? 'Firmware PS3 requis' : 'PS3 firmware required'),
+          content: Text(
+            _fr
+                ? 'RPCS3 nécessite le firmware officiel PS3 avant de pouvoir utiliser la bibliothèque. Sélectionnez le fichier PS3UPDAT.PUP pour continuer.'
+                : 'RPCS3 requires the official PS3 firmware before the library can be used. Select PS3UPDAT.PUP to continue.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(_fr ? 'Retour' : 'Back'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('rpcs3-library-install-firmware'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.system_update_alt),
+              label: Text(
+                _fr ? 'Installer le firmware PS3' : 'Install PS3 firmware',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    _interaction(false);
+    if (install == true && mounted) {
+      await _installFirmware();
+    }
+  }
+
+  Future<void> _rememberInstalledFirmware() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_firmwareInstalledKey, true);
+    if (_firmwareVersion.isNotEmpty) {
+      await preferences.setString(_firmwareVersionKey, _firmwareVersion);
+    }
+  }
+
+  Future<void> _installFirmware() async {
+    if (_busy) return;
     setState(() => _busy = true);
     _interaction(true);
     try {
-      final version = await Rpcs3InternalService.firmwareVersion();
-      if (!mounted) return;
-      if (version.isNotEmpty) {
-        setState(() => _firmwareVersion = version);
-        return;
+      // importFirmware() opens the PUP picker first. JIT/Core initialization is
+      // deferred until the user has actually selected the firmware file.
+      if (await Rpcs3InternalService.importFirmware()) {
+        _firmwareVersion = await Rpcs3InternalService.firmwareVersion();
+        _firmwareKnownInstalled = true;
+        await _rememberInstalledFirmware();
+        if (mounted) setState(() {});
+        _notice(
+          _fr
+              ? 'Firmware PS3 installé${_firmwareVersion.isEmpty ? '' : ' : $_firmwareVersion'}.'
+              : 'PS3 firmware installed${_firmwareVersion.isEmpty ? '' : ': $_firmwareVersion'}.',
+        );
+      } else {
+        // Picker cancelled: allow onboarding to be presented again next time
+        // the PS3 library is opened.
+        _onboardingShown = false;
       }
-
-      // No firmware: present the official PUP picker directly instead of
-      // exposing the generic recursive-ROM-scan onboarding step.
-      final installed = await Rpcs3InternalService.importFirmware();
-      if (!installed || !mounted) return;
-
-      _firmwareVersion = await Rpcs3InternalService.firmwareVersion();
-      if (mounted) setState(() {});
     } on Rpcs3InternalException catch (error) {
+      _onboardingShown = false;
       _notice(error.message);
     } catch (error) {
+      _onboardingShown = false;
       _notice('$_failed $error');
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -112,6 +185,8 @@ class _Rpcs3InternalPlaylistActionsState
     try {
       if (await Rpcs3InternalService.hasFirmware()) {
         _firmwareVersion = await Rpcs3InternalService.firmwareVersion();
+        _firmwareKnownInstalled = true;
+        await _rememberInstalledFirmware();
       }
     } catch (_) {
       // Firmware state is shown again the next time the manager is opened.
@@ -129,8 +204,19 @@ class _Rpcs3InternalPlaylistActionsState
       return;
     }
 
+    if (action == 'firmware') {
+      await _installFirmware();
+      return;
+    }
+
     setState(() => _busy = true);
     try {
+      if (!_firmwareKnownInstalled) {
+        _onboardingShown = false;
+        await _showFirmwareOnboarding();
+        return;
+      }
+
       if (action == 'games') {
         final result = await Rpcs3InternalService.importGames();
         if (result.imported > 0) await widget.onLibraryChanged();
@@ -140,11 +226,6 @@ class _Rpcs3InternalPlaylistActionsState
       } else if (action == 'folder') {
         if (await Rpcs3InternalService.importExtractedGameFolder()) {
           await widget.onLibraryChanged();
-        }
-      } else if (action == 'firmware') {
-        if (await Rpcs3InternalService.importFirmware()) {
-          _firmwareVersion = await Rpcs3InternalService.firmwareVersion();
-          if (mounted) setState(() {});
         }
       }
     } on Rpcs3InternalException catch (error) {
@@ -161,9 +242,11 @@ class _Rpcs3InternalPlaylistActionsState
   Widget build(BuildContext context) {
     if (!Platform.isIOS) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
-    final firmwareLabel = _firmwareVersion.isEmpty
-        ? _firmwareMissing
-        : '${_fr ? 'Firmware installé' : 'Firmware installed'}: $_firmwareVersion';
+    final firmwareLabel = _firmwareKnownInstalled
+        ? (_firmwareVersion.isEmpty
+              ? (_fr ? 'Firmware installé' : 'Firmware installed')
+              : '${_fr ? 'Firmware installé' : 'Firmware installed'}: $_firmwareVersion')
+        : _firmwareMissing;
 
     return Container(
       width: 36.r,
@@ -208,9 +291,9 @@ class _Rpcs3InternalPlaylistActionsState
             child: Row(
               children: [
                 Icon(
-                  _firmwareVersion.isEmpty
-                      ? Icons.warning_amber_rounded
-                      : Icons.check_circle_outline,
+                  _firmwareKnownInstalled
+                      ? Icons.check_circle_outline
+                      : Icons.warning_amber_rounded,
                   size: 18.r,
                 ),
                 SizedBox(width: 8.r),
@@ -231,8 +314,16 @@ class _Rpcs3InternalPlaylistActionsState
           ),
           const PopupMenuDivider(),
           PopupMenuItem(value: 'firmware', child: Text(_firmware)),
-          PopupMenuItem(value: 'games', child: Text(_games)),
-          PopupMenuItem(value: 'folder', child: Text(_folder)),
+          PopupMenuItem(
+            value: 'games',
+            enabled: _firmwareKnownInstalled,
+            child: Text(_games),
+          ),
+          PopupMenuItem(
+            value: 'folder',
+            enabled: _firmwareKnownInstalled,
+            child: Text(_folder),
+          ),
         ],
       ),
     );
