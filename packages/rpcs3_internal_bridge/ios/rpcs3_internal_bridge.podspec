@@ -1,17 +1,23 @@
 Pod::Spec.new do |s|
   s.name             = 'rpcs3_internal_bridge'
   s.version          = '0.1.0'
-  s.summary          = 'In-process RPCS3 Core bridge for NeoStation iOS.'
+  s.summary          = 'Lazy-loaded in-process RPCS3 Core bridge for NeoStation iOS.'
   s.description      = <<-DESC
-Loads the RPCS3 iOS 0.8.1 Core as an isolated PlayStation 3 engine inside
-NeoStation. The standalone RPCS3 SwiftUI application is not embedded.
+Exposes NeoStation's PlayStation 3 runtime bridge without linking RPCS3 Core
+into the application at process startup. The verified RPCS3 dylib is embedded
+as a dormant runtime resource and opened only when a PS3 session is requested.
+The standalone RPCS3 SwiftUI application is not embedded.
                        DESC
   s.homepage         = 'https://github.com/TarbleFR/neostation-ios'
   s.license          = { :type => 'GPL-3.0' }
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
-  s.vendored_libraries = 'Frameworks/libRPCS3Core.dylib'
+  # Deliberately do NOT use vendored_libraries here. CocoaPods would link the
+  # dylib into Runner/rpcs3_internal_bridge and dyld would load RPCS3 before
+  # NeoStation reaches its menus. Build 216 copies this file after Xcode builds
+  # the host, and Rpcs3InternalBridgePlugin opens it later with dlopen().
+  s.preserve_paths   = 'Frameworks/libRPCS3Core.dylib'
   s.dependency 'Flutter'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
