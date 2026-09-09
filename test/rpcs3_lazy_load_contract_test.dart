@@ -37,7 +37,7 @@ void main() {
       expect(opened, isNot(contains('hasFirmware')));
     });
 
-    test('distributed IPA does not force user-specific entitlements', () {
+    test('distributed signing sidecar declares RPCS3 runtime entitlements', () {
       final configurator = File(
         'build-utils/configure_rpcs3_ios_v2.py',
       ).readAsStringSync();
@@ -47,10 +47,10 @@ void main() {
         'com.apple.developer.kernel.increased-memory-limit',
         'com.apple.developer.kernel.increased-debugging-memory-limit',
       ]) {
-        expect(configurator, contains(key));
+        expect(configurator, contains("'$key': True"));
       }
-      expect(configurator, contains('payload.pop(key, None)'));
-      expect(configurator, isNot(contains("payload['get-task-allow'] = True")));
+      expect(configurator, contains('payload.update(REQUIRED_RUNTIME_ENTITLEMENTS)'));
+      expect(configurator, isNot(contains('payload.pop(key, None)')));
     });
   });
 }
