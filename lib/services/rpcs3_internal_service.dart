@@ -33,24 +33,22 @@ class Rpcs3InternalException implements Exception {
 
 /// Owns the in-process PlayStation 3 engine embedded in NeoStation iOS.
 ///
-/// RPCS3 has two deliberately separate runtime modes:
-/// - maintenance: no JIT, used to install firmware/games and inspect the library;
-/// - gameplay: JIT prepared, used only when a PS3 title is actually launched.
-///
-/// The standalone RPCS3 application is never launched. NeoStation embeds the
-/// verified RPCS3 iOS Core dylib and drives its exported iOS ABI directly.
+/// RPCS3 iOS 0.8.1 requires JIT to be active before libRPCS3Core.dylib is
+/// dlopened, including for firmware/content management. NeoStation therefore
+/// prepares and validates JIT first, loads one expanded RPCS3 runtime, and then
+/// uses that same runtime for firmware installation, game import and direct
+/// title boot. The standalone RPCS3 SwiftUI application is never launched.
 class Rpcs3InternalService {
   Rpcs3InternalService._();
 
   static final _log = LoggerService.instance;
   static bool _initializing = false;
   static bool _initialized = false;
-  static bool _initializedForGameplay = false;
   static bool _jitPrepared = false;
 
   static bool get supported => Platform.isIOS;
   static bool get initialized => _initialized;
-  static bool get gameplayMode => _initialized && _initializedForGameplay;
+  static bool get gameplayMode => _initialized;
 
   static Future<Directory> rootDirectory() async {
     final support = await getApplicationSupportDirectory();
@@ -80,20 +78,21 @@ class Rpcs3InternalService {
       ...core,
       'jit': jit,
       'jitPrepared': _jitPrepared,
-      'runtimeMode': !_initialized
-          ? 'stopped'
-          : _initializedForGameplay
-          ? 'gameplay'
-          : 'maintenance',
+      'runtimeMode': _initialized ? 'ready' : 'stopped',
     };
   }
 
   static Future<void> _ensureJit() async {
-    if (_jitPrepared) return;
+    if (_jitPrepared) {
+      final current = await Rpcs3InternalBridge.jitStatus();
+      if (current['debugged'] == true) return;
+      _jitPrepared = false;
+    }
+
     if (!await PairingFileService.hasStoredPairingFile()) {
       throw const Rpcs3InternalException(
         'pairingRequired',
-        'Import the NeoStation Pairing File before starting a PS3 game.',
+        'Import the NeoStation Pairing File before opening RPCS3 or installing PS3 firmware/games.',
       );
     }
 
@@ -109,60 +108,49 @@ class Rpcs3InternalService {
       );
     }
 
+    final status = await Rpcs3InternalBridge.jitStatus();
+    if (status['debugged'] != true) {
+      throw const Rpcs3InternalException(
+        'jitNotPersistent',
+        'RPCS3 JIT did not remain active after StikJIT detached.',
+      );
+    }
+
     _jitPrepared = true;
     _log.i(
       'RPCS3 internal JIT prepared for NeoStation pid=${jit['pid'] ?? 'unknown'}.',
     );
   }
 
-  static Future<void> _shutdownRuntime() async {
-    if (!_initialized) return;
-    final report = await Rpcs3InternalBridge.shutdown();
-    if (report['success'] != true) {
-      throw Rpcs3InternalException(
-        'coreShutdownFailed',
-        report['message']?.toString() ?? 'RPCS3 Core could not shut down.',
-      );
-    }
-    _initialized = false;
-    _initializedForGameplay = false;
-    _log.i('RPCS3 internal Core shut down for runtime mode transition.');
-  }
-
-  static Future<void> _ensureRuntime({required bool gameplay}) async {
+  static Future<void> _ensureRuntime() async {
     if (!supported) {
       throw const Rpcs3InternalException(
         'unsupported',
         'RPCS3 internal is available on iOS only.',
       );
     }
-
-    if (_initialized && _initializedForGameplay == gameplay) return;
+    if (_initialized) return;
 
     if (_initializing) {
       while (_initializing) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
-      if (_initialized && _initializedForGameplay == gameplay) return;
-      return _ensureRuntime(gameplay: gameplay);
+      if (_initialized) return;
+      return _ensureRuntime();
     }
 
     _initializing = true;
     try {
-      if (_initialized && _initializedForGameplay != gameplay) {
-        await _shutdownRuntime();
-      }
-
-      // Firmware and content installation do not need JIT. JIT is requested
-      // only when the user actually launches a game.
-      if (gameplay) await _ensureJit();
+      // RPCS3's own iOS loader requires JIT before dlopen. Do not move this
+      // below initialize(): the Core reserves its JIT arena while loading.
+      await _ensureJit();
 
       final data = await dataDirectory();
       final cache = await cacheDirectory();
       final report = await Rpcs3InternalBridge.initialize(
         supportPath: data.path,
         cachePath: cache.path,
-        expandedJitRegion: gameplay,
+        expandedJitRegion: true,
       );
       if (report['success'] != true) {
         throw Rpcs3InternalException(
@@ -172,30 +160,24 @@ class Rpcs3InternalService {
       }
 
       _initialized = true;
-      _initializedForGameplay = gameplay;
-      _log.i(
-        'RPCS3 internal Core initialized in ${gameplay ? 'gameplay/JIT' : 'maintenance'} mode.',
-      );
+      _log.i('RPCS3 internal Core initialized with validated expanded JIT.');
     } finally {
       _initializing = false;
     }
   }
 
-  /// Opens RPCS3 for firmware/content management without requiring JIT.
-  static Future<void> ensureManagementInitialized() =>
-      _ensureRuntime(gameplay: false);
+  /// Opens the internal RPCS3 runtime for firmware/content management.
+  /// RPCS3 0.8.1 still requires JIT before its Core can be loaded.
+  static Future<void> ensureManagementInitialized() => _ensureRuntime();
 
-  /// Keeps the historical API name for callers that mean "ready to play".
-  static Future<void> ensureInitialized() => _ensureRuntime(gameplay: true);
+  static Future<void> ensureInitialized() => _ensureRuntime();
 
-  static Future<void> ensureGameplayInitialized() =>
-      _ensureRuntime(gameplay: true);
+  static Future<void> ensureGameplayInitialized() => _ensureRuntime();
 
-  static Future<void> closeManagementRuntime() async {
-    if (_initialized && !_initializedForGameplay) {
-      await _shutdownRuntime();
-    }
-  }
+  /// Closing the manager only closes NeoStation's manager UI. The Core remains
+  /// loaded with the same JIT-arena policy so a later game can boot directly;
+  /// RPCS3 itself treats changing that policy after dlopen as relaunch-only.
+  static Future<void> closeManagementRuntime() async {}
 
   static Future<String> firmwareVersion() async {
     await ensureManagementInitialized();
@@ -225,6 +207,11 @@ class Rpcs3InternalService {
   }
 
   static Future<bool> importFirmware() async {
+    // Prepare RPCS3 before presenting the document picker. This mirrors the
+    // standalone loader and ensures the selected security-scoped file is used
+    // immediately instead of waiting for a long JIT transaction afterwards.
+    await ensureManagementInitialized();
+
     final picked = await FilePicker.pickFiles(
       dialogTitle: 'Select official PS3UPDAT.PUP firmware',
       allowMultiple: false,
@@ -242,7 +229,6 @@ class Rpcs3InternalService {
       );
     }
 
-    await ensureManagementInitialized();
     String? stagedPath;
     try {
       // Keep a private copy while the native installer runs. This avoids the
@@ -275,6 +261,8 @@ class Rpcs3InternalService {
   }
 
   static Future<Rpcs3ImportResult> importGames() async {
+    await ensureManagementInitialized();
+
     final picked = await FilePicker.pickFiles(
       dialogTitle: 'Import PlayStation 3 games',
       allowMultiple: true,
@@ -285,8 +273,6 @@ class Rpcs3InternalService {
     if (picked == null) {
       return const Rpcs3ImportResult(imported: 0, rejected: 0);
     }
-
-    await ensureManagementInitialized();
 
     var imported = 0;
     var rejected = 0;
@@ -337,12 +323,13 @@ class Rpcs3InternalService {
   }
 
   static Future<bool> importExtractedGameFolder() async {
+    await ensureManagementInitialized();
+
     final folder = await FilePicker.getDirectoryPath(
       dialogTitle: 'Import extracted PlayStation 3 game folder',
     );
     if (folder == null) return false;
 
-    await ensureManagementInitialized();
     final report = await Rpcs3InternalBridge.installFolder(folder);
     if (report['success'] != true) {
       throw Rpcs3InternalException(
@@ -358,9 +345,7 @@ class Rpcs3InternalService {
     final normalized = titleId.trim().toUpperCase();
     if (normalized.isEmpty) return false;
 
-    // Read firmware in maintenance mode first. Only after this check succeeds
-    // do we transition to the JIT-enabled gameplay runtime.
-    await ensureManagementInitialized();
+    await ensureGameplayInitialized();
     final firmware = (await Rpcs3InternalBridge.firmwareVersion()).trim();
     if (firmware.isEmpty) {
       throw const Rpcs3InternalException(
@@ -369,9 +354,8 @@ class Rpcs3InternalService {
       );
     }
 
-    await ensureGameplayInitialized();
-
-    // Direct Core boot: no standalone RPCS3 launch screen is presented.
+    // Direct Core boot: no standalone RPCS3 Start/Commencer screen is ever
+    // presented. NeoStation calls rpcs3_ios_boot_game for the selected title.
     final report = await Rpcs3InternalBridge.launchGame(
       titleId: normalized,
       savestateId: savestateId,
