@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Repair the one-shot RPCS3 migration before applying it.
+"""Normalize remaining RPCS3 migration inputs before final validation.
 
-The previous migration used overly broad replacement ranges and some regression
-tests still described the removed standalone RPCS3 IPA handoff. This script
-repairs those migration-only issues without modifying any Dolphin source.
+The migration script is already surgical on this branch. This helper now only
+normalizes APIs/tests that may still reflect the removed standalone RPCS3 IPA.
+It never reads or modifies Dolphin source.
 """
 from pathlib import Path
 
@@ -15,42 +15,7 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-finalize = Path('build-utils/finalize_rpcs3_internal_v1.py')
-text = finalize.read_text()
-
-old = """    '  static Future<String?> _resolveLinkedDataRoot() async {',
-    '  static Future<bool> _canReadDataRoot(String dataRoot) async {',
-"""
-new = """    '  static Future<String?> _resolveLinkedDataRoot() async {',
-    '  static Future<void> _replaceCache(List<Rpcs3LibraryGame> games) async {',
-"""
-if old not in text:
-    raise SystemExit('RPCS3 library resolver migration anchor not found')
-text = text.replace(old, new, 1)
-
-old = """        '  List<Widget> _iosEmulatorCards(ThemeData theme) {',
-        'RPCS3 directory actions',
-"""
-new = """        '',
-        'RPCS3 directory actions',
-"""
-if old not in text:
-    raise SystemExit('RPCS3 directory-action migration anchor not found')
-text = text.replace(old, new, 1)
-
-old = """        '  Widget _buildIOSArmsx2Section(ThemeData theme) {',
-        'RPCS3 directory card',
-"""
-new = """        '',
-        'RPCS3 directory card',
-"""
-if old not in text:
-    raise SystemExit('RPCS3 directory-card migration anchor not found')
-text = text.replace(old, new, 1)
-finalize.write_text(text)
-
-# The project uses the static file_picker API (the pinned beta removed
-# FilePicker.platform). Keep RPCS3 consistent with every other iOS importer.
+# The pinned file_picker build uses static methods rather than FilePicker.platform.
 service = Path('lib/services/rpcs3_internal_service.dart')
 service_text = service.read_text()
 service_text = service_text.replace(
@@ -67,9 +32,8 @@ if 'DolphinInternalBridge' in service_text or 'dolphin_internal_bridge' in servi
     raise SystemExit('RPCS3 internal service must not depend on Dolphin')
 service.write_text(service_text)
 
-# The following tests predate the in-process Core and expected NeoStation to
-# launch the standalone RPCS3 IPA through openJitRequest. Keep their useful
-# metadata coverage while asserting direct embedded-Core boot instead.
+# Retire test expectations for the old standalone RPCS3 IPA handoff. Each
+# replacement is idempotent: already-migrated tests are accepted as-is.
 replacements = {
     'test/rpcs3_stage3_test.dart': (
         """    test('RPCS3 launcher uses the stable Universal JIT handoff', () {
@@ -93,6 +57,7 @@ replacements = {
       expect(plugin, contains('rpcs3_ios_boot_game'));
       expect(plugin, contains('self->_api.boot_game'));
     });""",
+        'Rpcs3InternalService.launchTitle',
     ),
     'test/rpcs3_stage6_test.dart': (
         """    test('launcher validates serials and uses Universal JIT', () {
@@ -121,6 +86,7 @@ replacements = {
       expect(internal, contains('Rpcs3InternalBridge.prepareJit'));
       expect(internal, contains(\"'firmwareRequired'\"));
     });""",
+        'Rpcs3InternalBridge.prepareJit',
     ),
     'test/rpcs3_stage7_test.dart': (
         """  test('RPCS3 launch uses the basic Universal JIT handoff', () {
@@ -143,13 +109,16 @@ replacements = {
     expect(plugin, contains('@\"launchGame\"'));
     expect(plugin, contains('self->_api.boot_game'));
   });""",
+        'self->_api.boot_game',
     ),
 }
-for filename, (old, new) in replacements.items():
+for filename, (old, new, migrated_marker) in replacements.items():
     path = Path(filename)
     body = path.read_text()
-    if old not in body:
-        raise SystemExit(f'{filename}: obsolete standalone test block not found')
-    path.write_text(replace_once(body, old, new, filename))
+    if old in body:
+        body = replace_once(body, old, new, filename)
+    elif migrated_marker not in body:
+        raise SystemExit(f'{filename}: neither old nor migrated RPCS3 contract found')
+    path.write_text(body)
 
-print('RPCS3 migration, file picker API, and standalone test expectations repaired.')
+print('RPCS3 file-picker and internal-engine test contracts are normalized.')
