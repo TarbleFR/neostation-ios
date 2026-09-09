@@ -37,7 +37,7 @@ typedef struct rpcs3_ios_display_surface {
   uint32_t size;
   uint32_t width;
   uint32_t height;
-  float scale;
+  float refresh_rate;
   void* metal_layer;
 } rpcs3_ios_display_surface;
 

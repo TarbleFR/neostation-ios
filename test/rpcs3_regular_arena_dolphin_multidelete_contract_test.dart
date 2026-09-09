@@ -11,7 +11,8 @@ void main() {
       expect(bridge, isNot(contains("import 'dart:ffi'")));
       expect(bridge, isNot(contains('DynamicLibrary.open')));
       expect(bridge, isNot(contains('preloadCoreImage')));
-      expect(bridge, contains("'expandedJitRegion': false"));
+      expect(bridge, contains("'expandedJitRegion': expandedJitRegion"));
+      expect(bridge, contains('bool expandedJitRegion = false'));
     });
 
     test('RPCS3 bridge has no preload-only ffi dependency', () {

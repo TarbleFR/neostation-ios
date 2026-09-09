@@ -1,6 +1,8 @@
 #import "Rpcs3InternalBridgePlugin.h"
 #import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
+#import "Rpcs3Diagnostics.h"
+#import "Rpcs3MemoryPreflight.h"
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -192,6 +194,9 @@ static void RPCS3Log(void* context, int32_t level, const char* message) {
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
   if (!bridge || !message) return;
   NSString* text = [NSString stringWithUTF8String:message] ?: @"";
+  // Keep notices/errors needed for crash diagnosis; do not fsync debug/trace
+  // output on the render or emulation hot paths.
+  if (level <= 4) RPCS3Diagnostic(@"core_log", text);
   dispatch_async(dispatch_get_main_queue(), ^{
     [bridge.channel invokeMethod:@"coreLog" arguments:@{@"level": @(level), @"message": text}];
   });
@@ -211,6 +216,7 @@ static void RPCS3Progress(void* context,
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
   if (!bridge) return;
   NSString* text = detail ? ([NSString stringWithUTF8String:detail] ?: @"") : @"";
+  RPCS3Diagnostic(@"install_progress", text);
   dispatch_async(dispatch_get_main_queue(), ^{
     [bridge.channel invokeMethod:@"installProgress" arguments:@{
       @"current": @(current), @"total": @(total), @"detail": text,
@@ -275,7 +281,9 @@ static void RPCS3Progress(void* context,
   dlerror();
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
+      RPCS3Diagnostic(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
       handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
+      RPCS3Diagnostic(@"core_load_end", handle ? @"loaded" : @"dlopen failed");
       if (handle) break;
     }
   }
@@ -318,6 +326,20 @@ static void RPCS3Progress(void* context,
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+  if ([call.method isEqualToString:@"preflight"]) {
+    dispatch_async(_runtimeQueue, ^{
+      RPCS3Diagnostic(@"memory_preflight_begin", @"Checking RPCS3 virtual address space before JIT attachment");
+      BOOL available = self.initialized || neostation::rpcs3::probe_virtual_layout();
+      NSString* message = available ? @"RPCS3 virtual memory layout available." :
+          @"iOS refuse l’espace mémoire requis par RPCS3. Réinstallez l’IPA en conservant le droit extended-virtual-addressing lors de la signature. Journal : RPCS3-diagnostic.log.";
+      RPCS3Diagnostic(@"memory_preflight_end", message);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(@{@"success": @(available), @"message": message});
+      });
+    });
+    return;
+  }
+
   if ([call.method isEqualToString:@"diagnostics"]) {
     NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
     NSString* corePath = [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"];
@@ -375,7 +397,9 @@ static void RPCS3Progress(void* context,
       options.context = (__bridge void*)self;
       options.expanded_jit_region = expanded ? 1 : 0;
       options.reserved = 0;
+      RPCS3Diagnostic(@"core_initialize_begin", @"Calling rpcs3_ios_initialize");
       rpcs3_ios_status status = self->_api.initialize(&options);
+      RPCS3Diagnostic(@"core_initialize_end", [NSString stringWithFormat:@"status=%d", status]);
       if (status == 0) {
         self.initialized = YES;
         self.initializedWithExpandedJit = expanded;
@@ -431,6 +455,7 @@ static void RPCS3Progress(void* context,
       if (!self.initialized) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"message": @"RPCS3 Core is not initialized."}); }); return; }
       if (self.operationBusy) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"message": @"Another RPCS3 operation is already running."}); }); return; }
       self.operationBusy = YES;
+      RPCS3Diagnostic(@"install_begin", call.method);
       rpcs3_ios_status status = -1;
       if ([call.method isEqualToString:@"installFirmware"])
         status = self->_api.install_firmware(input.fileSystemRepresentation, RPCS3Progress, (__bridge void*)self);
@@ -443,6 +468,7 @@ static void RPCS3Progress(void* context,
       else if ([call.method isEqualToString:@"installFolder"])
         status = self->_api.install_folder(input.fileSystemRepresentation, RPCS3Progress, (__bridge void*)self);
       self.operationBusy = NO;
+      RPCS3Diagnostic(@"install_end", [NSString stringWithFormat:@"%@ status=%d", call.method, status]);
       NSDictionary* payload = [self statusPayload:status];
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });
     });
@@ -453,12 +479,14 @@ static void RPCS3Progress(void* context,
     NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
     NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class] ? args[@"titleId"] : @"";
     NSString* savestateId = [args[@"savestateId"] isKindOfClass:NSString.class] ? args[@"savestateId"] : nil;
-    if (!self.initialized || !self.initializedWithExpandedJit || !titleId.length || self.gameController) {
+    if (!self.initialized || !titleId.length || self.gameController) {
       result(@{@"success": @NO, @"message": @"RPCS3 is not ready to boot this title with JIT."});
       return;
     }
     __block RPCS3GameViewController* controller = nil;
-    dispatch_sync(dispatch_get_main_queue(), ^{
+    // Flutter delivers this handler on the main queue; dispatch_sync to the
+    // same queue deadlocks as soon as standard-arena boot is permitted.
+    void (^present)(void) = ^{
       UIViewController* root = RPCS3RootViewController();
       if (!root || root.view.window == nil) return;
       controller = [RPCS3GameViewController new];
@@ -467,16 +495,20 @@ static void RPCS3Progress(void* context,
       [controller loadViewIfNeeded];
       [root presentViewController:controller animated:NO completion:nil];
       self.gameController = controller;
-    });
+    };
+    if (NSThread.isMainThread) present();
+    else dispatch_sync(dispatch_get_main_queue(), present);
     if (!controller || !controller.metalLayer.device) { result(@{@"success": @NO, @"message": @"Metal surface could not be created."}); return; }
+    CGSize size = controller.view.bounds.size;
+    UIScreen* screen = controller.view.window.screen ?: UIScreen.mainScreen;
+    CGFloat scale = screen.scale;
+    float refreshRate = (float)screen.maximumFramesPerSecond;
     dispatch_async(_runtimeQueue, ^{
-      CGSize size = controller.view.bounds.size;
-      CGFloat scale = controller.view.window.screen.scale ?: UIScreen.mainScreen.scale;
       rpcs3_ios_display_surface surface = {};
       surface.size = sizeof(surface);
       surface.width = MAX(1, (uint32_t)llround(size.width * scale));
       surface.height = MAX(1, (uint32_t)llround(size.height * scale));
-      surface.scale = (float)scale;
+      surface.refresh_rate = refreshRate;
       surface.metal_layer = (__bridge void*)controller.metalLayer;
       rpcs3_ios_status surfaceStatus = self->_api.set_display_surface(&surface);
       rpcs3_ios_status bootStatus = surfaceStatus == 0
