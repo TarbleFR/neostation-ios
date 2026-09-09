@@ -6,8 +6,9 @@ import '../services/rpcs3_internal_service.dart';
 
 /// User-facing management surface for the embedded RPCS3 engine.
 ///
-/// Opening this screen loads RPCS3 in maintenance mode only. JIT is not
-/// requested until a game is launched from the normal NeoStation library.
+/// RPCS3 iOS 0.8.1 requires JIT before its Core can be loaded, even for
+/// firmware/content maintenance. Opening this screen prepares that runtime and
+/// then exposes the Core's native installation APIs through NeoStation.
 class Rpcs3ManagerScreen extends StatefulWidget {
   const Rpcs3ManagerScreen({
     super.key,
@@ -38,7 +39,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
 
   @override
   void dispose() {
-    // Returning to NeoStation should leave the PS3 engine dormant again.
+    // Closing the manager leaves the validated RPCS3 Core ready for a later
+    // direct game boot; it is not an external emulator process.
     unawaited(Rpcs3InternalService.closeManagementRuntime());
     super.dispose();
   }
@@ -194,8 +196,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                         const SizedBox(height: 12),
                         Text(
                           _fr
-                              ? 'Mode maintenance : installation du firmware et des jeux sans JIT. Le JIT est activé uniquement lorsque vous lancez un jeu PS3.'
-                              : 'Maintenance mode: install firmware and games without JIT. JIT is enabled only when you launch a PS3 game.',
+                              ? 'RPCS3 active d’abord le JIT requis par son moteur, puis ce menu permet d’installer le firmware et les jeux. Le lancement d’un jeu reste direct depuis NeoStation.'
+                              : 'RPCS3 first enables the JIT required by its engine, then this menu can install firmware and games. Games still boot directly from NeoStation.',
                         ),
                         if (_build.isNotEmpty || _abi != 0) ...[
                           const SizedBox(height: 8),
