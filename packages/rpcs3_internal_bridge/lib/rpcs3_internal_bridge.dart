@@ -31,6 +31,9 @@ class Rpcs3InternalBridge {
   static const MethodChannel _tuningChannel = MethodChannel(
     'neostation/rpcs3_tuning',
   );
+  static const MethodChannel _documentsChannel = MethodChannel(
+    'neostation/rpcs3_documents',
+  );
 
   static final StreamController<Rpcs3InstallProgress>
   _installProgressController = StreamController<Rpcs3InstallProgress>.broadcast(
@@ -172,6 +175,20 @@ class Rpcs3InternalBridge {
           }) ??
           const <String, dynamic>{},
     );
+  }
+
+  static Future<List<String>?> pickGameFilesOpenInPlace() async {
+    final values = await _documentsChannel.invokeListMethod<String>(
+      'pickGameFiles',
+    );
+    return values?.toList(growable: false);
+  }
+
+  static Future<String?> pickGameFolderOpenInPlace() =>
+      _documentsChannel.invokeMethod<String>('pickGameFolder');
+
+  static Future<void> releaseScopedResources() async {
+    await _documentsChannel.invokeMethod<bool>('releaseScopedResources');
   }
 
   static Future<Map<String, dynamic>> setSetting(
