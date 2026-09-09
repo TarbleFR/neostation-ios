@@ -24,6 +24,7 @@ class Rpcs3InternalPlaylistActions extends StatefulWidget {
 class _Rpcs3InternalPlaylistActionsState
     extends State<Rpcs3InternalPlaylistActions> {
   bool _busy = false;
+  bool _firmwareBootstrapStarted = false;
   String _firmwareVersion = '';
 
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
@@ -38,11 +39,24 @@ class _Rpcs3InternalPlaylistActionsState
   String get _failed =>
       _fr ? 'Échec de l’opération RPCS3.' : 'RPCS3 operation failed.';
 
+  @override
+  void initState() {
+    super.initState();
+
+    // The PS3 library itself is now the entry point. On first display, verify
+    // the embedded Core's firmware and ask for PS3UPDAT.PUP immediately when
+    // it is missing. Once the firmware exists, the user remains in the normal
+    // NeoStation library and uses this compact menu only for imports/updates.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ensureFirmwareForLibrary();
+    });
+  }
+
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
   // Opening the popup alone must not initialize or dlopen RPCS3. The Core is
   // loaded only after the user explicitly opens RPCS3, imports content, or
-  // launches a PS3 game.
+  // when this library performs its one-time firmware readiness check.
   Future<void> _opened() async {
     _interaction(true);
   }
@@ -52,6 +66,37 @@ class _Rpcs3InternalPlaylistActionsState
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _ensureFirmwareForLibrary() async {
+    if (_firmwareBootstrapStarted || _busy) return;
+    _firmwareBootstrapStarted = true;
+
+    setState(() => _busy = true);
+    _interaction(true);
+    try {
+      final version = await Rpcs3InternalService.firmwareVersion();
+      if (!mounted) return;
+      if (version.isNotEmpty) {
+        setState(() => _firmwareVersion = version);
+        return;
+      }
+
+      // No firmware: present the official PUP picker directly instead of
+      // exposing the generic recursive-ROM-scan onboarding step.
+      final installed = await Rpcs3InternalService.importFirmware();
+      if (!installed || !mounted) return;
+
+      _firmwareVersion = await Rpcs3InternalService.firmwareVersion();
+      if (mounted) setState(() {});
+    } on Rpcs3InternalException catch (error) {
+      _notice(error.message);
+    } catch (error) {
+      _notice('$_failed $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      _interaction(false);
+    }
   }
 
   Future<void> _openManager() async {
