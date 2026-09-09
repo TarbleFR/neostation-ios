@@ -1,5 +1,5 @@
 name: Finalize RPCS3 Internal Integration
-# Validation pass owned by the current in-process RPCS3 integration.
+# Validation pass after retiring the final standalone RPCS3 test contracts.
 
 on:
   push:
@@ -47,7 +47,11 @@ jobs:
             lib/widgets/rpcs3_internal_playlist_actions.dart \
             lib/screens/game_screen/my_games_list.dart \
             lib/screens/settings_screen/new_settings_options/directories_settings_content.dart \
-            lib/services/game/game_launch_service.dart
+            lib/services/game/game_launch_service.dart \
+            test/rpcs3_stage3_test.dart \
+            test/rpcs3_stage6_test.dart \
+            test/rpcs3_stage7_test.dart \
+            test/rpcs3_internal_integration_test.dart
 
       - name: Enforce Dolphin isolation
         run: |
