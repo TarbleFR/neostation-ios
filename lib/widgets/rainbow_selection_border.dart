@@ -26,8 +26,7 @@ class RainbowSelectionBorder extends StatefulWidget {
   });
 
   @override
-  State<RainbowSelectionBorder> createState() =>
-      _RainbowSelectionBorderState();
+  State<RainbowSelectionBorder> createState() => _RainbowSelectionBorderState();
 }
 
 class _RainbowSelectionBorderState extends State<RainbowSelectionBorder>
@@ -58,7 +57,8 @@ class _RainbowSelectionBorderState extends State<RainbowSelectionBorder>
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     if (reduceMotion) {
       return CustomPaint(
         foregroundPainter: _RainbowBorderPainter(
