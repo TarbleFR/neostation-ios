@@ -7,12 +7,14 @@ import 'package:provider/provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 
 import '../../services/game_service.dart';
+import '../../services/dolphin_internal_v2_service.dart';
 import '../../themes/corner_radii.dart';
 import '../../utils/centered_scroll_controller.dart';
 import '../../utils/game_utils.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
+import '../../widgets/dolphin_multi_delete_dialog.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
 import '../../widgets/rainbow_selection_border.dart';
@@ -196,6 +198,20 @@ class GameListViewState extends State<GameListView>
     }
   }
 
+  Future<void> _handleLongPress(GameModel game) async {
+    if (!Platform.isIOS ||
+        !DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)) {
+      return;
+    }
+    SfxService().playNavSound();
+    await DolphinMultiDeleteDialog.show(
+      context: context,
+      system: widget.system,
+      games: widget.games,
+      initialGame: game,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -283,6 +299,7 @@ class GameListViewState extends State<GameListView>
                       final isSelected = index == widget.selectedIndex;
 
                       return GestureDetector(
+                        onLongPress: () => _handleLongPress(game),
                         onTap: () {
                           // Touch users have no A button: the first tap selects
                           // the row (populating the details panel), a second tap
