@@ -1,18 +1,17 @@
-name: NeoStation iOS Build 235
-run-name: NeoStation iOS Build 235 (RPCS3 JIT segfault fix) • ${{ github.sha }}
+name: NeoStation iOS Build 236
+run-name: NeoStation iOS Build 236 (RPCS3 Universal JIT RX fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - fix/rpcs3-jit-segfault-build235
+      - fix/rpcs3-universal-jit-region-build236
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: neostation-ios-build-235-fast
+  group: neostation-ios-build-236
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '235'
-      IPA_NAME: 'NeoStation-iOS-Build-235'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-235'
+      BUILD_NUMBER: '236'
+      IPA_NAME: 'NeoStation-iOS-Build-236'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-236'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -94,43 +93,26 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' -o "$RUNNER_TEMP/StikJIT.xcframework.zip"
           python3 packages/dolphin_internal_bridge/ci/build_support.py stik "$RUNNER_TEMP/StikJIT.xcframework.zip"
 
-      - name: Restore validated Build 234 RPCS3 artifact
-        uses: actions/download-artifact@v4
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
         with:
-          name: NeoStation-iOS-Build-234
-          path: ${{ runner.temp }}/rpcs3-build234
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 34502963669
+          key: neostation-ios-ccache-xcode16.4-${{ github.run_id }}
+          restore-keys: |
+            neostation-ios-ccache-xcode16.4-
+            dolphin-v3-ccache-xcode16.4-
+          path: .dolphin-ccache
 
-      - name: Restore unchanged RPCS3 iOS Core
+      - name: Build patched RPCS3 iOS Core
         shell: bash
         run: |
           set -euo pipefail
+          bash build-utils/build_rpcs3_embedded_core.sh
+          BUILT_CORE=build/rpcs3-embedded-core/libRPCS3Core.dylib
           CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
-          python3 - <<'PY'
-          import os
-          import zipfile
-          from pathlib import Path
-
-          root = Path(os.environ['RUNNER_TEMP']) / 'rpcs3-build234'
-          ipas = sorted(root.rglob('*.ipa'))
-          if len(ipas) != 1:
-              raise SystemExit(f'Expected one Build 234 IPA, found: {ipas}')
-          with zipfile.ZipFile(ipas[0]) as archive:
-              matches = [n for n in archive.namelist() if n.endswith('/Frameworks/libRPCS3Core.dylib')]
-              if len(matches) != 1:
-                  raise SystemExit(f'Expected one RPCS3 Core in Build 234 IPA, found: {matches}')
-              data = archive.read(matches[0])
-          if len(data) < 60_000_000:
-              raise SystemExit(f'Build 234 RPCS3 Core unexpectedly small: {len(data)} bytes')
-          out = Path('packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib')
-          out.parent.mkdir(parents=True, exist_ok=True)
-          out.write_bytes(data)
-          out.chmod(0o755)
-          print(f'Restored unchanged RPCS3 Core from {ipas[0]}: {len(data)} bytes')
-          PY
-          test -s "$CORE"
+          test -s "$BUILT_CORE"
+          mkdir -p "$(dirname "$CORE")"
+          cp -f "$BUILT_CORE" "$CORE"
+          chmod 0755 "$CORE"
           for symbol in \
             _rpcs3_ios_run_llvm_self_test \
             _rpcs3_ios_set_game_setting \
@@ -142,6 +124,10 @@ jobs:
               exit 1
             }
           done
+          strings "$CORE" | grep -Fq 'RPCS3 LLVM JIT self-test entry=%p' || {
+            echo 'Rebuilt Core does not contain the Build 236 Universal-JIT diagnostic marker' >&2
+            exit 1
+          }
           shasum -a 256 "$CORE"
 
       - name: Analyze and test
@@ -174,14 +160,6 @@ jobs:
             ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/NeoStationBridge.mm
             ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/CMakeLists.txt
             ${{ runner.temp }}/dolphin-ios/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp
-
-      - name: Restore compiler cache
-        if: steps.core-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          key: dolphin-v3-ccache-xcode16.4-${{ github.run_id }}
-          restore-keys: dolphin-v3-ccache-xcode16.4-
-          path: .dolphin-ccache
 
       - name: Compile pinned Dolphin core
         id: compile-core
@@ -290,19 +268,22 @@ jobs:
               if info_name not in names:
                   raise SystemExit('NeoStation app payload is missing')
               app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '235':
+              if str(app_info.get('CFBundleVersion')) != '236':
                   raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
               if len(cores) != 1:
                   raise SystemExit(f'Embedded RPCS3 Core missing or duplicated: {cores}')
-              if archive.getinfo(cores[0]).file_size < 60_000_000:
+              core_data = archive.read(cores[0])
+              if len(core_data) < 60_000_000:
                   raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
+              if b'RPCS3 LLVM JIT self-test entry=%p' not in core_data:
+                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 236 JIT fix marker')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-          print(f'Validated {ipa}: Build 235 + patched RPCS3 Core + JIT helper')
+          print(f'Validated {ipa}: Build 236 + rebuilt RPCS3 Universal-JIT Core + JIT helper')
           PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-235.sha256
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-236.sha256
           ls -lah dist
 
       - name: Upload IPA
@@ -314,10 +295,10 @@ jobs:
           retention-days: 14
 
       - name: Save compiler cache
-        if: always() && steps.compile-core.outcome != 'skipped'
+        if: always()
         uses: actions/cache/save@v4
         with:
-          key: dolphin-v3-ccache-xcode16.4-${{ github.run_id }}
+          key: neostation-ios-ccache-xcode16.4-${{ github.run_id }}
           path: .dolphin-ccache
 
       - name: Remove temporary build secrets
