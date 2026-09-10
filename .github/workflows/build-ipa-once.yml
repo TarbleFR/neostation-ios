@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: neostation-ios-build-235
@@ -93,17 +94,43 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' -o "$RUNNER_TEMP/StikJIT.xcframework.zip"
           python3 packages/dolphin_internal_bridge/ci/build_support.py stik "$RUNNER_TEMP/StikJIT.xcframework.zip"
 
-      - name: Build patched RPCS3 iOS Core
+      - name: Restore validated Build 234 RPCS3 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-234
+          path: ${{ runner.temp }}/rpcs3-build234
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34502963669
+
+      - name: Restore unchanged RPCS3 iOS Core
         shell: bash
         run: |
           set -euo pipefail
-          bash build-utils/build_rpcs3_embedded_core.sh
-          BUILT_CORE=build/rpcs3-embedded-core/libRPCS3Core.dylib
           CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
-          test -s "$BUILT_CORE"
-          mkdir -p "$(dirname "$CORE")"
-          cp -f "$BUILT_CORE" "$CORE"
-          chmod 0755 "$CORE"
+          python3 - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'rpcs3-build234'
+          ipas = sorted(root.rglob('*.ipa'))
+          if len(ipas) != 1:
+              raise SystemExit(f'Expected one Build 234 IPA, found: {ipas}')
+          with zipfile.ZipFile(ipas[0]) as archive:
+              matches = [n for n in archive.namelist() if n.endswith('/Frameworks/libRPCS3Core.dylib')]
+              if len(matches) != 1:
+                  raise SystemExit(f'Expected one RPCS3 Core in Build 234 IPA, found: {matches}')
+              data = archive.read(matches[0])
+          if len(data) < 60_000_000:
+              raise SystemExit(f'Build 234 RPCS3 Core unexpectedly small: {len(data)} bytes')
+          out = Path('packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_bytes(data)
+          out.chmod(0o755)
+          print(f'Restored unchanged RPCS3 Core from {ipas[0]}: {len(data)} bytes')
+          PY
+          test -s "$CORE"
           for symbol in \
             _rpcs3_ios_run_llvm_self_test \
             _rpcs3_ios_set_game_setting \
