@@ -16,6 +16,9 @@ typedef int32_t (*rpcs3_set_game_setting_fn)(const char* title_id,
                                               const char* key,
                                               const char* value);
 typedef int32_t (*rpcs3_delete_game_fn)(const char* title_id);
+typedef int32_t (*rpcs3_clear_game_cache_fn)(const char* title_id,
+                                              uint32_t cache_type,
+                                              uint64_t* bytes_removed);
 typedef int32_t (*rpcs3_stop_emulation_fn)(void);
 typedef int32_t (*rpcs3_get_boot_progress_fn)(uint32_t* current,
                                                uint32_t* total,
@@ -208,6 +211,58 @@ static NSString* RPCS3TuningLastError(void* handle) {
       dispatch_async(dispatch_get_main_queue(), ^{
         result(status == 0
             ? @{@"success": @YES, @"titleId": titleId}
+            : @{@"success": @NO,
+                @"status": @(status),
+                @"message": message});
+      });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"clearPpuCache"]) {
+    NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class]
+        ? call.arguments
+        : @{};
+    NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class]
+        ? args[@"titleId"]
+        : @"";
+    if (titleId.length == 0) {
+      result(@{@"success": @NO,
+               @"message": @"A RPCS3 title ID is required for PPU cache cleanup."});
+      return;
+    }
+
+    dispatch_async(self.queue, ^{
+      void* handle = RPCS3OpenLoadedCore();
+      if (!handle) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"RPCS3 Core must be initialized before clearing PPU cache."});
+        });
+        return;
+      }
+      auto clearGameCache = reinterpret_cast<rpcs3_clear_game_cache_fn>(
+          dlsym(handle, "rpcs3_ios_clear_game_cache"));
+      if (!clearGameCache) {
+        dlclose(handle);
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"This RPCS3 Core does not expose game cache cleanup."});
+        });
+        return;
+      }
+
+      // RPCS3_IOS_GAME_CACHE_PPU = 2. Keep SPU, shader, HDD1, saves and game
+      // data untouched: this recovery is intentionally title-local and PPU-only.
+      uint64_t bytesRemoved = 0;
+      int32_t status = clearGameCache(titleId.UTF8String, 2u, &bytesRemoved);
+      NSString* message = status == 0 ? @"" : RPCS3TuningLastError(handle);
+      dlclose(handle);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(status == 0
+            ? @{@"success": @YES,
+                @"titleId": titleId,
+                @"bytesRemoved": @(bytesRemoved)}
             : @{@"success": @NO,
                 @"status": @(status),
                 @"message": message});

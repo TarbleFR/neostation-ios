@@ -223,6 +223,14 @@ class Rpcs3InternalBridge {
             const <String, dynamic>{},
       );
 
+  static Future<Map<String, dynamic>> clearPpuCache(String titleId) async =>
+      Map<String, dynamic>.from(
+        await _tuningChannel.invokeMapMethod<String, dynamic>('clearPpuCache', {
+              'titleId': titleId,
+            }) ??
+            const <String, dynamic>{},
+      );
+
   static Future<Map<String, dynamic>> abortBoot() async =>
       Map<String, dynamic>.from(
         await _tuningChannel.invokeMapMethod<String, dynamic>('abortBoot') ??
