@@ -27,6 +27,7 @@ def replace_function(text: str, signature: str, replacement: str, marker: str) -
         index += 1
     if depth:
         raise ValueError(f"Unterminated pinned function: {signature!r}")
+    replacement = replacement.replace(r'\t', '\t')
     return text[:start] + replacement + text[index:]
 
 
