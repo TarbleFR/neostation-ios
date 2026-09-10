@@ -96,7 +96,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./build-utils/build_rpcs3_ios_port_core.sh
+          bash build-utils/build_rpcs3_ios_port_core.sh
           BUILT_CORE=build/rpcs3-ios-port-core/libRPCS3Core.dylib
           CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           test -s "$BUILT_CORE"
