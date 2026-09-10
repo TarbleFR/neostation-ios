@@ -1,17 +1,17 @@
-name: NeoStation iOS Build 234
-run-name: NeoStation iOS Build 234 (RPCS3 embedded cache startup) • ${{ github.sha }}
+name: NeoStation iOS Build 235
+run-name: NeoStation iOS Build 235 (RPCS3 JIT segfault fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - fix/rpcs3-cache-startup-build234
+      - fix/rpcs3-jit-segfault-build235
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-234
+  group: neostation-ios-build-235
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '234'
-      IPA_NAME: 'NeoStation-iOS-Build-234'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-234'
+      BUILD_NUMBER: '235'
+      IPA_NAME: 'NeoStation-iOS-Build-235'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-235'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -263,7 +263,7 @@ jobs:
               if info_name not in names:
                   raise SystemExit('NeoStation app payload is missing')
               app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '234':
+              if str(app_info.get('CFBundleVersion')) != '235':
                   raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
@@ -273,9 +273,9 @@ jobs:
                   raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-          print(f'Validated {ipa}: Build 234 + patched RPCS3 Core + JIT helper')
+          print(f'Validated {ipa}: Build 235 + patched RPCS3 Core + JIT helper')
           PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-234.sha256
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-235.sha256
           ls -lah dist
 
       - name: Upload IPA
