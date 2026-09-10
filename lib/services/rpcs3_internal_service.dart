@@ -367,11 +367,14 @@ class Rpcs3InternalService {
         coreReady: false,
       );
 
+      // Build 234 forced the expanded 512 MiB arena here. On-device logs show
+      // the Core initializes successfully, then generated ARM64 faults at
+      // 0x7000000000 during the LLVM self-test. Use the stable standard arena.
       final report = await _bounded(
         Rpcs3InternalBridge.initialize(
           supportPath: data.path,
           cachePath: cache.path,
-          expandedJitRegion: true,
+          expandedJitRegion: false,
         ),
         _coreTimeout,
         'coreInitializeTimeout',
@@ -407,7 +410,7 @@ class Rpcs3InternalService {
         jitReady: true,
         coreReady: true,
       );
-      _log.i('RPCS3 internal Core initialized with validated expanded JIT.');
+      _log.i('RPCS3 internal Core initialized with validated standard JIT.');
     } on Rpcs3InternalException catch (error) {
       _restartRequired =
           _jitCompletionPending ||
