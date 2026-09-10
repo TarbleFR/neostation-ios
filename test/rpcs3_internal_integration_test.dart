@@ -54,6 +54,9 @@ void main() {
       final bridge = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
+      final dartBridge = File(
+        'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
+      ).readAsStringSync();
 
       final serviceJit = service.indexOf('await ensureJitReady();');
       final serviceInitialize = service.indexOf('Rpcs3InternalBridge.initialize');
@@ -69,6 +72,16 @@ void main() {
       final dlopenIndex = bridge.indexOf('dlopen(path.fileSystemRepresentation');
       expect(setenvIndex, greaterThanOrEqualTo(0));
       expect(dlopenIndex, greaterThan(setenvIndex));
+
+      // The embedded 0.8.1 Core must use the regular Universal JIT arena by
+      // default. The affected expanded 512 MiB path faults when generated
+      // ARM64 is executed after initialization on-device.
+      expect(bridge, contains('BOOL expanded = NO;'));
+      expect(
+        bridge,
+        isNot(contains('BOOL expanded = [args[@"expandedJitRegion"] boolValue];')),
+      );
+      expect(dartBridge, contains('bool expandedJitRegion = false'));
 
       final diagnosticsStart = bridge.indexOf(
         'if ([call.method isEqualToString:@"diagnostics"])',
@@ -150,7 +163,11 @@ void main() {
       expect(plugin, contains('rpcs3_ios_boot_game'));
       expect(plugin, contains('self->_api.boot_game'));
       expect(plugin, contains('@"launchGame"'));
-      expect(plugin, contains('!self.initializedWithExpandedJit'));
+      expect(plugin, isNot(contains('!self.initializedWithExpandedJit')));
+      expect(
+        plugin,
+        contains('if (!self.initialized || !titleId.length || self.gameController)'),
+      );
       expect(launcher, contains('Rpcs3InternalService.launchTitle'));
       expect(launcher, isNot(contains('openJitRequest')));
       expect(launcher, isNot(contains('com.xitrix.RPCS3')));
