@@ -1,0 +1,77 @@
+name: One-shot cleanup of superseded RPCS3 branches
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-old-branches-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: maintenance-old-branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Delete superseded RPCS3 development branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete obsolete remote branches
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          protected=(
+            "main"
+            "fix/rpcs3-cache-startup-build234"
+            "fix/rpcs3-jit-lifetime-build233"
+          )
+
+          obsolete=(
+            "exp/rpcs3-ios-port-core"
+            "feature/rpcs3-internal-engine-v1"
+            "fix/rpcs3-firmware-dolphin-routing-build225"
+            "fix/rpcs3-firmware-import-build229"
+            "fix/rpcs3-firmware-import-build230"
+            "fix/rpcs3-firmware-library-build223"
+            "fix/rpcs3-import-spu-cache-build230"
+            "fix/rpcs3-jit-before-dlopen-build219"
+            "fix/rpcs3-jit-status-build221"
+            "fix/rpcs3-jit-symbol-resolver-build232"
+            "fix/rpcs3-lazy-load-build216"
+            "fix/rpcs3-lazy-load-startup-crash"
+            "fix/rpcs3-manager-import-build218"
+            "fix/rpcs3-ppu-delete-build231"
+            "fix/rpcs3-preload-dolphin-delete-build226"
+            "fix/rpcs3-regular-arena-dolphin-multidelete-build227"
+            "reference/rpcs3-ios-build231-0.8.1"
+            "test/rpcs3-ios-port-core-build231"
+            "maintenance/cleanup-old-branches"
+          )
+
+          for branch in "${obsolete[@]}"; do
+            for keep in "${protected[@]}"; do
+              if [[ "$branch" == "$keep" ]]; then
+                echo "Refusing to delete protected branch: $branch" >&2
+                exit 1
+              fi
+            done
+
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              echo "Deleting $branch"
+              git push origin --delete "$branch"
+            else
+              echo "Already absent: $branch"
+            fi
+          done
+
+          echo "Obsolete RPCS3 branch cleanup complete."
