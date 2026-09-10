@@ -79,7 +79,6 @@ void set_error(std::string) { assert(false && "unexpected allocator error"); }
         body += r'''
 int main() {
  using rpcs3::ios::jit::arena_range;
- // Preserve a process-lifetime allocation, like the global ASM runtime.
  arena_range permanent{};
  assert(g_arena.code_allocator.allocate_highest(128, 16, permanent));
  g_arena.live_code_bytes = 128;
@@ -134,11 +133,27 @@ void probe(bool precompile) {
         body += r'''
  assert(cache.reads == (precompile ? 1 : 0));
  assert(func_list.size() == (precompile ? 83 : 0));
- assert(records_cache == precompile); // No duplicates appended to unread cache.
+ assert(records_cache == precompile);
 }
 int main() { probe(false); probe(true); }
 '''
         self.run_cpp(body)
+
+    def test_universal_arena_is_allocated_by_debugserver(self):
+        patcher.patch(self.root)
+        jit_text = (self.root / 'Utilities/JITIOS.cpp').read_text()
+        prepare = function(jit_text, 'bool prepare_arena(bool expanded) noexcept')
+        self.assertIn('NEOSTATION_UNIVERSAL_DEBUGSERVER_RX', prepare)
+        self.assertIn('protocol_call(command_prepare_region, nullptr, capacity)', prepare)
+        self.assertIn('static_cast<vm_address_t>(prepared_address)', prepare)
+        self.assertIn('VM_INHERIT_DEFAULT', prepare)
+        self.assertIn('VM_PROT_READ | VM_PROT_WRITE', prepare)
+        self.assertIn('g_arena.code = code;', prepare)
+        self.assertIn('g_arena.data = data;', prepare)
+        self.assertIn('g_arena.preparation_chunks = 1;', prepare)
+        self.assertNotIn('arena_prepare_chunk_count(capacity)', prepare)
+        api_text = (self.root / 'rpcs3/ios/RPCS3IOS.cpp').read_text()
+        self.assertIn('RPCS3 LLVM JIT self-test entry=%p', api_text)
 
     def test_patch_is_idempotent(self):
         patcher.patch(self.root)
