@@ -372,7 +372,12 @@ static void RPCS3Progress(void* context,
     NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
-    BOOL expanded = [args[@"expandedJitRegion"] boolValue];
+
+    // The Build 234 crash happens only on the optional expanded 512 MiB arena:
+    // initialization succeeds, then the first generated ARM64 self-test jumps
+    // to 0x7000000000 and faults. Embedded RPCS3 therefore uses the stable
+    // standard Universal arena even if an older caller requests expansion.
+    BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
       if (![self loadCoreWithExpandedJit:expanded error:&error]) {
