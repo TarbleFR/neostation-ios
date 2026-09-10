@@ -34,7 +34,7 @@ class Rpcs3InternalBridge {
   static Future<Map<String, dynamic>> initialize({
     required String supportPath,
     required String cachePath,
-    bool expandedJitRegion = true,
+    bool expandedJitRegion = false,
   }) async => Map<String, dynamic>.from(
     await _channel.invokeMapMethod<String, dynamic>('initialize', {
           'supportPath': supportPath,
