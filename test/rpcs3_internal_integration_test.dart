@@ -255,8 +255,8 @@ void main() {
       expect(manager, contains('rpcs3-manager-firmware'));
       expect(manager, contains('rpcs3-manager-games'));
       expect(manager, contains('rpcs3-manager-folder'));
-      expect(manager, isNot(contains('Start'));
-      expect(manager, isNot(contains('Commencer'));
+      expect(manager, isNot(contains('Start')));
+      expect(manager, isNot(contains('Commencer')));
     });
   });
 }
