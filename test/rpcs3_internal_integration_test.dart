@@ -55,6 +55,9 @@ void main() {
       final bridge = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
+      final dartBridge = File(
+        'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
+      ).readAsStringSync();
 
       final serviceJit = service.indexOf('await _attachJitForCore();');
       final serviceInitialize = service.indexOf(
@@ -83,6 +86,20 @@ void main() {
       );
       expect(setenvIndex, greaterThanOrEqualTo(0));
       expect(dlopenIndex, greaterThan(setenvIndex));
+
+      // Build 234 crashed after successfully preparing the optional 512 MiB
+      // arena: generated ARM64 execution jumped to 0x7000000000. Keep every
+      // embedded entry point on the stable standard Universal arena.
+      expect(service, contains('expandedJitRegion: false'));
+      expect(service, isNot(contains('expandedJitRegion: true')));
+      expect(dartBridge, contains('bool expandedJitRegion = false'));
+      expect(bridge, contains('BOOL expanded = NO;'));
+      expect(
+        bridge,
+        isNot(
+          contains('BOOL expanded = [args[@"expandedJitRegion"] boolValue];'),
+        ),
+      );
 
       final diagnosticsStart = bridge.indexOf(
         'if ([call.method isEqualToString:@"diagnostics"])',
@@ -238,8 +255,8 @@ void main() {
       expect(manager, contains('rpcs3-manager-firmware'));
       expect(manager, contains('rpcs3-manager-games'));
       expect(manager, contains('rpcs3-manager-folder'));
-      expect(manager, isNot(contains('Start')));
-      expect(manager, isNot(contains('Commencer')));
+      expect(manager, isNot(contains('Start'));
+      expect(manager, isNot(contains('Commencer'));
     });
   });
 }
