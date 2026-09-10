@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: neostation-ios-build-235
+  group: neostation-ios-build-235-fast
   cancel-in-progress: true
 
 jobs:
