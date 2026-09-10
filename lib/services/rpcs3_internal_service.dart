@@ -371,7 +371,7 @@ class Rpcs3InternalService {
         Rpcs3InternalBridge.initialize(
           supportPath: data.path,
           cachePath: cache.path,
-          expandedJitRegion: false,
+          expandedJitRegion: true,
         ),
         _coreTimeout,
         'coreInitializeTimeout',
@@ -407,7 +407,7 @@ class Rpcs3InternalService {
         jitReady: true,
         coreReady: true,
       );
-      _log.i('RPCS3 internal Core initialized with validated standard JIT.');
+      _log.i('RPCS3 internal Core initialized with validated expanded JIT.');
     } on Rpcs3InternalException catch (error) {
       _restartRequired =
           _jitCompletionPending ||
