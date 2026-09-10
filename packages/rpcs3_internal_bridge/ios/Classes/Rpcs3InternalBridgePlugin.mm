@@ -347,7 +347,13 @@ static void RPCS3Progress(void* context,
     NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
-    BOOL expanded = [args[@"expandedJitRegion"] boolValue];
+
+    // RPCS3 0.8.1's optional 512 MiB expanded Universal JIT arena is not safe
+    // inside NeoStation's in-process host on the affected iOS path: the Core
+    // initializes successfully, then faults as soon as it executes generated
+    // ARM64 from the 0x7000000000 arena. Keep the stable regular JIT policy for
+    // embedded gameplay; the extension can be reconsidered separately later.
+    BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
       if (![self loadCoreWithExpandedJit:expanded error:&error]) {
@@ -452,7 +458,7 @@ static void RPCS3Progress(void* context,
     NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
     NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class] ? args[@"titleId"] : @"";
     NSString* savestateId = [args[@"savestateId"] isKindOfClass:NSString.class] ? args[@"savestateId"] : nil;
-    if (!self.initialized || !self.initializedWithExpandedJit || !titleId.length || self.gameController) {
+    if (!self.initialized || !titleId.length || self.gameController) {
       result(@{@"success": @NO, @"message": @"RPCS3 is not ready to boot this title with JIT."});
       return;
     }
