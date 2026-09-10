@@ -298,3 +298,6 @@ ROMs/
 # Native build scratch from the vendored packages (never committed)
 .cxx/
 packages/rpcs3_internal_bridge/ios/Frameworks/
+
+__pycache__/
+*.pyc

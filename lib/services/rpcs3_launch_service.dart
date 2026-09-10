@@ -17,9 +17,9 @@ abstract final class Rpcs3LaunchService {
   static const Duration _bootPollInterval = Duration(seconds: 1);
   static const Duration _bootStageGrace = Duration(seconds: 12);
   static const Duration _spuNoProgressLimit = Duration(seconds: 90);
-  static const Duration _ppuNoProgressLimit = Duration(seconds: 120);
-  static const Duration _ppuApplyNoProgressLimit = Duration(seconds: 45);
-  static const Duration _finishedStageLimit = Duration(seconds: 45);
+  static const Duration _ppuNoProgressLimit = Duration(minutes: 10);
+  static const Duration _ppuApplyNoProgressLimit = Duration(minutes: 5);
+  static const Duration _finishedStageLimit = Duration(minutes: 5);
   static const Duration _recoveryStopTimeout = Duration(seconds: 20);
 
   static String? _lastError;
@@ -188,7 +188,7 @@ abstract final class Rpcs3LaunchService {
                 : 'bootPreparationStalled',
             ppuStage
                 ? 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
-                    'NeoStation va reconstruire uniquement le cache PPU de ce jeu.'
+                    'Consultez RPCS3-diagnostic.log ; les caches sont conservés.'
                 : 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
                     'Le démarrage a été arrêté au lieu de rester figé.',
           );
@@ -250,48 +250,6 @@ abstract final class Rpcs3LaunchService {
     return launched ?? false;
   }
 
-  static Future<bool> _waitForStoppedForPpuRecovery() async {
-    final deadline = DateTime.now().add(_recoveryStopTimeout);
-    while (DateTime.now().isBefore(deadline)) {
-      try {
-        final state = await Rpcs3InternalBridge.emulationState().timeout(
-          const Duration(seconds: 2),
-        );
-        if (state == 1) return true;
-      } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-    return false;
-  }
-
-  static Future<bool> _recoverPpuCacheAndRetry(String titleId) async {
-    if (!await _waitForStoppedForPpuRecovery()) {
-      throw const Rpcs3InternalException(
-        'ppuRecoveryStopTimeout',
-        'RPCS3 ne s’est pas arrêté proprement après le blocage PPU.',
-      );
-    }
-
-    final cleared = await Rpcs3InternalBridge.clearPpuCache(titleId).timeout(
-      const Duration(seconds: 20),
-    );
-    if (cleared['success'] != true) {
-      throw Rpcs3InternalException(
-        'ppuCacheClearFailed',
-        cleared['message']?.toString() ??
-            'Le cache PPU RPCS3 de ce jeu n’a pas pu être reconstruit.',
-      );
-    }
-
-    final bytesRemoved = (cleared['bytesRemoved'] as num?)?.toInt() ?? 0;
-    _log.i(
-      'RPCS3 PPU recovery $titleId: cleared $bytesRemoved byte(s); retrying once.',
-    );
-
-    await _applyMobileBootProfile(titleId);
-    return _launchWithBootWatchdog(titleId);
-  }
-
   static Future<bool> launchTitle(
     String? rawTitleId, {
     String? displayTitle,
@@ -313,12 +271,9 @@ abstract final class Rpcs3LaunchService {
 
     try {
       await _applyMobileBootProfile(titleId);
-      try {
-        return await _launchWithBootWatchdog(titleId);
-      } on Rpcs3InternalException catch (error) {
-        if (error.code != 'ppuBootPreparationStalled') rethrow;
-        return await _recoverPpuCacheAndRetry(titleId);
-      }
+      // A timeout alone is not evidence of a corrupt cache. Never delete
+      // compiled objects or start a second native boot automatically.
+      return await _launchWithBootWatchdog(titleId);
     } on Rpcs3InternalException catch (error, stackTrace) {
       _lastError = error.message;
       _lastErrorCode = error.code;

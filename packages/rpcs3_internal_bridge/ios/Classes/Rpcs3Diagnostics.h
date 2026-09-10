@@ -26,7 +26,10 @@ static inline void RPCS3Diagnostic(NSString* stage, NSString* message) {
       if (json) {
         [file writeData:json];
         [file writeData:[@"\n" dataUsingEncoding:NSUTF8StringEncoding]];
-        [file synchronizeFile];
+        // Compilation emits many module notices. A synchronous fsync for
+        // every one stalls the compiler on storage; keep boot milestones
+        // durable and let the OS buffer the ordinary Core log stream.
+        if (![stage isEqualToString:@"core_log"]) [file synchronizeFile];
       }
     } @catch (__unused NSException* exception) {
       // Diagnostic I/O must never abort an import.

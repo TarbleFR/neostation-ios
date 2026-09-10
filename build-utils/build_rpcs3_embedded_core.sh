@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build XITRIX/rpcs3's iOS RPCS3Core only. The source and mobile dependencies
-# are pinned so device regressions can be compared with NeoStation Build 232.
+# are pinned so device regressions can be compared with NeoStation embedded builds.
 RPCS3_REPOSITORY="${RPCS3_REPOSITORY:-https://github.com/XITRIX/rpcs3.git}"
 RPCS3_COMMIT="${RPCS3_COMMIT:-22f1152783cef1f7e04af7b1c895173e28fd5b03}"
 RPCS3_IOS_ABI="${RPCS3_IOS_ABI:-30}"
@@ -11,8 +11,8 @@ MOLTENVK_VERSION="${MOLTENVK_VERSION:-1.4.2}"
 MOLTENVK_SHA256="${MOLTENVK_SHA256:-b5d947b1660e6e9fed40b9cd2387e160aaab9e80b775c0cef7e14059405178c1}"
 FFMPEG_VERSION="${FFMPEG_VERSION:-8.1.1}"
 FFMPEG_SHA256="${FFMPEG_SHA256:-b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3}"
-WORK_ROOT="${WORK_ROOT:-${RUNNER_TEMP:-/tmp}/neostation-rpcs3-ios-port}"
-OUTPUT_DIR="${OUTPUT_DIR:-$PWD/build/rpcs3-ios-port-core}"
+WORK_ROOT="${WORK_ROOT:-${RUNNER_TEMP:-/tmp}/neostation-rpcs3-embedded}"
+OUTPUT_DIR="${OUTPUT_DIR:-$PWD/build/rpcs3-embedded-core}"
 BUILD_JOBS="${BUILD_JOBS:-3}"
 
 SRC="$WORK_ROOT/rpcs3"
@@ -97,13 +97,14 @@ for lib in avformat avcodec swscale swresample avutil; do
   lipo -archs "$FFMPEG_ROOT/lib/lib${lib}.a" | grep -qw arm64 || die "FFmpeg lib${lib}.a is not arm64"
 done
 
-log "Fetch pinned XITRIX/rpcs3 ios-port source"
+log "Fetch pinned RPCS3 source for the embedded Core"
 rm -rf "$SRC" "$BUILD"
 git init -q "$SRC"
 git -C "$SRC" remote add origin "$RPCS3_REPOSITORY"
 git -C "$SRC" fetch --depth 1 origin "$RPCS3_COMMIT"
 git -C "$SRC" checkout -q --detach FETCH_HEAD
 test "$(git -C "$SRC" rev-parse HEAD)" = "$RPCS3_COMMIT" || die "RPCS3 commit mismatch"
+python3 "$PWD/test/rpcs3_embedded_boot_test.py" "$SRC"
 git -C "$SRC" submodule sync --recursive
 git -C "$SRC" -c submodule.fetchJobs=8 submodule update --init --recursive --depth 1
 
@@ -111,8 +112,8 @@ UPSTREAM_ABI="$(sed -nE 's/^#define[[:space:]]+RPCS3_IOS_ABI_VERSION[[:space:]]+
 [[ "$UPSTREAM_ABI" = "$RPCS3_IOS_ABI" ]] || die "upstream iOS ABI is $UPSTREAM_ABI, expected $RPCS3_IOS_ABI"
 grep -q 'add_library(RPCS3Core SHARED' "$SRC/rpcs3/CMakeLists.txt" || die "ios-port no longer defines RPCS3Core as a shared target"
 
-log "Apply NeoStation iOS JIT lifetime patch (LLVM/ARM64 remains enabled)"
-python3 "$PWD/build-utils/patch_rpcs3_ios_jit_lifetime.py" "$SRC"
+log "Apply NeoStation embedded boot fixes (LLVM/ARM64 remains enabled)"
+python3 "$PWD/build-utils/patch_rpcs3_embedded_boot.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \

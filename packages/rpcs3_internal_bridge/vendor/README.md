@@ -1,14 +1,16 @@
-# RPCS3 Core provenance
+# Embedded RPCS3 Core provenance
 
-NeoStation does not vendor or redistribute the standalone RPCS3 iOS application UI.
-During iOS builds, `build-utils/materialize_rpcs3_internal.py` downloads the pinned
-XITRIX RPCS3 iOS 0.8.1 release asset, verifies its published SHA-256, extracts only
-`Payload/RPCS3.app/Frameworks/libRPCS3Core.dylib`, verifies the core SHA-256, and
-removes the original code signature before NeoStation packaging.
+NeoStation builds only the `RPCS3Core` shared library from pinned source using
+`build-utils/build_rpcs3_embedded_core.sh`. No RPCS3 application IPA, SwiftUI
+frontend, external bundle identifier or external app launcher is used.
 
-Pinned release: https://github.com/XITRIX/RPCS3-iOS-Releases/releases/tag/v0.8.1
-IPA SHA-256: cd6910cb27e41a24cad224e04254f885aa90be176013569d05fb169c322f4522
-Core SHA-256: a2053a59c1ea6ee18dd681f5e1ab9d6c991b0cebc32284a891250d0d9c2424a7
+Source: https://github.com/XITRIX/rpcs3
+Commit: `22f1152783cef1f7e04af7b1c895173e28fd5b03` (iOS ABI 30).
+The iOS platform adapters are required to run the library inside NeoStation.
+The build keeps LLVM/AArch64 and applies `patch_rpcs3_embedded_boot.py`.
 
-The PlayStation 3 firmware is not included. Users must import an official
-`PS3UPDAT.PUP` themselves.
+The upstream temporary LLVM allocation ownership is retained. The Build 233
+no-release patch was removed because `reset_runtime()` releases only the low
+runtime allocations, leaving pinned high allocations leaked across sessions.
+
+Firmware, games and saves are not included or deleted by this build.

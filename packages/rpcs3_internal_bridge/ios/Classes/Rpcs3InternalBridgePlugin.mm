@@ -166,6 +166,7 @@ static UIViewController* RPCS3RootViewController(void) {
 @property(nonatomic, assign) BOOL initializedWithExpandedJit;
 @property(nonatomic, assign) BOOL coreLoadedWithExpandedJit;
 @property(nonatomic, assign) BOOL operationBusy;
+@property(nonatomic, assign) BOOL llvmSelfTestPassed;
 @end
 
 @implementation Rpcs3InternalBridgePlugin {
@@ -192,14 +193,14 @@ static UIViewController* RPCS3RootViewController(void) {
 
 static void RPCS3Log(void* context, int32_t level, const char* message) {
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
-  if (!bridge || !message) return;
+  if (!bridge || !message || level > 5) return;
   NSString* text = [NSString stringWithUTF8String:message] ?: @"";
   // Keep notices/errors needed for crash diagnosis; do not fsync debug/trace
   // output on the render or emulation hot paths.
-  if (level <= 4) RPCS3Diagnostic(@"core_log", text);
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [bridge.channel invokeMethod:@"coreLog" arguments:@{@"level": @(level), @"message": text}];
-  });
+  // Level 5 includes PPU linking / relocation and SPU worker milestones.
+  // Dart has no coreLog consumer. Do not flood its main queue with events
+  // while native boot callbacks are waiting for that same queue.
+  RPCS3Diagnostic(@"core_log", text);
 }
 
 static void RPCS3Dispatch(void* context,
@@ -357,6 +358,7 @@ static void RPCS3Progress(void* context,
       @"abi": @(abi),
       @"build": build,
       @"initialized": @(self.initialized),
+      @"llvmSelfTestPassed": @(self.llvmSelfTestPassed),
       @"expandedJitRegion": @(self.initializedWithExpandedJit),
       @"jitReady": @(RPCS3HostIsDebugged()),
       @"extendedVirtualAddressing": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing"))),
@@ -422,6 +424,7 @@ static void RPCS3Progress(void* context,
       rpcs3_ios_status status = self->_api.shutdown ? self->_api.shutdown() : 0;
       if (status == 0) {
         self.initialized = NO;
+        self.llvmSelfTestPassed = NO;
         self.initializedWithExpandedJit = NO;
       }
       NSDictionary* payload = [self statusPayload:status];
@@ -504,6 +507,23 @@ static void RPCS3Progress(void* context,
     CGFloat scale = screen.scale;
     float refreshRate = (float)screen.maximumFramesPerSecond;
     dispatch_async(_runtimeQueue, ^{
+      if (!self.llvmSelfTestPassed) {
+        typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
+        auto selfTest = reinterpret_cast<SelfTest>(dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test"));
+        uint64_t output = 0;
+        RPCS3Diagnostic(@"llvm_self_test_begin", @"Testing generated ARM64 code before game boot");
+        rpcs3_ios_status testStatus = selfTest ? selfTest(11, &output) : -1;
+        self.llvmSelfTestPassed = testStatus == 0 && output == 40;
+        RPCS3Diagnostic(@"llvm_self_test_end", [NSString stringWithFormat:@"status=%d output=%llu passed=%d", testStatus, (unsigned long long)output, self.llvmSelfTestPassed]);
+        if (!self.llvmSelfTestPassed) {
+          NSString* detail = selfTest ? [self lastError] : @"LLVM self-test export is missing.";
+          [self stopAndDismiss:nil];
+          dispatch_async(dispatch_get_main_queue(), ^{
+            result(@{@"success": @NO, @"message": [@"RPCS3 LLVM JIT self-test failed: " stringByAppendingString:detail]});
+          });
+          return;
+        }
+      }
       rpcs3_ios_display_surface surface = {};
       surface.size = sizeof(surface);
       surface.width = MAX(1, (uint32_t)llround(size.width * scale));
@@ -511,9 +531,11 @@ static void RPCS3Progress(void* context,
       surface.refresh_rate = refreshRate;
       surface.metal_layer = (__bridge void*)controller.metalLayer;
       rpcs3_ios_status surfaceStatus = self->_api.set_display_surface(&surface);
+      RPCS3Diagnostic(@"game_boot_begin", titleId);
       rpcs3_ios_status bootStatus = surfaceStatus == 0
           ? self->_api.boot_game(titleId.UTF8String, savestateId.length ? savestateId.UTF8String : NULL)
           : surfaceStatus;
+      RPCS3Diagnostic(@"game_boot_return", [NSString stringWithFormat:@"%@ status=%d", titleId, bootStatus]);
       NSDictionary* payload = [self statusPayload:bootStatus];
       if (bootStatus != 0) [self stopAndDismiss:nil];
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });

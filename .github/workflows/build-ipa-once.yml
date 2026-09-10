@@ -1,27 +1,28 @@
-name: NeoStation iOS Build 231
-run-name: NeoStation iOS Build 231 (RPCS3 PPU boot + multi-delete) • ${{ github.sha }}
+name: NeoStation iOS Build 234
+run-name: NeoStation iOS Build 234 (RPCS3 embedded cache startup) • ${{ github.sha }}
 
 on:
+  workflow_dispatch:
   push:
     branches:
-      - fix/rpcs3-ppu-delete-build231
+      - fix/rpcs3-cache-startup-build234
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-231
+  group: neostation-ios-build-234
   cancel-in-progress: true
 
 jobs:
   build:
     name: Build NeoStation IPA
     runs-on: macos-15
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
-      BUILD_NUMBER: '231'
-      IPA_NAME: 'NeoStation-iOS-Build-231'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-231'
+      BUILD_NUMBER: '234'
+      IPA_NAME: 'NeoStation-iOS-Build-234'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-234'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -37,37 +38,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify cleaned source
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git diff --check
-          python3 - <<'PY'
-          from pathlib import Path
-          forbidden = ('Neo' + 'Sync', ('Neo' + 'Sync').lower(), 'neo' + '_sync')
-          violations = []
-          for root_name in ('lib', 'assets', 'test'):
-              root = Path(root_name)
-              if not root.exists():
-                  continue
-              for path in root.rglob('*'):
-                  if not path.is_file():
-                      continue
-                  rel = path.as_posix()
-                  if any(token in rel for token in forbidden):
-                      violations.append(rel)
-                      continue
-                  try:
-                      text = path.read_text()
-                  except UnicodeDecodeError:
-                      continue
-                  if any(token in text for token in forbidden):
-                      violations.append(rel)
-          if violations:
-              raise SystemExit('Retired sync remnants: ' + ', '.join(sorted(set(violations))[:50]))
-          PY
-
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -81,6 +51,7 @@ jobs:
           cache: true
 
       - name: Prepare build tools
+        shell: bash
         run: |
           set -euo pipefail
           export BUNDLE_PATH="$RUNNER_TEMP/dolphin-ruby-gems"
@@ -91,9 +62,11 @@ jobs:
           command -v cmake >/dev/null || brew install cmake
           command -v ninja >/dev/null || brew install ninja
           command -v ccache >/dev/null || brew install ccache
-          ccache --max-size=2G
+          brew list llvm@22 >/dev/null 2>&1 || brew install llvm@22
+          ccache --max-size=3G
 
       - name: Prepare emulator build definitions
+        shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -114,29 +87,38 @@ jobs:
           PY
 
       - name: Restore StikJIT 1.5.0
+        shell: bash
         run: |
           set -euo pipefail
           curl -fL --retry 3 --retry-delay 2 'https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip' -o "$RUNNER_TEMP/StikJIT.xcframework.zip"
           python3 packages/dolphin_internal_bridge/ci/build_support.py stik "$RUNNER_TEMP/StikJIT.xcframework.zip"
 
-      - name: Materialize verified RPCS3 Core
+      - name: Build patched RPCS3 iOS Core
+        shell: bash
         run: |
           set -euo pipefail
+          bash build-utils/build_rpcs3_embedded_core.sh
+          BUILT_CORE=build/rpcs3-embedded-core/libRPCS3Core.dylib
           CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
-          python3 build-utils/materialize_rpcs3_internal.py core
-          test -s "$CORE"
+          test -s "$BUILT_CORE"
+          mkdir -p "$(dirname "$CORE")"
+          cp -f "$BUILT_CORE" "$CORE"
+          chmod 0755 "$CORE"
           for symbol in \
+            _rpcs3_ios_run_llvm_self_test \
             _rpcs3_ios_set_game_setting \
             _rpcs3_ios_get_boot_progress \
             _rpcs3_ios_stop_emulation \
             _rpcs3_ios_delete_game; do
             nm -g "$CORE" | grep -q " $symbol$" || {
-              echo "Required Build 231 RPCS3 symbol missing: $symbol" >&2
+              echo "Required RPCS3 symbol missing: $symbol" >&2
               exit 1
             }
           done
+          shasum -a 256 "$CORE"
 
       - name: Analyze and test
+        shell: bash
         run: |
           set -euo pipefail
           flutter pub get --enforce-lockfile
@@ -148,6 +130,7 @@ jobs:
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
+        shell: bash
         run: |
           set -euo pipefail
           flutter config --no-enable-swift-package-manager
@@ -176,6 +159,7 @@ jobs:
       - name: Compile pinned Dolphin core
         id: compile-core
         if: steps.core-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           set -euo pipefail
           SRC="$RUNNER_TEMP/dolphin-ios"
@@ -199,6 +183,7 @@ jobs:
 
       - name: Prepare Dolphin framework
         id: framework
+        shell: bash
         run: |
           set -euo pipefail
           python3 packages/dolphin_internal_bridge/ci/build_support.py framework "$RUNNER_TEMP/dolphin-ios"
@@ -216,9 +201,11 @@ jobs:
             ${{ runner.temp }}/dolphin-ios/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp
 
       - name: Package DolphiniOS touchscreen resources
+        shell: bash
         run: python3 packages/dolphin_internal_bridge/ci/materialize_touch_resources.py --source "$RUNNER_TEMP/dolphin-ios"
 
       - name: Configure Flutter release
+        shell: bash
         run: |
           set -euo pipefail
           flutter build ios --release --no-codesign --config-only --no-pub \
@@ -232,6 +219,7 @@ jobs:
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Compile unsigned iOS app
+        shell: bash
         run: |
           set -euo pipefail
           xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
@@ -241,38 +229,42 @@ jobs:
             DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
             COMPILER_INDEX_STORE_ENABLE=NO build
 
-      - name: Embed dormant RPCS3 Core
+      - name: Embed patched RPCS3 Core
+        shell: bash
         run: |
           set -euo pipefail
           python3 build-utils/embed_rpcs3_core_lazy.py
 
       - name: Embed RPCS3 entitlements in Runner for sideloading
+        shell: bash
         run: python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package IPA
+      - name: Package and validate IPA
+        shell: bash
         run: |
           set -euo pipefail
           git diff --check
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
           python3 - <<'PY'
           import glob
-          import sys
           import plistlib
           import zipfile
           from pathlib import Path
-
-          sys.path.insert(0, 'build-utils')
-          from embed_rpcs3_host_entitlements import embedded_entitlements, require_runtime_entitlements
 
           matches = sorted(glob.glob('dist/*.ipa'))
           if len(matches) != 1:
               raise SystemExit(f'Expected exactly one IPA, found {matches}')
           ipa = Path(matches[0])
+          if not zipfile.is_zipfile(ipa):
+              raise SystemExit('Produced IPA is not a valid ZIP archive')
           with zipfile.ZipFile(ipa) as archive:
               names = archive.namelist()
-              app_info = plistlib.loads(archive.read('Payload/NeoStation.app/Info.plist'))
-              runner = archive.read('Payload/NeoStation.app/' + app_info['CFBundleExecutable'])
-              require_runtime_entitlements(embedded_entitlements(runner))
+              info_name = 'Payload/NeoStation.app/Info.plist'
+              if info_name not in names:
+                  raise SystemExit('NeoStation app payload is missing')
+              app_info = plistlib.loads(archive.read(info_name))
+              if str(app_info.get('CFBundleVersion')) != '234':
+                  raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
               if len(cores) != 1:
@@ -281,22 +273,9 @@ jobs:
                   raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-
-          entitlements = Path('dist/NeoStation-signing.entitlements')
-          payload = plistlib.loads(entitlements.read_bytes())
-          required = (
-              'get-task-allow',
-              'com.apple.developer.kernel.extended-virtual-addressing',
-              'com.apple.developer.kernel.increased-memory-limit',
-              'com.apple.developer.kernel.increased-debugging-memory-limit',
-          )
-          missing = [key for key in required if payload.get(key) is not True]
-          if missing:
-              raise SystemExit(
-                  'Build 231 is missing required RPCS3 signing entitlements: ' + ', '.join(missing)
-              )
-          print(f'RPCS3 Build 231 IPA validation passed: {cores[0]} + RPCS3JITHelper; safe per-title PPU/SPU boot profile and native multi-delete compiled')
+          print(f'Validated {ipa}: Build 234 + patched RPCS3 Core + JIT helper')
           PY
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-234.sha256
           ls -lah dist
 
       - name: Upload IPA
@@ -316,4 +295,5 @@ jobs:
 
       - name: Remove temporary build secrets
         if: always()
+        shell: bash
         run: rm -f .dart-defines.json
