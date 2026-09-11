@@ -21,7 +21,7 @@ The standalone RPCS3 SwiftUI application is not embedded.
   s.dependency 'Flutter'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
-  s.frameworks = 'UIKit', 'Metal', 'QuartzCore', 'Security', 'CoreFoundation', 'AudioToolbox', 'CoreGraphics', 'IOSurface', 'CoreServices', 'CoreAudio', 'CoreMIDI', 'Foundation', 'MetalFX'
+  s.frameworks = 'UIKit', 'GameController', 'Metal', 'QuartzCore', 'Security', 'CoreFoundation', 'AudioToolbox', 'CoreGraphics', 'IOSurface', 'CoreServices', 'CoreAudio', 'CoreMIDI', 'Foundation', 'MetalFX'
   s.libraries = 'c++', 'iconv'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
