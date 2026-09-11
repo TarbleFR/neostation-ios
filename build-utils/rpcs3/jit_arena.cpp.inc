@@ -16,6 +16,7 @@ bool prepare_arena(bool expanded) noexcept
 	{
 		return false;
 	}
+
 	const usz capacity = choose_arena_capacity(physical_memory_size(), expanded);
 	if (!capacity || capacity > std::numeric_limits<usz>::max() / 2)
 	{
@@ -23,130 +24,174 @@ bool prepare_arena(bool expanded) noexcept
 		return false;
 	}
 
-	// NEOSTATION_DYNAMIC_JIT_V2: OS-selected addresses, without an application
-	// VM tag or fixed-address hint. pthread's MAP_JIT switch is macOS-only in
-	// Apple's libpthread. Do not require that SPI or a new entitlement on iOS.
-	u8* code = reinterpret_cast<u8*>(MAP_FAILED);
-	if (write_protect_function())
-	{
-		code = static_cast<u8*>(::mmap(nullptr, capacity, PROT_READ | PROT_WRITE | PROT_EXEC,
-			MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0));
-	}
-	const bool uses_pthread = code != MAP_FAILED;
-	if (!uses_pthread)
-	{
-		const int protection = backend == arena_backend::universal_mirrored
-			? PROT_READ | PROT_EXEC : PROT_READ | PROT_WRITE;
-		code = static_cast<u8*>(::mmap(nullptr, capacity, protection,
-			MAP_PRIVATE | MAP_ANON, -1, 0));
-	}
-	if (code == MAP_FAILED)
-	{
-		set_error("Unable to allocate dynamic JIT code: " + std::string{std::strerror(errno)});
-		return false;
-	}
-
-	// Mutable data must remain ordinary RW memory while this thread executes
-	// JIT code. Use an address hint, never overwrite an existing host mapping.
-	const uptr code_address = reinterpret_cast<uptr>(code);
-	auto* const data = static_cast<u8*>(::mmap(reinterpret_cast<void*>(code_address + capacity),
-		capacity, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0));
-	if (data == MAP_FAILED)
-	{
-		const std::string detail = std::strerror(errno);
-		::munmap(code, capacity);
-		set_error("Unable to allocate dynamic JIT data: " + detail);
-		return false;
-	}
-	// ARM64's small code model uses signed page-relative relocations. The OS
-	// can ignore the hint; reject an out-of-range result before LLVM uses it.
-	const uptr data_address = reinterpret_cast<uptr>(data);
-	const uptr distance = code_address > data_address
-		? code_address - data_address : data_address - code_address;
-	if (distance >= 0x100000000ull - capacity)
-	{
-		::munmap(data, capacity);
-		::munmap(code, capacity);
-		set_error("Dynamic JIT code/data exceed the ARM64 relocation range");
-		return false;
-	}
-
-	// Complete Universal preparation for the actual mapping before detach.
-	// The debugger must never select a different executable address.
+	// NEOSTATION_DYNAMIC_JIT_V3
+	//
+	// iOS 26 Universal JIT must execute from a VM region owned/prepared by
+	// debugserver. Do not create a host RX mapping and ask the debugger to bless
+	// it afterwards: that path can report success while the first generated
+	// instruction still faults. Also do not use MAP_JIT or the macOS-only
+	// pthread_jit_write_protect_np SPI from the embedded iOS dylib.
+	//
+	// The Universal protocol allocates the actual RX code arena when address is
+	// null. The Core then creates a shared RW alias of that exact object for all
+	// LLVM/ASM writes. Legacy JIT keeps the established RW -> RX transition.
+	u8* code = nullptr;
 	u32 preparation_chunks = 0;
 	if (backend == arena_backend::universal_mirrored)
 	{
-		if (protocol_call(command_prepare_region, code, capacity) != code_address)
+		const u64 prepared_address = protocol_call(command_prepare_region, nullptr, capacity);
+		if (!prepared_address || (prepared_address & (page_size() - 1)) != 0)
 		{
-			::munmap(data, capacity);
-			::munmap(code, capacity);
-			set_error("Universal JIT did not prepare the dynamic code mapping");
+			set_error("Universal JIT did not return a valid debugserver-owned RX arena");
 			return false;
 		}
+		code = reinterpret_cast<u8*>(static_cast<uptr>(prepared_address));
 		preparation_chunks = 1;
 	}
-
-	u8* write_view = code;
-	if (!uses_pthread)
+	else
 	{
-		// Match DolphiniOS's iOS mapping order: prepare RX, then share that exact
-		// prepared object with a writable view. copy=false is essential.
-		vm_address_t writable_address = 0;
-		vm_prot_t current_protection = VM_PROT_NONE, maximum_protection = VM_PROT_NONE;
-		const auto result = ::vm_remap(mach_task_self(), &writable_address, capacity, 0,
-			VM_FLAGS_ANYWHERE, mach_task_self(), static_cast<vm_address_t>(code_address),
-			false, &current_protection, &maximum_protection, VM_INHERIT_DEFAULT);
-		if (result != KERN_SUCCESS)
+		code = static_cast<u8*>(::mmap(nullptr, capacity, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANON, -1, 0));
+		if (code == MAP_FAILED)
 		{
-			::munmap(data, capacity);
-			::munmap(code, capacity);
-			set_error("Unable to share the prepared dynamic JIT mapping");
+			set_error("Unable to allocate legacy JIT code arena: " + std::string{std::strerror(errno)});
 			return false;
 		}
-		write_view = reinterpret_cast<u8*>(writable_address);
-		if (::vm_protect(mach_task_self(), writable_address, capacity, false,
-			VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS ||
-			(backend == arena_backend::legacy_debugger &&
-				::mprotect(code, capacity, PROT_READ | PROT_EXEC) != 0))
+	}
+
+	const auto release_code = [&]() noexcept
+	{
+		if (!code || code == MAP_FAILED)
 		{
-			::vm_deallocate(mach_task_self(), writable_address, capacity);
-			::munmap(data, capacity);
-			::munmap(code, capacity);
-			set_error("Unable to protect the dynamic JIT execution/write views");
-			return false;
+			return;
 		}
-		// Catch a detached/COW view before LLVM publishes any function pointer.
-		// Check distinct pages and two patterns; restore the original contents.
-		for (const usz offset : {usz{0}, capacity / 2, capacity - page_size()})
+		if (backend == arena_backend::universal_mirrored)
 		{
-			auto* const writer = reinterpret_cast<volatile u64*>(write_view + offset);
-			auto* const reader = reinterpret_cast<volatile const u64*>(code + offset);
-			const u64 saved = *writer;
-			bool coherent = true;
-			for (const u64 pattern : {u64{0x13579bdf2468ace0}, u64{0xfedcba9876543210}})
-			{
-				*writer = pattern;
-				std::atomic_thread_fence(std::memory_order_seq_cst);
-				coherent = coherent && *reader == pattern;
-			}
-			*writer = saved;
+			::vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(code),
+				static_cast<vm_size_t>(capacity));
+		}
+		else
+		{
+			::munmap(code, capacity);
+		}
+	};
+
+	// Keep mutable JIT data in ordinary RW memory and request an address close to
+	// the code arena. ARM64 page-relative relocations require the two arenas to
+	// remain within the 4 GiB signed-page window used by RPCS3's small model.
+	const uptr code_address = reinterpret_cast<uptr>(code);
+	auto* const data = static_cast<u8*>(::mmap(
+		reinterpret_cast<void*>(code_address + capacity),
+		capacity,
+		PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANON,
+		-1,
+		0));
+	if (data == MAP_FAILED)
+	{
+		const std::string detail = std::strerror(errno);
+		release_code();
+		set_error("Unable to allocate JIT data arena: " + detail);
+		return false;
+	}
+
+	const uptr data_address = reinterpret_cast<uptr>(data);
+	const uptr distance = code_address > data_address
+		? code_address - data_address
+		: data_address - code_address;
+	if (distance >= 0x100000000ull - capacity)
+	{
+		::munmap(data, capacity);
+		release_code();
+		set_error("JIT code/data arenas exceed the ARM64 relocation range");
+		return false;
+	}
+
+	// Share the debugserver-owned/legacy code object instead of copying it.
+	// Every generated byte is written through this RW view and executed through
+	// the original RX view.
+	vm_address_t writable_address = 0;
+	vm_prot_t current_protection = VM_PROT_NONE;
+	vm_prot_t maximum_protection = VM_PROT_NONE;
+	const kern_return_t remap_result = ::vm_remap(
+		mach_task_self(),
+		&writable_address,
+		static_cast<vm_size_t>(capacity),
+		0,
+		VM_FLAGS_ANYWHERE,
+		mach_task_self(),
+		static_cast<vm_address_t>(code_address),
+		false,
+		&current_protection,
+		&maximum_protection,
+		VM_INHERIT_DEFAULT);
+	if (remap_result != KERN_SUCCESS)
+	{
+		::munmap(data, capacity);
+		release_code();
+		set_error("Unable to create the JIT writable alias");
+		return false;
+	}
+
+	if (::vm_protect(
+			mach_task_self(),
+			writable_address,
+			static_cast<vm_size_t>(capacity),
+			false,
+			VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
+	{
+		::vm_deallocate(mach_task_self(), writable_address, static_cast<vm_size_t>(capacity));
+		::munmap(data, capacity);
+		release_code();
+		set_error("Unable to protect the JIT writable alias");
+		return false;
+	}
+
+	if (backend == arena_backend::legacy_debugger &&
+		::mprotect(code, capacity, PROT_READ | PROT_EXEC) != 0)
+	{
+		const std::string detail = std::strerror(errno);
+		::vm_deallocate(mach_task_self(), writable_address, static_cast<vm_size_t>(capacity));
+		::munmap(data, capacity);
+		release_code();
+		set_error("Unable to transition the legacy JIT arena to executable: " + detail);
+		return false;
+	}
+
+	auto* const writable_code = reinterpret_cast<u8*>(writable_address);
+
+	// Reject a detached/COW remap before LLVM can publish a function pointer.
+	// Validate distant pages and restore their original contents.
+	for (const usz offset : {usz{0}, capacity / 2, capacity - page_size()})
+	{
+		auto* const writer = reinterpret_cast<volatile u64*>(writable_code + offset);
+		auto* const reader = reinterpret_cast<volatile const u64*>(code + offset);
+		const u64 saved = *writer;
+		bool coherent = true;
+		for (const u64 pattern : {u64{0x13579bdf2468ace0}, u64{0xfedcba9876543210}})
+		{
+			*writer = pattern;
 			::sys_dcache_flush(const_cast<u64*>(writer), sizeof(u64));
 			::sys_icache_invalidate(code + offset, sizeof(u64));
-			if (!coherent)
-			{
-				::vm_deallocate(mach_task_self(), writable_address, capacity);
-				::munmap(data, capacity);
-				::munmap(code, capacity);
-				set_error("Dynamic JIT write/execute views do not share instruction bytes");
-				return false;
-			}
+			coherent = coherent && *reader == pattern;
+		}
+		*writer = saved;
+		::sys_dcache_flush(const_cast<u64*>(writer), sizeof(u64));
+		::sys_icache_invalidate(code + offset, sizeof(u64));
+		if (!coherent)
+		{
+			::vm_deallocate(mach_task_self(), writable_address, static_cast<vm_size_t>(capacity));
+			::munmap(data, capacity);
+			release_code();
+			set_error("JIT write/execute views do not share instruction bytes");
+			return false;
 		}
 	}
 
 	g_arena.code_allocator.reset(capacity);
 	g_arena.data_allocator.reset(capacity);
 	g_arena.code = code;
-	g_arena.write_view = write_view;
+	g_arena.writable_code = writable_code;
 	g_arena.data = data;
 	g_arena.capacity = capacity;
 	g_arena.preparation_chunks = preparation_chunks;

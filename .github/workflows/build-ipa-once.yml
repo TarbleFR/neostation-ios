@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 237
-run-name: NeoStation iOS Build 237 (RPCS3 dynamic JIT write/execute fix) • ${{ github.sha }}
+name: NeoStation iOS Build 238
+run-name: NeoStation iOS Build 238 (RPCS3 dlopen-safe Universal JIT fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-237
+  group: neostation-ios-build-238
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '237'
-      IPA_NAME: 'NeoStation-iOS-Build-237'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-237'
+      BUILD_NUMBER: '238'
+      IPA_NAME: 'NeoStation-iOS-Build-238'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-238'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -129,9 +129,9 @@ jobs:
           import sys
           from pathlib import Path
           data = Path(sys.argv[1]).read_bytes()
-          for marker in (b'NEOSTATION_DYNAMIC_JIT_V2', b'pthread_jit_write_protect_np'):
-              if marker not in data:
-                  raise SystemExit(f'Rebuilt Core is missing {marker!r}')
+          marker = b'NEOSTATION_DYNAMIC_JIT_V3'
+          if marker not in data:
+              raise SystemExit(f'Rebuilt Core is missing {marker!r}')
           PYCORE
           shasum -a 256 "$CORE"
 
@@ -273,7 +273,7 @@ jobs:
               if info_name not in names:
                   raise SystemExit('NeoStation app payload is missing')
               app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '237':
+              if str(app_info.get('CFBundleVersion')) != '238':
                   raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
@@ -282,13 +282,13 @@ jobs:
               core_data = archive.read(cores[0])
               if len(core_data) < 60_000_000:
                   raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
-              if b'NEOSTATION_DYNAMIC_JIT_V2' not in core_data:
-                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 237 JIT fix marker')
+              if b'NEOSTATION_DYNAMIC_JIT_V3' not in core_data:
+                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 238 JIT fix marker')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-          print(f'Validated {ipa}: Build 237 + rebuilt RPCS3 dynamic-JIT Core + JIT helper')
+          print(f'Validated {ipa}: Build 238 + rebuilt RPCS3 debugserver-owned JIT Core + JIT helper')
           PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-237.sha256
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-238.sha256
           ls -lah dist
 
       - name: Upload IPA
