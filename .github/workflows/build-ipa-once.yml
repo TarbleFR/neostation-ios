@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 240
-run-name: NeoStation iOS Build 240 (RPCS3 full-address Universal JIT + patched StikJIT) • ${{ github.sha }}
+name: NeoStation iOS Build 241
+run-name: NeoStation iOS Build 241 (RPCS3 physical controller + automatic touch controls) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-240
+  group: neostation-ios-build-241
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '240'
-      IPA_NAME: 'NeoStation-iOS-Build-240'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-240'
+      BUILD_NUMBER: '241'
+      IPA_NAME: 'NeoStation-iOS-Build-241'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-241'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -101,7 +101,6 @@ jobs:
           test "$(git -C "$STIK_SRC" rev-parse HEAD)" = "$STIKJIT_SHA"
 
           python3 build-utils/patch_stikjit_rpcs3.py "$STIK_SRC"
-          # The patcher is deliberately idempotent; run it twice before build.
           python3 build-utils/patch_stikjit_rpcs3.py "$STIK_SRC"
           python3 test/stikjit_rpcs3_patch_test.py "$STIK_SRC"
           python3 -m py_compile build-utils/patch_stikjit_rpcs3.py build-utils/install_patched_stikjit.py
@@ -153,6 +152,7 @@ jobs:
             _rpcs3_ios_run_llvm_self_test \
             _rpcs3_ios_set_game_setting \
             _rpcs3_ios_get_boot_progress \
+            _rpcs3_ios_set_pad_state \
             _rpcs3_ios_stop_emulation \
             _rpcs3_ios_delete_game; do
             grep -q " $symbol$" build/rpcs3-embedded-core/symbols.txt || {
@@ -173,7 +173,8 @@ jobs:
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_memory_preflight_test.py
           python3 test/rpcs3_host_entitlements_test.py
-          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py
+          python3 test/rpcs3_input_bridge_test.py
+          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -306,8 +307,14 @@ jobs:
               if info_name not in names:
                   raise SystemExit('NeoStation app payload is missing')
               app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '240':
+              if str(app_info.get('CFBundleVersion')) != '241':
                   raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
+              executable = app_info.get('CFBundleExecutable')
+              executable_name = f'Payload/NeoStation.app/{executable}' if executable else ''
+              if executable_name not in names:
+                  raise SystemExit(f'NeoStation executable missing: {executable_name}')
+              if b'NEOSTATION_RPCS3_INPUT_V1' not in archive.read(executable_name):
+                  raise SystemExit('IPA is missing the RPCS3 native physical/touch input bridge marker')
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
               stik_bins = [name for name in names if name.endswith('/Frameworks/StikJIT.framework/StikJIT')]
@@ -318,7 +325,7 @@ jobs:
               core_data = archive.read(cores[0])
               validate_core(core_data)
               if b'NEOSTATION_DYNAMIC_JIT_V4' not in core_data:
-                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 240 V4 marker')
+                  raise SystemExit('IPA contains a stale RPCS3 Core without the V4 marker')
               if core_data != Path('build/rpcs3-embedded-core/libRPCS3Core.dylib').read_bytes():
                   raise SystemExit('IPA does not contain the exact Core rebuilt in this workflow')
               if not helpers:
@@ -331,9 +338,9 @@ jobs:
                   raise SystemExit(f'Patched StikJIT universal.js missing or duplicated: {stik_scripts}')
               if b'NEOSTATION_STIKJIT_UNIVERSAL_V1' not in archive.read(stik_scripts[0]):
                   raise SystemExit('IPA contains a stale StikJIT Universal script')
-          print(f'Validated {ipa}: Build 240 + RPCS3 V4 contiguous JIT Core + full-address StikJIT 1.5.0')
+          print(f'Validated {ipa}: Build 241 + RPCS3 V4 JIT + physical controller + automatic touch controls')
           PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-240.sha256
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-241.sha256
           ls -lah dist
 
       - name: Upload IPA
