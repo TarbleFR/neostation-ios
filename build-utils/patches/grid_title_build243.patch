@@ -1,0 +1,36 @@
+--- a/lib/widgets/game_view_footer.dart
++++ b/lib/widgets/game_view_footer.dart
+@@ -76,14 +76,25 @@
+               crossAxisAlignment: CrossAxisAlignment.start,
+               mainAxisSize: MainAxisSize.min,
+               children: [
+-                if (showTitle)
+-                  MarqueeText(
+-                    text: GameUtils.formatGameName(game.name),
+-                  isActive: true,
+-                  style: TextStyle(
+-                    color: scheme.onSurface,
+-                    fontSize: 18.r,
+-                    fontWeight: FontWeight.bold,
++                // Grid mode hides only the visible game title. Keep the exact
++                // title line geometry so the footer and the action pills keep
++                // the same size/vertical alignment as the previous layout.
++                Visibility(
++                  visible: showTitle,
++                  maintainAnimation: true,
++                  maintainState: true,
++                  maintainSize: true,
++                  child: ExcludeSemantics(
++                    excluding: !showTitle,
++                    child: MarqueeText(
++                      text: GameUtils.formatGameName(game.name),
++                      isActive: showTitle,
++                      style: TextStyle(
++                        color: scheme.onSurface,
++                        fontSize: 18.r,
++                        fontWeight: FontWeight.bold,
++                      ),
++                    ),
+                   ),
+                 ),
+                 // Always reserve the ROM-filename subtitle's line height so the
