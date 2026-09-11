@@ -3,6 +3,7 @@
 #import "Rpcs3CoreABI.h"
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3MemoryPreflight.h"
+#import "RPCS3GameInputController.h"
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -114,6 +115,7 @@ static UIViewController* RPCS3RootViewController(void) {
 @interface RPCS3GameViewController : UIViewController
 @property(nonatomic, copy) dispatch_block_t closeHandler;
 @property(nonatomic, readonly) CAMetalLayer* metalLayer;
+@property(nonatomic, strong) RPCS3GameInputController* inputController;
 @end
 
 @implementation RPCS3GameViewController
@@ -151,6 +153,18 @@ static UIViewController* RPCS3RootViewController(void) {
     [close.widthAnchor constraintEqualToConstant:44],
     [close.heightAnchor constraintEqualToConstant:44],
   ]];
+}
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  [self.inputController start];
+}
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  [self.inputController layoutControlsInBounds:self.view.bounds safeAreaInsets:self.view.safeAreaInsets];
+}
+- (void)viewDidDisappear:(BOOL)animated {
+  [self.inputController stop];
+  [super viewDidDisappear:animated];
 }
 - (CAMetalLayer*)metalLayer { return (CAMetalLayer*)self.view.layer; }
 - (void)closePressed { if (self.closeHandler) self.closeHandler(); }
@@ -305,6 +319,7 @@ static void RPCS3Progress(void* context,
   LOAD("rpcs3_ios_install_zip", install_zip);
   LOAD("rpcs3_ios_install_folder", install_folder);
   LOAD("rpcs3_ios_set_display_surface", set_display_surface);
+  LOAD("rpcs3_ios_set_pad_state", set_pad_state);
   LOAD("rpcs3_ios_boot_game", boot_game);
   LOAD("rpcs3_ios_get_emulation_state", get_emulation_state);
   LOAD("rpcs3_ios_stop_emulation", stop_emulation);
@@ -433,6 +448,7 @@ static void RPCS3Progress(void* context,
       NSDictionary* payload = [self statusPayload:status];
       dispatch_async(dispatch_get_main_queue(), ^{
         RPCS3GameViewController* controller = self.gameController;
+        [controller.inputController stop];
         self.gameController = nil;
         [controller dismissViewControllerAnimated:NO completion:nil];
         result(payload);
@@ -499,6 +515,9 @@ static void RPCS3Progress(void* context,
       __weak Rpcs3InternalBridgePlugin* weakSelf = self;
       controller.closeHandler = ^{ [weakSelf stopAndDismiss:nil]; };
       [controller loadViewIfNeeded];
+      controller.inputController = [[RPCS3GameInputController alloc] initWithHostView:controller.view api:&self->_api];
+      [controller.inputController start];
+      [controller.inputController layoutControlsInBounds:controller.view.bounds safeAreaInsets:controller.view.safeAreaInsets];
       [root presentViewController:controller animated:NO completion:nil];
       self.gameController = controller;
     };
@@ -564,6 +583,7 @@ static void RPCS3Progress(void* context,
     if (self.initialized && self->_api.set_display_surface) self->_api.set_display_surface(NULL);
     dispatch_async(dispatch_get_main_queue(), ^{
       RPCS3GameViewController* controller = self.gameController;
+      [controller.inputController stop];
       self.gameController = nil;
       [controller dismissViewControllerAnimated:NO completion:nil];
       if (result) result(@(ok));
