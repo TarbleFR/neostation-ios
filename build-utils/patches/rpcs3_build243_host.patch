@@ -1,0 +1,459 @@
+--- a/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+@@ -4,7 +4,9 @@
+ #import "Rpcs3Diagnostics.h"
+ #import "Rpcs3MemoryPreflight.h"
+ #import "RPCS3GameInputController.h"
++#import "RPCS3PerformanceOverlay.h"
+ 
++#import <AVFAudio/AVAudioSession.h>
+ #import <Metal/Metal.h>
+ #import <QuartzCore/CAMetalLayer.h>
+ #import <Security/Security.h>
+@@ -114,8 +116,13 @@
+ 
+ @interface RPCS3GameViewController : UIViewController
+ @property(nonatomic, copy) dispatch_block_t closeHandler;
++@property(nonatomic, copy) dispatch_block_t menuHandler;
++@property(nonatomic, copy) void (^performanceToggleHandler)(BOOL visible);
+ @property(nonatomic, readonly) CAMetalLayer* metalLayer;
+ @property(nonatomic, strong) RPCS3GameInputController* inputController;
++@property(nonatomic, strong) RPCS3PerformanceOverlay* performanceOverlay;
++@property(nonatomic, strong) UIButton* performanceButton;
++@property(nonatomic, assign) BOOL showingPerformance;
+ @end
+ 
+ @implementation RPCS3GameViewController
+@@ -138,20 +145,46 @@
+   layer.contentsScale = UIScreen.mainScreen.scale;
+   self.view = view;
+ 
+-  UIButton* close = [UIButton buttonWithType:UIButtonTypeSystem];
+-  close.translatesAutoresizingMaskIntoConstraints = NO;
+-  close.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+-  close.tintColor = UIColor.whiteColor;
+-  close.layer.cornerRadius = 18;
+-  close.accessibilityLabel = @"Quit RPCS3";
+-  [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
+-  [close addTarget:self action:@selector(closePressed) forControlEvents:UIControlEventTouchUpInside];
+-  [view addSubview:close];
++  UIButton* menu = [UIButton buttonWithType:UIButtonTypeSystem];
++  menu.translatesAutoresizingMaskIntoConstraints = NO;
++  menu.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
++  menu.tintColor = UIColor.whiteColor;
++  menu.layer.cornerRadius = 18;
++  menu.accessibilityLabel = @"Menu RPCS3";
++  [menu setImage:[UIImage systemImageNamed:@"line.3.horizontal"] forState:UIControlStateNormal];
++  [menu addTarget:self action:@selector(menuPressed) forControlEvents:UIControlEventTouchUpInside];
++  [view addSubview:menu];
++
++  UIButton* performance = [UIButton buttonWithType:UIButtonTypeSystem];
++  performance.translatesAutoresizingMaskIntoConstraints = NO;
++  performance.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
++  performance.tintColor = UIColor.whiteColor;
++  performance.layer.cornerRadius = 18;
++  performance.accessibilityLabel = @"Performances RPCS3";
++  performance.accessibilityValue = @"Désactivé";
++  [performance setImage:[UIImage systemImageNamed:@"chart.xyaxis.line"] forState:UIControlStateNormal];
++  [performance addTarget:self action:@selector(performancePressed) forControlEvents:UIControlEventTouchUpInside];
++  self.performanceButton = performance;
++  [view addSubview:performance];
++
++  self.performanceOverlay = [[RPCS3PerformanceOverlay alloc] initWithFrame:CGRectZero];
++  self.performanceOverlay.translatesAutoresizingMaskIntoConstraints = NO;
++  self.performanceOverlay.hidden = YES;
++  [view addSubview:self.performanceOverlay];
++
+   [NSLayoutConstraint activateConstraints:@[
+-    [close.leadingAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.leadingAnchor constant:12],
+-    [close.topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor constant:12],
+-    [close.widthAnchor constraintEqualToConstant:44],
+-    [close.heightAnchor constraintEqualToConstant:44],
++    [menu.leadingAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.leadingAnchor constant:12],
++    [menu.topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor constant:12],
++    [menu.widthAnchor constraintEqualToConstant:44],
++    [menu.heightAnchor constraintEqualToConstant:44],
++    [performance.leadingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:8],
++    [performance.centerYAnchor constraintEqualToAnchor:menu.centerYAnchor],
++    [performance.widthAnchor constraintEqualToConstant:44],
++    [performance.heightAnchor constraintEqualToConstant:44],
++    [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:menu.leadingAnchor],
++    [self.performanceOverlay.topAnchor constraintEqualToAnchor:menu.bottomAnchor constant:8],
++    [self.performanceOverlay.widthAnchor constraintEqualToConstant:310],
++    [self.performanceOverlay.heightAnchor constraintEqualToConstant:150],
+   ]];
+ }
+ - (void)viewDidAppear:(BOOL)animated {
+@@ -167,7 +200,15 @@
+   [super viewDidDisappear:animated];
+ }
+ - (CAMetalLayer*)metalLayer { return (CAMetalLayer*)self.view.layer; }
+-- (void)closePressed { if (self.closeHandler) self.closeHandler(); }
++- (void)menuPressed { if (self.menuHandler) self.menuHandler(); }
++- (void)performancePressed {
++  self.showingPerformance = !self.showingPerformance;
++  [self.performanceOverlay reset];
++  self.performanceOverlay.hidden = !self.showingPerformance;
++  self.performanceButton.tintColor = self.showingPerformance ? UIColor.systemGreenColor : UIColor.whiteColor;
++  self.performanceButton.accessibilityValue = self.showingPerformance ? @"Activé" : @"Désactivé";
++  if (self.performanceToggleHandler) self.performanceToggleHandler(self.showingPerformance);
++}
+ - (BOOL)prefersStatusBarHidden { return YES; }
+ - (BOOL)prefersHomeIndicatorAutoHidden { return YES; }
+ - (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
+@@ -181,10 +222,13 @@
+ @property(nonatomic, assign) BOOL coreLoadedWithExpandedJit;
+ @property(nonatomic, assign) BOOL operationBusy;
+ @property(nonatomic, assign) BOOL llvmSelfTestPassed;
++@property(nonatomic, copy) NSString* activeTitleId;
++@property(nonatomic, assign) BOOL audioSessionActive;
+ @end
+ 
+ @implementation Rpcs3InternalBridgePlugin {
+   dispatch_queue_t _runtimeQueue;
++  dispatch_source_t _performanceTimer;
+   rpcs3_ios_api _api;
+ }
+ 
+@@ -320,8 +364,12 @@
+   LOAD("rpcs3_ios_install_folder", install_folder);
+   LOAD("rpcs3_ios_set_display_surface", set_display_surface);
+   LOAD("rpcs3_ios_set_pad_state", set_pad_state);
++  LOAD("rpcs3_ios_set_game_setting", set_game_setting);
+   LOAD("rpcs3_ios_boot_game", boot_game);
+   LOAD("rpcs3_ios_get_emulation_state", get_emulation_state);
++  LOAD("rpcs3_ios_get_performance_metrics", get_performance_metrics);
++  LOAD("neostation_rpcs3_ios_save_state", save_state);
++  LOAD("neostation_rpcs3_ios_enumerate_savestates_live", enumerate_savestates_live);
+   LOAD("rpcs3_ios_stop_emulation", stop_emulation);
+   LOAD("rpcs3_ios_shutdown", shutdown);
+   LOAD("rpcs3_ios_last_error", last_error);
+@@ -341,6 +389,266 @@
+   return ok ? @{@"success": @YES} : @{@"success": @NO, @"message": [self lastError], @"status": @(status)};
+ }
+ 
++- (BOOL)activateRPCS3AudioSession:(NSString**)fatalError {
++  AVAudioSession* session = AVAudioSession.sharedInstance;
++  NSError* error = nil;
++  if (![session setCategory:AVAudioSessionCategoryPlayback
++                        mode:AVAudioSessionModeDefault
++                     options:0
++                       error:&error]) {
++    if (fatalError) *fatalError = [NSString stringWithFormat:@"RPCS3 audio category failed: %@", error.localizedDescription ?: @"unknown error"];
++    return NO;
++  }
++
++  // RPCS3's iOS backend models a 512-frame callback at 48 kHz. Pin the host
++  // route to that cadence before RemoteIO opens; letting iOS choose a much
++  // shorter slice causes the emulator mixer to be drained too aggressively and
++  // presents as repeated underruns/crackle under PS3 CPU load.
++  NSError* sampleError = nil;
++  [session setPreferredSampleRate:48000.0 error:&sampleError];
++  NSError* bufferError = nil;
++  [session setPreferredIOBufferDuration:(512.0 / 48000.0) error:&bufferError];
++  error = nil;
++  if (![session setActive:YES error:&error]) {
++    if (fatalError) *fatalError = [NSString stringWithFormat:@"RPCS3 audio session activation failed: %@", error.localizedDescription ?: @"unknown error"];
++    return NO;
++  }
++  self.audioSessionActive = YES;
++
++  NSString* warning = @"";
++  if (sampleError || bufferError) {
++    warning = [NSString stringWithFormat:@" preferenceWarning=%@/%@",
++        sampleError.localizedDescription ?: @"none", bufferError.localizedDescription ?: @"none"];
++  }
++  RPCS3Diagnostic(@"audio_session_active", [NSString stringWithFormat:
++      @"rate=%.1fHz ioBuffer=%.3fms outputLatency=%.3fms%@",
++      session.sampleRate, session.IOBufferDuration * 1000.0,
++      session.outputLatency * 1000.0, warning]);
++  return YES;
++}
++
++- (void)deactivateRPCS3AudioSession {
++  if (!self.audioSessionActive) return;
++  NSError* error = nil;
++  [AVAudioSession.sharedInstance setActive:NO
++                                withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
++                                      error:&error];
++  RPCS3Diagnostic(@"audio_session_inactive", error ? error.localizedDescription : @"deactivated");
++  self.audioSessionActive = NO;
++}
++
++- (void)showMessage:(NSString*)title message:(NSString*)message {
++  dispatch_async(dispatch_get_main_queue(), ^{
++    RPCS3GameViewController* controller = self.gameController;
++    if (!controller || controller.presentedViewController) return;
++    UIAlertController* alert = [UIAlertController alertControllerWithTitle:title
++                                                                   message:message
++                                                            preferredStyle:UIAlertControllerStyleAlert];
++    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
++    [controller presentViewController:alert animated:YES completion:nil];
++  });
++}
++
++- (void)setPerformanceSamplingEnabled:(BOOL)enabled {
++  dispatch_async(_runtimeQueue, ^{
++    if (!enabled) {
++      if (self->_performanceTimer) {
++        dispatch_source_cancel(self->_performanceTimer);
++        self->_performanceTimer = nil;
++      }
++      return;
++    }
++    if (self->_performanceTimer || !self->_api.get_performance_metrics) return;
++    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self->_runtimeQueue);
++    self->_performanceTimer = timer;
++    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0),
++                              (uint64_t)(0.5 * NSEC_PER_SEC),
++                              (uint64_t)(0.05 * NSEC_PER_SEC));
++    __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++    dispatch_source_set_event_handler(timer, ^{
++      Rpcs3InternalBridgePlugin* strongSelf = weakSelf;
++      if (!strongSelf) return;
++      rpcs3_ios_performance_metrics metrics = {};
++      metrics.size = sizeof(metrics);
++      if (strongSelf->_api.get_performance_metrics(&metrics) != 0) return;
++      const double timestamp = CACurrentMediaTime() * 1000.0;
++      dispatch_async(dispatch_get_main_queue(), ^{
++        RPCS3GameViewController* owner = strongSelf.gameController;
++        if (!owner || !owner.showingPerformance) return;
++        [owner.performanceOverlay appendMetricsWithFPS:metrics.frames_per_second
++                                                   cpu:metrics.cpu_usage_percent
++                                                   gpu:metrics.gpu_usage_percent
++                                            memoryUsed:metrics.memory_used_bytes
++                                           memoryTotal:metrics.memory_total_bytes
++                                           validFields:metrics.valid_fields
++                                             timestamp:timestamp];
++      });
++    });
++    dispatch_resume(timer);
++  });
++}
++
++static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info* info) {
++  if (!context || !info || !info->identifier) return;
++  NSMutableArray* states = (__bridge NSMutableArray*)context;
++  NSString* identifier = [NSString stringWithUTF8String:info->identifier] ?: @"";
++  if (!identifier.length) return;
++  [states addObject:@{
++    @"id": identifier,
++    @"compatible": @(info->compatible != 0),
++    @"size": @(info->byte_size),
++    @"modified": @(info->modified_time),
++  }];
++}
++
++- (NSArray<NSDictionary*>*)languageChoices {
++  return @[
++    @{@"label": @"日本語", @"value": @"Japanese"},
++    @{@"label": @"English (US)", @"value": @"English (US)"},
++    @{@"label": @"Français", @"value": @"French"},
++    @{@"label": @"Español", @"value": @"Spanish"},
++    @{@"label": @"Deutsch", @"value": @"German"},
++    @{@"label": @"Italiano", @"value": @"Italian"},
++    @{@"label": @"Nederlands", @"value": @"Dutch"},
++    @{@"label": @"Português (Portugal)", @"value": @"Portuguese (Portugal)"},
++    @{@"label": @"Русский", @"value": @"Russian"},
++    @{@"label": @"한국어", @"value": @"Korean"},
++    @{@"label": @"中文（繁體）", @"value": @"Chinese (Traditional)"},
++    @{@"label": @"中文（简体）", @"value": @"Chinese (Simplified)"},
++    @{@"label": @"Suomi", @"value": @"Finnish"},
++    @{@"label": @"Svenska", @"value": @"Swedish"},
++    @{@"label": @"Dansk", @"value": @"Danish"},
++    @{@"label": @"Norsk", @"value": @"Norwegian"},
++    @{@"label": @"Polski", @"value": @"Polish"},
++    @{@"label": @"English (UK)", @"value": @"English (UK)"},
++    @{@"label": @"Português (Brasil)", @"value": @"Portuguese (Brazil)"},
++    @{@"label": @"Türkçe", @"value": @"Turkish"},
++  ];
++}
++
++- (void)showLanguageMenu {
++  RPCS3GameViewController* controller = self.gameController;
++  NSString* titleId = self.activeTitleId;
++  if (!controller || !titleId.length || controller.presentedViewController) return;
++  UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Langue PS3"
++                                                                 message:@"Le jeu redémarre pour appliquer la langue."
++                                                          preferredStyle:UIAlertControllerStyleAlert];
++  __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++  for (NSDictionary* choice in [self languageChoices]) {
++    NSString* label = choice[@"label"];
++    NSString* value = choice[@"value"];
++    [alert addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++      Rpcs3InternalBridgePlugin* strongSelf = weakSelf;
++      if (!strongSelf) return;
++      dispatch_async(strongSelf->_runtimeQueue, ^{
++        if (!strongSelf.activeTitleId.length || !strongSelf->_api.stop_emulation || !strongSelf->_api.set_game_setting) return;
++        rpcs3_ios_status status = strongSelf->_api.stop_emulation();
++        if (status == 0) status = strongSelf->_api.set_game_setting(strongSelf.activeTitleId.UTF8String, "system.language", value.UTF8String);
++        if (status == 0) status = strongSelf->_api.boot_game(strongSelf.activeTitleId.UTF8String, NULL);
++        if (status != 0) [strongSelf showMessage:@"RPCS3" message:[strongSelf lastError]];
++        else RPCS3Diagnostic(@"game_language", [NSString stringWithFormat:@"%@ = %@", strongSelf.activeTitleId, value]);
++      });
++    }]];
++  }
++  [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
++  [controller presentViewController:alert animated:YES completion:nil];
++}
++
++- (void)saveCurrentState {
++  dispatch_async(_runtimeQueue, ^{
++    rpcs3_ios_status status = self->_api.save_state ? self->_api.save_state() : -1;
++    if (status == 0) {
++      RPCS3Diagnostic(@"savestate_save", @"requested");
++      [self showMessage:@"Savestate" message:@"Création de la savestate lancée. RPCS3 reprend automatiquement la partie après l’écriture."];
++    } else {
++      [self showMessage:@"Savestate" message:[self lastError]];
++    }
++  });
++}
++
++- (void)loadSavestateIdentifier:(NSString*)identifier {
++  if (!identifier.length) return;
++  dispatch_async(_runtimeQueue, ^{
++    if (!self.activeTitleId.length) return;
++    rpcs3_ios_status status = self->_api.stop_emulation();
++    if (status == 0) status = self->_api.boot_game(self.activeTitleId.UTF8String, identifier.UTF8String);
++    if (status != 0) [self showMessage:@"Savestate" message:[self lastError]];
++    else RPCS3Diagnostic(@"savestate_load", identifier);
++  });
++}
++
++- (void)showLoadSavestateMenu {
++  NSString* titleId = self.activeTitleId;
++  if (!titleId.length) return;
++  dispatch_async(_runtimeQueue, ^{
++    NSMutableArray<NSDictionary*>* states = [NSMutableArray array];
++    rpcs3_ios_status status = self->_api.enumerate_savestates_live
++        ? self->_api.enumerate_savestates_live(titleId.UTF8String, RPCS3CollectSavestate, (__bridge void*)states)
++        : -1;
++    if (status != 0) {
++      [self showMessage:@"Savestates" message:[self lastError]];
++      return;
++    }
++    NSArray<NSDictionary*>* snapshot = [states copy];
++    dispatch_async(dispatch_get_main_queue(), ^{
++      RPCS3GameViewController* controller = self.gameController;
++      if (!controller || controller.presentedViewController) return;
++      if (!snapshot.count) {
++        [self showMessage:@"Savestates" message:@"Aucune savestate disponible pour ce jeu."];
++        return;
++      }
++      UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Charger une savestate"
++                                                                     message:nil
++                                                              preferredStyle:UIAlertControllerStyleAlert];
++      NSDateFormatter* formatter = [NSDateFormatter new];
++      formatter.dateStyle = NSDateFormatterShortStyle;
++      formatter.timeStyle = NSDateFormatterMediumStyle;
++      __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++      NSUInteger index = 0;
++      for (NSDictionary* entry in snapshot) {
++        ++index;
++        NSString* identifier = entry[@"id"];
++        BOOL compatible = [entry[@"compatible"] boolValue];
++        int64_t modified = [entry[@"modified"] longLongValue];
++        NSDate* date = modified > 0 ? [NSDate dateWithTimeIntervalSince1970:(NSTimeInterval)modified] : nil;
++        NSString* dateText = date ? [formatter stringFromDate:date] : @"date inconnue";
++        NSString* label = [NSString stringWithFormat:@"%lu · %@%@", (unsigned long)index, dateText, compatible ? @"" : @" · incompatible"];
++        UIAlertAction* action = [UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* selected) {
++          if (compatible) [weakSelf loadSavestateIdentifier:identifier];
++          else [weakSelf showMessage:@"Savestate" message:@"Cette savestate n’est pas compatible avec ce cœur RPCS3."];
++        }];
++        action.enabled = YES;
++        [alert addAction:action];
++      }
++      [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
++      [controller presentViewController:alert animated:YES completion:nil];
++    });
++  });
++}
++
++- (void)showGameMenu {
++  RPCS3GameViewController* controller = self.gameController;
++  if (!controller || controller.presentedViewController) return;
++  UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"RPCS3"
++                                                                 message:nil
++                                                          preferredStyle:UIAlertControllerStyleAlert];
++  __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++  [alert addAction:[UIAlertAction actionWithTitle:@"Langue" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf showLanguageMenu]; });
++  }]];
++  [alert addAction:[UIAlertAction actionWithTitle:@"Créer une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++    [weakSelf saveCurrentState];
++  }]];
++  [alert addAction:[UIAlertAction actionWithTitle:@"Charger une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++    [weakSelf showLoadSavestateMenu];
++  }]];
++  [alert addAction:[UIAlertAction actionWithTitle:@"Quitter le jeu" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
++    [weakSelf stopAndDismiss:nil];
++  }]];
++  [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
++  [controller presentViewController:alert animated:YES completion:nil];
++}
++
+ - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+   if ([call.method isEqualToString:@"preflight"]) {
+     dispatch_async(_runtimeQueue, ^{
+@@ -437,8 +745,11 @@
+         dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @YES, @"alreadyShutdown": @YES}); });
+         return;
+       }
++      if (self->_performanceTimer) { dispatch_source_cancel(self->_performanceTimer); self->_performanceTimer = nil; }
+       if (self.gameController && self->_api.stop_emulation) self->_api.stop_emulation();
+       if (self->_api.set_display_surface) self->_api.set_display_surface(NULL);
++      [self deactivateRPCS3AudioSession];
++      self.activeTitleId = nil;
+       rpcs3_ios_status status = self->_api.shutdown ? self->_api.shutdown() : 0;
+       if (status == 0) {
+         self.initialized = NO;
+@@ -514,12 +825,15 @@
+       controller = [RPCS3GameViewController new];
+       __weak Rpcs3InternalBridgePlugin* weakSelf = self;
+       controller.closeHandler = ^{ [weakSelf stopAndDismiss:nil]; };
++      controller.menuHandler = ^{ [weakSelf showGameMenu]; };
++      controller.performanceToggleHandler = ^(BOOL visible) { [weakSelf setPerformanceSamplingEnabled:visible]; };
+       [controller loadViewIfNeeded];
+       controller.inputController = [[RPCS3GameInputController alloc] initWithHostView:controller.view api:&self->_api];
+       [controller.inputController start];
+       [controller.inputController layoutControlsInBounds:controller.view.bounds safeAreaInsets:controller.view.safeAreaInsets];
+       [root presentViewController:controller animated:NO completion:nil];
+       self.gameController = controller;
++      self.activeTitleId = titleId;
+     };
+     if (NSThread.isMainThread) present();
+     else dispatch_sync(dispatch_get_main_queue(), present);
+@@ -546,6 +860,14 @@
+           return;
+         }
+       }
++      NSString* audioError = nil;
++      if (![self activateRPCS3AudioSession:&audioError]) {
++        [self stopAndDismiss:nil];
++        dispatch_async(dispatch_get_main_queue(), ^{
++          result(@{@"success": @NO, @"message": audioError ?: @"RPCS3 audio session could not start."});
++        });
++        return;
++      }
+       rpcs3_ios_display_surface surface = {};
+       surface.size = sizeof(surface);
+       surface.width = MAX(1, (uint32_t)llround(size.width * scale));
+@@ -579,11 +901,18 @@
+ - (void)stopAndDismiss:(FlutterResult)result {
+   dispatch_async(_runtimeQueue, ^{
+     BOOL ok = YES;
++    if (self->_performanceTimer) {
++      dispatch_source_cancel(self->_performanceTimer);
++      self->_performanceTimer = nil;
++    }
+     if (self.initialized && self->_api.stop_emulation) ok = self->_api.stop_emulation() == 0;
+     if (self.initialized && self->_api.set_display_surface) self->_api.set_display_surface(NULL);
++    [self deactivateRPCS3AudioSession];
++    self.activeTitleId = nil;
+     dispatch_async(dispatch_get_main_queue(), ^{
+       RPCS3GameViewController* controller = self.gameController;
+       [controller.inputController stop];
++      controller.performanceToggleHandler = nil;
+       self.gameController = nil;
+       [controller dismissViewControllerAnimated:NO completion:nil];
+       if (result) result(@(ok));
