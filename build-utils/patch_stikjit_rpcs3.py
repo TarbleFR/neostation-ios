@@ -147,26 +147,29 @@ def patch_universal_js(path: Path) -> None:
         f'const {JS_MARKER} = "{JS_MARKER}";\n',
         'Universal script patch marker',
     )
-    text = replace_once(
-        text,
-        '''    let prepareJITPageResponse = prepare_memory_region(jitPageAddress, x1);
-    log(`prepareJITPageResponse = ${prepareJITPageResponse}`);
 
-    let putX0Response = send_command(`P0=${numberToLittleEndianHexString(jitPageAddress)};thread:${tid};`);
-''',
-        f'''    let prepareJITPageResponse = prepare_memory_region(jitPageAddress, x1);
-    log(`prepareJITPageResponse = ${{prepareJITPageResponse}}`);
+    # Scope the change to the live handler. The upstream file also contains a
+    # commented example with the same prepare_memory_region lines, so global
+    # exact replacement would be ambiguous and fragile.
+    signature = 'function JIT26PrepareRegion(brkResponse) {'
+    start = text.index(signature)
+    end = text.index('\n}\n\n// utilities', start) + 2
+    handler = text[start:end]
+    if f'{JS_MARKER}: debugserver page preparation failed' not in handler:
+        anchor = '    log(`prepareJITPageResponse = ${prepareJITPageResponse}`);\n'
+        if handler.count(anchor) != 1:
+            raise ValueError('StikJIT 1.5.0 source drift at Universal prepare response')
+        failure = f'''    log(`prepareJITPageResponse = ${{prepareJITPageResponse}}`);
     if (prepareJITPageResponse !== "OK") {{
         log(`{JS_MARKER}: debugserver page preparation failed; returning zero to the target`);
         let putFailureX0Response = send_command(`P0=${{numberToLittleEndianHexString(0n)}};thread:${{tid}};`);
         log(`putFailureX0Response = ${{putFailureX0Response}}`);
         return;
     }}
+'''
+        handler = handler.replace(anchor, failure, 1)
+        text = text[:start] + handler + text[end:]
 
-    let putX0Response = send_command(`P0=${{numberToLittleEndianHexString(jitPageAddress)}};thread:${{tid}};`);
-''',
-        'propagate page preparation failure',
-    )
     text = replace_once(
         text,
         '    for (let i = 4; i >= 0; i--) {\n',
