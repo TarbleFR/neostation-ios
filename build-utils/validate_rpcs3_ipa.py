@@ -26,8 +26,12 @@ REQUIRED_CORE_SYMBOLS = (
     '_rpcs3_ios_run_llvm_self_test',
     '_rpcs3_ios_set_display_surface',
     '_rpcs3_ios_set_pad_state',
+    '_rpcs3_ios_set_game_setting',
     '_rpcs3_ios_boot_game',
     '_rpcs3_ios_get_emulation_state',
+    '_rpcs3_ios_get_performance_metrics',
+    '_neostation_rpcs3_ios_save_state',
+    '_neostation_rpcs3_ios_enumerate_savestates_live',
     '_rpcs3_ios_stop_emulation',
     '_rpcs3_ios_shutdown',
 )
