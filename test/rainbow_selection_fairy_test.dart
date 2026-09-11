@@ -33,7 +33,7 @@ void main() {
     );
   });
 
-  test('grid, list and carousel explicitly opt in to the fairy', () {
+  test('grid, list and carousel hide the fairy for the RPCS3 playlist', () {
     final grid = File(
       'lib/screens/game_screen/my_games_grid.dart',
     ).readAsStringSync();
@@ -44,8 +44,16 @@ void main() {
       'lib/screens/game_screen/my_games_carousel.dart',
     ).readAsStringSync();
 
-    expect(grid, contains('showOrbitingFairy: true'));
-    expect(list, contains('showOrbitingFairy: true'));
-    expect(carousel, contains('showOrbitingFairy: true'));
+    for (final source in <String>[grid, list, carousel]) {
+      expect(source, contains('showOrbitingFairy:'));
+      expect(
+        source,
+        matches(
+          RegExp(
+            r"widget\.system\.folderName\.toLowerCase\(\)\s*!=\s*'ps3'",
+          ),
+        ),
+      );
+    }
   });
 }

@@ -1,0 +1,341 @@
+--- a/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+@@ -5,6 +5,7 @@
+ #import "Rpcs3MemoryPreflight.h"
+ #import "RPCS3GameInputController.h"
+ #import "RPCS3PerformanceOverlay.h"
++#import "RPCS3InGameLocalization.h"
+
+ #import <AVFAudio/AVAudioSession.h>
+ #import <Metal/Metal.h>
+@@ -124,6 +125,7 @@
+ @property(nonatomic, strong) UIButton* menuButton;
+ @property(nonatomic, strong) UIButton* performanceButton;
+ @property(nonatomic, assign) BOOL showingPerformance;
++@property(nonatomic, copy) NSString* uiLocale;
+ @end
+
+ @implementation RPCS3GameViewController
+@@ -135,6 +137,7 @@
+   }
+   return self;
+ }
++
+ - (void)loadView {
+   RPCS3MetalView* view = [[RPCS3MetalView alloc] initWithFrame:UIScreen.mainScreen.bounds];
+   view.backgroundColor = UIColor.blackColor;
+@@ -145,13 +148,14 @@
+   layer.framebufferOnly = NO;
+   layer.contentsScale = UIScreen.mainScreen.scale;
+   self.view = view;
++  self.uiLocale = RPCS3CanonicalLocale(self.uiLocale ?: NSLocale.preferredLanguages.firstObject);
+
+   UIButton* menu = [UIButton buttonWithType:UIButtonTypeSystem];
+   menu.translatesAutoresizingMaskIntoConstraints = NO;
+   menu.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+   menu.tintColor = UIColor.whiteColor;
+   menu.layer.cornerRadius = 18;
+-  menu.accessibilityLabel = @"Menu RPCS3";
++  menu.accessibilityLabel = RPCS3LocalizedString(@"menu", self.uiLocale);
+   [menu setImage:[UIImage systemImageNamed:@"line.3.horizontal"] forState:UIControlStateNormal];
+   [menu addTarget:self action:@selector(menuPressed) forControlEvents:UIControlEventTouchUpInside];
+   self.menuButton = menu;
+@@ -162,14 +166,15 @@
+   performance.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+   performance.tintColor = UIColor.whiteColor;
+   performance.layer.cornerRadius = 18;
+-  performance.accessibilityLabel = @"Performances RPCS3";
+-  performance.accessibilityValue = @"Désactivé";
++  performance.accessibilityLabel = RPCS3LocalizedString(@"performance", self.uiLocale);
++  performance.accessibilityValue = RPCS3LocalizedString(@"disabled", self.uiLocale);
+   [performance setImage:[UIImage systemImageNamed:@"chart.xyaxis.line"] forState:UIControlStateNormal];
+   [performance addTarget:self action:@selector(performancePressed) forControlEvents:UIControlEventTouchUpInside];
+   self.performanceButton = performance;
+   [view addSubview:performance];
+
+   self.performanceOverlay = [[RPCS3PerformanceOverlay alloc] initWithFrame:CGRectZero];
++  [self.performanceOverlay setLocaleIdentifier:self.uiLocale];
+   self.performanceOverlay.translatesAutoresizingMaskIntoConstraints = NO;
+   self.performanceOverlay.hidden = YES;
+   [view addSubview:self.performanceOverlay];
+@@ -214,7 +219,8 @@
+   [self.performanceOverlay reset];
+   self.performanceOverlay.hidden = !self.showingPerformance;
+   self.performanceButton.tintColor = self.showingPerformance ? UIColor.systemGreenColor : UIColor.whiteColor;
+-  self.performanceButton.accessibilityValue = self.showingPerformance ? @"Activé" : @"Désactivé";
++  self.performanceButton.accessibilityValue = RPCS3LocalizedString(
++      self.showingPerformance ? @"enabled" : @"disabled", self.uiLocale);
+   if (self.performanceToggleHandler) self.performanceToggleHandler(self.showingPerformance);
+ }
+ - (BOOL)prefersStatusBarHidden { return YES; }
+@@ -231,6 +237,7 @@
+ @property(nonatomic, assign) BOOL operationBusy;
+ @property(nonatomic, assign) BOOL llvmSelfTestPassed;
+ @property(nonatomic, copy) NSString* activeTitleId;
++@property(nonatomic, copy) NSString* activeUiLocale;
+ @property(nonatomic, assign) BOOL audioSessionActive;
+ @property(nonatomic, copy) NSString* previousAudioCategory;
+ @property(nonatomic, copy) NSString* previousAudioMode;
+@@ -263,6 +270,10 @@
+   return self;
+ }
+
++- (NSString*)localized:(NSString*)key {
++  return RPCS3LocalizedString(key, self.activeUiLocale);
++}
++
+ static void RPCS3Log(void* context, int32_t level, const char* message) {
+   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
+   if (!bridge || !message || level > 5) return;
+@@ -493,7 +504,7 @@
+     UIAlertController* alert = [UIAlertController alertControllerWithTitle:title
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
++    [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"ok"] style:UIAlertActionStyleDefault handler:nil]];
+     [controller presentViewController:alert animated:YES completion:nil];
+   });
+ }
+@@ -579,8 +590,8 @@
+   RPCS3GameViewController* controller = self.gameController;
+   NSString* titleId = self.activeTitleId;
+   if (!controller || !titleId.length || controller.presentedViewController) return;
+-  UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Langue PS3"
+-                                                                 message:@"Le jeu redémarre pour appliquer la langue."
++  UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self localized:@"languageTitle"]
++                                                                 message:[self localized:@"languageRestart"]
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+   __weak Rpcs3InternalBridgePlugin* weakSelf = self;
+   for (NSDictionary* choice in [self languageChoices]) {
+@@ -599,7 +610,7 @@
+       });
+     }]];
+   }
+-  [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
+   [controller presentViewController:alert animated:YES completion:nil];
+ }
+
+@@ -608,9 +619,9 @@
+     rpcs3_ios_status status = self->_api.save_state ? self->_api.save_state() : -1;
+     if (status == 0) {
+       RPCS3Diagnostic(@"savestate_save", @"requested");
+-      [self showMessage:@"Savestate" message:@"Création de la savestate lancée. RPCS3 reprend automatiquement la partie après l’écriture."];
++      [self showMessage:[self localized:@"state"] message:[self localized:@"stateStarted"]];
+     } else {
+-      [self showMessage:@"Savestate" message:[self lastError]];
++      [self showMessage:[self localized:@"state"] message:[self lastError]];
+     }
+   });
+ }
+@@ -621,7 +632,7 @@
+     if (!self.activeTitleId.length) return;
+     rpcs3_ios_status status = self->_api.stop_emulation();
+     if (status == 0) status = self->_api.boot_game(self.activeTitleId.UTF8String, identifier.UTF8String);
+-    if (status != 0) [self showMessage:@"Savestate" message:[self lastError]];
++    if (status != 0) [self showMessage:[self localized:@"state"] message:[self lastError]];
+     else RPCS3Diagnostic(@"savestate_load", identifier);
+   });
+ }
+@@ -635,7 +646,7 @@
+         ? self->_api.enumerate_savestates_live(titleId.UTF8String, RPCS3CollectSavestate, (__bridge void*)states)
+         : -1;
+     if (status != 0) {
+-      [self showMessage:@"Savestates" message:[self lastError]];
++      [self showMessage:[self localized:@"states"] message:[self lastError]];
+       return;
+     }
+     NSArray<NSDictionary*>* snapshot = [states copy];
+@@ -643,15 +654,16 @@
+       RPCS3GameViewController* controller = self.gameController;
+       if (!controller || controller.presentedViewController) return;
+       if (!snapshot.count) {
+-        [self showMessage:@"Savestates" message:@"Aucune savestate disponible pour ce jeu."];
++        [self showMessage:[self localized:@"states"] message:[self localized:@"noStates"]];
+         return;
+       }
+-      UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Charger une savestate"
++      UIAlertController* alert = [UIAlertController alertControllerWithTitle:[self localized:@"loadState"]
+                                                                      message:nil
+                                                               preferredStyle:UIAlertControllerStyleAlert];
+       NSDateFormatter* formatter = [NSDateFormatter new];
+       formatter.dateStyle = NSDateFormatterShortStyle;
+       formatter.timeStyle = NSDateFormatterMediumStyle;
++      formatter.locale = [NSLocale localeWithLocaleIdentifier:self.activeUiLocale ?: @"en"];
+       __weak Rpcs3InternalBridgePlugin* weakSelf = self;
+       NSUInteger index = 0;
+       for (NSDictionary* entry in snapshot) {
+@@ -660,16 +672,17 @@
+         BOOL compatible = [entry[@"compatible"] boolValue];
+         int64_t modified = [entry[@"modified"] longLongValue];
+         NSDate* date = modified > 0 ? [NSDate dateWithTimeIntervalSince1970:(NSTimeInterval)modified] : nil;
+-        NSString* dateText = date ? [formatter stringFromDate:date] : @"date inconnue";
+-        NSString* label = [NSString stringWithFormat:@"%lu · %@%@", (unsigned long)index, dateText, compatible ? @"" : @" · incompatible"];
++        NSString* dateText = date ? [formatter stringFromDate:date] : [self localized:@"unknownDate"];
++        NSString* label = [NSString stringWithFormat:@"%lu · %@%@", (unsigned long)index, dateText,
++            compatible ? @"" : [@" · " stringByAppendingString:[self localized:@"incompatible"]]];
+         UIAlertAction* action = [UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* selected) {
+           if (compatible) [weakSelf loadSavestateIdentifier:identifier];
+-          else [weakSelf showMessage:@"Savestate" message:@"Cette savestate n’est pas compatible avec ce cœur RPCS3."];
++          else [weakSelf showMessage:[weakSelf localized:@"state"] message:[weakSelf localized:@"incompatibleState"]];
+         }];
+         action.enabled = YES;
+         [alert addAction:action];
+       }
+-      [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
++      [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
+       [controller presentViewController:alert animated:YES completion:nil];
+     });
+   });
+@@ -690,19 +703,19 @@
+     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                    dispatch_get_main_queue(), block);
+   };
+-  [alert addAction:[UIAlertAction actionWithTitle:@"Langue" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"language"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+     afterMenuDismiss(^{ [weakSelf showLanguageMenu]; });
+   }]];
+-  [alert addAction:[UIAlertAction actionWithTitle:@"Créer une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"createState"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+     afterMenuDismiss(^{ [weakSelf saveCurrentState]; });
+   }]];
+-  [alert addAction:[UIAlertAction actionWithTitle:@"Charger une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"loadState"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+     afterMenuDismiss(^{ [weakSelf showLoadSavestateMenu]; });
+   }]];
+-  [alert addAction:[UIAlertAction actionWithTitle:@"Quitter le jeu" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"quitGame"] style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
+     [weakSelf stopAndDismiss:nil];
+   }]];
+-  [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
+   [controller presentViewController:alert animated:YES completion:nil];
+ }
+
+@@ -807,6 +820,7 @@
+       if (self->_api.set_display_surface) self->_api.set_display_surface(NULL);
+       [self deactivateRPCS3AudioSession];
+       self.activeTitleId = nil;
++      self.activeUiLocale = nil;
+       rpcs3_ios_status status = self->_api.shutdown ? self->_api.shutdown() : 0;
+       if (status == 0) {
+         self.initialized = NO;
+@@ -869,6 +883,7 @@
+     NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
+     NSString* titleId = [args[@"titleId"] isKindOfClass:NSString.class] ? args[@"titleId"] : @"";
+     NSString* savestateId = [args[@"savestateId"] isKindOfClass:NSString.class] ? args[@"savestateId"] : nil;
++    NSString* uiLocale = [args[@"uiLocale"] isKindOfClass:NSString.class] ? args[@"uiLocale"] : @"en";
+     if (!self.initialized || !titleId.length || self.gameController) {
+       result(@{@"success": @NO, @"message": @"RPCS3 is not ready to boot this title with JIT."});
+       return;
+@@ -880,6 +895,7 @@
+       UIViewController* root = RPCS3RootViewController();
+       if (!root || root.view.window == nil) return;
+       controller = [RPCS3GameViewController new];
++      controller.uiLocale = RPCS3CanonicalLocale(uiLocale);
+       __weak Rpcs3InternalBridgePlugin* weakSelf = self;
+       controller.closeHandler = ^{ [weakSelf stopAndDismiss:nil]; };
+       controller.menuHandler = ^{ [weakSelf showGameMenu]; };
+@@ -891,6 +907,7 @@
+       [root presentViewController:controller animated:NO completion:nil];
+       self.gameController = controller;
+       self.activeTitleId = titleId;
++      self.activeUiLocale = controller.uiLocale;
+     };
+     if (NSThread.isMainThread) present();
+     else dispatch_sync(dispatch_get_main_queue(), present);
+@@ -966,6 +983,7 @@
+     if (self.initialized && self->_api.set_display_surface) self->_api.set_display_surface(NULL);
+     [self deactivateRPCS3AudioSession];
+     self.activeTitleId = nil;
++    self.activeUiLocale = nil;
+     dispatch_async(dispatch_get_main_queue(), ^{
+       RPCS3GameViewController* controller = self.gameController;
+       [controller.inputController stop];
+@@ -977,4 +995,4 @@
+   });
+ }
+
+-@end
+\ No newline at end of file
++@end
+--- a/packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ #import "RPCS3PerformanceOverlay.h"
++#import "RPCS3InGameLocalization.h"
+
+ #include <array>
+ #include <cmath>
+@@ -32,6 +33,7 @@
+ @property(nonatomic, strong) UILabel* ratesLabel;
+ @property(nonatomic, strong) UILabel* memoryLabel;
+ @property(nonatomic, strong) UILabel* graphLabel;
++@property(nonatomic, copy) NSString* localeIdentifier;
+ @end
+
+ @implementation RPCS3PerformanceOverlay
+@@ -46,18 +48,25 @@
+   self.userInteractionEnabled = NO;
+   self.isAccessibilityElement = YES;
+   self.accessibilityTraits = UIAccessibilityTraitStaticText;
+-  self.accessibilityLabel = @"RPCS3 Performance";
+   self.accessibilityIdentifier = @"rpcs3.performance.overlay";
+
+   self.ratesLabel = [self newLabelWithSize:13 weight:UIFontWeightSemibold];
+   self.memoryLabel = [self newLabelWithSize:11 weight:UIFontWeightRegular];
+   self.graphLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
+-  self.graphLabel.text = @"Frame time (ms) · 60 s";
+   self.graphLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
++  [self setLocaleIdentifier:NSLocale.preferredLanguages.firstObject ?: @"en"];
+   [self reset];
+   return self;
+ }
+
++- (void)setLocaleIdentifier:(NSString*)localeIdentifier {
++  _localeIdentifier = RPCS3CanonicalLocale(localeIdentifier);
++  self.accessibilityLabel = RPCS3LocalizedString(@"performance", _localeIdentifier);
++  self.graphLabel.text = [NSString stringWithFormat:@"%@ · 60 s",
++      RPCS3LocalizedString(@"frameTime", _localeIdentifier)];
++  if (self.ratesLabel) [self reset];
++}
++
+ - (UILabel*)newLabelWithSize:(CGFloat)size weight:(UIFontWeight)weight {
+   UILabel* label = [UILabel new];
+   label.font = [UIFont monospacedDigitSystemFontOfSize:size weight:weight];
+@@ -85,7 +94,8 @@
+   _sampleStart = 0;
+   _sampleCount = 0;
+   self.ratesLabel.text = @"FPS — · CPU — · RSX —";
+-  self.memoryLabel.text = @"Memory —";
++  self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
++      RPCS3LocalizedString(@"memory", self.localeIdentifier)];
+   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
+   [self setNeedsDisplay];
+ }
+@@ -109,9 +119,12 @@
+   self.ratesLabel.text = [NSString stringWithFormat:@"FPS %@ · CPU %@ · RSX %@", fpsText, cpuText, gpuText];
+
+   if ((validFields & kMemoryValid) && memoryTotal > 0 && memoryUsed <= memoryTotal) {
+-    self.memoryLabel.text = [NSString stringWithFormat:@"Memory %@ / %@", MemoryText(memoryUsed), MemoryText(memoryTotal)];
++    self.memoryLabel.text = [NSString stringWithFormat:@"%@ %@ / %@",
++        RPCS3LocalizedString(@"memory", self.localeIdentifier),
++        MemoryText(memoryUsed), MemoryText(memoryTotal)];
+   } else {
+-    self.memoryLabel.text = @"Memory —";
++    self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
++        RPCS3LocalizedString(@"memory", self.localeIdentifier)];
+   }
+
+   if ((validFields & kFPSValid) && std::isfinite(fps) && fps > 0) {
+--- a/packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h
++++ b/packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h
+@@ -6,6 +6,7 @@
+ /// Passive NeoStation overlay for RPCS3's lock-independent iOS performance API.
+ /// The owner samples only while this view is visible.
+ @interface RPCS3PerformanceOverlay : UIView
++- (void)setLocaleIdentifier:(NSString*)localeIdentifier;
+ - (void)appendMetricsWithFPS:(double)fps
+                          cpu:(double)cpu
+                          gpu:(double)gpu

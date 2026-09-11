@@ -199,8 +199,14 @@ abstract final class Rpcs3LaunchService {
     }
   }
 
-  static Future<bool> _launchWithBootWatchdog(String titleId) async {
-    final launchFuture = Rpcs3InternalService.launchTitle(titleId);
+  static Future<bool> _launchWithBootWatchdog(
+    String titleId, {
+    required String uiLocale,
+  }) async {
+    final launchFuture = Rpcs3InternalService.launchTitle(
+      titleId,
+      uiLocale: uiLocale,
+    );
     var completed = false;
     bool? launched;
     Object? launchError;
@@ -252,6 +258,7 @@ abstract final class Rpcs3LaunchService {
 
   static Future<bool> launchTitle(
     String? rawTitleId, {
+    required String uiLocale,
     String? displayTitle,
     String? sourcePath,
     String? sourceKind,
@@ -273,7 +280,7 @@ abstract final class Rpcs3LaunchService {
       await _applyMobileBootProfile(titleId);
       // A timeout alone is not evidence of a corrupt cache. Never delete
       // compiled objects or start a second native boot automatically.
-      return await _launchWithBootWatchdog(titleId);
+      return await _launchWithBootWatchdog(titleId, uiLocale: uiLocale);
     } on Rpcs3InternalException catch (error, stackTrace) {
       _lastError = error.message;
       _lastErrorCode = error.code;

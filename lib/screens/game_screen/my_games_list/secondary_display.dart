@@ -11,6 +11,12 @@ part of '../my_games_list.dart';
 /// host [rebuild] bridge and the host static `_log` is qualified as
 /// `_SystemGamesListState._log` (both required from an extension).
 extension _SecondaryDisplay on _SystemGamesListState {
+  /// Grid cards never expose a video-audio control and their primary preview is
+  /// not visible. Keep those previews silent even when the global list/carousel
+  /// preview sound preference is enabled.
+  bool _previewAudioEnabled(ConfigModel config) =>
+      config.videoSound && config.gameViewMode != 'grid';
+
   /// Hard reset of the video preview system.
   void _resetVideoState() {
     _invalidateVideoPreview(updateDucking: false);
@@ -150,7 +156,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     final configProvider = mounted
         ? context.read<SqliteConfigProvider>()
         : null;
-    final isVideoMuted = !configProvider!.config.videoSound;
+    final isVideoMuted = !_previewAudioEnabled(configProvider!.config);
     final isScraperLoggedIn = await ScreenScraperService.hasSavedCredentials();
 
     final isMusicSystem = widget.system.folderName == 'music';
@@ -309,7 +315,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     // Suppress ducking within the Music Player system itself.
     if (widget.system.folderName == 'music') return;
 
-    if (!config.videoSound) {
+    if (!_previewAudioEnabled(config)) {
       MusicPlayerService().setDucked(false);
       return;
     }
@@ -427,7 +433,8 @@ extension _SecondaryDisplay on _SystemGamesListState {
         .read<SqliteConfigProvider>()
         .config
         .showGameInfo;
-    if (showGameInfo) {
+    if (showGameInfo &&
+        context.read<SqliteConfigProvider>().config.gameViewMode != 'grid') {
       await _initializeVideo(scheduledGame, generation: generation);
     }
   }
@@ -442,7 +449,11 @@ extension _SecondaryDisplay on _SystemGamesListState {
       return;
     }
     final config = context.read<SqliteConfigProvider>().config;
-    if (!config.showGameInfo || _isGameLaunching) return;
+    if (!config.showGameInfo ||
+        config.gameViewMode == 'grid' ||
+        _isGameLaunching) {
+      return;
+    }
 
     rebuild(() => _isVideoLoading = true);
     final videoPath = _getVideoPath(game);
@@ -503,7 +514,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
         await _fadeVideoVolume(
           controller,
           generation: generation,
-          target: config.videoSound ? 1.0 : 0.0,
+          target: _previewAudioEnabled(config) ? 1.0 : 0.0,
         );
         _updateMusicDucking();
       } catch (error) {

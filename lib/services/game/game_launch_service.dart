@@ -216,6 +216,7 @@ class GameLaunchService {
           final linkedGame = Rpcs3LibraryService.cachedGameForTitleId(titleId);
           final launched = await Rpcs3LaunchService.launchTitle(
             titleId,
+            uiLocale: Localizations.localeOf(context).toLanguageTag(),
             displayTitle: game.name,
             sourcePath: linkedGame?.sourcePath,
             sourceKind: linkedGame?.sourceKind,

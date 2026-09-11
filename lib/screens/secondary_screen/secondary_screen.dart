@@ -272,7 +272,12 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     } else {
       // Game selected, same video, but maybe mute changed
       if (_videoController != null && _videoController!.value.isInitialized) {
-        _videoController!.setVolume(state.isVideoMuted ? 0.0 : 1.0);
+        // The primary engine forces isVideoMuted in grid mode. Apply the
+        // synchronized state even when the video path itself did not change,
+        // which is the list -> grid transition that previously leaked audio.
+        unawaited(
+          _videoController!.setVolume(state.isVideoMuted ? 0.0 : 1.0),
+        );
       }
     }
   }

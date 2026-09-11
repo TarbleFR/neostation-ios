@@ -245,10 +245,12 @@ class Rpcs3InternalBridge {
 
   static Future<Map<String, dynamic>> launchGame({
     required String titleId,
+    required String uiLocale,
     String? savestateId,
   }) async => Map<String, dynamic>.from(
     await _channel.invokeMapMethod<String, dynamic>('launchGame', {
           'titleId': titleId,
+          'uiLocale': uiLocale,
           if (savestateId != null) 'savestateId': savestateId,
         }) ??
         const <String, dynamic>{},

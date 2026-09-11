@@ -804,7 +804,11 @@ class Rpcs3InternalService {
     return true;
   }
 
-  static Future<bool> launchTitle(String titleId, {String? savestateId}) async {
+  static Future<bool> launchTitle(
+    String titleId, {
+    required String uiLocale,
+    String? savestateId,
+  }) async {
     final normalized = titleId.trim().toUpperCase();
     if (normalized.isEmpty) return false;
 
@@ -830,6 +834,7 @@ class Rpcs3InternalService {
     );
     final report = await Rpcs3InternalBridge.launchGame(
       titleId: normalized,
+      uiLocale: uiLocale,
       savestateId: savestateId,
     );
     if (report['success'] != true) {

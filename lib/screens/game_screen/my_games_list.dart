@@ -39,6 +39,7 @@ import '../../providers/sqlite_database_provider.dart';
 import '../../providers/scraping_provider.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
+import '../../models/config_model.dart';
 import 'game_details_card/game_details_card_list.dart';
 import 'game_details_card/random_game_dialog.dart';
 import 'game_settings_dialog/game_settings_dialog.dart';
@@ -311,7 +312,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // `legend_hidden`, for one) would drop the legend back to its default layer
     // mid-hold, and `SelectTap.reset()` means it can't recover until Select is
     // released and pressed again.
-    if (gameViewMode != _lastGameViewMode) {
+    final previousGameViewMode = _lastGameViewMode;
+    if (gameViewMode != previousGameViewMode) {
       _lastGameViewMode = gameViewMode;
       try {
         if (gameViewMode == 'grid' || gameViewMode == 'carousel') {
@@ -320,6 +322,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
           _gamepadNav.activate();
         }
       } catch (_) {}
+
+      // A list preview owns a live AVPlayer even after its widget disappears.
+      // Tear it down at every structural view transition so list -> grid can
+      // never leave invisible preview audio running. The fresh generation
+      // below still publishes the preview to a secondary display, whose mute
+      // policy is derived from the newly selected view mode.
+      if (previousGameViewMode != null) {
+        _resetVideoState();
+        if (_selectedGame != null && newShowInfo && !_isGameLaunching) {
+          _updateSecondaryDisplay(_selectedGame!);
+          _startVideoTimer();
+        }
+      }
     }
 
     if (newShowInfo != _lastShowInfo) {
