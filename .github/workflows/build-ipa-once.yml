@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 238
-run-name: NeoStation iOS Build 238 (RPCS3 dlopen-safe Universal JIT fix) • ${{ github.sha }}
+name: NeoStation iOS Build 239
+run-name: NeoStation iOS Build 239 (RPCS3 dlopen-safe Universal JIT fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-238
+  group: neostation-ios-build-239
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '238'
-      IPA_NAME: 'NeoStation-iOS-Build-238'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-238'
+      BUILD_NUMBER: '239'
+      IPA_NAME: 'NeoStation-iOS-Build-239'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-239'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -125,14 +125,7 @@ jobs:
               exit 1
             }
           done
-          python3 - "$CORE" <<'PYCORE'
-          import sys
-          from pathlib import Path
-          data = Path(sys.argv[1]).read_bytes()
-          marker = b'NEOSTATION_DYNAMIC_JIT_V3'
-          if marker not in data:
-              raise SystemExit(f'Rebuilt Core is missing {marker!r}')
-          PYCORE
+          python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
           shasum -a 256 "$CORE"
 
       - name: Analyze and test
@@ -257,9 +250,13 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
           python3 - <<'PY'
           import glob
+          import sys
           import plistlib
           import zipfile
           from pathlib import Path
+
+          sys.path.insert(0, 'build-utils')
+          from validate_rpcs3_embedded_core import validate_core
 
           matches = sorted(glob.glob('dist/*.ipa'))
           if len(matches) != 1:
@@ -273,22 +270,21 @@ jobs:
               if info_name not in names:
                   raise SystemExit('NeoStation app payload is missing')
               app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '238':
+              if str(app_info.get('CFBundleVersion')) != '239':
                   raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
               if len(cores) != 1:
                   raise SystemExit(f'Embedded RPCS3 Core missing or duplicated: {cores}')
               core_data = archive.read(cores[0])
-              if len(core_data) < 60_000_000:
-                  raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
-              if b'NEOSTATION_DYNAMIC_JIT_V3' not in core_data:
-                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 238 JIT fix marker')
+              validate_core(core_data)
+              if core_data != Path('build/rpcs3-embedded-core/libRPCS3Core.dylib').read_bytes():
+                  raise SystemExit('IPA does not contain the exact Core rebuilt in this workflow')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-          print(f'Validated {ipa}: Build 238 + rebuilt RPCS3 debugserver-owned JIT Core + JIT helper')
+          print(f'Validated {ipa}: Build 239 + rebuilt RPCS3 debugserver-owned JIT Core + JIT helper')
           PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-238.sha256
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-239.sha256
           ls -lah dist
 
       - name: Upload IPA

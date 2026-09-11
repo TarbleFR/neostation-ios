@@ -5,6 +5,7 @@
 # cleanup. Apple arm64 CI also executes rewritten instructions through the
 # legacy RX view to prove RW/RX alias coherence without MAP_JIT.
 from pathlib import Path
+import json
 import platform
 import shutil
 import subprocess
@@ -17,7 +18,7 @@ SOURCE = Path(sys.argv.pop(1)).resolve()
 sys.path.insert(0, str(ROOT / 'build-utils'))
 import patch_rpcs3_jit_memory as patcher
 
-FILES = ('Utilities/JITIOS.cpp',)
+FILES = ('Utilities/JITIOS.cpp', 'rpcs3/ios/RPCS3IOS.cpp')
 
 
 def function(text, signature):
@@ -51,7 +52,18 @@ class JitMemoryTests(unittest.TestCase):
             check=True,
             timeout=60,
         )
-        subprocess.run([str(binary)], check=True, timeout=30)
+        return subprocess.run([str(binary)], check=True, timeout=30,
+                              capture_output=True, text=True).stdout
+
+    def test_patch_id_survives_compilation_and_is_returned_by_existing_abi(self):
+        api = (self.root / 'rpcs3/ios/RPCS3IOS.cpp').read_text()
+        body = '#include <cstdio>\n'
+        body += function(api, 'extern "C" const char* rpcs3_ios_build_info(void) noexcept')
+        body += '\nint main() { std::puts(rpcs3_ios_build_info()); }\n'
+        info = json.loads(self.run_cpp(body))
+        self.assertEqual(info['neostation_jit'], patcher.PATCH_ID)
+        self.assertEqual(info['abi'], 30)
+        self.assertEqual(info['jit'], 'sealed-arena')
 
     def code(self, native=False):
         text = (self.root / 'Utilities/JITIOS.cpp').read_text()
