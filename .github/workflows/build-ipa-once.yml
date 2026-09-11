@@ -122,8 +122,10 @@ jobs:
           popd >/dev/null
 
           python3 build-utils/install_patched_stikjit.py "$STIK_XCFRAMEWORK"
-          strings packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT \
-            | grep -q 'NEOSTATION_STIKJIT_RPCS3_V1'
+          STIK_BIN="packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT"
+          STIK_STRINGS="$RUNNER_TEMP/stikjit-build241.strings"
+          strings "$STIK_BIN" > "$STIK_STRINGS"
+          grep -q 'NEOSTATION_STIKJIT_RPCS3_V1' "$STIK_STRINGS"
           find packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework \
             -name universal.js -print -exec grep -q 'NEOSTATION_STIKJIT_UNIVERSAL_V1' {} \;
 
