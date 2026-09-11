@@ -129,7 +129,7 @@ jobs:
           import sys
           from pathlib import Path
           data = Path(sys.argv[1]).read_bytes()
-          for marker in (b'NEOSTATION_DYNAMIC_JIT_V1', b'pthread_jit_write_protect_np'):
+          for marker in (b'NEOSTATION_DYNAMIC_JIT_V2', b'pthread_jit_write_protect_np'):
               if marker not in data:
                   raise SystemExit(f'Rebuilt Core is missing {marker!r}')
           PYCORE
@@ -282,7 +282,7 @@ jobs:
               core_data = archive.read(cores[0])
               if len(core_data) < 60_000_000:
                   raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
-              if b'NEOSTATION_DYNAMIC_JIT_V1' not in core_data:
+              if b'NEOSTATION_DYNAMIC_JIT_V2' not in core_data:
                   raise SystemExit('IPA contains a stale RPCS3 Core without the Build 237 JIT fix marker')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')

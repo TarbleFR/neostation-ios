@@ -50,7 +50,7 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
 
 // Only the legacy Core backend uses an ordinary RW -> RX transition. On
 // iOS 26 the Core itself prepares RX pages through the attached Universal
-// debugger; this legacy probe cannot test the Core's MAP_JIT allocation.
+// debugger; this legacy probe cannot test those prepared mappings.
 static BOOL RPCS3ProbeExecutableMemory(NSString** error) {
   if (@available(iOS 26.0, *)) {
     if (RPCS3JitHasActiveCoreHandshake()) return YES;

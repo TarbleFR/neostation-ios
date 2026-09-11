@@ -19,7 +19,7 @@ def patch(root: Path) -> None:
     path = root / 'Utilities/JITIOS.cpp'
     text = path.read_text()
     text = replace_once(text, '#include <algorithm>', '#include <algorithm>\n#include <atomic>\n#include <dlfcn.h>')
-    text = text.replace('\tu8* writable_code = nullptr;\n', '')
+    text = text.replace('\tu8* writable_code = nullptr;\n', '\tu8* write_view = nullptr;\n')
     text = replace_once(text, 'std::mutex g_protocol_mutex;', '''// The iOS SDK marks the direct declaration unavailable. Resolve the existing
 // runtime SPI without changing host entitlements or redeclaring SDK symbols.
 using write_protect_fn = void (*)(int);
@@ -32,9 +32,9 @@ write_protect_fn write_protect_function() noexcept
 thread_local bool g_jit_executable = true;
 
 std::mutex g_protocol_mutex;''')
-    text = replace_function(text, 'void discard_layout(', '', 'NEOSTATION_DYNAMIC_JIT_V1')
+    text = replace_function(text, 'void discard_layout(', '', 'NEOSTATION_DYNAMIC_JIT_V2')
     text = replace_function(text, 'bool prepare_arena(bool expanded) noexcept',
-                            (PARTS / 'jit_arena.cpp.inc').read_text().rstrip(), 'NEOSTATION_DYNAMIC_JIT_V1')
+                            (PARTS / 'jit_arena.cpp.inc').read_text().rstrip(), 'NEOSTATION_DYNAMIC_JIT_V2')
     text = replace_once(text, 'bool is_ready() noexcept\n{', '''bool write_protected() noexcept
 {
 \treturn g_jit_executable;
@@ -45,10 +45,10 @@ void write_protect(bool executable) noexcept
 \t// Always call pthread, even if our local state agrees: the calling thread
 \t// may previously have been used by another embedded runtime.
 \tconst auto function = write_protect_function();
-\t// No arena is exposed when this SPI is absent: prepare_arena reports it.
-\tif (!function) return;
 \tstd::atomic_signal_fence(std::memory_order_seq_cst);
-\tfunction(executable ? 1 : 0);
+\t// iOS uses explicit, validated RX/RW pointers; it has no pthread switch.
+\t// On platforms exposing the SPI, preserve the actual per-thread switch.
+\tif (function) function(executable ? 1 : 0);
 \tg_jit_executable = executable;
 \tstd::atomic_signal_fence(std::memory_order_seq_cst);
 }
@@ -58,13 +58,15 @@ bool is_ready() noexcept
     text = replace_once(text, '''\tu8* const storage = (executable ? g_arena.writable_code : g_arena.data) + allocation.offset;
 \tstd::memset(storage, 0, allocation.size);''', '''\t{
 \t\twrite_guard guard;
-\t\tstd::memset(target, 0, allocation.size);
+\t\tu8* const storage = (executable ? g_arena.write_view : g_arena.data) + allocation.offset;
+\t\tstd::memset(storage, 0, allocation.size);
 \t}''')
     text = replace_once(text, 'static_cast<void*>(g_arena.writable_code + offset)',
-                        'static_cast<void*>(g_arena.code + offset)')
+                        'static_cast<void*>(g_arena.write_view + offset)')
     text = replace_once(text, '''\tvoid* const alias = writable(executable, size);
 \t::sys_dcache_flush(alias ? alias : const_cast<void*>(executable), size);''',
-                        '\t::sys_dcache_flush(const_cast<void*>(executable), size);')
+                        '''\tvoid* const write_view = writable(executable, size);
+\t::sys_dcache_flush(write_view ? write_view : const_cast<void*>(executable), size);''')
     edits[path] = text
 
     path = root / 'Utilities/JIT.h'
@@ -79,7 +81,7 @@ bool is_ready() noexcept
     text = replace_once(text, '#if defined(__APPLE__) && !defined(RPCS3_IOS)\nstruct jit_write_guard',
                         '#if defined(RPCS3_IOS)\nusing jit_write_guard = rpcs3::ios::jit::write_guard;\n#elif defined(__APPLE__)\nstruct jit_write_guard')
     text = text.replace('// shared RW alias; elsewhere the executable pointer is already writable at',
-                        '// same MAP_JIT address; elsewhere the executable pointer is already writable at')
+                        '// verified shared write view; elsewhere the executable pointer is already writable at')
     edits[path] = text
 
     path = root / 'Utilities/JITLLVM.cpp'
@@ -143,7 +145,7 @@ bool is_ready() noexcept
     text = replace_once(text, '\t\tconst uint64_t actual = reinterpret_cast<test_function>(function_address)(input);',
                         '''\t\t// The dispatch worker may have completed initialization in write mode.
 \t\tjit_write_protect(true);
-\t\temit_log(4, "NEOSTATION_DYNAMIC_JIT_V1: LLVM execute mode restored");
+\t\temit_log(4, "NEOSTATION_DYNAMIC_JIT_V2: LLVM execute mode restored");
 \t\tconst uint64_t actual = reinterpret_cast<test_function>(function_address)(input);''')
     edits[path] = text
 

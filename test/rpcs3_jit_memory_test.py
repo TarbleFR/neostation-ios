@@ -78,7 +78,7 @@ constexpr u64 command_prepare_region = 1;
 constexpr usz test_capacity = 65536;
 struct allocator { void reset(usz) {} };
 struct arena_state {
- u8* code = nullptr; u8* data = nullptr; usz capacity = 0;
+ u8* code = nullptr; u8* write_view = nullptr; u8* data = nullptr; usz capacity = 0;
  allocator code_allocator, data_allocator;
  u32 preparation_chunks = 0;
  arena_backend backend = arena_backend::legacy_debugger;
@@ -89,6 +89,7 @@ std::string last_error;
 void set_error(std::string s) { last_error = s; }
 u64 physical_memory_size() { return 0; }
 usz choose_arena_capacity(u64, bool) { return test_capacity; }
+usz page_size() { return 4096; }
 bool legacy_debugger_is_ready() { return true; }
 bool use_universal = false, protocol_fails = false;
 arena_backend current_backend() {
@@ -100,7 +101,7 @@ u64 protocol_call(u64 command, const void* address, usz size) {
 }
 '''
         if native:
-            prefix += '#include <sys/mman.h>\n#include <dlfcn.h>\n#include <libkern/OSCacheControl.h>\n'
+            prefix += '#include <sys/mman.h>\n#include <dlfcn.h>\n#include <libkern/OSCacheControl.h>\n#include <mach/mach.h>\n'
         else:
             prefix += r'''
 constexpr int PROT_READ = 1, PROT_WRITE = 2, PROT_EXEC = 4;
@@ -108,24 +109,26 @@ constexpr int MAP_PRIVATE = 2, MAP_ANON = 16, MAP_JIT = 128;
 void* const MAP_FAILED = reinterpret_cast<void*>(-1);
 void* const RTLD_DEFAULT = nullptr;
 alignas(65536) u8 storage[test_capacity * 2];
-int maps = 0, unmaps = 0, fail_map = 0;
-bool far_data = false;
+alignas(65536) u8 detached_storage[test_capacity];
+int maps = 0, unmaps = 0, fail_map = 0, view_deallocations = 0;
+bool far_data = false, no_pthread = false, bad_view = false, remap_fails = false, protect_fails = false;
 thread_local bool actual_executable = true;
 thread_local int transitions = 0;
 void pthread_switch(int executable) { actual_executable = executable; ++transitions; }
 void* dlsym(void*, const char* name) {
  assert(std::string(name) == "pthread_jit_write_protect_np");
- return reinterpret_cast<void*>(&pthread_switch);
+ return no_pthread ? nullptr : reinterpret_cast<void*>(&pthread_switch);
 }
 void* mmap(void* hint, usz size, int prot, int flags, int, int) {
  ++maps;
  assert(size == test_capacity);
- if (maps == fail_map) { errno = EPERM; return MAP_FAILED; }
- if (maps == 1) {
-  assert(hint == nullptr && flags == (MAP_PRIVATE | MAP_ANON | MAP_JIT));
-  assert(prot == (PROT_READ | PROT_WRITE | PROT_EXEC));
+ if (!hint) {
+  if (fail_map == 1) { errno = EPERM; return MAP_FAILED; }
+  if (flags & MAP_JIT) assert(prot == (PROT_READ | PROT_WRITE | PROT_EXEC));
+  else assert(flags == (MAP_PRIVATE | MAP_ANON));
   return storage;
  }
+ if (fail_map == 2) { errno = EPERM; return MAP_FAILED; }
  assert(maps == 2 && hint == storage + test_capacity);
  assert(flags == (MAP_PRIVATE | MAP_ANON) && prot == (PROT_READ | PROT_WRITE));
  return far_data ? reinterpret_cast<void*>(reinterpret_cast<uptr>(storage) + 0x200000000ull)
@@ -134,6 +137,21 @@ void* mmap(void* hint, usz size, int prot, int flags, int, int) {
 int munmap(void*, usz size) { assert(size == test_capacity); ++unmaps; return 0; }
 void sys_dcache_flush(void*, usz) {}
 void sys_icache_invalidate(void*, usz) {}
+using vm_address_t = uptr;
+using vm_prot_t = int;
+constexpr int VM_PROT_NONE = 0, VM_PROT_READ = 1, VM_PROT_WRITE = 2;
+constexpr int VM_FLAGS_ANYWHERE = 1, VM_INHERIT_DEFAULT = 1, KERN_SUCCESS = 0;
+int mach_task_self() { return 1; }
+int vm_remap(int, vm_address_t* address, usz size, int, int flags, int,
+             vm_address_t source, bool copy, vm_prot_t*, vm_prot_t*, int) {
+ assert(size == test_capacity && source == reinterpret_cast<uptr>(storage));
+ assert(!copy && flags == VM_FLAGS_ANYWHERE);
+ *address = reinterpret_cast<uptr>(bad_view ? detached_storage : storage);
+ return remap_fails ? 1 : 0;
+}
+int vm_protect(int, vm_address_t, usz, bool, int) { return protect_fails ? 1 : 0; }
+int vm_deallocate(int, vm_address_t, usz) { ++view_deallocations; return 0; }
+int mprotect(void*, usz, int) { return 0; }
 '''
         prefix += 'using write_protect_fn = void (*)(int);\n'
         prefix += function(text, 'write_protect_fn write_protect_function()') + '\n'
@@ -188,6 +206,30 @@ int main() {
 }
 ''')
 
+    def test_ios_without_pthread_validates_shared_views(self):
+        self.run_cpp(self.code() + r'''
+int main() {
+ no_pthread = true; use_universal = true;
+ for (int failure = 0; failure < 3; ++failure) {
+  maps = unmaps = view_deallocations = 0;
+  bad_view = failure == 0;
+  remap_fails = failure == 1;
+  protect_fails = failure == 2;
+  assert(!prepare_arena(false));
+  assert(!g_arena.prepared);
+  assert(unmaps == 2);
+  assert(view_deallocations == (remap_fails ? 0 : 1));
+ }
+ maps = unmaps = 0; bad_view = remap_fails = protect_fails = false;
+ assert(prepare_arena(false));
+ assert(g_arena.code == storage && g_arena.write_view == storage);
+ assert(g_arena.preparation_chunks == 1);
+ { write_guard outer; { write_guard inner; } assert(!write_protected()); }
+ assert(write_protected());
+ assert(transitions == 0); // iOS must not depend on an absent macOS SPI
+}
+''')
+
     @unittest.skipUnless(platform.system() == 'Darwin' and platform.machine() == 'arm64',
                          'native Apple arm64 JIT execution runs in macOS CI')
     def test_native_arm64_write_execute_rewrite(self):
@@ -216,13 +258,15 @@ int main() {
 }
 ''')
 
-    def test_patch_is_idempotent_and_has_no_alias_or_fixed_address(self):
+    def test_patch_is_idempotent_and_has_no_fixed_or_tagged_address(self):
         before = {f: (self.root / f).read_bytes() for f in FILES}
         patcher.patch(self.root)
         self.assertEqual(before, {f: (self.root / f).read_bytes() for f in FILES})
         jit = (self.root / 'Utilities/JITIOS.cpp').read_text()
-        for forbidden in ('0x7000000000', '::vm_remap(', 'writable_code', 'MAP_FIXED |'):
+        for forbidden in ('0x7000000000', 'writable_code', 'MAP_FIXED |'):
             self.assertNotIn(forbidden, jit)
+        arena = function(jit, 'bool prepare_arena(bool')
+        self.assertNotIn('jit_vm_tag', arena)
 
 
 if __name__ == '__main__':
