@@ -10,10 +10,11 @@ grid_screen = (root / 'lib/screens/game_screen/my_games_grid.dart').read_text()
 podspec = (root / 'packages/rpcs3_internal_bridge/ios/rpcs3_internal_bridge.podspec').read_text()
 build = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
 
-# Grid mode hides exactly the title while preserving the old footer geometry.
+# Grid mode hides both identity strings while preserving the old footer geometry.
 assert 'showTitle: false' in grid_screen
 for token in ['Visibility(', 'visible: showTitle', 'maintainSize: true', 'isActive: showTitle']:
     assert token in grid, token
+assert 'showTitle && game.showRomFileNameSubtitle' in grid
 assert 'height: 32.r' in grid, 'PLAY/action sizing must remain untouched'
 
 # RPCS3 owns an isolated AVAudioSession only while its embedded session is live.

@@ -2,7 +2,8 @@
 """Apply NeoStation-only RPCS3 in-game/session hooks to the pinned iOS core.
 
 The upstream ABI remains version 30.  NeoStation adds private symbols for live
-savestate management and adjusts the iOS RemoteIO underrun tail so a transient
+savestate management, hardens savestate SPU image restoration, registers disc
+images before boot, and adjusts the iOS RemoteIO underrun tail so a transient
 short read cannot turn into a repeated-sample buzz.
 """
 from pathlib import Path
@@ -15,6 +16,7 @@ if not root or not (root / "rpcs3/ios/RPCS3IOS.cpp").exists():
 cpp = root / "rpcs3/ios/RPCS3IOS.cpp"
 exports = root / "rpcs3/ios/RPCS3IOS.exports"
 audio = root / "rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp"
+ppu_module = root / "rpcs3/Emu/Cell/PPUModule.cpp"
 
 text = cpp.read_text()
 include = '#include "IOSMemoryPressurePolicy.h"\n'
@@ -127,6 +129,19 @@ if 'neostation_rpcs3_ios_save_state' not in text:
     if marker not in text:
         raise SystemExit("RPCS3IOS.cpp stop-emulation anchor drifted")
     text = text.replace(marker, private_api + marker, 1)
+
+# The iOS library is authoritative and intentionally ignores stale games.yml
+# entries. Register its validated disc-image path before every disc boot so
+# RPCS3 can resolve /dev_bdvd again during process transitions as well as when
+# restoring a savestate. This also replaces an obsolete path for the same ID.
+disc_boot_marker = '''\t\tstd::string boot_path = game->path;\n'''
+disc_boot_registration = '''\t\t// NeoStation's core-owned library is the source of truth for disc images.\n\t\t// Register the validated path before every boot so RPCS3 can resolve the\n\t\t// disc again across guest process transitions and savestate restoration.\n\t\tif (game->category == "DG")\n\t\t{\n\t\t\tconst game_boot_result registration = Emu.AddGame(game->path);\n\t\t\tif (registration != game_boot_result::no_errors &&\n\t\t\t\tregistration != game_boot_result::already_added)\n\t\t\t{\n\t\t\t\tset_error(fmt::format("Could not register the installed disc source before boot: %s", registration));\n\t\t\t\treturn RPCS3_IOS_BOOT_FAILED;\n\t\t\t}\n\t\t}\n\n\t\tstd::string boot_path = game->path;\n'''
+old_savestate_registration = '''\n\t\t\t// Savestates for disc titles store the title ID and restore the\n\t\t\t// current disc source through RPCS3's games configuration. The iOS\n\t\t\t// library is independently core-owned, so make sure its validated\n\t\t\t// path is registered before the savestate reader resolves that ID.\n\t\t\tif (game->category == "DG")\n\t\t\t{\n\t\t\t\tconst game_boot_result registration = Emu.AddGame(game->path);\n\t\t\t\tif (registration != game_boot_result::no_errors &&\n\t\t\t\t\tregistration != game_boot_result::already_added)\n\t\t\t\t{\n\t\t\t\t\tset_error(fmt::format("Could not register the installed disc source before loading a save state: %s", registration));\n\t\t\t\t\treturn RPCS3_IOS_BOOT_FAILED;\n\t\t\t\t}\n\t\t\t}\n'''
+if 'source of truth for disc images' not in text:
+    if disc_boot_marker not in text or old_savestate_registration not in text:
+        raise SystemExit("RPCS3IOS.cpp disc-boot registration anchor drifted")
+    text = text.replace(disc_boot_marker, disc_boot_registration, 1)
+    text = text.replace(old_savestate_registration, '', 1)
 cpp.write_text(text)
 
 exp = exports.read_text()
@@ -146,5 +161,18 @@ if 'DC-like buzz' not in a:
         raise SystemExit("IOSAudioBackend.cpp underrun anchor drifted")
     a = a.replace(old, new, 1)
 audio.write_text(a)
+
+# The savestate reader re-scans candidate SPU images. The pinned upstream loop
+# subtracts 16 from an unsigned end offset and does not clamp that offset to the
+# captured segment. A short/empty candidate therefore underflows and reaches
+# read_from_ptr out of bounds while reloading an otherwise valid state.
+p = ppu_module.read_text()
+old_scan = '''\t\t\t\t\tfor (u32 found = 0, last_vaddr = 0, it = 16; it < end - 16; it += 4)\n'''
+new_scan = '''\t\t\t\t\t// NeoStation iOS: a short savestate SPU segment must not make the\n\t\t\t\t\t// unsigned `end - 16` bound underflow into read_from_ptr().\n\t\t\t\t\tconst u32 scan_end = std::min<u32>(end, ::size32(ls_segment));\n\t\t\t\t\tfor (u32 found = 0, last_vaddr = 0, it = 16;\n\t\t\t\t\t\tscan_end >= 16 && it < scan_end - 16; it += 4)\n'''
+if 'short savestate SPU segment' not in p:
+    if old_scan not in p:
+        raise SystemExit("PPUModule.cpp savestate SPU scan anchor drifted")
+    p = p.replace(old_scan, new_scan, 1)
+ppu_module.write_text(p)
 
 print("NeoStation RPCS3 session/audio patch applied")

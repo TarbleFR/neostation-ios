@@ -1,5 +1,9 @@
 --- a/lib/widgets/game_view_footer.dart
 +++ b/lib/widgets/game_view_footer.dart
+@@ -41,2 +41,2 @@
+-  /// Hide only the scrolling title in console grid mode.
++  /// Hide the game identity text in console grid mode.
+   final bool showTitle;
 @@ -76,14 +76,25 @@
                crossAxisAlignment: CrossAxisAlignment.start,
                mainAxisSize: MainAxisSize.min,
@@ -12,9 +16,9 @@
 -                    color: scheme.onSurface,
 -                    fontSize: 18.r,
 -                    fontWeight: FontWeight.bold,
-+                // Grid mode hides only the visible game title. Keep the exact
-+                // title line geometry so the footer and the action pills keep
-+                // the same size/vertical alignment as the previous layout.
++                // Grid mode hides the identity text. Keep the exact title line
++                // geometry so the footer and the action pills retain their
++                // previous size and vertical alignment.
 +                Visibility(
 +                  visible: showTitle,
 +                  maintainAnimation: true,
@@ -34,3 +38,15 @@
                    ),
                  ),
                  // Always reserve the ROM-filename subtitle's line height so the
+@@ -91,8 +102,10 @@
+                 // no subtitle; without this reservation the shorter column
+                 // re-centers the rating/RA pill + PLAY row upward. The empty
+                 // string still lays out a full line box via the forced strut.
+                 Text(
+-                  game.showRomFileNameSubtitle ? game.romname : '',
++                  showTitle && game.showRomFileNameSubtitle
++                      ? game.romname
++                      : '',
+                   maxLines: 1,
+                   overflow: TextOverflow.ellipsis,
+                   strutStyle: StrutStyle(
