@@ -2,6 +2,7 @@
 
 #import <GameController/GameController.h>
 #import <QuartzCore/QuartzCore.h>
+#include <math.h>
 
 static const char* const kRPCS3InputMarker = "NEOSTATION_RPCS3_INPUT_V1";
 
@@ -206,15 +207,15 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   self.leftStick.valueChanged = ^(float x, float y) {
     RPCS3GameInputController* strongSelf = weakSelf;
     if (!strongSelf || strongSelf.physicalController) return;
-    strongSelf.touchState.left_x = x;
-    strongSelf.touchState.left_y = y;
+    strongSelf->_touchState.left_x = x;
+    strongSelf->_touchState.left_y = y;
     [strongSelf sendTouchState];
   };
   self.rightStick.valueChanged = ^(float x, float y) {
     RPCS3GameInputController* strongSelf = weakSelf;
     if (!strongSelf || strongSelf.physicalController) return;
-    strongSelf.touchState.right_x = x;
-    strongSelf.touchState.right_y = y;
+    strongSelf->_touchState.right_x = x;
+    strongSelf->_touchState.right_y = y;
     [strongSelf sendTouchState];
   };
 }
@@ -246,7 +247,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 
 - (void)selectFirstPhysicalController {
   if (self.physicalController) return;
-  for (GCController* controller in GCController.controllers) {
+  for (GCController* controller in [GCController controllers]) {
     if ([self isUsableController:controller]) {
       [self bindPhysicalController:controller];
       return;
@@ -273,7 +274,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   [self unbindPhysicalController];
   self.physicalController = controller;
   memset(&_touchState, 0, sizeof(_touchState));
-  self.touchState.size = sizeof(self.touchState);
+  _touchState.size = sizeof(_touchState);
   [self clearCorePadState];
 
   __weak RPCS3GameInputController* weakSelf = self;
@@ -376,31 +377,31 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 - (void)touchButtonDown:(UIButton*)sender {
   if (!self.started || self.physicalController) return;
   uint32_t bit = (uint32_t)sender.tag;
-  self.touchState.buttons |= bit;
-  if (bit == rpcs3_ios_pad_l2) self.touchState.l2 = 1.0f;
-  if (bit == rpcs3_ios_pad_r2) self.touchState.r2 = 1.0f;
+  _touchState.buttons |= bit;
+  if (bit == rpcs3_ios_pad_l2) _touchState.l2 = 1.0f;
+  if (bit == rpcs3_ios_pad_r2) _touchState.r2 = 1.0f;
   sender.backgroundColor = [UIColor colorWithWhite:1 alpha:0.34];
   [self sendTouchState];
 }
 
 - (void)touchButtonUp:(UIButton*)sender {
   uint32_t bit = (uint32_t)sender.tag;
-  self.touchState.buttons &= ~bit;
-  if (bit == rpcs3_ios_pad_l2) self.touchState.l2 = 0.0f;
-  if (bit == rpcs3_ios_pad_r2) self.touchState.r2 = 0.0f;
+  _touchState.buttons &= ~bit;
+  if (bit == rpcs3_ios_pad_l2) _touchState.l2 = 0.0f;
+  if (bit == rpcs3_ios_pad_r2) _touchState.r2 = 0.0f;
   sender.backgroundColor = [UIColor colorWithWhite:0.06 alpha:0.38];
   if (!self.physicalController) [self sendTouchState];
 }
 
 - (void)sendTouchState {
   if (!self.started || self.physicalController) return;
-  self.touchState.size = sizeof(self.touchState);
+  _touchState.size = sizeof(_touchState);
   [self sendState:&_touchState];
 }
 
 - (void)sendState:(const rpcs3_ios_pad_state*)state {
-  if (!state || !self.api || !self.api->set_pad_state) return;
-  self.api->set_pad_state(0, state);
+  if (!state || !_api || !_api->set_pad_state) return;
+  _api->set_pad_state(0, state);
 }
 
 - (void)clearCorePadState {
