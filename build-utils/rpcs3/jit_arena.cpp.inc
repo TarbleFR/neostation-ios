@@ -29,8 +29,8 @@ bool prepare_arena(bool expanded) noexcept
 	// iOS 26 Universal JIT must execute from a VM region owned/prepared by
 	// debugserver. Do not create a host RX mapping and ask the debugger to bless
 	// it afterwards: that path can report success while the first generated
-	// instruction still faults. Also do not use MAP_JIT or the macOS-only
-	// pthread_jit_write_protect_np SPI from the embedded iOS dylib.
+	// instruction still faults. Also do not use Apple's JIT mapping flag or the
+	// macOS-only thread write-protection SPI from the embedded iOS dylib.
 	//
 	// The Universal protocol allocates the actual RX code arena when address is
 	// null. The Core then creates a shared RW alias of that exact object for all
