@@ -86,7 +86,15 @@ void main() {
       expect(profiles, contains("'BLES00215'"));
       expect(profiles, contains("'BLUS30110'"));
       expect(profiles, contains("'cpu.ppu_decoder': 'Interpreter (static)'"));
-      expect(profiles, isNot(contains("'cpu.spu_block_size': 'Mega'")));
+      expect(profiles, contains("'BCUS98111'"));
+      expect(profiles, contains("'BCES00510'"));
+      expect(profiles, contains("'BCAS25003'"));
+      expect(profiles, contains("'cpu.spu_block_size': 'Mega'"));
+      expect(profiles, contains("'gpu.resolution_scale': '75'"));
+      expect(
+        profiles,
+        contains("'experimental.fps_optimization_batch': 'Enabled'"),
+      );
       expect(launcher, contains('_applyMobileBootProfile(String titleId)'));
       expect(launcher, contains('Rpcs3GameProfileService.applyForLaunch'));
       expect(launcher, isNot(contains('Rpcs3InternalBridge.setSetting(')));

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('audio policy is lifecycle-only', () {
+  test('audio policy is applied only at structural playback boundaries', () {
     final policy = File(
       'lib/services/audio_policy_service.dart',
     ).readAsStringSync();
@@ -38,7 +38,12 @@ void main() {
       'lib/widgets/shaders/shader_gif_widget.dart',
     ]) {
       final source = File(file).readAsStringSync();
-      expect(source, isNot(contains('AudioPolicyService')), reason: file);
+      if (file.endsWith('home_music_service.dart')) {
+        expect(source, contains('AudioPolicyService'), reason: file);
+        expect(source, contains("reason: 'main-menu-music'"), reason: file);
+      } else {
+        expect(source, isNot(contains('AudioPolicyService')), reason: file);
+      }
       expect(source, isNot(contains('mixWithOthers: true')), reason: file);
     }
 

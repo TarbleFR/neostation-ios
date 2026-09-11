@@ -26,6 +26,9 @@ for token in [
     'Could not register the installed disc source before boot',
     'std::string{Emulator::game_id_boot_prefix} + game->title_id',
     'keeps /dev_bdvd attached',
+    'validate_installed_game_iso(game->path, integrity_detail)',
+    'Installed disc image is incomplete or corrupt',
+    'Re-import this title from a complete ISO',
 ]:
     assert token in cpp, token
 assert cpp.index('source of truth for disc images') < cpp.index(

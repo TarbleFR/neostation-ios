@@ -599,6 +599,20 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
   }
 
   Widget _buildEmulatorsTab() {
+    if (Platform.isIOS && _system.folderName.toLowerCase() == 'ps3') {
+      return Padding(
+        padding: EdgeInsets.all(12.r),
+        child: ListTile(
+          leading: const Icon(Symbols.sports_esports_rounded),
+          title: const Text('RPCS3'),
+          subtitle: Text(EmbeddedEmulatorLocale.integrated(context)),
+          trailing: Icon(
+            Icons.check_circle,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
+    }
     return _buildCoresList();
   }
 

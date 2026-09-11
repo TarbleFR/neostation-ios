@@ -26,7 +26,7 @@
    if (![session setCategory:AVAudioSessionCategoryPlayback
                          mode:AVAudioSessionModeDefault
                       options:0
-@@ -423,9 +438,35 @@
+@@ -423,9 +438,38 @@
  - (void)deactivateRPCS3AudioSession {
 -  if (!self.audioSessionActive) return;
 +  if (!self.audioSessionActive && !self.audioPolicyCaptured) return;
@@ -38,9 +38,12 @@
 -  RPCS3Diagnostic(@"audio_session_inactive", error ? error.localizedDescription : @"deactivated");
 +
 +  if (self.audioPolicyCaptured) {
-+    [session setCategory:self.previousAudioCategory ?: AVAudioSessionCategoryAmbient
-+                    mode:self.previousAudioMode ?: AVAudioSessionModeDefault
-+                 options:self.previousAudioOptions
++    // RPCS3 owns `.playback` only while its game view is active. Always
++    // return to NeoStation's ambient policy instead of replaying a category
++    // that another native component may have changed after capture.
++    [session setCategory:AVAudioSessionCategoryAmbient
++                    mode:AVAudioSessionModeDefault
++                 options:AVAudioSessionCategoryOptionMixWithOthers
 +                   error:&error];
 +    if (error == nil && self.previousPreferredSampleRate > 0.0) {
 +      [session setPreferredSampleRate:self.previousPreferredSampleRate error:&error];
@@ -67,7 +70,7 @@
 +  self.previousPreferredSampleRate = 0.0;
 +  self.previousPreferredIOBufferDuration = 0.0;
  }
-@@ -633,14 +674,22 @@
+@@ -633,14 +677,22 @@
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleAlert];
    __weak Rpcs3InternalBridgePlugin* weakSelf = self;

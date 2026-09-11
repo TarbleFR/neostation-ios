@@ -43,7 +43,25 @@ void main() {
         expect(eu.settings['cpu.ppu_decoder'], 'Interpreter (static)');
         expect(us.settings['cpu.ppu_decoder'], 'Interpreter (static)');
         expect(other.settings, isNot(contains('cpu.ppu_decoder')));
-        expect(other.settings['cpu.spu_block_size'], 'Safe');
+        expect(other.settings, isEmpty);
+      },
+    );
+
+    test(
+      'optimizes every retail God of War III serial without global spill',
+      () {
+        for (final serial in <String>['BCUS98111', 'BCES00510', 'BCAS25003']) {
+          final profile = Rpcs3GameProfileService.profileForSerial(serial)!;
+          expect(profile.settings['cpu.spu_block_size'], 'Mega');
+          expect(profile.settings['cpu.preferred_spu_threads'], '2');
+          expect(profile.settings['gpu.resolution_scale'], '75');
+          expect(profile.settings['gpu.multithreaded_rsx'], 'true');
+          expect(
+            profile.settings['experimental.fps_optimization_batch'],
+            'Enabled',
+          );
+          expect(profile.settings, isNot(contains('cpu.ppu_decoder')));
+        }
       },
     );
 
@@ -65,13 +83,41 @@ void main() {
       expect(yaml, contains('iOS Experimental:'));
       expect(yaml, isNot(contains('Video:')));
       expect(yaml, isNot(contains('Audio:')));
+
+      final generic = games['BLES00412'] as Map<String, dynamic>;
+      expect(generic['config'], isEmpty);
+    });
+
+    test('emits the God of War III performance keys as partial YAML', () {
+      final payload = Rpcs3GameProfileService.databasePayloadForSerials(
+        <String>['BCES00510'],
+      );
+      final games =
+          (jsonDecode(payload) as Map<String, dynamic>)['games']
+              as Map<String, dynamic>;
+      final yaml =
+          (games['BCES00510'] as Map<String, dynamic>)['config'] as String;
+
+      expect(yaml, contains('Core:'));
+      expect(yaml, contains('SPU Block Size: Mega'));
+      expect(yaml, contains('Preferred SPU Threads: 2'));
+      expect(yaml, contains('Video:'));
+      expect(yaml, contains('Resolution Scale: 75'));
+      expect(yaml, contains('Multithreaded RSX: true'));
+      expect(
+        yaml,
+        contains('  Vulkan:\n    Asynchronous Texture Streaming: true'),
+      );
+      expect(yaml, contains('FPS Optimization Batch: Enabled'));
+      expect(yaml, isNot(contains('Audio:')));
     });
 
     test(
       'launch path no longer mutates global or complete custom settings',
       () {
-        final launcher = File('lib/services/rpcs3_launch_service.dart')
-            .readAsStringSync();
+        final launcher = File(
+          'lib/services/rpcs3_launch_service.dart',
+        ).readAsStringSync();
         expect(launcher, contains('Rpcs3GameProfileService.applyForLaunch'));
         expect(launcher, isNot(contains('Rpcs3InternalBridge.setSetting(')));
         expect(

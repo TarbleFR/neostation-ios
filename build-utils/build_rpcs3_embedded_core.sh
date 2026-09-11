@@ -118,8 +118,10 @@ python3 "$PWD/build-utils/patch_rpcs3_embedded_boot.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_jit_memory.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_neostation_session.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_serial_profiles.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_iso_integrity.py" "$SRC"
 python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_serial_profile_patch_test.py" "$SRC"
+python3 "$PWD/test/rpcs3_iso_integrity_patch_test.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \

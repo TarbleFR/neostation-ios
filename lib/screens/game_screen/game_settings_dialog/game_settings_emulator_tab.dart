@@ -5,6 +5,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/embedded_emulator_locale.dart';
 import 'package:neostation/models/core_emulator_model.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
@@ -51,6 +52,13 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
         widget.isAllMode && widget.game.systemFolderName != null
             ? widget.game.systemFolderName! : widget.system.folderName,
       );
+  bool get _usesRpcs3 =>
+      Platform.isIOS &&
+      (widget.isAllMode && widget.game.systemFolderName != null
+                  ? widget.game.systemFolderName!
+                  : widget.system.folderName)
+              .toLowerCase() ==
+          'ps3';
   // DOLPHIN_ISOLATION_END: emulator_identity_gate
 
   List<CoreEmulatorModel> _availableEmulators = [];
@@ -95,7 +103,7 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   Future<void> _loadEmulators() async {
     // DOLPHIN_ISOLATION_BEGIN: embedded_emulator_availability
-    if (_usesDolphin) return;
+    if (_usesDolphin || _usesRpcs3) return;
     // DOLPHIN_ISOLATION_END: embedded_emulator_availability
     final emulators = await loadEmulatorsForSystem(widget.system);
     if (mounted) setState(() => _availableEmulators = emulators);
@@ -190,6 +198,20 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       );
     }
     // DOLPHIN_ISOLATION_END: embedded_emulator_label
+    if (_usesRpcs3) {
+      return Padding(
+        padding: EdgeInsets.all(12.r),
+        child: ListTile(
+          leading: const Icon(Symbols.sports_esports_rounded),
+          title: const Text('RPCS3'),
+          subtitle: Text(EmbeddedEmulatorLocale.integrated(context)),
+          trailing: Icon(
+            Icons.check_circle,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
+    }
     if (_availableEmulators.isEmpty) {
       return Center(
         child: Text(

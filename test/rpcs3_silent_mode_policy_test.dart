@@ -15,6 +15,14 @@ void main() {
     expect(configure, contains('patch_ios_video_player_audio_session.py'));
     expect(transitionPatch, contains('previousAudioCategory'));
     expect(transitionPatch, contains('AVAudioSessionCategoryAmbient'));
+    expect(
+      transitionPatch,
+      contains('AVAudioSessionCategoryOptionMixWithOthers'),
+    );
+    expect(
+      transitionPatch,
+      isNot(contains('setCategory:self.previousAudioCategory')),
+    );
     expect(transitionPatch, contains('frontend audio policy restored'));
   });
 

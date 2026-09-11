@@ -14,7 +14,8 @@ void main() {
     expect(initialization, greaterThan(assignment));
     expect(homeMusic, contains('await SfxService().init();'));
     expect(homeMusic, contains('SoLoud.instance.play('));
-    expect(homeMusic, isNot(contains('AudioPolicyService')));
+    expect(homeMusic, contains('AudioPolicyService'));
+    expect(homeMusic, contains("reason: 'main-menu-music'"));
     expect(homeMusic, isNot(contains('prepareForPlayback')));
     expect(homeMusic, isNot(contains('afterPlaybackStarted')));
 

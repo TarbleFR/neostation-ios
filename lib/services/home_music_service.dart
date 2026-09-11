@@ -7,6 +7,7 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'audio_policy_service.dart';
 import 'config_service.dart';
 import 'logger_service.dart';
 import 'music_player_service.dart';
@@ -353,6 +354,15 @@ class HomeMusicService extends ChangeNotifier with WidgetsBindingObserver {
       // engine is ready, this reader manages only its own source,
       // handle and volume.
       await SfxService().init();
+      if (!_shouldPlay || _musicPath == null) return;
+
+      // Returning from an embedded emulator does not necessarily generate an
+      // iOS foreground transition. Reassert NeoStation's ambient category at
+      // the main-menu boundary so the Ring/Silent switch always wins even if
+      // a native game session previously selected `.playback`.
+      await AudioPolicyService().restoreAfterSharedAudioEngineInitialization(
+        reason: 'main-menu-music',
+      );
       if (!_shouldPlay || _musicPath == null) return;
 
       final source = await SoLoud.instance.loadFile(_musicPath!);

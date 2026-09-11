@@ -18,6 +18,8 @@ class Rpcs3GameProfile {
 
   String toRpcs3Yaml() {
     final core = <String, String>{};
+    final video = <String, String>{};
+    final videoVulkan = <String, String>{};
     final ios = <String, String>{};
 
     for (final entry in settings.entries) {
@@ -28,6 +30,12 @@ class Rpcs3GameProfile {
         case 'cpu.spu_block_size':
           core['SPU Block Size'] = entry.value;
           break;
+        case 'cpu.spu_xfloat_accuracy':
+          core['SPU XFloat Accuracy'] = entry.value;
+          break;
+        case 'cpu.preferred_spu_threads':
+          core['Preferred SPU Threads'] = entry.value;
+          break;
         case 'advanced.llvm_precompilation':
           core['LLVM Precompilation'] = entry.value;
           break;
@@ -36,6 +44,18 @@ class Rpcs3GameProfile {
           break;
         case 'experimental.mobile_spu_scheduling':
           ios['Mobile SPU Compile Scheduling'] = entry.value;
+          break;
+        case 'experimental.fps_optimization_batch':
+          ios['FPS Optimization Batch'] = entry.value;
+          break;
+        case 'gpu.resolution_scale':
+          video['Resolution Scale'] = entry.value;
+          break;
+        case 'gpu.multithreaded_rsx':
+          video['Multithreaded RSX'] = entry.value;
+          break;
+        case 'gpu.async_texture_uploads':
+          videoVulkan['Asynchronous Texture Streaming'] = entry.value;
           break;
         default:
           throw StateError('Unsupported managed RPCS3 setting: ${entry.key}');
@@ -52,6 +72,18 @@ class Rpcs3GameProfile {
     }
 
     writeNode('Core', core);
+    if (video.isNotEmpty || videoVulkan.isNotEmpty) {
+      buffer.writeln('Video:');
+      for (final entry in video.entries) {
+        buffer.writeln('  ${entry.key}: ${entry.value}');
+      }
+      if (videoVulkan.isNotEmpty) {
+        buffer.writeln('  Vulkan:');
+        for (final entry in videoVulkan.entries) {
+          buffer.writeln('    ${entry.key}: ${entry.value}');
+        }
+      }
+    }
     writeNode('iOS Experimental', ios);
     return buffer.toString();
   }
@@ -66,20 +98,57 @@ abstract final class Rpcs3GameProfileService {
   static final LoggerService _log = LoggerService.instance;
   static final RegExp _serialPattern = RegExp(r'^[A-Z0-9]{9,16}$');
 
-  static const Map<String, String> _iosBaseSettings = <String, String>{
-    'advanced.llvm_precompilation': 'false',
-    'emulator.max_llvm_threads': '0',
-    'experimental.mobile_spu_scheduling': 'Automatic',
-    'cpu.spu_block_size': 'Safe',
-  };
-
-  // The iOS ARM64 diagnostic log for Dynasty Warriors 6 terminates its PPU
-  // main thread inside the LLVM symbol resolver at 0x701f000000. Keep the
-  // compatibility fallback strictly scoped to the known regional serials.
+  // An earlier iOS ARM64 diagnostic for Dynasty Warriors 6 terminated its PPU
+  // thread in LLVM; retain that compatibility fallback after clean re-import.
+  // Keep it strictly scoped to the two known regional serials.
   static const Map<String, Map<String, String>>
   _serialOverrides = <String, Map<String, String>>{
-    'BLES00215': <String, String>{'cpu.ppu_decoder': 'Interpreter (static)'},
-    'BLUS30110': <String, String>{'cpu.ppu_decoder': 'Interpreter (static)'},
+    'BLES00215': <String, String>{
+      'cpu.ppu_decoder': 'Interpreter (static)',
+      'advanced.llvm_precompilation': 'false',
+      'emulator.max_llvm_threads': '0',
+      'experimental.mobile_spu_scheduling': 'Automatic',
+      'cpu.spu_block_size': 'Safe',
+    },
+    'BLUS30110': <String, String>{
+      'cpu.ppu_decoder': 'Interpreter (static)',
+      'advanced.llvm_precompilation': 'false',
+      'emulator.max_llvm_threads': '0',
+      'experimental.mobile_spu_scheduling': 'Automatic',
+      'cpu.spu_block_size': 'Safe',
+    },
+
+    // God of War III saturates both SPU and RSX on mobile. Keep this
+    // performance profile strictly scoped to its three retail disc serials.
+    // The 75% scale reduces 3D pixel load while preserving native-resolution
+    // UI, and the iOS batch enables only the audited DMA/hash fast paths.
+    'BCUS98111': <String, String>{
+      'cpu.spu_block_size': 'Mega',
+      'cpu.spu_xfloat_accuracy': 'Approximate',
+      'cpu.preferred_spu_threads': '2',
+      'gpu.resolution_scale': '75',
+      'gpu.multithreaded_rsx': 'true',
+      'gpu.async_texture_uploads': 'true',
+      'experimental.fps_optimization_batch': 'Enabled',
+    },
+    'BCES00510': <String, String>{
+      'cpu.spu_block_size': 'Mega',
+      'cpu.spu_xfloat_accuracy': 'Approximate',
+      'cpu.preferred_spu_threads': '2',
+      'gpu.resolution_scale': '75',
+      'gpu.multithreaded_rsx': 'true',
+      'gpu.async_texture_uploads': 'true',
+      'experimental.fps_optimization_batch': 'Enabled',
+    },
+    'BCAS25003': <String, String>{
+      'cpu.spu_block_size': 'Mega',
+      'cpu.spu_xfloat_accuracy': 'Approximate',
+      'cpu.preferred_spu_threads': '2',
+      'gpu.resolution_scale': '75',
+      'gpu.multithreaded_rsx': 'true',
+      'gpu.async_texture_uploads': 'true',
+      'experimental.fps_optimization_batch': 'Enabled',
+    },
   };
 
   static final Map<String, Rpcs3GameProfile> _detectedProfiles =
@@ -95,10 +164,7 @@ abstract final class Rpcs3GameProfileService {
     if (serial == null) return null;
     return Rpcs3GameProfile(
       serial: serial,
-      settings: <String, String>{
-        ..._iosBaseSettings,
-        ...?_serialOverrides[serial],
-      },
+      settings: <String, String>{...?_serialOverrides[serial]},
     );
   }
 
@@ -132,7 +198,7 @@ abstract final class Rpcs3GameProfileService {
   /// Publishes every detected profile plus [rawSerial] before boot.
   ///
   /// The RPCS3 Core validates and atomically caches this serial database. The
-  /// Build 248 Core applies the selected partial YAML after global/custom
+  /// Build 249 Core applies the selected partial YAML after global/custom
   /// loading, so the managed compatibility keys win while unrelated values
   /// remain inherited.
   static Future<Map<String, dynamic>> applyForLaunch(String rawSerial) async {
