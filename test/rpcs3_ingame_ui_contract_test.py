@@ -33,8 +33,13 @@ for token in [
     'chart.xyaxis.line', 'RPCS3PerformanceOverlay',
     'get_performance_metrics', 'system.language',
     'neostation_rpcs3_ios_save_state', 'neostation_rpcs3_ios_enumerate_savestates_live',
+    'topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor constant:70',
+    'performance.topAnchor constraintEqualToAnchor:menu.bottomAnchor constant:8',
+    'bringSubviewToFront:self.menuButton',
+    'bringSubviewToFront:self.performanceButton',
 ]:
     assert token in plugin or token in abi, token
+assert 'performance.leadingAnchor constraintEqualToAnchor:menu.trailingAnchor' not in plugin
 assert 'Frame time (ms) · 60 s' in overlay
 
 # Core build must apply and verify the private session/audio patch every time.

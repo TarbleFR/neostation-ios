@@ -1,0 +1,49 @@
+--- a/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+@@ -121,6 +121,7 @@
+ @property(nonatomic, readonly) CAMetalLayer* metalLayer;
+ @property(nonatomic, strong) RPCS3GameInputController* inputController;
+ @property(nonatomic, strong) RPCS3PerformanceOverlay* performanceOverlay;
++@property(nonatomic, strong) UIButton* menuButton;
+ @property(nonatomic, strong) UIButton* performanceButton;
+ @property(nonatomic, assign) BOOL showingPerformance;
+ @end
+@@ -153,4 +154,5 @@
+   menu.accessibilityLabel = @"Menu RPCS3";
+   [menu setImage:[UIImage systemImageNamed:@"line.3.horizontal"] forState:UIControlStateNormal];
+   [menu addTarget:self action:@selector(menuPressed) forControlEvents:UIControlEventTouchUpInside];
++  self.menuButton = menu;
+   [view addSubview:menu];
+@@ -175,14 +177,15 @@
+   [NSLayoutConstraint activateConstraints:@[
+     [menu.leadingAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.leadingAnchor constant:12],
+-    [menu.topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor constant:12],
++    // Keep RPCS3 actions in their own rail below the virtual shoulder row.
++    [menu.topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor constant:70],
+     [menu.widthAnchor constraintEqualToConstant:44],
+     [menu.heightAnchor constraintEqualToConstant:44],
+-    [performance.leadingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:8],
+-    [performance.centerYAnchor constraintEqualToAnchor:menu.centerYAnchor],
++    [performance.centerXAnchor constraintEqualToAnchor:menu.centerXAnchor],
++    [performance.topAnchor constraintEqualToAnchor:menu.bottomAnchor constant:8],
+     [performance.widthAnchor constraintEqualToConstant:44],
+     [performance.heightAnchor constraintEqualToConstant:44],
+-    [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:menu.leadingAnchor],
+-    [self.performanceOverlay.topAnchor constraintEqualToAnchor:menu.bottomAnchor constant:8],
++    [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:8],
++    [self.performanceOverlay.topAnchor constraintEqualToAnchor:menu.topAnchor],
+     [self.performanceOverlay.widthAnchor constraintEqualToConstant:310],
+     [self.performanceOverlay.heightAnchor constraintEqualToConstant:150],
+   ]];
+@@ -194,6 +197,11 @@
+ - (void)viewDidLayoutSubviews {
+   [super viewDidLayoutSubviews];
+   [self.inputController layoutControlsInBounds:self.view.bounds safeAreaInsets:self.view.safeAreaInsets];
++  // The virtual pad is installed after loadView; preserve the independent
++  // action rail's hit testing above it without sharing any pad geometry.
++  [self.view bringSubviewToFront:self.performanceOverlay];
++  [self.view bringSubviewToFront:self.menuButton];
++  [self.view bringSubviewToFront:self.performanceButton];
+ }
+ - (void)viewDidDisappear:(BOOL)animated {
+   [self.inputController stop];

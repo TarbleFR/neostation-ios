@@ -24,9 +24,14 @@ for token in [
     'source of truth for disc images',
     'const game_boot_result registration = Emu.AddGame(game->path)',
     'Could not register the installed disc source before boot',
+    'std::string{Emulator::game_id_boot_prefix} + game->title_id',
+    'keeps /dev_bdvd attached',
 ]:
     assert token in cpp, token
 assert cpp.index('source of truth for disc images') < cpp.index(
+    'if (!requested_savestate_id.empty())'
+)
+assert cpp.index('game_id_boot_prefix') < cpp.index(
     'if (!requested_savestate_id.empty())'
 )
 for symbol in ['_neostation_rpcs3_ios_save_state', '_neostation_rpcs3_ios_enumerate_savestates_live']:
