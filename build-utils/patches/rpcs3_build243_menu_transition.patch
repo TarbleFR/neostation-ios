@@ -1,0 +1,28 @@
+--- a/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+@@ -633,14 +633,22 @@
+                                                                  message:nil
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+   __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++  // UIAlertController is still the presented controller while its action
++  // handler runs. Defer secondary UI/actions until the dismissal animation has
++  // released presentedViewController, otherwise fast devices can drop the next
++  // menu or confirmation alert.
++  void (^afterMenuDismiss)(dispatch_block_t) = ^(dispatch_block_t block) {
++    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
++                   dispatch_get_main_queue(), block);
++  };
+   [alert addAction:[UIAlertAction actionWithTitle:@"Langue" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+-    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf showLanguageMenu]; });
++    afterMenuDismiss(^{ [weakSelf showLanguageMenu]; });
+   }]];
+   [alert addAction:[UIAlertAction actionWithTitle:@"Créer une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+-    [weakSelf saveCurrentState];
++    afterMenuDismiss(^{ [weakSelf saveCurrentState]; });
+   }]];
+   [alert addAction:[UIAlertAction actionWithTitle:@"Charger une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+-    [weakSelf showLoadSavestateMenu];
++    afterMenuDismiss(^{ [weakSelf showLoadSavestateMenu]; });
+   }]];
+   [alert addAction:[UIAlertAction actionWithTitle:@"Quitter le jeu" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
+     [weakSelf stopAndDismiss:nil];
