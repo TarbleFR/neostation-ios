@@ -116,6 +116,8 @@ grep -q 'add_library(RPCS3Core SHARED' "$SRC/rpcs3/CMakeLists.txt" || die "ios-p
 log "Apply NeoStation embedded boot fixes (LLVM/ARM64 remains enabled)"
 python3 "$PWD/build-utils/patch_rpcs3_embedded_boot.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_jit_memory.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_neostation_session.py" "$SRC"
+python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \
