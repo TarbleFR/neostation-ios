@@ -38,6 +38,9 @@ class GameViewFooter extends StatelessWidget {
   /// control that does nothing for this game.
   final bool hasVideo;
 
+  /// Hide only the scrolling title in console grid mode.
+  final bool showTitle;
+
   const GameViewFooter({
     super.key,
     required this.game,
@@ -48,6 +51,7 @@ class GameViewFooter extends StatelessWidget {
     this.onShowAchievements,
     this.onToggleMute,
     this.hasVideo = false,
+    this.showTitle = true,
   });
 
   @override
@@ -72,8 +76,9 @@ class GameViewFooter extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                MarqueeText(
-                  text: GameUtils.formatGameName(game.name),
+                if (showTitle)
+                  MarqueeText(
+                    text: GameUtils.formatGameName(game.name),
                   isActive: true,
                   style: TextStyle(
                     color: scheme.onSurface,

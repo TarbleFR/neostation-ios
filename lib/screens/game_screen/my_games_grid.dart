@@ -1298,6 +1298,7 @@ class _GamesGridState extends State<GamesGrid> {
     _chromeSig = sig;
     _chromeFooter = GameViewFooter(
       game: settledGame,
+      showTitle: false,
       onPlay: widget.onPlay,
       hasRetroAchievements: hasRa,
       isLoadingAchievements: _isLoadingAchievements,

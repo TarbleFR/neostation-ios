@@ -3,14 +3,22 @@
 #import <GameController/GameController.h>
 #import <QuartzCore/QuartzCore.h>
 #include <math.h>
+#include <stddef.h>
 
 static const char* const kRPCS3InputMarker = "NEOSTATION_RPCS3_INPUT_V1";
+
+static_assert(sizeof(rpcs3_ios_pad_state) == 40, "RPCS3 iOS pad ABI size drift");
+static_assert(offsetof(rpcs3_ios_pad_state, size) == 0, "RPCS3 iOS pad struct_size offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, connected) == 4, "RPCS3 iOS pad connected offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, buttons) == 8, "RPCS3 iOS pad buttons offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, left_x) == 16, "RPCS3 iOS pad left stick offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, l2) == 32, "RPCS3 iOS pad trigger offset drift");
 
 static inline float RPCS3Clamp(float value, float minimum, float maximum) {
   return fminf(maximum, fmaxf(minimum, value));
 }
 
-static inline void RPCS3SetBit(uint32_t* bits, uint32_t bit, BOOL pressed) {
+static inline void RPCS3SetBit(uint64_t* bits, uint64_t bit, BOOL pressed) {
   if (pressed) *bits |= bit;
   else *bits &= ~bit;
 }
@@ -145,6 +153,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
     _api = api;
     memset(&_touchState, 0, sizeof(_touchState));
     _touchState.size = sizeof(_touchState);
+    _touchState.connected = 1;
     [self installTouchOverlay];
   }
   return self;
@@ -275,6 +284,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   self.physicalController = controller;
   memset(&_touchState, 0, sizeof(_touchState));
   _touchState.size = sizeof(_touchState);
+  _touchState.connected = 1;
   [self clearCorePadState];
 
   __weak RPCS3GameInputController* weakSelf = self;
@@ -325,6 +335,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   if (!self.started || !pad || !self.physicalController) return;
   rpcs3_ios_pad_state state = {};
   state.size = sizeof(state);
+  state.connected = 1;
 
   RPCS3SetBit(&state.buttons, rpcs3_ios_pad_up, pad.dpad.up.isPressed);
   RPCS3SetBit(&state.buttons, rpcs3_ios_pad_down, pad.dpad.down.isPressed);
@@ -365,6 +376,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   if (!self.started || !pad || !self.physicalController) return;
   rpcs3_ios_pad_state state = {};
   state.size = sizeof(state);
+  state.connected = 1;
   RPCS3SetBit(&state.buttons, rpcs3_ios_pad_up, pad.dpad.up.isPressed);
   RPCS3SetBit(&state.buttons, rpcs3_ios_pad_down, pad.dpad.down.isPressed);
   RPCS3SetBit(&state.buttons, rpcs3_ios_pad_left, pad.dpad.left.isPressed);
@@ -396,6 +408,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 - (void)sendTouchState {
   if (!self.started || self.physicalController) return;
   _touchState.size = sizeof(_touchState);
+  _touchState.connected = 1;
   [self sendState:&_touchState];
 }
 
@@ -407,6 +420,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 - (void)clearCorePadState {
   rpcs3_ios_pad_state state = {};
   state.size = sizeof(state);
+  state.connected = 0;
   [self sendState:&state];
 }
 
@@ -414,6 +428,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   BOOL showTouch = self.started && self.physicalController == nil;
   self.touchOverlay.hidden = !showTouch;
   self.touchOverlay.userInteractionEnabled = showTouch;
+  if (showTouch) [self sendTouchState];
 }
 
 - (void)setFrameForView:(UIView*)view center:(CGPoint)center size:(CGSize)size {

@@ -41,37 +41,38 @@ typedef struct rpcs3_ios_display_surface {
   void* metal_layer;
 } rpcs3_ios_display_surface;
 
-// Keep this layout and bit assignment byte-for-byte compatible with the pinned
-// XITRIX RPCS3 iOS ABI (rpcs3/ios/RPCS3IOS.h, ABI 30).
+// Exact byte layout and bit assignments of the pinned XITRIX RPCS3 iOS ABI 30.
+// Local names retain the existing NeoStation call sites; comments show upstream names.
 typedef enum rpcs3_ios_pad_button_bits {
-  rpcs3_ios_pad_up       = 1u << 0,
-  rpcs3_ios_pad_down     = 1u << 1,
-  rpcs3_ios_pad_left     = 1u << 2,
-  rpcs3_ios_pad_right    = 1u << 3,
-  rpcs3_ios_pad_square   = 1u << 4,
-  rpcs3_ios_pad_cross    = 1u << 5,
-  rpcs3_ios_pad_circle   = 1u << 6,
-  rpcs3_ios_pad_triangle = 1u << 7,
-  rpcs3_ios_pad_l1       = 1u << 8,
-  rpcs3_ios_pad_l2       = 1u << 9,
-  rpcs3_ios_pad_r1       = 1u << 10,
-  rpcs3_ios_pad_r2       = 1u << 11,
-  rpcs3_ios_pad_l3       = 1u << 12,
-  rpcs3_ios_pad_r3       = 1u << 13,
-  rpcs3_ios_pad_select   = 1u << 14,
-  rpcs3_ios_pad_start    = 1u << 15,
-  rpcs3_ios_pad_ps       = 1u << 16,
+  rpcs3_ios_pad_up       = 1ull << 0,
+  rpcs3_ios_pad_down     = 1ull << 1,
+  rpcs3_ios_pad_left     = 1ull << 2,
+  rpcs3_ios_pad_right    = 1ull << 3,
+  rpcs3_ios_pad_cross    = 1ull << 4,
+  rpcs3_ios_pad_circle   = 1ull << 5,
+  rpcs3_ios_pad_square   = 1ull << 6,
+  rpcs3_ios_pad_triangle = 1ull << 7,
+  rpcs3_ios_pad_l1       = 1ull << 8,
+  rpcs3_ios_pad_r1       = 1ull << 9,
+  rpcs3_ios_pad_l2       = 1ull << 10,
+  rpcs3_ios_pad_r2       = 1ull << 11,
+  rpcs3_ios_pad_l3       = 1ull << 12,
+  rpcs3_ios_pad_r3       = 1ull << 13,
+  rpcs3_ios_pad_start    = 1ull << 14,
+  rpcs3_ios_pad_select   = 1ull << 15,
+  rpcs3_ios_pad_ps       = 1ull << 16,
 } rpcs3_ios_pad_button_bits;
 
 typedef struct rpcs3_ios_pad_state {
-  uint32_t size;
-  uint32_t buttons;
-  float left_x;
-  float left_y;
-  float right_x;
-  float right_y;
-  float l2;
-  float r2;
+  uint32_t size;       // upstream: struct_size
+  uint32_t connected;
+  uint64_t buttons;
+  float left_x;        // upstream: left_stick_x
+  float left_y;        // upstream: left_stick_y
+  float right_x;       // upstream: right_stick_x
+  float right_y;       // upstream: right_stick_y
+  float l2;            // upstream: left_trigger
+  float r2;            // upstream: right_trigger
 } rpcs3_ios_pad_state;
 
 typedef struct rpcs3_ios_api {
