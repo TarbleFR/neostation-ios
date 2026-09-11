@@ -1,0 +1,406 @@
+name: One-shot RPCS3 input + grid repair
+
+on:
+  push:
+    branches:
+      - fix/rpcs3-universal-jit-region-build236
+    paths:
+      - .github/workflows/zz-one-shot-rpcs3-input-grid-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/rpcs3-universal-jit-region-build236
+          fetch-depth: 0
+
+      - name: Apply exact RPCS3 ABI/input and grid footer fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+
+          abi_path = root / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h'
+          abi_path.write_text(r'''#pragma once
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef int32_t rpcs3_ios_status;
+
+typedef void (*rpcs3_ios_log_callback)(void* context,
+                                       int32_t level,
+                                       const char* message);
+typedef void (*rpcs3_ios_dispatch_function)(void* context);
+typedef void (*rpcs3_ios_dispatch_callback)(
+    void* context,
+    rpcs3_ios_dispatch_function function,
+    void* function_context);
+typedef void (*rpcs3_ios_progress_callback)(void* context,
+                                            uint32_t current,
+                                            uint32_t total,
+                                            const char* detail);
+
+typedef struct rpcs3_ios_init_options {
+  uint32_t abi_version;
+  uint32_t size;
+  const char* support_path;
+  const char* cache_path;
+  rpcs3_ios_log_callback log_callback;
+  rpcs3_ios_dispatch_callback dispatch_callback;
+  void* context;
+  uint32_t expanded_jit_region;
+  uint32_t reserved;
+} rpcs3_ios_init_options;
+
+typedef struct rpcs3_ios_display_surface {
+  uint32_t size;
+  uint32_t width;
+  uint32_t height;
+  float refresh_rate;
+  void* metal_layer;
+} rpcs3_ios_display_surface;
+
+// Byte layout and bit assignments must match the pinned XITRIX RPCS3 iOS ABI
+// (rpcs3/ios/RPCS3IOS.h, ABI 30). Local field aliases keep the bridge call sites
+// readable while preserving the exact upstream memory layout.
+typedef enum rpcs3_ios_pad_button_bits {
+  rpcs3_ios_pad_up       = 1ull << 0,
+  rpcs3_ios_pad_down     = 1ull << 1,
+  rpcs3_ios_pad_left     = 1ull << 2,
+  rpcs3_ios_pad_right    = 1ull << 3,
+  rpcs3_ios_pad_cross    = 1ull << 4,
+  rpcs3_ios_pad_circle   = 1ull << 5,
+  rpcs3_ios_pad_square   = 1ull << 6,
+  rpcs3_ios_pad_triangle = 1ull << 7,
+  rpcs3_ios_pad_l1       = 1ull << 8,
+  rpcs3_ios_pad_r1       = 1ull << 9,
+  rpcs3_ios_pad_l2       = 1ull << 10,
+  rpcs3_ios_pad_r2       = 1ull << 11,
+  rpcs3_ios_pad_l3       = 1ull << 12,
+  rpcs3_ios_pad_r3       = 1ull << 13,
+  rpcs3_ios_pad_start    = 1ull << 14,
+  rpcs3_ios_pad_select   = 1ull << 15,
+  rpcs3_ios_pad_ps       = 1ull << 16,
+} rpcs3_ios_pad_button_bits;
+
+typedef struct rpcs3_ios_pad_state {
+  uint32_t size;       // upstream: struct_size
+  uint32_t connected;
+  uint64_t buttons;
+  float left_x;        // upstream: left_stick_x
+  float left_y;        // upstream: left_stick_y
+  float right_x;       // upstream: right_stick_x
+  float right_y;       // upstream: right_stick_y
+  float l2;            // upstream: left_trigger
+  float r2;            // upstream: right_trigger
+} rpcs3_ios_pad_state;
+
+typedef struct rpcs3_ios_api {
+  void* handle;
+  uint32_t (*abi_version)(void);
+  const char* (*build_info)(void);
+  rpcs3_ios_status (*initialize)(const rpcs3_ios_init_options*);
+  const char* (*firmware_version)(void);
+  rpcs3_ios_status (*install_firmware)(const char*, rpcs3_ios_progress_callback, void*);
+  rpcs3_ios_status (*install_package)(const char*, rpcs3_ios_progress_callback, void*);
+  rpcs3_ios_status (*install_iso)(const char*, const char*, rpcs3_ios_progress_callback, void*);
+  rpcs3_ios_status (*install_zip)(const char*, rpcs3_ios_progress_callback, void*);
+  rpcs3_ios_status (*install_folder)(const char*, rpcs3_ios_progress_callback, void*);
+  rpcs3_ios_status (*set_display_surface)(const rpcs3_ios_display_surface*);
+  rpcs3_ios_status (*set_pad_state)(uint32_t, const rpcs3_ios_pad_state*);
+  rpcs3_ios_status (*boot_game)(const char*, const char*);
+  int32_t (*get_emulation_state)(void);
+  rpcs3_ios_status (*stop_emulation)(void);
+  rpcs3_ios_status (*shutdown)(void);
+  const char* (*last_error)(void);
+} rpcs3_ios_api;
+
+#ifdef __cplusplus
+}
+#endif
+''')
+
+          input_path = root / 'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm'
+          text = input_path.read_text()
+          old = text
+          text = text.replace('#include <math.h>\n', '#include <math.h>\n#include <stddef.h>\n')
+          text = text.replace(
+              'static inline void RPCS3SetBit(uint32_t* bits, uint32_t bit, BOOL pressed) {',
+              'static inline void RPCS3SetBit(uint64_t* bits, uint64_t bit, BOOL pressed) {',
+          )
+          marker = 'static const char* const kRPCS3InputMarker = "NEOSTATION_RPCS3_INPUT_V1";\n'
+          checks = '''\nstatic_assert(sizeof(rpcs3_ios_pad_state) == 40, "RPCS3 iOS pad ABI size drift");
+static_assert(offsetof(rpcs3_ios_pad_state, size) == 0, "RPCS3 iOS pad struct_size offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, connected) == 4, "RPCS3 iOS pad connected offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, buttons) == 8, "RPCS3 iOS pad buttons offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, left_x) == 16, "RPCS3 iOS pad left stick offset drift");
+static_assert(offsetof(rpcs3_ios_pad_state, l2) == 32, "RPCS3 iOS pad trigger offset drift");
+'''
+          if checks.strip() not in text:
+              assert marker in text
+              text = text.replace(marker, marker + checks, 1)
+
+          # Every live state must advertise a connected virtual/physical pad.
+          text = re.sub(
+              r'(?m)^(\s*)_touchState\.size = sizeof\(_touchState\);$',
+              r'\1_touchState.size = sizeof(_touchState);\n\1_touchState.connected = 1;',
+              text,
+          )
+          text = re.sub(
+              r'(?m)^(\s*)state\.size = sizeof\(state\);$',
+              r'\1state.size = sizeof(state);\n\1state.connected = 1;',
+              text,
+          )
+          # clearCorePadState is the single intentional disconnect packet.
+          clear_live = '''- (void)clearCorePadState {
+  rpcs3_ios_pad_state state = {};
+  state.size = sizeof(state);
+  state.connected = 1;
+  [self sendState:&state];
+}'''
+          clear_dead = '''- (void)clearCorePadState {
+  rpcs3_ios_pad_state state = {};
+  state.size = sizeof(state);
+  state.connected = 0;
+  [self sendState:&state];
+}'''
+          assert clear_live in text
+          text = text.replace(clear_live, clear_dead, 1)
+
+          # A touch-only session is a real virtual pad; publish it immediately.
+          vis_old = '''  self.touchOverlay.hidden = !showTouch;
+  self.touchOverlay.userInteractionEnabled = showTouch;
+}'''
+          vis_new = '''  self.touchOverlay.hidden = !showTouch;
+  self.touchOverlay.userInteractionEnabled = showTouch;
+  if (showTouch) [self sendTouchState];
+}'''
+          assert vis_old in text
+          text = text.replace(vis_old, vis_new, 1)
+          assert text != old
+          input_path.write_text(text)
+
+          # Grid-only UI: keep metadata/action pills, remove only the scrolling title.
+          footer_path = root / 'lib/widgets/game_view_footer.dart'
+          footer = footer_path.read_text()
+          assert 'final bool showTitle;' not in footer
+          footer = footer.replace(
+              '  final bool hasVideo;\n\n  const GameViewFooter({',
+              '  final bool hasVideo;\n\n  /// Grid mode can suppress only the scrolling game title while retaining\n  /// the ROM subtitle and status/action pills.\n  final bool showTitle;\n\n  const GameViewFooter({',
+              1,
+          )
+          footer = footer.replace(
+              '    this.hasVideo = false,\n  });',
+              '    this.hasVideo = false,\n    this.showTitle = true,\n  });',
+              1,
+          )
+          title_old = '''                MarqueeText(
+                  text: GameUtils.formatGameName(game.name),'''
+          title_new = '''                if (showTitle)
+                  MarqueeText(
+                    text: GameUtils.formatGameName(game.name),'''
+          assert title_old in footer
+          footer = footer.replace(title_old, title_new, 1)
+          # Indentation remains formatter-safe; dart format in the real build normalizes it.
+          footer_path.write_text(footer)
+
+          grid_path = root / 'lib/screens/game_screen/my_games_grid.dart'
+          grid = grid_path.read_text()
+          grid_old = '''    _chromeFooter = GameViewFooter(
+      game: settledGame,'''
+          grid_new = '''    _chromeFooter = GameViewFooter(
+      game: settledGame,
+      showTitle: false,'''
+          assert grid_old in grid
+          grid = grid.replace(grid_old, grid_new, 1)
+          grid_path.write_text(grid)
+
+          # Keep the existing source-level bridge test aligned with the pinned ABI.
+          bridge_test = root / 'test/rpcs3_input_bridge_test.py'
+          bridge_test.write_text(r'''from pathlib import Path
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+ABI = ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h'
+PLUGIN = ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
+INPUT = ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm'
+PODSPEC = ROOT / 'packages/rpcs3_internal_bridge/ios/rpcs3_internal_bridge.podspec'
+
+
+class RPCS3InputBridgeTests(unittest.TestCase):
+    def test_pinned_pad_abi_is_exposed(self):
+        text = ABI.read_text()
+        expected = (
+            'uint32_t connected;',
+            'uint64_t buttons;',
+            'rpcs3_ios_pad_cross    = 1ull << 4',
+            'rpcs3_ios_pad_circle   = 1ull << 5',
+            'rpcs3_ios_pad_square   = 1ull << 6',
+            'rpcs3_ios_pad_r1       = 1ull << 9',
+            'rpcs3_ios_pad_l2       = 1ull << 10',
+            'rpcs3_ios_pad_start    = 1ull << 14',
+            'rpcs3_ios_pad_select   = 1ull << 15',
+            'rpcs3_ios_status (*set_pad_state)(uint32_t, const rpcs3_ios_pad_state*)',
+        )
+        for token in expected:
+            self.assertIn(token, text)
+
+    def test_plugin_requires_core_pad_symbol_and_installs_input_owner(self):
+        text = PLUGIN.read_text()
+        self.assertIn('LOAD("rpcs3_ios_set_pad_state", set_pad_state);', text)
+        self.assertIn('RPCS3GameInputController', text)
+        self.assertIn('initWithHostView:controller.view api:&self->_api', text)
+        self.assertIn('[controller.inputController start];', text)
+        self.assertIn('[controller.inputController stop];', text)
+
+    def test_physical_controller_mapping_matches_ps3_layout(self):
+        text = INPUT.read_text()
+        self.assertIn('GCControllerDidConnectNotification', text)
+        self.assertIn('RPCS3SetBit(uint64_t* bits, uint64_t bit', text)
+        self.assertIn('rpcs3_ios_pad_cross, pad.buttonA.isPressed', text)
+        self.assertIn('rpcs3_ios_pad_circle, pad.buttonB.isPressed', text)
+        self.assertIn('rpcs3_ios_pad_square, pad.buttonX.isPressed', text)
+        self.assertIn('rpcs3_ios_pad_triangle, pad.buttonY.isPressed', text)
+        self.assertIn('rpcs3_ios_pad_start, menu.isPressed', text)
+        self.assertIn('rpcs3_ios_pad_select, options.isPressed', text)
+        self.assertIn('state.connected = 1;', text)
+        self.assertIn('_api->set_pad_state(0, state);', text)
+
+    def test_touch_controls_publish_a_connected_virtual_pad(self):
+        text = INPUT.read_text()
+        self.assertIn('NEOSTATION_RPCS3_INPUT_V1', text)
+        self.assertIn('BOOL showTouch = self.started && self.physicalController == nil;', text)
+        self.assertIn('if (showTouch) [self sendTouchState];', text)
+        self.assertIn('_touchState.connected = 1;', text)
+        for label in ('@"▲"', '@"▼"', '@"◀"', '@"▶"', '@"□"', '@"✕"', '@"○"', '@"△"'):
+            self.assertIn(label, text)
+        self.assertIn('_touchState.l2 = 1.0f;', text)
+        self.assertIn('_touchState.r2 = 1.0f;', text)
+
+    def test_compile_time_layout_guards_exist(self):
+        text = INPUT.read_text()
+        self.assertIn('sizeof(rpcs3_ios_pad_state) == 40', text)
+        self.assertIn('offsetof(rpcs3_ios_pad_state, connected) == 4', text)
+        self.assertIn('offsetof(rpcs3_ios_pad_state, buttons) == 8', text)
+
+    def test_gamecontroller_framework_is_linked(self):
+        self.assertIn("'GameController'", PODSPEC.read_text())
+
+
+if __name__ == '__main__':
+    unittest.main()
+''')
+
+          abi_test = root / 'test/rpcs3_input_abi_test.py'
+          abi_test.write_text(r'''from pathlib import Path
+import sys
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+ABI = ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h'
+PINNED = Path(sys.argv[1]) / 'rpcs3/ios/RPCS3IOS.h' if len(sys.argv) > 1 else None
+
+
+class RPCS3PadABITests(unittest.TestCase):
+    def test_local_layout_matches_pinned_abi_30(self):
+        text = ABI.read_text()
+        fields = [
+            'uint32_t size;',
+            'uint32_t connected;',
+            'uint64_t buttons;',
+            'float left_x;',
+            'float left_y;',
+            'float right_x;',
+            'float right_y;',
+            'float l2;',
+            'float r2;',
+        ]
+        positions = [text.index(field) for field in fields]
+        self.assertEqual(positions, sorted(positions))
+        expected_bits = {
+            'rpcs3_ios_pad_up': 0, 'rpcs3_ios_pad_down': 1,
+            'rpcs3_ios_pad_left': 2, 'rpcs3_ios_pad_right': 3,
+            'rpcs3_ios_pad_cross': 4, 'rpcs3_ios_pad_circle': 5,
+            'rpcs3_ios_pad_square': 6, 'rpcs3_ios_pad_triangle': 7,
+            'rpcs3_ios_pad_l1': 8, 'rpcs3_ios_pad_r1': 9,
+            'rpcs3_ios_pad_l2': 10, 'rpcs3_ios_pad_r2': 11,
+            'rpcs3_ios_pad_l3': 12, 'rpcs3_ios_pad_r3': 13,
+            'rpcs3_ios_pad_start': 14, 'rpcs3_ios_pad_select': 15,
+            'rpcs3_ios_pad_ps': 16,
+        }
+        for name, bit in expected_bits.items():
+            self.assertIn(f'{name}', text)
+            self.assertIn(f'1ull << {bit}', text[text.index(name):text.index(name)+80])
+
+    def test_upstream_contract_is_the_expected_shape(self):
+        if PINNED is None:
+            self.skipTest('pinned RPCS3 source path not supplied')
+        text = PINNED.read_text()
+        for token in (
+            'uint32_t struct_size;', 'uint32_t connected;', 'uint64_t buttons;',
+            'float left_stick_x;', 'float left_stick_y;',
+            'float right_stick_x;', 'float right_stick_y;',
+            'float left_trigger;', 'float right_trigger;',
+            'RPCS3_IOS_PAD_BUTTON_CROSS     = 1ull << 4',
+            'RPCS3_IOS_PAD_BUTTON_R1        = 1ull << 9',
+            'RPCS3_IOS_PAD_BUTTON_START     = 1ull << 14',
+            'RPCS3_IOS_PAD_BUTTON_SELECT    = 1ull << 15',
+        ):
+            self.assertIn(token, text)
+
+
+if __name__ == '__main__':
+    # unittest treats the optional pinned-source path as a test name; remove it.
+    if len(sys.argv) > 1:
+        sys.argv = [sys.argv[0]]
+    unittest.main()
+''')
+
+          workflow_path = root / '.github/workflows/build-ipa-once.yml'
+          workflow = workflow_path.read_text()
+          assert 'NeoStation iOS Build 242' in workflow
+          workflow = workflow.replace('242', '243')
+          workflow_path.write_text(workflow)
+          PY
+
+      - name: Validate patch before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/rpcs3_input_bridge_test.py
+          python3 test/rpcs3_input_abi_test.py
+          git diff --check
+          grep -q "showTitle: false" lib/screens/game_screen/my_games_grid.dart
+          grep -q "if (showTitle)" lib/widgets/game_view_footer.dart
+          grep -q "uint32_t connected;" packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h
+          grep -q "uint64_t buttons;" packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h
+
+      - name: Commit repaired sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "NeoStation CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
+                  packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm \
+                  lib/widgets/game_view_footer.dart \
+                  lib/screens/game_screen/my_games_grid.dart \
+                  test/rpcs3_input_bridge_test.py \
+                  test/rpcs3_input_abi_test.py \
+                  .github/workflows/build-ipa-once.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: restore RPCS3 controller/touch ABI and hide grid marquee [skip ci]"
+          git push origin HEAD:fix/rpcs3-universal-jit-region-build236
