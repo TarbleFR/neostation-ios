@@ -1,32 +1,6 @@
 --- a/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
 +++ b/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
-@@ -633,14 +633,22 @@
-                                                                  message:nil
-                                                           preferredStyle:UIAlertControllerStyleAlert];
-   __weak Rpcs3InternalBridgePlugin* weakSelf = self;
-+  // UIAlertController is still the presented controller while its action
-+  // handler runs. Defer secondary UI/actions until the dismissal animation has
-+  // released presentedViewController, otherwise fast devices can drop the next
-+  // menu or confirmation alert.
-+  void (^afterMenuDismiss)(dispatch_block_t) = ^(dispatch_block_t block) {
-+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-+                   dispatch_get_main_queue(), block);
-+  };
-   [alert addAction:[UIAlertAction actionWithTitle:@"Langue" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
--    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf showLanguageMenu]; });
-+    afterMenuDismiss(^{ [weakSelf showLanguageMenu]; });
-   }]];
-   [alert addAction:[UIAlertAction actionWithTitle:@"Créer une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
--    [weakSelf saveCurrentState];
-+    afterMenuDismiss(^{ [weakSelf saveCurrentState]; });
-   }]];
-   [alert addAction:[UIAlertAction actionWithTitle:@"Charger une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
--    [weakSelf showLoadSavestateMenu];
-+    afterMenuDismiss(^{ [weakSelf showLoadSavestateMenu]; });
-   }]];
-   [alert addAction:[UIAlertAction actionWithTitle:@"Quitter le jeu" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
-     [weakSelf stopAndDismiss:nil];
-@@ -224,3 +232,9 @@
+@@ -224,3 +224,9 @@
  @property(nonatomic, copy) NSString* activeTitleId;
  @property(nonatomic, assign) BOOL audioSessionActive;
 +@property(nonatomic, copy) NSString* previousAudioCategory;
@@ -36,7 +10,7 @@
 +@property(nonatomic, assign) NSTimeInterval previousPreferredIOBufferDuration;
 +@property(nonatomic, assign) BOOL audioPolicyCaptured;
  @end
-@@ -391,6 +405,15 @@
+@@ -391,6 +397,15 @@
  - (BOOL)activateRPCS3AudioSession:(NSString**)fatalError {
    AVAudioSession* session = AVAudioSession.sharedInstance;
    NSError* error = nil;
@@ -52,9 +26,7 @@
    if (![session setCategory:AVAudioSessionCategoryPlayback
                          mode:AVAudioSessionModeDefault
                       options:0
-@@ -423,13 +446,34 @@
- }
- 
+@@ -423,9 +438,35 @@
  - (void)deactivateRPCS3AudioSession {
 -  if (!self.audioSessionActive) return;
 +  if (!self.audioSessionActive && !self.audioPolicyCaptured) return;
@@ -95,3 +67,29 @@
 +  self.previousPreferredSampleRate = 0.0;
 +  self.previousPreferredIOBufferDuration = 0.0;
  }
+@@ -633,14 +674,22 @@
+                                                                  message:nil
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+   __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++  // UIAlertController is still the presented controller while its action
++  // handler runs. Defer secondary UI/actions until the dismissal animation has
++  // released presentedViewController, otherwise fast devices can drop the next
++  // menu or confirmation alert.
++  void (^afterMenuDismiss)(dispatch_block_t) = ^(dispatch_block_t block) {
++    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
++                   dispatch_get_main_queue(), block);
++  };
+   [alert addAction:[UIAlertAction actionWithTitle:@"Langue" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+-    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf showLanguageMenu]; });
++    afterMenuDismiss(^{ [weakSelf showLanguageMenu]; });
+   }]];
+   [alert addAction:[UIAlertAction actionWithTitle:@"Créer une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+-    [weakSelf saveCurrentState];
++    afterMenuDismiss(^{ [weakSelf saveCurrentState]; });
+   }]];
+   [alert addAction:[UIAlertAction actionWithTitle:@"Charger une savestate" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+-    [weakSelf showLoadSavestateMenu];
++    afterMenuDismiss(^{ [weakSelf showLoadSavestateMenu]; });
+   }]];
+   [alert addAction:[UIAlertAction actionWithTitle:@"Quitter le jeu" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
+     [weakSelf stopAndDismiss:nil];
