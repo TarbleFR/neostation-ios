@@ -26,3 +26,72 @@
    }]];
    [alert addAction:[UIAlertAction actionWithTitle:@"Quitter le jeu" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
      [weakSelf stopAndDismiss:nil];
+@@ -224,3 +232,9 @@
+ @property(nonatomic, copy) NSString* activeTitleId;
+ @property(nonatomic, assign) BOOL audioSessionActive;
++@property(nonatomic, copy) NSString* previousAudioCategory;
++@property(nonatomic, copy) NSString* previousAudioMode;
++@property(nonatomic, assign) AVAudioSessionCategoryOptions previousAudioOptions;
++@property(nonatomic, assign) double previousPreferredSampleRate;
++@property(nonatomic, assign) NSTimeInterval previousPreferredIOBufferDuration;
++@property(nonatomic, assign) BOOL audioPolicyCaptured;
+ @end
+@@ -391,6 +405,15 @@
+ - (BOOL)activateRPCS3AudioSession:(NSString**)fatalError {
+   AVAudioSession* session = AVAudioSession.sharedInstance;
+   NSError* error = nil;
++  if (!self.audioPolicyCaptured) {
++    self.previousAudioCategory = session.category;
++    self.previousAudioMode = session.mode;
++    self.previousAudioOptions = session.categoryOptions;
++    self.previousPreferredSampleRate = session.preferredSampleRate;
++    self.previousPreferredIOBufferDuration = session.preferredIOBufferDuration;
++    self.audioPolicyCaptured = YES;
++  }
++
+   if (![session setCategory:AVAudioSessionCategoryPlayback
+                         mode:AVAudioSessionModeDefault
+                      options:0
+@@ -423,13 +446,34 @@
+ }
+ 
+ - (void)deactivateRPCS3AudioSession {
+-  if (!self.audioSessionActive) return;
++  if (!self.audioSessionActive && !self.audioPolicyCaptured) return;
++  AVAudioSession* session = AVAudioSession.sharedInstance;
+   NSError* error = nil;
+-  [AVAudioSession.sharedInstance setActive:NO
+-                                withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+-                                      error:&error];
+-  RPCS3Diagnostic(@"audio_session_inactive", error ? error.localizedDescription : @"deactivated");
++
++  if (self.audioPolicyCaptured) {
++    [session setCategory:self.previousAudioCategory ?: AVAudioSessionCategoryAmbient
++                    mode:self.previousAudioMode ?: AVAudioSessionModeDefault
++                 options:self.previousAudioOptions
++                   error:&error];
++    if (error == nil && self.previousPreferredSampleRate > 0.0) {
++      [session setPreferredSampleRate:self.previousPreferredSampleRate error:&error];
++    }
++    if (error == nil && self.previousPreferredIOBufferDuration > 0.0) {
++      [session setPreferredIOBufferDuration:self.previousPreferredIOBufferDuration error:&error];
++    }
++    if (error == nil && UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
++      [session setActive:YES error:&error];
++    }
++  } else {
++    [session setActive:NO
++           withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
++                 error:&error];
++  }
++
++  RPCS3Diagnostic(@"audio_session_inactive",
++                  error ? error.localizedDescription : @"frontend audio policy restored");
+   self.audioSessionActive = NO;
++  self.audioPolicyCaptured = NO;
++  self.previousAudioCategory = nil;
++  self.previousAudioMode = nil;
++  self.previousAudioOptions = 0;
++  self.previousPreferredSampleRate = 0.0;
++  self.previousPreferredIOBufferDuration = 0.0;
+ }
