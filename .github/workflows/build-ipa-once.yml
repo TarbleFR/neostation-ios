@@ -45,6 +45,8 @@ jobs:
           set -euo pipefail
           git apply --check build-utils/patches/rpcs3_build243_host.patch
           git apply build-utils/patches/rpcs3_build243_host.patch
+          git apply --check build-utils/patches/rpcs3_build243_menu_transition.patch
+          git apply build-utils/patches/rpcs3_build243_menu_transition.patch
           git apply --check build-utils/patches/grid_title_build243.patch
           git apply build-utils/patches/grid_title_build243.patch
           python3 test/rpcs3_ingame_ui_contract_test.py
