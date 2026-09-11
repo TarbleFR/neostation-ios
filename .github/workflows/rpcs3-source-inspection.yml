@@ -1,0 +1,34 @@
+name: RPCS3 pinned source inspection
+on:
+  push:
+    branches: [fix/rpcs3-audio-session-build243]
+    paths: [.github/workflows/rpcs3-source-inspection.yml]
+permissions:
+  contents: read
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export exact host and core sources (no secrets or credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-export"
+          git archive --format=tar.gz HEAD > "$RUNNER_TEMP/source-export/neostation.tar.gz"
+          git init -q "$RUNNER_TEMP/rpcs3-source"
+          git -C "$RUNNER_TEMP/rpcs3-source" remote add origin https://github.com/XITRIX/rpcs3.git
+          git -C "$RUNNER_TEMP/rpcs3-source" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
+          git -C "$RUNNER_TEMP/rpcs3-source" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/rpcs3-source" rev-parse HEAD)" = 22f1152783cef1f7e04af7b1c895173e28fd5b03
+          git -C "$RUNNER_TEMP/rpcs3-source" archive --format=tar.gz HEAD > "$RUNNER_TEMP/source-export/rpcs3.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RPCS3-build243-pinned-sources
+          path: ${{ runner.temp }}/source-export/*.tar.gz
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
