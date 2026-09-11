@@ -105,6 +105,7 @@ git -C "$SRC" fetch --depth 1 origin "$RPCS3_COMMIT"
 git -C "$SRC" checkout -q --detach FETCH_HEAD
 test "$(git -C "$SRC" rev-parse HEAD)" = "$RPCS3_COMMIT" || die "RPCS3 commit mismatch"
 python3 "$PWD/test/rpcs3_embedded_boot_test.py" "$SRC"
+python3 "$PWD/test/rpcs3_jit_memory_test.py" "$SRC"
 git -C "$SRC" submodule sync --recursive
 git -C "$SRC" -c submodule.fetchJobs=8 submodule update --init --recursive --depth 1
 
@@ -114,6 +115,7 @@ grep -q 'add_library(RPCS3Core SHARED' "$SRC/rpcs3/CMakeLists.txt" || die "ios-p
 
 log "Apply NeoStation embedded boot fixes (LLVM/ARM64 remains enabled)"
 python3 "$PWD/build-utils/patch_rpcs3_embedded_boot.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_jit_memory.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \

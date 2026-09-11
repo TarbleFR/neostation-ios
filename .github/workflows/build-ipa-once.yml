@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 236
-run-name: NeoStation iOS Build 236 (RPCS3 Universal JIT RX fix) • ${{ github.sha }}
+name: NeoStation iOS Build 237
+run-name: NeoStation iOS Build 237 (RPCS3 dynamic JIT write/execute fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-236
+  group: neostation-ios-build-237
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '236'
-      IPA_NAME: 'NeoStation-iOS-Build-236'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-236'
+      BUILD_NUMBER: '237'
+      IPA_NAME: 'NeoStation-iOS-Build-237'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-237'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -113,21 +113,26 @@ jobs:
           mkdir -p "$(dirname "$CORE")"
           cp -f "$BUILT_CORE" "$CORE"
           chmod 0755 "$CORE"
+          nm -g "$CORE" > build/rpcs3-embedded-core/symbols.txt
           for symbol in \
             _rpcs3_ios_run_llvm_self_test \
             _rpcs3_ios_set_game_setting \
             _rpcs3_ios_get_boot_progress \
             _rpcs3_ios_stop_emulation \
             _rpcs3_ios_delete_game; do
-            nm -g "$CORE" | grep -q " $symbol$" || {
+            grep -q " $symbol$" build/rpcs3-embedded-core/symbols.txt || {
               echo "Required RPCS3 symbol missing: $symbol" >&2
               exit 1
             }
           done
-          strings "$CORE" | grep -Fq 'RPCS3 LLVM JIT self-test entry=%p' || {
-            echo 'Rebuilt Core does not contain the Build 236 Universal-JIT diagnostic marker' >&2
-            exit 1
-          }
+          python3 - "$CORE" <<'PYCORE'
+          import sys
+          from pathlib import Path
+          data = Path(sys.argv[1]).read_bytes()
+          for marker in (b'NEOSTATION_DYNAMIC_JIT_V1', b'pthread_jit_write_protect_np'):
+              if marker not in data:
+                  raise SystemExit(f'Rebuilt Core is missing {marker!r}')
+          PYCORE
           shasum -a 256 "$CORE"
 
       - name: Analyze and test
@@ -268,7 +273,7 @@ jobs:
               if info_name not in names:
                   raise SystemExit('NeoStation app payload is missing')
               app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '236':
+              if str(app_info.get('CFBundleVersion')) != '237':
                   raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
               cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
               helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
@@ -277,13 +282,13 @@ jobs:
               core_data = archive.read(cores[0])
               if len(core_data) < 60_000_000:
                   raise SystemExit('Embedded RPCS3 Core is unexpectedly small')
-              if b'RPCS3 LLVM JIT self-test entry=%p' not in core_data:
-                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 236 JIT fix marker')
+              if b'NEOSTATION_DYNAMIC_JIT_V1' not in core_data:
+                  raise SystemExit('IPA contains a stale RPCS3 Core without the Build 237 JIT fix marker')
               if not helpers:
                   raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-          print(f'Validated {ipa}: Build 236 + rebuilt RPCS3 Universal-JIT Core + JIT helper')
+          print(f'Validated {ipa}: Build 237 + rebuilt RPCS3 dynamic-JIT Core + JIT helper')
           PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-236.sha256
+          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-237.sha256
           ls -lah dist
 
       - name: Upload IPA

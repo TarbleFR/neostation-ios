@@ -50,7 +50,7 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
 
 // Only the legacy Core backend uses an ordinary RW -> RX transition. On
 // iOS 26 the Core itself prepares RX pages through the attached Universal
-// debugger and creates mirrored RW aliases; this legacy probe cannot test it.
+// debugger; this legacy probe cannot test the Core's MAP_JIT allocation.
 static BOOL RPCS3ProbeExecutableMemory(NSString** error) {
   if (@available(iOS 26.0, *)) {
     if (RPCS3JitHasActiveCoreHandshake()) return YES;
@@ -373,10 +373,8 @@ static void RPCS3Progress(void* context,
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
 
-    // The Build 234 crash happens only on the optional expanded 512 MiB arena:
-    // initialization succeeds, then the first generated ARM64 self-test jumps
-    // to 0x7000000000 and faults. Embedded RPCS3 therefore uses the stable
-    // standard Universal arena even if an older caller requests expansion.
+    // Preserve the existing embedded Core capacity policy. The allocator owns
+    // dynamic JIT addresses and thread write/execute transitions.
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
