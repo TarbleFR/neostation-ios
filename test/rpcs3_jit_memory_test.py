@@ -73,7 +73,6 @@ using u64 = std::uint64_t;
 using uptr = std::uintptr_t;
 using usz = std::size_t;
 enum class arena_backend { legacy_debugger, universal_mirrored };
-constexpr int jit_vm_tag = -1;
 constexpr u64 command_prepare_region = 1;
 constexpr usz test_capacity = 65536;
 struct allocator { void reset(usz) {} };
