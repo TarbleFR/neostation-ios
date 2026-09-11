@@ -11,6 +11,8 @@ packager so the sideloading/signing step can preserve them.
 from __future__ import annotations
 
 import plistlib
+import subprocess
+import sys
 from pathlib import Path
 
 from configure_rpcs3_ios_v1 import (
@@ -40,6 +42,24 @@ def configure_runner_entitlements() -> None:
     path.write_bytes(plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False))
 
 
+def preserve_frontend_silent_mode_policy() -> None:
+    """Keep video_player_avfoundation from upgrading the shared session.
+
+    NeoStation owns the app-wide AVAudioSession and intentionally uses the
+    `.ambient` category in the frontend so the hardware Ring/Silent switch is
+    authoritative. video_player_avfoundation otherwise upgrades that shared
+    session to `.playback` when a menu preview initializes, which makes menu
+    audio bypass Silent Mode. The repository already carries the fail-closed
+    compatibility patch; run and verify it here after Flutter has materialized
+    the plugin sources and before the final Xcode build.
+    """
+    patcher = ROOT / 'build-utils/patch_ios_video_player_audio_session.py'
+    if not patcher.is_file():
+        raise SystemExit(f'iOS video-player audio policy patch is missing: {patcher}')
+    subprocess.run([sys.executable, str(patcher)], cwd=ROOT, check=True)
+    subprocess.run([sys.executable, str(patcher), '--check'], cwd=ROOT, check=True)
+
+
 def main() -> None:
     if not (IOS / 'Runner.xcodeproj').is_dir():
         raise SystemExit('Generate the Flutter iOS host before configuring RPCS3')
@@ -50,6 +70,7 @@ def main() -> None:
     if not stik.is_file():
         raise SystemExit(f'StikJIT device framework missing: {stik}')
 
+    preserve_frontend_silent_mode_policy()
     configure_helper_files()
     configure_podfile()
     configure_xcode_project()
