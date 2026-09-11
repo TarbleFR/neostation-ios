@@ -41,7 +41,7 @@ class RPCS3InputBridgeTests(unittest.TestCase):
         self.assertIn('rpcs3_ios_pad_triangle, pad.buttonY.isPressed', text)
         self.assertIn('rpcs3_ios_pad_start, menu.isPressed', text)
         self.assertIn('rpcs3_ios_pad_select, options.isPressed', text)
-        self.assertIn('self.api->set_pad_state(0, state);', text)
+        self.assertIn('_api->set_pad_state(0, state);', text)
 
     def test_touch_controls_are_automatic_without_physical_controller(self):
         text = INPUT.read_text()
@@ -51,8 +51,8 @@ class RPCS3InputBridgeTests(unittest.TestCase):
             self.assertIn(label, text)
         self.assertIn('self.leftStick.valueChanged', text)
         self.assertIn('self.rightStick.valueChanged', text)
-        self.assertIn('self.touchState.l2 = 1.0f;', text)
-        self.assertIn('self.touchState.r2 = 1.0f;', text)
+        self.assertIn('_touchState.l2 = 1.0f;', text)
+        self.assertIn('_touchState.r2 = 1.0f;', text)
 
     def test_gamecontroller_framework_is_linked(self):
         self.assertIn("'GameController'", PODSPEC.read_text())
