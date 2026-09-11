@@ -166,6 +166,7 @@ void main() {
         expect(find.text('Import games'), findsOneWidget);
         expect(find.text('Import decrypted game folder'), findsOneWidget);
         expect(find.text('Import PS3 firmware'), findsOneWidget);
+        expect(find.text('Export save data'), findsOneWidget);
         expect(nativeCalls, isEmpty);
         await tester.pumpWidget(const SizedBox.shrink());
       }

@@ -478,6 +478,122 @@ class Rpcs3InternalService {
     }
   }
 
+  /// Publishes a detached snapshot of RPCS3's user saves in NeoStation's
+  /// Documents container. iOS exposes that container in Files, while the live
+  /// RPCS3 tree remains in Application Support where the Core expects it.
+  ///
+  /// The export contains regular PS3 savedata and RPCS3 savestates only.
+  /// Firmware, games, caches, trophies and configuration stay private.
+  static Future<Directory> exportSaveData() async {
+    if (!supported) {
+      throw const Rpcs3InternalException(
+        'unsupported',
+        'RPCS3 save export is available on iOS only.',
+      );
+    }
+
+    final data = await dataDirectory();
+    final sources = <String, Directory>{
+      'Game Saves': Directory(
+        path.join(
+          data.path,
+          'dev_hdd0',
+          'home',
+          '00000001',
+          'savedata',
+        ),
+      ),
+      'Savestates': Directory(path.join(data.path, 'savestates')),
+    };
+
+    final documents = await getApplicationDocumentsDirectory();
+    final exportRoot = Directory(path.join(documents.path, 'RPCS3'));
+    await exportRoot.create(recursive: true);
+    final destination = Directory(path.join(exportRoot.path, 'Saves'));
+    final staging = Directory(
+      path.join(
+        exportRoot.path,
+        '.Saves-${DateTime.now().microsecondsSinceEpoch}.tmp',
+      ),
+    );
+    final previous = Directory(path.join(exportRoot.path, '.Saves.previous'));
+
+    var copiedFiles = 0;
+    try {
+      await staging.create(recursive: true);
+      for (final entry in sources.entries) {
+        final source = entry.value;
+        if (!await source.exists()) continue;
+        await for (final entity in source.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          final relative = path.relative(entity.path, from: source.path);
+          if (relative == '.' ||
+              relative == '..' ||
+              relative.startsWith('../')) {
+            continue;
+          }
+          final target = path.join(staging.path, entry.key, relative);
+          if (entity is Directory) {
+            await Directory(target).create(recursive: true);
+          } else if (entity is File) {
+            await Directory(path.dirname(target)).create(recursive: true);
+            await entity.copy(target);
+            copiedFiles++;
+          }
+        }
+      }
+
+      if (copiedFiles == 0) {
+        throw const Rpcs3InternalException(
+          'saveDataEmpty',
+          'Aucune sauvegarde RPCS3 n’est encore disponible à exporter.',
+        );
+      }
+
+      // Prepare the full snapshot before swapping it into place. If the final
+      // rename fails, restore the previous exported copy; RPCS3's live saves
+      // are never moved or modified by this operation.
+      if (await previous.exists()) {
+        await previous.delete(recursive: true);
+      }
+      if (await destination.exists()) {
+        await destination.rename(previous.path);
+      }
+      try {
+        final exported = await staging.rename(destination.path);
+        if (await previous.exists()) {
+          await previous.delete(recursive: true);
+        }
+        return exported;
+      } catch (_) {
+        if (!(await destination.exists()) && (await previous.exists())) {
+          await previous.rename(destination.path);
+        }
+        rethrow;
+      }
+    } on Rpcs3InternalException {
+      rethrow;
+    } catch (error) {
+      throw Rpcs3InternalException(
+        'saveExportFailed',
+        'Impossible de préparer les sauvegardes RPCS3 : $error',
+      );
+    } finally {
+      if (await staging.exists()) {
+        try {
+          await staging.delete(recursive: true);
+        } catch (_) {}
+      }
+      if ((await previous.exists()) && !(await destination.exists())) {
+        try {
+          await previous.rename(destination.path);
+        } catch (_) {}
+      }
+    }
+  }
+
   static Future<String> _stageFirmware(String sourcePath) async {
     final root = await rootDirectory();
     final imports = Directory(path.join(root.path, 'Imports'));

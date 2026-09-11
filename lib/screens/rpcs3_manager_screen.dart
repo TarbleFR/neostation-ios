@@ -238,6 +238,41 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     }
   }
 
+  Future<void> _exportSaves() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _contentProgress = null;
+      _statusMessage = _fr
+          ? 'Préparation des sauvegardes RPCS3…'
+          : 'Preparing RPCS3 saves…';
+    });
+    try {
+      await Rpcs3InternalService.exportSaveData();
+      if (mounted) {
+        _notice(
+          _fr
+              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Saves.'
+              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Saves.',
+        );
+      }
+    } on Rpcs3InternalException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+      _notice(error.message);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+      _notice(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _statusMessage = _fr ? 'RPCS3 prêt.' : 'RPCS3 ready.';
+        });
+      }
+    }
+  }
+
   Widget _statusRow({
     required IconData icon,
     required String label,
@@ -473,6 +508,17 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                     _fr
                         ? 'Importer un dossier de jeu décrypté'
                         : 'Import a decrypted game folder',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const ValueKey('rpcs3-manager-export-saves'),
+                  onPressed: _busy ? null : _exportSaves,
+                  icon: const Icon(Icons.drive_folder_upload_outlined),
+                  label: Text(
+                    _fr
+                        ? 'Exporter les sauvegardes RPCS3'
+                        : 'Export RPCS3 saves',
                   ),
                 ),
               ],

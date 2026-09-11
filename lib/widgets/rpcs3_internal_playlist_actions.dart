@@ -39,6 +39,7 @@ class _Rpcs3InternalPlaylistActionsState
   Rpcs3RuntimePhase _phase = Rpcs3RuntimePhase.idle;
   String _progressMessage = '';
   Rpcs3ContentImportProgress? _contentProgress;
+  String? _activeAction;
 
   bool get _firmwareInstalled => _firmwareVersion.isNotEmpty;
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
@@ -164,17 +165,23 @@ class _Rpcs3InternalPlaylistActionsState
       await _installFirmware();
       return;
     }
-    if (!_firmwareInstalled) {
+    if (!_firmwareInstalled && action != 'saves') {
       _interaction(true);
       return;
     }
 
     setState(() {
       _busy = true;
+      _activeAction = action;
       _contentProgress = null;
-      _progressMessage = action == 'folder'
-          ? (_fr ? 'Ouverture du dossier PS3…' : 'Opening PS3 game folder…')
-          : (_fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…');
+      _progressMessage = switch (action) {
+        'folder' =>
+          _fr ? 'Ouverture du dossier PS3…' : 'Opening PS3 game folder…',
+        'saves' => _fr
+            ? 'Préparation des sauvegardes RPCS3…'
+            : 'Preparing RPCS3 saves…',
+        _ => _fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…',
+      };
     });
     _interaction(true);
     try {
@@ -188,6 +195,13 @@ class _Rpcs3InternalPlaylistActionsState
         if (await Rpcs3ContentImportService.importExtractedGameFolder()) {
           await widget.onLibraryChanged();
         }
+      } else if (action == 'saves') {
+        await Rpcs3InternalService.exportSaveData();
+        _notice(
+          _fr
+              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Saves.'
+              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Saves.',
+        );
       }
     } on Rpcs3InternalException catch (error) {
       _notice(error.message);
@@ -197,6 +211,7 @@ class _Rpcs3InternalPlaylistActionsState
       if (mounted) {
         setState(() {
           _busy = false;
+          _activeAction = null;
           _contentProgress = null;
         });
         _interaction(false);
@@ -286,6 +301,7 @@ class _Rpcs3InternalPlaylistActionsState
   }
 
   Widget _buildOperationOverlay(ColorScheme scheme) {
+    final exportingSaves = _activeAction == 'saves';
     final progress = _contentProgress;
     final fraction = progress?.fraction;
     final itemLabel = progress == null || progress.itemName.isEmpty
@@ -313,10 +329,21 @@ class _Rpcs3InternalPlaylistActionsState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.downloading_rounded, size: 42.r),
+                    Icon(
+                      exportingSaves
+                          ? Icons.folder_copy_outlined
+                          : Icons.downloading_rounded,
+                      size: 42.r,
+                    ),
                     SizedBox(height: 14.r),
                     Text(
-                      _fr ? 'Importation du jeu PS3' : 'Importing PS3 game',
+                      exportingSaves
+                          ? (_fr
+                                ? 'Export des sauvegardes RPCS3'
+                                : 'Exporting RPCS3 saves')
+                          : (_fr
+                                ? 'Importation du jeu PS3'
+                                : 'Importing PS3 game'),
                       style: Theme.of(context).textTheme.titleLarge,
                       textAlign: TextAlign.center,
                     ),
@@ -346,9 +373,13 @@ class _Rpcs3InternalPlaylistActionsState
                     ],
                     SizedBox(height: 10.r),
                     Text(
-                      _fr
-                          ? 'Laissez NeoStation ouvert pendant l’importation.'
-                          : 'Keep NeoStation open while the import completes.',
+                      exportingSaves
+                          ? (_fr
+                                ? 'Le dossier sera accessible dans l’app Fichiers.'
+                                : 'The folder will be available in the Files app.')
+                          : (_fr
+                                ? 'Laissez NeoStation ouvert pendant l’importation.'
+                                : 'Keep NeoStation open while the import completes.'),
                       style: Theme.of(context).textTheme.bodySmall,
                       textAlign: TextAlign.center,
                     ),
@@ -426,6 +457,14 @@ class _Rpcs3InternalPlaylistActionsState
                       ),
                     ),
                     const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'saves',
+                      child: Text(
+                        _fr
+                            ? 'Exporter les sauvegardes'
+                            : 'Export save data',
+                      ),
+                    ),
                     PopupMenuItem(
                       value: 'open',
                       child: Text(_fr ? 'Ouvrir RPCS3' : 'Open RPCS3'),
