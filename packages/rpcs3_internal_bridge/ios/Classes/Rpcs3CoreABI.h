@@ -75,6 +75,36 @@ typedef struct rpcs3_ios_pad_state {
   float r2;            // upstream: right_trigger
 } rpcs3_ios_pad_state;
 
+
+typedef struct rpcs3_ios_savestate_info {
+  uint32_t size;  // upstream: struct_size
+  uint32_t compatible;
+  uint64_t byte_size;
+  int64_t modified_time;
+  const char* identifier;
+} rpcs3_ios_savestate_info;
+
+typedef void (*rpcs3_ios_savestate_callback)(
+    void* context,
+    const rpcs3_ios_savestate_info* savestate);
+
+typedef enum rpcs3_ios_performance_metric_bits {
+  rpcs3_ios_performance_fps = 1u << 0,
+  rpcs3_ios_performance_cpu = 1u << 1,
+  rpcs3_ios_performance_gpu = 1u << 2,
+  rpcs3_ios_performance_memory = 1u << 3,
+} rpcs3_ios_performance_metric_bits;
+
+typedef struct rpcs3_ios_performance_metrics {
+  uint32_t size;  // upstream: struct_size
+  uint32_t valid_fields;
+  double frames_per_second;
+  double cpu_usage_percent;
+  double gpu_usage_percent;
+  uint64_t memory_used_bytes;
+  uint64_t memory_total_bytes;
+} rpcs3_ios_performance_metrics;
+
 typedef struct rpcs3_ios_api {
   void* handle;
   uint32_t (*abi_version)(void);
@@ -88,8 +118,12 @@ typedef struct rpcs3_ios_api {
   rpcs3_ios_status (*install_folder)(const char*, rpcs3_ios_progress_callback, void*);
   rpcs3_ios_status (*set_display_surface)(const rpcs3_ios_display_surface*);
   rpcs3_ios_status (*set_pad_state)(uint32_t, const rpcs3_ios_pad_state*);
+  rpcs3_ios_status (*set_game_setting)(const char*, const char*, const char*);
   rpcs3_ios_status (*boot_game)(const char*, const char*);
   int32_t (*get_emulation_state)(void);
+  rpcs3_ios_status (*get_performance_metrics)(rpcs3_ios_performance_metrics*);
+  rpcs3_ios_status (*save_state)(void);
+  rpcs3_ios_status (*enumerate_savestates_live)(const char*, rpcs3_ios_savestate_callback, void*);
   rpcs3_ios_status (*stop_emulation)(void);
   rpcs3_ios_status (*shutdown)(void);
   const char* (*last_error)(void);
