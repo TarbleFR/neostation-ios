@@ -1,0 +1,69 @@
+name: One-shot RPCS3 audio and session repair
+
+on:
+  push:
+    branches:
+      - fix/rpcs3-audio-session-build243
+    paths:
+      - .github/workflows/zz-one-shot-rpcs3-audio-session-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/rpcs3-audio-session-build243
+          fetch-depth: 0
+
+      - name: Materialize exact repair payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat build-utils/.rpcs3_patch_chunk00 \
+              build-utils/.rpcs3_patch_chunk01 \
+              build-utils/.rpcs3_patch_chunk02 \
+              build-utils/.rpcs3_patch_chunk03 \
+              build-utils/.rpcs3_patch_chunk04 \
+              build-utils/.rpcs3_patch_chunk05 > /tmp/rpcs3-patch.b64
+          base64 --decode /tmp/rpcs3-patch.b64 > build-utils/one_shot_rpcs3_audio_session_patch.py
+          chmod +x build-utils/one_shot_rpcs3_audio_session_patch.py
+          python3 build-utils/one_shot_rpcs3_audio_session_patch.py
+
+      - name: Validate source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/rpcs3_session_bridge_test.py
+          python3 -m py_compile \
+            build-utils/patch_rpcs3_ios_audio.py \
+            build-utils/patch_rpcs3_ios_session.py \
+            test/rpcs3_ios_audio_patch_test.py \
+            test/rpcs3_session_core_patch_test.py \
+            test/rpcs3_session_bridge_test.py
+          grep -q "showTitle: false" lib/screens/game_screen/my_games_grid.dart
+          grep -q "height: 32.r" lib/widgets/game_view_footer.dart
+          grep -q "RPCS3PerformanceOverlay" packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+          grep -q "rpcs3_ios_create_savestate" packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h
+          git diff --check
+
+      - name: Commit repaired sources and Build 243 workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f build-utils/one_shot_rpcs3_audio_session_patch.py
+          rm -f build-utils/.rpcs3_patch_chunk00 build-utils/.rpcs3_patch_chunk01 \
+                build-utils/.rpcs3_patch_chunk02 build-utils/.rpcs3_patch_chunk03 \
+                build-utils/.rpcs3_patch_chunk04 build-utils/.rpcs3_patch_chunk05
+          rm -f .github/workflows/rpcs3-source-inspection.yml
+          rm -f .github/workflows/zz-one-shot-rpcs3-audio-session-patch.yml
+          git config user.name "NeoStation CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: stabilize RPCS3 audio and add session controls"
+          git push origin HEAD:fix/rpcs3-audio-session-build243
