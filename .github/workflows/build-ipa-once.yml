@@ -1,17 +1,17 @@
-name: NeoStation iOS Build 242
-run-name: NeoStation iOS Build 242 (RPCS3 ABI 30 input fix + validated IPA) • ${{ github.sha }}
+name: NeoStation iOS Build 243
+run-name: NeoStation iOS Build 243 (RPCS3 audio + in-game menu + performance + grid fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - fix/rpcs3-universal-jit-region-build236
+      - fix/rpcs3-audio-session-build243
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-242
+  group: neostation-ios-build-243
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '242'
-      IPA_NAME: 'NeoStation-iOS-Build-242'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-242'
+      BUILD_NUMBER: '243'
+      IPA_NAME: 'NeoStation-iOS-Build-243'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-243'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -38,6 +38,16 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Apply Build 243 RPCS3 host and grid patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check build-utils/patches/rpcs3_build243_host.patch
+          git apply build-utils/patches/rpcs3_build243_host.patch
+          git apply --check build-utils/patches/grid_title_build243.patch
+          git apply build-utils/patches/grid_title_build243.patch
+          python3 test/rpcs3_ingame_ui_contract_test.py
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
@@ -58,6 +68,7 @@ jobs:
           python3 test/rpcs3_input_abi_test.py "$CONTRACT_SRC" 2>&1 | tee build/rpcs3-ci/input-abi.log
           python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/rpcs3-ci/input-routing.log
           python3 test/rpcs3_ipa_validation_test.py 2>&1 | tee build/rpcs3-ci/ipa-validator.log
+          python3 test/rpcs3_ingame_ui_contract_test.py 2>&1 | tee build/rpcs3-ci/ingame-ui.log
 
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
@@ -138,7 +149,7 @@ jobs:
 
           python3 build-utils/install_patched_stikjit.py "$STIK_XCFRAMEWORK"
           STIK_BIN="packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT"
-          STIK_STRINGS="$RUNNER_TEMP/stikjit-build242.strings"
+          STIK_STRINGS="$RUNNER_TEMP/stikjit-build243.strings"
           strings "$STIK_BIN" > "$STIK_STRINGS"
           grep -q 'NEOSTATION_STIKJIT_RPCS3_V1' "$STIK_STRINGS"
           find packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework \
@@ -169,6 +180,9 @@ jobs:
           for symbol in \
             _rpcs3_ios_run_llvm_self_test \
             _rpcs3_ios_set_game_setting \
+            _rpcs3_ios_get_performance_metrics \
+            _neostation_rpcs3_ios_save_state \
+            _neostation_rpcs3_ios_enumerate_savestates_live \
             _rpcs3_ios_get_boot_progress \
             _rpcs3_ios_set_pad_state \
             _rpcs3_ios_stop_emulation \
@@ -192,7 +206,8 @@ jobs:
           python3 test/rpcs3_memory_preflight_test.py
           python3 test/rpcs3_host_entitlements_test.py
           python3 test/rpcs3_input_bridge_test.py
-          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py build-utils/validate_rpcs3_ipa.py
+          python3 test/rpcs3_ingame_ui_contract_test.py
+          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_ingame_ui_contract_test.py build-utils/patch_rpcs3_neostation_session.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -255,6 +270,7 @@ jobs:
             ${{ runner.temp }}/dolphin-ios/build-iphoneos-Release/Source/iOS/Library/libdolphin.dylib
             ${{ runner.temp }}/dolphin-ios/Data/Sys
             ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/NeoStationBridge.mm
+            ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/CMakeLists.txt
             ${{ runner.temp }}/dolphin-ios/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp
 
       - name: Package DolphiniOS touchscreen resources
