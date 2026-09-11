@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 241
-run-name: NeoStation iOS Build 241 (RPCS3 physical controller + automatic touch controls) • ${{ github.sha }}
+name: NeoStation iOS Build 242
+run-name: NeoStation iOS Build 242 (RPCS3 ABI 30 input fix + validated IPA) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-241
+  group: neostation-ios-build-242
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '241'
-      IPA_NAME: 'NeoStation-iOS-Build-241'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-241'
+      BUILD_NUMBER: '242'
+      IPA_NAME: 'NeoStation-iOS-Build-242'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-242'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -43,6 +43,21 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
+
+      - name: Verify RPCS3 input ABI and IPA validator before compiling
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/rpcs3-ci
+          CONTRACT_SRC="$RUNNER_TEMP/rpcs3-input-contract-source"
+          mkdir -p "$CONTRACT_SRC/rpcs3/ios"
+          curl -fL --retry 3 --retry-delay 2 \
+            https://raw.githubusercontent.com/XITRIX/rpcs3/22f1152783cef1f7e04af7b1c895173e28fd5b03/rpcs3/ios/RPCS3IOS.h \
+            -o "$CONTRACT_SRC/rpcs3/ios/RPCS3IOS.h"
+          test "$(git hash-object "$CONTRACT_SRC/rpcs3/ios/RPCS3IOS.h")" = 20526d090154733100d83fea27c20201db86c7f1
+          python3 test/rpcs3_input_abi_test.py "$CONTRACT_SRC" 2>&1 | tee build/rpcs3-ci/input-abi.log
+          python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/rpcs3-ci/input-routing.log
+          python3 test/rpcs3_ipa_validation_test.py 2>&1 | tee build/rpcs3-ci/ipa-validator.log
 
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
@@ -123,7 +138,7 @@ jobs:
 
           python3 build-utils/install_patched_stikjit.py "$STIK_XCFRAMEWORK"
           STIK_BIN="packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT"
-          STIK_STRINGS="$RUNNER_TEMP/stikjit-build241.strings"
+          STIK_STRINGS="$RUNNER_TEMP/stikjit-build242.strings"
           strings "$STIK_BIN" > "$STIK_STRINGS"
           grep -q 'NEOSTATION_STIKJIT_RPCS3_V1' "$STIK_STRINGS"
           find packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework \
@@ -142,7 +157,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash build-utils/build_rpcs3_embedded_core.sh
+          bash build-utils/build_rpcs3_embedded_core.sh 2>&1 | tee "$RUNNER_TEMP/rpcs3-core-build.log"
+          python3 test/rpcs3_input_abi_test.py "$RUNNER_TEMP/neostation-rpcs3-embedded/rpcs3" 2>&1 | tee build/rpcs3-ci/built-core-input-abi.log
           BUILT_CORE=build/rpcs3-embedded-core/libRPCS3Core.dylib
           CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           test -s "$BUILT_CORE"
@@ -176,7 +192,7 @@ jobs:
           python3 test/rpcs3_memory_preflight_test.py
           python3 test/rpcs3_host_entitlements_test.py
           python3 test/rpcs3_input_bridge_test.py
-          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py
+          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -239,7 +255,6 @@ jobs:
             ${{ runner.temp }}/dolphin-ios/build-iphoneos-Release/Source/iOS/Library/libdolphin.dylib
             ${{ runner.temp }}/dolphin-ios/Data/Sys
             ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/NeoStationBridge.mm
-            ${{ runner.temp }}/dolphin-ios/Source/iOS/Library/CMakeLists.txt
             ${{ runner.temp }}/dolphin-ios/Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp
 
       - name: Package DolphiniOS touchscreen resources
@@ -269,7 +284,7 @@ jobs:
             -derivedDataPath build/ios/DolphinDerivedData \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
             DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
-            COMPILER_INDEX_STORE_ENABLE=NO build
+            COMPILER_INDEX_STORE_ENABLE=NO build 2>&1 | tee "$RUNNER_TEMP/neostation-xcodebuild.log"
 
       - name: Embed patched RPCS3 Core
         shell: bash
@@ -286,63 +301,9 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          python3 packages/dolphin_internal_bridge/ci/build_support.py package
-          python3 - <<'PY'
-          import glob
-          import sys
-          import plistlib
-          import zipfile
-          from pathlib import Path
-
-          sys.path.insert(0, 'build-utils')
-          from validate_rpcs3_embedded_core import validate_core
-
-          matches = sorted(glob.glob('dist/*.ipa'))
-          if len(matches) != 1:
-              raise SystemExit(f'Expected exactly one IPA, found {matches}')
-          ipa = Path(matches[0])
-          if not zipfile.is_zipfile(ipa):
-              raise SystemExit('Produced IPA is not a valid ZIP archive')
-          with zipfile.ZipFile(ipa) as archive:
-              names = archive.namelist()
-              info_name = 'Payload/NeoStation.app/Info.plist'
-              if info_name not in names:
-                  raise SystemExit('NeoStation app payload is missing')
-              app_info = plistlib.loads(archive.read(info_name))
-              if str(app_info.get('CFBundleVersion')) != '241':
-                  raise SystemExit(f"Unexpected build number: {app_info.get('CFBundleVersion')}")
-              executable = app_info.get('CFBundleExecutable')
-              executable_name = f'Payload/NeoStation.app/{executable}' if executable else ''
-              if executable_name not in names:
-                  raise SystemExit(f'NeoStation executable missing: {executable_name}')
-              if b'NEOSTATION_RPCS3_INPUT_V1' not in archive.read(executable_name):
-                  raise SystemExit('IPA is missing the RPCS3 native physical/touch input bridge marker')
-              cores = [name for name in names if name.endswith('/Frameworks/libRPCS3Core.dylib')]
-              helpers = [name for name in names if '/PlugIns/RPCS3JITHelper.appex/' in name]
-              stik_bins = [name for name in names if name.endswith('/Frameworks/StikJIT.framework/StikJIT')]
-              stik_scripts = [name for name in names
-                              if '/Frameworks/StikJIT.framework/' in name and name.endswith('universal.js')]
-              if len(cores) != 1:
-                  raise SystemExit(f'Embedded RPCS3 Core missing or duplicated: {cores}')
-              core_data = archive.read(cores[0])
-              validate_core(core_data)
-              if b'NEOSTATION_DYNAMIC_JIT_V4' not in core_data:
-                  raise SystemExit('IPA contains a stale RPCS3 Core without the V4 marker')
-              if core_data != Path('build/rpcs3-embedded-core/libRPCS3Core.dylib').read_bytes():
-                  raise SystemExit('IPA does not contain the exact Core rebuilt in this workflow')
-              if not helpers:
-                  raise SystemExit('Embedded RPCS3 JIT helper extension is missing')
-              if len(stik_bins) != 1:
-                  raise SystemExit(f'Patched StikJIT binary missing or duplicated: {stik_bins}')
-              if b'NEOSTATION_STIKJIT_RPCS3_V1' not in archive.read(stik_bins[0]):
-                  raise SystemExit('IPA contains a stale StikJIT binary without the full-address patch')
-              if len(stik_scripts) != 1:
-                  raise SystemExit(f'Patched StikJIT universal.js missing or duplicated: {stik_scripts}')
-              if b'NEOSTATION_STIKJIT_UNIVERSAL_V1' not in archive.read(stik_scripts[0]):
-                  raise SystemExit('IPA contains a stale StikJIT Universal script')
-          print(f'Validated {ipa}: Build 241 + RPCS3 V4 JIT + physical controller + automatic touch controls')
-          PY
-          shasum -a 256 dist/*.ipa | tee dist/NeoStation-iOS-Build-241.sha256
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package 2>&1 | tee build/rpcs3-ci/package.log
+          python3 build-utils/validate_rpcs3_ipa.py --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" 2>&1 | tee build/rpcs3-ci/validation.log
+          shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
       - name: Upload IPA
@@ -352,6 +313,27 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Collect compact build diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build/rpcs3-ci
+          for file in rpcs3-core-build.log neostation-xcodebuild.log; do
+            if [ -f "$RUNNER_TEMP/$file" ]; then
+              tail -n 400 "$RUNNER_TEMP/$file" > "build/rpcs3-ci/$file"
+            fi
+          done
+          printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/rpcs3-ci/build.txt
+
+      - name: Upload compact build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-diagnostics
+          path: build/rpcs3-ci/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Save compiler cache
         if: always()
