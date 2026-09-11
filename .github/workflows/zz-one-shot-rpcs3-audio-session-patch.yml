@@ -21,6 +21,32 @@ jobs:
           ref: fix/rpcs3-audio-session-build243
           fetch-depth: 0
 
+      - name: Verify staged payload hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum build-utils/.rpcs3_patch_chunk00 \
+                    build-utils/.rpcs3_patch_chunk01 \
+                    build-utils/.rpcs3_patch_chunk02 \
+                    build-utils/.rpcs3_patch_chunk03 \
+                    build-utils/.rpcs3_patch_chunk04 \
+                    build-utils/.rpcs3_patch_chunk05
+          echo 'EXPECTED:'
+          cat <<'EOF'
+          04bba2ad37d925af45d40617ee178dd73acdadcbad95d297d8c438f4f7cda389  build-utils/.rpcs3_patch_chunk00
+          ba2ca64717a4d88be92e56579a7e3fbb059446983af3d4e26b1c26523af5bfbf  build-utils/.rpcs3_patch_chunk01
+          021f1b1dc6e97bcdeb591f8ea4fb7d98b070d87746e06e15c22bed9fd7685a2e  build-utils/.rpcs3_patch_chunk02
+          1c8403798018234dbf2fb098d9e5ed655531d55f7ac5f0e9534d949031308a00  build-utils/.rpcs3_patch_chunk03
+          5c4137ef95349807232856bfc66ebf18d478a7f4d14a25f4022502aa07bd8052  build-utils/.rpcs3_patch_chunk04
+          76aba44be7fbcf68ade39395c668e2639bfd64b85fcaacfe57b93e0d7346a687  build-utils/.rpcs3_patch_chunk05
+          EOF
+          test "$(sha256sum build-utils/.rpcs3_patch_chunk00 | cut -d' ' -f1)" = 04bba2ad37d925af45d40617ee178dd73acdadcbad95d297d8c438f4f7cda389
+          test "$(sha256sum build-utils/.rpcs3_patch_chunk01 | cut -d' ' -f1)" = ba2ca64717a4d88be92e56579a7e3fbb059446983af3d4e26b1c26523af5bfbf
+          test "$(sha256sum build-utils/.rpcs3_patch_chunk02 | cut -d' ' -f1)" = 021f1b1dc6e97bcdeb591f8ea4fb7d98b070d87746e06e15c22bed9fd7685a2e
+          test "$(sha256sum build-utils/.rpcs3_patch_chunk03 | cut -d' ' -f1)" = 1c8403798018234dbf2fb098d9e5ed655531d55f7ac5f0e9534d949031308a00
+          test "$(sha256sum build-utils/.rpcs3_patch_chunk04 | cut -d' ' -f1)" = 5c4137ef95349807232856bfc66ebf18d478a7f4d14a25f4022502aa07bd8052
+          test "$(sha256sum build-utils/.rpcs3_patch_chunk05 | cut -d' ' -f1)" = 76aba44be7fbcf68ade39395c668e2639bfd64b85fcaacfe57b93e0d7346a687
+
       - name: Materialize exact repair payload
         shell: bash
         run: |
@@ -31,7 +57,9 @@ jobs:
               build-utils/.rpcs3_patch_chunk03 \
               build-utils/.rpcs3_patch_chunk04 \
               build-utils/.rpcs3_patch_chunk05 > /tmp/rpcs3-patch.b64
+          test "$(sha256sum /tmp/rpcs3-patch.b64 | cut -d' ' -f1)" = 92d57a5f417fa03d11a60b3e770d84cf92b5048e7f3b6b2d803814f01b0107f4
           base64 --decode /tmp/rpcs3-patch.b64 > build-utils/one_shot_rpcs3_audio_session_patch.py
+          test "$(sha256sum build-utils/one_shot_rpcs3_audio_session_patch.py | cut -d' ' -f1)" = 10ed8b021019b699cc7c6ca47ddfd55abca3646fbb81eb44b1c86f3ae3e09999
           chmod +x build-utils/one_shot_rpcs3_audio_session_patch.py
           python3 build-utils/one_shot_rpcs3_audio_session_patch.py
 
