@@ -15,6 +15,8 @@ typedef int32_t (*rpcs3_set_setting_fn)(const char* key, const char* value);
 typedef int32_t (*rpcs3_set_game_setting_fn)(const char* title_id,
                                               const char* key,
                                               const char* value);
+typedef int32_t (*rpcs3_update_config_database_fn)(const void* content,
+                                                   size_t content_size);
 typedef int32_t (*rpcs3_delete_game_fn)(const char* title_id);
 typedef int32_t (*rpcs3_clear_game_cache_fn)(const char* title_id,
                                               uint32_t cache_type,
@@ -160,6 +162,53 @@ static NSString* RPCS3TuningLastError(void* handle) {
       }
       int32_t status = setGameSetting(
           titleId.UTF8String, key.UTF8String, value.UTF8String);
+      NSString* message = status == 0 ? @"" : RPCS3TuningLastError(handle);
+      dlclose(handle);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(status == 0
+            ? @{@"success": @YES}
+            : @{@"success": @NO,
+                @"status": @(status),
+                @"message": message});
+      });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"updateConfigDatabase"]) {
+    NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class]
+        ? call.arguments
+        : @{};
+    NSString* content = [args[@"content"] isKindOfClass:NSString.class]
+        ? args[@"content"]
+        : @"";
+    NSData* data = [content dataUsingEncoding:NSUTF8StringEncoding];
+    if (data.length == 0 || data.length > 16u * 1024u * 1024u) {
+      result(@{@"success": @NO,
+               @"message": @"The RPCS3 serial profile database is empty or too large."});
+      return;
+    }
+
+    dispatch_async(self.queue, ^{
+      void* handle = RPCS3OpenLoadedCore();
+      if (!handle) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"RPCS3 Core must be initialized before loading serial profiles."});
+        });
+        return;
+      }
+      auto updateConfigDatabase = reinterpret_cast<rpcs3_update_config_database_fn>(
+          dlsym(handle, "rpcs3_ios_update_config_database"));
+      if (!updateConfigDatabase) {
+        dlclose(handle);
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO,
+                   @"message": @"This RPCS3 Core does not expose serial profiles."});
+        });
+        return;
+      }
+      int32_t status = updateConfigDatabase(data.bytes, data.length);
       NSString* message = status == 0 ? @"" : RPCS3TuningLastError(handle);
       dlclose(handle);
       dispatch_async(dispatch_get_main_queue(), ^{

@@ -12,6 +12,7 @@ import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/rpcs3_game_profile_service.dart';
 import 'package:neostation/services/rpcs3_title_catalog_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -504,6 +505,10 @@ class Rpcs3LibraryService {
     };
     _syncCompleted = true;
     await _persistCache();
+    Rpcs3GameProfileService.noteDetectedSerials(
+      games.map((game) => game.titleId),
+    );
+    await Rpcs3GameProfileService.publishDetectedProfilesIfReady();
   }
 
   static Future<List<Rpcs3LibraryGame>> _applyTitleFallbacks(
@@ -1393,9 +1398,8 @@ class Rpcs3LibraryService {
         }
         if (hasExisting) continue;
 
-        await File(
-          path.join(directory.path, '$mediaKey.$extension'),
-        ).writeAsBytes(bytes, flush: true);
+        await File(path.join(directory.path, '$mediaKey.$extension'))
+            .writeAsBytes(bytes, flush: true);
         written++;
       }
     }

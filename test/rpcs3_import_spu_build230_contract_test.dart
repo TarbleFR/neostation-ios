@@ -13,7 +13,10 @@ void main() {
       ).readAsStringSync();
 
       expect(bridge, contains("call.method != 'installProgress'"));
-      expect(bridge, contains('Stream<Rpcs3InstallProgress> get installProgress'));
+      expect(
+        bridge,
+        contains('Stream<Rpcs3InstallProgress> get installProgress'),
+      );
       expect(playlist, contains('rpcs3-import-progress-overlay'));
       expect(playlist, contains('LinearProgressIndicator(value: fraction)'));
       expect(playlist, contains('(fraction * 100).round()'));
@@ -59,9 +62,12 @@ void main() {
       expect(importer, isNot(contains('copyWithProgress')));
     });
 
-    test('iOS boot profile is persisted per title and covers PPU stalls', () {
+    test('iOS boot profile is selected by serial and covers PPU stalls', () {
       final launcher = File(
         'lib/services/rpcs3_launch_service.dart',
+      ).readAsStringSync();
+      final profiles = File(
+        'lib/services/rpcs3_game_profile_service.dart',
       ).readAsStringSync();
       final bridge = File(
         'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
@@ -70,27 +76,32 @@ void main() {
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3RuntimeTuningPlugin.mm',
       ).readAsStringSync();
 
-      expect(launcher, contains("'advanced.llvm_precompilation': 'false'"));
-      expect(launcher, contains("'emulator.max_llvm_threads': '0'"));
+      expect(profiles, contains("'advanced.llvm_precompilation': 'false'"));
+      expect(profiles, contains("'emulator.max_llvm_threads': '0'"));
       expect(
-        launcher,
+        profiles,
         contains("'experimental.mobile_spu_scheduling': 'Automatic'"),
       );
-      expect(launcher, contains("'cpu.spu_block_size': 'Safe'"));
-      expect(launcher, isNot(contains("'cpu.spu_block_size': 'Mega'")));
+      expect(profiles, contains("'cpu.spu_block_size': 'Safe'"));
+      expect(profiles, contains("'BLES00215'"));
+      expect(profiles, contains("'BLUS30110'"));
+      expect(profiles, contains("'cpu.ppu_decoder': 'Interpreter (static)'"));
+      expect(profiles, isNot(contains("'cpu.spu_block_size': 'Mega'")));
       expect(launcher, contains('_applyMobileBootProfile(String titleId)'));
-      expect(launcher, contains('Rpcs3InternalBridge.setGameSetting('));
+      expect(launcher, contains('Rpcs3GameProfileService.applyForLaunch'));
+      expect(launcher, isNot(contains('Rpcs3InternalBridge.setSetting(')));
+      expect(launcher, isNot(contains('Rpcs3InternalBridge.setGameSetting(')));
       expect(launcher, contains("value.contains('ppu')"));
       expect(launcher, contains("value.contains('applying')"));
       expect(launcher, contains('Rpcs3InternalBridge.bootProgress()'));
       expect(launcher, contains("'bootPreparationStalled'"));
       expect(launcher, contains('Rpcs3InternalBridge.stop()'));
+      expect(bridge, contains("'updateConfigDatabase'"));
       expect(
         bridge,
-        contains("invokeMapMethod<String, dynamic>('setGameSetting'"),
+        contains("invokeMapMethod<String, dynamic>('bootProgress')"),
       );
-      expect(bridge, contains("invokeMapMethod<String, dynamic>('bootProgress')"));
-      expect(tuning, contains('rpcs3_ios_set_game_setting'));
+      expect(tuning, contains('rpcs3_ios_update_config_database'));
       expect(tuning, contains('rpcs3_ios_get_boot_progress'));
     });
 

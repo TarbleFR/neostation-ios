@@ -52,11 +52,7 @@ class Rpcs3InternalBridge {
       final total = (raw['total'] as num?)?.toInt() ?? 0;
       final detail = raw['detail']?.toString() ?? '';
       _installProgressController.add(
-        Rpcs3InstallProgress(
-          current: current,
-          total: total,
-          detail: detail,
-        ),
+        Rpcs3InstallProgress(current: current, total: total, detail: detail),
       );
       return null;
     });
@@ -212,6 +208,16 @@ class Rpcs3InternalBridge {
           'key': key,
           'value': value,
         }) ??
+        const <String, dynamic>{},
+  );
+
+  static Future<Map<String, dynamic>> updateConfigDatabase(
+    String content,
+  ) async => Map<String, dynamic>.from(
+    await _tuningChannel.invokeMapMethod<String, dynamic>(
+          'updateConfigDatabase',
+          <String, String>{'content': content},
+        ) ??
         const <String, dynamic>{},
   );
 

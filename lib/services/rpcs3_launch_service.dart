@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/rpcs3_game_profile_service.dart';
 import 'package:neostation/services/rpcs3_internal_service.dart';
 import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 
@@ -12,7 +13,6 @@ import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 /// application is queried, opened or foregrounded.
 abstract final class Rpcs3LaunchService {
   static final LoggerService _log = LoggerService.instance;
-  static final RegExp _titleIdPattern = RegExp(r'^[A-Z0-9._-]{3,32}$');
 
   static const Duration _bootPollInterval = Duration(seconds: 1);
   static const Duration _bootStageGrace = Duration(seconds: 12);
@@ -29,8 +29,7 @@ abstract final class Rpcs3LaunchService {
   static String? get lastErrorCode => _lastErrorCode;
 
   static String? normalizeTitleId(String? value) {
-    final titleId = value?.trim().toUpperCase() ?? '';
-    return _titleIdPattern.hasMatch(titleId) ? titleId : null;
+    return Rpcs3GameProfileService.normalizeSerial(value);
   }
 
   static Future<void> initialize() async {
@@ -38,57 +37,28 @@ abstract final class Rpcs3LaunchService {
     await Rpcs3InternalService.rootDirectory();
   }
 
-  /// Applies an iOS-safe boot policy both globally and to the title itself.
+  /// Publishes the serial-keyed, partial profile before boot.
   ///
-  /// RPCS3 reloads a title's own configuration during boot, so a global-only
-  /// override can be replaced just before PPU/SPU preparation begins. Build 230
-  /// could therefore still enter the long "Compiling PPU Modules" path even
-  /// though LLVM precompilation had been disabled globally. Persist the same
-  /// policy through `rpcs3_ios_set_game_setting` before boot so the title cannot
-  /// re-enable the blocking precompile when its configuration is loaded.
-  ///
-  /// `Safe` deliberately replaces the previous forced `Mega` SPU block size,
-  /// and mobile SPU scheduling returns to `Automatic` for compatibility. The
-  /// existing on-disk caches remain reusable; only the aggressive boot policy
-  /// is changed.
+  /// No global RPCS3 setting is mutated here. The Core layers only this game's
+  /// managed keys over the global configuration selected by the user.
   static Future<void> _applyMobileBootProfile(String titleId) async {
     await Rpcs3InternalService.ensureGameplayInitialized();
-    const settings = <String, String>{
-      'advanced.llvm_precompilation': 'false',
-      'emulator.max_llvm_threads': '0',
-      'experimental.mobile_spu_scheduling': 'Automatic',
-      'cpu.spu_block_size': 'Safe',
-    };
-
-    for (final entry in settings.entries) {
-      final global = await Rpcs3InternalBridge.setSetting(entry.key, entry.value);
-      if (global['success'] != true) {
-        _log.i(
-          'RPCS3 global mobile boot setting ${entry.key}=${entry.value} was not applied: '
-          '${global['message'] ?? 'unknown Core response'}',
-        );
-      }
-
-      final perGame = await Rpcs3InternalBridge.setGameSetting(
-        titleId,
-        entry.key,
-        entry.value,
+    final report = await Rpcs3GameProfileService.applyForLaunch(titleId);
+    if (report['success'] != true) {
+      throw Rpcs3InternalException(
+        'gameProfileFailed',
+        report['message']?.toString() ??
+            'RPCS3 could not load the serial-specific compatibility profile.',
       );
-      if (perGame['success'] != true) {
-        _log.i(
-          'RPCS3 per-title boot setting $titleId ${entry.key}=${entry.value} was not applied: '
-          '${perGame['message'] ?? 'unknown Core response'}',
-        );
-      }
     }
   }
 
-  static bool _isPpuStage(String stage) =>
-      stage.toLowerCase().contains('ppu');
+  static bool _isPpuStage(String stage) => stage.toLowerCase().contains('ppu');
 
   static Duration? _stallLimitForStage(String stage) {
     final value = stage.toLowerCase();
-    final ppuStage = value.contains('ppu') &&
+    final ppuStage =
+        value.contains('ppu') &&
         (value.contains('compil') ||
             value.contains('applying') ||
             value.contains('linking') ||
@@ -99,7 +69,8 @@ abstract final class Rpcs3LaunchService {
           : _ppuNoProgressLimit;
     }
 
-    final spuStage = value.contains('spu') &&
+    final spuStage =
+        value.contains('spu') &&
         (value.contains('cache') || value.contains('compil'));
     if (spuStage) return _spuNoProgressLimit;
     return null;
@@ -183,14 +154,12 @@ abstract final class Rpcs3LaunchService {
           final progress = total > 0 ? ' ($current/$total)' : '';
           final ppuStage = _isPpuStage(stage);
           throw Rpcs3InternalException(
-            ppuStage
-                ? 'ppuBootPreparationStalled'
-                : 'bootPreparationStalled',
+            ppuStage ? 'ppuBootPreparationStalled' : 'bootPreparationStalled',
             ppuStage
                 ? 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
-                    'Consultez RPCS3-diagnostic.log ; les caches sont conservés.'
+                      'Consultez RPCS3-diagnostic.log ; les caches sont conservés.'
                 : 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
-                    'Le démarrage a été arrêté au lieu de rester figé.',
+                      'Le démarrage a été arrêté au lieu de rester figé.',
           );
         }
       }

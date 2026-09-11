@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 247
-run-name: NeoStation iOS Build 247 (RPCS3 localization + silent grid previews) • ${{ github.sha }}
+name: NeoStation iOS Build 248
+run-name: NeoStation iOS Build 248 (RPCS3 serial profiles + Dynasty Warriors 6) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-247
+  group: neostation-ios-build-248
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '247'
-      IPA_NAME: 'NeoStation-iOS-Build-247'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-247'
+      BUILD_NUMBER: '248'
+      IPA_NAME: 'NeoStation-iOS-Build-248'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-248'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -39,7 +39,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Apply Build 247 RPCS3 host and UI patches
+      - name: Apply Build 248 RPCS3 host and UI patches
         shell: bash
         run: |
           set -euo pipefail
@@ -185,6 +185,7 @@ jobs:
           nm -g "$CORE" > build/rpcs3-embedded-core/symbols.txt
           for symbol in \
             _rpcs3_ios_run_llvm_self_test \
+            _rpcs3_ios_update_config_database \
             _rpcs3_ios_set_game_setting \
             _rpcs3_ios_get_performance_metrics \
             _neostation_rpcs3_ios_save_state \
@@ -213,7 +214,7 @@ jobs:
           python3 test/rpcs3_host_entitlements_test.py
           python3 test/rpcs3_input_bridge_test.py
           python3 test/rpcs3_ingame_ui_contract_test.py
-          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_ingame_ui_contract_test.py build-utils/patch_rpcs3_neostation_session.py build-utils/validate_rpcs3_ipa.py
+          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_ingame_ui_contract_test.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
