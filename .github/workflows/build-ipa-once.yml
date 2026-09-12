@@ -1,17 +1,17 @@
-name: NeoStation iOS Build 257
-run-name: NeoStation iOS Build 257 (next-generation RPCS3 profile engine) • ${{ github.sha }}
+name: NeoStation iOS Build 258
+run-name: NeoStation iOS Build 258 (RPCS3 core architecture) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - work/rpcs3-nextgen-build257
+      - work/rpcs3-core-architecture-build258
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-257
+  group: neostation-ios-build-258
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '257'
-      IPA_NAME: 'NeoStation-iOS-Build-257'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-257'
+      BUILD_NUMBER: '258'
+      IPA_NAME: 'NeoStation-iOS-Build-258'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-258'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -39,7 +39,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Apply Build 257 profile engine and Build 256 stability patches
+      - name: Apply host integration and stable baseline patches
         shell: bash
         run: |
           set -euo pipefail
@@ -90,6 +90,9 @@ jobs:
           python3 test/rpcs3_ipa_validation_test.py 2>&1 | tee build/rpcs3-ci/ipa-validator.log
           python3 test/rpcs3_ingame_ui_contract_test.py 2>&1 | tee build/rpcs3-ci/ingame-ui.log
           python3 test/rpcs3_diagnostics_native_test.py 2>&1 | tee build/rpcs3-ci/diagnostics-native.log
+          python3 test/rpcs3_build258_core_profile_comparison_test.py
+          python3 test/rpcs3_build258_pipeline_scheduler_benchmark_test.py
+          python3 build-utils/benchmark_rpcs3_pipeline_scheduler.py | tee build/rpcs3-ci/pipeline-scheduler-benchmark.log
 
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
