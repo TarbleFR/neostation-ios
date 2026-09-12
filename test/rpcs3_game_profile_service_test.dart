@@ -55,7 +55,16 @@ void main() {
           expect(profile.settings['cpu.spu_block_size'], 'Mega');
           expect(profile.settings['cpu.preferred_spu_threads'], '0');
           expect(profile.settings['gpu.resolution_scale'], '75');
+          expect(
+            profile.settings['gpu.shader_mode'],
+            'Async Recompiler (multi-threaded)',
+          );
           expect(profile.settings['gpu.multithreaded_rsx'], 'true');
+          expect(profile.settings['experimental.fifo_cache_size'], '4 KiB');
+          expect(
+            profile.settings['experimental.getllar_backoff'],
+            'Enabled',
+          );
           expect(
             profile.settings['experimental.fps_optimization_batch'],
             'Enabled',
@@ -152,12 +161,15 @@ void main() {
       expect(yaml, contains('PPU Profiler: false'));
       expect(yaml, contains('Video:'));
       expect(yaml, contains('Resolution Scale: 75'));
+      expect(yaml, contains('Shader Mode: Async Recompiler (multi-threaded)'));
       expect(yaml, contains('Multithreaded RSX: true'));
       expect(
         yaml,
         contains('  Vulkan:\n    Asynchronous Texture Streaming: true'),
       );
       expect(yaml, contains('FPS Optimization Batch: Enabled'));
+      expect(yaml, contains('RSX FIFO Read Cache: 4 KiB'));
+      expect(yaml, contains('GETLLAR Mobile Backoff: Enabled'));
       expect(yaml, isNot(contains('Audio:')));
     });
 

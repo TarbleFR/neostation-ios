@@ -48,11 +48,20 @@ class Rpcs3GameProfile {
         case 'emulator.max_llvm_threads':
           core['Max LLVM Compile Threads'] = entry.value;
           break;
+        case 'gpu.shader_mode':
+          video['Shader Mode'] = entry.value;
+          break;
         case 'experimental.mobile_spu_scheduling':
           ios['Mobile SPU Compile Scheduling'] = entry.value;
           break;
         case 'experimental.fps_optimization_batch':
           ios['FPS Optimization Batch'] = entry.value;
+          break;
+        case 'experimental.fifo_cache_size':
+          ios['RSX FIFO Read Cache'] = entry.value;
+          break;
+        case 'experimental.getllar_backoff':
+          ios['GETLLAR Mobile Backoff'] = entry.value;
           break;
         case 'gpu.resolution_scale':
           video['Resolution Scale'] = entry.value;
@@ -138,9 +147,12 @@ abstract final class Rpcs3GameProfileService {
       'cpu.spu_xfloat_accuracy': 'Approximate',
       'cpu.preferred_spu_threads': '0',
       'gpu.resolution_scale': '75',
+      'gpu.shader_mode': 'Async Recompiler (multi-threaded)',
       'gpu.multithreaded_rsx': 'true',
       'gpu.async_texture_uploads': 'true',
       'experimental.fps_optimization_batch': 'Enabled',
+      'experimental.fifo_cache_size': '4 KiB',
+      'experimental.getllar_backoff': 'Enabled',
     },
     'BCES00510': <String, String>{
       'cpu.ppu_decoder': 'Recompiler (LLVM)',
@@ -150,9 +162,12 @@ abstract final class Rpcs3GameProfileService {
       'cpu.spu_xfloat_accuracy': 'Approximate',
       'cpu.preferred_spu_threads': '0',
       'gpu.resolution_scale': '75',
+      'gpu.shader_mode': 'Async Recompiler (multi-threaded)',
       'gpu.multithreaded_rsx': 'true',
       'gpu.async_texture_uploads': 'true',
       'experimental.fps_optimization_batch': 'Enabled',
+      'experimental.fifo_cache_size': '4 KiB',
+      'experimental.getllar_backoff': 'Enabled',
     },
     'BCAS25003': <String, String>{
       'cpu.ppu_decoder': 'Recompiler (LLVM)',
@@ -162,9 +177,12 @@ abstract final class Rpcs3GameProfileService {
       'cpu.spu_xfloat_accuracy': 'Approximate',
       'cpu.preferred_spu_threads': '0',
       'gpu.resolution_scale': '75',
+      'gpu.shader_mode': 'Async Recompiler (multi-threaded)',
       'gpu.multithreaded_rsx': 'true',
       'gpu.async_texture_uploads': 'true',
       'experimental.fps_optimization_batch': 'Enabled',
+      'experimental.fifo_cache_size': '4 KiB',
+      'experimental.getllar_backoff': 'Enabled',
     },
   };
 

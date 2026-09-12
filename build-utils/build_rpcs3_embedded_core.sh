@@ -52,9 +52,9 @@ ccache --max-size=3G >/dev/null
 # These values are consumed by all subsequent workflow steps.
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
-    echo "BUILD_NUMBER=254"
-    echo "IPA_NAME=NeoStation-iOS-Build-254"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-254"
+    echo "BUILD_NUMBER=255"
+    echo "IPA_NAME=NeoStation-iOS-Build-255"
+    echo "ARTIFACT_NAME=NeoStation-iOS-Build-255"
   } >> "$GITHUB_ENV"
 fi
 
@@ -131,10 +131,13 @@ python3 "$PWD/build-utils/patch_rpcs3_serial_profiles.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_iso_integrity.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_savestate_stability.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_savestate_stability.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_armsx3_performance.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_armsx3_performance.py" "$SRC"
 python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_serial_profile_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_iso_integrity_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_savestate_native_test.py" "$SRC"
+python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \
