@@ -3,6 +3,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/rpcs3_profile_locale.dart';
+import 'package:neostation/services/rpcs3_game_profile_service.dart';
 import 'package:provider/provider.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
@@ -176,6 +178,29 @@ class GameDetailsGameInfoTab extends StatelessWidget {
                     ).colorScheme.onSurface.withValues(alpha: 0.1),
                     height: 10.r,
                   ),
+                  if (system.folderName.toLowerCase() == 'ps3' &&
+                      game.titleId?.trim().isNotEmpty == true)
+                    FutureBuilder<Rpcs3ResolvedProfile?>(
+                      future: Rpcs3GameProfileService.resolveProfile(
+                        game.titleId,
+                      ),
+                      builder: (context, snapshot) {
+                        final profile = snapshot.data;
+                        if (profile == null) return const SizedBox.shrink();
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: 4.r),
+                          child: _InfoPill(
+                            icon: Symbols.auto_awesome_rounded,
+                            text: Rpcs3ProfileLocale.label(
+                              context,
+                              profile.family,
+                              individual: profile.hasIndividualOverride,
+                              gameDatabase: profile.hasDatabaseRecommendation,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),

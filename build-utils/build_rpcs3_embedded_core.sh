@@ -52,9 +52,9 @@ ccache --max-size=3G >/dev/null
 # These values are consumed by all subsequent workflow steps.
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
-    echo "BUILD_NUMBER=256"
-    echo "IPA_NAME=NeoStation-iOS-Build-256"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-256"
+    echo "BUILD_NUMBER=257"
+    echo "IPA_NAME=NeoStation-iOS-Build-257"
+    echo "ARTIFACT_NAME=NeoStation-iOS-Build-257"
   } >> "$GITHUB_ENV"
 fi
 
@@ -127,6 +127,7 @@ log "Apply NeoStation embedded boot fixes (LLVM/ARM64 remains enabled)"
 python3 "$PWD/build-utils/patch_rpcs3_embedded_boot.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_jit_memory.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_neostation_session.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_serial_profiles.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_serial_profiles.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_iso_integrity.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_savestate_stability.py" "$SRC"

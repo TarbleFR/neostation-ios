@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/services/rpcs3_game_profile_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('RPCS3 serial configuration profiles', () {
     test(
       'normalizes recognized RPCS3 serial families without using titles',
@@ -97,16 +99,16 @@ void main() {
       );
     });
 
-    test('emits partial RPCS3 YAML keyed only by serial', () {
-      final payload = Rpcs3GameProfileService.databasePayloadForSerials(
-        <String>['BLES00215', 'Dynasty Warriors 6', 'BLES00412'],
+    test('merges title overrides into GameDB YAML keyed only by serial', () async {
+      final payload = await Rpcs3GameProfileService.databasePayloadForSerials(
+        <String>['BLES00215', 'Dynasty Warriors 6', 'BCAS20014'],
       );
       final root = jsonDecode(payload) as Map<String, dynamic>;
       final games = root['games'] as Map<String, dynamic>;
 
       expect(root['return_code'], 0);
       expect(games.keys, contains('BLES00215'));
-      expect(games, isNot(contains('BLES00412')));
+      expect(games.keys, contains('BCAS20014'));
       expect(games, isNot(contains('Dynasty Warriors 6')));
       final bles = games['BLES00215'] as Map<String, dynamic>;
       final yaml = bles['config'] as String;
@@ -118,9 +120,9 @@ void main() {
       expect(yaml, isNot(contains('Audio:')));
     });
 
-    test('never publishes empty inherited-global entries', () {
-      final mixedPayload = Rpcs3GameProfileService.databasePayloadForSerials(
-        <String>['BLES00215', 'BLES00412', 'BCUS98114'],
+    test('never publishes empty inherited-global entries', () async {
+      final mixedPayload = await Rpcs3GameProfileService.databasePayloadForSerials(
+        <String>['BLES00215', 'ABCD123456789'],
       );
       final mixedGames =
           (jsonDecode(mixedPayload) as Map<String, dynamic>)['games']
@@ -134,8 +136,8 @@ void main() {
       }
 
       final inheritedPayload =
-          Rpcs3GameProfileService.databasePayloadForSerials(
-            <String>['BLES00412', 'BCUS98114'],
+          await Rpcs3GameProfileService.databasePayloadForSerials(
+            <String>['ABCD123456789', 'ZZZZ123456789'],
           );
       final inheritedGames =
           (jsonDecode(inheritedPayload) as Map<String, dynamic>)['games']
@@ -143,8 +145,8 @@ void main() {
       expect(inheritedGames, isEmpty);
     });
 
-    test('emits the God of War III performance keys as partial YAML', () {
-      final payload = Rpcs3GameProfileService.databasePayloadForSerials(
+    test('merges God of War III official and iOS performance keys', () async {
+      final payload = await Rpcs3GameProfileService.databasePayloadForSerials(
         <String>['BCES00510'],
       );
       final games =
@@ -170,6 +172,8 @@ void main() {
       expect(yaml, contains('FPS Optimization Batch: Enabled'));
       expect(yaml, contains('RSX FIFO Read Cache: 4 KiB'));
       expect(yaml, contains('GETLLAR Mobile Backoff: Enabled'));
+      expect(yaml, contains('Shader Precision: Ultra'));
+      expect(yaml, contains('Write Color Buffers: true'));
       expect(yaml, isNot(contains('Audio:')));
     });
 
@@ -196,12 +200,12 @@ void main() {
         source.indexOf('static Future<Map<String, dynamic>> applyForLaunch'),
       );
 
-      expect(launchBody, contains('if (profile.settings.isEmpty)'));
+      expect(launchBody, contains('if (!profile.isManaged)'));
       expect(launchBody, contains("'success': true"));
       expect(
-        launchBody.indexOf('if (profile.settings.isEmpty)'),
+        launchBody.indexOf('if (!profile.isManaged)'),
         lessThan(
-          launchBody.indexOf('_detectedProfiles[profile.serial] = profile'),
+          launchBody.indexOf('_detectedSerials.add(profile.serial)'),
         ),
       );
     });
