@@ -27,6 +27,12 @@ class Rpcs3GameProfile {
         case 'cpu.ppu_decoder':
           core['PPU Decoder'] = entry.value;
           break;
+        case 'cpu.spu_decoder':
+          core['SPU Decoder'] = entry.value;
+          break;
+        case 'cpu.ppu_profiler':
+          core['PPU Profiler'] = entry.value;
+          break;
         case 'cpu.spu_block_size':
           core['SPU Block Size'] = entry.value;
           break;
@@ -118,32 +124,43 @@ abstract final class Rpcs3GameProfileService {
       'cpu.spu_block_size': 'Safe',
     },
 
-    // God of War III saturates both SPU and RSX on mobile. Keep this
-    // performance profile strictly scoped to its three retail disc serials.
+    // GOW III performance candidate: keep LLVM explicit so old diagnostic
+    // custom configurations cannot select an interpreter or PPU profiler.
+    // Automatic SPU scheduling replaces the old fixed concurrency of two;
+    // physical-device A/B testing is still required to establish an FPS gain.
     // The 75% scale reduces 3D pixel load while preserving native-resolution
     // UI, and the iOS batch enables only the audited DMA/hash fast paths.
     'BCUS98111': <String, String>{
+      'cpu.ppu_decoder': 'Recompiler (LLVM)',
+      'cpu.spu_decoder': 'Recompiler (LLVM)',
+      'cpu.ppu_profiler': 'false',
       'cpu.spu_block_size': 'Mega',
       'cpu.spu_xfloat_accuracy': 'Approximate',
-      'cpu.preferred_spu_threads': '2',
+      'cpu.preferred_spu_threads': '0',
       'gpu.resolution_scale': '75',
       'gpu.multithreaded_rsx': 'true',
       'gpu.async_texture_uploads': 'true',
       'experimental.fps_optimization_batch': 'Enabled',
     },
     'BCES00510': <String, String>{
+      'cpu.ppu_decoder': 'Recompiler (LLVM)',
+      'cpu.spu_decoder': 'Recompiler (LLVM)',
+      'cpu.ppu_profiler': 'false',
       'cpu.spu_block_size': 'Mega',
       'cpu.spu_xfloat_accuracy': 'Approximate',
-      'cpu.preferred_spu_threads': '2',
+      'cpu.preferred_spu_threads': '0',
       'gpu.resolution_scale': '75',
       'gpu.multithreaded_rsx': 'true',
       'gpu.async_texture_uploads': 'true',
       'experimental.fps_optimization_batch': 'Enabled',
     },
     'BCAS25003': <String, String>{
+      'cpu.ppu_decoder': 'Recompiler (LLVM)',
+      'cpu.spu_decoder': 'Recompiler (LLVM)',
+      'cpu.ppu_profiler': 'false',
       'cpu.spu_block_size': 'Mega',
       'cpu.spu_xfloat_accuracy': 'Approximate',
-      'cpu.preferred_spu_threads': '2',
+      'cpu.preferred_spu_threads': '0',
       'gpu.resolution_scale': '75',
       'gpu.multithreaded_rsx': 'true',
       'gpu.async_texture_uploads': 'true',

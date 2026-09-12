@@ -48,22 +48,45 @@ void main() {
     );
 
     test(
-      'optimizes every retail God of War III serial without global spill',
+      'targets only the registered God of War III serials',
       () {
         for (final serial in <String>['BCUS98111', 'BCES00510', 'BCAS25003']) {
           final profile = Rpcs3GameProfileService.profileForSerial(serial)!;
           expect(profile.settings['cpu.spu_block_size'], 'Mega');
-          expect(profile.settings['cpu.preferred_spu_threads'], '2');
+          expect(profile.settings['cpu.preferred_spu_threads'], '0');
           expect(profile.settings['gpu.resolution_scale'], '75');
           expect(profile.settings['gpu.multithreaded_rsx'], 'true');
           expect(
             profile.settings['experimental.fps_optimization_batch'],
             'Enabled',
           );
-          expect(profile.settings, isNot(contains('cpu.ppu_decoder')));
+          expect(profile.settings['cpu.ppu_decoder'], 'Recompiler (LLVM)');
+          expect(profile.settings['cpu.spu_decoder'], 'Recompiler (LLVM)');
+          expect(profile.settings['cpu.ppu_profiler'], 'false');
+        }
+        for (final serial in <String>['BCUS98114', 'BLES00412', 'NPUB12345']) {
+          expect(
+            Rpcs3GameProfileService.profileForSerial(serial)!.settings,
+            isEmpty,
+          );
         }
       },
     );
+
+    test('returns independent profile maps between games and launches', () {
+      final first = Rpcs3GameProfileService.profileForSerial('BCES00510')!;
+      first.settings['cpu.preferred_spu_threads'] = '6';
+      expect(
+        Rpcs3GameProfileService.profileForSerial('BCES00510')!
+            .settings['cpu.preferred_spu_threads'],
+        '0',
+      );
+      expect(
+        Rpcs3GameProfileService.profileForSerial('BCUS98111')!
+            .settings['cpu.preferred_spu_threads'],
+        '0',
+      );
+    });
 
     test('emits partial RPCS3 YAML keyed only by serial', () {
       final payload = Rpcs3GameProfileService.databasePayloadForSerials(
@@ -123,7 +146,10 @@ void main() {
 
       expect(yaml, contains('Core:'));
       expect(yaml, contains('SPU Block Size: Mega'));
-      expect(yaml, contains('Preferred SPU Threads: 2'));
+      expect(yaml, contains('Preferred SPU Threads: 0'));
+      expect(yaml, contains('PPU Decoder: Recompiler (LLVM)'));
+      expect(yaml, contains('SPU Decoder: Recompiler (LLVM)'));
+      expect(yaml, contains('PPU Profiler: false'));
       expect(yaml, contains('Video:'));
       expect(yaml, contains('Resolution Scale: 75'));
       expect(yaml, contains('Multithreaded RSX: true'));
