@@ -81,94 +81,150 @@ class Rpcs3ContentImportService {
     }
   }
 
-  static Future<Rpcs3ImportResult> importGames() async {
-    final selected = await Rpcs3InternalBridge.pickGameFilesOpenInPlace();
-    if (selected == null || selected.isEmpty) {
-      return const Rpcs3ImportResult(imported: 0, rejected: 0);
-    }
+  /// Build 251: the embedded Core already validates every ISO9660 extent and
+  /// reports a precise failure when the selected/provider-backed image ends
+  /// before a referenced game file. Treat only those integrity failures as a
+  /// request for a fresh document selection; ordinary import errors remain
+  /// terminal and are returned to the caller as before.
+  static bool _isIncompleteIsoFailure(Object? rawMessage) {
+    final message = rawMessage?.toString().toLowerCase() ?? '';
+    return message.contains('truncated or corrupt') ||
+        message.contains('incomplete or corrupt') ||
+        message.contains('requires iso bytes through') ||
+        message.contains('re-import this title from a complete iso');
+  }
 
-    final selectedKeys = <String, String>{};
-    final gamePaths = <String>[];
+  static Future<Rpcs3ImportResult> importGames() async {
+    var imported = 0;
     var rejected = 0;
     final errors = <String>[];
+    var pendingIncompleteErrors = <String>[];
 
-    for (final filePath in selected) {
-      final extension = path.extension(filePath).toLowerCase();
-      if (extension == '.key') {
-        selectedKeys[path.withoutExtension(filePath).toLowerCase()] = filePath;
-      } else if (const {'.pkg', '.zip', '.iso'}.contains(extension)) {
-        gamePaths.add(filePath);
-      } else {
-        rejected++;
-        errors.add('${path.basename(filePath)}: unsupported game format.');
+    // An incomplete ISO is never accepted into the library. Once the Core
+    // rejects it, release the security-scoped URLs and immediately present a
+    // fresh picker. Cancelling that second picker records the rejected ISO and
+    // returns normally instead of leaving a half-imported game behind.
+    while (true) {
+      final selected = await Rpcs3InternalBridge.pickGameFilesOpenInPlace();
+      if (selected == null || selected.isEmpty) {
+        if (pendingIncompleteErrors.isNotEmpty) {
+          rejected += pendingIncompleteErrors.length;
+          errors.addAll(pendingIncompleteErrors);
+        }
+        return Rpcs3ImportResult(
+          imported: imported,
+          rejected: rejected,
+          errors: errors,
+        );
       }
-    }
 
-    if (gamePaths.isEmpty) {
-      await Rpcs3InternalBridge.releaseScopedResources();
-      return Rpcs3ImportResult(
-        imported: 0,
-        rejected: rejected,
-        errors: errors,
-      );
-    }
-
-    var imported = 0;
-    try {
-      await Rpcs3InternalService.ensureManagementInitialized();
-      _itemCount = gamePaths.length;
-
-      for (var index = 0; index < gamePaths.length; index++) {
-        final filePath = gamePaths[index];
-        final name = path.basename(filePath);
-        _itemName = name;
-        _itemIndex = index + 1;
-        _emit(detail: 'Preparing $name…');
-
+      final selectedKeys = <String, String>{};
+      final gamePaths = <String>[];
+      for (final filePath in selected) {
         final extension = path.extension(filePath).toLowerCase();
-        final report = await _withNativeProgress(() async {
-          if (extension == '.pkg') {
-            return Rpcs3InternalBridge.installPackage(filePath);
-          }
-          if (extension == '.zip') {
-            return Rpcs3InternalBridge.installZip(filePath);
-          }
-
-          final stem = path.withoutExtension(filePath).toLowerCase();
-          final selectedKey = selectedKeys[stem];
-          String? keyPath = selectedKey;
-          if (keyPath == null) {
-            final sibling = File(path.setExtension(filePath, '.key'));
-            if (await sibling.exists()) keyPath = sibling.path;
-          }
-          return Rpcs3InternalBridge.installIso(
-            filePath,
-            keyPath: keyPath,
-          );
-        });
-
-        if (report['success'] == true) {
-          imported++;
-          _emit(current: 1, total: 1, detail: '$name imported.');
+        if (extension == '.key') {
+          selectedKeys[path.withoutExtension(filePath).toLowerCase()] = filePath;
+        } else if (const {'.pkg', '.zip', '.iso'}.contains(extension)) {
+          gamePaths.add(filePath);
         } else {
           rejected++;
-          errors.add(
-            '$name: ${report['message'] ?? 'RPCS3 import failed.'}',
-          );
+          errors.add('${path.basename(filePath)}: unsupported game format.');
         }
       }
 
-      if (imported > 0) await Rpcs3LibraryService.syncInternalLibrary();
-      return Rpcs3ImportResult(
-        imported: imported,
-        rejected: rejected,
-        errors: errors,
-      );
-    } finally {
-      _itemName = '';
-      _itemIndex = 0;
-      _itemCount = 0;
-      await Rpcs3InternalBridge.releaseScopedResources();
+      if (gamePaths.isEmpty) {
+        await Rpcs3InternalBridge.releaseScopedResources();
+        if (pendingIncompleteErrors.isNotEmpty) {
+          rejected += pendingIncompleteErrors.length;
+          errors.addAll(pendingIncompleteErrors);
+        }
+        return Rpcs3ImportResult(
+          imported: imported,
+          rejected: rejected,
+          errors: errors,
+        );
+      }
+
+      var importedThisSelection = 0;
+      final incompleteErrors = <String>[];
+      try {
+        await Rpcs3InternalService.ensureManagementInitialized();
+        _itemCount = gamePaths.length;
+
+        for (var index = 0; index < gamePaths.length; index++) {
+          final filePath = gamePaths[index];
+          final name = path.basename(filePath);
+          _itemName = name;
+          _itemIndex = index + 1;
+          _emit(detail: 'Preparing $name…');
+
+          final extension = path.extension(filePath).toLowerCase();
+          final report = await _withNativeProgress(() async {
+            if (extension == '.pkg') {
+              return Rpcs3InternalBridge.installPackage(filePath);
+            }
+            if (extension == '.zip') {
+              return Rpcs3InternalBridge.installZip(filePath);
+            }
+
+            final stem = path.withoutExtension(filePath).toLowerCase();
+            final selectedKey = selectedKeys[stem];
+            String? keyPath = selectedKey;
+            if (keyPath == null) {
+              final sibling = File(path.setExtension(filePath, '.key'));
+              if (await sibling.exists()) keyPath = sibling.path;
+            }
+            return Rpcs3InternalBridge.installIso(
+              filePath,
+              keyPath: keyPath,
+            );
+          });
+
+          if (report['success'] == true) {
+            imported++;
+            importedThisSelection++;
+            _emit(current: 1, total: 1, detail: '$name imported.');
+            continue;
+          }
+
+          final message =
+              report['message']?.toString() ?? 'RPCS3 import failed.';
+          final formatted = '$name: $message';
+          if (extension == '.iso' && _isIncompleteIsoFailure(message)) {
+            incompleteErrors.add(formatted);
+            _emit(
+              detail:
+                  'Incomplete ISO rejected. Select the complete disc image again…',
+            );
+          } else {
+            rejected++;
+            errors.add(formatted);
+          }
+        }
+
+        if (importedThisSelection > 0) {
+          await Rpcs3LibraryService.syncInternalLibrary();
+        }
+      } finally {
+        _itemName = '';
+        _itemIndex = 0;
+        _itemCount = 0;
+        await Rpcs3InternalBridge.releaseScopedResources();
+      }
+
+      if (incompleteErrors.isEmpty) {
+        return Rpcs3ImportResult(
+          imported: imported,
+          rejected: rejected,
+          errors: errors,
+        );
+      }
+
+      // Replacing the selection resolves the previous incomplete-image error.
+      // If the user cancels the fresh picker, the pending error is surfaced in
+      // the result so both RPCS3 manager entry points still report the rejection.
+      pendingIncompleteErrors = incompleteErrors;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
     }
   }
 
