@@ -31,6 +31,7 @@ REQUIRED_CORE_SYMBOLS = (
     '_rpcs3_ios_get_emulation_state',
     '_rpcs3_ios_get_performance_metrics',
     '_neostation_rpcs3_ios_save_state',
+    '_neostation_rpcs3_ios_get_savestate_status',
     '_neostation_rpcs3_ios_enumerate_savestates_live',
     '_rpcs3_ios_stop_emulation',
     '_rpcs3_ios_shutdown',

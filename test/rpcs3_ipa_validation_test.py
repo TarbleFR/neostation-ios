@@ -30,6 +30,7 @@ class RPCS3IPAValidationTests(unittest.TestCase):
             '_rpcs3_ios_set_game_setting',
             '_rpcs3_ios_get_performance_metrics',
             '_neostation_rpcs3_ios_save_state',
+            '_neostation_rpcs3_ios_get_savestate_status',
             '_neostation_rpcs3_ios_enumerate_savestates_live',
         ):
             self.assertIn(symbol, validator.REQUIRED_CORE_SYMBOLS)
