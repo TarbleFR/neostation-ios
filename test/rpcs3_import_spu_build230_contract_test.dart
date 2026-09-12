@@ -41,9 +41,10 @@ void main() {
       expect(
         importer,
         contains(
-          'if (imported > 0) await Rpcs3LibraryService.syncInternalLibrary();',
+          'if (importedThisSelection > 0) {',
         ),
       );
+      expect(importer, contains('Rpcs3LibraryService.syncInternalLibrary();'));
     });
 
     test('decrypted PS3 folders use the security-scoped folder path', () {
