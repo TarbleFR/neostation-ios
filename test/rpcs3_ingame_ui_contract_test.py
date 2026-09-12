@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import sys
 
-root = Path(__file__).resolve().parents[1]
+root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 plugin = (root / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
 abi = (root / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h').read_text()
 overlay = (root / 'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm').read_text()
@@ -56,7 +57,8 @@ for key in [
     'unknownDate', 'incompatible', 'incompatibleState', 'memory', 'frameTime',
     'upscale', 'upscaleTitle', 'upscaleRestart',
 ]:
-    assert localization.count(f'@"{key}":') == 12, key
+    expected = 24 if key in ('state', 'states') else 12
+    assert localization.count(f'@"{key}":') == expected, key
 for hardcoded in ['@"Langue"', '@"Créer une savestate"', '@"Charger une savestate"',
                   '@"Quitter le jeu"', '@"Frame time (ms) · 60 s"']:
     assert hardcoded not in plugin and hardcoded not in overlay, hardcoded

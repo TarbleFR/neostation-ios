@@ -9,6 +9,7 @@ from pathlib import Path
 
 SPU_MARKER = "NEOSTATION_ARMSX3_NEON_RESERVATION_COPY_V1"
 RANGE_MARKER = "NEOSTATION_ARMSX3_RANGE_LOCK_WAIT_V1"
+SPU_LLVM_MARKER = "NEOSTATION_ARMSX3_SPU_BYTE_FAST_PATHS_V1"
 
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
@@ -130,12 +131,122 @@ def patch_vm(source: Path) -> None:
     path.write_text(replace_once(text, old_wait, new_wait, "range-lock wait"))
 
 
+def patch_spu_llvm(source: Path) -> None:
+    """Port ARMSX3 ca223f7's semantics-preserving SPU LLVM folds.
+
+    The folds recognize guest byte add/sub and compare idioms after RPCS3 has
+    widened them. Emitting native 8-bit vector operations reduces generated
+    AArch64 instructions without changing memory ordering or timing policy.
+    """
+    path = source / "rpcs3/Emu/Cell/SPULLVMRecompiler.cpp"
+    text = path.read_text()
+    if SPU_LLVM_MARKER in text:
+        return
+
+    absdb_anchor = """\tvoid ABSDB(spu_opcode_t op)
+\t{
+\t\tconst auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
+\t\tset_vr(op.rt, absd(a, b));
+\t}
+"""
+    absdb_patch = f"""\tvoid ABSDB(spu_opcode_t op)
+\t{{
+\t\t// {SPU_LLVM_MARKER}: ARMSX3 ca223f7 compare-result fast path.
+\t\tconst auto matches_compare = [&](auto val, auto MP)
+\t\t{{
+\t\t\tusing VT = typename decltype(MP)::type;
+\t\t\tauto [ok, x] = match_expr(val, sext<VT>(match<bool[std::extent_v<VT>]>()));
+\t\t\treturn ok;
+\t\t}};
+
+\t\tconst auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
+\t\tif (match_vr<s8[16], s16[8], s32[4], s64[2]>(op.ra, matches_compare) ||
+\t\t\tmatch_vr<s8[16], s16[8], s32[4], s64[2]>(op.rb, matches_compare))
+\t\t{{
+\t\t\tset_vr(op.rt, a ^ b);
+\t\t\treturn;
+\t\t}}
+\t\tset_vr(op.rt, absd(a, b));
+\t}}
+"""
+    text = replace_once(text, absdb_anchor, absdb_patch, "SPU ABSDB compare fold")
+
+    selb_anchor = """\t\t\tcase 2:
+\t\t\tcase 1:
+\t\t\t{
+\t\t\t\tset_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, get_vr<u8[16]>(op.rb), get_vr<u8[16]>(op.ra)));
+\t\t\t\treturn;
+\t\t\t}
+"""
+    selb_patch = """\t\t\tcase 2:
+\t\t\tcase 1:
+\t\t\t{
+\t\t\t\tconst bool lhs_to_lo = mask == v128::from16p(0xff00);
+\t\t\t\tif (lhs_to_lo || mask == v128::from16p(0x00ff))
+\t\t\t\t{
+\t\t\t\t\tconst auto lhs = get_vr<u16[8]>(op.ra);
+\t\t\t\t\tconst auto rhs = get_vr<u16[8]>(op.rb);
+\t\t\t\t\tconst auto lo_op = lhs_to_lo ? lhs : rhs;
+\t\t\t\t\tconst auto hi_op = lhs_to_lo ? rhs : lhs;
+\t\t\t\t\tif (const auto [ok, add_a, add_b] = match_expr(lo_op, match<u16[8]>() + match<u16[8]>()); ok)
+\t\t\t\t\t{
+\t\t\t\t\t\tconst auto [ab] = match_expr(hi_op, add_a + (add_b & 0xff00));
+\t\t\t\t\t\tconst auto [ba] = match_expr(hi_op, add_b + (add_a & 0xff00));
+\t\t\t\t\t\tif (ab || ba)
+\t\t\t\t\t\t{
+\t\t\t\t\t\t\tset_vr(op.rt4, bitcast<u8[16]>(add_a) + bitcast<u8[16]>(add_b));
+\t\t\t\t\t\t\treturn;
+\t\t\t\t\t\t}
+\t\t\t\t\t}
+\t\t\t\t\tif (const auto [ok, sub_a, sub_b] = match_expr(lo_op, match<u16[8]>() - match<u16[8]>()); ok)
+\t\t\t\t\t{
+\t\t\t\t\t\tif (const auto [hi] = match_expr(hi_op, sub_a - (sub_b & 0xff00)); hi)
+\t\t\t\t\t\t{
+\t\t\t\t\t\t\tset_vr(op.rt4, bitcast<u8[16]>(sub_a) - bitcast<u8[16]>(sub_b));
+\t\t\t\t\t\t\treturn;
+\t\t\t\t\t\t}
+\t\t\t\t\t}
+\t\t\t\t}
+\t\t\t\tset_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, get_vr<u8[16]>(op.rb), get_vr<u8[16]>(op.ra)));
+\t\t\t\treturn;
+\t\t\t}
+"""
+    text = replace_once(text, selb_anchor, selb_patch, "SPU SELB byte folds")
+
+    shufb_anchor = """\t\tconst auto c = get_vr<u8[16]>(op.rc);
+
+\t\tif (auto [ok, mask] = get_const_vector(c.value, m_pos); ok)
+"""
+    shufb_patch = """\t\tif (match_vr<s8[16], s16[8], s32[4], s64[2]>(op.rc, [&](auto c, auto MP)
+\t\t{
+\t\t\tusing VT = typename decltype(MP)::type;
+\t\t\tif (auto [ok, i] = match_expr(c, sext<VT>(match<bool[std::extent_v<VT>]>())); ok)
+\t\t\t{
+\t\t\t\tconst auto a_splat = zshuffle(get_vr<u8[16]>(op.ra), 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15);
+\t\t\t\tset_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, splat<u8[16]>(0x80), a_splat));
+\t\t\t\treturn true;
+\t\t\t}
+\t\t\treturn false;
+\t\t}))
+\t\t{
+\t\t\treturn;
+\t\t}
+
+\t\tconst auto c = get_vr<u8[16]>(op.rc);
+
+\t\tif (auto [ok, mask] = get_const_vector(c.value, m_pos); ok)
+"""
+    text = replace_once(text, shufb_anchor, shufb_patch, "SPU SHUFB compare fold")
+    path.write_text(text)
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_rpcs3_armsx3_performance.py <rpcs3-source-root>")
     source = Path(sys.argv[1]).resolve()
     patch_spu(source)
     patch_vm(source)
+    patch_spu_llvm(source)
     print("RPCS3 ARMSX3-derived ARM64 performance patch: OK")
 
 

@@ -17,6 +17,7 @@ def main() -> None:
         raise SystemExit("usage: rpcs3_armsx3_performance_patch_test.py <rpcs3-source-root>")
     source = Path(sys.argv[1]).resolve()
     spu = (source / "rpcs3/Emu/Cell/SPUThread.cpp").read_text()
+    spu_llvm = (source / "rpcs3/Emu/Cell/SPULLVMRecompiler.cpp").read_text()
     vm = (source / "rpcs3/Emu/Memory/vm.cpp").read_text()
 
     require(spu.count("NEOSTATION_ARMSX3_NEON_RESERVATION_COPY_V1") == 2,
@@ -37,6 +38,16 @@ def main() -> None:
             "range-lock wait lost its timeout safety net")
     require("std::this_thread::yield();" not in vm[vm.index("void passive_lock"):vm.index("bool temporary_unlock")],
             "passive range-lock path still yields blindly")
+    require(spu_llvm.count("NEOSTATION_ARMSX3_SPU_BYTE_FAST_PATHS_V1") == 1,
+            "ARMSX3 SPU LLVM byte fast paths are missing or duplicated")
+    require("set_vr(op.rt4, bitcast<u8[16]>(add_a) + bitcast<u8[16]>(add_b));" in spu_llvm,
+            "SPU 8-bit addition renarrowing is missing")
+    require("set_vr(op.rt4, bitcast<u8[16]>(sub_a) - bitcast<u8[16]>(sub_b));" in spu_llvm,
+            "SPU 8-bit subtraction renarrowing is missing")
+    require("set_vr(op.rt, a ^ b);" in spu_llvm,
+            "SPU compare-result ABSDB fast path is missing")
+    require("splat<u8[16]>(0x80)" in spu_llvm,
+            "SPU compare-result SHUFB fast path is missing")
     print("RPCS3 ARMSX3-derived performance patch contract: OK")
 
 

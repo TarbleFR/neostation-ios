@@ -2,6 +2,7 @@
 """Contract checks for RPCS3 device performance telemetry."""
 
 from pathlib import Path
+import sys
 
 
 def require(condition: bool, message: str) -> None:
@@ -10,12 +11,9 @@ def require(condition: bool, message: str) -> None:
 
 
 def main() -> None:
-    plugin = Path(
-        "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm"
-    ).read_text()
-    diagnostics = Path(
-        "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h"
-    ).read_text()
+    root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(".")
+    plugin = (root / "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm").read_text()
+    diagnostics = (root / "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h").read_text()
 
     require(plugin.count("NEOSTATION_RPCS3_PERFORMANCE_TELEMETRY_V1") == 1,
             "performance telemetry marker is missing or duplicated")
