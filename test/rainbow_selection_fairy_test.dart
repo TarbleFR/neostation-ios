@@ -1,39 +1,12 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:neostation/widgets/rainbow_selection_border.dart';
 
 void main() {
-  testWidgets('orbiting fairy is rendered only when requested', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Center(
-          child: SizedBox(
-            width: 220,
-            height: 140,
-            child: RainbowSelectionBorder(
-              borderRadius: BorderRadius.circular(12),
-              showOrbitingFairy: true,
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.byKey(const ValueKey('orbiting-selection-fairy')),
-      findsOneWidget,
-    );
-    await tester.pump(const Duration(milliseconds: 750));
-    expect(
-      find.byKey(const ValueKey('orbiting-selection-fairy')),
-      findsOneWidget,
-    );
-  });
-
-  test('grid, list and carousel hide the fairy for the RPCS3 playlist', () {
+  test('all playlist views keep the rainbow halo without the fairy', () {
+    final border = File(
+      'lib/widgets/rainbow_selection_border.dart',
+    ).readAsStringSync();
     final grid = File(
       'lib/screens/game_screen/my_games_grid.dart',
     ).readAsStringSync();
@@ -44,16 +17,13 @@ void main() {
       'lib/screens/game_screen/my_games_carousel.dart',
     ).readAsStringSync();
 
-    for (final source in <String>[grid, list, carousel]) {
-      expect(source, contains('showOrbitingFairy:'));
-      expect(
-        source,
-        matches(
-          RegExp(
-            r"widget\.system\.folderName\.toLowerCase\(\)\s*!=\s*'ps3'",
-          ),
-        ),
-      );
+    expect(border, contains('class RainbowSelectionBorder'));
+    expect(border, contains('_RainbowBorderPainter'));
+    for (final source in <String>[border, grid, list, carousel]) {
+      expect(source, isNot(contains('showOrbitingFairy')));
+      expect(source, isNot(contains('fairySize')));
+      expect(source, isNot(contains('orbiting-selection-fairy')));
+      expect(source, isNot(contains('🧚')));
     }
   });
 }

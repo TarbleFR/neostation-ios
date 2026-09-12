@@ -274,9 +274,6 @@ class GameListViewState extends State<GameListView>
                         borderWidth: 2.r,
                         glowWidth: 4.r,
                         glowBlur: 3.r,
-                        showOrbitingFairy:
-                            widget.system.folderName.toLowerCase() != 'ps3',
-                        fairySize: 16.r,
                         child: Container(
                           decoration: BoxDecoration(
                             color: highlightColor,

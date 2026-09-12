@@ -719,9 +719,6 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 borderWidth: 4.r,
                 glowWidth: 7.r,
                 glowBlur: 4.r,
-                showOrbitingFairy:
-                    widget.system.folderName.toLowerCase() != 'ps3',
-                fairySize: 18.r,
                 child: const SizedBox.expand(),
               ),
             ),

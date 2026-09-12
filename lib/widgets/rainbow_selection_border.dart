@@ -14,8 +14,6 @@ class RainbowSelectionBorder extends StatefulWidget {
   final double glowBlur;
   final double glowWidth;
   final Duration duration;
-  final bool showOrbitingFairy;
-  final double fairySize;
 
   const RainbowSelectionBorder({
     super.key,
@@ -25,8 +23,6 @@ class RainbowSelectionBorder extends StatefulWidget {
     this.glowBlur = 5,
     this.glowWidth = 7,
     this.duration = const Duration(seconds: 3),
-    this.showOrbitingFairy = false,
-    this.fairySize = 18,
   });
 
   @override
@@ -77,7 +73,7 @@ class _RainbowSelectionBorderState extends State<RainbowSelectionBorder>
   }
 
   Widget _buildFrame({required double progress, required Widget child}) {
-    final border = CustomPaint(
+    return CustomPaint(
       foregroundPainter: _RainbowBorderPainter(
         progress: progress,
         borderRadius: widget.borderRadius,
@@ -86,64 +82,6 @@ class _RainbowSelectionBorderState extends State<RainbowSelectionBorder>
         glowWidth: widget.glowWidth,
       ),
       child: child,
-    );
-    if (!widget.showOrbitingFairy) return border;
-
-    // Keep the fairy inside the card cell: the grid rows are memoized and
-    // clipped, so an outside overlay would either disappear at the row edge or
-    // force every row to repaint. Only the selected cell owns this lightweight
-    // orbit and its artwork remains the static [AnimatedBuilder.child].
-    return Stack(
-      clipBehavior: Clip.hardEdge,
-      children: [
-        border,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final horizontalRadius = math.max(
-                  0.0,
-                  constraints.maxWidth / 2 - widget.fairySize * 0.8,
-                );
-                final verticalRadius = math.max(
-                  0.0,
-                  constraints.maxHeight / 2 - widget.fairySize * 0.8,
-                );
-                final angle = progress * math.pi * 2 - math.pi / 2;
-                final offset = Offset(
-                  math.cos(angle) * horizontalRadius,
-                  math.sin(angle) * verticalRadius,
-                );
-                final pulse = 0.96 + math.sin(progress * math.pi * 4) * 0.04;
-
-                return Align(
-                  alignment: Alignment.center,
-                  child: Transform.translate(
-                    offset: offset,
-                    child: Transform.scale(
-                      scale: pulse,
-                      child: ExcludeSemantics(
-                        child: Text(
-                          '🧚',
-                          key: const ValueKey('orbiting-selection-fairy'),
-                          style: TextStyle(
-                            fontSize: widget.fairySize,
-                            height: 1,
-                            shadows: const [
-                              Shadow(color: Colors.white, blurRadius: 5),
-                              Shadow(color: Color(0xFFBF5AF2), blurRadius: 9),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

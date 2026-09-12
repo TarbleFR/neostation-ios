@@ -48,15 +48,15 @@ IOS_COMPILER_RT="$APPLE_CLANG_RESOURCE_DIR/lib/darwin/libclang_rt.ios.a"
 mkdir -p "$WORK_ROOT" "$DEPS" "$OUTPUT_DIR"
 ccache --max-size=3G >/dev/null
 
-# Build 251 is intentionally layered over the stable Build 250 branch. The
+# Build 252 is intentionally layered over the validated Build 251 branch. The
 # existing workflow still carries its historical display name, so publish the
 # authoritative bundle/artifact number through GITHUB_ENV before Flutter is
 # configured. These values are consumed by all subsequent workflow steps.
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
-    echo "BUILD_NUMBER=251"
-    echo "IPA_NAME=NeoStation-iOS-Build-251"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-251"
+    echo "BUILD_NUMBER=252"
+    echo "IPA_NAME=NeoStation-iOS-Build-252"
+    echo "ARTIFACT_NAME=NeoStation-iOS-Build-252"
   } >> "$GITHUB_ENV"
 fi
 
