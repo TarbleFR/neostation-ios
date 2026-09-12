@@ -73,7 +73,8 @@ void main() {
       final games = root['games'] as Map<String, dynamic>;
 
       expect(root['return_code'], 0);
-      expect(games.keys, containsAll(<String>['BLES00215', 'BLES00412']));
+      expect(games.keys, contains('BLES00215'));
+      expect(games, isNot(contains('BLES00412')));
       expect(games, isNot(contains('Dynasty Warriors 6')));
       final bles = games['BLES00215'] as Map<String, dynamic>;
       final yaml = bles['config'] as String;
@@ -83,9 +84,31 @@ void main() {
       expect(yaml, contains('iOS Experimental:'));
       expect(yaml, isNot(contains('Video:')));
       expect(yaml, isNot(contains('Audio:')));
+    });
 
-      final generic = games['BLES00412'] as Map<String, dynamic>;
-      expect(generic['config'], isEmpty);
+    test('never publishes empty inherited-global entries', () {
+      final mixedPayload = Rpcs3GameProfileService.databasePayloadForSerials(
+        <String>['BLES00215', 'BLES00412', 'BCUS98114'],
+      );
+      final mixedGames =
+          (jsonDecode(mixedPayload) as Map<String, dynamic>)['games']
+              as Map<String, dynamic>;
+
+      expect(mixedGames.keys, orderedEquals(<String>['BLES00215']));
+      for (final entry in mixedGames.values) {
+        final config = (entry as Map<String, dynamic>)['config'];
+        expect(config, isA<String>());
+        expect(config, isNotEmpty);
+      }
+
+      final inheritedPayload =
+          Rpcs3GameProfileService.databasePayloadForSerials(
+            <String>['BLES00412', 'BCUS98114'],
+          );
+      final inheritedGames =
+          (jsonDecode(inheritedPayload) as Map<String, dynamic>)['games']
+              as Map<String, dynamic>;
+      expect(inheritedGames, isEmpty);
     });
 
     test('emits the God of War III performance keys as partial YAML', () {
@@ -126,5 +149,23 @@ void main() {
         );
       },
     );
+
+    test('launch bypasses the native database for inherited-global serials', () {
+      final source = File(
+        'lib/services/rpcs3_game_profile_service.dart',
+      ).readAsStringSync();
+      final launchBody = source.substring(
+        source.indexOf('static Future<Map<String, dynamic>> applyForLaunch'),
+      );
+
+      expect(launchBody, contains('if (profile.settings.isEmpty)'));
+      expect(launchBody, contains("'success': true"));
+      expect(
+        launchBody.indexOf('if (profile.settings.isEmpty)'),
+        lessThan(
+          launchBody.indexOf('_detectedProfiles[profile.serial] = profile'),
+        ),
+      );
+    });
   });
 }

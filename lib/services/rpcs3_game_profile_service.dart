@@ -173,7 +173,9 @@ abstract final class Rpcs3GameProfileService {
     _detectedProfiles.clear();
     for (final value in serials) {
       final profile = profileForSerial(value);
-      if (profile != null) _detectedProfiles[profile.serial] = profile;
+      if (profile != null && profile.settings.isNotEmpty) {
+        _detectedProfiles[profile.serial] = profile;
+      }
     }
   }
 
@@ -190,6 +192,10 @@ abstract final class Rpcs3GameProfileService {
   static String _databasePayload(Iterable<Rpcs3GameProfile> profiles) {
     final games = <String, dynamic>{};
     for (final profile in profiles) {
+      // An empty RPCS3 YAML document means "inherit the global config". It is
+      // not a database record: the native validator deliberately rejects
+      // empty documents and would atomically reject every valid sibling too.
+      if (profile.settings.isEmpty) continue;
       games[profile.serial] = <String, String>{'config': profile.toRpcs3Yaml()};
     }
     return jsonEncode(<String, dynamic>{'return_code': 0, 'games': games});
@@ -198,7 +204,7 @@ abstract final class Rpcs3GameProfileService {
   /// Publishes every detected profile plus [rawSerial] before boot.
   ///
   /// The RPCS3 Core validates and atomically caches this serial database. The
-  /// Build 249 Core applies the selected partial YAML after global/custom
+  /// Build 250 Core applies the selected partial YAML after global/custom
   /// loading, so the managed compatibility keys win while unrelated values
   /// remain inherited.
   static Future<Map<String, dynamic>> applyForLaunch(String rawSerial) async {
@@ -207,6 +213,16 @@ abstract final class Rpcs3GameProfileService {
       return const <String, dynamic>{
         'success': false,
         'message': 'RPCS3 rejected the invalid PlayStation serial.',
+      };
+    }
+
+    if (profile.settings.isEmpty) {
+      _log.i(
+        'RPCS3 ${profile.serial}: no managed override; using global config.',
+      );
+      return <String, dynamic>{
+        'success': true,
+        'message': 'RPCS3 global configuration inherited for ${profile.serial}.',
       };
     }
 
