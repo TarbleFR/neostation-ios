@@ -31,8 +31,11 @@ assert "'AVFAudio'" in podspec
 # Menu actions and performance UI are native to RPCS3, independent of Dolphin.
 for token in [
     'localized:@"language"', 'localized:@"createState"', 'localized:@"loadState"',
+    'localized:@"upscale"', 'localized:@"upscaleTitle"',
     'chart.xyaxis.line', 'RPCS3PerformanceOverlay',
     'get_performance_metrics', 'system.language',
+    'showResolutionScaleMenu', 'applyResolutionScale',
+    '"gpu.resolution_scale"', '@[@"50", @"75", @"100", @"125", @"150", @"200"]',
     'neostation_rpcs3_ios_save_state', 'neostation_rpcs3_ios_enumerate_savestates_live',
     'topAnchor constraintEqualToAnchor:view.safeAreaLayoutGuide.topAnchor constant:70',
     'performance.topAnchor constraintEqualToAnchor:menu.bottomAnchor constant:8',
@@ -51,6 +54,7 @@ for key in [
     'language', 'languageTitle', 'languageRestart', 'createState',
     'loadState', 'quitGame', 'state', 'states', 'stateStarted', 'noStates',
     'unknownDate', 'incompatible', 'incompatibleState', 'memory', 'frameTime',
+    'upscale', 'upscaleTitle', 'upscaleRestart',
 ]:
     assert localization.count(f'@"{key}":') == 12, key
 for hardcoded in ['@"Langue"', '@"Créer une savestate"', '@"Charger une savestate"',

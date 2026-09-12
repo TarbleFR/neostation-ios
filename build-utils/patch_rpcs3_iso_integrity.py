@@ -102,16 +102,33 @@ bool validate_installed_game_iso(const std::string& iso_path, std::string& detai
         raise SystemExit("GameLibrary.cpp public validation anchor drifted")
     cpp = cpp.replace(public_anchor, public_impl, 1)
 
+    copy_loop_old = """	std::vector<u8> buffer(4 * 1024 * 1024);
+	while (copied < total)
+"""
+    copy_loop_new = """	// A security-scoped document provider can initially advertise a stale
+	// length for a large cloud-backed file. Treat that value as a minimum and
+	// consume the stream through its real EOF instead of truncating the private
+	// RPCS3 copy at the first stat result.
+	const u64 advertised_size = source.size();
+	const u64 copied_before = copied;
+	std::vector<u8> buffer(4 * 1024 * 1024);
+	while (true)
+"""
+    if copy_loop_old not in cpp:
+        raise SystemExit("GameLibrary.cpp provider-copy loop anchor drifted")
+    cpp = cpp.replace(copy_loop_old, copy_loop_new, 1)
+
     copy_old = """	return source.pos() == source.size();
 }
 
 bool copy_folder_file_with_progress("""
-    copy_new = """	// Flush and verify the destination as well as the source. A provider-backed
-	// document can otherwise report its advertised length even after a short
-	// transfer, leaving a sparse/truncated private copy that only fails in-game.
+    copy_new = """	// Flush and verify the destination against the bytes actually consumed. A
+	// short provider read must never be accepted, while a stream that safely
+	// grows beyond its initially advertised size remains valid.
 	destination.sync();
-	return source.pos() == source.size() &&
-		destination.size() == source.size();
+	const u64 transferred = copied - copied_before;
+	return transferred >= advertised_size &&
+		destination.size() == transferred;
 }
 
 bool copy_folder_file_with_progress("""
@@ -122,10 +139,15 @@ bool copy_folder_file_with_progress("""
     archive_anchor = """	iso_archive archive{temporary_iso};
 	const psf::registry metadata = archive.open_psf("PS3_GAME/PARAM.SFO");
 """
-    archive_new = """	iso_archive archive{temporary_iso};
+    archive_new = """	u64 installed_iso_size = 0;
+	if (!is_iso_file(temporary_iso, &installed_iso_size) || !installed_iso_size)
+	{
+		return invalid_iso("The copied image is missing or unreadable after import");
+	}
+	iso_archive archive{temporary_iso};
 	std::string integrity_detail;
 	if (!archive.is_valid() ||
-		!validate_iso_node_extents(archive.root(), iso_size, {}, integrity_detail))
+		!validate_iso_node_extents(archive.root(), installed_iso_size, {}, integrity_detail))
 	{
 		return invalid_iso(fmt::format(
 			"The selected image is truncated or corrupt: %s", integrity_detail));

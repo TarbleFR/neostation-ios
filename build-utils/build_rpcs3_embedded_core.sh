@@ -60,16 +60,6 @@ if [[ -n "${GITHUB_ENV:-}" ]]; then
   } >> "$GITHUB_ENV"
 fi
 
-# The workflow applies the audited host/menu/localization patches before this
-# Core phase. Add Build 251's resolution-scale menu on top of that composed
-# source, then validate both the upscale controls and truncated-ISO re-prompt.
-HOST_PLUGIN="$PWD/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm"
-if grep -q 'RPCS3InGameLocalization' "$HOST_PLUGIN"; then
-  log "Apply NeoStation Build 251 RPCS3 host controls"
-  python3 "$PWD/build-utils/patch_rpcs3_build251_upscale.py"
-  python3 "$PWD/test/rpcs3_build251_contract_test.py"
-fi
-
 log "Provision pinned MoltenVK $MOLTENVK_VERSION for iOS"
 MOLTENVK_LIB="$(find "$MOLTENVK_EXTRACT" -type f -path '*/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a' -print -quit 2>/dev/null || true)"
 if [[ -z "$MOLTENVK_LIB" ]]; then

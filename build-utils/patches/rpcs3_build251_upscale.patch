@@ -1,0 +1,181 @@
+--- a/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+@@ -617,6 +617,57 @@
+   [controller presentViewController:alert animated:YES completion:nil];
+ }
+ 
++- (void)applyResolutionScale:(NSString*)value {
++  NSString* titleId = [self.activeTitleId copy];
++  if (!titleId.length || !value.length) return;
++  dispatch_async(_runtimeQueue, ^{
++    if (!self->_api.stop_emulation || !self->_api.set_game_setting ||
++        !self->_api.boot_game) {
++      [self showMessage:@"RPCS3" message:[self lastError]];
++      return;
++    }
++    rpcs3_ios_status status = self->_api.stop_emulation();
++    if (status == 0) {
++      status = self->_api.set_game_setting(
++          titleId.UTF8String, "gpu.resolution_scale", value.UTF8String);
++    }
++    if (status == 0) {
++      status = self->_api.boot_game(titleId.UTF8String, NULL);
++    }
++    if (status != 0) {
++      [self showMessage:@"RPCS3" message:[self lastError]];
++    } else {
++      RPCS3Diagnostic(@"game_resolution_scale",
++                      [NSString stringWithFormat:@"%@ = %@%%", titleId, value]);
++    }
++  });
++}
++
++- (void)showResolutionScaleMenu {
++  RPCS3GameViewController* controller = self.gameController;
++  if (!controller || !self.activeTitleId.length ||
++      controller.presentedViewController) return;
++  UIAlertController* alert = [UIAlertController
++      alertControllerWithTitle:[self localized:@"upscaleTitle"]
++                       message:[self localized:@"upscaleRestart"]
++                preferredStyle:UIAlertControllerStyleAlert];
++  __weak Rpcs3InternalBridgePlugin* weakSelf = self;
++  for (NSString* value in @[@"50", @"75", @"100", @"125", @"150", @"200"]) {
++    NSString* label = [value stringByAppendingString:@"%"];
++    [alert addAction:[UIAlertAction
++        actionWithTitle:label
++                  style:UIAlertActionStyleDefault
++                handler:^(__unused UIAlertAction* action) {
++                  [weakSelf applyResolutionScale:value];
++                }]];
++  }
++  [alert addAction:[UIAlertAction
++      actionWithTitle:[self localized:@"cancel"]
++                style:UIAlertActionStyleCancel
++              handler:nil]];
++  [controller presentViewController:alert animated:YES completion:nil];
++}
++
+ - (void)saveCurrentState {
+   dispatch_async(_runtimeQueue, ^{
+     rpcs3_ios_status status = self->_api.save_state ? self->_api.save_state() : -1;
+@@ -709,6 +760,9 @@
+   [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"language"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+     afterMenuDismiss(^{ [weakSelf showLanguageMenu]; });
+   }]];
++  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"upscale"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
++    afterMenuDismiss(^{ [weakSelf showResolutionScaleMenu]; });
++  }]];
+   [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"createState"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
+     afterMenuDismiss(^{ [weakSelf saveCurrentState]; });
+   }]];
+--- a/packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm
++++ b/packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm
+@@ -11,6 +11,8 @@
+         @"menu": @"RPCS3 Menu", @"performance": @"RPCS3 Performance",
+         @"enabled": @"Enabled", @"disabled": @"Disabled", @"ok": @"OK",
+         @"cancel": @"Cancel", @"language": @"Language",
++        @"upscale": @"Upscale / Resolution", @"upscaleTitle": @"Resolution scale",
++        @"upscaleRestart": @"The game will restart to apply this setting only to the current Game ID.",
+         @"languageTitle": @"PS3 Language",
+         @"languageRestart": @"The game will restart to apply the language.",
+         @"createState": @"Create save state", @"loadState": @"Load save state",
+@@ -25,6 +27,8 @@
+         @"menu": @"Menu RPCS3", @"performance": @"Performances RPCS3",
+         @"enabled": @"Activé", @"disabled": @"Désactivé", @"ok": @"OK",
+         @"cancel": @"Annuler", @"language": @"Langue",
++        @"upscale": @"Upscale / Résolution", @"upscaleTitle": @"Échelle de résolution",
++        @"upscaleRestart": @"Le jeu redémarrera pour appliquer ce réglage uniquement au Game ID actuel.",
+         @"languageTitle": @"Langue PS3",
+         @"languageRestart": @"Le jeu redémarre pour appliquer la langue.",
+         @"createState": @"Créer une savestate", @"loadState": @"Charger une savestate",
+@@ -39,6 +43,8 @@
+         @"menu": @"RPCS3-Menü", @"performance": @"RPCS3-Leistung",
+         @"enabled": @"Aktiviert", @"disabled": @"Deaktiviert", @"ok": @"OK",
+         @"cancel": @"Abbrechen", @"language": @"Sprache",
++        @"upscale": @"Upscaling / Auflösung", @"upscaleTitle": @"Auflösungsskalierung",
++        @"upscaleRestart": @"Das Spiel wird neu gestartet, um diese Einstellung nur auf die aktuelle Game-ID anzuwenden.",
+         @"languageTitle": @"PS3-Sprache",
+         @"languageRestart": @"Das Spiel wird neu gestartet, um die Sprache anzuwenden.",
+         @"createState": @"Spielstand erstellen", @"loadState": @"Spielstand laden",
+@@ -53,6 +59,8 @@
+         @"menu": @"Menú de RPCS3", @"performance": @"Rendimiento de RPCS3",
+         @"enabled": @"Activado", @"disabled": @"Desactivado", @"ok": @"Aceptar",
+         @"cancel": @"Cancelar", @"language": @"Idioma",
++        @"upscale": @"Escalado / Resolución", @"upscaleTitle": @"Escala de resolución",
++        @"upscaleRestart": @"El juego se reiniciará para aplicar este ajuste solo al Game ID actual.",
+         @"languageTitle": @"Idioma de PS3",
+         @"languageRestart": @"El juego se reiniciará para aplicar el idioma.",
+         @"createState": @"Crear estado de guardado", @"loadState": @"Cargar estado de guardado",
+@@ -67,6 +75,8 @@
+         @"menu": @"Menu RPCS3", @"performance": @"Prestazioni RPCS3",
+         @"enabled": @"Attivato", @"disabled": @"Disattivato", @"ok": @"OK",
+         @"cancel": @"Annulla", @"language": @"Lingua",
++        @"upscale": @"Upscaling / Risoluzione", @"upscaleTitle": @"Scala di risoluzione",
++        @"upscaleRestart": @"Il gioco verrà riavviato per applicare questa impostazione solo al Game ID attuale.",
+         @"languageTitle": @"Lingua PS3",
+         @"languageRestart": @"Il gioco verrà riavviato per applicare la lingua.",
+         @"createState": @"Crea stato di salvataggio", @"loadState": @"Carica stato di salvataggio",
+@@ -81,6 +91,8 @@
+         @"menu": @"Menu do RPCS3", @"performance": @"Desempenho do RPCS3",
+         @"enabled": @"Ativado", @"disabled": @"Desativado", @"ok": @"OK",
+         @"cancel": @"Cancelar", @"language": @"Idioma",
++        @"upscale": @"Upscaling / Resolução", @"upscaleTitle": @"Escala de resolução",
++        @"upscaleRestart": @"O jogo será reiniciado para aplicar esta definição apenas ao Game ID atual.",
+         @"languageTitle": @"Idioma da PS3",
+         @"languageRestart": @"O jogo será reiniciado para aplicar o idioma.",
+         @"createState": @"Criar estado de gravação", @"loadState": @"Carregar estado de gravação",
+@@ -95,6 +107,8 @@
+         @"menu": @"Menu RPCS3", @"performance": @"Performa RPCS3",
+         @"enabled": @"Aktif", @"disabled": @"Nonaktif", @"ok": @"OK",
+         @"cancel": @"Batal", @"language": @"Bahasa",
++        @"upscale": @"Upscale / Resolusi", @"upscaleTitle": @"Skala resolusi",
++        @"upscaleRestart": @"Game akan dimulai ulang untuk menerapkan pengaturan ini hanya pada Game ID saat ini.",
+         @"languageTitle": @"Bahasa PS3",
+         @"languageRestart": @"Game akan dimulai ulang untuk menerapkan bahasa.",
+         @"createState": @"Buat status simpan", @"loadState": @"Muat status simpan",
+@@ -109,6 +123,8 @@
+         @"menu": @"Меню RPCS3", @"performance": @"Производительность RPCS3",
+         @"enabled": @"Включено", @"disabled": @"Выключено", @"ok": @"ОК",
+         @"cancel": @"Отмена", @"language": @"Язык",
++        @"upscale": @"Масштабирование / Разрешение", @"upscaleTitle": @"Масштаб разрешения",
++        @"upscaleRestart": @"Игра будет перезапущена, чтобы применить эту настройку только к текущему Game ID.",
+         @"languageTitle": @"Язык PS3",
+         @"languageRestart": @"Игра будет перезапущена для применения языка.",
+         @"createState": @"Создать сохранение состояния", @"loadState": @"Загрузить сохранение состояния",
+@@ -123,6 +139,8 @@
+         @"menu": @"RPCS3メニュー", @"performance": @"RPCS3パフォーマンス",
+         @"enabled": @"オン", @"disabled": @"オフ", @"ok": @"OK",
+         @"cancel": @"キャンセル", @"language": @"言語",
++        @"upscale": @"アップスケール / 解像度", @"upscaleTitle": @"解像度スケール",
++        @"upscaleRestart": @"現在のゲームIDだけにこの設定を適用するため、ゲームを再起動します。",
+         @"languageTitle": @"PS3の言語",
+         @"languageRestart": @"言語を適用するためゲームを再起動します。",
+         @"createState": @"ステートを保存", @"loadState": @"ステートを読み込む",
+@@ -137,6 +155,8 @@
+         @"menu": @"RPCS3 메뉴", @"performance": @"RPCS3 성능",
+         @"enabled": @"켜짐", @"disabled": @"꺼짐", @"ok": @"확인",
+         @"cancel": @"취소", @"language": @"언어",
++        @"upscale": @"업스케일 / 해상도", @"upscaleTitle": @"해상도 배율",
++        @"upscaleRestart": @"현재 게임 ID에만 이 설정을 적용하기 위해 게임을 다시 시작합니다.",
+         @"languageTitle": @"PS3 언어",
+         @"languageRestart": @"언어를 적용하기 위해 게임을 다시 시작합니다.",
+         @"createState": @"상태 저장", @"loadState": @"상태 불러오기",
+@@ -151,6 +171,8 @@
+         @"menu": @"RPCS3 菜单", @"performance": @"RPCS3 性能",
+         @"enabled": @"已开启", @"disabled": @"已关闭", @"ok": @"确定",
+         @"cancel": @"取消", @"language": @"语言",
++        @"upscale": @"升频 / 分辨率", @"upscaleTitle": @"分辨率缩放",
++        @"upscaleRestart": @"游戏将重新启动，并仅为当前游戏 ID 应用此设置。",
+         @"languageTitle": @"PS3 语言",
+         @"languageRestart": @"游戏将重新启动以应用语言。",
+         @"createState": @"创建即时存档", @"loadState": @"加载即时存档",
+@@ -165,6 +187,8 @@
+         @"menu": @"RPCS3 選單", @"performance": @"RPCS3 效能",
+         @"enabled": @"已開啟", @"disabled": @"已關閉", @"ok": @"確定",
+         @"cancel": @"取消", @"language": @"語言",
++        @"upscale": @"升頻 / 解析度", @"upscaleTitle": @"解析度縮放",
++        @"upscaleRestart": @"遊戲將重新啟動，並僅為目前的遊戲 ID 套用此設定。",
+         @"languageTitle": @"PS3 語言",
+         @"languageRestart": @"遊戲將重新啟動以套用語言。",
+         @"createState": @"建立即時存檔", @"loadState": @"載入即時存檔",
+

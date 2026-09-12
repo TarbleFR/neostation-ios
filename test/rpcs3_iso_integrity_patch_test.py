@@ -16,8 +16,14 @@ for token in [
     'validate_iso_node_extents',
     'extent.start * ISO_SECTOR_SIZE',
     'extent.size > image_size - byte_offset',
+    'const u64 advertised_size = source.size();',
+    'const u64 copied_before = copied;',
+    'while (true)',
     'destination.sync();',
-    'destination.size() == source.size()',
+    'transferred >= advertised_size',
+    'destination.size() == transferred',
+    'is_iso_file(temporary_iso, &installed_iso_size)',
+    'validate_iso_node_extents(archive.root(), installed_iso_size',
     'The selected image is truncated or corrupt',
     'const std::string previous_directory = root + ".replace-" + title_id',
 ]:
@@ -25,6 +31,8 @@ for token in [
 
 assert 'validate_installed_game_iso' in cpp
 assert 'validate_installed_game_iso' in header
+assert 'while (copied < total)' not in cpp
+assert 'validate_iso_node_extents(archive.root(), iso_size' not in cpp
 assert 'Installed disc image is incomplete or corrupt' in api
 assert 'Re-import this title from a complete ISO' in api
 print('RPCS3 ISO extent-integrity patch contract: OK')
