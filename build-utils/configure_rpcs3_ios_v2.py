@@ -6,7 +6,8 @@ PS3 action is requested. Once requested, however, the Core requires the same
 host capabilities as the standalone RPCS3 IPA: get-task-allow, extended virtual
 addressing and the increased memory limits. These are emitted into
 Runner.entitlements and copied to NeoStation-signing.entitlements by the IPA
-packager so the sideloading/signing step can preserve them.
+packager. The final device provisioning profile must explicitly authorize these
+capabilities; merely requesting them in an unsigned IPA is not sufficient.
 """
 from __future__ import annotations
 

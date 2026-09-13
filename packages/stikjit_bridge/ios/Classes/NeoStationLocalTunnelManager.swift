@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import Security
 
 /// Owns the system VPN configuration for NeoStation's device-local JIT route.
 /// Calls are coalesced so startup, resume and game launch cannot create duplicate
@@ -16,7 +17,6 @@ final class NeoStationLocalTunnelManager {
     static let interfaceAddress = "10.7.1.1"
     static let peerAddress = "10.7.0.1"
     static let extensionName = "NeoStationLocalTunnel.appex"
-    static let fallbackSuffix = ".localtunnel"
     static let localizedDescription = "NeoStation Local JIT Tunnel"
     static let serverAddress = "On-device RemotePairing route"
     static let connectionPollInterval: TimeInterval = 0.25
@@ -44,6 +44,10 @@ final class NeoStationLocalTunnelManager {
     DispatchQueue.main.async {
       guard let providerBundleIdentifier = self.providerBundleIdentifier() else {
         completion(.failure(.extensionMissing))
+        return
+      }
+      if let signingFailure = Self.signingCapabilityFailure() {
+        completion(.failure(signingFailure))
         return
       }
       NETunnelProviderManager.loadAllFromPreferences { managers, error in
@@ -102,6 +106,10 @@ final class NeoStationLocalTunnelManager {
       finishEnsure(.failure(.extensionMissing))
       return
     }
+    if let signingFailure = Self.signingCapabilityFailure() {
+      finishEnsure(.failure(signingFailure))
+      return
+    }
 
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
@@ -145,6 +153,10 @@ final class NeoStationLocalTunnelManager {
   private func performDisable() {
     guard let providerBundleIdentifier = providerBundleIdentifier() else {
       finishDisable(.failure(.extensionMissing))
+      return
+    }
+    if let signingFailure = Self.signingCapabilityFailure() {
+      finishDisable(.failure(signingFailure))
       return
     }
 
@@ -389,10 +401,49 @@ final class NeoStationLocalTunnelManager {
        !identifier.isEmpty {
       return identifier
     }
-    guard let host = Bundle.main.bundleIdentifier, !host.isEmpty else {
-      return nil
+    // Never manufacture an identifier when a sideload signer removed the
+    // nested extension. Doing so turns a packaging failure into the misleading
+    // NEVPNError.configurationReadWriteFailed shown by iOS.
+    return nil
+  }
+
+  /// NetworkExtension preferences can only be written when the *installed*
+  /// host signature contains the Apple-authorized capabilities. The unsigned
+  /// distribution IPA declares them, but a sideload signer may legitimately
+  /// remove them while creating the final device signature.
+  private static func signingCapabilityFailure() -> NeoStationLocalTunnelError? {
+    guard let task = SecTaskCreateFromSelf(nil),
+          entitlement(
+            "com.apple.developer.networking.networkextension",
+            contains: "packet-tunnel-provider",
+            task: task
+          ),
+          entitlement(
+            "com.apple.developer.networking.vpn.api",
+            contains: "allow-vpn",
+            task: task
+          ) else {
+      return .signingMissing
     }
-    return host + Constants.fallbackSuffix
+    return nil
+  }
+
+  private static func entitlement(
+    _ key: String,
+    contains requiredValue: String,
+    task: SecTask
+  ) -> Bool {
+    guard let value = SecTaskCopyValueForEntitlement(
+      task,
+      key as CFString,
+      nil
+    ) else {
+      return false
+    }
+    if let values = value as? [String] {
+      return values.contains(requiredValue)
+    }
+    return (value as? String) == requiredValue
   }
 
   private func response(
@@ -474,6 +525,7 @@ final class NeoStationLocalTunnelManager {
 @available(iOS 17.4, *)
 enum NeoStationLocalTunnelError: LocalizedError {
   case extensionMissing
+  case signingMissing
   case activeVPNConflict(String)
   case configuration(String)
   case start(String)
@@ -484,6 +536,7 @@ enum NeoStationLocalTunnelError: LocalizedError {
   var code: String {
     switch self {
     case .extensionMissing: return "extension_missing"
+    case .signingMissing: return "signing_missing"
     case .activeVPNConflict: return "vpn_conflict"
     case .configuration: return "configuration_failed"
     case .start: return "start_failed"
@@ -497,6 +550,8 @@ enum NeoStationLocalTunnelError: LocalizedError {
     switch self {
     case .extensionMissing:
       return "The NeoStation local tunnel extension is missing from this installation. Re-sign the complete IPA with app extensions enabled."
+    case .signingMissing:
+      return "The installed NeoStation signature does not include Apple's VPN and packet-tunnel entitlements. Use an Apple provisioning profile that authorizes Network Extensions, or use LocalDevVPN from the App Store."
     case .activeVPNConflict(let name):
       return "NeoStation cannot start its local JIT tunnel while \(name) is active. Disconnect the other VPN and retry."
     case .configuration(let message):
@@ -506,7 +561,7 @@ enum NeoStationLocalTunnelError: LocalizedError {
     case .stop(let message):
       return "The NeoStation local JIT tunnel could not stop: \(message)"
     case .permissionDenied:
-      return "iOS did not authorize the NeoStation VPN configuration. You can retry from Settings > Tools."
+      return "iOS refused the NeoStation VPN configuration. If no native authorization dialog appeared, the signing profile does not authorize the embedded Network Extension."
     case .timeout:
       return "The NeoStation local JIT tunnel did not become ready before the timeout."
     }

@@ -55,6 +55,11 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('manager.isOnDemandEnabled = true', manager)
         self.assertIn('Bundle.main.builtInPlugInsURL', manager)
         self.assertIn('NeoStationLocalTunnel.appex', manager)
+        self.assertNotIn('fallbackSuffix', manager)
+        self.assertIn('SecTaskCopyValueForEntitlement', manager)
+        self.assertIn('com.apple.developer.networking.networkextension', manager)
+        self.assertIn('com.apple.developer.networking.vpn.api', manager)
+        self.assertIn('signingMissing', manager)
         self.assertIn('ensureWaiters', manager)
         self.assertIn('disableWaiters', manager)
         self.assertIn('activeVPNConflict', manager)
@@ -135,6 +140,13 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         )
         self.assertIn("app / 'PlugIns/NeoStationLocalTunnel.appex'", signer)
         self.assertIn('LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS', signer)
+        self.assertIn(
+            'NeoStationLocalTunnel-signing.entitlements',
+            (
+                ROOT /
+                'packages/dolphin_internal_bridge/ci/build_support.py'
+            ).read_text(),
+        )
 
     def test_startup_and_resume_refresh_are_non_blocking(self):
         main = (ROOT / 'lib/main.dart').read_text()

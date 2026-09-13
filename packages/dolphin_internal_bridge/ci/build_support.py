@@ -266,6 +266,10 @@ def package() -> None:
     (dist / 'dolphin-build-report.json').write_text(json.dumps(report, indent=2) + '\n')
     (dist / (ipa.name + '.sha256')).write_text(report['sha256'] + '  ' + ipa.name + '\n')
     shutil.copy2(ROOT / 'ios/Runner/Runner.entitlements', dist / 'NeoStation-signing.entitlements')
+    shutil.copy2(
+        ROOT / 'ios/NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements',
+        dist / 'NeoStationLocalTunnel-signing.entitlements',
+    )
     print(json.dumps({k: report[k] for k in ('ipa', 'bytes', 'sha256', 'signatureState', 'structuralValidation')}, indent=2))
 
 
