@@ -1,6 +1,5 @@
 import Foundation
 import NetworkExtension
-import Security
 
 /// Owns the system VPN configuration for NeoStation's device-local JIT route.
 /// Calls are coalesced so startup, resume and game launch cannot create duplicate
@@ -393,10 +392,7 @@ final class NeoStationLocalTunnelManager {
   }
 
   private func providerBundleIdentifier() -> String? {
-    if let plugIns = Bundle.main.builtInPlugInsURL,
-       let extensionBundle = Bundle(
-         url: plugIns.appendingPathComponent(Constants.extensionName)
-       ),
+    if let extensionBundle = Self.installedExtensionBundle(),
        let identifier = extensionBundle.bundleIdentifier,
        !identifier.isEmpty {
       return identifier
@@ -407,43 +403,86 @@ final class NeoStationLocalTunnelManager {
     return nil
   }
 
-  /// NetworkExtension preferences can only be written when the *installed*
-  /// host signature contains the Apple-authorized capabilities. The unsigned
-  /// distribution IPA declares them, but a sideload signer may legitimately
-  /// remove them while creating the final device signature.
+  /// NetworkExtension preferences can only be written when the installed host
+  /// and extension profiles contain the Apple-authorized capabilities. The
+  /// unsigned distribution IPA declares them, but a sideload signer may omit
+  /// them while creating the final device provisioning profiles.
   private static func signingCapabilityFailure() -> NeoStationLocalTunnelError? {
-    guard let task = SecTaskCreateFromSelf(nil),
-          entitlement(
-            "com.apple.developer.networking.networkextension",
-            contains: "packet-tunnel-provider",
-            task: task
-          ),
-          entitlement(
-            "com.apple.developer.networking.vpn.api",
-            contains: "allow-vpn",
-            task: task
-          ) else {
+    guard let extensionBundle = installedExtensionBundle() else {
+      return .extensionMissing
+    }
+    if let host = provisioningEntitlements(in: Bundle.main),
+       (!entitlement(
+         host,
+         key: "com.apple.developer.networking.networkextension",
+         contains: "packet-tunnel-provider"
+       ) || !entitlement(
+         host,
+         key: "com.apple.developer.networking.vpn.api",
+         contains: "allow-vpn"
+       )) {
+      return .signingMissing
+    }
+    if let tunnel = provisioningEntitlements(in: extensionBundle),
+       !entitlement(
+         tunnel,
+         key: "com.apple.developer.networking.networkextension",
+         contains: "packet-tunnel-provider"
+       ) {
       return .signingMissing
     }
     return nil
   }
 
   private static func entitlement(
-    _ key: String,
-    contains requiredValue: String,
-    task: SecTask
+    _ entitlements: [String: Any],
+    key: String,
+    contains requiredValue: String
   ) -> Bool {
-    guard let value = SecTaskCopyValueForEntitlement(
-      task,
-      key as CFString,
-      nil
-    ) else {
-      return false
-    }
+    let value = entitlements[key]
     if let values = value as? [String] {
       return values.contains(requiredValue)
     }
     return (value as? String) == requiredValue
+  }
+
+  /// A provisioning profile is a CMS envelope containing an XML property list.
+  /// Reading the embedded property list avoids private entitlement-inspection
+  /// APIs and reflects the profile produced by the user's final sideload signer.
+  private static func provisioningEntitlements(
+    in bundle: Bundle
+  ) -> [String: Any]? {
+    guard let url = bundle.url(
+      forResource: "embedded",
+      withExtension: "mobileprovision"
+    ),
+    let data = try? Data(contentsOf: url),
+    let start = data.range(of: Data("<?xml".utf8)),
+    let end = data.range(
+      of: Data("</plist>".utf8),
+      options: [],
+      in: start.lowerBound..<data.endIndex
+    ) else {
+      // Ad-hoc/TrollStore-style installations may have no mobile provision.
+      // Let NetworkExtension report the authoritative platform result there.
+      return nil
+    }
+    let plistData = Data(data[start.lowerBound..<end.upperBound])
+    guard let root = try? PropertyListSerialization.propertyList(
+      from: plistData,
+      options: [],
+      format: nil
+    ) as? [String: Any] else {
+      return nil
+    }
+    return root["Entitlements"] as? [String: Any]
+  }
+
+  private static func installedExtensionBundle() -> Bundle? {
+    guard let plugIns = Bundle.main.builtInPlugInsURL else { return nil }
+    return Bundle(
+      url: plugIns.appendingPathComponent(Constants.extensionName)
+    )
   }
 
   private func response(
