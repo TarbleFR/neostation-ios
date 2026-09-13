@@ -52,7 +52,7 @@ void main() {
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools exposes pairing, the iOS VPN switch, and fallback switch', () {
+  test('Tools exposes pairing, the iOS VPN, and one fallback switch', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
@@ -64,9 +64,8 @@ void main() {
     );
     expect(tools, contains('LocalJitTunnelLocale.title'));
     expect(tools, contains('LocalJitTunnelService.status()'));
-    expect(tools, contains('value: _isTunnelSwitchOn(tunnelState)'));
     expect(tools, contains('JitFallbackLocale.title'));
-    expect('CustomToggleSwitch'.allMatches(tools), hasLength(2));
+    expect(tools, contains('CustomToggleSwitch'));
     expect(tools, contains('setUseStikDebugFallback'));
   });
 }

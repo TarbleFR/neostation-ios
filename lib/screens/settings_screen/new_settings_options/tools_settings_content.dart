@@ -134,7 +134,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
     }
   }
 
-  bool _isTunnelSwitchOn(LocalJitTunnelState? state) {
+  bool _shouldDisableTunnel(LocalJitTunnelState? state) {
     if (state == null) return false;
     return state.active ||
         state.enabled ||
@@ -178,6 +178,15 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
     return LocalJitTunnelLocale.notAuthorizedDescription;
   }
 
+  String _tunnelActionKey(LocalJitTunnelState? state) {
+    if (state?.authorized != true) {
+      return LocalJitTunnelLocale.authorizeAction;
+    }
+    return _shouldDisableTunnel(state)
+        ? LocalJitTunnelLocale.disableAction
+        : LocalJitTunnelLocale.enableAction;
+  }
+
   String _tunnelStatusText(
     BuildContext context,
     LocalJitTunnelState? state,
@@ -202,7 +211,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
   Future<void> _toggleTunnel() async {
     if (!_tunnelStateLoaded || _isUpdatingTunnel) return;
     final previous = _tunnelState;
-    final disable = _isTunnelSwitchOn(previous);
+    final disable = _shouldDisableTunnel(previous);
 
     setState(() {
       _isUpdatingTunnel = true;
@@ -487,6 +496,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
 
     final tunnelState = _tunnelState;
     final tunnelDescriptionKey = _tunnelDescriptionKey(tunnelState);
+    final tunnelActionKey = _tunnelActionKey(tunnelState);
     final tunnelStatusText = _tunnelStatusText(context, tunnelState);
 
     return Column(
@@ -553,12 +563,15 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
                             strokeWidth: 2,
                           ),
                         )
-                      : IgnorePointer(
-                          child: CustomToggleSwitch(
-                            value: _isTunnelSwitchOn(tunnelState),
-                            onChanged: null,
-                            activeColor: theme.colorScheme.primary,
-                            disabled: tunnelState?.status == 'unsupported',
+                      : Text(
+                          LocalJitTunnelLocale.get(context, tunnelActionKey),
+                          textAlign: TextAlign.end,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 9.r,
                           ),
                         ),
                 ),

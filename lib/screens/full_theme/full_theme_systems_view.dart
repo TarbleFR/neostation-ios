@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,8 +14,6 @@ import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../services/logger_service.dart';
 import '../../services/sfx_service.dart';
 import '../../utils/game_launch_utils.dart';
-import '../../utils/gamepad_nav.dart';
-import '../app_screen.dart';
 import '../systems_screen/my_systems_section/system_list_builder.dart';
 import 'arcade_planet_system_scene.dart';
 import 'full_theme_games_screen.dart';
@@ -40,21 +37,29 @@ class FullThemeSystemsView extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int>? onCardTapped;
 
+  static _FullThemeSystemsViewState? _currentState;
+
+  static bool navigateLeft() => _currentState?._move(-1) ?? false;
+  static bool navigateRight() => _currentState?._move(1) ?? false;
+  static bool navigateUp() => _currentState?._move(-1) ?? false;
+  static bool navigateDown() => _currentState?._move(1) ?? false;
+
+  static Future<void> selectCurrent() async {
+    final state = _currentState;
+    if (state != null) await state._openSelected();
+  }
+
   @override
   State<FullThemeSystemsView> createState() => _FullThemeSystemsViewState();
 }
 
 class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   static final _log = LoggerService.instance;
-  static const _layerId = 'full_theme_systems';
 
   OverlayEntry? _overlayEntry;
-  late final GamepadNavigation _gamepadNav;
-  Timer? _clockTimer;
   int _selectedIndex = 0;
   bool _navigating = false;
   bool _overlaySuspended = false;
-  DateTime _now = DateTime.now();
 
   Color get _accent {
     final cleaned = widget.theme.accentHex.replaceAll('#', '');
@@ -65,32 +70,12 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   @override
   void initState() {
     super.initState();
+    FullThemeSystemsView._currentState = this;
     _selectedIndex = widget.selectedIndex;
-    _gamepadNav = GamepadNavigation(
-      onNavigateLeft: () => _move(-1),
-      onNavigateRight: () => _move(1),
-      onNavigateUp: () => _move(-1),
-      onNavigateDown: () => _move(1),
-      onSelectItem: _openSelected,
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-    );
-
-    _clockTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      if (!mounted) return;
-      _now = DateTime.now();
-      _overlayEntry?.markNeedsBuild();
-    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _installOverlay();
-      _gamepadNav.initialize();
-      GamepadNavigationManager.pushLayer(
-        _layerId,
-        onActivate: _gamepadNav.activate,
-        onDeactivate: _gamepadNav.deactivate,
-      );
     });
   }
 
@@ -108,10 +93,10 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
 
   @override
   void dispose() {
-    _clockTimer?.cancel();
+    if (identical(FullThemeSystemsView._currentState, this)) {
+      FullThemeSystemsView._currentState = null;
+    }
     _removeOverlay();
-    GamepadNavigationManager.popLayer(_layerId);
-    _gamepadNav.dispose();
     super.dispose();
   }
 
@@ -165,17 +150,25 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     );
   }
 
-  void _move(int delta) {
-    if (_navigating || _overlayEntry == null) return;
+  bool _move(int delta) {
+    if (_navigating || _overlayEntry == null) return false;
     final systems = _systems(context);
-    if (systems.isEmpty) return;
+    if (systems.isEmpty) return false;
 
-    final next = (_selectedIndex + delta).clamp(0, systems.length - 1).toInt();
-    if (next == _selectedIndex) return;
+    final next = (_selectedIndex + delta) % systems.length;
+    if (next == _selectedIndex) return false;
 
-    SfxService().playNavSound();
     _selectedIndex = next;
     widget.onCardTapped?.call(next);
+    _overlayEntry?.markNeedsBuild();
+    return true;
+  }
+
+  void _selectIndex(int index) {
+    if (_navigating || index == _selectedIndex) return;
+    SfxService().playNavSound();
+    _selectedIndex = index;
+    widget.onCardTapped?.call(index);
     _overlayEntry?.markNeedsBuild();
   }
 
@@ -289,76 +282,86 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   }
 
   Widget _buildFullScreen(BuildContext overlayContext) {
-    return Consumer2<SqliteConfigProvider, SqliteDatabaseProvider>(
-      builder: (context, config, database, child) {
-        final systems = buildSystemsList(
-          context: context,
-          configProvider: config,
-          dbProvider: database,
-          fileProvider: context.read<FileProvider>(),
-        );
-
-        if (systems.isEmpty) {
-          return ColoredBox(
-            color: const Color(0xFF111017),
-            child: Center(child: CircularProgressIndicator(color: _accent)),
-          );
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity.abs() < 120) return;
+        if (_move(velocity < 0 ? 1 : -1)) {
+          SfxService().playNavSound();
         }
-
-        if (_selectedIndex >= systems.length) {
-          _selectedIndex = systems.length - 1;
-        }
-        if (_selectedIndex < 0) _selectedIndex = 0;
-
-        final selected = systems[_selectedIndex];
-        final folder = selected.primaryFolderName ?? selected.folderName ?? 'all';
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            if (widget.theme.isArcadePlanet)
-              ArcadePlanetSystemScene(
-                theme: widget.theme,
-                systemFolder: folder,
-                accent: _accent,
-              )
-            else
-              _background(widget.theme.systemBackdrop(folder)),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.10),
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.62),
-                  ],
-                ),
-              ),
-            ),
-            SafeArea(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(30.r, 22.r, 30.r, 18.r),
-                child: Column(
-                  children: [
-                    _topBar(),
-                    const Spacer(),
-                    if (!widget.theme.isArcadePlanet)
-                      _selectedIdentity(selected)
-                    else
-                      SizedBox(height: 110.r),
-                    SizedBox(height: 14.r),
-                    _systemRibbon(systems),
-                    SizedBox(height: 22.r),
-                    _bottomBar(selected),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
       },
+      child: Consumer2<SqliteConfigProvider, SqliteDatabaseProvider>(
+        builder: (context, config, database, child) {
+          final systems = buildSystemsList(
+            context: context,
+            configProvider: config,
+            dbProvider: database,
+            fileProvider: context.read<FileProvider>(),
+          );
+
+          if (systems.isEmpty) {
+            return ColoredBox(
+              color: const Color(0xFF111017),
+              child: Center(child: CircularProgressIndicator(color: _accent)),
+            );
+          }
+
+          if (_selectedIndex >= systems.length) {
+            _selectedIndex = systems.length - 1;
+          }
+          if (_selectedIndex < 0) _selectedIndex = 0;
+
+          final selected = systems[_selectedIndex];
+          final folder =
+              selected.primaryFolderName ?? selected.folderName ?? 'all';
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (widget.theme.isArcadePlanet)
+                ArcadePlanetSystemScene(
+                  theme: widget.theme,
+                  systemFolder: folder,
+                  accent: _accent,
+                )
+              else
+                _background(widget.theme.systemBackdrop(folder)),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.10),
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.62),
+                    ],
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(30.r, 22.r, 30.r, 18.r),
+                  child: Column(
+                    children: [
+                      const Spacer(),
+                      if (!widget.theme.isArcadePlanet)
+                        _selectedIdentity(selected)
+                      else
+                        SizedBox(height: 110.r),
+                      SizedBox(height: 14.r),
+                      _systemRibbon(systems),
+                      SizedBox(height: 22.r),
+                      _bottomBar(selected),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -391,37 +394,6 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _topBar() {
-    final hour = _now.hour.toString().padLeft(2, '0');
-    final minute = _now.minute.toString().padLeft(2, '0');
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            widget.theme.name.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.72),
-              fontFamily: 'NeoStationFullThemeBold',
-              fontSize: 16.r,
-              letterSpacing: 2.4,
-            ),
-          ),
-        ),
-        const Spacer(),
-        Text(
-          '$hour:$minute',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.58),
-            fontFamily: 'NeoStationFullTheme',
-            fontSize: 18.r,
-          ),
-        ),
-      ],
     );
   }
 
@@ -509,14 +481,13 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
           final distance = (index - _selectedIndex).abs();
 
           return GestureDetector(
-            onTap: () {
-              if (_navigating || index == _selectedIndex) return;
-              SfxService().playNavSound();
-              _selectedIndex = index;
-              widget.onCardTapped?.call(index);
-              _overlayEntry?.markNeedsBuild();
+            onTap: () async {
+              if (isSelected) {
+                await _openSelected();
+              } else {
+                _selectIndex(index);
+              }
             },
-            onDoubleTap: isSelected ? _openSelected : null,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 190),
               curve: Curves.easeOutCubic,

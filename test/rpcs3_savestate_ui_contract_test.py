@@ -31,7 +31,7 @@ build = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
 assert workflow.count('patch_rpcs3_savestate_ui.py') == 2
 assert build.count('patch_rpcs3_savestate_stability.py') == 2
 assert 'rpcs3_savestate_native_test.py' in build
-assert 'BUILD_NUMBER=262' in build and "BUILD_NUMBER: '262'" in workflow
+assert 'BUILD_NUMBER=263' in build and "BUILD_NUMBER: '263'" in workflow
 assert build.count('patch_rpcs3_armsx3_performance.py') == 2
 assert build.count('patch_rpcs3_serial_profiles.py') == 2
 assert workflow.count('patch_rpcs3_performance_telemetry.py') >= 2

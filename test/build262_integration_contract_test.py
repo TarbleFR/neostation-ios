@@ -15,21 +15,30 @@ settings = (
 ).read_text()
 workflow = (ROOT / ".github/workflows/build-ipa-once.yml").read_text()
 core_builder = (ROOT / "build-utils/build_rpcs3_embedded_core.sh").read_text()
+integration_patcher = (ROOT / "build-utils/patch_build262_integration.py").read_text()
 
-# VPN startup must match the proven LocalDevVPN host/provider contract and
-# recover from the stale .connecting race that caused the 45 second timeout.
+# Keep the exact VPN runtime path that worked in Build 259. Build 263 must not
+# rewrite its schema, on-demand rule, provider MTU, or connection state machine.
 for token in (
-    "static let schemaVersion = 2",
+    "static let schemaVersion = 1",
+    "NEOnDemandRuleConnect()",
+    "manager.connection.startVPNTunnel(options:",
+):
+    assert token in manager, token
+for token in (
     "NEOnDemandRuleEvaluateConnection()",
     "NEEvaluateConnectionRule(",
     "waitForExistingConnectionOrRestart",
     "waitUntilStoppedThenStart",
-    "startExplicitly",
 ):
-    assert token in manager, token
+    assert token not in manager, token
 assert "com.apple.developer.networking.vpn.api" not in manager
 assert "allow-vpn" not in manager
-assert "settings.mtu = 1500" not in provider
+assert "settings.mtu = 1500" in provider
+main_body = integration_patcher.split("def main() -> None:", maxsplit=1)[1]
+assert "patch_vpn_provider()" not in main_body
+assert "patch_vpn_manager()" not in main_body
+assert "patch_vpn_contract_test()" not in main_body
 for token in (
     "com.apple.developer.networking.networkextension",
     "packet-tunnel-provider",
@@ -60,7 +69,7 @@ assert "_downloadArcadePlanet" in locale
 assert "_downloading" in locale
 assert "_downloadError" in locale
 
-# Preserve the final Build 260 feature set while adding Build 262 integration.
+# Preserve the final Build 260 feature set in Build 263.
 for token in (
     "patch_rpcs3_build260_modern_menu.py",
     "dolphin_achievements_hacks_menu_test.py",
@@ -69,14 +78,14 @@ for token in (
 ):
     assert token in workflow, token
 for token in (
-    "name: NeoStation iOS Build 262",
+    "name: NeoStation iOS Build 263",
     "- experimental",
-    "BUILD_NUMBER: '262'",
-    "NeoStation-iOS-Build-262-VPN-FullTheme",
+    "BUILD_NUMBER: '263'",
+    "NeoStation-iOS-Build-263-VPN-Theme-Fix",
 ):
     assert token in workflow, token
 assert "work/ui-dolphin-build260" not in workflow
-assert "BUILD_NUMBER=262" in core_builder
-assert "NeoStation-iOS-Build-262-VPN-FullTheme" in core_builder
+assert "BUILD_NUMBER=263" in core_builder
+assert "NeoStation-iOS-Build-263-VPN-Theme-Fix" in core_builder
 
-print("Build 262 VPN/full-theme integration contract: OK")
+print("Build 263 VPN/full-theme integration contract: OK")
