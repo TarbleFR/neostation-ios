@@ -52,13 +52,18 @@ void main() {
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools exposes Pairing File and one global fallback switch', () {
+  test('Tools exposes pairing, the iOS VPN, and one fallback switch', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
     ).readAsStringSync();
 
-    expect(tools, contains('int getItemCount() => 2;'));
+    expect(
+      tools,
+      contains('int getItemCount() => Platform.isIOS ? 3 : 2;'),
+    );
+    expect(tools, contains('LocalJitTunnelLocale.title'));
+    expect(tools, contains('LocalJitTunnelService.status()'));
     expect(tools, contains('JitFallbackLocale.title'));
     expect(tools, contains('CustomToggleSwitch'));
     expect(tools, contains('setUseStikDebugFallback'));
