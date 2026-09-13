@@ -11,6 +11,7 @@ import '../../models/system_model.dart';
 import '../../providers/file_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
+import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../services/logger_service.dart';
 import '../../services/sfx_service.dart';
 import '../../utils/game_launch_utils.dart';
