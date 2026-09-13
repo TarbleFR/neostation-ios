@@ -15,6 +15,9 @@ void main() {
       ).readAsStringSync();
 
       expect(service, contains('Rpcs3InternalBridge.prepareJit'));
+      expect(service, contains('_actionableJitFailure(rawMessage)'));
+      expect(service, contains("normalized.contains('connectionreset')"));
+      expect(service, contains('delete the saved RPPairing entry'));
       expect(service, isNot(contains('dolphin_internal_bridge')));
       expect(service, isNot(contains('DolphinInternalBridge')));
       expect(hostJit, contains('com.neogamelab.neostation.rpcs3-jit-request'));

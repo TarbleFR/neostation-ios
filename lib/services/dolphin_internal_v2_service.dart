@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'logger_service.dart';
 import 'dolphin_system_files.dart';
+import 'pairing_file_service.dart';
 
 /// IPL slots exposed by the native GameCube playlist.
 enum DolphinIplRegion { usa, eur, jap }
@@ -740,6 +741,10 @@ class DolphinInternalV2Service {
   }
 
   static Future<File?> _locatePairingFile() async {
+    if (await PairingFileService.hasStoredPairingFile()) {
+      return PairingFileService.storedFile();
+    }
+
     final roots = <Directory>[
       await getApplicationDocumentsDirectory(),
       await getApplicationSupportDirectory(),
@@ -759,6 +764,10 @@ class DolphinInternalV2Service {
           if (path.split(relative).length > 6) continue;
           final lower = path.basename(entity.path).toLowerCase();
           if (!lower.contains('pair') || await entity.length() < 128) continue;
+          final validation = PairingFileService.inspectData(
+            await entity.readAsBytes(),
+          );
+          if (validation != PairingFileValidation.validRemotePairing) continue;
           if (preferredNames.contains(lower)) return entity;
           fallback ??= entity;
         }

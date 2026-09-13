@@ -24,6 +24,12 @@
   <string>17.4</string>
   <key>NeoStationDolphinJITHelper</key>
   <string>1</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_remotepairing._tcp</string>
+  </array>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>NeoStation discovers this iPhone's Remote Pairing service to enable JIT.</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionAttributes</key>

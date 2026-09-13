@@ -45,4 +45,13 @@ void main() {
     expect(service, isNot(contains("'dol'")));
     expect(service, contains("normalized == 'gc' || normalized == 'wii'"));
   });
+
+  test('Dolphin rejects legacy Lockdown files before starting StikJIT', () {
+    final service = File(
+      'lib/services/dolphin_internal_v2_service.dart',
+    ).readAsStringSync();
+    expect(service, contains('PairingFileService.hasStoredPairingFile()'));
+    expect(service, contains('PairingFileService.inspectData'));
+    expect(service, contains('PairingFileValidation.validRemotePairing'));
+  });
 }

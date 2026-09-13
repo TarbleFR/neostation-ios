@@ -105,6 +105,10 @@ end
     info_path = ios / 'Runner/Info.plist'
     info = plist(info_path)
     info['CFBundleDisplayName'] = 'NeoStation iOS'
+    info['NSBonjourServices'] = ['_remotepairing._tcp']
+    info['NSLocalNetworkUsageDescription'] = (
+        "NeoStation discovers this iPhone's Remote Pairing service to enable JIT."
+    )
     write_plist(info_path, info)
     generate_plugin_registrant(ios)
     # The locked device-info plugin references a newer SDK declaration.

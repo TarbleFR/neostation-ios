@@ -255,10 +255,12 @@ class Rpcs3InternalService {
       progress.cancel();
     }
     if (jit['success'] != true) {
+      final rawMessage =
+          jit['message']?.toString() ??
+          'StikJIT could not enable JIT for NeoStation.';
       throw Rpcs3InternalException(
         'jitFailed',
-        jit['message']?.toString() ??
-            'StikJIT could not enable JIT for NeoStation.',
+        _actionableJitFailure(rawMessage),
       );
     }
 
@@ -283,6 +285,22 @@ class Rpcs3InternalService {
     _log.i(
       'RPCS3 internal JIT prepared for NeoStation pid=${jit['pid'] ?? 'unknown'}.',
     );
+  }
+
+  static String _actionableJitFailure(String message) {
+    final normalized = message.toLowerCase();
+    final remotePairingRejected =
+        normalized.contains('connectionreset') ||
+        normalized.contains('connection reset by peer') ||
+        normalized.contains('brokenpipe') ||
+        normalized.contains('broken pipe');
+    if (!remotePairingRejected) return message;
+
+    return 'Remote Pairing rejected the saved credentials. NeoStation found '
+        'the Pairing File, but iOS closed the session. In iLoader, delete the '
+        'saved RPPairing entry for this iPhone, pair again, export the new '
+        'Pairing File, then reimport it in NeoStation. Reconnect LocalDevVPN '
+        'before retrying. Technical detail: $message';
   }
 
   /// Ensures exactly one JIT transaction can be active at a time.

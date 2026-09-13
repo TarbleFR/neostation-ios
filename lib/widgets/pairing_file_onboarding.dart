@@ -68,6 +68,11 @@ class _PairingFileOnboardingState extends State<PairingFileOnboarding> {
           context,
           PairingFileLocale.invalidFile,
         );
+      case PairingFileError.remotePairingRequired:
+        return PairingFileLocale.get(
+          context,
+          PairingFileLocale.remotePairingRequired,
+        );
       case PairingFileError.unreadable:
         return PairingFileLocale.get(
           context,

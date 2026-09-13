@@ -25,6 +25,9 @@ jobs:
       ARTIFACT_NAME: 'NeoStation-iOS-Build-258'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
+      # First upstream commit containing the iOS RemotePairing OPACK
+      # back-reference decoder. It landed after the v0.1.67 release tag.
+      IDEVICE_SHA: 6fb49aeb33e8e27f2e52267729b631e53c87e1d9
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       CCACHE_DIR: ${{ github.workspace }}/.dolphin-ccache
@@ -92,6 +95,7 @@ jobs:
           python3 test/rpcs3_diagnostics_native_test.py 2>&1 | tee build/rpcs3-ci/diagnostics-native.log
           python3 test/rpcs3_build258_core_profile_comparison_test.py
           python3 test/rpcs3_build258_pipeline_scheduler_benchmark_test.py
+          python3 test/stikjit_remote_pairing_compat_test.py
           python3 build-utils/benchmark_rpcs3_pipeline_scheduler.py | tee build/rpcs3-ci/pipeline-scheduler-benchmark.log
 
       - name: Set up Flutter 3.47.2
@@ -143,17 +147,39 @@ jobs:
           set -euo pipefail
           STIK_SRC="$RUNNER_TEMP/StikJIT-1.5.0"
           STIK_XCFRAMEWORK="$RUNNER_TEMP/StikJIT.xcframework"
-          rm -rf "$STIK_SRC" "$STIK_XCFRAMEWORK"
+          IDEVICE_SRC="$RUNNER_TEMP/idevice-neostation-rppairing"
+          rm -rf "$STIK_SRC" "$STIK_XCFRAMEWORK" "$IDEVICE_SRC"
           git init -q "$STIK_SRC"
           git -C "$STIK_SRC" remote add origin https://github.com/StikDebug/StikJIT.git
           git -C "$STIK_SRC" fetch --depth 1 origin "$STIKJIT_SHA"
           git -C "$STIK_SRC" checkout -q --detach FETCH_HEAD
           test "$(git -C "$STIK_SRC" rev-parse HEAD)" = "$STIKJIT_SHA"
 
+          # StikJIT 1.5.0 embeds a June idevice archive. Build the exact
+          # post-0.1.67 compatibility fix so current iOS OPACK replies decode.
+          git init -q "$IDEVICE_SRC"
+          git -C "$IDEVICE_SRC" remote add origin https://github.com/jkcoxson/idevice.git
+          git -C "$IDEVICE_SRC" fetch --depth 1 origin "$IDEVICE_SHA"
+          git -C "$IDEVICE_SRC" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$IDEVICE_SRC" rev-parse HEAD)" = "$IDEVICE_SHA"
+          rustup target add aarch64-apple-ios
+          pushd "$IDEVICE_SRC/ffi" >/dev/null
+          BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$(xcrun --sdk iphoneos --show-sdk-path)" \
+            IPHONEOS_DEPLOYMENT_TARGET=17.4 \
+            cargo build --locked --release --target aarch64-apple-ios --features obfuscate
+          popd >/dev/null
+          cp -f "$IDEVICE_SRC/target/aarch64-apple-ios/release/libidevice_ffi.a" \
+            "$STIK_SRC/idevice/libidevice_ffi.a"
+          cp -f "$IDEVICE_SRC/ffi/idevice.h" "$STIK_SRC/idevice/idevice.h"
+          strings "$STIK_SRC/idevice/libidevice_ffi.a" | grep -q 'OPACK back-reference'
+
           python3 build-utils/patch_stikjit_rpcs3.py "$STIK_SRC"
           python3 build-utils/patch_stikjit_rpcs3.py "$STIK_SRC"
+          python3 build-utils/patch_stikjit_remote_pairing.py "$STIK_SRC"
+          python3 build-utils/patch_stikjit_remote_pairing.py "$STIK_SRC"
           python3 test/stikjit_rpcs3_patch_test.py "$STIK_SRC"
-          python3 -m py_compile build-utils/patch_stikjit_rpcs3.py build-utils/install_patched_stikjit.py
+          python3 test/stikjit_remote_pairing_compat_test.py "$STIK_SRC"
+          python3 -m py_compile build-utils/patch_stikjit_rpcs3.py build-utils/patch_stikjit_remote_pairing.py build-utils/install_patched_stikjit.py
 
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           pushd "$STIK_SRC" >/dev/null
@@ -236,6 +262,7 @@ jobs:
           python3 test/rpcs3_build256_host_patch_test.py
           python3 test/rpcs3_profile_database_test.py
           python3 test/rpcs3_telemetry_comparison_test.py
+          python3 test/stikjit_remote_pairing_compat_test.py
           python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 

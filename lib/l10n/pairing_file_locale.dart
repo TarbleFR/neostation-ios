@@ -16,6 +16,7 @@ class PairingFileLocale {
   static const replaced = 'replaced';
   static const invalidExtension = 'invalidExtension';
   static const invalidFile = 'invalidFile';
+  static const remotePairingRequired = 'remotePairingRequired';
   static const importFailed = 'importFailed';
   static const setupTitle = 'setupTitle';
   static const setupBody = 'setupBody';
@@ -63,6 +64,8 @@ class PairingFileLocale {
       replaced: 'Pairing File replaced successfully.',
       invalidExtension: 'Please select a .mobiledevicepairing file.',
       invalidFile: 'The selected Pairing File is empty or invalid.',
+      remotePairingRequired:
+          'This is a legacy Lockdown file. NeoStation needs a current Remote Pairing file containing identifier, public_key and private_key. In iLoader, delete the saved RPPairing entry, pair again, then export the new file.',
       importFailed: 'The Pairing File could not be imported.',
       setupTitle: 'Pairing File',
       setupBody:
@@ -139,6 +142,8 @@ class PairingFileLocale {
       replaced: 'Pairing File remplacé avec succès.',
       invalidExtension: 'Veuillez sélectionner un fichier .mobiledevicepairing.',
       invalidFile: 'Le Pairing File sélectionné est vide ou invalide.',
+      remotePairingRequired:
+          'Ce fichier utilise l’ancien format Lockdown. NeoStation a besoin d’un fichier Remote Pairing récent contenant identifier, public_key et private_key. Dans iLoader, supprimez le RPPairing enregistré, refaites l’appairage, puis exportez le nouveau fichier.',
       importFailed: 'Le Pairing File n’a pas pu être importé.',
       setupTitle: 'Pairing File',
       setupBody:
