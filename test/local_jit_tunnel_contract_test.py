@@ -74,7 +74,7 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('"authorized": configured', manager)
         self.assertIn('"configured": configured', manager)
 
-    def test_tools_exposes_authorize_enable_disable_and_resume_refresh(self):
+    def test_tools_exposes_on_off_switch_and_resume_refresh(self):
         tools = (
             ROOT /
             'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart'
@@ -87,9 +87,9 @@ class LocalJitTunnelContractTests(unittest.TestCase):
 
         self.assertIn('with WidgetsBindingObserver', tools)
         self.assertIn('AppLifecycleState.resumed', tools)
-        self.assertIn('LocalJitTunnelLocale.authorizeAction', tools)
-        self.assertIn('LocalJitTunnelLocale.enableAction', tools)
-        self.assertIn('LocalJitTunnelLocale.disableAction', tools)
+        self.assertIn('value: _isTunnelSwitchOn(tunnelState)', tools)
+        self.assertIn('child: CustomToggleSwitch(', tools)
+        self.assertNotIn('tunnelActionKey', tools)
         self.assertIn('LocalJitTunnelService.authorizeAndEnable()', tools)
         self.assertIn('LocalJitTunnelService.disable()', tools)
         self.assertIn("invokeMethod<Object?>('disableLocalTunnel')", bridge)
