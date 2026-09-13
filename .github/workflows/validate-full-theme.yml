@@ -3,8 +3,7 @@ name: Validate Full Theme
 on:
   push:
     branches:
-      - feature/full-theme-arcadeplanet
-      - work/full-theme-build262-sync260
+      - experimental
     paths:
       - 'lib/**'
       - 'test/full_theme_category_contract_test.py'

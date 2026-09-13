@@ -7,7 +7,6 @@ idempotent because the existing CI applies host patchers twice to detect drift.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,13 +77,6 @@ def patch_vpn_manager() -> None:
         "      finishEnsure(.failure(.timeout(Self.statusName(manager.connection.status))))",
     )
 
-    old_signing = """    if let host = provisioningEntitlements(in: Bundle.main),\n       !entitlement(\n         host,\n         key: \"com.apple.developer.networking.networkextension\",\n         contains: \"packet-tunnel-provider\"\n       ) {\n      return .signingMissing\n    }\n"""
-    new_signing = """    if let host = provisioningEntitlements(in: Bundle.main) {\n      let hasPacketTunnel = entitlement(\n        host,\n        key: \"com.apple.developer.networking.networkextension\",\n        contains: \"packet-tunnel-provider\"\n      )\n      let hasVPNAPI = entitlement(\n        host,\n        key: \"com.apple.developer.networking.vpn.api\",\n        contains: \"allow-vpn\"\n      )\n      if !hasPacketTunnel || !hasVPNAPI {\n        return .signingMissing\n      }\n    }\n"""
-    if "let hasVPNAPI = entitlement(" not in text:
-        if old_signing not in text:
-            raise SystemExit("Build 262 VPN signing anchor drifted")
-        text = text.replace(old_signing, new_signing, 1)
-
     text = text.replace("  case timeout\n", "  case timeout(String)\n")
     text = text.replace(
         "    case .timeout: return \"connection_timeout\"",
@@ -94,22 +86,17 @@ def patch_vpn_manager() -> None:
         "    case .timeout:\n      return \"The NeoStation local JIT tunnel did not become ready before the timeout.\"",
         "    case .timeout(let status):\n      return \"The NeoStation local JIT tunnel did not become ready before the timeout. Final iOS status: \\(status).\"",
     )
-    text = text.replace(
-        "The installed NeoStation signature does not include Apple's packet-tunnel entitlement. Re-sign the complete NeoStation IPA with app extensions enabled and a provisioning profile that authorizes Network Extensions.",
-        "The installed NeoStation signature does not include Apple's packet-tunnel/VPN entitlements. Re-sign the complete NeoStation IPA with app extensions enabled and a provisioning profile that authorizes Network Extensions and VPN access.",
-    )
     write(relative, text)
 
 
 def patch_vpn_build_configuration() -> None:
     relative = "build-utils/configure_local_jit_tunnel.py"
     text = read(relative)
-    if "'com.apple.developer.networking.vpn.api'" not in text:
-        old = """HOST_ENTITLEMENTS = {\n    'com.apple.developer.networking.networkextension': [\n        'packet-tunnel-provider',\n    ],\n}\n"""
-        new = """HOST_ENTITLEMENTS = {\n    'com.apple.developer.networking.networkextension': [\n        'packet-tunnel-provider',\n    ],\n    # Matches the working LocalDevVPN host contract. The packet provider itself\n    # only needs NetworkExtension; the containing app also needs VPN API access\n    # when it owns and starts the NETunnelProviderManager configuration.\n    'com.apple.developer.networking.vpn.api': [\n        'allow-vpn',\n    ],\n}\n"""
-        if old not in text:
-            raise SystemExit("Build 262 host entitlement anchor drifted")
-        text = text.replace(old, new, 1)
+    # NETunnelProviderManager uses the Network Extension capability. The
+    # Personal VPN entitlement (`vpn.api` / `allow-vpn`) belongs to the separate
+    # NEVPNManager contract and must not be mixed into Packet Tunnel signing.
+    if "com.apple.developer.networking.vpn.api" in text or "allow-vpn" in text:
+        raise SystemExit("Build 262 must not mix Personal VPN and Packet Tunnel")
     text = text.replace("ENV.fetch('BUILD_NUMBER', '260')", "ENV.fetch('BUILD_NUMBER', '262')")
     write(relative, text)
 
@@ -120,14 +107,6 @@ def patch_vpn_contract_test() -> None:
     text = text.replace(
         "self.assertIn('NEOnDemandRuleConnect()', manager)",
         "self.assertIn('NEOnDemandRuleEvaluateConnection()', manager)\n        self.assertIn('NEEvaluateConnectionRule(', manager)\n        self.assertIn('waitForExistingConnectionOrRestart', manager)",
-    )
-    text = text.replace(
-        "self.assertNotIn('com.apple.developer.networking.vpn.api', manager)",
-        "self.assertIn('com.apple.developer.networking.vpn.api', manager)\n        self.assertIn('allow-vpn', manager)",
-    )
-    text = text.replace(
-        "self.assertNotIn(\"'com.apple.developer.networking.vpn.api'\", configurator)",
-        "self.assertIn(\"'com.apple.developer.networking.vpn.api'\", configurator)\n        self.assertIn(\"'allow-vpn'\", configurator)",
     )
     write(relative, text)
 
@@ -367,19 +346,6 @@ def patch_full_theme_settings() -> None:
     write(relative, text)
 
 
-def patch_build_metadata() -> None:
-    # The legacy Build 260 workflow is intentionally reused to preserve its
-    # already validated emulator build pipeline. GITHUB_ENV overrides affect all
-    # subsequent shell build/package steps without rewriting that workflow.
-    github_env = os.environ.get("GITHUB_ENV")
-    if not github_env:
-        return
-    with open(github_env, "a", encoding="utf-8") as handle:
-        handle.write("BUILD_NUMBER=262\n")
-        handle.write("IPA_NAME=NeoStation-iOS-Build-262-VPN-FullTheme\n")
-        handle.write("ARTIFACT_NAME=NeoStation-iOS-Build-262-VPN-FullTheme\n")
-
-
 def main() -> None:
     patch_vpn_provider()
     patch_vpn_manager()
@@ -388,7 +354,6 @@ def main() -> None:
     patch_full_theme_service()
     patch_full_theme_locale()
     patch_full_theme_settings()
-    patch_build_metadata()
     print("NeoStation Build 262 VPN/full-theme integration patch applied")
 
 

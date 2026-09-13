@@ -18,8 +18,12 @@ require(
     'fullThemeIndex',
     "allowedExtensions: const ['zip']",
     'FullThemeService.instance.importZip',
-    'activeTheme?.name ?? FullThemeLocale.import(context)',
 )
+assert (
+    'activeTheme?.name ?? FullThemeLocale.import(context)' in settings
+    or 'activeTheme?.name ?? FullThemeLocale.downloadArcadePlanet(context)'
+    in settings
+), 'Full-theme category must expose an install action'
 require(
     workflow,
     'patch_rpcs3_build260_modern_menu.py',

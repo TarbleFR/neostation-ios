@@ -1,17 +1,17 @@
-name: NeoStation iOS Build 260
-run-name: NeoStation iOS Build 260 (modern in-game UI + Dolphin RA/hacks) • ${{ github.sha }}
+name: NeoStation iOS Build 262
+run-name: NeoStation iOS Build 262 (VPN + Full Theme) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - work/ui-dolphin-build260
+      - experimental
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-260
+  group: neostation-ios-build-262
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '260'
-      IPA_NAME: 'NeoStation-iOS-Build-260-Modern-Dolphin'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-260-Modern-Dolphin'
+      BUILD_NUMBER: '262'
+      IPA_NAME: 'NeoStation-iOS-Build-262-VPN-FullTheme'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-262-VPN-FullTheme'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       # First upstream commit containing the iOS RemotePairing OPACK

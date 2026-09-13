@@ -14,6 +14,7 @@ settings = (
     ROOT / "lib/screens/settings_screen/new_settings_options/themes_settings_content.dart"
 ).read_text()
 workflow = (ROOT / ".github/workflows/build-ipa-once.yml").read_text()
+core_builder = (ROOT / "build-utils/build_rpcs3_embedded_core.sh").read_text()
 
 # VPN startup must match the proven LocalDevVPN host/provider contract and
 # recover from the stale .connecting race that caused the 45 second timeout.
@@ -24,18 +25,18 @@ for token in (
     "waitForExistingConnectionOrRestart",
     "waitUntilStoppedThenStart",
     "startExplicitly",
-    "com.apple.developer.networking.vpn.api",
-    "allow-vpn",
 ):
     assert token in manager, token
+assert "com.apple.developer.networking.vpn.api" not in manager
+assert "allow-vpn" not in manager
 assert "settings.mtu = 1500" not in provider
 for token in (
     "com.apple.developer.networking.networkextension",
     "packet-tunnel-provider",
-    "com.apple.developer.networking.vpn.api",
-    "allow-vpn",
 ):
     assert token in configurator, token
+assert "com.apple.developer.networking.vpn.api" not in configurator
+assert "allow-vpn" not in configurator
 
 # Arcade Planet is downloaded from the original repository at a pinned revision
 # and is not bundled into the IPA.
@@ -67,5 +68,15 @@ for token in (
     "-DUSE_RETRO_ACHIEVEMENTS=ON",
 ):
     assert token in workflow, token
+for token in (
+    "name: NeoStation iOS Build 262",
+    "- experimental",
+    "BUILD_NUMBER: '262'",
+    "NeoStation-iOS-Build-262-VPN-FullTheme",
+):
+    assert token in workflow, token
+assert "work/ui-dolphin-build260" not in workflow
+assert "BUILD_NUMBER=262" in core_builder
+assert "NeoStation-iOS-Build-262-VPN-FullTheme" in core_builder
 
 print("Build 262 VPN/full-theme integration contract: OK")
