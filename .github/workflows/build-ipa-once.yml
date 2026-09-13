@@ -171,7 +171,9 @@ jobs:
           cp -f "$IDEVICE_SRC/target/aarch64-apple-ios/release/libidevice_ffi.a" \
             "$STIK_SRC/idevice/libidevice_ffi.a"
           cp -f "$IDEVICE_SRC/ffi/idevice.h" "$STIK_SRC/idevice/idevice.h"
-          strings "$STIK_SRC/idevice/libidevice_ffi.a" | grep -q 'OPACK back-reference'
+          IDEVICE_STRINGS="$RUNNER_TEMP/idevice-neostation-rppairing.strings"
+          strings "$STIK_SRC/idevice/libidevice_ffi.a" > "$IDEVICE_STRINGS"
+          grep -q 'OPACK back-reference' "$IDEVICE_STRINGS"
 
           python3 build-utils/patch_stikjit_rpcs3.py "$STIK_SRC"
           python3 build-utils/patch_stikjit_rpcs3.py "$STIK_SRC"
