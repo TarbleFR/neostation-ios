@@ -17,6 +17,7 @@ import '../../utils/game_launch_utils.dart';
 import '../../utils/gamepad_nav.dart';
 import '../app_screen.dart';
 import '../systems_screen/my_systems_section/system_list_builder.dart';
+import 'arcade_planet_system_scene.dart';
 import 'full_theme_games_screen.dart';
 
 /// Full-screen owner for an imported full theme.
@@ -310,26 +311,27 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
 
         final selected = systems[_selectedIndex];
         final folder = selected.primaryFolderName ?? selected.folderName ?? 'all';
-        final customBackground = selected.customBackgroundPath;
-        final background = customBackground != null &&
-                customBackground.isNotEmpty &&
-                File(customBackground).existsSync()
-            ? customBackground
-            : widget.theme.systemBackdrop(folder);
 
         return Stack(
           fit: StackFit.expand,
           children: [
-            _background(background),
+            if (widget.theme.isArcadePlanet)
+              ArcadePlanetSystemScene(
+                theme: widget.theme,
+                systemFolder: folder,
+                accent: _accent,
+              )
+            else
+              _background(widget.theme.systemBackdrop(folder)),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.18),
+                    Colors.black.withValues(alpha: 0.10),
                     Colors.transparent,
-                    Colors.black.withValues(alpha: 0.72),
+                    Colors.black.withValues(alpha: 0.62),
                   ],
                 ),
               ),
@@ -341,8 +343,11 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
                   children: [
                     _topBar(),
                     const Spacer(),
-                    _selectedIdentity(selected),
-                    SizedBox(height: 24.r),
+                    if (!widget.theme.isArcadePlanet)
+                      _selectedIdentity(selected)
+                    else
+                      SizedBox(height: 110.r),
+                    SizedBox(height: 14.r),
                     _systemRibbon(systems),
                     SizedBox(height: 22.r),
                     _bottomBar(selected),
@@ -549,7 +554,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     final folder = system.primaryFolderName ?? system.folderName ?? 'all';
     final themeLogo = system.isGame
         ? system.customWheelImage
-        : widget.theme.rasterSystemLogo(folder);
+        : widget.theme.carouselSystemLogo(folder);
     final raster = _existing(system.customLogoPath) ?? _existing(themeLogo);
 
     if (raster != null) {
