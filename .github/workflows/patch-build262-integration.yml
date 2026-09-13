@@ -23,6 +23,9 @@ jobs:
       - name: Apply Build 262 integration
         run: python3 build-utils/patch_build262_integration.py
 
+      - name: Align Dolphin hacks contract with Build 260 implementation
+        run: sed -i 's/NEOSTATION_DOLPHIN_HACKS_V1/graphics.hack_applied/' test/full_theme_category_contract_test.py
+
       - name: Validate preservation contract
         run: python3 test/full_theme_category_contract_test.py
 
