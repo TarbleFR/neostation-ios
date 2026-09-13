@@ -525,22 +525,24 @@ class DolphinInternalV2Service {
       );
     }
 
-    try {
-      await LocalJitTunnelService.ensureRunningForJit();
-    } on LocalJitTunnelException catch (error) {
-      await _appendLogTo(
-        logPath,
-        'stikjit.local_tunnel_failed',
-        error.message,
-        {'code': error.code},
-      );
-      return DolphinLaunchReport(
-        ready: false,
-        message: error.message,
-        failedStage: 'stikjit.local_tunnel_failed',
-        logPath: logPath,
-        gates: _emptyGates(),
-      );
+    if (Platform.isIOS) {
+      try {
+        await LocalJitTunnelService.ensureRunningForJit();
+      } on LocalJitTunnelException catch (error) {
+        await _appendLogTo(
+          logPath,
+          'stikjit.local_tunnel_failed',
+          error.message,
+          {'code': error.code},
+        );
+        return DolphinLaunchReport(
+          ready: false,
+          message: error.message,
+          failedStage: 'stikjit.local_tunnel_failed',
+          logPath: logPath,
+          gates: _emptyGates(),
+        );
+      }
     }
 
     final systemDirectory = path.join(

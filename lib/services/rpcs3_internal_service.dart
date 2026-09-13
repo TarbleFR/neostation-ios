@@ -226,10 +226,12 @@ class Rpcs3InternalService {
     );
 
     final pairing = await PairingFileService.storedFile();
-    try {
-      await LocalJitTunnelService.ensureRunningForJit();
-    } on LocalJitTunnelException catch (error) {
-      throw Rpcs3InternalException('localTunnelFailed', error.message);
+    if (Platform.isIOS) {
+      try {
+        await LocalJitTunnelService.ensureRunningForJit();
+      } on LocalJitTunnelException catch (error) {
+        throw Rpcs3InternalException('localTunnelFailed', error.message);
+      }
     }
     var readingProgress = false;
     final progress = Timer.periodic(const Duration(seconds: 1), (_) async {

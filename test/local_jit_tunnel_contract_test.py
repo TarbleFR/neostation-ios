@@ -72,6 +72,8 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         ).read_text()
         self.assertIn('LocalJitTunnelService.ensureRunningForJit()', rpcs3)
         self.assertIn('LocalJitTunnelService.ensureRunningForJit()', dolphin)
+        self.assertIn('if (Platform.isIOS)', rpcs3)
+        self.assertIn('if (Platform.isIOS)', dolphin)
         self.assertIn('stikjit.local_tunnel_failed', dolphin)
 
     def test_generated_host_embeds_and_signs_the_extension(self):
