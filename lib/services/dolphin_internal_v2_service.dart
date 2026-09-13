@@ -615,19 +615,23 @@ class DolphinInternalV2Service {
     try {
       String raUsername = '';
       String raApiToken = '';
-      try {
-        raUsername =
-            (await RetroAchievementsRepository.getRAUser())?.trim() ?? '';
-        raApiToken =
-            (await RetroAchievementsRepository.getRAApiKey())?.trim() ?? '';
-      } catch (error) {
-        // A Keychain/database read failure must never block game launch and
-        // credentials must never be written to the diagnostic log.
-        await _appendLogTo(
-          logPath,
-          'achievements.credentials_unavailable',
-          'RetroAchievements credentials could not be read for this session.',
-        );
+      // The embedded Dolphin core is iOS-only. Avoid touching platform plugins
+      // when routing tests exercise this service on the macOS test runner.
+      if (Platform.isIOS) {
+        try {
+          raUsername =
+              (await RetroAchievementsRepository.getRAUser())?.trim() ?? '';
+          raApiToken =
+              (await RetroAchievementsRepository.getRAApiKey())?.trim() ?? '';
+        } catch (error) {
+          // A Keychain/database read failure must never block game launch and
+          // credentials must never be written to the diagnostic log.
+          await _appendLogTo(
+            logPath,
+            'achievements.credentials_unavailable',
+            'RetroAchievements credentials could not be read for this session.',
+          );
+        }
       }
       final raw = await _channel.invokeMapMethod<String, dynamic>(
         'launchGame',
