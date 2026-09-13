@@ -19,11 +19,14 @@ import '../../services/sfx_service.dart';
 import '../../utils/game_launch_utils.dart';
 import '../../utils/gamepad_nav.dart';
 import '../game_screen/game_settings_dialog/game_settings_dialog.dart';
+import 'arcade_planet_games_layout.dart';
 
-/// Arcade Planet-inspired playlist owned by the active full theme.
+/// Game playlist owned by the active full theme.
 ///
 /// This is deliberately not a value of `gameViewMode`. A full theme replaces
-/// the playlist presentation as a whole until that theme is removed.
+/// the playlist presentation as a whole until that theme is removed. Arcade
+/// Planet always receives NeoStation's chosen Detailed/Video composition rather
+/// than exposing its many EmulationStation variants to the user.
 class FullThemeGamesScreen extends StatefulWidget {
   const FullThemeGamesScreen({
     super.key,
@@ -107,7 +110,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
 
       var nextIndex = 0;
       if (preserveRom != null) {
-        final found = games.indexWhere((g) => g.romname == preserveRom);
+        final found = games.indexWhere((game) => game.romname == preserveRom);
         if (found >= 0) nextIndex = found;
       }
 
@@ -121,31 +124,34 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _ensureSelectionVisible();
       });
-    } catch (e, st) {
+    } catch (error, stackTrace) {
       _log.e(
         '[FullTheme] Could not load playlist',
-        error: e,
-        stackTrace: st,
+        error: error,
+        stackTrace: stackTrace,
       );
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _move(int delta) {
+  void _selectIndex(int index) {
     if (_games.isEmpty || _launching) return;
-    final next = _boundedIndex(_selectedIndex + delta);
+    final next = _boundedIndex(index);
     if (next == _selectedIndex) return;
     SfxService().playNavSound();
     setState(() => _selectedIndex = next);
     _ensureSelectionVisible();
   }
 
+  void _move(int delta) => _selectIndex(_selectedIndex + delta);
+
   void _ensureSelectionVisible() {
     if (!_listController.hasClients || _games.isEmpty) return;
+    final itemHeight = widget.theme.isArcadePlanet ? 45.r : 54.r;
     final raw =
-        (_selectedIndex * 54.r) -
+        (_selectedIndex * itemHeight) -
         (_listController.position.viewportDimension / 2) +
-        27.r;
+        (itemHeight / 2);
     final target = math.max(
       0.0,
       math.min(raw, _listController.position.maxScrollExtent),
@@ -233,17 +239,21 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
           context.read<SqliteDatabaseProvider>().refresh();
           GamepadNavigationManager.reactivate();
         },
-        onLaunchFailed: (ctx, result) async {
+        onLaunchFailed: (dialogContext, result) async {
           if (!mounted) return;
           setState(() => _launching = false);
           GamepadNavigationManager.reactivate();
-          ScaffoldMessenger.of(ctx).showSnackBar(
+          ScaffoldMessenger.of(dialogContext).showSnackBar(
             SnackBar(content: Text('Unable to launch ${game.name}')),
           );
         },
       );
-    } catch (e, st) {
-      _log.e('[FullTheme] Launch failed', error: e, stackTrace: st);
+    } catch (error, stackTrace) {
+      _log.e(
+        '[FullTheme] Launch failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (mounted) setState(() => _launching = false);
       GamepadNavigationManager.reactivate();
     }
@@ -257,8 +267,8 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
       await context.read<SqliteConfigProvider>().refreshDetectedSystems();
       if (!mounted) return;
       await _loadGames(preserveRom: game.romname);
-    } catch (e) {
-      _log.w('[FullTheme] Favorite toggle failed: $e');
+    } catch (error) {
+      _log.w('[FullTheme] Favorite toggle failed: $error');
     }
   }
 
@@ -270,7 +280,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (_) => GameSettingsDialog(
+      builder: (dialogContext) => GameSettingsDialog(
         game: game,
         system: system,
         fileProvider: widget.fileProvider,
@@ -289,13 +299,23 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     Navigator.of(context).maybePop();
   }
 
+  String _description(GameModel game) {
+    final language = Localizations.localeOf(context).languageCode;
+    final localized = game.getDescriptionForLanguage(language);
+    if (localized.isNotEmpty) return localized;
+    return game.getDescriptionForLanguage('en');
+  }
+
+  List<String> _metadata(GameModel game) => [
+    if (game.year.isNotEmpty) game.year,
+    if (game.genre.isNotEmpty) game.genre,
+    if (game.players.isNotEmpty) game.players,
+    if (game.developer.isNotEmpty) game.developer,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final game = _selected;
-    final backdrop = game == null
-        ? widget.theme.systemBackdrop(widget.system.folderName)
-        : (_media(game, 'fanarts') ??
-              widget.theme.systemBackdrop(_mediaFolder(game)));
 
     return PopScope(
       canPop: !_launching,
@@ -304,38 +324,29 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            _Backdrop(path: backdrop, accent: _accent),
-            ColoredBox(color: Colors.black.withValues(alpha: 0.32)),
-            SafeArea(
-              child: _loading
-                  ? Center(child: CircularProgressIndicator(color: _accent))
-                  : _games.isEmpty
-                  ? _emptyView()
-                  : Padding(
-                      padding: EdgeInsets.fromLTRB(26.r, 18.r, 26.r, 18.r),
-                      child: Column(
-                        children: [
-                          _header(),
-                          SizedBox(height: 12.r),
-                          Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                SizedBox(
-                                  width: 0.36.sw,
-                                  child: _gameList(),
-                                ),
-                                SizedBox(width: 24.r),
-                                Expanded(child: _presentation(game!)),
-                              ],
-                            ),
-                          ),
-                          SizedBox(height: 10.r),
-                          _footer(game!),
-                        ],
-                      ),
-                    ),
-            ),
+            if (_loading)
+              Center(child: CircularProgressIndicator(color: _accent))
+            else if (_games.isEmpty)
+              _emptyView()
+            else if (widget.theme.isArcadePlanet)
+              ArcadePlanetGamesLayout(
+                theme: widget.theme,
+                system: widget.system,
+                games: _games,
+                selectedIndex: _selectedIndex,
+                listController: _listController,
+                accent: _accent,
+                onSelect: _selectIndex,
+                onLaunch: _launchSelected,
+                screenshotPath: _screenshot(game!),
+                boxPath: _media(game, 'box2d'),
+                wheelPath: _media(game, 'wheels'),
+                description: _description(game),
+                metadata: _metadata(game),
+                footer: _footer(game),
+              )
+            else
+              _genericThemeBody(game!),
             if (_launching)
               ColoredBox(
                 color: Colors.black.withValues(alpha: 0.62),
@@ -344,6 +355,42 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _genericThemeBody(GameModel game) {
+    final backdrop =
+        _media(game, 'fanarts') ??
+        widget.theme.systemBackdrop(_mediaFolder(game));
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _Backdrop(path: backdrop, accent: _accent),
+        ColoredBox(color: Colors.black.withValues(alpha: 0.32)),
+        SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(26.r, 18.r, 26.r, 18.r),
+            child: Column(
+              children: [
+                _header(),
+                SizedBox(height: 12.r),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(width: 0.36.sw, child: _gameList()),
+                      SizedBox(width: 24.r),
+                      Expanded(child: _presentation(game)),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 10.r),
+                _footer(game),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -431,11 +478,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
             final game = _games[index];
             final selected = index == _selectedIndex;
             return InkWell(
-              onTap: () {
-                if (selected) return;
-                SfxService().playNavSound();
-                setState(() => _selectedIndex = index);
-              },
+              onTap: () => _selectIndex(index),
               onDoubleTap: selected ? _launchSelected : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 130),
@@ -486,10 +529,6 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     final screenshot = _screenshot(game);
     final box = _media(game, 'box2d');
     final wheel = _media(game, 'wheels');
-    final language = Localizations.localeOf(context).languageCode;
-    final description = game.getDescriptionForLanguage(language).isNotEmpty
-        ? game.getDescriptionForLanguage(language)
-        : game.getDescriptionForLanguage('en');
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -555,7 +594,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
               child: Align(
                 alignment: Alignment.topLeft,
                 child: Text(
-                  description,
+                  _description(game),
                   maxLines: 5,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -567,26 +606,20 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
                 ),
               ),
             ),
-            _metadata(game),
+            _metadataRow(game),
           ],
         ),
       ),
     );
   }
 
-  Widget _metadata(GameModel game) {
-    final items = <String>[
-      if (game.year.isNotEmpty) game.year,
-      if (game.genre.isNotEmpty) game.genre,
-      if (game.players.isNotEmpty) game.players,
-      if (game.developer.isNotEmpty) game.developer,
-    ];
+  Widget _metadataRow(GameModel game) {
     return Align(
       alignment: Alignment.centerLeft,
       child: Wrap(
         spacing: 8.r,
         runSpacing: 6.r,
-        children: items
+        children: _metadata(game)
             .map(
               (value) => Container(
                 padding: EdgeInsets.symmetric(horizontal: 9.r, vertical: 5.r),
@@ -669,7 +702,8 @@ class _Backdrop extends StatelessWidget {
               File(path!),
               key: ValueKey(path),
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              errorBuilder: (context, error, stackTrace) =>
+                  const SizedBox.shrink(),
             ),
           ),
         DecoratedBox(
