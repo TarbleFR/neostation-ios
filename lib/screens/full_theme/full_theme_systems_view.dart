@@ -5,14 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
-import '../../l10n/app_locale.dart';
 import '../../models/full_theme_definition.dart';
 import '../../models/my_systems.dart';
 import '../../models/system_model.dart';
 import '../../providers/file_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
-import '../../services/game_service.dart';
 import '../../services/logger_service.dart';
 import '../../services/sfx_service.dart';
 import '../../utils/game_launch_utils.dart';
@@ -23,12 +21,11 @@ import 'full_theme_games_screen.dart';
 
 /// Full-screen owner for an imported full theme.
 ///
-/// The widget installs itself into the Navigator overlay so it covers
-/// NeoStation's normal header/footer as well as the systems body. This is the
-/// important distinction from adding a `full_theme` value to the existing
-/// grid/carousel setting: while mounted, the imported theme owns the whole home
-/// experience. It temporarily removes the overlay before pushing a playlist or
-/// launch dialog, then restores it on return.
+/// This is intentionally not another systems layout. The normal Systems widget
+/// remains mounted only as a lifecycle anchor while this view paints through a
+/// root [OverlayEntry], covering NeoStation's normal header/footer. The overlay
+/// is suspended before opening a playlist or the standard launch dialog and is
+/// restored when the user comes back.
 class FullThemeSystemsView extends StatefulWidget {
   const FullThemeSystemsView({
     super.key,
@@ -51,15 +48,15 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
 
   OverlayEntry? _overlayEntry;
   late final GamepadNavigation _gamepadNav;
+  Timer? _clockTimer;
   int _selectedIndex = 0;
   bool _navigating = false;
   bool _overlaySuspended = false;
-  Timer? _clockTimer;
   DateTime _now = DateTime.now();
 
   Color get _accent {
-    final value = widget.theme.accentHex.replaceAll('#', '');
-    final six = value.length >= 6 ? value.substring(0, 6) : '565296';
+    final cleaned = widget.theme.accentHex.replaceAll('#', '');
+    final six = cleaned.length >= 6 ? cleaned.substring(0, 6) : '565296';
     return Color(int.parse('FF$six', radix: 16));
   }
 
@@ -73,15 +70,16 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
       onNavigateUp: () => _move(-1),
       onNavigateDown: () => _move(1),
       onSelectItem: _openSelected,
-      onPreviousTab: AppScreen.previousTab,
-      onNextTab: AppScreen.nextTab,
+      onPreviousTab: AppNavigation.previousTab,
+      onNextTab: AppNavigation.nextTab,
     );
-    _clockTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) {
-        _now = DateTime.now();
-        _overlayEntry?.markNeedsBuild();
-      }
+
+    _clockTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      if (!mounted) return;
+      _now = DateTime.now();
+      _overlayEntry?.markNeedsBuild();
     });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _installOverlay();
@@ -97,11 +95,11 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   @override
   void didUpdateWidget(covariant FullThemeSystemsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.theme.id != widget.theme.id) {
-      _overlayEntry?.markNeedsBuild();
-    }
     if (widget.selectedIndex != oldWidget.selectedIndex && !_navigating) {
       _selectedIndex = widget.selectedIndex;
+    }
+    if (widget.selectedIndex != oldWidget.selectedIndex ||
+        widget.theme.id != oldWidget.theme.id) {
       _overlayEntry?.markNeedsBuild();
     }
   }
@@ -114,6 +112,11 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     _gamepadNav.dispose();
     super.dispose();
   }
+
+  /// The visible surface lives in the root overlay so it can cover AppScreen's
+  /// global chrome. This child only keeps the lifecycle tied to SystemContent.
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 
   void _installOverlay() {
     if (!mounted || _overlayEntry != null || _overlaySuspended) return;
@@ -132,7 +135,9 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   void _removeOverlay() {
     try {
       _overlayEntry?.remove();
-    } catch (_) {}
+    } catch (_) {
+      // Overlay may already have been detached during route teardown.
+    }
     _overlayEntry = null;
   }
 
@@ -149,15 +154,12 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     });
   }
 
-  List<SystemInfo> _systems(BuildContext context) {
-    final config = context.read<SqliteConfigProvider>();
-    final database = context.read<SqliteDatabaseProvider>();
-    final files = context.read<FileProvider>();
+  List<SystemInfo> _systems(BuildContext sourceContext) {
     return buildSystemsList(
-      context: context,
-      configProvider: config,
-      dbProvider: database,
-      fileProvider: files,
+      context: sourceContext,
+      configProvider: sourceContext.read<SqliteConfigProvider>(),
+      dbProvider: sourceContext.read<SqliteDatabaseProvider>(),
+      fileProvider: sourceContext.read<FileProvider>(),
     );
   }
 
@@ -165,8 +167,10 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     if (_navigating || _overlayEntry == null) return;
     final systems = _systems(context);
     if (systems.isEmpty) return;
+
     final next = (_selectedIndex + delta).clamp(0, systems.length - 1).toInt();
     if (next == _selectedIndex) return;
+
     SfxService().playNavSound();
     _selectedIndex = next;
     widget.onCardTapped?.call(next);
@@ -184,14 +188,12 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   Future<void> _navigateTo(SystemInfo info) async {
     if (_navigating) return;
     _navigating = true;
+
     final config = context.read<SqliteConfigProvider>();
     final files = context.read<FileProvider>();
     SfxService().playEnterSound();
 
     try {
-      // Recent-game cards remain direct launch shortcuts, but the full-theme
-      // overlay is removed first so the standard launch dialog is actually on
-      // top and remains usable.
       if (info.isGame && info.gameModel != null) {
         final game = info.gameModel!;
         final system = config.availableSystems.cast<SystemModel?>().firstWhere(
@@ -204,6 +206,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
         GamepadNavigationManager.deactivateAll();
         imageCache.clear();
         imageCache.clearLiveImages();
+
         await launchGameWithDialog(
           context: context,
           game: game,
@@ -215,7 +218,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
             _resumeOverlay();
             GamepadNavigationManager.reactivate();
           },
-          onLaunchFailed: (ctx, result) async {
+          onLaunchFailed: (dialogContext, result) async {
             _resumeOverlay();
             GamepadNavigationManager.reactivate();
           },
@@ -230,17 +233,23 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
       GamepadNavigationManager.deactivateAll();
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => FullThemeGamesScreen(
+          builder: (routeContext) => FullThemeGamesScreen(
             theme: widget.theme,
             system: system,
             fileProvider: files,
           ),
         ),
       );
-      if (!mounted) return;
-      context.read<SqliteDatabaseProvider>().refresh();
-    } catch (e, st) {
-      _log.e('[FullTheme] System navigation failed', error: e, stackTrace: st);
+
+      if (mounted) {
+        context.read<SqliteDatabaseProvider>().refresh();
+      }
+    } catch (error, stackTrace) {
+      _log.e(
+        '[FullTheme] System navigation failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
     } finally {
       _navigating = false;
       if (mounted) {
@@ -250,10 +259,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     }
   }
 
-  SystemModel? _resolveSystem(
-    SystemInfo info,
-    SqliteConfigProvider config,
-  ) {
+  SystemModel? _resolveSystem(SystemInfo info, SqliteConfigProvider config) {
     if (info.folderName == 'all') {
       final existing = config.detectedSystems.cast<SystemModel?>().firstWhere(
         (system) => system?.folderName == 'all',
@@ -282,33 +288,34 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
 
   Widget _buildFullScreen(BuildContext overlayContext) {
     return Consumer2<SqliteConfigProvider, SqliteDatabaseProvider>(
-      builder: (context, config, database, _) {
-        final files = context.read<FileProvider>();
+      builder: (context, config, database, child) {
         final systems = buildSystemsList(
           context: context,
           configProvider: config,
           dbProvider: database,
-          fileProvider: files,
+          fileProvider: context.read<FileProvider>(),
         );
+
         if (systems.isEmpty) {
           return ColoredBox(
             color: const Color(0xFF111017),
-            child: Center(
-              child: CircularProgressIndicator(color: _accent),
-            ),
+            child: Center(child: CircularProgressIndicator(color: _accent)),
           );
         }
 
-        if (_selectedIndex >= systems.length) _selectedIndex = systems.length - 1;
+        if (_selectedIndex >= systems.length) {
+          _selectedIndex = systems.length - 1;
+        }
+        if (_selectedIndex < 0) _selectedIndex = 0;
+
         final selected = systems[_selectedIndex];
         final folder = selected.primaryFolderName ?? selected.folderName ?? 'all';
-        final themeBackground = widget.theme.systemBackdrop(folder);
-        final fallbackBackground = selected.customBackgroundPath;
-        final background = fallbackBackground != null &&
-                fallbackBackground.isNotEmpty &&
-                File(fallbackBackground).existsSync()
-            ? fallbackBackground
-            : themeBackground;
+        final customBackground = selected.customBackgroundPath;
+        final background = customBackground != null &&
+                customBackground.isNotEmpty &&
+                File(customBackground).existsSync()
+            ? customBackground
+            : widget.theme.systemBackdrop(folder);
 
         return Stack(
           fit: StackFit.expand,
@@ -321,7 +328,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.black.withValues(alpha: 0.18),
-                    Colors.black.withValues(alpha: 0.02),
+                    Colors.transparent,
                     Colors.black.withValues(alpha: 0.72),
                   ],
                 ),
@@ -332,7 +339,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
                 padding: EdgeInsets.fromLTRB(30.r, 22.r, 30.r, 18.r),
                 child: Column(
                   children: [
-                    _topBar(selected),
+                    _topBar(),
                     const Spacer(),
                     _selectedIdentity(selected),
                     SizedBox(height: 24.r),
@@ -353,44 +360,50 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 650),
       switchInCurve: Curves.easeOutCubic,
-      child: path != null
-          ? Image.file(
+      child: path == null
+          ? _gradientBackground()
+          : Image.file(
               File(path),
               key: ValueKey(path),
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _gradientBackground(),
-            )
-          : _gradientBackground(),
+              errorBuilder: (context, error, stackTrace) => _gradientBackground(),
+            ),
     );
   }
 
-  Widget _gradientBackground() => DecoratedBox(
-    key: const ValueKey('full_theme_gradient'),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFF18151D),
-          _accent.withValues(alpha: 0.66),
-          const Color(0xFF08070B),
-        ],
+  Widget _gradientBackground() {
+    return DecoratedBox(
+      key: const ValueKey('full_theme_gradient'),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF18151D),
+            _accent.withValues(alpha: 0.66),
+            const Color(0xFF08070B),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _topBar(SystemInfo selected) {
+  Widget _topBar() {
     final hour = _now.hour.toString().padLeft(2, '0');
     final minute = _now.minute.toString().padLeft(2, '0');
     return Row(
       children: [
-        Text(
-          widget.theme.name.toUpperCase(),
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.72),
-            fontFamily: 'NeoStationFullThemeBold',
-            fontSize: 16.r,
-            letterSpacing: 2.4,
+        Flexible(
+          child: Text(
+            widget.theme.name.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontFamily: 'NeoStationFullThemeBold',
+              fontSize: 16.r,
+              letterSpacing: 2.4,
+            ),
           ),
         ),
         const Spacer(),
@@ -408,9 +421,11 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
 
   Widget _selectedIdentity(SystemInfo selected) {
     final folder = selected.primaryFolderName ?? selected.folderName ?? 'all';
-    final themeLogo = selected.isGame ? selected.customWheelImage : widget.theme.rasterSystemLogo(folder);
-    final customLogo = selected.customLogoPath;
-    final rasterLogo = _existing(customLogo) ?? _existing(themeLogo);
+    final themeLogo = selected.isGame
+        ? selected.customWheelImage
+        : widget.theme.rasterSystemLogo(folder);
+    final rasterLogo =
+        _existing(selected.customLogoPath) ?? _existing(themeLogo);
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
@@ -420,32 +435,37 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (rasterLogo != null)
-              Expanded(
-                child: Image.file(
-                  File(rasterLogo),
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
-              )
-            else
-              Expanded(
-                child: Center(
-                  child: Text(
-                    (selected.title ?? selected.shortName ?? 'NEOSTATION').toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontFamily: 'NeoStationFullThemeBold',
-                      fontSize: 42.r,
-                      letterSpacing: 1.4,
-                      shadows: const [
-                        Shadow(color: Colors.black87, blurRadius: 12, offset: Offset(0, 2)),
-                      ],
+            Expanded(
+              child: rasterLogo == null
+                  ? Center(
+                      child: Text(
+                        (selected.title ?? selected.shortName ?? 'NEOSTATION')
+                            .toUpperCase(),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'NeoStationFullThemeBold',
+                          fontSize: 42.r,
+                          letterSpacing: 1.4,
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black87,
+                              blurRadius: 12,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : Image.file(
+                      File(rasterLogo),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
                     ),
-                  ),
-                ),
-              ),
+            ),
             SizedBox(height: 8.r),
             Text(
               selected.totalStorage ?? '${selected.numOfRoms ?? 0} games',
@@ -467,47 +487,47 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
   }
 
   Widget _systemRibbon(List<SystemInfo> systems) {
-    const visibleRadius = 3;
-    final indices = <int>[];
-    for (var offset = -visibleRadius; offset <= visibleRadius; offset++) {
+    final visible = <int>[];
+    for (var offset = -3; offset <= 3; offset++) {
       final index = _selectedIndex + offset;
-      if (index >= 0 && index < systems.length) indices.add(index);
+      if (index >= 0 && index < systems.length) visible.add(index);
     }
 
     return SizedBox(
       height: 108.r,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: indices.map((index) {
+        children: visible.map((index) {
           final system = systems[index];
-          final selected = index == _selectedIndex;
+          final isSelected = index == _selectedIndex;
           final distance = (index - _selectedIndex).abs();
+
           return GestureDetector(
             onTap: () {
-              if (_navigating) return;
+              if (_navigating || index == _selectedIndex) return;
               SfxService().playNavSound();
               _selectedIndex = index;
               widget.onCardTapped?.call(index);
               _overlayEntry?.markNeedsBuild();
             },
-            onDoubleTap: selected ? _openSelected : null,
+            onDoubleTap: isSelected ? _openSelected : null,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 190),
               curve: Curves.easeOutCubic,
-              width: selected ? 176.r : 116.r,
-              height: selected ? 100.r : 72.r,
+              width: isSelected ? 176.r : 116.r,
+              height: isSelected ? 100.r : 72.r,
               margin: EdgeInsets.symmetric(horizontal: 8.r),
-              padding: EdgeInsets.all(selected ? 12.r : 9.r),
+              padding: EdgeInsets.all(isSelected ? 12.r : 9.r),
               decoration: BoxDecoration(
-                color: selected
+                color: isSelected
                     ? _accent.withValues(alpha: 0.78)
-                    : Colors.black.withValues(alpha: 0.42 - (distance * 0.05)),
-                borderRadius: BorderRadius.circular(selected ? 16.r : 12.r),
+                    : Colors.black.withValues(alpha: 0.42 - distance * 0.05),
+                borderRadius: BorderRadius.circular(isSelected ? 16.r : 12.r),
                 border: Border.all(
-                  color: selected ? Colors.white70 : Colors.white12,
-                  width: selected ? 2 : 1,
+                  color: isSelected ? Colors.white70 : Colors.white12,
+                  width: isSelected ? 2 : 1,
                 ),
-                boxShadow: selected
+                boxShadow: isSelected
                     ? [
                         BoxShadow(
                           color: _accent.withValues(alpha: 0.45),
@@ -517,7 +537,7 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
                       ]
                     : null,
               ),
-              child: _systemTileContent(system, selected),
+              child: _systemTile(system, isSelected),
             ),
           );
         }).toList(),
@@ -525,28 +545,30 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
     );
   }
 
-  Widget _systemTileContent(SystemInfo system, bool selected) {
+  Widget _systemTile(SystemInfo system, bool isSelected) {
     final folder = system.primaryFolderName ?? system.folderName ?? 'all';
-    final themeLogo = system.isGame ? system.customWheelImage : widget.theme.rasterSystemLogo(folder);
+    final themeLogo = system.isGame
+        ? system.customWheelImage
+        : widget.theme.rasterSystemLogo(folder);
     final raster = _existing(system.customLogoPath) ?? _existing(themeLogo);
+
     if (raster != null) {
       return Image.file(File(raster), fit: BoxFit.contain);
     }
 
-    final asset = 'assets/images/logos/$folder.webp';
     return Image.asset(
-      asset,
+      'assets/images/logos/$folder.webp',
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => Center(
+      errorBuilder: (context, error, stackTrace) => Center(
         child: Text(
           system.shortName ?? system.title ?? folder.toUpperCase(),
+          textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
           style: TextStyle(
-            color: selected ? Colors.white : Colors.white70,
+            color: isSelected ? Colors.white : Colors.white70,
             fontFamily: 'NeoStationFullThemeBold',
-            fontSize: selected ? 17.r : 13.r,
+            fontSize: isSelected ? 17.r : 13.r,
           ),
         ),
       ),
@@ -563,41 +585,47 @@ class _FullThemeSystemsViewState extends State<FullThemeSystemsView> {
         _hint('LB / RB', 'NeoStation tabs'),
         const Spacer(),
         if (widget.theme.author != null)
-          Text(
-            '${widget.theme.author} · ${widget.theme.license ?? ''}',
-            style: TextStyle(color: Colors.white38, fontSize: 10.r),
+          Flexible(
+            child: Text(
+              '${widget.theme.author} · ${widget.theme.license ?? ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.white38, fontSize: 10.r),
+            ),
           ),
       ],
     );
   }
 
-  Widget _hint(String key, String label) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
-        decoration: BoxDecoration(
-          color: _accent.withValues(alpha: 0.78),
-          borderRadius: BorderRadius.circular(5.r),
-        ),
-        child: Text(
-          key,
-          style: TextStyle(
-            color: Colors.white,
-            fontFamily: 'NeoStationFullThemeBold',
-            fontSize: 10.r,
+  Widget _hint(String key, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 4.r),
+          decoration: BoxDecoration(
+            color: _accent.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(5.r),
+          ),
+          child: Text(
+            key,
+            style: TextStyle(
+              color: Colors.white,
+              fontFamily: 'NeoStationFullThemeBold',
+              fontSize: 10.r,
+            ),
           ),
         ),
-      ),
-      SizedBox(width: 5.r),
-      Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.62),
-          fontFamily: 'NeoStationFullTheme',
-          fontSize: 11.r,
+        SizedBox(width: 5.r),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.62),
+            fontFamily: 'NeoStationFullTheme',
+            fontSize: 11.r,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
