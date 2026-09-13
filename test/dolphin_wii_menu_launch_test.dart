@@ -64,8 +64,15 @@ void main() {
         ]) gate: accepted,
       };
     });
-    await File(p.join(root.path, 'pairingfile.plist'))
-        .writeAsString(List.filled(256, 'x').join());
+    final encodedKey = base64Encode(Uint8List(32));
+    await File(p.join(root.path, 'pairingfile.plist')).writeAsString(
+      '<?xml version="1.0" encoding="UTF-8"?>'
+      '<plist version="1.0"><dict>'
+      '<key>identifier</key><string>test-device</string>'
+      '<key>public_key</key><data>$encodedKey</data>'
+      '<key>private_key</key><data>$encodedKey</data>'
+      '</dict></plist>',
+    );
     await DolphinInternalV2Service.ensureLayout();
     dolphin = await DolphinInternalV2Service.rootDirectory();
     nand = Directory(p.join(dolphin.path, 'User', 'Wii'));
