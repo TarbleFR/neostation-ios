@@ -15,7 +15,6 @@ TUNNEL = IOS / 'NeoStationLocalTunnel'
 NATIVE = ROOT / 'native' / 'local_jit_tunnel'
 
 HOST_ENTITLEMENTS = {
-    'com.apple.developer.networking.vpn.api': ['allow-vpn'],
     'com.apple.developer.networking.networkextension': [
         'packet-tunnel-provider',
     ],
@@ -59,6 +58,14 @@ project_path = ARGV.fetch(0)
 project = Xcodeproj::Project.open(project_path)
 runner = project.targets.find { |target| target.name == 'Runner' }
 raise 'Runner target not found' unless runner
+
+def enable_system_capability(project, target, capability)
+  attributes = project.root_object.attributes ||= {}
+  target_attributes = attributes['TargetAttributes'] ||= {}
+  entry = target_attributes[target.uuid] ||= {}
+  capabilities = entry['SystemCapabilities'] ||= {}
+  capabilities[capability] = { 'enabled' => 1 }
+end
 
 def target_snapshot(target)
   {
@@ -128,7 +135,7 @@ tunnel.build_configurations.each do |configuration|
   settings['CLANG_ENABLE_MODULES'] = 'YES'
   settings['CODE_SIGN_ENTITLEMENTS'] = 'NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements'
   settings['CODE_SIGN_STYLE'] = 'Automatic'
-  settings['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '258')
+  settings['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '259')
   settings['DEFINES_MODULE'] = 'YES'
   settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
   settings['GENERATE_INFOPLIST_FILE'] = 'NO'
@@ -146,7 +153,10 @@ end
 
 runner.build_configurations.each do |configuration|
   configuration.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'Runner/Runner.entitlements'
+  configuration.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
 end
+enable_system_capability(project, runner, 'com.apple.NetworkExtensions.iOS')
+enable_system_capability(project, tunnel, 'com.apple.NetworkExtensions.iOS')
 unless runner.dependencies.any? { |dependency| dependency.target == tunnel }
   runner.add_dependency(tunnel)
 end
@@ -155,7 +165,14 @@ embed ||= runner.new_copy_files_build_phase('Embed App Extensions')
 embed.dst_subfolder_spec = '13'
 unless embed.files.any? { |file| file.file_ref == tunnel.product_reference }
   build_file = embed.add_file_reference(tunnel.product_reference, true)
-  build_file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+  build_file.settings = {
+    'ATTRIBUTES' => ['CodeSignOnCopy', 'RemoveHeadersOnCopy']
+  }
+else
+  build_file = embed.files.find { |file| file.file_ref == tunnel.product_reference }
+  attributes = Array(build_file.settings&.fetch('ATTRIBUTES', []))
+  attributes |= ['CodeSignOnCopy', 'RemoveHeadersOnCopy']
+  build_file.settings = { 'ATTRIBUTES' => attributes }
 end
 
 protected_after = protected.to_h { |target| [target.uuid, target_snapshot(target)] }

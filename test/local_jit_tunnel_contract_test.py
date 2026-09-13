@@ -60,7 +60,7 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('withExtension: "mobileprovision"', manager)
         self.assertIn('PropertyListSerialization.propertyList', manager)
         self.assertIn('com.apple.developer.networking.networkextension', manager)
-        self.assertIn('com.apple.developer.networking.vpn.api', manager)
+        self.assertNotIn('com.apple.developer.networking.vpn.api', manager)
         self.assertIn('signingMissing', manager)
         self.assertIn('ensureWaiters', manager)
         self.assertIn('disableWaiters', manager)
@@ -106,6 +106,7 @@ class LocalJitTunnelContractTests(unittest.TestCase):
             self.assertIn(f"'{key}': {{", locale)
         self.assertIn('static const allKeys', locale)
         self.assertIn('missingKeysForLocale', locale)
+        self.assertNotIn('LocalDevVPN', locale)
 
     def test_every_jit_path_ensures_tunnel_before_remote_pairing(self):
         bridge = (
@@ -135,6 +136,9 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         ).read_text()
         self.assertIn("project.new_target(:app_extension, 'NeoStationLocalTunnel'", configurator)
         self.assertIn("'packet-tunnel-provider'", configurator)
+        self.assertIn("'com.apple.NetworkExtensions.iOS'", configurator)
+        self.assertIn("'CodeSignOnCopy'", configurator)
+        self.assertNotIn("'com.apple.developer.networking.vpn.api'", configurator)
         self.assertIn("framework_path = 'System/Library/Frameworks/NetworkExtension.framework'", configurator)
         self.assertGreaterEqual(
             workflow.count('python3 build-utils/configure_local_jit_tunnel.py'),
@@ -149,6 +153,20 @@ class LocalJitTunnelContractTests(unittest.TestCase):
                 'packages/dolphin_internal_bridge/ci/build_support.py'
             ).read_text(),
         )
+        packager = (
+            ROOT / 'packages/dolphin_internal_bridge/ci/build_support.py'
+        ).read_text()
+        self.assertIn("LOGS / 'NeoStation-signing.entitlements'", packager)
+        self.assertIn(
+            "LOGS / 'NeoStationLocalTunnel-signing.entitlements'",
+            packager,
+        )
+        validator = (
+            ROOT / 'build-utils/validate_single_ipa_distribution.py'
+        ).read_text()
+        self.assertIn("'installationUnits': 1", validator)
+        self.assertIn("'separateTunnelIPARequired': False", validator)
+        self.assertIn("'userSignsOneIPA': True", validator)
 
     def test_startup_and_resume_refresh_are_non_blocking(self):
         main = (ROOT / 'lib/main.dart').read_text()

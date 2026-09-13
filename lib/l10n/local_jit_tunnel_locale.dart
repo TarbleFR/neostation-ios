@@ -160,7 +160,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS did not authorize the VPN configuration. You can try again.',
       signingMissing:
-          "This NeoStation installation was signed without Apple's Network Extension permission. Use an authorized developer profile or LocalDevVPN from the App Store.",
+          "This NeoStation IPA was signed without Apple's Network Extension permission. Re-sign the complete IPA with app extensions enabled and an authorized developer profile.",
       configurationFailed:
           'iOS could not save or read the VPN configuration.',
       extensionMissing:
@@ -203,7 +203,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS hat die VPN-Konfiguration nicht autorisiert. Du kannst es erneut versuchen.',
       signingMissing:
-          'Diese NeoStation-Installation wurde ohne Apples Network-Extension-Berechtigung signiert. Verwende ein autorisiertes Entwicklerprofil oder LocalDevVPN aus dem App Store.',
+          'Diese NeoStation-IPA wurde ohne Apples Network-Extension-Berechtigung signiert. Signiere die vollständige IPA erneut mit aktivierten App-Erweiterungen und einem autorisierten Entwicklerprofil.',
       configurationFailed:
           'iOS konnte die VPN-Konfiguration nicht speichern oder lesen.',
       extensionMissing:
@@ -246,7 +246,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS no autorizó la configuración VPN. Puedes intentarlo de nuevo.',
       signingMissing:
-          'Esta instalación de NeoStation se firmó sin el permiso Network Extension de Apple. Usa un perfil de desarrollador autorizado o LocalDevVPN de la App Store.',
+          'Esta IPA de NeoStation se firmó sin el permiso Network Extension de Apple. Vuelve a firmar la IPA completa con las extensiones activadas y un perfil de desarrollador autorizado.',
       configurationFailed:
           'iOS no pudo guardar o leer la configuración VPN.',
       extensionMissing:
@@ -289,7 +289,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS n’a pas autorisé la configuration VPN. Vous pouvez réessayer.',
       signingMissing:
-          'Cette installation de NeoStation a été signée sans l’autorisation Network Extension d’Apple. Utilisez un profil développeur autorisé ou LocalDevVPN depuis l’App Store.',
+          'Cette IPA NeoStation a été signée sans l’autorisation Network Extension d’Apple. Resignez l’IPA complète avec les extensions activées et un profil développeur autorisé.',
       configurationFailed:
           'iOS n’a pas pu enregistrer ou lire la configuration VPN.',
       extensionMissing:
@@ -332,7 +332,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS tidak mengizinkan konfigurasi VPN. Anda dapat mencoba lagi.',
       signingMissing:
-          'Instalasi NeoStation ini ditandatangani tanpa izin Network Extension Apple. Gunakan profil pengembang yang diizinkan atau LocalDevVPN dari App Store.',
+          'IPA NeoStation ini ditandatangani tanpa izin Network Extension Apple. Tanda tangani ulang IPA lengkap dengan ekstensi aplikasi diaktifkan dan profil pengembang yang diizinkan.',
       configurationFailed:
           'iOS tidak dapat menyimpan atau membaca konfigurasi VPN.',
       extensionMissing:
@@ -375,7 +375,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS non ha autorizzato la configurazione VPN. Puoi riprovare.',
       signingMissing:
-          'Questa installazione di NeoStation è stata firmata senza il permesso Network Extension di Apple. Usa un profilo sviluppatore autorizzato o LocalDevVPN dall’App Store.',
+          'Questa IPA di NeoStation è stata firmata senza il permesso Network Extension di Apple. Firma nuovamente l’IPA completa con le estensioni abilitate e un profilo sviluppatore autorizzato.',
       configurationFailed:
           'iOS non ha potuto salvare o leggere la configurazione VPN.',
       extensionMissing:
@@ -417,7 +417,7 @@ abstract final class LocalJitTunnelLocale {
       disabledMessage: 'VPN を無効化しました。許可設定は保持されます。',
       permissionDenied: 'iOS が VPN 設定を許可しませんでした。再試行できます。',
       signingMissing:
-          'この NeoStation は Apple の Network Extension 権限なしで署名されています。対応する開発者プロファイルまたは App Store の LocalDevVPN を使用してください。',
+          'この NeoStation IPA は Apple の Network Extension 権限なしで署名されています。App Extension を有効にし、対応する開発者プロファイルで IPA 全体を再署名してください。',
       configurationFailed: 'iOS が VPN 設定を保存または読み込めませんでした。',
       extensionMissing:
           'ローカルトンネル拡張がありません。署名済みの完全な IPA を再インストールしてください。',
@@ -458,7 +458,7 @@ abstract final class LocalJitTunnelLocale {
       disabledMessage: 'VPN을 비활성화했습니다. 허용 설정은 유지됩니다.',
       permissionDenied: 'iOS가 VPN 구성을 허용하지 않았습니다. 다시 시도할 수 있습니다.',
       signingMissing:
-          '이 NeoStation 설치본은 Apple Network Extension 권한 없이 서명되었습니다. 승인된 개발자 프로필이나 App Store의 LocalDevVPN을 사용하세요.',
+          '이 NeoStation IPA는 Apple Network Extension 권한 없이 서명되었습니다. 앱 확장을 활성화하고 승인된 개발자 프로필로 전체 IPA를 다시 서명하세요.',
       configurationFailed: 'iOS가 VPN 구성을 저장하거나 읽지 못했습니다.',
       extensionMissing:
           '로컬 터널 확장이 없습니다. 완전히 서명된 IPA를 다시 설치하세요.',
@@ -500,7 +500,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'O iOS não autorizou a configuração VPN. Você pode tentar novamente.',
       signingMissing:
-          'Esta instalação do NeoStation foi assinada sem a permissão Network Extension da Apple. Use um perfil de desenvolvedor autorizado ou o LocalDevVPN da App Store.',
+          'Esta IPA do NeoStation foi assinada sem a permissão Network Extension da Apple. Assine novamente a IPA completa com as extensões ativadas e um perfil de desenvolvedor autorizado.',
       configurationFailed:
           'O iOS não conseguiu salvar ou ler a configuração VPN.',
       extensionMissing:
@@ -543,7 +543,7 @@ abstract final class LocalJitTunnelLocale {
       permissionDenied:
           'iOS не разрешила конфигурацию VPN. Можно повторить попытку.',
       signingMissing:
-          'Эта установка NeoStation подписана без разрешения Apple Network Extension. Используйте разрешённый профиль разработчика или LocalDevVPN из App Store.',
+          'Эта IPA NeoStation подписана без разрешения Apple Network Extension. Переподпишите всю IPA с включёнными расширениями и разрешённым профилем разработчика.',
       configurationFailed:
           'iOS не удалось сохранить или прочитать конфигурацию VPN.',
       extensionMissing:
@@ -584,7 +584,7 @@ abstract final class LocalJitTunnelLocale {
       disabledMessage: 'VPN 已停用，授权仍保留。',
       permissionDenied: 'iOS 未授权 VPN 配置。你可以重试。',
       signingMissing:
-          '此 NeoStation 安装包的签名不含 Apple Network Extension 权限。请使用获授权的开发者描述文件，或从 App Store 安装 LocalDevVPN。',
+          '此 NeoStation IPA 的签名不含 Apple Network Extension 权限。请启用应用扩展，并使用获授权的开发者描述文件重新签名完整 IPA。',
       configurationFailed: 'iOS 无法保存或读取 VPN 配置。',
       extensionMissing: '缺少本地隧道扩展。请重新安装完整签名的 IPA。',
       vpnConflict: '另一个 VPN 正在运行。请先停用它，再重试 NeoStation VPN。',
@@ -622,7 +622,7 @@ abstract final class LocalJitTunnelLocale {
       disabledMessage: 'VPN 已停用，授權仍會保留。',
       permissionDenied: 'iOS 未授權 VPN 設定。你可以重試。',
       signingMissing:
-          '此 NeoStation 安裝版本的簽章不含 Apple Network Extension 權限。請使用獲授權的開發者描述檔，或從 App Store 安裝 LocalDevVPN。',
+          '此 NeoStation IPA 的簽章不含 Apple Network Extension 權限。請啟用 App Extension，並使用獲授權的開發者描述檔重新簽署完整 IPA。',
       configurationFailed: 'iOS 無法儲存或讀取 VPN 設定。',
       extensionMissing: '缺少本機通道擴充功能。請重新安裝完整簽署的 IPA。',
       vpnConflict: '另一個 VPN 正在運作。請先停用，再重試 NeoStation VPN。',

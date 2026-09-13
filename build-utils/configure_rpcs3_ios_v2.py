@@ -30,7 +30,6 @@ REQUIRED_RUNTIME_ENTITLEMENTS = {
     'com.apple.developer.kernel.extended-virtual-addressing': True,
     'com.apple.developer.kernel.increased-memory-limit': True,
     'com.apple.developer.kernel.increased-debugging-memory-limit': True,
-    'com.apple.developer.networking.vpn.api': ['allow-vpn'],
     'com.apple.developer.networking.networkextension': [
         'packet-tunnel-provider',
     ],

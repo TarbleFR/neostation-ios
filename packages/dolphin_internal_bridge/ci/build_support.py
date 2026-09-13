@@ -257,7 +257,7 @@ def package() -> None:
     run('/usr/bin/zip', '-qry', str(ipa), 'Payload', cwd=stage)
     run('unzip', '-tq', str(ipa))
     report = validate(ipa)
-    report.update({'branch': 'test/dolphin-internal-engine-isolated-v3',
+    report.update({'branch': os.environ.get('GITHUB_REF_NAME', ''),
                    'commit': os.environ['GITHUB_SHA'], 'buildNumber': os.environ['BUILD_NUMBER'],
                    'runId': os.environ['GITHUB_RUN_ID'], 'dolphinRevision': os.environ['DOLPHIN_SHA'],
                    'removedIdenticalHelperFrameworkCopies': duplicates,
@@ -265,10 +265,15 @@ def package() -> None:
                    'stikjitRelease': json.loads((LOGS / 'stikjit-release.json').read_text())})
     (dist / 'dolphin-build-report.json').write_text(json.dumps(report, indent=2) + '\n')
     (dist / (ipa.name + '.sha256')).write_text(report['sha256'] + '  ' + ipa.name + '\n')
-    shutil.copy2(ROOT / 'ios/Runner/Runner.entitlements', dist / 'NeoStation-signing.entitlements')
+    # These plists are diagnostic inputs for signing automation, not separate
+    # applications for the user to install. The distribution remains one IPA.
+    shutil.copy2(
+        ROOT / 'ios/Runner/Runner.entitlements',
+        LOGS / 'NeoStation-signing.entitlements',
+    )
     shutil.copy2(
         ROOT / 'ios/NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements',
-        dist / 'NeoStationLocalTunnel-signing.entitlements',
+        LOGS / 'NeoStationLocalTunnel-signing.entitlements',
     )
     print(json.dumps({k: report[k] for k in ('ipa', 'bytes', 'sha256', 'signatureState', 'structuralValidation')}, indent=2))
 

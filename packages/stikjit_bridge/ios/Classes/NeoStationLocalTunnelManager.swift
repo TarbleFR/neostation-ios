@@ -412,15 +412,11 @@ final class NeoStationLocalTunnelManager {
       return .extensionMissing
     }
     if let host = provisioningEntitlements(in: Bundle.main),
-       (!entitlement(
+       !entitlement(
          host,
          key: "com.apple.developer.networking.networkextension",
          contains: "packet-tunnel-provider"
-       ) || !entitlement(
-         host,
-         key: "com.apple.developer.networking.vpn.api",
-         contains: "allow-vpn"
-       )) {
+       ) {
       return .signingMissing
     }
     if let tunnel = provisioningEntitlements(in: extensionBundle),
@@ -590,7 +586,7 @@ enum NeoStationLocalTunnelError: LocalizedError {
     case .extensionMissing:
       return "The NeoStation local tunnel extension is missing from this installation. Re-sign the complete IPA with app extensions enabled."
     case .signingMissing:
-      return "The installed NeoStation signature does not include Apple's VPN and packet-tunnel entitlements. Use an Apple provisioning profile that authorizes Network Extensions, or use LocalDevVPN from the App Store."
+      return "The installed NeoStation signature does not include Apple's packet-tunnel entitlement. Re-sign the complete NeoStation IPA with app extensions enabled and a provisioning profile that authorizes Network Extensions."
     case .activeVPNConflict(let name):
       return "NeoStation cannot start its local JIT tunnel while \(name) is active. Disconnect the other VPN and retry."
     case .configuration(let message):
