@@ -21,6 +21,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/local_jit_tunnel_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -266,6 +267,14 @@ void main() async {
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
+
+  if (Platform.isIOS) {
+    // The system-owned Packet Tunnel continues outside the Flutter lifecycle.
+    // Do not delay the frontend while iOS restores or authorizes it.
+    unawaited(
+      LocalJitTunnelService.refreshInBackground(reason: 'cold start'),
+    );
+  }
 
   await AudioPolicyService().initialize();
 

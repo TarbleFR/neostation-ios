@@ -140,6 +140,21 @@ def validate(ipa: Path) -> dict:
         demand(helper_info['CFBundleIdentifier'] == info['CFBundleIdentifier'] + '.dolphinjithelper', 'Helper ID is inconsistent')
         demand(bool(helper_info.get('NSExtension', {}).get('NSExtensionPrincipalClass')), 'Helper principal class is missing')
         helper = helper_root + '/' + helper_info['CFBundleExecutable']
+        tunnel_infos = [n for n in names if n.endswith('/NeoStationLocalTunnel.appex/Info.plist')]
+        demand(len(tunnel_infos) == 1, 'Expected exactly one NeoStationLocalTunnel')
+        tunnel_info = plistlib.loads(z.read(tunnel_infos[0]))
+        tunnel_root = posixpath.dirname(tunnel_infos[0])
+        demand(tunnel_root == app + '/PlugIns/NeoStationLocalTunnel.appex',
+               'Local tunnel must be embedded in PlugIns')
+        demand(tunnel_info['CFBundleIdentifier'] == info['CFBundleIdentifier'] + '.localtunnel',
+               'Local tunnel ID is inconsistent')
+        tunnel_extension = tunnel_info.get('NSExtension', {})
+        demand(tunnel_extension.get('NSExtensionPointIdentifier') ==
+               'com.apple.networkextension.packet-tunnel',
+               'Local tunnel extension point is invalid')
+        demand(bool(tunnel_extension.get('NSExtensionPrincipalClass')),
+               'Local tunnel principal class is missing')
+        tunnel = tunnel_root + '/' + tunnel_info['CFBundleExecutable']
         core = app + '/Frameworks/DolphinCore.framework/DolphinCore'
         stik = app + '/Frameworks/StikJIT.framework/StikJIT'
         demand([n for n in names if n.endswith('/StikJIT.framework/StikJIT')] == [stik], 'StikJIT must have one shared host copy')
@@ -157,7 +172,7 @@ def validate(ipa: Path) -> dict:
                 image = macho(z.read(name))
                 demand(image['platform'] == 2, f'Non-iOS Mach-O embedded: {name}')
                 images[name] = image
-        for name in (main, helper, core, stik):
+        for name in (main, helper, tunnel, core, stik):
             demand(name in images, f'Required arm64 executable is missing: {name}')
             demand((z.getinfo(name).external_attr >> 16) & 0o111 != 0, f'Executable mode missing: {name}')
         demand(BRIDGE.issubset(set(images[core]['definedSymbols'])), 'Actual Dolphin bridge exports are missing')
@@ -166,6 +181,9 @@ def validate(ipa: Path) -> dict:
         for token in ('BootCore', 'JitArm64'):
             demand(any(token in s for s in core_symbols), f'Real Dolphin implementation symbol missing: {token}')
         demand(any(d['path'] == '@rpath/StikJIT.framework/StikJIT' for d in images[helper]['dependencies']), 'Helper does not dynamically link StikJIT')
+        demand(any('/NetworkExtension.framework/NetworkExtension' in d['path']
+                   for d in images[tunnel]['dependencies']),
+               'Local tunnel does not link NetworkExtension')
         demand(any(d['path'] == '@rpath/DolphinCore.framework/DolphinCore'
                    for name, image in images.items() if name != core
                    for d in image['dependencies']), 'No host image links DolphinCore (self-ID is not evidence)')

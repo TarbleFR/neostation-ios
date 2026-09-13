@@ -17,6 +17,11 @@ from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS = ROOT / 'build/ios/DolphinDerivedData/Build/Products/Release-iphoneos'
+LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS = {
+    'com.apple.developer.networking.networkextension': [
+        'packet-tunnel-provider',
+    ],
+}
 
 
 def embedded_entitlements(data: bytes) -> dict:
@@ -77,14 +82,44 @@ def embedded_entitlements(data: bytes) -> dict:
 
 
 def require_runtime_entitlements(payload: dict) -> None:
-    missing = [key for key in REQUIRED_RUNTIME_ENTITLEMENTS if payload.get(key) is not True]
+    missing = [
+        key
+        for key, value in REQUIRED_RUNTIME_ENTITLEMENTS.items()
+        if not entitlement_matches(payload.get(key), value)
+    ]
     if missing:
         raise ValueError('Runner executable is missing RPCS3 entitlements: ' + ', '.join(missing))
 
 
-def embed(executable: Path, entitlements: Path) -> dict:
+def require_entitlements(payload: dict, expected: dict, owner: str) -> None:
+    missing = [
+        key
+        for key, value in expected.items()
+        if not entitlement_matches(payload.get(key), value)
+    ]
+    if missing:
+        raise ValueError(
+            f'{owner} executable is missing entitlements: ' + ', '.join(missing)
+        )
+
+
+def entitlement_matches(actual: object, expected: object) -> bool:
+    # Python considers 1 == True. Entitlement plists do not: preserve both the
+    # value and its type so a sideload signer cannot substitute an integer.
+    if isinstance(expected, bool):
+        return actual is expected
+    return actual == expected
+
+
+def embed(
+    executable: Path,
+    entitlements: Path,
+    required: dict | None = None,
+    owner: str = 'Runner',
+) -> dict:
     expected = plistlib.loads(entitlements.read_bytes())
-    require_runtime_entitlements(expected)
+    required = REQUIRED_RUNTIME_ENTITLEMENTS if required is None else required
+    require_entitlements(expected, required, owner)
     subprocess.run([
         'codesign', '--force', '--sign', '-', '--timestamp=none',
         '--generate-entitlement-der', '--entitlements', str(entitlements),
@@ -92,7 +127,7 @@ def embed(executable: Path, entitlements: Path) -> dict:
     ], check=True)
     subprocess.run(['codesign', '--verify', '--strict', str(executable)], check=True)
     actual = embedded_entitlements(executable.read_bytes())
-    require_runtime_entitlements(actual)
+    require_entitlements(actual, required, owner)
     if any(actual.get(key) != value for key, value in expected.items()):
         raise ValueError('Ad-hoc signing lost existing host capabilities')
     return actual
@@ -103,10 +138,24 @@ def main() -> None:
     if len(apps) != 1:
         raise SystemExit('Expected one built NeoStation app')
     app = apps[0]
+    extension = app / 'PlugIns/NeoStationLocalTunnel.appex'
+    if not extension.is_dir():
+        raise SystemExit('NeoStation local tunnel extension is missing from the build')
+    extension_info = plistlib.loads((extension / 'Info.plist').read_bytes())
+    extension_executable = extension / extension_info['CFBundleExecutable']
+    embed(
+        extension_executable,
+        ROOT / 'ios/NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements',
+        required=LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS,
+        owner='NeoStationLocalTunnel',
+    )
     info = plistlib.loads((app / 'Info.plist').read_bytes())
     executable = app / info['CFBundleExecutable']
     embed(executable, ROOT / 'ios/Runner/Runner.entitlements')
-    print('RPCS3 entitlements verified INSIDE Runner; user sideload signing is still required.')
+    print(
+        'RPCS3 and local-tunnel entitlements verified inside the app; '
+        'user sideload signing is still required.'
+    )
 
 
 if __name__ == '__main__':

@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'logger_service.dart';
 import 'dolphin_system_files.dart';
+import 'local_jit_tunnel_service.dart';
 import 'pairing_file_service.dart';
 
 /// IPL slots exposed by the native GameCube playlist.
@@ -519,6 +520,24 @@ class DolphinInternalV2Service {
         ready: false,
         message: 'Import a pairing file in NeoStation before launching Dolphin.',
         failedStage: 'stikjit.pairing_missing',
+        logPath: logPath,
+        gates: _emptyGates(),
+      );
+    }
+
+    try {
+      await LocalJitTunnelService.ensureRunningForJit();
+    } on LocalJitTunnelException catch (error) {
+      await _appendLogTo(
+        logPath,
+        'stikjit.local_tunnel_failed',
+        error.message,
+        {'code': error.code},
+      );
+      return DolphinLaunchReport(
+        ready: false,
+        message: error.message,
+        failedStage: 'stikjit.local_tunnel_failed',
         logPath: logPath,
         gates: _emptyGates(),
       );

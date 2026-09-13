@@ -3,7 +3,7 @@
 
 StikJIT 1.5.0 assumes that RemotePairing always listens on port 49152. Newer
 iOS releases advertise the active port with Bonjour and may move it between
-LocalDevVPN sessions. Resolve that service before constructing the default
+device-local tunnel sessions. Resolve that service before constructing the default
 configuration, while preserving 49152 as the offline/permission fallback.
 """
 from pathlib import Path

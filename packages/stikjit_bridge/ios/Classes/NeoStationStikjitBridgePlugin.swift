@@ -205,7 +205,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
     var logs = [String]()
 
     logs.append(
-      "Preparing LocalDevVPN/RSD endpoint and Developer Disk Image for ARMSX2."
+      "Preparing NeoStation local tunnel/RSD and Developer Disk Image for ARMSX2."
     )
     let readiness = StikJIT.prepareDevice(
       pairingFile: pairingFile,
@@ -272,7 +272,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
   ) -> String {
     switch stage {
     case .checkingReachability:
-      return "Checking LocalDevVPN/RSD reachability."
+      return "Checking NeoStation local tunnel/RSD reachability."
     case .checkingDDI:
       return "Checking Developer Disk Image."
     case .downloadingDDI(let fraction, let status):
@@ -396,7 +396,7 @@ enum Armsx2BridgeError: LocalizedError {
     case .symbolMissing(let symbol):
       return "StikJIT framework is missing required ARMSX2 symbol \(symbol)."
     case .invalidDeviceAddress(let address):
-      return "Invalid LocalDevVPN device address: \(address)"
+      return "Invalid NeoStation local tunnel device address: \(address)"
     case .idevice(let message):
       return message
     case .incompleteHandle(let name):

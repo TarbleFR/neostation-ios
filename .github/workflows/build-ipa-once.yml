@@ -96,6 +96,7 @@ jobs:
           python3 test/rpcs3_build258_core_profile_comparison_test.py
           python3 test/rpcs3_build258_pipeline_scheduler_benchmark_test.py
           python3 test/stikjit_remote_pairing_compat_test.py
+          python3 test/local_jit_tunnel_contract_test.py
           python3 build-utils/benchmark_rpcs3_pipeline_scheduler.py | tee build/rpcs3-ci/pipeline-scheduler-benchmark.log
 
       - name: Set up Flutter 3.47.2
@@ -181,7 +182,7 @@ jobs:
           python3 build-utils/patch_stikjit_remote_pairing.py "$STIK_SRC"
           python3 test/stikjit_rpcs3_patch_test.py "$STIK_SRC"
           python3 test/stikjit_remote_pairing_compat_test.py "$STIK_SRC"
-          python3 -m py_compile build-utils/patch_stikjit_rpcs3.py build-utils/patch_stikjit_remote_pairing.py build-utils/install_patched_stikjit.py
+          python3 -m py_compile build-utils/patch_stikjit_rpcs3.py build-utils/patch_stikjit_remote_pairing.py build-utils/configure_local_jit_tunnel.py build-utils/install_patched_stikjit.py
 
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           pushd "$STIK_SRC" >/dev/null
@@ -265,7 +266,8 @@ jobs:
           python3 test/rpcs3_profile_database_test.py
           python3 test/rpcs3_telemetry_comparison_test.py
           python3 test/stikjit_remote_pairing_compat_test.py
-          python3 -m py_compile test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
+          python3 test/local_jit_tunnel_contract_test.py
+          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -343,6 +345,8 @@ jobs:
             --build-number="$BUILD_NUMBER" --dart-define-from-file=.dart-defines.json
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
           python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_local_jit_tunnel.py
+          python3 build-utils/configure_local_jit_tunnel.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios

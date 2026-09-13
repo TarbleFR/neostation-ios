@@ -8,11 +8,28 @@ class StikjitBridge {
     'neostation/stikjit_armsx2',
   );
 
+  static Future<LocalJitTunnelState> ensureLocalTunnel() async {
+    final raw = await _channel.invokeMethod<Object?>('ensureLocalTunnel');
+    if (raw is! Map) {
+      throw StateError('NeoStation local tunnel returned an invalid response.');
+    }
+    return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
+  }
+
+  static Future<LocalJitTunnelState> localTunnelStatus() async {
+    final raw = await _channel.invokeMethod<Object?>('localTunnelStatus');
+    if (raw is! Map) {
+      throw StateError('NeoStation local tunnel returned an invalid status.');
+    }
+    return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
+  }
+
   static Future<StikjitLaunchResult> enableMeloNxJit({
     required String pairingFilePath,
     required String bundleId,
     required String gameUrl,
   }) async {
+    await ensureLocalTunnel();
     final raw = await _channel.invokeMethod<Object?>('enableMeloNxJit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
@@ -49,6 +66,7 @@ class StikjitBridge {
     required String bundleId,
     required String gameUrl,
   }) async {
+    await ensureLocalTunnel();
     final raw = await _armsx2Channel.invokeMethod<Object?>('enableArmsx2Jit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
@@ -79,6 +97,34 @@ class StikjitBridge {
       logs: logs,
     );
   }
+}
+
+class LocalJitTunnelState {
+  const LocalJitTunnelState({
+    required this.active,
+    required this.status,
+    required this.managedByNeoStation,
+    required this.interfaceAddress,
+    required this.peerAddress,
+    required this.onDemand,
+  });
+
+  factory LocalJitTunnelState.fromMap(Map<String, dynamic> data) =>
+      LocalJitTunnelState(
+        active: data['active'] == true,
+        status: data['status']?.toString() ?? 'unknown',
+        managedByNeoStation: data['managedByNeoStation'] == true,
+        interfaceAddress: data['interfaceAddress']?.toString(),
+        peerAddress: data['peerAddress']?.toString(),
+        onDemand: data['onDemand'] == true,
+      );
+
+  final bool active;
+  final String status;
+  final bool managedByNeoStation;
+  final String? interfaceAddress;
+  final String? peerAddress;
+  final bool onDemand;
 }
 
 class StikjitLaunchResult {

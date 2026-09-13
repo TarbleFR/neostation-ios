@@ -15,7 +15,7 @@ Experimental iOS-only bridge allowing NeoStation to prepare StikJIT and enable J
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
   s.swift_version = '5.0'
-  s.frameworks = 'JavaScriptCore', 'Network', 'Security', 'CFNetwork', 'SystemConfiguration', 'IOKit'
+  s.frameworks = 'JavaScriptCore', 'Network', 'NetworkExtension', 'Security', 'CFNetwork', 'SystemConfiguration', 'IOKit'
   s.libraries = 'z', 'bz2', 'iconv', 'compression'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES'

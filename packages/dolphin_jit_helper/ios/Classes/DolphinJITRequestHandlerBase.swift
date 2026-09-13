@@ -105,7 +105,7 @@ open class DolphinJITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
 
   private static func preparationDescription(_ stage: StikJIT.PreparationStage) -> String {
     switch stage {
-    case .checkingReachability: return "StikJIT: checking LocalDevVPN/RSD reachability."
+    case .checkingReachability: return "StikJIT: checking NeoStation local tunnel/RSD reachability."
     case .checkingDDI: return "StikJIT: checking the Developer Disk Image."
     case .downloadingDDI(let fraction, let status): return "StikJIT: DDI download \(Int(fraction * 100))% — \(status)"
     case .mountingDDI(let fraction): return "StikJIT: mounting DDI \(Int(fraction * 100))%."

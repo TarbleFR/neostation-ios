@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 
 import 'logger_service.dart';
+import 'local_jit_tunnel_service.dart';
 import 'pairing_file_service.dart';
 import 'rpcs3_library_service.dart';
 
@@ -225,6 +226,11 @@ class Rpcs3InternalService {
     );
 
     final pairing = await PairingFileService.storedFile();
+    try {
+      await LocalJitTunnelService.ensureRunningForJit();
+    } on LocalJitTunnelException catch (error) {
+      throw Rpcs3InternalException('localTunnelFailed', error.message);
+    }
     var readingProgress = false;
     final progress = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (readingProgress) return;
@@ -299,8 +305,9 @@ class Rpcs3InternalService {
     return 'Remote Pairing rejected the saved credentials. NeoStation found '
         'the Pairing File, but iOS closed the session. In iLoader, delete the '
         'saved RPPairing entry for this iPhone, pair again, export the new '
-        'Pairing File, then reimport it in NeoStation. Reconnect LocalDevVPN '
-        'before retrying. Technical detail: $message';
+        'Pairing File, then reimport it in NeoStation. NeoStation will refresh '
+        'its integrated local JIT tunnel automatically before retrying. '
+        'Technical detail: $message';
   }
 
   /// Ensures exactly one JIT transaction can be active at a time.

@@ -34,8 +34,10 @@ def write_plist(path: Path, data: dict) -> None:
 
 def source_snapshot() -> None:
     paths = ['build-utils', 'native/dolphin_internal_helper',
+             'native/local_jit_tunnel',
              'packages/dolphin_internal_bridge', 'packages/dolphin_jit_helper',
              'packages/stikjit_bridge', 'lib/services/dolphin_internal_v2_service.dart',
+             'lib/services/local_jit_tunnel_service.dart',
              'lib/widgets/dolphin_internal_playlist_actions.dart',
              'lib/services/game/game_launch_service.dart',
              'lib/providers/sqlite_config_provider.dart',

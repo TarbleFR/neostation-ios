@@ -217,7 +217,7 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
   ) -> String {
     switch stage {
     case .checkingReachability:
-      return "StikJIT: checking LocalDevVPN/RSD reachability."
+      return "StikJIT: checking NeoStation local tunnel/RSD reachability."
     case .checkingDDI:
       return "StikJIT: checking the Developer Disk Image."
     case .downloadingDDI(let fraction, let status):

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/game_service.dart';
+import 'package:neostation/services/local_jit_tunnel_service.dart';
 import 'package:neostation/services/music_player_service.dart';
 import 'package:provider/provider.dart';
 
@@ -53,6 +55,12 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
       await GameService.handleAppResumed();
       if (!mounted) return;
+
+      if (Platform.isIOS) {
+        unawaited(
+          LocalJitTunnelService.refreshInBackground(reason: 'app resume'),
+        );
+      }
 
       if (Platform.isAndroid) {
         final configProvider = Provider.of<SqliteConfigProvider>(

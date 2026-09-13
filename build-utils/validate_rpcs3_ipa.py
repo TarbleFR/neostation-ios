@@ -17,7 +17,12 @@ import zipfile
 from pathlib import Path
 
 from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
-from embed_rpcs3_host_entitlements import embedded_entitlements, require_runtime_entitlements
+from embed_rpcs3_host_entitlements import (
+    LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS,
+    embedded_entitlements,
+    require_entitlements,
+    require_runtime_entitlements,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_NAME = 'libRPCS3Core.dylib'
@@ -127,6 +132,30 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
         entitlements = embedded_entitlements(executable.read_bytes())
         require_runtime_entitlements(entitlements)
 
+        tunnel = app / 'PlugIns/NeoStationLocalTunnel.appex'
+        demand(tunnel.is_dir(), 'NeoStation local tunnel extension is missing')
+        tunnel_info = plistlib.loads((tunnel / 'Info.plist').read_bytes())
+        demand(
+            tunnel_info.get('CFBundleIdentifier') ==
+            f"{info.get('CFBundleIdentifier')}.localtunnel",
+            'NeoStation local tunnel bundle identifier is inconsistent',
+        )
+        demand(
+            tunnel_info.get('NSExtension', {}).get(
+                'NSExtensionPointIdentifier'
+            ) == 'com.apple.networkextension.packet-tunnel',
+            'NeoStation local tunnel extension point is invalid',
+        )
+        tunnel_executable = tunnel / tunnel_info['CFBundleExecutable']
+        tunnel_entitlements = embedded_entitlements(
+            tunnel_executable.read_bytes()
+        )
+        require_entitlements(
+            tunnel_entitlements,
+            LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS,
+            'NeoStationLocalTunnel',
+        )
+
         actual_head = command_output('git', '-C', str(ROOT), 'rev-parse', 'HEAD').strip()
         demand(actual_head == commit,
                f'Validator checkout mismatch: expected {commit}, got {actual_head}')
@@ -142,6 +171,8 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'runtimeEntitlements': {
                 key: entitlements.get(key) for key in REQUIRED_RUNTIME_ENTITLEMENTS
             },
+            'localTunnelBundleIdentifier': tunnel_info['CFBundleIdentifier'],
+            'localTunnelEntitlements': tunnel_entitlements,
             'lazyLoadValidated': True,
         }
 

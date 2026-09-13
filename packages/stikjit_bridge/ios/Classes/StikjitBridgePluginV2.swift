@@ -256,7 +256,7 @@ private enum NeoStationActivationError: LocalizedError {
     case .pairingFileMissing:
       return "The pairing file is no longer readable during the post-JIT handoff."
     case .invalidDeviceAddress(let address):
-      return "Invalid LocalDevVPN device address during handoff: \(address)"
+      return "Invalid NeoStation local tunnel device address during handoff: \(address)"
     case .symbolMissing(let symbol):
       return "StikJIT framework is missing required handoff symbol \(symbol)."
     case .incompleteHandle(let name):
