@@ -1,13 +1,8 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:neostation/l10n/full_theme_locale.dart';
-import 'package:neostation/services/full_theme_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/app_themes.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class ThemeCard extends StatefulWidget {
   const ThemeCard({
@@ -24,7 +19,12 @@ class ThemeCard extends StatefulWidget {
   final String themeName;
   final String displayName;
   final VoidCallback? onTap;
+
+  /// Optional long-press handler, used to delete imported (custom) themes.
   final VoidCallback? onLongPress;
+
+  /// When set, a small ✕ badge is shown on the card to delete the theme (used
+  /// for imported/custom themes). Complements [onLongPress] and gamepad delete.
   final VoidCallback? onDelete;
   final bool isSelected;
   final bool isFocused;
@@ -51,18 +51,11 @@ class _ThemeCardState extends State<ThemeCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final preview = widget.themeName == 'system'
-        ? AppThemes.getThemeDataByName(
-            WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-                    Brightness.dark
-                ? 'dark'
-                : 'light',
-          )
-        : AppThemes.getThemeDataByName(widget.themeName);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 16:9 App Mockup Container
         AspectRatio(
           aspectRatio: 4 / 3,
           child: Container(
@@ -89,15 +82,37 @@ class _ThemeCardState extends State<ThemeCard> {
               borderRadius: BorderRadius.circular(6.r),
               child: Stack(
                 children: [
+                  // 1. App Mockup
                   Positioned.fill(
-                    child: CustomPaint(
-                      painter: _AppMockupPainter(
-                        surface: preview.colorScheme.surface,
-                        primary: preview.colorScheme.primary,
-                        secondary: preview.colorScheme.secondary,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        ThemeData themeData;
+                        if (widget.themeName == 'system') {
+                          final brightness = WidgetsBinding
+                              .instance
+                              .platformDispatcher
+                              .platformBrightness;
+                          themeData = AppThemes.getThemeDataByName(
+                            brightness == Brightness.dark ? 'dark' : 'light',
+                          );
+                        } else {
+                          themeData = AppThemes.getThemeDataByName(
+                            widget.themeName,
+                          );
+                        }
+
+                        return CustomPaint(
+                          painter: _AppMockupPainter(
+                            surface: themeData.colorScheme.surface,
+                            primary: themeData.colorScheme.primary,
+                            secondary: themeData.colorScheme.secondary,
+                          ),
+                        );
+                      },
                     ),
                   ),
+
+                  // Selection indicator: centered checkmark, only when selected
                   if (widget.isSelected)
                     Center(
                       child: Container(
@@ -114,16 +129,17 @@ class _ThemeCardState extends State<ThemeCard> {
                         ),
                       ),
                     ),
+                  // 5. InkWell Layer
                   Positioned.fill(
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
                         canRequestFocus: false,
-                        focusNode: _focusNode,
                         focusColor: Colors.transparent,
                         hoverColor: Colors.transparent,
                         highlightColor: Colors.transparent,
                         splashColor: Colors.transparent,
+                        focusNode: _focusNode,
                         onTap: () {
                           SfxService().playEnterSound();
                           widget.onTap?.call();
@@ -132,6 +148,8 @@ class _ThemeCardState extends State<ThemeCard> {
                       ),
                     ),
                   ),
+                  // Delete badge for imported themes (on top of the InkWell so
+                  // it receives its own taps).
                   if (widget.onDelete != null)
                     Positioned(
                       top: 4.r,
@@ -163,6 +181,7 @@ class _ThemeCardState extends State<ThemeCard> {
           ),
         ),
         SizedBox(height: 4.r),
+        // Theme Name Text Below
         Text(
           widget.displayName,
           textAlign: TextAlign.center,
@@ -182,76 +201,174 @@ class _ThemeCardState extends State<ThemeCard> {
 }
 
 class _AppMockupPainter extends CustomPainter {
+  final Color surface;
+  final Color primary;
+  final Color secondary;
+
   const _AppMockupPainter({
     required this.surface,
     required this.primary,
     required this.secondary,
   });
 
-  final Color surface;
-  final Color primary;
-  final Color secondary;
-
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = surface;
-    canvas.drawRect(Offset.zero & size, paint);
+    final w = size.width;
+    final h = size.height;
+    final p = Paint();
 
-    final topH = size.height * 0.15;
-    paint.color = primary.withValues(alpha: 0.08);
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, topH), paint);
+    // Background
+    p.color = surface;
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), p);
 
-    final bottomH = size.height * 0.22;
-    paint.color = secondary.withValues(alpha: 0.12);
-    canvas.drawRect(
-      Rect.fromLTWH(0, size.height - bottomH, size.width, bottomH),
-      paint,
-    );
+    // ── Top nav bar ──
+    final topH = h * 0.15;
+    p.color = primary.withValues(alpha: 0.07);
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, topH), p);
 
-    final cardH = size.height * 0.55;
-    final centerW = size.width * 0.44;
-    final centerX = (size.width - centerW) / 2;
-    final centerY = topH + (size.height - topH - bottomH - cardH) / 2;
-    paint.color = primary.withValues(alpha: 0.72);
+    // "View Mode" pill (top-left)
+    p.color = primary.withValues(alpha: 0.55);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(centerX, centerY, centerW, cardH),
-        Radius.circular(size.width * 0.014),
+        Rect.fromLTWH(w * 0.02, topH * 0.28, w * 0.12, topH * 0.44),
+        Radius.circular(topH * 0.22),
       ),
-      paint,
+      p,
     );
 
-    paint.color = secondary.withValues(alpha: 0.34);
-    final sideW = size.width * 0.18;
-    final sideH = cardH * 0.78;
-    final sideY = centerY + (cardH - sideH) / 2;
+    // Centered nav icons (6 tabs)
+    final iconR = topH * 0.18;
+    const iconCount = 6;
+    final spacing = iconR * 3.0;
+    final startX = (w - (iconCount - 1) * spacing) / 2;
+    for (int i = 0; i < iconCount; i++) {
+      p.color = i == 1 ? primary : primary.withValues(alpha: 0.22);
+      canvas.drawCircle(Offset(startX + i * spacing, topH / 2), iconR, p);
+    }
+
+    // Clock strip (top-right)
+    p.color = primary.withValues(alpha: 0.3);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.04, sideY, sideW, sideH),
-        Radius.circular(size.width * 0.012),
+        Rect.fromLTWH(w * 0.86, topH * 0.28, w * 0.1, topH * 0.44),
+        Radius.circular(2),
       ),
-      paint,
+      p,
     );
+
+    // ── Bottom bar ──
+    final bottomH = h * 0.22;
+    final bottomY = h - bottomH;
+    p.color = secondary.withValues(alpha: 0.12);
+    canvas.drawRect(Rect.fromLTWH(0, bottomY, w, bottomH), p);
+
+    // System filter chips
+    final chipH = bottomH * 0.38;
+    final chipW = w * 0.055;
+    final chipY = bottomY + bottomH * 0.12;
+    final chipGap = w * 0.008;
+    for (int i = 0; i < 11; i++) {
+      final cx = w * 0.015 + i * (chipW + chipGap);
+      p.color = i == 0
+          ? primary.withValues(alpha: 0.75)
+          : primary.withValues(alpha: 0.18);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(cx, chipY, chipW, chipH),
+          Radius.circular(chipH / 2),
+        ),
+        p,
+      );
+    }
+
+    // Action buttons row (bottom-right)
+    final btnH = bottomH * 0.48;
+    final btnY2 = bottomY + bottomH * 0.52;
+    // Settings pill
+    p.color = secondary.withValues(alpha: 0.5);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.78, sideY, sideW, sideH),
-        Radius.circular(size.width * 0.012),
+        Rect.fromLTWH(w * 0.72, btnY2, w * 0.12, btnH),
+        Radius.circular(btnH / 2),
       ),
-      paint,
+      p,
+    );
+    // Enter button (primary)
+    p.color = primary.withValues(alpha: 0.9);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.86, btnY2, w * 0.12, btnH),
+        Radius.circular(btnH / 2),
+      ),
+      p,
+    );
+
+    // ── Carousel ──
+    final carouselTop = topH + h * 0.025;
+    final carouselBottom = bottomY - h * 0.025;
+    final carouselH = carouselBottom - carouselTop;
+
+    // Left partial card
+    final sideW = w * 0.2;
+    final sideH = carouselH * 0.78;
+    final sideY = carouselTop + (carouselH - sideH) / 2;
+    p.color = secondary.withValues(alpha: 0.38);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(-sideW * 0.15, sideY, sideW, sideH),
+        Radius.circular(w * 0.012),
+      ),
+      p,
+    );
+
+    // Right partial card
+    p.color = secondary.withValues(alpha: 0.38);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w - sideW * 0.85, sideY, sideW, sideH),
+        Radius.circular(w * 0.012),
+      ),
+      p,
+    );
+
+    // Center card (dominant)
+    final centerW = w * 0.44;
+    final centerX = (w - centerW) / 2;
+    p.color = primary.withValues(alpha: 0.72);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(centerX, carouselTop, centerW, carouselH),
+        Radius.circular(w * 0.014),
+      ),
+      p,
+    );
+
+    // Game count strip on center card bottom
+    p.color = surface.withValues(alpha: 0.35);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          centerX + centerW * 0.15,
+          carouselTop + carouselH * 0.82,
+          centerW * 0.7,
+          carouselH * 0.1,
+        ),
+        Radius.circular(w * 0.006),
+      ),
+      p,
     );
   }
 
   @override
-  bool shouldRepaint(_AppMockupPainter oldDelegate) =>
-      oldDelegate.surface != surface ||
-      oldDelegate.primary != primary ||
-      oldDelegate.secondary != secondary;
+  bool shouldRepaint(_AppMockupPainter old) =>
+      old.surface != surface ||
+      old.primary != primary ||
+      old.secondary != secondary;
 }
 
-/// Existing custom-theme tile, expanded to expose two distinct imports:
-/// NeoStation color themes (`.json`) and full EmulationStation themes (`.zip`).
-/// A full theme is installed as the single active full experience rather than
-/// being added to the list/grid/carousel view-mode choices.
+/// Grid tile that triggers the "import custom theme" flow. Rendered as the last
+/// item in the theme grid, styled to match [ThemeCard] (same footprint, focus
+/// border and label) but with a dashed "+" placeholder instead of a preview.
 class ImportThemeCard extends StatelessWidget {
   const ImportThemeCard({
     super.key,
@@ -264,219 +381,76 @@ class ImportThemeCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isFocused;
 
-  Future<void> _showImportChoice(BuildContext context) async {
-    SfxService().playEnterSound();
-    await FullThemeService.instance.initialize();
-    if (!context.mounted) return;
-
-    final active = FullThemeService.instance.activeTheme.value;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(FullThemeLocale.title(dialogContext)),
-        content: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 480.r),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                FullThemeLocale.description(dialogContext),
-                style: Theme.of(dialogContext).textTheme.bodyMedium,
-              ),
-              SizedBox(height: 16.r),
-              ListTile(
-                leading: const Icon(Symbols.palette_rounded),
-                title: Text(FullThemeLocale.colorTheme(dialogContext)),
-                subtitle: const Text('NeoStation / daisyUI JSON'),
-                onTap: () {
-                  Navigator.of(dialogContext).pop();
-                  onTap?.call();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Symbols.dashboard_customize_rounded),
-                title: Text(
-                  active == null
-                      ? FullThemeLocale.import(dialogContext)
-                      : FullThemeLocale.replace(dialogContext),
-                ),
-                subtitle: Text(
-                  active?.name ?? 'EmulationStation theme package',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () {
-                  Navigator.of(dialogContext).pop();
-                  _pickFullTheme(context);
-                },
-              ),
-              if (active != null)
-                ListTile(
-                  leading: const Icon(Symbols.delete_rounded),
-                  title: Text(FullThemeLocale.remove(dialogContext)),
-                  subtitle: Text(active.name),
-                  onTap: () async {
-                    Navigator.of(dialogContext).pop();
-                    await FullThemeService.instance.removeActiveTheme();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(FullThemeLocale.remove(context))),
-                    );
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickFullTheme(BuildContext context) async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['zip'],
-        allowMultiple: false,
-      );
-      final path = result?.files.single.path;
-      if (path == null || path.isEmpty || !context.mounted) return;
-
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const PopScope(
-          canPop: false,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-
-      try {
-        final imported = await FullThemeService.instance.importZip(File(path));
-        if (!context.mounted) return;
-        Navigator.of(context, rootNavigator: true).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(FullThemeLocale.success(context, imported.name))),
-        );
-      } catch (_) {
-        if (!context.mounted) return;
-        Navigator.of(context, rootNavigator: true).pop();
-        rethrow;
-      }
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(FullThemeLocale.error(context))),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
 
-    return ValueListenableBuilder(
-      valueListenable: FullThemeService.instance.activeTheme,
-      builder: (context, activeTheme, _) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AspectRatio(
-              aspectRatio: 4 / 3,
-              child: Container(
-                margin: EdgeInsets.symmetric(vertical: 4.h),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(
-                    color: isFocused
-                        ? accent
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.25),
-                    width: 2.r,
-                  ),
-                  boxShadow: isFocused
-                      ? [
-                          BoxShadow(
-                            color: accent.withValues(alpha: 0.3),
-                            blurRadius: 8.r,
-                            spreadRadius: 1.r,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6.r),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      canRequestFocus: false,
-                      onTap: () => _showImportChoice(context),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Center(
-                            child: Icon(
-                              activeTheme == null
-                                  ? Symbols.add_rounded
-                                  : Symbols.dashboard_customize_rounded,
-                              color: isFocused
-                                  ? accent
-                                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                              size: 32.r,
-                            ),
-                          ),
-                          if (activeTheme != null)
-                            Positioned(
-                              left: 8.r,
-                              right: 8.r,
-                              bottom: 7.r,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 7.r,
-                                  vertical: 4.r,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: accent.withValues(alpha: 0.85),
-                                  borderRadius: BorderRadius.circular(6.r),
-                                ),
-                                child: Text(
-                                  activeTheme.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onPrimary,
-                                    fontSize: 8.r,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Container(
+            margin: EdgeInsets.symmetric(vertical: 4.h),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: isFocused
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                width: 2.r,
+              ),
+              boxShadow: isFocused
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.3),
+                        blurRadius: 8.r,
+                        spreadRadius: 1.r,
                       ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6.r),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  canRequestFocus: false,
+                  onTap: () {
+                    SfxService().playEnterSound();
+                    onTap?.call();
+                  },
+                  child: Center(
+                    child: Icon(
+                      Symbols.add_rounded,
+                      color: isFocused
+                          ? accent
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      size: 32.r,
                     ),
                   ),
                 ),
               ),
             ),
-            SizedBox(height: 4.r),
-            Text(
-              activeTheme == null ? label : FullThemeLocale.title(context),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: isFocused
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
-                fontSize: 12.r,
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+        SizedBox(height: 4.r),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: isFocused
+                ? theme.colorScheme.onSurface
+                : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12.r,
+          ),
+        ),
+      ],
     );
   }
 }
