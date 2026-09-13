@@ -47,7 +47,11 @@ class FullThemeDefinition {
     final raw = relativeOrAbsolute.trim();
     final candidate = p.isAbsolute(raw)
         ? File(raw)
-        : File(p.normalize(p.join(rootPath, raw.replaceFirst(RegExp(r'^\./'), ''))));
+        : File(
+            p.normalize(
+              p.join(rootPath, raw.replaceFirst(RegExp(r'^\./'), '')),
+            ),
+          );
     return candidate.existsSync() ? candidate.path : null;
   }
 
@@ -60,20 +64,71 @@ class FullThemeDefinition {
   }
 
   /// Returns a raster logo shipped by the imported theme when one exists.
-  /// SVG-only logos deliberately fall back to NeoStation's bundled system logo
-  /// so importing a theme does not add a new rendering dependency.
+  ///
+  /// Arcade Planet often ships an SVG ColorLogo but also has PNG wheel assets.
+  /// NeoStation prefers the ColorLogo and transparently falls back to the wheel
+  /// so the full theme remains useful without introducing an SVG dependency.
   String? rasterSystemLogo(String folderName) {
     final key = folderName.toLowerCase();
     return firstExisting([
       '_art/Colorlogos/$key.webp',
       '_art/Colorlogos/$key.png',
       '_art/Colorlogos/$key.jpg',
-      '_art/Colorlogos/$key.jpeg',
       '_art/Colorlogos/US/$key.webp',
       '_art/Colorlogos/US/$key.png',
-      '_art/Colorlogos/US/$key.jpg',
+      '_art/wheel/$key.png',
+      '_art/wheel/US/$key.png',
+      '_art/wheelv/$key.png',
+      '_art/wheelv/US/$key.png',
     ]);
   }
+
+  /// Small horizontal-system-carousel logo used by Arcade Planet's 16:9 view.
+  String? carouselSystemLogo(String folderName) {
+    final key = folderName.toLowerCase();
+    return firstExisting([
+      '_art/wheel/$key.png',
+      '_art/wheel/US/$key.png',
+      '_art/Colorlogos/$key.png',
+      '_art/Colorlogos/US/$key.png',
+    ]);
+  }
+
+  /// System-specific foreground artwork used by Arcade Planet.
+  String? systemSprite(String folderName, {int layer = 1}) {
+    final key = folderName.toLowerCase();
+    final directory = layer <= 1 ? 'sprites' : 'sprites$layer';
+    return firstExisting([
+      '_art/$directory/$key.png',
+      '_art/$directory/US/$key.png',
+      '_art/$directory/$key.webp',
+    ]);
+  }
+
+  String? systemController(String folderName) {
+    final key = folderName.toLowerCase();
+    return firstExisting([
+      '_art/controllers/$key.png',
+      '_art/controllers/US/$key.png',
+      '_art/controllers/$key.webp',
+    ]);
+  }
+
+  /// Static layers defined by Arcade Planet's `_art/systemview/169H.xml`.
+  String? get arcadePlanetLandscapeBackground => firstExisting(const [
+    '_art/backgrounds/169/bghlandscape.png',
+    '_art/backgrounds/169/bghlandscape.webp',
+  ]);
+
+  String? get arcadePlanetGlowBackground => firstExisting(const [
+    '_art/backgrounds/169/bgh2.png',
+    '_art/backgrounds/169/bgh2.webp',
+  ]);
+
+  String? get arcadePlanetForegroundBackground => firstExisting(const [
+    '_art/backgrounds/169/bgh3.png',
+    '_art/backgrounds/169/bgh3.webp',
+  ]);
 
   String? systemBackdrop(String folderName) {
     final key = folderName.toLowerCase();
@@ -82,6 +137,7 @@ class FullThemeDefinition {
       '_art/backgrounds/$key.png',
       '_art/backgrounds/$key.jpg',
       '_art/backgrounds/$key.jpeg',
+      if (isArcadePlanet) '_art/backgrounds/169/bghlandscape.png',
       backgroundPath ?? '',
       '_art/backgrounds/bgsky.jpg',
       '_art/backgrounds/bgsky.png',
