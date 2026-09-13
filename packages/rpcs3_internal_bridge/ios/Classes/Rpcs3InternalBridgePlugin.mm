@@ -1,5 +1,9 @@
 #import "Rpcs3InternalBridgePlugin.h"
+#import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
+#import "Rpcs3Diagnostics.h"
+#import "Rpcs3MemoryPreflight.h"
+#import "RPCS3GameInputController.h"
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -45,11 +49,15 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
   return enabled;
 }
 
-// RPCS3 0.8.1 performs the same kind of readiness check before it dlopens its
-// Core. A successful debugger attach is not sufficient if iOS still rejects
-// the RW -> RX transition that the JIT arena needs. Probe that transition here
-// so NeoStation can report an error instead of letting the Core abort at load.
+// Only the legacy Core backend uses an ordinary RW -> RX transition. On
+// iOS 26 the Core itself prepares RX pages through the attached Universal
+// debugger; this legacy probe cannot test those prepared mappings.
 static BOOL RPCS3ProbeExecutableMemory(NSString** error) {
+  if (@available(iOS 26.0, *)) {
+    if (RPCS3JitHasActiveCoreHandshake()) return YES;
+    if (error) *error = @"RPCS3 requires a fresh Universal JIT attachment before loading its Core.";
+    return NO;
+  }
   size_t pageSize = (size_t)getpagesize();
   void* page = mmap(NULL,
                     pageSize,
@@ -107,6 +115,7 @@ static UIViewController* RPCS3RootViewController(void) {
 @interface RPCS3GameViewController : UIViewController
 @property(nonatomic, copy) dispatch_block_t closeHandler;
 @property(nonatomic, readonly) CAMetalLayer* metalLayer;
+@property(nonatomic, strong) RPCS3GameInputController* inputController;
 @end
 
 @implementation RPCS3GameViewController
@@ -145,6 +154,18 @@ static UIViewController* RPCS3RootViewController(void) {
     [close.heightAnchor constraintEqualToConstant:44],
   ]];
 }
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  [self.inputController start];
+}
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  [self.inputController layoutControlsInBounds:self.view.bounds safeAreaInsets:self.view.safeAreaInsets];
+}
+- (void)viewDidDisappear:(BOOL)animated {
+  [self.inputController stop];
+  [super viewDidDisappear:animated];
+}
 - (CAMetalLayer*)metalLayer { return (CAMetalLayer*)self.view.layer; }
 - (void)closePressed { if (self.closeHandler) self.closeHandler(); }
 - (BOOL)prefersStatusBarHidden { return YES; }
@@ -159,6 +180,7 @@ static UIViewController* RPCS3RootViewController(void) {
 @property(nonatomic, assign) BOOL initializedWithExpandedJit;
 @property(nonatomic, assign) BOOL coreLoadedWithExpandedJit;
 @property(nonatomic, assign) BOOL operationBusy;
+@property(nonatomic, assign) BOOL llvmSelfTestPassed;
 @end
 
 @implementation Rpcs3InternalBridgePlugin {
@@ -185,11 +207,14 @@ static UIViewController* RPCS3RootViewController(void) {
 
 static void RPCS3Log(void* context, int32_t level, const char* message) {
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
-  if (!bridge || !message) return;
+  if (!bridge || !message || level > 5) return;
   NSString* text = [NSString stringWithUTF8String:message] ?: @"";
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [bridge.channel invokeMethod:@"coreLog" arguments:@{@"level": @(level), @"message": text}];
-  });
+  // Keep notices/errors needed for crash diagnosis; do not fsync debug/trace
+  // output on the render or emulation hot paths.
+  // Level 5 includes PPU linking / relocation and SPU worker milestones.
+  // Dart has no coreLog consumer. Do not flood its main queue with events
+  // while native boot callbacks are waiting for that same queue.
+  RPCS3Diagnostic(@"core_log", text);
 }
 
 static void RPCS3Dispatch(void* context,
@@ -206,6 +231,7 @@ static void RPCS3Progress(void* context,
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
   if (!bridge) return;
   NSString* text = detail ? ([NSString stringWithUTF8String:detail] ?: @"") : @"";
+  RPCS3Diagnostic(@"install_progress", text);
   dispatch_async(dispatch_get_main_queue(), ^{
     [bridge.channel invokeMethod:@"installProgress" arguments:@{
       @"current": @(current), @"total": @(total), @"detail": text,
@@ -238,16 +264,12 @@ static void RPCS3Progress(void* context,
     return NO;
   }
 
-  if (expanded) {
-    if (!RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing")) ||
-        !RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))) {
-      if (error) {
-        *error = @"RPCS3 requires extended-virtual-addressing and increased-memory-limit entitlements in the signed NeoStation IPA.";
-      }
-      return NO;
-    }
-  }
-
+  // libRPCS3Core.dylib is loaded into NeoStation itself, not a child process.
+  // The Core therefore executes with the entitlements of the signed NeoStation
+  // host process. Do not gate dlopen on a second SecTask entitlement lookup:
+  // some sideload signing paths can make that diagnostic lookup report a false
+  // negative even though the kernel has already granted the host capabilities.
+  // The executable-memory probe below remains the runtime source of truth.
   NSString* readinessError = nil;
   if (!RPCS3ProbeExecutableMemory(&readinessError)) {
     if (error) *error = readinessError;
@@ -274,7 +296,9 @@ static void RPCS3Progress(void* context,
   dlerror();
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
+      RPCS3Diagnostic(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
       handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
+      RPCS3Diagnostic(@"core_load_end", handle ? @"loaded" : @"dlopen failed");
       if (handle) break;
     }
   }
@@ -295,6 +319,7 @@ static void RPCS3Progress(void* context,
   LOAD("rpcs3_ios_install_zip", install_zip);
   LOAD("rpcs3_ios_install_folder", install_folder);
   LOAD("rpcs3_ios_set_display_surface", set_display_surface);
+  LOAD("rpcs3_ios_set_pad_state", set_pad_state);
   LOAD("rpcs3_ios_boot_game", boot_game);
   LOAD("rpcs3_ios_get_emulation_state", get_emulation_state);
   LOAD("rpcs3_ios_stop_emulation", stop_emulation);
@@ -317,6 +342,20 @@ static void RPCS3Progress(void* context,
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+  if ([call.method isEqualToString:@"preflight"]) {
+    dispatch_async(_runtimeQueue, ^{
+      RPCS3Diagnostic(@"memory_preflight_begin", @"Checking RPCS3 virtual address space before JIT attachment");
+      BOOL available = self.initialized || neostation::rpcs3::probe_virtual_layout();
+      NSString* message = available ? @"RPCS3 virtual memory layout available." :
+          @"iOS refuse l’espace mémoire requis par RPCS3. Réinstallez l’IPA en conservant le droit extended-virtual-addressing lors de la signature. Journal : RPCS3-diagnostic.log.";
+      RPCS3Diagnostic(@"memory_preflight_end", message);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        result(@{@"success": @(available), @"message": message});
+      });
+    });
+    return;
+  }
+
   if ([call.method isEqualToString:@"diagnostics"]) {
     NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
     NSString* corePath = [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"];
@@ -334,6 +373,7 @@ static void RPCS3Progress(void* context,
       @"abi": @(abi),
       @"build": build,
       @"initialized": @(self.initialized),
+      @"llvmSelfTestPassed": @(self.llvmSelfTestPassed),
       @"expandedJitRegion": @(self.initializedWithExpandedJit),
       @"jitReady": @(RPCS3HostIsDebugged()),
       @"extendedVirtualAddressing": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing"))),
@@ -348,11 +388,8 @@ static void RPCS3Progress(void* context,
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
 
-    // RPCS3 0.8.1's optional 512 MiB expanded Universal JIT arena is not safe
-    // inside NeoStation's in-process host on the affected iOS path: the Core
-    // initializes successfully, then faults as soon as it executes generated
-    // ARM64 from the 0x7000000000 arena. Keep the stable regular JIT policy for
-    // embedded gameplay; the extension can be reconsidered separately later.
+    // Preserve the existing embedded Core capacity policy. The allocator owns
+    // dynamic JIT addresses and thread write/execute transitions.
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
@@ -380,7 +417,9 @@ static void RPCS3Progress(void* context,
       options.context = (__bridge void*)self;
       options.expanded_jit_region = expanded ? 1 : 0;
       options.reserved = 0;
+      RPCS3Diagnostic(@"core_initialize_begin", @"Calling rpcs3_ios_initialize");
       rpcs3_ios_status status = self->_api.initialize(&options);
+      RPCS3Diagnostic(@"core_initialize_end", [NSString stringWithFormat:@"status=%d", status]);
       if (status == 0) {
         self.initialized = YES;
         self.initializedWithExpandedJit = expanded;
@@ -403,11 +442,13 @@ static void RPCS3Progress(void* context,
       rpcs3_ios_status status = self->_api.shutdown ? self->_api.shutdown() : 0;
       if (status == 0) {
         self.initialized = NO;
+        self.llvmSelfTestPassed = NO;
         self.initializedWithExpandedJit = NO;
       }
       NSDictionary* payload = [self statusPayload:status];
       dispatch_async(dispatch_get_main_queue(), ^{
         RPCS3GameViewController* controller = self.gameController;
+        [controller.inputController stop];
         self.gameController = nil;
         [controller dismissViewControllerAnimated:NO completion:nil];
         result(payload);
@@ -436,6 +477,7 @@ static void RPCS3Progress(void* context,
       if (!self.initialized) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"message": @"RPCS3 Core is not initialized."}); }); return; }
       if (self.operationBusy) { dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"message": @"Another RPCS3 operation is already running."}); }); return; }
       self.operationBusy = YES;
+      RPCS3Diagnostic(@"install_begin", call.method);
       rpcs3_ios_status status = -1;
       if ([call.method isEqualToString:@"installFirmware"])
         status = self->_api.install_firmware(input.fileSystemRepresentation, RPCS3Progress, (__bridge void*)self);
@@ -448,6 +490,7 @@ static void RPCS3Progress(void* context,
       else if ([call.method isEqualToString:@"installFolder"])
         status = self->_api.install_folder(input.fileSystemRepresentation, RPCS3Progress, (__bridge void*)self);
       self.operationBusy = NO;
+      RPCS3Diagnostic(@"install_end", [NSString stringWithFormat:@"%@ status=%d", call.method, status]);
       NSDictionary* payload = [self statusPayload:status];
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });
     });
@@ -463,30 +506,58 @@ static void RPCS3Progress(void* context,
       return;
     }
     __block RPCS3GameViewController* controller = nil;
-    dispatch_sync(dispatch_get_main_queue(), ^{
+    // Flutter delivers this handler on the main queue; dispatch_sync to the
+    // same queue deadlocks as soon as standard-arena boot is permitted.
+    void (^present)(void) = ^{
       UIViewController* root = RPCS3RootViewController();
       if (!root || root.view.window == nil) return;
       controller = [RPCS3GameViewController new];
       __weak Rpcs3InternalBridgePlugin* weakSelf = self;
       controller.closeHandler = ^{ [weakSelf stopAndDismiss:nil]; };
       [controller loadViewIfNeeded];
+      controller.inputController = [[RPCS3GameInputController alloc] initWithHostView:controller.view api:&self->_api];
+      [controller.inputController start];
+      [controller.inputController layoutControlsInBounds:controller.view.bounds safeAreaInsets:controller.view.safeAreaInsets];
       [root presentViewController:controller animated:NO completion:nil];
       self.gameController = controller;
-    });
+    };
+    if (NSThread.isMainThread) present();
+    else dispatch_sync(dispatch_get_main_queue(), present);
     if (!controller || !controller.metalLayer.device) { result(@{@"success": @NO, @"message": @"Metal surface could not be created."}); return; }
+    CGSize size = controller.view.bounds.size;
+    UIScreen* screen = controller.view.window.screen ?: UIScreen.mainScreen;
+    CGFloat scale = screen.scale;
+    float refreshRate = (float)screen.maximumFramesPerSecond;
     dispatch_async(_runtimeQueue, ^{
-      CGSize size = controller.view.bounds.size;
-      CGFloat scale = controller.view.window.screen.scale ?: UIScreen.mainScreen.scale;
+      if (!self.llvmSelfTestPassed) {
+        typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
+        auto selfTest = reinterpret_cast<SelfTest>(dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test"));
+        uint64_t output = 0;
+        RPCS3Diagnostic(@"llvm_self_test_begin", @"Testing generated ARM64 code before game boot");
+        rpcs3_ios_status testStatus = selfTest ? selfTest(11, &output) : -1;
+        self.llvmSelfTestPassed = testStatus == 0 && output == 40;
+        RPCS3Diagnostic(@"llvm_self_test_end", [NSString stringWithFormat:@"status=%d output=%llu passed=%d", testStatus, (unsigned long long)output, self.llvmSelfTestPassed]);
+        if (!self.llvmSelfTestPassed) {
+          NSString* detail = selfTest ? [self lastError] : @"LLVM self-test export is missing.";
+          [self stopAndDismiss:nil];
+          dispatch_async(dispatch_get_main_queue(), ^{
+            result(@{@"success": @NO, @"message": [@"RPCS3 LLVM JIT self-test failed: " stringByAppendingString:detail]});
+          });
+          return;
+        }
+      }
       rpcs3_ios_display_surface surface = {};
       surface.size = sizeof(surface);
       surface.width = MAX(1, (uint32_t)llround(size.width * scale));
       surface.height = MAX(1, (uint32_t)llround(size.height * scale));
-      surface.scale = (float)scale;
+      surface.refresh_rate = refreshRate;
       surface.metal_layer = (__bridge void*)controller.metalLayer;
       rpcs3_ios_status surfaceStatus = self->_api.set_display_surface(&surface);
+      RPCS3Diagnostic(@"game_boot_begin", titleId);
       rpcs3_ios_status bootStatus = surfaceStatus == 0
           ? self->_api.boot_game(titleId.UTF8String, savestateId.length ? savestateId.UTF8String : NULL)
           : surfaceStatus;
+      RPCS3Diagnostic(@"game_boot_return", [NSString stringWithFormat:@"%@ status=%d", titleId, bootStatus]);
       NSDictionary* payload = [self statusPayload:bootStatus];
       if (bootStatus != 0) [self stopAndDismiss:nil];
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });
@@ -512,6 +583,7 @@ static void RPCS3Progress(void* context,
     if (self.initialized && self->_api.set_display_surface) self->_api.set_display_surface(NULL);
     dispatch_async(dispatch_get_main_queue(), ^{
       RPCS3GameViewController* controller = self.gameController;
+      [controller.inputController stop];
       self.gameController = nil;
       [controller dismissViewControllerAnimated:NO completion:nil];
       if (result) result(@(ok));
