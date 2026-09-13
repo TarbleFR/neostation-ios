@@ -14,5 +14,5 @@ for token in [
 ]:
     assert token in plugin, token
 
-assert plugin.count("UIAlertControllerStyleActionSheet") >= 4
+assert plugin.count("UIAlertControllerStyleActionSheet") >= 6
 print("RPCS3 Build 260 modern in-game menu contract: OK")

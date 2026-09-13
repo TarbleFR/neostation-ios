@@ -56,7 +56,6 @@ jobs:
           git apply build-utils/patches/rpcs3_build247_localization.patch
           git apply --check build-utils/patches/rpcs3_build251_upscale.patch
           git apply build-utils/patches/rpcs3_build251_upscale.patch
-          python3 build-utils/patch_rpcs3_build260_modern_menu.py
           git apply --check build-utils/patches/grid_title_build243.patch
           git apply build-utils/patches/grid_title_build243.patch
           python3 build-utils/patch_rpcs3_savestate_ui.py
@@ -65,6 +64,7 @@ jobs:
           python3 build-utils/patch_rpcs3_performance_telemetry.py
           python3 build-utils/patch_rpcs3_build256_host.py
           python3 build-utils/patch_rpcs3_build256_host.py
+          python3 build-utils/patch_rpcs3_build260_modern_menu.py
           python3 test/rpcs3_ingame_ui_contract_test.py
           python3 test/rpcs3_build260_modern_menu_test.py
           python3 test/dolphin_achievements_hacks_menu_test.py

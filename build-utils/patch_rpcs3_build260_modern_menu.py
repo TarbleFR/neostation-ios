@@ -30,14 +30,16 @@ if marker not in text:
     text = text.replace(anchor, helper + anchor, 1)
 
     methods = [
-        ("- (void)showLanguageMenu {", "- (void)applyResolutionScale:"),
-        ("- (void)showResolutionScaleMenu {", "- (void)saveCurrentState {"),
-        ("- (void)showLoadSavestateMenu {", "- (void)showGameMenu {"),
-        ("- (void)showGameMenu {", "- (void)handleMethodCall:"),
+        "- (void)showLanguageMenu {",
+        "- (void)showResolutionScaleMenu {",
+        "- (void)showStretchMenu {",
+        "- (void)showSaveSavestateMenu {",
+        "- (void)showLoadSavestateMenu {",
+        "- (void)showGameMenu {",
     ]
-    for start, end in methods:
+    for start in methods:
         start_index = text.find(start)
-        end_index = text.find(end, start_index + len(start))
+        end_index = text.find("\n- (", start_index + len(start))
         if start_index < 0 or end_index < 0:
             raise SystemExit(f"RPCS3 menu method drifted: {start}")
         segment = text[start_index:end_index]
