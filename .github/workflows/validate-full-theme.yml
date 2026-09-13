@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - feature/full-theme-arcadeplanet
+      - work/full-theme-build262-sync260
     paths:
       - 'lib/**'
+      - 'test/full_theme_category_contract_test.py'
       - 'pubspec.yaml'
       - '.github/workflows/validate-full-theme.yml'
   workflow_dispatch:
@@ -28,6 +30,8 @@ jobs:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
+      - name: Validate Build 260 preservation contract
+        run: python3 test/full_theme_category_contract_test.py
       - name: Resolve dependencies
         run: flutter pub get
       - name: Analyze full-theme integration
