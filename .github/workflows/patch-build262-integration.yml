@@ -29,6 +29,9 @@ jobs:
       - name: Validate preservation contract
         run: python3 test/full_theme_category_contract_test.py
 
+      - name: Keep workflow update for direct GitHub write
+        run: git checkout -- .github/workflows/build-ipa-once.yml
+
       - name: Commit converged Build 262 sources
         shell: bash
         run: |
@@ -38,12 +41,11 @@ jobs:
           git add \
             lib/screens/settings_screen/new_settings_options/themes_settings_content.dart \
             lib/services/full_theme_service.dart \
-            .github/workflows/build-ipa-once.yml \
             build-utils/build_rpcs3_embedded_core.sh \
             build-utils/configure_local_jit_tunnel.py \
             test/full_theme_category_contract_test.py
           if git diff --cached --quiet; then
-            echo 'Build 262 integration already applied.'
+            echo 'Build 262 source integration already applied.'
             exit 0
           fi
           git commit -m 'Build 262: preserve 260 features and expose full-theme category'
