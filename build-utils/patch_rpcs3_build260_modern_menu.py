@@ -17,6 +17,17 @@ subprocess.run(
     cwd=ROOT,
     check=True,
 )
+
+# Dart's num.clamp returns num even when the receiver is a double. Normalize
+# the generated progress value explicitly before static analysis.
+full_theme_service = ROOT / "lib/services/full_theme_service.dart"
+full_theme_text = full_theme_service.read_text(encoding="utf-8")
+full_theme_text = full_theme_text.replace(
+    ".clamp(0.0, 1.0));",
+    ".clamp(0.0, 1.0).toDouble());",
+)
+full_theme_service.write_text(full_theme_text, encoding="utf-8")
+
 subprocess.run(
     [sys.executable, str(ROOT / "test/build262_integration_contract_test.py")],
     cwd=ROOT,
