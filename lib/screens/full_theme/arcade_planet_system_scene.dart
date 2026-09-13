@@ -32,7 +32,6 @@ class _ArcadePlanetSystemSceneState extends State<ArcadePlanetSystemScene>
     with TickerProviderStateMixin {
   late final AnimationController _ambientController;
   late final AnimationController _entryController;
-  late final Animation<double> _spriteScale;
   late final Animation<double> _logoSlide;
   late final Animation<double> _controllerBounce;
 
@@ -51,10 +50,6 @@ class _ArcadePlanetSystemSceneState extends State<ArcadePlanetSystemScene>
   }
 
   void _configureAnimations() {
-    _spriteScale = CurvedAnimation(
-      parent: _entryController,
-      curve: const Interval(0.34, 0.72, curve: Curves.easeOutBack),
-    );
     _logoSlide = CurvedAnimation(
       parent: _entryController,
       curve: const Interval(0.0, 0.58, curve: Curves.easeOutCubic),
@@ -210,7 +205,10 @@ class _ArcadePlanetSystemSceneState extends State<ArcadePlanetSystemScene>
             widthFactor: widthFactor,
             child: Transform.scale(
               scale: local,
-              child: Opacity(opacity: local.clamp(0.0, 1.0), child: child),
+              child: Opacity(
+                opacity: local.clamp(0.0, 1.0).toDouble(),
+                child: child,
+              ),
             ),
           ),
         );
@@ -251,7 +249,7 @@ class _ArcadePlanetSystemSceneState extends State<ArcadePlanetSystemScene>
             widthFactor: 0.14,
             heightFactor: 0.20,
             child: Opacity(
-              opacity: value.clamp(0.0, 1.0),
+              opacity: value.clamp(0.0, 1.0).toDouble(),
               child: child,
             ),
           ),
