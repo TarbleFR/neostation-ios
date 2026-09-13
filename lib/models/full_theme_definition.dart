@@ -83,7 +83,7 @@ class FullThemeDefinition {
     ]);
   }
 
-  /// Small horizontal-system-carousel logo used by Arcade Planet's 16:9 view.
+  /// Small horizontal-system-carousel logo used by Arcade Planet's system view.
   String? carouselSystemLogo(String folderName) {
     final key = folderName.toLowerCase();
     return firstExisting([
@@ -114,21 +114,31 @@ class FullThemeDefinition {
     ]);
   }
 
-  /// Static layers defined by Arcade Planet's `_art/systemview/169H.xml`.
-  String? get arcadePlanetLandscapeBackground => firstExisting(const [
-    '_art/backgrounds/169/bghlandscape.png',
-    '_art/backgrounds/169/bghlandscape.webp',
-  ]);
+  /// Chooses the closest landscape asset family shipped by Arcade Planet.
+  /// iPhone tends to resolve to 16:9 or 16:10, while iPad naturally resolves
+  /// to 4:3. This avoids stretching a 16:9 scene across every Apple display.
+  String arcadePlanetAspectCode(double aspectRatio) {
+    if (aspectRatio >= 1.68) return '169';
+    if (aspectRatio >= 1.47) return '1610';
+    if (aspectRatio >= 1.29) return '43';
+    if (aspectRatio >= 1.12) return '54';
+    return '11';
+  }
 
-  String? get arcadePlanetGlowBackground => firstExisting(const [
-    '_art/backgrounds/169/bgh2.png',
-    '_art/backgrounds/169/bgh2.webp',
-  ]);
-
-  String? get arcadePlanetForegroundBackground => firstExisting(const [
-    '_art/backgrounds/169/bgh3.png',
-    '_art/backgrounds/169/bgh3.webp',
-  ]);
+  String? arcadePlanetBackgroundForAspect(
+    double aspectRatio,
+    String fileName,
+  ) {
+    final preferred = arcadePlanetAspectCode(aspectRatio);
+    return firstExisting([
+      '_art/backgrounds/$preferred/$fileName',
+      '_art/backgrounds/169/$fileName',
+      '_art/backgrounds/1610/$fileName',
+      '_art/backgrounds/43/$fileName',
+      '_art/backgrounds/54/$fileName',
+      '_art/backgrounds/11/$fileName',
+    ]);
+  }
 
   String? systemBackdrop(String folderName) {
     final key = folderName.toLowerCase();
