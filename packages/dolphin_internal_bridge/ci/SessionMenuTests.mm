@@ -60,8 +60,8 @@
   [menu endAppearanceTransition];
   [menu.tableView reloadData];
   XCTAssertEqual(reads, 0);
-  XCTAssertEqual([menu.tableView numberOfRowsInSection:0], 7);
-  for (NSInteger row = 0; row < 7; ++row)
+  XCTAssertEqual([menu.tableView numberOfRowsInSection:0], 9);
+  for (NSInteger row = 0; row < 9; ++row)
     XCTAssertNotNil([menu tableView:menu.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:0]]);
 }
 
@@ -71,12 +71,12 @@
   __block BOOL resumed = NO;
   menu.resumeGame = ^{ resumed = YES; };
   [menu loadViewIfNeeded];
-  XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0], 5);
-  NSArray* expected = @[@"graphics", @"controls", @"console", @"resume", @"quit"];
+  XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0], 7);
+  NSArray* expected = @[@"graphics", @"hacks", @"controls", @"console", @"achievements", @"resume", @"quit"];
   for (NSInteger row = 0; row < expected.count; ++row)
     XCTAssertEqualObjects([menu tableView:menu.tableView cellForRowAtIndexPath:
         [NSIndexPath indexPathForRow:row inSection:0]].textLabel.text, expected[row]);
-  [menu tableView:menu.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]];
+  [menu tableView:menu.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:5 inSection:0]];
   XCTAssertTrue(resumed);
 }
 
@@ -144,7 +144,7 @@
     XCTAssertEqualObjects([root tableView:root.tableView cellForRowAtIndexPath:
         [NSIndexPath indexPathForRow:4 inSection:0]].textLabel.text, @"Load state");
 
-    AutoConfirmSessionMenu* saves = [self openStatePage:3 root:root navigation:navigation];
+    AutoConfirmSessionMenu* saves = [self openStatePage:5 root:root navigation:navigation];
     XCTAssertEqualObjects(saves.title, @"Save state");
     XCTAssertNotNil(finishRead);
     XCTAssertEqual([saves tableView:saves.tableView numberOfRowsInSection:0], 0);
@@ -182,7 +182,7 @@
     XCTAssertTrue([last.detailTextLabel.text containsString:wii.boolValue ? @"RMGE01.s10" : @"GMSE01.s10"]);
 
     [navigation popToRootViewControllerAnimated:NO];
-    AutoConfirmSessionMenu* loads = [self openStatePage:4 root:root navigation:navigation];
+    AutoConfirmSessionMenu* loads = [self openStatePage:6 root:root navigation:navigation];
     XCTAssertEqualObjects(loads.title, @"Load state");
     XCTAssertNotNil(finishRead);
     readCompletion = finishRead;
@@ -240,7 +240,7 @@
   UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
   [navigation loadViewIfNeeded];
   [root loadViewIfNeeded];
-  AutoConfirmSessionMenu* saves = [self openStatePage:3 root:root navigation:navigation];
+  AutoConfirmSessionMenu* saves = [self openStatePage:5 root:root navigation:navigation];
   NSIndexPath* lastRow = [NSIndexPath indexPathForRow:9 inSection:0];
   [saves tableView:saves.tableView didSelectRowAtIndexPath:lastRow];
   XCTAssertFalse(navigation.view.userInteractionEnabled);
@@ -306,7 +306,7 @@
     root.shareRecording = ^{ shares++; };
     UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
     [navigation loadViewIfNeeded];
-    AutoConfirmSessionMenu* page = [self openStatePage:5 root:root navigation:navigation];
+    AutoConfirmSessionMenu* page = [self openStatePage:7 root:root navigation:navigation];
     XCTAssertEqualObjects(page.title, @"Video recording");
     XCTAssertEqual(page.wii, wii.boolValue);
     NSIndexPath* toggleRow = [NSIndexPath indexPathForRow:0 inSection:0];
@@ -376,7 +376,7 @@
   root.resumeGame = ^{ resumes++; };
   UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
   [navigation loadViewIfNeeded];
-  AutoConfirmSessionMenu* page = [self openStatePage:5 root:root navigation:navigation];
+  AutoConfirmSessionMenu* page = [self openStatePage:7 root:root navigation:navigation];
   NSIndexPath* toggleRow = [NSIndexPath indexPathForRow:0 inSection:0];
   for (NSNumber* nativeSuccess in @[@NO, @YES]) {
     [page tableView:page.tableView didSelectRowAtIndexPath:toggleRow];
@@ -407,7 +407,7 @@
   root.resumeGame = ^{ actions++; };
   UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
   [navigation loadViewIfNeeded];
-  AutoConfirmSessionMenu* page = [self openStatePage:5 root:root navigation:navigation];
+  AutoConfirmSessionMenu* page = [self openStatePage:7 root:root navigation:navigation];
   for (NSInteger row = 0; row < 2; row++) {
     NSIndexPath* index = [NSIndexPath indexPathForRow:row inSection:0];
     XCTAssertTrue(([page tableView:page.tableView cellForRowAtIndexPath:index]
@@ -441,7 +441,7 @@
   root.applySettings = ^(NSDictionary* request, void (^completion)(BOOL)) { applied = request; completion(YES); };
   UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
   [root loadViewIfNeeded];
-  [root tableView:root.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]];
+  [root tableView:root.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:3 inSection:0]];
   DolphinSessionMenu* console = (DolphinSessionMenu*)navigation.topViewController;
   [console loadViewIfNeeded];
   [console beginAppearanceTransition:YES animated:NO];
@@ -452,6 +452,34 @@
   [choices loadViewIfNeeded];
   [choices tableView:choices.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
   XCTAssertEqualObjects(applied, (@{@"kind": @"language", @"wii": @YES, @"value": @3}));
+}
+
+- (void)testCompatibilityHacksUseTheNativeSettingsBridge {
+  DolphinSessionMenu* root = [DolphinSessionMenu new];
+  __block NSDictionary* applied = nil;
+  root.readSettings = ^(BOOL wii, NSInteger slot, void (^completion)(NSDictionary*)) {
+    completion(@{@"hacks": @{@"viSkip": @NO, @"skipEfbAccess": @NO,
+      @"ignoreFormatChanges": @NO, @"efbCopyToTexture": @NO,
+      @"deferEfbCopies": @NO, @"fastDepth": @YES,
+      @"disableBoundingBox": @NO, @"vertexRounding": @NO}});
+  };
+  root.applySettings = ^(NSDictionary* request, void (^completion)(BOOL)) {
+    applied = request;
+    completion(YES);
+  };
+  UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:root];
+  [root loadViewIfNeeded];
+  [root tableView:root.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
+  DolphinSessionMenu* hacks = (DolphinSessionMenu*)navigation.topViewController;
+  [hacks loadViewIfNeeded];
+  [hacks beginAppearanceTransition:YES animated:NO];
+  [hacks endAppearanceTransition];
+  XCTAssertEqual([hacks tableView:hacks.tableView numberOfRowsInSection:0], 8);
+  [hacks tableView:hacks.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+  DolphinSessionMenu* choices = (DolphinSessionMenu*)navigation.topViewController;
+  [choices loadViewIfNeeded];
+  [choices tableView:choices.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
+  XCTAssertEqualObjects(applied, (@{@"kind": @"hack", @"key": @"viSkip", @"value": @YES}));
 }
 
 - (NSArray<UIButton*>*)buttonsIn:(UIView*)view {

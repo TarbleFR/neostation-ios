@@ -16,12 +16,14 @@ class DolphinInternalPlaylistActions extends StatefulWidget {
   final String systemFolder;
   final Future<void> Function() onLibraryChanged;
   final ValueChanged<bool>? onInteractionChanged;
+  final bool embedded;
 
   const DolphinInternalPlaylistActions({
     super.key,
     required this.systemFolder,
     required this.onLibraryChanged,
     this.onInteractionChanged,
+    this.embedded = false,
   });
 
   @override
@@ -119,9 +121,8 @@ class _DolphinInternalPlaylistActionsState
 
   void _notice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _selected(String action) async {
@@ -164,10 +165,8 @@ class _DolphinInternalPlaylistActionsState
           );
           if (!mounted) return;
           if (!await _confirm(
-                _text('sharedHelp').replaceAll(
-                  '{system}',
-                  _isGameCube ? 'GameCube' : 'Wii',
-                ),
+                _text('sharedHelp')
+                    .replaceAll('{system}', _isGameCube ? 'GameCube' : 'Wii'),
                 title: _text('shared'),
               ) ||
               !mounted) {
@@ -216,21 +215,9 @@ class _DolphinInternalPlaylistActionsState
     }
     final scheme = Theme.of(context).colorScheme;
 
-    return Container(
+    final button = SizedBox(
       width: 36.r,
       height: 36.r,
-      decoration: BoxDecoration(
-        color: scheme.tertiaryFixed,
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: scheme.tertiaryFixed, width: 2.r),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.3),
-            blurRadius: 3.r,
-            offset: Offset(1.5.r, 1.5.r),
-          ),
-        ],
-      ),
       child: PopupMenuButton<String>(
         key: const ValueKey('dolphin-import-menu'),
         tooltip: _text('import'),
@@ -278,6 +265,13 @@ class _DolphinInternalPlaylistActionsState
           PopupMenuItem(value: 'shared', child: Text(_text('shared'))),
         ],
       ),
+    );
+    if (widget.embedded) return button;
+    return Material(
+      color: scheme.tertiaryFixed,
+      borderRadius: BorderRadius.circular(10.r),
+      elevation: 2,
+      child: button,
     );
   }
 }

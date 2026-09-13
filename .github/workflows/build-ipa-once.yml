@@ -1,17 +1,17 @@
-name: NeoStation iOS Build 259
-run-name: NeoStation iOS Build 259 (single-IPA local VPN) • ${{ github.sha }}
+name: NeoStation iOS Build 260
+run-name: NeoStation iOS Build 260 (modern in-game UI + Dolphin RA/hacks) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - work/vpn-single-ipa-build259
+      - work/ui-dolphin-build260
 
 permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-259
+  group: neostation-ios-build-260
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '259'
-      IPA_NAME: 'NeoStation-iOS-Build-259-Single-IPA-VPN'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-259-Single-IPA-VPN'
+      BUILD_NUMBER: '260'
+      IPA_NAME: 'NeoStation-iOS-Build-260-Modern-Dolphin'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-260-Modern-Dolphin'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       # First upstream commit containing the iOS RemotePairing OPACK
@@ -56,6 +56,7 @@ jobs:
           git apply build-utils/patches/rpcs3_build247_localization.patch
           git apply --check build-utils/patches/rpcs3_build251_upscale.patch
           git apply build-utils/patches/rpcs3_build251_upscale.patch
+          python3 build-utils/patch_rpcs3_build260_modern_menu.py
           git apply --check build-utils/patches/grid_title_build243.patch
           git apply build-utils/patches/grid_title_build243.patch
           python3 build-utils/patch_rpcs3_savestate_ui.py
@@ -65,6 +66,9 @@ jobs:
           python3 build-utils/patch_rpcs3_build256_host.py
           python3 build-utils/patch_rpcs3_build256_host.py
           python3 test/rpcs3_ingame_ui_contract_test.py
+          python3 test/rpcs3_build260_modern_menu_test.py
+          python3 test/dolphin_achievements_hacks_menu_test.py
+          python3 test/integrated_import_tab_contract_test.py
           python3 test/rpcs3_build251_contract_test.py
           python3 test/rpcs3_savestate_ui_contract_test.py
           python3 test/rpcs3_performance_telemetry_patch_test.py
@@ -309,6 +313,7 @@ jobs:
             -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=17.4 -DENABLE_VISIBILITY=ON \
             -DENABLE_BITCODE=OFF -DENABLE_ARC=ON -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_FLAGS=-fPIC -DIOS=ON -DENABLE_ANALYTICS=NO \
+            -DUSE_RETRO_ACHIEVEMENTS=ON -DRC_CLIENT_SUPPORTS_RAINTEGRATION=OFF \
             -DUSE_SYSTEM_LIBS=OFF -DENABLE_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache

@@ -56,6 +56,23 @@ void ApplyGraphicsPreferences()
     Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(value));
     Config::SetCurrent(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(value));
   }
+  auto* hacks = preferences.GetOrCreateSection("Hacks");
+  bool enabled = false;
+#define APPLY_NEOSTATION_HACK(name, setting)                                      \
+  if (hacks->Get(name, &enabled))                                                 \
+  {                                                                               \
+    Config::SetBase(setting, enabled);                                             \
+    Config::SetCurrent(setting, enabled);                                          \
+  }
+  APPLY_NEOSTATION_HACK("viSkip", Config::GFX_HACK_VI_SKIP);
+  APPLY_NEOSTATION_HACK("efbAccess", Config::GFX_HACK_EFB_ACCESS_ENABLE);
+  APPLY_NEOSTATION_HACK("efbFormatChanges", Config::GFX_HACK_EFB_EMULATE_FORMAT_CHANGES);
+  APPLY_NEOSTATION_HACK("efbCopyToTexture", Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM);
+  APPLY_NEOSTATION_HACK("deferEfbCopies", Config::GFX_HACK_DEFER_EFB_COPIES);
+  APPLY_NEOSTATION_HACK("fastDepth", Config::GFX_FAST_DEPTH_CALC);
+  APPLY_NEOSTATION_HACK("boundingBox", Config::GFX_HACK_BBOX_ENABLE);
+  APPLY_NEOSTATION_HACK("vertexRounding", Config::GFX_HACK_VERTEX_ROUNDING);
+#undef APPLY_NEOSTATION_HACK
 }
 
 std::string InputSection(bool wii, int slot, const std::string& mode)

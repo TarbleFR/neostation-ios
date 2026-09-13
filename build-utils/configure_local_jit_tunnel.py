@@ -135,7 +135,7 @@ tunnel.build_configurations.each do |configuration|
   settings['CLANG_ENABLE_MODULES'] = 'YES'
   settings['CODE_SIGN_ENTITLEMENTS'] = 'NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements'
   settings['CODE_SIGN_STYLE'] = 'Automatic'
-  settings['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '259')
+  settings['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '260')
   settings['DEFINES_MODULE'] = 'YES'
   settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
   settings['GENERATE_INFOPLIST_FILE'] = 'NO'

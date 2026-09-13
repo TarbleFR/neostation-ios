@@ -16,12 +16,14 @@ class Rpcs3InternalPlaylistActions extends StatefulWidget {
     required this.onFirmwareChanged,
     required this.onBack,
     this.onInteractionChanged,
+    this.embedded = false,
   });
 
   final Future<void> Function() onLibraryChanged;
   final ValueChanged<bool> onFirmwareChanged;
   final VoidCallback onBack;
   final ValueChanged<bool>? onInteractionChanged;
+  final bool embedded;
 
   @override
   State<Rpcs3InternalPlaylistActions> createState() =>
@@ -40,6 +42,7 @@ class _Rpcs3InternalPlaylistActionsState
   String _progressMessage = '';
   Rpcs3ContentImportProgress? _contentProgress;
   String? _activeAction;
+  OverlayEntry? _operationOverlayEntry;
 
   bool get _firmwareInstalled => _firmwareVersion.isNotEmpty;
   bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
@@ -55,11 +58,15 @@ class _Rpcs3InternalPlaylistActionsState
           _phase = state.phase;
           _progressMessage = state.message;
         });
+        _operationOverlayEntry?.markNeedsBuild();
       }
     });
-    _contentProgressSubscription = Rpcs3ContentImportService.progress.listen((event) {
+    _contentProgressSubscription = Rpcs3ContentImportService.progress.listen((
+      event,
+    ) {
       if (mounted && _busy) {
         setState(() => _contentProgress = event);
+        _operationOverlayEntry?.markNeedsBuild();
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -69,12 +76,28 @@ class _Rpcs3InternalPlaylistActionsState
 
   @override
   void dispose() {
+    _operationOverlayEntry?.remove();
+    _operationOverlayEntry = null;
     _runtimeSubscription?.cancel();
     _contentProgressSubscription?.cancel();
     super.dispose();
   }
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
+
+  void _showOperationOverlay() {
+    if (!widget.embedded || _operationOverlayEntry != null || !mounted) return;
+    _operationOverlayEntry = OverlayEntry(
+      builder: (overlayContext) =>
+          _buildOperationOverlay(Theme.of(overlayContext).colorScheme),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_operationOverlayEntry!);
+  }
+
+  void _hideOperationOverlay() {
+    _operationOverlayEntry?.remove();
+    _operationOverlayEntry = null;
+  }
 
   Future<void> _opened() async {
     _interaction(true);
@@ -122,6 +145,7 @@ class _Rpcs3InternalPlaylistActionsState
       _progressMessage = '';
       _contentProgress = null;
     });
+    _showOperationOverlay();
     _interaction(true);
     try {
       // The picker opens before JIT/Core preparation. Cancel keeps this gate.
@@ -139,6 +163,7 @@ class _Rpcs3InternalPlaylistActionsState
     } finally {
       if (mounted) {
         setState(() => _busy = false);
+        _hideOperationOverlay();
         _interaction(!_firmwareInstalled);
       }
     }
@@ -177,12 +202,12 @@ class _Rpcs3InternalPlaylistActionsState
       _progressMessage = switch (action) {
         'folder' =>
           _fr ? 'Ouverture du dossier PS3…' : 'Opening PS3 game folder…',
-        'saves' => _fr
-            ? 'Préparation des sauvegardes RPCS3…'
-            : 'Preparing RPCS3 saves…',
+        'saves' =>
+          _fr ? 'Préparation des sauvegardes RPCS3…' : 'Preparing RPCS3 saves…',
         _ => _fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…',
       };
     });
+    _showOperationOverlay();
     _interaction(true);
     try {
       if (action == 'games') {
@@ -214,6 +239,7 @@ class _Rpcs3InternalPlaylistActionsState
           _activeAction = null;
           _contentProgress = null;
         });
+        _hideOperationOverlay();
         _interaction(false);
       }
     }
@@ -395,8 +421,38 @@ class _Rpcs3InternalPlaylistActionsState
 
   @override
   Widget build(BuildContext context) {
-    if (_checking || !_firmwareInstalled) return _buildFirmwareGate();
+    if (!widget.embedded && (_checking || !_firmwareInstalled)) {
+      return _buildFirmwareGate();
+    }
     final scheme = Theme.of(context).colorScheme;
+    final button = SizedBox(
+      width: 36.r,
+      height: 36.r,
+      child: PopupMenuButton<String>(
+        key: const ValueKey('rpcs3-internal-import-menu'),
+        tooltip: _fr ? 'RPCS3 / Importer' : 'RPCS3 / Import',
+        enabled: !_busy && !_checking && _firmwareInstalled,
+        padding: EdgeInsets.zero,
+        onOpened: _opened,
+        onCanceled: () => _interaction(false),
+        onSelected: _selected,
+        icon: _busy || _checking
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                Icons.file_upload_outlined,
+                size: 18.r,
+                color: widget.embedded
+                    ? scheme.onSurface
+                    : scheme.onTertiaryFixed,
+              ),
+        itemBuilder: _menuItems,
+      ),
+    );
+    if (widget.embedded) return button;
     return Stack(
       children: [
         Positioned(
@@ -406,72 +462,7 @@ class _Rpcs3InternalPlaylistActionsState
             child: Material(
               color: scheme.tertiaryFixed,
               borderRadius: BorderRadius.circular(10.r),
-              child: SizedBox(
-                width: 36.r,
-                height: 36.r,
-                child: PopupMenuButton<String>(
-                  key: const ValueKey('rpcs3-internal-import-menu'),
-                  tooltip: _fr ? 'RPCS3 / Importer' : 'RPCS3 / Import',
-                  enabled: !_busy,
-                  padding: EdgeInsets.zero,
-                  onOpened: _opened,
-                  onCanceled: () => _interaction(false),
-                  onSelected: _selected,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          Icons.file_upload_outlined,
-                          size: 18.r,
-                          color: scheme.onTertiaryFixed,
-                        ),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      enabled: false,
-                      child: Text(
-                        '${_fr ? 'Firmware installé' : 'Firmware installed'} : $_firmwareVersion',
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: 'games',
-                      child: Text(_fr ? 'Importer des jeux' : 'Import games'),
-                    ),
-                    PopupMenuItem(
-                      value: 'folder',
-                      child: Text(
-                        _fr
-                            ? 'Importer un dossier de jeu décrypté'
-                            : 'Import decrypted game folder',
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'firmware',
-                      child: Text(
-                        _fr
-                            ? 'Importer le firmware PS3'
-                            : 'Import PS3 firmware',
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: 'saves',
-                      child: Text(
-                        _fr
-                            ? 'Exporter les sauvegardes'
-                            : 'Export save data',
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'open',
-                      child: Text(_fr ? 'Ouvrir RPCS3' : 'Open RPCS3'),
-                    ),
-                  ],
-                ),
-              ),
+              child: SizedBox(width: 36.r, height: 36.r, child: button),
             ),
           ),
         ),
@@ -492,4 +483,39 @@ class _Rpcs3InternalPlaylistActionsState
       ],
     );
   }
+
+  List<PopupMenuEntry<String>> _menuItems(BuildContext context) => [
+    PopupMenuItem(
+      enabled: false,
+      child: Text(
+        '${_fr ? 'Firmware installé' : 'Firmware installed'} : $_firmwareVersion',
+      ),
+    ),
+    const PopupMenuDivider(),
+    PopupMenuItem(
+      value: 'games',
+      child: Text(_fr ? 'Importer des jeux' : 'Import games'),
+    ),
+    PopupMenuItem(
+      value: 'folder',
+      child: Text(
+        _fr
+            ? 'Importer un dossier de jeu décrypté'
+            : 'Import decrypted game folder',
+      ),
+    ),
+    PopupMenuItem(
+      value: 'firmware',
+      child: Text(_fr ? 'Importer le firmware PS3' : 'Import PS3 firmware'),
+    ),
+    const PopupMenuDivider(),
+    PopupMenuItem(
+      value: 'saves',
+      child: Text(_fr ? 'Exporter les sauvegardes' : 'Export save data'),
+    ),
+    PopupMenuItem(
+      value: 'open',
+      child: Text(_fr ? 'Ouvrir RPCS3' : 'Open RPCS3'),
+    ),
+  ];
 }

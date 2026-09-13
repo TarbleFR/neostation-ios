@@ -1,7 +1,7 @@
 #import "DolphinSessionMenu.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
-  DOLMenuRoot, DOLMenuGraphics, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
+  DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
 };
 
 static void DOLMenuOnMain(dispatch_block_t block) {
@@ -18,6 +18,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
 @property(nonatomic, copy) NSDictionary* recordingSnapshot;
+- (UINavigationBarAppearance*)modernNavigationAppearance;
 @end
 
 @implementation DolphinSessionMenu
@@ -29,7 +30,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 }
 
 - (NSArray<NSString*>*)rootKeys {
-  NSMutableArray* keys = [NSMutableArray arrayWithArray:@[@"graphics", @"controls", @"console"]];
+  NSMutableArray* keys = [NSMutableArray arrayWithArray:@[@"graphics", @"hacks", @"controls", @"console", @"achievements"]];
   if (self.stateActionsAvailable) [keys addObjectsFromArray:@[@"saveState", @"loadState"]];
   if (self.readRecording) [keys addObject:@"recording"];
   [keys addObjectsFromArray:@[@"resume", @"quit"]];
@@ -50,6 +51,14 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
+  self.tableView.backgroundColor = UIColor.clearColor;
+  self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
+  self.tableView.separatorColor = [UIColor.separatorColor colorWithAlphaComponent:0.35];
+  self.tableView.sectionHeaderTopPadding = 12;
+  self.navigationController.navigationBar.prefersLargeTitles = NO;
+  self.navigationController.navigationBar.tintColor = UIColor.systemIndigoColor;
+  self.navigationController.navigationBar.standardAppearance = [self modernNavigationAppearance];
+  self.navigationController.navigationBar.scrollEdgeAppearance = self.navigationController.navigationBar.standardAppearance;
   self.navigationItem.backButtonTitle = [self text:@"back"];
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.estimatedRowHeight = 56;
@@ -61,10 +70,22 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  if (self.page == DOLMenuConsole || self.page == DOLMenuGraphics || self.page == DOLMenuControls)
+  if (self.page == DOLMenuConsole || self.page == DOLMenuGraphics || self.page == DOLMenuHacks || self.page == DOLMenuAchievements || self.page == DOLMenuControls)
     [self reloadSettings];
   if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) [self reloadStates];
   if (self.page == DOLMenuRecording) [self reloadRecording];
+}
+
+- (UINavigationBarAppearance*)modernNavigationAppearance {
+  UINavigationBarAppearance* appearance = [UINavigationBarAppearance new];
+  [appearance configureWithTransparentBackground];
+  appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial];
+  appearance.shadowColor = [UIColor.separatorColor colorWithAlphaComponent:0.25];
+  appearance.titleTextAttributes = @{
+    NSForegroundColorAttributeName: UIColor.labelColor,
+    NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold],
+  };
+  return appearance;
 }
 
 - (void)refreshRecordingStatus {
@@ -270,6 +291,8 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     case DOLMenuLoadStates: return [self.snapshot[@"slots"] count];
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
     case DOLMenuGraphics: return self.snapshot ? 4 : 0;
+    case DOLMenuHacks: return self.snapshot ? 8 : 0;
+    case DOLMenuAchievements: return self.snapshot ? 3 : 0;
     case DOLMenuControls:
       return section == 0 ? (self.wii ? 4 : 3) : [self.snapshot[@"controls"] count];
     case DOLMenuDevices: return [self.snapshot[@"devices"] count] + 1;
@@ -284,6 +307,8 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
+  if (self.page == DOLMenuHacks) return [self text:@"hacksHelp"];
+  if (self.page == DOLMenuAchievements) return [self text:@"achievementsHelp"];
   if (self.page == DOLMenuRecording) {
     NSString* help = [self text:@"recordingHelp"];
     return self.stateMessage ? [NSString stringWithFormat:@"%@\n\n%@",
@@ -310,6 +335,10 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+  cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:0.82];
+  cell.tintColor = UIColor.systemIndigoColor;
+  cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+  cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
   cell.textLabel.numberOfLines = 0;
   cell.detailTextLabel.numberOfLines = 0;
   cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -317,6 +346,20 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   if (self.page == DOLMenuRoot) {
     NSString* key = self.rootKeys[row];
     cell.textLabel.text = [self text:key];
+    NSDictionary<NSString*, NSString*>* symbols = @{
+      @"graphics": @"display",
+      @"hacks": @"wrench.and.screwdriver",
+      @"controls": @"gamecontroller",
+      @"console": @"gearshape.2",
+      @"achievements": @"trophy",
+      @"saveState": @"square.and.arrow.down",
+      @"loadState": @"square.and.arrow.up",
+      @"recording": @"record.circle",
+      @"resume": @"play.fill",
+      @"quit": @"xmark.circle",
+    };
+    cell.imageView.image = [UIImage systemImageNamed:symbols[key] ?: @"circle"];
+    cell.imageView.tintColor = [key isEqual:@"quit"] ? UIColor.systemRedColor : UIColor.systemIndigoColor;
     if ([key isEqual:@"quit"]) cell.textLabel.textColor = UIColor.systemRedColor;
   } else if (self.page == DOLMenuRecording) {
     BOOL busy = self.loading || [self.recordingSnapshot[@"busy"] boolValue];
@@ -364,6 +407,24 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     NSString* key = @[@"resolution", @"aspect", @"anisotropy", @"vsync"][row];
     cell.textLabel.text = [self text:key];
     cell.detailTextLabel.text = [self graphicsValue:key];
+  } else if (self.page == DOLMenuHacks) {
+    NSString* key = @[@"viSkip", @"skipEfbAccess", @"ignoreFormatChanges",
+        @"efbCopyToTexture", @"deferEfbCopies", @"fastDepth",
+        @"disableBoundingBox", @"vertexRounding"][row];
+    cell.textLabel.text = [self text:key];
+    cell.detailTextLabel.text = [self text:[self.snapshot[@"hacks"][key] boolValue] ? @"on" : @"off"];
+  } else if (self.page == DOLMenuAchievements) {
+    NSDictionary* achievements = self.snapshot[@"achievements"];
+    NSString* key = @[@"raAccount", @"raStatus", @"raMode"][row];
+    cell.textLabel.text = [self text:key];
+    cell.accessoryType = UITableViewCellAccessoryNone;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    if (row == 0) cell.detailTextLabel.text = [achievements[@"username"] length]
+        ? achievements[@"username"] : [self text:@"notConnected"];
+    else if (row == 1) cell.detailTextLabel.text = [self text:
+        [achievements[@"enabled"] boolValue] ?
+          ([achievements[@"gameLoaded"] boolValue] ? @"active" : @"enabled") : @"disabled"];
+    else cell.detailTextLabel.text = [self text:[achievements[@"hardcore"] boolValue] ? @"hardcore" : @"standard"];
   } else if (self.page == DOLMenuControls) {
     if (indexPath.section == 0) {
       cell.textLabel.text = [self text:(self.wii ? @[@"controllerType", @"player", @"physicalController", @"extension"] : @[@"controllerType", @"player", @"physicalController"])[row]];
@@ -433,6 +494,8 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       return;
     }
     DOLMenuPage page = [key isEqual:@"graphics"] ? DOLMenuGraphics :
+        [key isEqual:@"hacks"] ? DOLMenuHacks :
+        [key isEqual:@"achievements"] ? DOLMenuAchievements :
         [key isEqual:@"controls"] ? DOLMenuControls :
         [key isEqual:@"console"] ? DOLMenuConsole :
         [key isEqual:@"saveState"] ? DOLMenuSaveStates :
@@ -473,6 +536,19 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         @"request": @{@"kind": @"graphics", @"key": key, @"value": values[index]}}];
     DolphinSessionMenu* child = [self child:DOLMenuChoices title:[self text:key]];
     child.choices = choices;
+    [self.navigationController pushViewController:child animated:YES];
+  } else if (self.page == DOLMenuHacks) {
+    NSString* key = @[@"viSkip", @"skipEfbAccess", @"ignoreFormatChanges",
+        @"efbCopyToTexture", @"deferEfbCopies", @"fastDepth",
+        @"disableBoundingBox", @"vertexRounding"][row];
+    const BOOL enabled = [self.snapshot[@"hacks"][key] boolValue];
+    DolphinSessionMenu* child = [self child:DOLMenuChoices title:[self text:key]];
+    child.choices = @[
+      @{@"title": [self text:@"off"], @"selected": @(!enabled),
+        @"request": @{@"kind": @"hack", @"key": key, @"value": @NO}},
+      @{@"title": [self text:@"on"], @"selected": @(enabled),
+        @"request": @{@"kind": @"hack", @"key": key, @"value": @YES}},
+    ];
     [self.navigationController pushViewController:child animated:YES];
   } else if (self.page == DOLMenuControls) {
     if (indexPath.section == 1) {

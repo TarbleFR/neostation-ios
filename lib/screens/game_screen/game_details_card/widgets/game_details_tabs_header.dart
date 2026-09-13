@@ -19,9 +19,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
   final bool hasRetroAchievements;
   final DetailTab currentTab;
   final ValueChanged<DetailTab> onTabChanged;
-  // DOLPHIN_ISOLATION_BEGIN: import_action
+
+  /// Optional action occupying a real segment inside the shared tab pill.
   final Widget? trailingAction;
-  // DOLPHIN_ISOLATION_END: import_action
 
   const GameDetailsTabsHeader({
     super.key,
@@ -29,9 +29,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
     required this.hasRetroAchievements,
     required this.currentTab,
     required this.onTabChanged,
-    // DOLPHIN_ISOLATION_BEGIN: import_action_parameter
     this.trailingAction,
-    // DOLPHIN_ISOLATION_END: import_action_parameter
   });
 
   /// Ordered list of always-visible tab enums.
@@ -65,7 +63,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
 
     // DOLPHIN_ISOLATION_BEGIN: responsive_import_header
     final header = ClipRRect(
-    // DOLPHIN_ISOLATION_END: responsive_import_header
+      // DOLPHIN_ISOLATION_END: responsive_import_header
       child: Container(
         height: 46.r,
         padding: EdgeInsets.only(top: 4.r, right: 8.r),
@@ -85,9 +83,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface.withValues(alpha: 0.9),
                 borderRadius:
-                    Theme.of(
-                      context,
-                    ).extension<CornerRadii>()?.radiusExternal ??
+                    Theme.of(context)
+                        .extension<CornerRadii>()
+                        ?.radiusExternal ??
                     BorderRadius.circular(12.r),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outline,
@@ -95,9 +93,8 @@ class GameDetailsTabsHeader extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.shadow.withValues(alpha: 0.1),
+                    color: Theme.of(context).colorScheme.shadow
+                        .withValues(alpha: 0.1),
                     blurRadius: 4.r,
                     offset: Offset(2.0.r, 2.0.r),
                   ),
@@ -122,9 +119,9 @@ class GameDetailsTabsHeader extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: theme.colorScheme.primary,
                           borderRadius:
-                              Theme.of(
-                                context,
-                              ).extension<CornerRadii>()?.radiusInternal ??
+                              Theme.of(context)
+                                  .extension<CornerRadii>()
+                                  ?.radiusInternal ??
                               BorderRadius.circular(14.r),
                         ),
                       ),
@@ -158,20 +155,22 @@ class GameDetailsTabsHeader extends StatelessWidget {
     );
     // DOLPHIN_ISOLATION_BEGIN: responsive_import_layout
     if (trailingAction == null) return header;
-    return LayoutBuilder(builder: (context, constraints) {
-      // Keep every media tab visible even on a narrow details panel.
-      final minimumWidth = totalTabsWidth + tabWidth + 100.r;
-      return FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerRight,
-        child: SizedBox(
-          width: constraints.maxWidth < minimumWidth
-              ? minimumWidth
-              : constraints.maxWidth,
-          child: header,
-        ),
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Keep every media tab visible even on a narrow details panel.
+        final minimumWidth = totalTabsWidth + tabWidth + 100.r;
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: constraints.maxWidth < minimumWidth
+                ? minimumWidth
+                : constraints.maxWidth,
+            child: header,
+          ),
+        );
+      },
+    );
     // DOLPHIN_ISOLATION_END: responsive_import_layout
   }
 

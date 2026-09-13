@@ -6,10 +6,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+
 import '../l10n/dolphin_import_locale.dart';
+
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../repositories/retro_achievements_repository.dart';
 import 'logger_service.dart';
 import 'dolphin_system_files.dart';
 import 'local_jit_tunnel_service.dart';
@@ -91,10 +94,7 @@ class DolphinInternalV2Service {
     0x86573808,
     0x667D0B64,
   };
-  static const Set<int> _palIplCrc32 = {
-    0x4F319F43,
-    0xAD1B7F16,
-  };
+  static const Set<int> _palIplCrc32 = {0x4F319F43, 0xAD1B7F16};
 
   static bool isDolphinSystem(String folderName) {
     final normalized = folderName.trim().toLowerCase();
@@ -144,7 +144,9 @@ class DolphinInternalV2Service {
   static Future<void> _initializeLayout() async {
     final root = await rootDirectory();
     for (final name in ['Wii', 'GC']) {
-      await DolphinSystemFiles.recover(Directory(path.join(root.path, 'User', name)));
+      await DolphinSystemFiles.recover(
+        Directory(path.join(root.path, 'User', name)),
+      );
     }
     final directories = <String>[
       'Library/gc',
@@ -193,7 +195,10 @@ class DolphinInternalV2Service {
 
     for (final picked in selection.files) {
       final sourcePath = picked.path;
-      final extension = path.extension(picked.name).replaceFirst('.', '').toLowerCase();
+      final extension = path
+          .extension(picked.name)
+          .replaceFirst('.', '')
+          .toLowerCase();
       if (sourcePath == null || !extensions.contains(extension)) {
         rejected++;
         errors.add('${picked.name}: unsupported $system image extension.');
@@ -238,41 +243,41 @@ class DolphinInternalV2Service {
     );
   }
 
-  static Future<bool> importIpl(DolphinIplRegion region) => _withSystemImport(() async {
-    await ensureLayout();
-    final selection = await FilePicker.pickFiles(
-      allowMultiple: false,
-      type: FileType.custom,
-      allowedExtensions: const ['bin'],
-      withData: true,
-      lockParentWindow: true,
-    );
-    if (selection == null || selection.files.isEmpty) return false;
+  static Future<bool> importIpl(DolphinIplRegion region) =>
+      _withSystemImport(() async {
+        await ensureLayout();
+        final selection = await FilePicker.pickFiles(
+          allowMultiple: false,
+          type: FileType.custom,
+          allowedExtensions: const ['bin'],
+          withData: true,
+          lockParentWindow: true,
+        );
+        if (selection == null || selection.files.isEmpty) return false;
 
-    final picked = selection.files.single;
-    Uint8List? bytes = picked.bytes;
-    if (bytes == null && picked.path != null) {
-      bytes = await File(picked.path!).readAsBytes();
-    }
-    if (bytes == null) {
-      throw const FormatException('The selected IPL could not be read.');
-    }
-    await _installIpl(bytes, region);
-    return true;
-  });
+        final picked = selection.files.single;
+        Uint8List? bytes = picked.bytes;
+        if (bytes == null && picked.path != null) {
+          bytes = await File(picked.path!).readAsBytes();
+        }
+        if (bytes == null) {
+          throw const FormatException('The selected IPL could not be read.');
+        }
+        await _installIpl(bytes, region);
+        return true;
+      });
 
-  static Future<void> _installIpl(Uint8List bytes, DolphinIplRegion region) async {
+  static Future<void> _installIpl(
+    Uint8List bytes,
+    DolphinIplRegion region,
+  ) async {
     final validation = _validateIpl(bytes, region);
     if (!validation.accepted) {
-      await _appendLog(
-        'ipl.rejected',
-        validation.reason,
-        {
-          'slot': region.name.toUpperCase(),
-          'size': bytes.length,
-          'crc32': validation.crc32.toRadixString(16).padLeft(8, '0'),
-        },
-      );
+      await _appendLog('ipl.rejected', validation.reason, {
+        'slot': region.name.toUpperCase(),
+        'size': bytes.length,
+        'crc32': validation.crc32.toRadixString(16).padLeft(8, '0'),
+      });
       throw FormatException(validation.reason);
     }
 
@@ -289,12 +294,17 @@ class DolphinInternalV2Service {
       merge: true,
     );
 
-    final manifest = File(path.join(root.path, 'Metadata', 'IPL', '$slot.json'));
+    final manifest = File(
+      path.join(root.path, 'Metadata', 'IPL', '$slot.json'),
+    );
     await manifest.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
         'slot': slot,
         'size': bytes.length,
-        'crc32': validation.crc32.toRadixString(16).padLeft(8, '0').toUpperCase(),
+        'crc32': validation.crc32
+            .toRadixString(16)
+            .padLeft(8, '0')
+            .toUpperCase(),
         'nintendoHeader': validation.nintendoHeader,
         'artXHeader': validation.artXHeader,
         'knownDump': true,
@@ -302,11 +312,10 @@ class DolphinInternalV2Service {
       }),
       flush: true,
     );
-    await _appendLog(
-      'ipl.accepted',
-      'Validated and installed IPL $slot.',
-      {'slot': slot, 'crc32': validation.crc32},
-    );
+    await _appendLog('ipl.accepted', 'Validated and installed IPL $slot.', {
+      'slot': slot,
+      'crc32': validation.crc32,
+    });
   }
 
   static Future<Set<DolphinIplRegion>> installedIplRegions() async {
@@ -349,72 +358,92 @@ class DolphinInternalV2Service {
     final system = _normalizeSystem(folderName);
     final documents = await getApplicationDocumentsDirectory();
     final shared = Directory(path.join(documents.path, 'Dolphin'));
-    for (final name in ['Wii', 'GameCube/USA', 'GameCube/EUR', 'GameCube/JAP']) {
+    for (final name in [
+      'Wii',
+      'GameCube/USA',
+      'GameCube/EUR',
+      'GameCube/JAP',
+    ]) {
       await Directory(path.join(shared.path, name)).create(recursive: true);
     }
-    return Directory(path.join(shared.path, system == 'wii' ? 'Wii' : 'GameCube'));
+    return Directory(
+      path.join(shared.path, system == 'wii' ? 'Wii' : 'GameCube'),
+    );
   }
 
-  static Future<int?> importSystemFolder(String folderName, {bool fromShared = false}) =>
-      _withSystemImport(() async {
-        final system = _normalizeSystem(folderName);
-        const bookmark = 'dolphin-system-import';
-        try {
-          final selected = fromShared
-              ? (await sharedSystemDirectory(system)).path
-              : await ExternalFolderAccess.pickAndActivateFolder(key: bookmark);
-          if (selected == null) return null;
-          final root = await rootDirectory();
-          if (system == 'wii') {
-            return await DolphinSystemFiles.importWiiFolder(
-              Directory(selected), Directory(path.join(root.path, 'User', 'Wii')),
-            );
-          }
-          // Accept GC, GameCube, User/GC or their parent; never confuse a Wii
-          // keys.bin with an IPL. Validate every selected slot before writing.
-          final images = <DolphinIplRegion, Uint8List>{};
-          for (final suffix in ['', 'GC', 'GameCube', 'User/GC']) {
-            for (final region in DolphinIplRegion.values) {
-              final file = File(path.join(selected, suffix, region.name.toUpperCase(), 'IPL.bin'));
-              if (!await file.exists()) continue;
-              final real = await file.resolveSymbolicLinks();
-              final sourceRoot = await Directory(selected).resolveSymbolicLinks();
-              if (!path.isWithin(sourceRoot, real)) {
-                throw const DolphinSystemFilesException('unsafePath');
-              }
-              final bytes = await file.readAsBytes();
-              if (!_validateIpl(bytes, region).accepted) {
-                throw const DolphinSystemFilesException('invalidIpl');
-              }
-              images[region] = bytes;
-            }
-            if (images.isNotEmpty) break;
-          }
-          if (images.isEmpty) throw const DolphinSystemFilesException('invalidGameCube');
-          return await DolphinSystemFiles.replaceSnapshot(
-            Directory(path.join(root.path, 'User', 'GC')),
-            (stage) async {
-              for (final entry in images.entries) {
-                final file = File(path.join(stage.path, entry.key.name.toUpperCase(), 'IPL.bin'));
-                await file.parent.create(recursive: true);
-                await file.writeAsBytes(entry.value, flush: true);
-              }
-              return images.length;
-            }, merge: true,
+  static Future<int?> importSystemFolder(
+    String folderName, {
+    bool fromShared = false,
+  }) => _withSystemImport(() async {
+    final system = _normalizeSystem(folderName);
+    const bookmark = 'dolphin-system-import';
+    try {
+      final selected = fromShared
+          ? (await sharedSystemDirectory(system)).path
+          : await ExternalFolderAccess.pickAndActivateFolder(key: bookmark);
+      if (selected == null) return null;
+      final root = await rootDirectory();
+      if (system == 'wii') {
+        return await DolphinSystemFiles.importWiiFolder(
+          Directory(selected),
+          Directory(path.join(root.path, 'User', 'Wii')),
+        );
+      }
+      // Accept GC, GameCube, User/GC or their parent; never confuse a Wii
+      // keys.bin with an IPL. Validate every selected slot before writing.
+      final images = <DolphinIplRegion, Uint8List>{};
+      for (final suffix in ['', 'GC', 'GameCube', 'User/GC']) {
+        for (final region in DolphinIplRegion.values) {
+          final file = File(
+            path.join(selected, suffix, region.name.toUpperCase(), 'IPL.bin'),
           );
-        } finally {
-          if (!fromShared) await ExternalFolderAccess.clearBookmark(key: bookmark);
+          if (!await file.exists()) continue;
+          final real = await file.resolveSymbolicLinks();
+          final sourceRoot = await Directory(selected).resolveSymbolicLinks();
+          if (!path.isWithin(sourceRoot, real)) {
+            throw const DolphinSystemFilesException('unsafePath');
+          }
+          final bytes = await file.readAsBytes();
+          if (!_validateIpl(bytes, region).accepted) {
+            throw const DolphinSystemFilesException('invalidIpl');
+          }
+          images[region] = bytes;
         }
-      });
+        if (images.isNotEmpty) break;
+      }
+      if (images.isEmpty)
+        throw const DolphinSystemFilesException('invalidGameCube');
+      return await DolphinSystemFiles.replaceSnapshot(
+        Directory(path.join(root.path, 'User', 'GC')),
+        (stage) async {
+          for (final entry in images.entries) {
+            final file = File(
+              path.join(stage.path, entry.key.name.toUpperCase(), 'IPL.bin'),
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(entry.value, flush: true);
+          }
+          return images.length;
+        },
+        merge: true,
+      );
+    } finally {
+      if (!fromShared) await ExternalFolderAccess.clearBookmark(key: bookmark);
+    }
+  });
 
   static Future<int?> importWiiSystemFiles() => _withSystemImport(() async {
     final selection = await FilePicker.pickFiles(
-      allowMultiple: true, type: FileType.custom,
-      allowedExtensions: const ['bin', 'pem'], withData: false,
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['bin', 'pem'],
+      withData: false,
     );
     if (selection == null) return null;
-    if (selection.files.any((file) => file.path == null ||
-        !DolphinSystemFiles.wiiFiles.contains(file.name))) {
+    if (selection.files.any(
+      (file) =>
+          file.path == null || !DolphinSystemFiles.wiiFiles.contains(file.name),
+    )) {
       throw const DolphinSystemFilesException('invalidWiiFile');
     }
     final root = await rootDirectory();
@@ -459,7 +488,9 @@ class DolphinInternalV2Service {
         throw const DolphinSystemFilesException('busy');
       }
       return await _launch(
-        folderName: folderName, gamePath: gamePath, gameTitle: gameTitle,
+        folderName: folderName,
+        gamePath: gamePath,
+        gameTitle: gameTitle,
         wiiSystemMenu: wiiSystemMenu,
       );
     } catch (_) {
@@ -479,7 +510,9 @@ class DolphinInternalV2Service {
     await ensureLayout();
     final root = await rootDirectory();
     final library = await libraryDirectory(system);
-    final normalizedGame = wiiSystemMenu ? '' : path.normalize(path.absolute(gamePath!));
+    final normalizedGame = wiiSystemMenu
+        ? ''
+        : path.normalize(path.absolute(gamePath!));
     final normalizedLibrary = path.normalize(path.absolute(library.path));
     if (wiiSystemMenu) {
       await DolphinSystemFiles.requireWiiMenuMetadata(
@@ -494,16 +527,24 @@ class DolphinInternalV2Service {
       );
       return DolphinLaunchReport(
         ready: false,
-        message: 'This game is not stored in NeoStation’s private Dolphin library.',
+        message:
+            'This game is not stored in NeoStation’s private Dolphin library.',
         failedStage: 'route.path_rejected',
         logPath: logPath,
         gates: _emptyGates(),
       );
     }
-    final extension = path.extension(normalizedGame).replaceFirst('.', '').toLowerCase();
+    final extension = path
+        .extension(normalizedGame)
+        .replaceFirst('.', '')
+        .toLowerCase();
     if (!wiiSystemMenu && !extensionsFor(system).contains(extension)) {
       final logPath = await _sessionLogPath();
-      await _appendLogTo(logPath, 'image.extension_rejected', 'Unsupported $system image extension: $extension.');
+      await _appendLogTo(
+        logPath,
+        'image.extension_rejected',
+        'Unsupported $system image extension: $extension.',
+      );
       return DolphinLaunchReport(
         ready: false,
         message: 'This file format is not accepted for $system.',
@@ -515,12 +556,19 @@ class DolphinInternalV2Service {
 
     final pairing = await _locatePairingFile();
     final logPath = await _sessionLogPath();
-    final marker = File(path.join(root.path, 'CrashMarkers', 'active-session.json'));
+    final marker = File(
+      path.join(root.path, 'CrashMarkers', 'active-session.json'),
+    );
     if (pairing == null) {
-      await _appendLogTo(logPath, 'stikjit.pairing_missing', 'No readable pairing file was found.');
+      await _appendLogTo(
+        logPath,
+        'stikjit.pairing_missing',
+        'No readable pairing file was found.',
+      );
       return DolphinLaunchReport(
         ready: false,
-        message: 'Import a pairing file in NeoStation before launching Dolphin.',
+        message:
+            'Import a pairing file in NeoStation before launching Dolphin.',
         failedStage: 'stikjit.pairing_missing',
         logPath: logPath,
         gates: _emptyGates(),
@@ -565,34 +613,61 @@ class DolphinInternalV2Service {
     );
 
     try {
+      String raUsername = '';
+      String raApiToken = '';
+      try {
+        raUsername =
+            (await RetroAchievementsRepository.getRAUser())?.trim() ?? '';
+        raApiToken =
+            (await RetroAchievementsRepository.getRAApiKey())?.trim() ?? '';
+      } catch (error) {
+        // A Keychain/database read failure must never block game launch and
+        // credentials must never be written to the diagnostic log.
+        await _appendLogTo(
+          logPath,
+          'achievements.credentials_unavailable',
+          'RetroAchievements credentials could not be read for this session.',
+        );
+      }
       final raw = await _channel.invokeMapMethod<String, dynamic>(
         'launchGame',
         {
           'system': system,
           'bootKind': wiiSystemMenu ? 'wiiSystemMenu' : 'game',
-          'menuLabels': DolphinImportLocale.labelsFor(FlutterLocalization.instance.currentLocale),
+          'menuLabels': DolphinImportLocale.labelsFor(
+            FlutterLocalization.instance.currentLocale,
+          ),
           if (!wiiSystemMenu) 'gamePath': normalizedGame,
           'gameTitle': gameTitle?.trim().isNotEmpty == true
-              ? gameTitle!.trim() : path.basenameWithoutExtension(normalizedGame),
+              ? gameTitle!.trim()
+              : path.basenameWithoutExtension(normalizedGame),
           'userDirectory': path.join(root.path, 'User'),
           'systemDirectory': systemDirectory,
           'logPath': logPath,
           'pairingFilePath': pairing.path,
+          if (raUsername.isNotEmpty && raApiToken.isNotEmpty) ...{
+            'raUsername': raUsername,
+            'raApiToken': raApiToken,
+          },
         },
       );
       final response = Map<String, dynamic>.from(raw ?? const {});
       final gates = <String, bool>{
         'stikjitConnected': response['stikjitConnected'] == true,
         'pidAttached': response['pidAttached'] == true,
-        'legacyHandshakeValidated': response['legacyHandshakeValidated'] == true,
-        'executableMemoryValidated': response['executableMemoryValidated'] == true,
+        'legacyHandshakeValidated':
+            response['legacyHandshakeValidated'] == true,
+        'executableMemoryValidated':
+            response['executableMemoryValidated'] == true,
         'jitArm64Initialized': response['jitArm64Initialized'] == true,
         'metalInitialized': response['metalInitialized'] == true,
         'imageAccepted': response['imageAccepted'] == true,
         'gameSubmitted': response['gameSubmitted'] == true,
       };
-      final ready = response['success'] == true && gates.values.every((gate) => gate);
-      final message = response['message']?.toString() ??
+      final ready =
+          response['success'] == true && gates.values.every((gate) => gate);
+      final message =
+          response['message']?.toString() ??
           (ready ? 'Dolphin started.' : 'Dolphin launch was refused.');
       final failedStage = response['failedStage']?.toString();
 
@@ -641,12 +716,9 @@ class DolphinInternalV2Service {
       );
     } catch (error, stackTrace) {
       await _deleteIfExists(marker);
-      await _appendLogTo(
-        logPath,
-        'bridge.exception',
-        '$error',
-        {'stack': '$stackTrace'},
-      );
+      await _appendLogTo(logPath, 'bridge.exception', '$error', {
+        'stack': '$stackTrace',
+      });
       return DolphinLaunchReport(
         ready: false,
         message: 'Dolphin launch failed: $error',
@@ -666,7 +738,10 @@ class DolphinInternalV2Service {
         path.join(root.path, 'CrashMarkers', 'active-session.json'),
       );
       await _deleteIfExists(marker);
-      await _appendLog('session.clean_stop', 'Dolphin session stopped cleanly.');
+      await _appendLog(
+        'session.clean_stop',
+        'Dolphin session stopped cleanly.',
+      );
     }
   }
 
@@ -690,7 +765,10 @@ class DolphinInternalV2Service {
     }
   }
 
-  static Future<File> _uniqueDestination(Directory directory, String name) async {
+  static Future<File> _uniqueDestination(
+    Directory directory,
+    String name,
+  ) async {
     final safe = path.basename(name).replaceAll(RegExp(r'[\x00-\x1f]'), '_');
     var candidate = File(path.join(directory.path, safe));
     var suffix = 1;
@@ -706,13 +784,14 @@ class DolphinInternalV2Service {
     return candidate;
   }
 
-  static _IplValidation _validateIpl(
-    Uint8List bytes,
-    DolphinIplRegion region,
-  ) {
+  static _IplValidation _validateIpl(Uint8List bytes, DolphinIplRegion region) {
     final crc = _crc32(bytes);
     if (bytes.length != _iplSize) {
-      return _IplValidation(false, 'A retail GameCube IPL must be exactly 2 MiB.', crc);
+      return _IplValidation(
+        false,
+        'A retail GameCube IPL must be exactly 2 MiB.',
+        crc,
+      );
     }
     final header = latin1.decode(bytes.sublist(0, 0x100), allowInvalid: true);
     final hasNintendo = header.contains('Nintendo');
@@ -756,9 +835,7 @@ class DolphinInternalV2Service {
     for (final value in data) {
       crc ^= value;
       for (var bit = 0; bit < 8; bit++) {
-        crc = (crc & 1) != 0
-            ? (crc >> 1) ^ 0xEDB88320
-            : crc >> 1;
+        crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
       }
     }
     return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
@@ -782,7 +859,10 @@ class DolphinInternalV2Service {
     for (final root in roots) {
       if (!await root.exists()) continue;
       try {
-        await for (final entity in root.list(recursive: true, followLinks: false)) {
+        await for (final entity in root.list(
+          recursive: true,
+          followLinks: false,
+        )) {
           if (entity is! File) continue;
           final relative = path.relative(entity.path, from: root.path);
           if (path.split(relative).length > 6) continue;
@@ -803,15 +883,15 @@ class DolphinInternalV2Service {
   }
 
   static Map<String, bool> _emptyGates() => {
-        'stikjitConnected': false,
-        'pidAttached': false,
-        'legacyHandshakeValidated': false,
-        'executableMemoryValidated': false,
-        'jitArm64Initialized': false,
-        'metalInitialized': false,
-        'imageAccepted': false,
-        'gameSubmitted': false,
-      };
+    'stikjitConnected': false,
+    'pidAttached': false,
+    'legacyHandshakeValidated': false,
+    'executableMemoryValidated': false,
+    'jitArm64Initialized': false,
+    'metalInitialized': false,
+    'imageAccepted': false,
+    'gameSubmitted': false,
+  };
 
   static Future<String> _sessionLogPath() async {
     final root = await rootDirectory();
@@ -857,7 +937,9 @@ class DolphinInternalV2Service {
   }
 
   static Future<void> _recoverPreviousCrash(Directory root) async {
-    final marker = File(path.join(root.path, 'CrashMarkers', 'active-session.json'));
+    final marker = File(
+      path.join(root.path, 'CrashMarkers', 'active-session.json'),
+    );
     if (!await marker.exists()) return;
     try {
       final payload = jsonDecode(await marker.readAsString());
@@ -867,9 +949,15 @@ class DolphinInternalV2Service {
           ? 'crash.after_launch_detected'
           : 'crash.before_launch_detected';
       if (logPath != null && logPath.isNotEmpty) {
-        await _appendLogTo(logPath, stage, 'NeoStation recovered an unclosed Dolphin session marker.');
+        await _appendLogTo(
+          logPath,
+          stage,
+          'NeoStation recovered an unclosed Dolphin session marker.',
+        );
       }
-      await marker.rename('${marker.path}.${DateTime.now().millisecondsSinceEpoch}.recovered');
+      await marker.rename(
+        '${marker.path}.${DateTime.now().millisecondsSinceEpoch}.recovered',
+      );
     } catch (_) {
       await _deleteIfExists(marker);
     }

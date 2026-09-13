@@ -52,9 +52,9 @@ ccache --max-size=3G >/dev/null
 # These values are consumed by all subsequent workflow steps.
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
-    echo "BUILD_NUMBER=259"
-    echo "IPA_NAME=NeoStation-iOS-Build-259-Single-IPA-VPN"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-259-Single-IPA-VPN"
+    echo "BUILD_NUMBER=260"
+    echo "IPA_NAME=NeoStation-iOS-Build-260-Modern-Dolphin"
+    echo "ARTIFACT_NAME=NeoStation-iOS-Build-260-Modern-Dolphin"
   } >> "$GITHUB_ENV"
 fi
 

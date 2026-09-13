@@ -28,6 +28,8 @@ char* neostation_dolphin_save_identity(const char* game_path, const char* expect
 int32_t neostation_dolphin_initialize(const char* user_directory,
                                       const char* system_directory,
                                       const char* log_path);
+int32_t neostation_dolphin_configure_achievements(const char* username,
+                                                   const char* api_token);
 int32_t neostation_dolphin_validate_image(const char* game_path,
                                           const char* expected_system,
                                           const char* log_path);
@@ -858,6 +860,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
                           ? arguments[@"logPath"] : @"";
   NSString* pairingPath = [arguments[@"pairingFilePath"] isKindOfClass:NSString.class]
                               ? arguments[@"pairingFilePath"] : @"";
+  NSString* raUsername = [arguments[@"raUsername"] isKindOfClass:NSString.class]
+                              ? arguments[@"raUsername"] : @"";
+  NSString* raApiToken = [arguments[@"raApiToken"] isKindOfClass:NSString.class]
+                              ? arguments[@"raApiToken"] : @"";
   self.activeLogPath = logPath;
 
   void (^fail)(NSString*, NSString*) = ^(NSString* stage, NSString* message) {
@@ -902,6 +908,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       fail(@"core.initialize_failed", @"The embedded Dolphin core could not initialize.");
       return [self finishFailedLaunch:state];
     }
+    // Configure the core without ever logging or persisting credentials in the
+    // Objective-C host. Missing credentials simply disable achievements.
+    neostation_dolphin_configure_achievements(raUsername.UTF8String,
+                                              raApiToken.UTF8String);
 
     const BOOL accepted = wiiMenu
         ? neostation_dolphin_validate_wii_menu(logPath.fileSystemRepresentation) == 1

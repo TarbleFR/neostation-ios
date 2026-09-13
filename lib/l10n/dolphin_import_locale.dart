@@ -38,7 +38,8 @@ abstract final class DolphinImportLocale {
       "stateLoaded": "State loaded.",
       "stateFailed": "Could not save or load the state. Check available storage and Dolphin version compatibility.",
       "overwriteState": "Replace the save state in this slot?",
-      "loadStateHelp": "Load this state? Your current progress will be replaced.",
+      "loadStateHelp":
+          "Load this state? Your current progress will be replaced.",
       "savestatesHelp": "Save states are stored locally only. Loading a save state requires a compatible Dolphin version.",
       "quit": "Quit game",
       "quitHelp": "Return to NeoStation? Unsaved progress will be lost.",
@@ -139,11 +140,14 @@ abstract final class DolphinImportLocale {
       "stateSaved": "État sauvegardé.",
       "stateLoaded": "État chargé.",
       "stateFailed": "Impossible de sauvegarder ou de charger l’état. Vérifiez l’espace disponible et la compatibilité de la version de Dolphin.",
-      "overwriteState": "Remplacer la sauvegarde instantanée de cet emplacement ?",
-      "loadStateHelp": "Charger cet état ? Votre progression actuelle sera remplacée.",
+      "overwriteState":
+          "Remplacer la sauvegarde instantanée de cet emplacement ?",
+      "loadStateHelp":
+          "Charger cet état ? Votre progression actuelle sera remplacée.",
       "savestatesHelp": "Les sauvegardes instantanées sont stockées uniquement sur l’appareil. Leur chargement nécessite une version compatible de Dolphin.",
       "quit": "Quitter le jeu",
-      "quitHelp": "Revenir à NeoStation ? La progression non sauvegardée sera perdue.",
+      "quitHelp":
+          "Revenir à NeoStation ? La progression non sauvegardée sera perdue.",
       "graphics": "Graphismes",
       "controls": "Commandes",
       "resolution": "Résolution interne",
@@ -200,7 +204,8 @@ abstract final class DolphinImportLocale {
       "continue": "Continuer",
       "cancel": "Annuler",
       "imported": "Éléments importés : {count}",
-      "failed": "Échec de l’import. Vérifiez les fichiers et l’espace disponible.",
+      "failed":
+          "Échec de l’import. Vérifiez les fichiers et l’espace disponible.",
       "invalidWii": "Sélectionnez un dossier Wii extrait contenant title et shared2, ticket ou sys. Un fichier nand.bin brut doit d’abord être extrait.",
       "invalidIpl": "IPL GameCube invalide. Utilisez un IPL reconnu de 2 Mio pour la région choisie.",
       "busy": "Fermez le jeu et attendez la fin de l’opération en cours.",
@@ -241,8 +246,10 @@ abstract final class DolphinImportLocale {
       "stateSaved": "Zustand gespeichert.",
       "stateLoaded": "Zustand geladen.",
       "stateFailed": "Der Zustand konnte nicht gespeichert oder geladen werden. Prüfe den freien Speicherplatz und die Kompatibilität der Dolphin-Version.",
-      "overwriteState": "Den Schnellspeicherstand in diesem Speicherplatz ersetzen?",
-      "loadStateHelp": "Diesen Zustand laden? Dein aktueller Fortschritt wird ersetzt.",
+      "overwriteState":
+          "Den Schnellspeicherstand in diesem Speicherplatz ersetzen?",
+      "loadStateHelp":
+          "Diesen Zustand laden? Dein aktueller Fortschritt wird ersetzt.",
       "savestatesHelp": "Savestates werden ausschließlich lokal gespeichert. Zum Laden ist eine kompatible Dolphin-Version erforderlich.",
       "quit": "Spiel beenden",
       "quitHelp": "Zu NeoStation zurückkehren? Nicht gespeicherter Fortschritt geht verloren.",
@@ -267,7 +274,8 @@ abstract final class DolphinImportLocale {
       "chooseInput": "Eingabe wählen",
       "unassigned": "Nicht zugewiesen",
       "clearBinding": "Belegung entfernen",
-      "settingsFailed": "Dolphin-Einstellungen konnten nicht angewendet werden.",
+      "settingsFailed":
+          "Dolphin-Einstellungen konnten nicht angewendet werden.",
       "close": "Schließen",
       "back": "Zurück",
       "Buttons": "Tasten",
@@ -328,7 +336,8 @@ abstract final class DolphinImportLocale {
       "consoleLanguage": "Idioma de la consola",
       "restart": "Reiniciar la consola",
       "languageHelp": "El idioma se aplica después de reiniciar. Los idiomas disponibles dependen del juego y su región. Importar archivos del sistema no traduce el contenido del juego.",
-      "restartHelp": "¿Reiniciar la consola ahora? Se perderá el progreso no guardado.",
+      "restartHelp":
+          "¿Reiniciar la consola ahora? Se perderá el progreso no guardado.",
       "restartRequired": "Reinicia para aplicar el idioma elegido.",
       "physicalController": "Mando",
       "restartFailed": "No se pudo reiniciar la consola. Vuelve a NeoStation e inicia el juego de nuevo.",
@@ -344,7 +353,8 @@ abstract final class DolphinImportLocale {
       "stateLoaded": "Estado cargado.",
       "stateFailed": "No se pudo guardar o cargar el estado. Comprueba el espacio disponible y la compatibilidad de la versión de Dolphin.",
       "overwriteState": "¿Reemplazar el estado guardado en esta ranura?",
-      "loadStateHelp": "¿Cargar este estado? Se reemplazará tu progreso actual.",
+      "loadStateHelp":
+          "¿Cargar este estado? Se reemplazará tu progreso actual.",
       "savestatesHelp": "Los estados de guardado solo se almacenan localmente. Para cargarlos se necesita una versión compatible de Dolphin.",
       "quit": "Salir del juego",
       "quitHelp": "¿Volver a NeoStation? Se perderá el progreso no guardado.",
@@ -404,7 +414,8 @@ abstract final class DolphinImportLocale {
       "continue": "Continuar",
       "cancel": "Cancelar",
       "imported": "Importados: {count}",
-      "failed": "Error al importar. Revisa los archivos y el espacio disponible.",
+      "failed":
+          "Error al importar. Revisa los archivos y el espacio disponible.",
       "invalidWii": "Selecciona una carpeta Wii extraída con title y shared2, ticket o sys. Primero hay que extraer un nand.bin sin procesar.",
       "invalidIpl": "IPL de GameCube no válido. Usa un IPL compatible de 2 MiB para la región elegida.",
       "busy": "Cierra el juego y espera a que termine la operación actual.",
@@ -430,7 +441,8 @@ abstract final class DolphinImportLocale {
       "consoleLanguage": "Lingua della console",
       "restart": "Riavvia console",
       "languageHelp": "La lingua viene applicata dopo il riavvio. Le lingue disponibili dipendono dal gioco e dalla regione. Importare file di sistema non traduce il contenuto del gioco.",
-      "restartHelp": "Riavviare la console ora? I progressi non salvati andranno persi.",
+      "restartHelp":
+          "Riavviare la console ora? I progressi non salvati andranno persi.",
       "restartRequired": "Riavvia per applicare la lingua scelta.",
       "physicalController": "Controller",
       "restartFailed": "Impossibile riavviare la console. Torna a NeoStation e avvia nuovamente il gioco.",
@@ -446,10 +458,12 @@ abstract final class DolphinImportLocale {
       "stateLoaded": "Stato caricato.",
       "stateFailed": "Impossibile salvare o caricare lo stato. Controlla lo spazio disponibile e la compatibilità della versione di Dolphin.",
       "overwriteState": "Sostituire il salvataggio istantaneo in questo slot?",
-      "loadStateHelp": "Caricare questo stato? I progressi attuali verranno sostituiti.",
+      "loadStateHelp":
+          "Caricare questo stato? I progressi attuali verranno sostituiti.",
       "savestatesHelp": "Gli stati di salvataggio vengono conservati solo in locale. Per caricarli serve una versione compatibile di Dolphin.",
       "quit": "Esci dal gioco",
-      "quitHelp": "Tornare a NeoStation? I progressi non salvati andranno persi.",
+      "quitHelp":
+          "Tornare a NeoStation? I progressi non salvati andranno persi.",
       "graphics": "Grafica",
       "controls": "Comandi",
       "resolution": "Risoluzione interna",
@@ -532,7 +546,8 @@ abstract final class DolphinImportLocale {
       "consoleLanguage": "Idioma do console",
       "restart": "Reiniciar o console",
       "languageHelp": "O idioma é aplicado após reiniciar. Os idiomas disponíveis dependem do jogo e da região. Importar arquivos do sistema não traduz o conteúdo do jogo.",
-      "restartHelp": "Reiniciar o console agora? O progresso não salvo será perdido.",
+      "restartHelp":
+          "Reiniciar o console agora? O progresso não salvo será perdido.",
       "restartRequired": "Reinicie para aplicar o idioma escolhido.",
       "physicalController": "Controle",
       "restartFailed": "Não foi possível reiniciar o console. Volte ao NeoStation e inicie o jogo novamente.",
@@ -548,7 +563,8 @@ abstract final class DolphinImportLocale {
       "stateLoaded": "Estado carregado.",
       "stateFailed": "Não foi possível salvar ou carregar o estado. Verifique o espaço disponível e a compatibilidade da versão do Dolphin.",
       "overwriteState": "Substituir o estado salvo neste slot?",
-      "loadStateHelp": "Carregar este estado? Seu progresso atual será substituído.",
+      "loadStateHelp":
+          "Carregar este estado? Seu progresso atual será substituído.",
       "savestatesHelp": "Os estados salvos são armazenados apenas localmente. Para carregá-los, é necessária uma versão compatível do Dolphin.",
       "quit": "Sair do jogo",
       "quitHelp": "Voltar ao NeoStation? O progresso não salvo será perdido.",
@@ -608,7 +624,8 @@ abstract final class DolphinImportLocale {
       "continue": "Continuar",
       "cancel": "Cancelar",
       "imported": "Importados: {count}",
-      "failed": "Falha ao importar. Verifique os arquivos e o espaço disponível.",
+      "failed":
+          "Falha ao importar. Verifique os arquivos e o espaço disponível.",
       "invalidWii": "Selecione uma pasta Wii extraída com title e shared2, ticket ou sys. Um nand.bin bruto precisa ser extraído primeiro.",
       "invalidIpl": "IPL do GameCube inválido. Use um IPL compatível de 2 MiB para a região escolhida.",
       "busy": "Feche o jogo e aguarde o fim da operação atual.",
@@ -634,8 +651,10 @@ abstract final class DolphinImportLocale {
       "consoleLanguage": "Язык консоли",
       "restart": "Перезапустить консоль",
       "languageHelp": "Язык применяется после перезапуска. Доступные языки зависят от игры и её региона. Импорт системных файлов не переводит содержимое игры.",
-      "restartHelp": "Перезапустить консоль? Несохранённый прогресс будет потерян.",
-      "restartRequired": "Перезапустите консоль, чтобы применить выбранный язык.",
+      "restartHelp":
+          "Перезапустить консоль? Несохранённый прогресс будет потерян.",
+      "restartRequired":
+          "Перезапустите консоль, чтобы применить выбранный язык.",
       "physicalController": "Геймпад",
       "restartFailed": "Не удалось перезапустить консоль. Вернитесь в NeoStation и запустите игру снова.",
       "integrated": "Встроен в NeoStation",
@@ -650,10 +669,12 @@ abstract final class DolphinImportLocale {
       "stateLoaded": "Состояние загружено.",
       "stateFailed": "Не удалось сохранить или загрузить состояние. Проверьте свободное место и совместимость версии Dolphin.",
       "overwriteState": "Заменить мгновенное сохранение в этом слоте?",
-      "loadStateHelp": "Загрузить это состояние? Текущий прогресс будет заменён.",
+      "loadStateHelp":
+          "Загрузить это состояние? Текущий прогресс будет заменён.",
       "savestatesHelp": "Состояния сохраняются только локально. Для загрузки требуется совместимая версия Dolphin.",
       "quit": "Выйти из игры",
-      "quitHelp": "Вернуться в NeoStation? Несохранённый прогресс будет потерян.",
+      "quitHelp":
+          "Вернуться в NeoStation? Несохранённый прогресс будет потерян.",
       "graphics": "Графика",
       "controls": "Управление",
       "resolution": "Внутреннее разрешение",
@@ -755,7 +776,8 @@ abstract final class DolphinImportLocale {
       "loadStateHelp": "Muat status ini? Progres saat ini akan diganti.",
       "savestatesHelp": "Save state hanya disimpan secara lokal. Untuk memuatnya, diperlukan versi Dolphin yang kompatibel.",
       "quit": "Keluar dari game",
-      "quitHelp": "Kembali ke NeoStation? Kemajuan yang belum disimpan akan hilang.",
+      "quitHelp":
+          "Kembali ke NeoStation? Kemajuan yang belum disimpan akan hilang.",
       "graphics": "Grafis",
       "controls": "Kontrol",
       "resolution": "Resolusi internal",
@@ -837,7 +859,8 @@ abstract final class DolphinImportLocale {
       "console": "本体",
       "consoleLanguage": "本体の言語",
       "restart": "本体を再起動",
-      "languageHelp": "言語は再起動後に適用されます。対応言語はゲームと地域によって異なります。システムファイルを読み込んでもゲームの内容は翻訳されません。",
+      "languageHelp":
+          "言語は再起動後に適用されます。対応言語はゲームと地域によって異なります。システムファイルを読み込んでもゲームの内容は翻訳されません。",
       "restartHelp": "本体を再起動しますか？保存していない進行状況は失われます。",
       "restartRequired": "選択した言語を適用するには再起動してください。",
       "physicalController": "コントローラー",
@@ -855,7 +878,8 @@ abstract final class DolphinImportLocale {
       "stateFailed": "ステートの保存または読み込みに失敗しました。空き容量と Dolphin のバージョンの互換性を確認してください。",
       "overwriteState": "このスロットのステートを上書きしますか？",
       "loadStateHelp": "このステートを読み込みますか？現在の進行状況は置き換えられます。",
-      "savestatesHelp": "セーブステートはローカルにのみ保存されます。読み込むには互換性のある Dolphin バージョンが必要です。",
+      "savestatesHelp":
+          "セーブステートはローカルにのみ保存されます。読み込むには互換性のある Dolphin バージョンが必要です。",
       "quit": "ゲームを終了",
       "quitHelp": "NeoStationに戻りますか？未保存の進行状況は失われます。",
       "graphics": "グラフィック",
@@ -873,7 +897,8 @@ abstract final class DolphinImportLocale {
       "player": "プレイヤー",
       "extension": "拡張コントローラー",
       "bindings": "ボタン割り当て",
-      "bindingsHelp": "操作を選び、次にデバイスと入力を選んでください。変更はDolphinのコントローラープロファイルに保存されます。",
+      "bindingsHelp":
+          "操作を選び、次にデバイスと入力を選んでください。変更はDolphinのコントローラープロファイルに保存されます。",
       "graphicsHelp": "変更は再開時に適用され、保存されます。解像度を上げると動作が遅くなる場合があります。",
       "wiimote": "Wiiリモコン",
       "chooseInput": "入力を選択",
@@ -975,7 +1000,8 @@ abstract final class DolphinImportLocale {
       "player": "플레이어",
       "extension": "확장 장치",
       "bindings": "버튼 매핑",
-      "bindingsHelp": "조작을 선택한 다음 장치와 입력을 선택하세요. 변경 사항은 Dolphin 컨트롤러 프로필에 저장됩니다.",
+      "bindingsHelp":
+          "조작을 선택한 다음 장치와 입력을 선택하세요. 변경 사항은 Dolphin 컨트롤러 프로필에 저장됩니다.",
       "graphicsHelp": "변경 사항은 재개 시 적용되고 저장됩니다. 해상도를 높이면 성능이 저하될 수 있습니다.",
       "wiimote": "Wii 리모컨",
       "chooseInput": "입력 선택",
@@ -1018,7 +1044,8 @@ abstract final class DolphinImportLocale {
       "imported": "가져온 항목: {count}",
       "failed": "가져오기에 실패했습니다. 파일과 저장 공간을 확인하세요.",
       "invalidWii": "title과 shared2, ticket 또는 sys가 있는 추출된 Wii 폴더를 선택하세요. 원본 nand.bin은 먼저 추출해야 합니다.",
-      "invalidIpl": "유효하지 않은 GameCube IPL입니다. 선택한 지역에 맞는 지원되는 2 MiB IPL을 사용하세요.",
+      "invalidIpl":
+          "유효하지 않은 GameCube IPL입니다. 선택한 지역에 맞는 지원되는 2 MiB IPL을 사용하세요.",
       "busy": "게임을 종료하고 현재 작업이 끝날 때까지 기다리세요.",
       "filesHelp": "지원: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. 기존 파일은 교체 전에 백업됩니다.",
     },
@@ -1035,7 +1062,8 @@ abstract final class DolphinImportLocale {
       "frameTime": "帧时间",
       "sampledFrameTime": "采样帧时间（毫秒）",
       "launchWiiMenu": "启动 Wii 菜单",
-      "wiiMenuMissing": "请先导入已提取的 Wii NAND，其中须包含 Wii 菜单。仅有 keys.bin 或 boot2.bin 文件是不够的。",
+      "wiiMenuMissing":
+          "请先导入已提取的 Wii NAND，其中须包含 Wii 菜单。仅有 keys.bin 或 boot2.bin 文件是不够的。",
       "wiiMenuFailed": "无法启动 Wii 菜单。",
       "wiiMenuTitle": "Wii 菜单",
       "console": "主机",
@@ -1119,7 +1147,8 @@ abstract final class DolphinImportLocale {
       "cancel": "取消",
       "imported": "已导入：{count}",
       "failed": "导入失败。请检查文件和可用空间。",
-      "invalidWii": "请选择含有 title 以及 shared2、ticket 或 sys 的已提取 Wii 文件夹。原始 nand.bin 需要先提取。",
+      "invalidWii":
+          "请选择含有 title 以及 shared2、ticket 或 sys 的已提取 Wii 文件夹。原始 nand.bin 需要先提取。",
       "invalidIpl": "GameCube IPL 无效。请使用所选地区支持的 2 MiB IPL。",
       "busy": "请关闭游戏，并等待当前操作完成。",
       "filesHelp": "支持：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。现有文件将在替换前备份。",
@@ -1137,7 +1166,8 @@ abstract final class DolphinImportLocale {
       "frameTime": "影格時間",
       "sampledFrameTime": "取樣影格時間（毫秒）",
       "launchWiiMenu": "啟動 Wii 選單",
-      "wiiMenuMissing": "請先匯入已擷取的 Wii NAND，其中須包含 Wii 選單。僅有 keys.bin 或 boot2.bin 檔案並不足夠。",
+      "wiiMenuMissing":
+          "請先匯入已擷取的 Wii NAND，其中須包含 Wii 選單。僅有 keys.bin 或 boot2.bin 檔案並不足夠。",
       "wiiMenuFailed": "無法啟動 Wii 選單。",
       "wiiMenuTitle": "Wii 選單",
       "console": "主機",
@@ -1221,23 +1251,82 @@ abstract final class DolphinImportLocale {
       "cancel": "取消",
       "imported": "已匯入：{count}",
       "failed": "匯入失敗。請檢查檔案和可用空間。",
-      "invalidWii": "請選擇含有 title 以及 shared2、ticket 或 sys 的已擷取 Wii 資料夾。原始 nand.bin 需要先擷取。",
+      "invalidWii":
+          "請選擇含有 title 以及 shared2、ticket 或 sys 的已擷取 Wii 資料夾。原始 nand.bin 需要先擷取。",
       "invalidIpl": "GameCube IPL 無效。請使用所選地區支援的 2 MiB IPL。",
       "busy": "請關閉遊戲，並等待目前的操作完成。",
       "filesHelp": "支援：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。現有檔案會在取代前備份。",
     },
   };
-  static Map<String, String> labelsFor(Locale? locale) =>
-      values[localeKey(locale ?? const Locale('en'))] ?? values['en']!;
+  static const _modernMenuEn = <String, String>{
+    "hacks": "Compatibility hacks",
+    "hacksHelp": "These options can improve speed or fix graphics, but may break individual games. VBI Skip can cause freezes; leave uncertain options off.",
+    "viSkip": "VBI Skip",
+    "skipEfbAccess": "Skip EFB access from CPU",
+    "ignoreFormatChanges": "Ignore EFB format changes",
+    "efbCopyToTexture": "Store EFB copies to texture only",
+    "deferEfbCopies": "Defer EFB copies",
+    "fastDepth": "Fast depth calculation",
+    "disableBoundingBox": "Disable bounding box",
+    "vertexRounding": "Vertex rounding",
+    "achievements": "RetroAchievements",
+    "achievementsHelp": "The account configured in NeoStation is used automatically. Standard mode keeps save states and compatibility hacks available.",
+    "raAccount": "Account",
+    "raStatus": "Game status",
+    "raMode": "Mode",
+    "notConnected": "Not connected",
+    "active": "Active for this game",
+    "hardcore": "Hardcore",
+    "standard": "Standard",
+  };
+
+  static const _modernMenuFr = <String, String>{
+    "hacks": "Hacks de compatibilité",
+    "hacksHelp": "Ces options peuvent améliorer les performances ou corriger l’image, mais aussi perturber certains jeux. VBI Skip peut provoquer des gels ; laissez les options incertaines désactivées.",
+    "viSkip": "Saut VBI",
+    "skipEfbAccess": "Ignorer les accès EFB du CPU",
+    "ignoreFormatChanges": "Ignorer les changements de format EFB",
+    "efbCopyToTexture": "Copies EFB vers texture uniquement",
+    "deferEfbCopies": "Différer les copies EFB",
+    "fastDepth": "Calcul rapide de profondeur",
+    "disableBoundingBox": "Désactiver la bounding box",
+    "vertexRounding": "Arrondi des sommets",
+    "achievements": "RetroAchievements",
+    "achievementsHelp": "Le compte configuré dans NeoStation est utilisé automatiquement. Le mode standard conserve les savestates et les hacks de compatibilité.",
+    "raAccount": "Compte",
+    "raStatus": "État du jeu",
+    "raMode": "Mode",
+    "notConnected": "Non connecté",
+    "active": "Actif pour ce jeu",
+    "hardcore": "Hardcore",
+    "standard": "Standard",
+  };
+
+  static Map<String, String> labelsFor(Locale? locale) {
+    final key = localeKey(locale ?? const Locale('en'));
+    return {
+      ...values['en']!,
+      ...?values[key],
+      ..._modernMenuEn,
+      if (key == 'fr') ..._modernMenuFr,
+    };
+  }
 
   static String localeKey(Locale locale) {
     if (locale.languageCode == 'zh' &&
         (locale.scriptCode?.toLowerCase() == 'hant' ||
-         ['TW', 'HK', 'MO'].contains(locale.countryCode?.toUpperCase()))) {
+            ['TW', 'HK', 'MO'].contains(locale.countryCode?.toUpperCase()))) {
       return 'zh_Hant';
     }
     return locale.languageCode;
   }
+
   static String text(BuildContext context, String key) =>
-      (values[localeKey(Localizations.localeOf(context))] ?? values['en']!)[key]!;
+      values[localeKey(Localizations.localeOf(context))]?[key] ??
+      (localeKey(Localizations.localeOf(context)) == 'fr'
+          ? _modernMenuFr[key]
+          : null) ??
+      _modernMenuEn[key] ??
+      values['en']![key] ??
+      key;
 }

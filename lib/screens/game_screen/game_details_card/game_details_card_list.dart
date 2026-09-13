@@ -3,7 +3,9 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:video_player/video_player.dart';
+
 import 'dart:async';
+
 import '../../../models/system_model.dart';
 import '../../../models/game_model.dart';
 import '../../../providers/file_provider.dart';
@@ -12,15 +14,19 @@ import '../../../models/retro_achievements_game_info.dart';
 import '../../../services/retro_achievements_helper.dart';
 import '../../../utils/artwork_cache.dart';
 import '../../../utils/gamepad_nav.dart';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:provider/provider.dart';
+
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../services/screenscraper_service.dart';
 import '../../../services/game_service.dart';
 import '../../../services/android_service.dart';
+
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+
 import '../../../models/secondary_display_state.dart';
 import 'widgets/game_details_footer.dart';
 import 'widgets/game_details_tabs_header.dart';
@@ -116,9 +122,8 @@ class GameDetailsCardList extends StatefulWidget {
   final bool isSecondaryScreenActive;
   final bool isNavigatingFast;
   final VoidCallback? onBack;
-  // DOLPHIN_ISOLATION_BEGIN: import_action
-  final Widget? dolphinImportAction;
-  // DOLPHIN_ISOLATION_END: import_action
+  // Emulator-specific action rendered as the final segment of the tab bar.
+  final Widget? importAction;
 
   const GameDetailsCardList({
     super.key,
@@ -158,9 +163,7 @@ class GameDetailsCardList extends StatefulWidget {
     this.isSecondaryScreenActive = false,
     this.isNavigatingFast = false,
     this.onBack,
-    // DOLPHIN_ISOLATION_BEGIN: import_action_parameter
-    this.dolphinImportAction,
-    // DOLPHIN_ISOLATION_END: import_action_parameter
+    this.importAction,
   });
 
   @override
@@ -629,7 +632,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               currentTab: _currentTab,
               onTabChanged: (tab) => _setTab(tab),
               // DOLPHIN_ISOLATION_BEGIN: import_action_header
-              trailingAction: widget.dolphinImportAction,
+              trailingAction: widget.importAction,
               // DOLPHIN_ISOLATION_END: import_action_header
             ),
           ),
@@ -998,5 +1001,4 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       }
     }
   }
-
 }
