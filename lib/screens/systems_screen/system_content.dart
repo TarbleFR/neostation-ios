@@ -5,17 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
+import 'package:neostation/models/full_theme_definition.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
+import 'package:neostation/services/full_theme_music_service.dart';
+import 'package:neostation/services/full_theme_service.dart';
 import 'package:neostation/services/home_music_service.dart';
 import 'package:neostation/widgets/shimmering_logo.dart';
+import '../full_theme/full_theme_systems_view.dart';
 import 'my_systems_section/my_systems_grid.dart';
 import 'my_systems_section/initial_setup_widget.dart';
 
 /// Orchestrator for the 'Systems' tab content.
 ///
-/// The optional user-selected custom background is deliberately rendered only
-/// behind the primary systems grid/carousel. Game playlists are pushed as new
-/// routes and therefore keep their existing backgrounds unchanged.
+/// When no full theme is installed this preserves NeoStation's original
+/// systems experience (including the user's grid/carousel preference). When a
+/// full theme is active, that theme becomes the systems experience outright:
+/// it owns the home surface and routes playlists through its own renderer. It
+/// is deliberately not represented as another layout mode.
 class SystemContent extends StatefulWidget {
   const SystemContent({super.key, this.selectedIndex = 0, this.onCardTapped});
 
@@ -31,12 +37,19 @@ class _SystemContentState extends State<SystemContent> {
 
   DateTime? _splashShownAt;
   Timer? _releaseTimer;
-  bool? _lastHomeMusicActive;
+  String? _lastMenuAudioKey;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(FullThemeService.instance.initialize());
+  }
 
   @override
   void dispose() {
     _releaseTimer?.cancel();
     unawaited(HomeMusicService().setMainMenuActive(false));
+    unawaited(FullThemeMusicService.instance.setHomeVisible(false));
     super.dispose();
   }
 
@@ -61,83 +74,127 @@ class _SystemContentState extends State<SystemContent> {
     return true;
   }
 
-  /// Keeps audio side effects outside build while still following route
-  /// visibility. A pushed game library leaves this widget mounted underneath,
-  /// so checking [ModalRoute.isCurrent] is what prevents ambience from leaking
-  /// beyond the main console-selection screen.
-  void _syncHomeMusic(bool active) {
-    if (_lastHomeMusicActive == active) return;
-    _lastHomeMusicActive = active;
+  /// Keeps menu audio side effects out of build while making the full theme
+  /// authoritative. User-selected NeoStation menu music is disabled while a
+  /// full theme owns the home screen; removing the full theme restores the
+  /// original behaviour automatically.
+  void _syncMenuAudio(bool active, FullThemeDefinition? fullTheme) {
+    final key = '${active ? 1 : 0}:${fullTheme?.id ?? 'classic'}';
+    if (_lastMenuAudioKey == key) return;
+    _lastMenuAudioKey = key;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted && active) return;
-      unawaited(HomeMusicService().setMainMenuActive(active));
+      if (fullTheme != null) {
+        unawaited(HomeMusicService().setMainMenuActive(false));
+        unawaited(
+          FullThemeMusicService.instance.setHomeVisible(
+            active,
+            theme: fullTheme,
+          ),
+        );
+      } else {
+        unawaited(FullThemeMusicService.instance.setHomeVisible(false));
+        unawaited(HomeMusicService().setMainMenuActive(active));
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SqliteConfigProvider>(
-      builder: (context, configProvider, child) {
-        final isLoading = configProvider.isLoading || configProvider.isScanning;
-        final showSplash = isLoading || _holdSplash(isLoading);
-
-        final showInitialSetup =
-            !showSplash &&
-            !configProvider.hasDetectedSystems &&
-            configProvider.scanCompleted;
-
-        final showContent =
-            !showSplash && configProvider.scanCompleted && !showInitialSetup;
-
-        final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
-        _syncHomeMusic(showContent && routeIsCurrent);
-        final safePadding = MediaQuery.viewPaddingOf(context);
-        final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
-        final safeLeft = isIOS ? safePadding.left : 0.0;
-        final safeRight = isIOS ? safePadding.right : 0.0;
-
-        final Widget phase;
-        if (showSplash) {
-          phase = KeyedSubtree(
-            key: const ValueKey('splash'),
-            child: _buildSplash(context, configProvider),
-          );
-        } else if (showInitialSetup) {
-          phase = const KeyedSubtree(
-            key: ValueKey('setup'),
-            child: InitialSetupWidget(),
-          );
-        } else if (showContent) {
-          phase = KeyedSubtree(
-            key: const ValueKey('content'),
-            child: MySystems(
-              selectedIndex: widget.selectedIndex,
-              onCardTapped: widget.onCardTapped,
-            ),
-          );
-        } else {
-          phase = const SizedBox.shrink(key: ValueKey('empty'));
-        }
-
-        final content = AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          child: phase,
-        );
-
-        // AppScreen owns the custom background so it stays mounted across
-        // top-level tab changes. During splash/setup phases, cover that
-        // persistent layer with the normal theme background. The actual
-        // Systems content remains transparent so the custom image shows through.
-        if (showContent) {
-          return Padding(
-            padding: EdgeInsets.only(left: safeLeft, right: safeRight),
-            child: content,
+    return ValueListenableBuilder<bool>(
+      valueListenable: FullThemeService.instance.isReady,
+      builder: (context, fullThemeReady, _) {
+        // Do not briefly expose the classic UI while a stored full theme is
+        // still being restored from disk at application start.
+        if (!fullThemeReady) {
+          return ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: const Center(child: ShimmeringLogo()),
           );
         }
-        return ColoredBox(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: content,
+
+        return ValueListenableBuilder<FullThemeDefinition?>(
+          valueListenable: FullThemeService.instance.activeTheme,
+          builder: (context, fullTheme, _) {
+            return Consumer<SqliteConfigProvider>(
+              builder: (context, configProvider, child) {
+                final isLoading =
+                    configProvider.isLoading || configProvider.isScanning;
+                final showSplash = isLoading || _holdSplash(isLoading);
+
+                final showInitialSetup =
+                    !showSplash &&
+                    !configProvider.hasDetectedSystems &&
+                    configProvider.scanCompleted;
+
+                final showContent =
+                    !showSplash &&
+                    configProvider.scanCompleted &&
+                    !showInitialSetup;
+
+                final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+                _syncMenuAudio(showContent && routeIsCurrent, fullTheme);
+                final safePadding = MediaQuery.viewPaddingOf(context);
+                final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+                final safeLeft = isIOS ? safePadding.left : 0.0;
+                final safeRight = isIOS ? safePadding.right : 0.0;
+
+                final Widget phase;
+                if (showSplash) {
+                  phase = KeyedSubtree(
+                    key: const ValueKey('splash'),
+                    child: _buildSplash(context, configProvider),
+                  );
+                } else if (showInitialSetup) {
+                  phase = const KeyedSubtree(
+                    key: ValueKey('setup'),
+                    child: InitialSetupWidget(),
+                  );
+                } else if (showContent) {
+                  if (fullTheme != null) {
+                    phase = KeyedSubtree(
+                      key: ValueKey('full-theme-${fullTheme.id}'),
+                      child: FullThemeSystemsView(
+                        theme: fullTheme,
+                        selectedIndex: widget.selectedIndex,
+                        onCardTapped: widget.onCardTapped,
+                      ),
+                    );
+                  } else {
+                    phase = KeyedSubtree(
+                      key: const ValueKey('content'),
+                      child: MySystems(
+                        selectedIndex: widget.selectedIndex,
+                        onCardTapped: widget.onCardTapped,
+                      ),
+                    );
+                  }
+                } else {
+                  phase = const SizedBox.shrink(key: ValueKey('empty'));
+                }
+
+                final content = AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  child: phase,
+                );
+
+                // AppScreen owns the classic custom background. A full theme's
+                // overlay paints above it and above the global chrome, so this
+                // backing surface intentionally remains cheap and inert.
+                if (showContent) {
+                  return Padding(
+                    padding: EdgeInsets.only(left: safeLeft, right: safeRight),
+                    child: content,
+                  );
+                }
+                return ColoredBox(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: content,
+                );
+              },
+            );
+          },
         );
       },
     );
