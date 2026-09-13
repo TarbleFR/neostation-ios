@@ -56,9 +56,49 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('Bundle.main.builtInPlugInsURL', manager)
         self.assertIn('NeoStationLocalTunnel.appex', manager)
         self.assertIn('ensureWaiters', manager)
+        self.assertIn('disableWaiters', manager)
         self.assertIn('activeVPNConflict', manager)
         self.assertIn('removeDuplicateManagers', manager)
         self.assertIn('schemaVersionKey', manager)
+        self.assertIn('manager.saveToPreferences', manager)
+        self.assertIn('NEVPNError.configurationReadWriteFailed', manager)
+        self.assertIn('manager.connection.stopVPNTunnel()', manager)
+        self.assertIn('manager.isOnDemandEnabled = false', manager)
+        self.assertIn('"authorized": configured', manager)
+        self.assertIn('"configured": configured', manager)
+
+    def test_tools_exposes_authorize_enable_disable_and_resume_refresh(self):
+        tools = (
+            ROOT /
+            'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart'
+        ).read_text()
+        bridge = (ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart').read_text()
+        plugin = (
+            ROOT / 'packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift'
+        ).read_text()
+        service = (ROOT / 'lib/services/local_jit_tunnel_service.dart').read_text()
+
+        self.assertIn('with WidgetsBindingObserver', tools)
+        self.assertIn('AppLifecycleState.resumed', tools)
+        self.assertIn('LocalJitTunnelLocale.authorizeAction', tools)
+        self.assertIn('LocalJitTunnelLocale.enableAction', tools)
+        self.assertIn('LocalJitTunnelLocale.disableAction', tools)
+        self.assertIn('LocalJitTunnelService.authorizeAndEnable()', tools)
+        self.assertIn('LocalJitTunnelService.disable()', tools)
+        self.assertIn("invokeMethod<Object?>('disableLocalTunnel')", bridge)
+        self.assertIn('call.method == "disableLocalTunnel"', plugin)
+        self.assertIn('if (!current.authorized || !current.enabled)', service)
+        self.assertIn('no system authorization prompt was requested', service)
+
+    def test_vpn_locale_declares_all_twelve_supported_languages(self):
+        locale = (ROOT / 'lib/l10n/local_jit_tunnel_locale.dart').read_text()
+        for key in (
+            'en', 'de', 'es', 'fr', 'id', 'it', 'ja', 'ko', 'pt', 'ru',
+            'zh', 'zh_Hant',
+        ):
+            self.assertIn(f"'{key}': {{", locale)
+        self.assertIn('static const allKeys', locale)
+        self.assertIn('missingKeysForLocale', locale)
 
     def test_every_jit_path_ensures_tunnel_before_remote_pairing(self):
         bridge = (

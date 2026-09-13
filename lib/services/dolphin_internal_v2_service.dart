@@ -34,6 +34,7 @@ class DolphinLaunchReport {
   final bool ready;
   final String message;
   final String? failedStage;
+  final String? errorCode;
   final String logPath;
   final Map<String, bool> gates;
 
@@ -43,6 +44,7 @@ class DolphinLaunchReport {
     required this.logPath,
     required this.gates,
     this.failedStage,
+    this.errorCode,
   });
 }
 
@@ -539,6 +541,7 @@ class DolphinInternalV2Service {
           ready: false,
           message: error.message,
           failedStage: 'stikjit.local_tunnel_failed',
+          errorCode: error.code,
           logPath: logPath,
           gates: _emptyGates(),
         );

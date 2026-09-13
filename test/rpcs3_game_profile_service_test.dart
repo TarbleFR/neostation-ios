@@ -74,6 +74,7 @@ void main() {
           expect(profile.settings['cpu.ppu_decoder'], 'Recompiler (LLVM)');
           expect(profile.settings['cpu.spu_decoder'], 'Recompiler (LLVM)');
           expect(profile.settings['cpu.ppu_profiler'], 'false');
+          expect(profile.settings['advanced.llvm_precompilation'], 'true');
         }
         for (final serial in <String>['BCUS98114', 'BLES00412', 'NPUB12345']) {
           expect(
@@ -161,6 +162,7 @@ void main() {
       expect(yaml, contains('PPU Decoder: Recompiler (LLVM)'));
       expect(yaml, contains('SPU Decoder: Recompiler (LLVM)'));
       expect(yaml, contains('PPU Profiler: false'));
+      expect(yaml, contains('LLVM Precompilation: true'));
       expect(yaml, contains('Video:'));
       expect(yaml, contains('Resolution Scale: 75'));
       expect(yaml, contains('Shader Mode: Async Recompiler (multi-threaded)'));

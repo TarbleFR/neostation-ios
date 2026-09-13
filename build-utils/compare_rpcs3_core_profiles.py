@@ -19,6 +19,16 @@ REQUIRED = {
     "pipeline_compile_ms", "pipeline_peak", "ppu_threads", "spu_threads",
     "rsx_threads", "jit_threads", "memory_mib", "headroom_mib",
 }
+RESILIENCE_REQUIRED = {
+    "memory_reclaims", "memory_reclaim_effective", "memory_reclaim_deferred",
+    "memory_pressure_peak", "vram_allocations", "vram_frees",
+    "vram_allocation_mib", "rsx_semaphore_wait_ms", "rsx_semaphore_stalls",
+    "rsx_semaphore_timeouts", "ppu_cache_hits", "ppu_cache_misses",
+    "spu_compiles", "spu_compile_kib", "spu_compile_ms", "spu_metadata_writes",
+    "spu_metadata_loaded", "spu_metadata_rejected",
+    "spu_metadata_repaired_bytes", "spu_diagnostics", "shader_cache_hits",
+    "shader_cache_misses",
+}
 
 
 def read_entries(path: Path) -> list[dict]:
@@ -69,14 +79,49 @@ def parse_windows(path: Path, title: str) -> list[dict[str, float]]:
     return windows
 
 
+def parse_resilience(path: Path, title: str) -> list[dict[str, float]]:
+    windows: list[dict[str, float]] = []
+    for entry in session_for_title(read_entries(path), title, path):
+        message = str(entry.get("message", ""))
+        if "COREPROF_RESILIENCE " not in message:
+            continue
+        values = {key: float(value) for key, value in PAIR.findall(message)}
+        missing = RESILIENCE_REQUIRED - values.keys()
+        if missing:
+            raise ValueError(
+                f"{path}: incomplete COREPROF_RESILIENCE window: {sorted(missing)}"
+            )
+        windows.append(values)
+    return windows
+
+
 def measure(path: Path, title: str) -> dict[str, float | str]:
     windows = parse_windows(path, title)
+    resilience = parse_resilience(path, title)
     total_frames = sum(window["frames"] for window in windows)
 
     def weighted(key: str) -> float:
         return sum(window[key] * window["frames"] for window in windows) / total_frames
 
     gpu_values = [window for window in windows if window["gpu_time_ms"] >= 0]
+
+    def resilience_total(key: str) -> float:
+        if not resilience:
+            return math.nan
+        return sum(window[key] for window in resilience)
+
+    def resilience_peak(key: str) -> float:
+        if not resilience:
+            return math.nan
+        return max(window[key] for window in resilience)
+
+    def resilience_hit_rate(hit_key: str, miss_key: str) -> float:
+        hits = resilience_total(hit_key)
+        misses = resilience_total(miss_key)
+        if math.isnan(hits) or hits + misses <= 0:
+            return math.nan
+        return hits * 100.0 / (hits + misses)
+
     return {
         "title": title.upper(),
         "windows": float(len(windows)),
@@ -110,6 +155,29 @@ def measure(path: Path, title: str) -> dict[str, float | str]:
         "jit_threads": weighted("jit_threads"),
         "peak_memory_mib": max(window["memory_mib"] for window in windows),
         "minimum_headroom_mib": min(window["headroom_mib"] for window in windows),
+        "resilience_windows": float(len(resilience)),
+        "memory_reclaims": resilience_total("memory_reclaims"),
+        "memory_reclaim_effective": resilience_total("memory_reclaim_effective"),
+        "memory_reclaim_deferred": resilience_total("memory_reclaim_deferred"),
+        "memory_pressure_peak": resilience_peak("memory_pressure_peak"),
+        "vram_allocations": resilience_total("vram_allocations"),
+        "vram_frees": resilience_total("vram_frees"),
+        "vram_allocation_mib": resilience_total("vram_allocation_mib"),
+        "rsx_semaphore_wait_ms": resilience_total("rsx_semaphore_wait_ms"),
+        "rsx_semaphore_stalls": resilience_total("rsx_semaphore_stalls"),
+        "rsx_semaphore_timeouts": resilience_total("rsx_semaphore_timeouts"),
+        "ppu_cache_hit_rate": resilience_hit_rate("ppu_cache_hits", "ppu_cache_misses"),
+        "spu_compiles": resilience_total("spu_compiles"),
+        "spu_compile_kib": resilience_total("spu_compile_kib"),
+        "spu_compile_ms": resilience_total("spu_compile_ms"),
+        "spu_metadata_writes": resilience_total("spu_metadata_writes"),
+        "spu_metadata_loaded": resilience_total("spu_metadata_loaded"),
+        "spu_metadata_rejected": resilience_total("spu_metadata_rejected"),
+        "spu_metadata_repaired_bytes": resilience_total("spu_metadata_repaired_bytes"),
+        "spu_diagnostics": resilience_total("spu_diagnostics"),
+        "shader_cache_hit_rate": resilience_hit_rate(
+            "shader_cache_hits", "shader_cache_misses"
+        ),
     }
 
 
@@ -140,6 +208,26 @@ def comparison(before: dict, after: dict) -> str:
         ("Average JIT threads", "jit_threads", ".2f", None),
         ("Peak memory (MiB)", "peak_memory_mib", ".1f", False),
         ("Minimum headroom (MiB)", "minimum_headroom_mib", ".1f", True),
+        ("Memory reclaim passes", "memory_reclaims", ".0f", False),
+        ("Effective memory reclaims", "memory_reclaim_effective", ".0f", None),
+        ("Deferred memory reclaims", "memory_reclaim_deferred", ".0f", None),
+        ("Peak memory-pressure level", "memory_pressure_peak", ".0f", False),
+        ("Vulkan allocations", "vram_allocations", ".0f", False),
+        ("Vulkan frees", "vram_frees", ".0f", None),
+        ("Vulkan allocation traffic (MiB)", "vram_allocation_mib", ".1f", False),
+        ("RSX semaphore wait (ms)", "rsx_semaphore_wait_ms", ".3f", False),
+        ("RSX semaphore stalls", "rsx_semaphore_stalls", ".0f", False),
+        ("RSX semaphore timeouts", "rsx_semaphore_timeouts", ".0f", False),
+        ("PPU cache hit rate (%)", "ppu_cache_hit_rate", ".2f", True),
+        ("SPU blocks compiled", "spu_compiles", ".0f", False),
+        ("SPU guest code compiled (KiB)", "spu_compile_kib", ".1f", False),
+        ("SPU compilation time (ms)", "spu_compile_ms", ".3f", False),
+        ("SPU metadata writes", "spu_metadata_writes", ".0f", False),
+        ("SPU metadata loaded", "spu_metadata_loaded", ".0f", None),
+        ("SPU metadata rejected", "spu_metadata_rejected", ".0f", False),
+        ("SPU cache bytes repaired", "spu_metadata_repaired_bytes", ".0f", False),
+        ("SPU diagnostics", "spu_diagnostics", ".0f", False),
+        ("RSX shader cache hit rate (%)", "shader_cache_hit_rate", ".2f", True),
     ]
 
     def display(value: float, pattern: str) -> str:
@@ -172,7 +260,8 @@ def comparison(before: dict, after: dict) -> str:
         "",
         "The 1% low is frame-weighted across native five-second windows. Physical GPU time remains "
         "unavailable until Vulkan timestamp queries are validated on MoltenVK; fence wait is reported "
-        "separately and is never presented as GPU execution time.",
+        "separately and is never presented as GPU execution time. Resilience rows remain unavailable "
+        "for older captures that predate COREPROF_RESILIENCE.",
     ])
     return "\n".join(output) + "\n"
 

@@ -230,7 +230,10 @@ class Rpcs3InternalService {
       try {
         await LocalJitTunnelService.ensureRunningForJit();
       } on LocalJitTunnelException catch (error) {
-        throw Rpcs3InternalException('localTunnelFailed', error.message);
+        throw Rpcs3InternalException(
+          'localTunnel.${error.code}',
+          error.message,
+        );
       }
     }
     var readingProgress = false;

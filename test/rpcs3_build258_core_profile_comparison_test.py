@@ -32,6 +32,18 @@ def capture(path: Path, fps: float, low: float, wait: float) -> None:
             "rsx_threads=1.00 jit_threads=2.00 memory_mib=1700 headroom_mib=800"
         )
         rows.append({"timestamp": 102.0 + index * 5, "stage": "core_log", "message": message})
+        resilience = (
+            "[iOS Core Profiler] COREPROF_RESILIENCE memory_reclaims=1 "
+            "memory_reclaim_effective=1 memory_reclaim_deferred=20 memory_pressure_peak=1 "
+            "vram_allocations=10 vram_frees=8 vram_allocation_mib=24.500 "
+            "rsx_semaphore_wait_ms=0.500 rsx_semaphore_stalls=2 rsx_semaphore_timeouts=0 "
+            "ppu_cache_hits=9 ppu_cache_misses=1 spu_compiles=3 spu_compile_kib=12.000 "
+            "spu_compile_ms=18.500 "
+            "spu_metadata_writes=2 spu_metadata_loaded=4 spu_metadata_rejected=0 "
+            "spu_metadata_repaired_bytes=0 spu_diagnostics=5 shader_cache_hits=8 "
+            "shader_cache_misses=2"
+        )
+        rows.append({"timestamp": 102.1 + index * 5, "stage": "core_log", "message": resilience})
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 
@@ -46,7 +58,17 @@ with tempfile.TemporaryDirectory() as directory:
     assert after["average_fps"] > before["average_fps"]
     assert after["gpu_fence_wait_ms"] < before["gpu_fence_wait_ms"]
     assert math.isnan(after["gpu_time_ms"])
+    assert after["ppu_cache_hit_rate"] == 90.0
+    assert after["shader_cache_hit_rate"] == 80.0
+    assert after["memory_reclaims"] == 3
+    assert after["vram_allocations"] == 30
+    assert after["vram_allocation_mib"] == 73.5
+    assert after["spu_compile_ms"] == 55.5
     assert "| 1% low FPS |" in report
     assert "Physical GPU / frame (ms) | unavailable" in report
     assert "fence wait is reported" in report
+    assert "| PPU cache hit rate (%) |" in report
+    assert "| RSX semaphore timeouts |" in report
+    assert "| Vulkan allocation traffic (MiB) |" in report
+    assert "| SPU compilation time (ms) |" in report
 print("RPCS3 Build 258 core profile comparison contract: OK")

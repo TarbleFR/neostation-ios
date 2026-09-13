@@ -52,10 +52,44 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
           "active": false,
           "status": "unsupported",
           "managedByNeoStation": true,
+          "configured": false,
+          "authorized": false,
+          "enabled": false,
+          "onDemand": false,
         ])
         return
       }
       NeoStationLocalTunnelManager.shared.status { response in
+        switch response {
+        case .success(let state):
+          result(state)
+        case .failure(let error):
+          result(
+            FlutterError(
+              code: "local_tunnel_\(error.code)",
+              message: error.localizedDescription,
+              details: nil
+            )
+          )
+        }
+      }
+      return
+    }
+
+    if call.method == "disableLocalTunnel" {
+      guard #available(iOS 17.4, *) else {
+        result([
+          "active": false,
+          "status": "unsupported",
+          "managedByNeoStation": true,
+          "configured": false,
+          "authorized": false,
+          "enabled": false,
+          "onDemand": false,
+        ])
+        return
+      }
+      NeoStationLocalTunnelManager.shared.disable { response in
         switch response {
         case .success(let state):
           result(state)

@@ -146,6 +146,10 @@ abstract final class Rpcs3GameProfileService {
     'cpu.ppu_decoder': 'Recompiler (LLVM)',
     'cpu.spu_decoder': 'Recompiler (LLVM)',
     'cpu.ppu_profiler': 'false',
+    // Persist raw SPU metadata on the first run and rebuild those safe guest
+    // blocks before gameplay on later runs. Host ARM64 machine code is not
+    // persisted because it still embeds process-specific addresses.
+    'advanced.llvm_precompilation': 'true',
     'cpu.spu_block_size': 'Mega',
     'cpu.spu_xfloat_accuracy': 'Approximate',
     'cpu.preferred_spu_threads': '0',

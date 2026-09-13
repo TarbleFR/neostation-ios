@@ -24,6 +24,14 @@ class StikjitBridge {
     return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
   }
 
+  static Future<LocalJitTunnelState> disableLocalTunnel() async {
+    final raw = await _channel.invokeMethod<Object?>('disableLocalTunnel');
+    if (raw is! Map) {
+      throw StateError('NeoStation local tunnel returned an invalid status.');
+    }
+    return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
+  }
+
   static Future<StikjitLaunchResult> enableMeloNxJit({
     required String pairingFilePath,
     required String bundleId,
@@ -104,6 +112,9 @@ class LocalJitTunnelState {
     required this.active,
     required this.status,
     required this.managedByNeoStation,
+    required this.configured,
+    required this.authorized,
+    required this.enabled,
     required this.interfaceAddress,
     required this.peerAddress,
     required this.onDemand,
@@ -114,6 +125,9 @@ class LocalJitTunnelState {
         active: data['active'] == true,
         status: data['status']?.toString() ?? 'unknown',
         managedByNeoStation: data['managedByNeoStation'] == true,
+        configured: data['configured'] == true,
+        authorized: data['authorized'] == true,
+        enabled: data['enabled'] == true,
         interfaceAddress: data['interfaceAddress']?.toString(),
         peerAddress: data['peerAddress']?.toString(),
         onDemand: data['onDemand'] == true,
@@ -122,6 +136,9 @@ class LocalJitTunnelState {
   final bool active;
   final String status;
   final bool managedByNeoStation;
+  final bool configured;
+  final bool authorized;
+  final bool enabled;
   final String? interfaceAddress;
   final String? peerAddress;
   final bool onDemand;

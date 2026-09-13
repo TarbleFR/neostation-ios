@@ -21,21 +21,22 @@ final class NeoStationLocalTunnelManager {
     static let serverAddress = "On-device RemotePairing route"
     static let connectionPollInterval: TimeInterval = 0.25
     static let connectionTimeout: TimeInterval = 45
+    static let disconnectionTimeout: TimeInterval = 10
   }
 
   typealias Response = Result<[String: Any], NeoStationLocalTunnelError>
 
   private var ensureInFlight = false
   private var ensureWaiters = [(Response) -> Void]()
+  private var disableInFlight = false
+  private var disableWaiters = [(Response) -> Void]()
 
   private init() {}
 
   func ensureRunning(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
       self.ensureWaiters.append(completion)
-      guard !self.ensureInFlight else { return }
-      self.ensureInFlight = true
-      self.performEnsureRunning()
+      self.beginEnsureIfPossible()
     }
   }
 
@@ -48,28 +49,64 @@ final class NeoStationLocalTunnelManager {
       NETunnelProviderManager.loadAllFromPreferences { managers, error in
         DispatchQueue.main.async {
           if let error {
-            completion(.failure(.configuration(error.localizedDescription)))
+            completion(.failure(Self.configurationFailure(error)))
             return
           }
-          let manager = managers?.first(where: {
+          let matching = managers?.filter {
+            Self.isOwned(
+              $0,
+              providerBundleIdentifier: providerBundleIdentifier
+            )
+          } ?? []
+          let manager = matching.first(where: {
+            Self.isActive($0.connection.status)
+          }) ?? matching.first(where: {
             Self.providerIdentifier(for: $0) == providerBundleIdentifier
-          })
-          completion(.success(self.response(for: manager?.connection.status ?? .invalid)))
+          }) ?? matching.first
+          completion(.success(self.response(for: manager)))
         }
       }
     }
   }
 
+  /// Stops the connection and persists on-demand as disabled while retaining
+  /// the system configuration. A later enable therefore reuses the permission
+  /// already granted by iOS instead of creating a duplicate VPN profile.
+  func disable(completion: @escaping (Response) -> Void) {
+    DispatchQueue.main.async {
+      self.disableWaiters.append(completion)
+      self.beginDisableIfPossible()
+    }
+  }
+
+  private func beginEnsureIfPossible() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard !ensureInFlight, !disableInFlight, !ensureWaiters.isEmpty else {
+      return
+    }
+    ensureInFlight = true
+    performEnsureRunning()
+  }
+
+  private func beginDisableIfPossible() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard !disableInFlight, !ensureInFlight, !disableWaiters.isEmpty else {
+      return
+    }
+    disableInFlight = true
+    performDisable()
+  }
+
   private func performEnsureRunning() {
     guard let providerBundleIdentifier = providerBundleIdentifier() else {
-      finish(.failure(.extensionMissing))
+      finishEnsure(.failure(.extensionMissing))
       return
     }
 
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
         if let error {
-          self.finish(.failure(.configuration(error.localizedDescription)))
+          self.finishEnsure(.failure(Self.configurationFailure(error)))
           return
         }
         let loaded = managers ?? []
@@ -78,7 +115,7 @@ final class NeoStationLocalTunnelManager {
             Self.isActive($0.connection.status)
         }) {
           let name = conflicting.localizedDescription ?? "another VPN"
-          self.finish(.failure(.activeVPNConflict(name)))
+          self.finishEnsure(.failure(.activeVPNConflict(name)))
           return
         }
 
@@ -92,7 +129,7 @@ final class NeoStationLocalTunnelManager {
           matching.filter { $0 !== manager }
         ) { error in
           if let error {
-            self.finish(.failure(.configuration(error.localizedDescription)))
+            self.finishEnsure(.failure(Self.configurationFailure(error)))
             return
           }
           self.configure(
@@ -100,6 +137,57 @@ final class NeoStationLocalTunnelManager {
             providerBundleIdentifier: providerBundleIdentifier
           )
           self.saveReloadAndStart(manager)
+        }
+      }
+    }
+  }
+
+  private func performDisable() {
+    guard let providerBundleIdentifier = providerBundleIdentifier() else {
+      finishDisable(.failure(.extensionMissing))
+      return
+    }
+
+    NETunnelProviderManager.loadAllFromPreferences { managers, error in
+      DispatchQueue.main.async {
+        if let error {
+          self.finishDisable(.failure(Self.configurationFailure(error)))
+          return
+        }
+        let matching = managers?.filter {
+          Self.isOwned(
+            $0,
+            providerBundleIdentifier: providerBundleIdentifier
+          )
+        } ?? []
+        guard let manager = matching.first(where: {
+          Self.isActive($0.connection.status)
+        }) ?? matching.first(where: {
+          Self.providerIdentifier(for: $0) == providerBundleIdentifier
+        }) ?? matching.first else {
+          self.finishDisable(.success(self.response(for: nil)))
+          return
+        }
+
+        self.removeDuplicateManagers(
+          matching.filter { $0 !== manager }
+        ) { error in
+          if let error {
+            self.finishDisable(.failure(Self.configurationFailure(error)))
+            return
+          }
+          // Repair signer rewrites or stale provider metadata before keeping
+          // the accepted profile in its disabled state.
+          self.configure(
+            manager,
+            providerBundleIdentifier: providerBundleIdentifier
+          )
+          manager.isOnDemandEnabled = false
+          // The on-demand flag represents the user's persisted service choice;
+          // isEnabled keeps the profile reusable without another authorization
+          // transaction.
+          manager.isEnabled = true
+          self.saveReloadAndStop(manager)
         }
       }
     }
@@ -155,13 +243,13 @@ final class NeoStationLocalTunnelManager {
     manager.saveToPreferences { error in
       DispatchQueue.main.async {
         if let error {
-          self.finish(.failure(.configuration(error.localizedDescription)))
+          self.finishEnsure(.failure(Self.configurationFailure(error)))
           return
         }
         manager.loadFromPreferences { error in
           DispatchQueue.main.async {
             if let error {
-              self.finish(.failure(.configuration(error.localizedDescription)))
+              self.finishEnsure(.failure(Self.configurationFailure(error)))
               return
             }
             self.start(manager)
@@ -171,9 +259,35 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
+  private func saveReloadAndStop(_ manager: NETunnelProviderManager) {
+    manager.saveToPreferences { error in
+      DispatchQueue.main.async {
+        if let error {
+          self.finishDisable(.failure(Self.configurationFailure(error)))
+          return
+        }
+        manager.loadFromPreferences { error in
+          DispatchQueue.main.async {
+            if let error {
+              self.finishDisable(.failure(Self.configurationFailure(error)))
+              return
+            }
+            manager.connection.stopVPNTunnel()
+            self.waitUntilDisconnected(
+              manager,
+              deadline: Date().addingTimeInterval(
+                Constants.disconnectionTimeout
+              )
+            )
+          }
+        }
+      }
+    }
+  }
+
   private func start(_ manager: NETunnelProviderManager) {
     if manager.connection.status == .connected {
-      finish(.success(response(for: .connected)))
+      finishEnsure(.success(response(for: manager)))
       return
     }
     if !Self.isActive(manager.connection.status) {
@@ -183,7 +297,7 @@ final class NeoStationLocalTunnelManager {
           Constants.peerAddressKey: Constants.peerAddress as NSString,
         ])
       } catch {
-        finish(.failure(.start(error.localizedDescription)))
+        finishEnsure(.failure(.start(error.localizedDescription)))
         return
       }
     }
@@ -199,17 +313,19 @@ final class NeoStationLocalTunnelManager {
   ) {
     switch manager.connection.status {
     case .connected:
-      finish(.success(response(for: .connected)))
+      finishEnsure(.success(response(for: manager)))
       return
     case .invalid:
-      finish(.failure(.configuration("The saved VPN configuration is invalid.")))
+      finishEnsure(
+        .failure(.configuration("The saved VPN configuration is invalid."))
+      )
       return
     default:
       break
     }
 
     guard Date() < deadline else {
-      finish(.failure(.timeout))
+      finishEnsure(.failure(.timeout))
       return
     }
     DispatchQueue.main.asyncAfter(
@@ -219,11 +335,46 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
-  private func finish(_ response: Response) {
+  private func waitUntilDisconnected(
+    _ manager: NETunnelProviderManager,
+    deadline: Date
+  ) {
+    switch manager.connection.status {
+    case .disconnected, .invalid:
+      finishDisable(.success(response(for: manager)))
+      return
+    default:
+      break
+    }
+
+    guard Date() < deadline else {
+      finishDisable(.failure(.stop("The VPN connection did not stop.")))
+      return
+    }
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + Constants.connectionPollInterval
+    ) {
+      self.waitUntilDisconnected(manager, deadline: deadline)
+    }
+  }
+
+  private func finishEnsure(_ response: Response) {
     dispatchPrecondition(condition: .onQueue(.main))
     let waiters = ensureWaiters
     ensureWaiters.removeAll(keepingCapacity: true)
     ensureInFlight = false
+    beginDisableIfPossible()
+    for waiter in waiters {
+      waiter(response)
+    }
+  }
+
+  private func finishDisable(_ response: Response) {
+    dispatchPrecondition(condition: .onQueue(.main))
+    let waiters = disableWaiters
+    disableWaiters.removeAll(keepingCapacity: true)
+    disableInFlight = false
+    beginEnsureIfPossible()
     for waiter in waiters {
       waiter(response)
     }
@@ -244,15 +395,38 @@ final class NeoStationLocalTunnelManager {
     return host + Constants.fallbackSuffix
   }
 
-  private func response(for status: NEVPNStatus) -> [String: Any] {
-    [
+  private func response(
+    for manager: NETunnelProviderManager?
+  ) -> [String: Any] {
+    let status = manager?.connection.status ?? .invalid
+    let configured = manager != nil
+    let onDemand = manager?.isOnDemandEnabled ?? false
+    let enabled = (manager?.isEnabled ?? false) && onDemand
+    return [
       "active": status == .connected,
       "status": Self.statusName(status),
       "managedByNeoStation": true,
+      "configured": configured,
+      // NetworkExtension exposes no standalone permission bit. A manager
+      // successfully loaded from preferences is the durable proof that iOS
+      // accepted this app's VPN configuration.
+      "authorized": configured,
+      "enabled": enabled,
       "interfaceAddress": Constants.interfaceAddress,
       "peerAddress": Constants.peerAddress,
-      "onDemand": true,
+      "onDemand": onDemand,
     ]
+  }
+
+  private static func configurationFailure(
+    _ error: Error
+  ) -> NeoStationLocalTunnelError {
+    let nsError = error as NSError
+    if nsError.domain == NEVPNErrorDomain,
+       nsError.code == NEVPNError.configurationReadWriteFailed.rawValue {
+      return .permissionDenied
+    }
+    return .configuration(error.localizedDescription)
   }
 
   private static func providerIdentifier(
@@ -303,6 +477,8 @@ enum NeoStationLocalTunnelError: LocalizedError {
   case activeVPNConflict(String)
   case configuration(String)
   case start(String)
+  case stop(String)
+  case permissionDenied
   case timeout
 
   var code: String {
@@ -311,6 +487,8 @@ enum NeoStationLocalTunnelError: LocalizedError {
     case .activeVPNConflict: return "vpn_conflict"
     case .configuration: return "configuration_failed"
     case .start: return "start_failed"
+    case .stop: return "stop_failed"
+    case .permissionDenied: return "permission_denied"
     case .timeout: return "connection_timeout"
     }
   }
@@ -325,6 +503,10 @@ enum NeoStationLocalTunnelError: LocalizedError {
       return "iOS could not save the NeoStation local tunnel. Confirm the VPN permission and preserve the Network Extension entitlement when signing. Technical detail: \(message)"
     case .start(let message):
       return "The NeoStation local JIT tunnel could not start: \(message)"
+    case .stop(let message):
+      return "The NeoStation local JIT tunnel could not stop: \(message)"
+    case .permissionDenied:
+      return "iOS did not authorize the NeoStation VPN configuration. You can retry from Settings > Tools."
     case .timeout:
       return "The NeoStation local JIT tunnel did not become ready before the timeout."
     }

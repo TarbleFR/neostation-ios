@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/local_jit_tunnel_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
@@ -171,7 +172,9 @@ class GameLaunchService {
         if (!context.mounted) return GameLaunchResult.failure('', '');
         if (!report.ready) {
           return GameLaunchResult.failure(
-            report.message,
+            report.errorCode == null
+                ? report.message
+                : LocalJitTunnelLocale.error(context, report.errorCode),
             'Dolphin stage: ${report.failedStage ?? "unknown"}\n'
             'Log: ${report.logPath}',
           );
@@ -224,8 +227,17 @@ class GameLaunchService {
           if (launched) return GameLaunchResult.success();
           if (!context.mounted) return GameLaunchResult.failure('', '');
           final internalError = Rpcs3LaunchService.lastError?.trim();
+          final internalErrorCode = Rpcs3LaunchService.lastErrorCode;
+          final localTunnelError = internalErrorCode?.startsWith(
+            'localTunnel.',
+          ) == true;
           return GameLaunchResult.failure(
-            internalError != null && internalError.isNotEmpty
+            localTunnelError
+                ? LocalJitTunnelLocale.error(
+                    context,
+                    internalErrorCode!.substring('localTunnel.'.length),
+                  )
+                : internalError != null && internalError.isNotEmpty
                 ? internalError
                 : Rpcs3LibraryLocale.launchFailed(context),
             titleId,

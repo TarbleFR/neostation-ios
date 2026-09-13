@@ -12,6 +12,34 @@ class LocalJitTunnelService {
 
   static final LoggerService _log = LoggerService.instance;
 
+  static Future<LocalJitTunnelState> status() async {
+    if (!Platform.isIOS) {
+      return const LocalJitTunnelState(
+        active: false,
+        status: 'unsupported',
+        managedByNeoStation: true,
+        configured: false,
+        authorized: false,
+        enabled: false,
+        interfaceAddress: null,
+        peerAddress: null,
+        onDemand: false,
+      );
+    }
+
+    try {
+      return await StikjitBridge.localTunnelStatus();
+    } on PlatformException catch (error) {
+      throw _platformException(error, 'inspect');
+    }
+  }
+
+  /// Saving the first system configuration is the operation that asks iOS to
+  /// display its native VPN authorization sheet. Existing configurations are
+  /// reloaded and reused, so accepting once does not cause repeated prompts.
+  static Future<LocalJitTunnelState> authorizeAndEnable() =>
+      ensureRunningForJit();
+
   static Future<LocalJitTunnelState> ensureRunningForJit() async {
     if (!Platform.isIOS) {
       throw const LocalJitTunnelException(
@@ -35,10 +63,21 @@ class LocalJitTunnelService {
       );
       return state;
     } on PlatformException catch (error) {
-      throw LocalJitTunnelException(
-        error.code,
-        error.message ?? 'The NeoStation local JIT tunnel could not start.',
+      throw _platformException(error, 'start');
+    }
+  }
+
+  static Future<LocalJitTunnelState> disable() async {
+    if (!Platform.isIOS) {
+      throw const LocalJitTunnelException(
+        'unsupportedPlatform',
+        'The integrated local JIT tunnel is available only on iOS.',
       );
+    }
+    try {
+      return await StikjitBridge.disableLocalTunnel();
+    } on PlatformException catch (error) {
+      throw _platformException(error, 'stop');
     }
   }
 
@@ -51,6 +90,15 @@ class LocalJitTunnelService {
       return;
     }
     try {
+      final current = await status();
+      if (!current.authorized || !current.enabled) {
+        _log.i(
+          'NeoStation local JIT tunnel remains disabled after $reason; '
+          'no system authorization prompt was requested in background.',
+        );
+        return;
+      }
+      if (current.active) return;
       await ensureRunningForJit();
       _log.i('NeoStation local JIT tunnel refreshed after $reason.');
     } catch (error) {
@@ -59,6 +107,17 @@ class LocalJitTunnelService {
         '$reason: $error',
       );
     }
+  }
+
+  static LocalJitTunnelException _platformException(
+    PlatformException error,
+    String operation,
+  ) {
+    return LocalJitTunnelException(
+      error.code,
+      error.message ??
+          'The NeoStation local JIT tunnel could not $operation.',
+    );
   }
 }
 
