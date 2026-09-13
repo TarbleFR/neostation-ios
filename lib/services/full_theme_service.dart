@@ -101,7 +101,11 @@ class FullThemeService {
       activeTheme.value = definition;
       _log.i('[FullTheme] Loaded ${definition.name}.');
     } catch (e, st) {
-      _log.e('[FullTheme] Could not load active full theme', error: e, stackTrace: st);
+      _log.e(
+        '[FullTheme] Could not load active full theme',
+        error: e,
+        stackTrace: st,
+      );
       activeTheme.value = null;
     } finally {
       _initialized = true;
@@ -133,7 +137,9 @@ class FullThemeService {
 
       final themeXml = await _findThemeXml(staging);
       if (themeXml == null) {
-        throw const FormatException('No EmulationStation theme.xml found in archive');
+        throw const FormatException(
+          'No EmulationStation theme.xml found in archive',
+        );
       }
 
       final parsed = await _parseTheme(themeXml);
@@ -164,7 +170,10 @@ class FullThemeService {
 
       // The user requested a single comfortable full-theme experience rather
       // than another selectable layout. Keep only the newly imported package.
-      await _removeInstalledThemes(base, exceptPaths: {prepared.path, staging.path});
+      await _removeInstalledThemes(
+        base,
+        exceptPaths: {prepared.path, staging.path},
+      );
       if (await destination.exists()) await destination.delete(recursive: true);
       await prepared.rename(destination.path);
 
@@ -203,12 +212,16 @@ class FullThemeService {
   Future<File?> _findThemeXml(Directory root) async {
     File? fallback;
     await for (final entity in root.list(recursive: true, followLinks: false)) {
-      if (entity is! File || p.basename(entity.path).toLowerCase() != 'theme.xml') {
+      if (entity is! File ||
+          p.basename(entity.path).toLowerCase() != 'theme.xml') {
         continue;
       }
       fallback ??= entity;
       try {
-        final prefix = await entity.openRead(0, 4096).transform(utf8.decoder).join();
+        final prefix = await entity
+            .openRead(0, 4096)
+            .transform(utf8.decoder)
+            .join();
         if (prefix.contains('<formatVersion>') || prefix.contains('<theme')) {
           return entity;
         }
@@ -223,7 +236,9 @@ class FullThemeService {
     final formatText = _firstElementText(document, 'formatVersion');
     final formatVersion = int.tryParse(formatText ?? '') ?? 0;
     if (formatVersion < 6) {
-      throw FormatException('Unsupported EmulationStation theme format $formatVersion');
+      throw FormatException(
+        'Unsupported EmulationStation theme format $formatVersion',
+      );
     }
 
     final commentName = RegExp(
@@ -247,16 +262,19 @@ class FullThemeService {
     String? music;
     String? regularFont;
     String? boldFont;
-    String accent = '565296';
+    var accent = '565296';
 
     for (final view in document.findAllElements('view')) {
       final viewName = view.getAttribute('name') ?? '';
-      if (viewName.split(',').contains('system')) {
+      final viewNames = viewName.split(',').map((value) => value.trim()).toSet();
+      if (viewNames.contains('system')) {
         for (final image in view.findAllElements('image')) {
           final imageName = image.getAttribute('name') ?? '';
           final path = image.getElement('path')?.innerText.trim();
-          if (path != null && path.isNotEmpty &&
-              (imageName == 'bgsky' || imageName.toLowerCase().contains('background'))) {
+          if (path != null &&
+              path.isNotEmpty &&
+              (imageName == 'bgsky' ||
+                  imageName.toLowerCase().contains('background'))) {
             background ??= _normalizeThemePath(path);
           }
         }
@@ -266,17 +284,22 @@ class FullThemeService {
             music ??= _normalizeThemePath(path);
           }
         }
-        final iconColor = view.findAllElements('iconColor').firstOrNull?.innerText.trim();
+        final iconColor = view
+            .findAllElements('iconColor')
+            .firstOrNull
+            ?.innerText
+            .trim();
         if (iconColor != null && iconColor.isNotEmpty) accent = iconColor;
       }
 
-      if (viewName.split(',').contains('menu')) {
+      if (viewNames.contains('menu')) {
         for (final node in view.descendants.whereType<XmlElement>()) {
           final font = node.getElement('fontPath')?.innerText.trim();
           if (font == null || font.isEmpty) continue;
           final normalized = _normalizeThemePath(font);
           final nodeName = node.getAttribute('name')?.toLowerCase() ?? '';
-          if (nodeName.contains('title') || font.toLowerCase().contains('bold')) {
+          if (nodeName.contains('title') ||
+              font.toLowerCase().contains('bold')) {
             boldFont ??= normalized;
           } else {
             regularFont ??= normalized;
@@ -305,6 +328,13 @@ class FullThemeService {
       '_art/fonts/SairaCondensed-SemiBold.ttf',
     ]);
 
+    final cleanedAccent = accent.replaceAll('#', '').trim();
+    final normalizedAccent = cleanedAccent.isEmpty
+        ? '565296'
+        : (cleanedAccent.length > 8
+              ? cleanedAccent.substring(0, 8)
+              : cleanedAccent);
+
     return FullThemeDefinition(
       id: _safeId(name),
       name: name,
@@ -317,7 +347,7 @@ class FullThemeService {
       musicPath: music,
       regularFontPath: regularFont,
       boldFontPath: boldFont,
-      accentHex: accent.replaceAll('#', '').substring(0, accent.replaceAll('#', '').length.clamp(0, 8)),
+      accentHex: normalizedAccent,
     );
   }
 
@@ -347,7 +377,10 @@ class FullThemeService {
     return normalized.isEmpty ? 'full-theme' : normalized;
   }
 
-  Future<void> _copyDirectory(Directory source, Directory destination) async {
+  Future<void> _copyDirectory(
+    Directory source,
+    Directory destination,
+  ) async {
     await destination.create(recursive: true);
     await for (final entity in source.list(recursive: false, followLinks: false)) {
       final targetPath = p.join(destination.path, p.basename(entity.path));
@@ -371,14 +404,22 @@ class FullThemeService {
       try {
         await entity.delete(recursive: true);
       } catch (e) {
-        _log.w('[FullTheme] Could not remove old theme entry ${entity.path}: $e');
+        _log.w(
+          '[FullTheme] Could not remove old theme entry ${entity.path}: $e',
+        );
       }
     }
   }
 
   Future<void> _registerThemeFonts(FullThemeDefinition definition) async {
-    await _loadFont(definition.resolve(definition.regularFontPath), 'NeoStationFullTheme');
-    await _loadFont(definition.resolve(definition.boldFontPath), 'NeoStationFullThemeBold');
+    await _loadFont(
+      definition.resolve(definition.regularFontPath),
+      'NeoStationFullTheme',
+    );
+    await _loadFont(
+      definition.resolve(definition.boldFontPath),
+      'NeoStationFullThemeBold',
+    );
   }
 
   Future<void> _loadFont(String? fontPath, String family) async {
