@@ -4,13 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../models/full_theme_definition.dart';
 
-/// Native Flutter reconstruction of Arcade Planet's 16:9 system scene.
+/// Native Flutter reconstruction of Arcade Planet's system scene.
 ///
-/// The source theme describes this composition in `_art/systemview/169H.xml`:
-/// a landscape base, animated glow/foreground layers, up to three system
-/// sprites, a color logo, and the system controller. Rebuilding those layers in
-/// Flutter keeps NeoStation's navigation and rendering pipeline native while
-/// preserving the theme's visual identity.
+/// The source theme ships dedicated background families for 16:9, 16:10, 4:3,
+/// 5:4 and 1:1. NeoStation selects the closest family from the actual viewport
+/// instead of stretching the 16:9 artwork across every iPhone/iPad display.
 class ArcadePlanetSystemScene extends StatefulWidget {
   const ArcadePlanetSystemScene({
     super.key,
@@ -46,10 +44,6 @@ class _ArcadePlanetSystemSceneState extends State<ArcadePlanetSystemScene>
       vsync: this,
       duration: const Duration(milliseconds: 1450),
     )..forward();
-    _configureAnimations();
-  }
-
-  void _configureAnimations() {
     _logoSlide = CurvedAnimation(
       parent: _entryController,
       curve: const Interval(0.0, 0.58, curve: Curves.easeOutCubic),
@@ -87,81 +81,104 @@ class _ArcadePlanetSystemSceneState extends State<ArcadePlanetSystemScene>
       );
     }
 
-    final base = widget.theme.arcadePlanetLandscapeBackground;
-    final glow = widget.theme.arcadePlanetGlowBackground;
-    final foreground = widget.theme.arcadePlanetForegroundBackground;
-    final sprite1 = widget.theme.systemSprite(widget.systemFolder);
-    final sprite2 = widget.theme.systemSprite(widget.systemFolder, layer: 2);
-    final sprite3 = widget.theme.systemSprite(widget.systemFolder, layer: 3);
-    final controller = widget.theme.systemController(widget.systemFolder);
-    final logo = widget.theme.rasterSystemLogo(widget.systemFolder);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final safeHeight = constraints.maxHeight <= 0
+            ? 1.0
+            : constraints.maxHeight;
+        final aspectRatio = constraints.maxWidth / safeHeight;
+        final base = widget.theme.arcadePlanetBackgroundForAspect(
+          aspectRatio,
+          'bghlandscape.png',
+        );
+        final glow = widget.theme.arcadePlanetBackgroundForAspect(
+          aspectRatio,
+          'bgh2.png',
+        );
+        final foreground = widget.theme.arcadePlanetBackgroundForAspect(
+          aspectRatio,
+          'bgh3.png',
+        );
+        final sprite1 = widget.theme.systemSprite(widget.systemFolder);
+        final sprite2 = widget.theme.systemSprite(
+          widget.systemFolder,
+          layer: 2,
+        );
+        final sprite3 = widget.theme.systemSprite(
+          widget.systemFolder,
+          layer: 3,
+        );
+        final controller = widget.theme.systemController(widget.systemFolder);
+        final logo = widget.theme.rasterSystemLogo(widget.systemFolder);
 
-    return RepaintBoundary(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          _assetOrGradient(base),
-          if (glow != null)
-            AnimatedBuilder(
-              animation: _ambientController,
-              builder: (context, child) {
-                final opacity = 0.22 + (_ambientController.value * 0.58);
-                return Opacity(
-                  opacity: opacity,
-                  child: ColorFiltered(
-                    colorFilter: ColorFilter.mode(
-                      widget.accent.withValues(alpha: 0.38),
-                      BlendMode.screen,
-                    ),
-                    child: child,
+        return RepaintBoundary(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _assetOrGradient(base),
+              if (glow != null)
+                AnimatedBuilder(
+                  animation: _ambientController,
+                  builder: (context, child) {
+                    final opacity = 0.22 + (_ambientController.value * 0.58);
+                    return Opacity(
+                      opacity: opacity,
+                      child: ColorFiltered(
+                        colorFilter: ColorFilter.mode(
+                          widget.accent.withValues(alpha: 0.38),
+                          BlendMode.screen,
+                        ),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: _fileImage(glow, BoxFit.cover),
+                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: Stack(
+                  key: ValueKey('${widget.theme.id}:${widget.systemFolder}'),
+                  fit: StackFit.expand,
+                  children: [
+                    if (sprite3 != null)
+                      _spriteLayer(sprite3, 0.97, 0.54, 0.50),
+                    if (sprite2 != null)
+                      _spriteLayer(sprite2, 0.90, 0.51, 0.50),
+                    if (sprite1 != null)
+                      _spriteLayer(sprite1, 0.78, 0.47, 0.50),
+                    if (logo != null) _logoLayer(logo),
+                    if (controller != null) _controllerLayer(controller),
+                  ],
+                ),
+              ),
+              if (foreground != null)
+                IgnorePointer(
+                  child: Opacity(
+                    opacity: 0.82,
+                    child: _fileImage(foreground, BoxFit.cover),
                   ),
-                );
-              },
-              child: _fileImage(glow, BoxFit.cover),
-            ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 280),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            child: Stack(
-              key: ValueKey('${widget.theme.id}:${widget.systemFolder}'),
-              fit: StackFit.expand,
-              children: [
-                if (sprite3 != null)
-                  _spriteLayer(sprite3, 0.97, 0.54, 0.50),
-                if (sprite2 != null)
-                  _spriteLayer(sprite2, 0.90, 0.51, 0.50),
-                if (sprite1 != null)
-                  _spriteLayer(sprite1, 0.78, 0.47, 0.50),
-                if (logo != null) _logoLayer(logo),
-                if (controller != null) _controllerLayer(controller),
-              ],
-            ),
-          ),
-          if (foreground != null)
-            IgnorePointer(
-              child: Opacity(
-                opacity: 0.82,
-                child: _fileImage(foreground, BoxFit.cover),
+                ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.0, 0.42, 0.72, 1.0],
+                    colors: [
+                      Colors.black.withValues(alpha: 0.03),
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.04),
+                      Colors.black.withValues(alpha: 0.38),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: const [0.0, 0.42, 0.72, 1.0],
-                colors: [
-                  Colors.black.withValues(alpha: 0.03),
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.04),
-                  Colors.black.withValues(alpha: 0.38),
-                ],
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
