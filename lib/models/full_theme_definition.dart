@@ -1,0 +1,122 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+/// Runtime description of an imported EmulationStation-style full theme.
+///
+/// Full themes are intentionally separate from NeoStation's color ThemeData.
+/// When present they own the systems home and game playlists as one coherent
+/// experience; the legacy grid/carousel preferences are not consulted.
+class FullThemeDefinition {
+  const FullThemeDefinition({
+    required this.id,
+    required this.name,
+    required this.rootPath,
+    required this.formatVersion,
+    required this.engine,
+    this.author,
+    this.license,
+    this.backgroundPath,
+    this.musicPath,
+    this.regularFontPath,
+    this.boldFontPath,
+    this.accentHex = '565296',
+  });
+
+  final String id;
+  final String name;
+  final String rootPath;
+  final int formatVersion;
+  final String engine;
+  final String? author;
+  final String? license;
+  final String? backgroundPath;
+  final String? musicPath;
+  final String? regularFontPath;
+  final String? boldFontPath;
+  final String accentHex;
+
+  bool get isArcadePlanet =>
+      name.toLowerCase().contains('arcade planet') ||
+      id.toLowerCase().contains('arcadeplanet');
+
+  String? resolve(String? relativeOrAbsolute) {
+    if (relativeOrAbsolute == null || relativeOrAbsolute.trim().isEmpty) {
+      return null;
+    }
+    final raw = relativeOrAbsolute.trim();
+    final candidate = p.isAbsolute(raw)
+        ? File(raw)
+        : File(p.normalize(p.join(rootPath, raw.replaceFirst(RegExp(r'^\./'), ''))));
+    return candidate.existsSync() ? candidate.path : null;
+  }
+
+  String? firstExisting(Iterable<String> candidates) {
+    for (final candidate in candidates) {
+      final resolved = resolve(candidate);
+      if (resolved != null) return resolved;
+    }
+    return null;
+  }
+
+  /// Returns a raster logo shipped by the imported theme when one exists.
+  /// SVG-only logos deliberately fall back to NeoStation's bundled system logo
+  /// so importing a theme does not add a new rendering dependency.
+  String? rasterSystemLogo(String folderName) {
+    final key = folderName.toLowerCase();
+    return firstExisting([
+      '_art/Colorlogos/$key.webp',
+      '_art/Colorlogos/$key.png',
+      '_art/Colorlogos/$key.jpg',
+      '_art/Colorlogos/$key.jpeg',
+      '_art/Colorlogos/US/$key.webp',
+      '_art/Colorlogos/US/$key.png',
+      '_art/Colorlogos/US/$key.jpg',
+    ]);
+  }
+
+  String? systemBackdrop(String folderName) {
+    final key = folderName.toLowerCase();
+    return firstExisting([
+      '_art/backgrounds/$key.webp',
+      '_art/backgrounds/$key.png',
+      '_art/backgrounds/$key.jpg',
+      '_art/backgrounds/$key.jpeg',
+      backgroundPath ?? '',
+      '_art/backgrounds/bgsky.jpg',
+      '_art/backgrounds/bgsky.png',
+    ]);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'rootPath': rootPath,
+    'formatVersion': formatVersion,
+    'engine': engine,
+    'author': author,
+    'license': license,
+    'backgroundPath': backgroundPath,
+    'musicPath': musicPath,
+    'regularFontPath': regularFontPath,
+    'boldFontPath': boldFontPath,
+    'accentHex': accentHex,
+  };
+
+  factory FullThemeDefinition.fromJson(Map<String, dynamic> json) {
+    return FullThemeDefinition(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      rootPath: json['rootPath'] as String,
+      formatVersion: (json['formatVersion'] as num?)?.toInt() ?? 7,
+      engine: json['engine'] as String? ?? 'emulationstation',
+      author: json['author'] as String?,
+      license: json['license'] as String?,
+      backgroundPath: json['backgroundPath'] as String?,
+      musicPath: json['musicPath'] as String?,
+      regularFontPath: json['regularFontPath'] as String?,
+      boldFontPath: json['boldFontPath'] as String?,
+      accentHex: json['accentHex'] as String? ?? '565296',
+    );
+  }
+}
