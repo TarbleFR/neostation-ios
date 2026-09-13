@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -19,11 +20,10 @@ import '../../utils/game_launch_utils.dart';
 import '../../utils/gamepad_nav.dart';
 import '../game_screen/game_settings_dialog/game_settings_dialog.dart';
 
-/// Arcade Planet-inspired playlist that belongs to the active full theme.
+/// Arcade Planet-inspired playlist owned by the active full theme.
 ///
-/// This is intentionally not a fourth `gameViewMode`: when a full theme is
-/// active every normal game playlist routes here and the user's old
-/// list/grid/carousel preference is ignored until the full theme is removed.
+/// This is deliberately not a value of `gameViewMode`. A full theme replaces
+/// the playlist presentation as a whole until that theme is removed.
 class FullThemeGamesScreen extends StatefulWidget {
   const FullThemeGamesScreen({
     super.key,
@@ -52,12 +52,17 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
   bool _loading = true;
   bool _launching = false;
 
+  int _boundedIndex(int value) {
+    if (_games.isEmpty) return 0;
+    return math.max(0, math.min(value, _games.length - 1));
+  }
+
   GameModel? get _selected =>
-      _games.isEmpty ? null : _games[_selectedIndex.clamp(0, _games.length - 1)];
+      _games.isEmpty ? null : _games[_boundedIndex(_selectedIndex)];
 
   Color get _accent {
-    final value = widget.theme.accentHex.replaceAll('#', '');
-    final six = value.length >= 6 ? value.substring(0, 6) : '565296';
+    final cleaned = widget.theme.accentHex.replaceAll('#', '');
+    final six = cleaned.length >= 6 ? cleaned.substring(0, 6) : '565296';
     return Color(int.parse('FF$six', radix: 16));
   }
 
@@ -99,26 +104,36 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     try {
       final games = await GameService.loadGamesForSystem(widget.system);
       if (!mounted) return;
-      var index = 0;
+
+      var nextIndex = 0;
       if (preserveRom != null) {
-        final preserved = games.indexWhere((g) => g.romname == preserveRom);
-        if (preserved >= 0) index = preserved;
+        final found = games.indexWhere((g) => g.romname == preserveRom);
+        if (found >= 0) nextIndex = found;
       }
+
       setState(() {
         _games = games;
-        _selectedIndex = games.isEmpty ? 0 : index.clamp(0, games.length - 1);
+        _selectedIndex = games.isEmpty
+            ? 0
+            : math.max(0, math.min(nextIndex, games.length - 1));
         _loading = false;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSelectionVisible());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureSelectionVisible();
+      });
     } catch (e, st) {
-      _log.e('[FullTheme] Could not load playlist', error: e, stackTrace: st);
+      _log.e(
+        '[FullTheme] Could not load playlist',
+        error: e,
+        stackTrace: st,
+      );
       if (mounted) setState(() => _loading = false);
     }
   }
 
   void _move(int delta) {
     if (_games.isEmpty || _launching) return;
-    final next = (_selectedIndex + delta).clamp(0, _games.length - 1);
+    final next = _boundedIndex(_selectedIndex + delta);
     if (next == _selectedIndex) return;
     SfxService().playNavSound();
     setState(() => _selectedIndex = next);
@@ -127,11 +142,16 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
 
   void _ensureSelectionVisible() {
     if (!_listController.hasClients || _games.isEmpty) return;
-    // Rows are intentionally fixed-height to make gamepad centering cheap and
-    // deterministic even with very large libraries.
-    final target = (_selectedIndex * 54.r) - (_listController.position.viewportDimension / 2) + 27.r;
+    final raw =
+        (_selectedIndex * 54.r) -
+        (_listController.position.viewportDimension / 2) +
+        27.r;
+    final target = math.max(
+      0.0,
+      math.min(raw, _listController.position.maxScrollExtent),
+    );
     _listController.animateTo(
-      target.clamp(0.0, _listController.position.maxScrollExtent),
+      target,
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
     );
@@ -147,33 +167,25 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     return widget.system.primaryFolderName;
   }
 
-  String? _existingPath(String path) {
+  String? _existing(String path) {
     if (path.isEmpty) return null;
-    final file = File(path);
-    return file.existsSync() ? file.path : null;
+    return File(path).existsSync() ? path : null;
   }
 
-  String? _fanart(GameModel game) => _existingPath(
-    game.getImagePath(_mediaFolder(game), 'fanarts', widget.fileProvider),
+  String? _media(GameModel game, String type) => _existing(
+    game.getImagePath(_mediaFolder(game), type, widget.fileProvider),
   );
 
-  String? _box(GameModel game) => _existingPath(
-    game.getImagePath(_mediaFolder(game), 'box2d', widget.fileProvider),
+  String? _screenshot(GameModel game) => _existing(
+    game.getScreenshotPath(_mediaFolder(game), widget.fileProvider),
   );
 
-  String? _wheel(GameModel game) => _existingPath(
-    game.getImagePath(_mediaFolder(game), 'wheels', widget.fileProvider),
-  );
-
-  String? _screenshot(GameModel game) =>
-      _existingPath(game.getScreenshotPath(_mediaFolder(game), widget.fileProvider));
-
-  Future<SystemModel> _systemForLaunch(GameModel game) async {
-    if ((widget.system.folderName == SystemFolderNames.all ||
-            widget.system.folderName == SystemFolderNames.favorites) &&
-        game.systemFolderName != null) {
-      final systems = context.read<SqliteConfigProvider>().availableSystems;
-      return systems.firstWhere(
+  Future<SystemModel> _systemForGame(GameModel game) async {
+    final aggregate =
+        widget.system.folderName == SystemFolderNames.all ||
+        widget.system.folderName == SystemFolderNames.favorites;
+    if (aggregate && game.systemFolderName != null) {
+      return context.read<SqliteConfigProvider>().availableSystems.firstWhere(
         (system) => system.folderName == game.systemFolderName,
         orElse: () => widget.system,
       );
@@ -186,20 +198,20 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     if (game == null || _launching) return;
 
     if (widget.system.folderName == 'music') {
-      final music = MusicPlayerService();
-      final current = music.activeTrack?.romPath == game.romPath;
-      if (music.isPlaying && current) {
-        music.pause();
-      } else if (current && music.isStarted) {
-        music.resume();
+      final service = MusicPlayerService();
+      final isCurrent = service.activeTrack?.romPath == game.romPath;
+      if (service.isPlaying && isCurrent) {
+        service.pause();
+      } else if (service.isStarted && isCurrent) {
+        service.resume();
       } else {
-        music.start(index: _selectedIndex);
+        service.start(index: _selectedIndex);
       }
       if (mounted) setState(() {});
       return;
     }
 
-    final system = await _systemForLaunch(game);
+    final system = await _systemForGame(game);
     if (!mounted) return;
 
     setState(() => _launching = true);
@@ -243,6 +255,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     try {
       await GameService.toggleFavorite(game);
       await context.read<SqliteConfigProvider>().refreshDetectedSystems();
+      if (!mounted) return;
       await _loadGames(preserveRom: game.romname);
     } catch (e) {
       _log.w('[FullTheme] Favorite toggle failed: $e');
@@ -251,9 +264,10 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
 
   Future<void> _openSettings() async {
     final game = _selected;
-    if (game == null) return;
-    final system = await _systemForLaunch(game);
+    if (game == null || _launching) return;
+    final system = await _systemForGame(game);
     if (!mounted) return;
+
     await showDialog<void>(
       context: context,
       builder: (_) => GameSettingsDialog(
@@ -280,7 +294,8 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     final game = _selected;
     final backdrop = game == null
         ? widget.theme.systemBackdrop(widget.system.folderName)
-        : (_fanart(game) ?? widget.theme.systemBackdrop(_mediaFolder(game)));
+        : (_media(game, 'fanarts') ??
+              widget.theme.systemBackdrop(_mediaFolder(game)));
 
     return PopScope(
       canPop: !_launching,
@@ -289,34 +304,37 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            _FullThemeBackdrop(path: backdrop, accent: _accent),
-            Container(color: Colors.black.withValues(alpha: 0.36)),
+            _Backdrop(path: backdrop, accent: _accent),
+            ColoredBox(color: Colors.black.withValues(alpha: 0.32)),
             SafeArea(
               child: _loading
                   ? Center(child: CircularProgressIndicator(color: _accent))
                   : _games.isEmpty
-                      ? _emptyView()
-                      : Padding(
-                          padding: EdgeInsets.fromLTRB(26.r, 18.r, 26.r, 18.r),
-                          child: Column(
-                            children: [
-                              _header(game!),
-                              SizedBox(height: 12.r),
-                              Expanded(
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    SizedBox(width: 0.36.sw, child: _gameList()),
-                                    SizedBox(width: 24.r),
-                                    Expanded(child: _gamePresentation(game)),
-                                  ],
+                  ? _emptyView()
+                  : Padding(
+                      padding: EdgeInsets.fromLTRB(26.r, 18.r, 26.r, 18.r),
+                      child: Column(
+                        children: [
+                          _header(),
+                          SizedBox(height: 12.r),
+                          Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(
+                                  width: 0.36.sw,
+                                  child: _gameList(),
                                 ),
-                              ),
-                              SizedBox(height: 10.r),
-                              _footer(game),
-                            ],
+                                SizedBox(width: 24.r),
+                                Expanded(child: _presentation(game!)),
+                              ],
+                            ),
                           ),
-                        ),
+                          SizedBox(height: 10.r),
+                          _footer(game!),
+                        ],
+                      ),
+                    ),
             ),
             if (_launching)
               ColoredBox(
@@ -337,6 +355,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
         SizedBox(height: 12.r),
         Text(
           widget.system.realName,
+          textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white,
             fontFamily: 'NeoStationFullThemeBold',
@@ -344,28 +363,40 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
           ),
         ),
         SizedBox(height: 6.r),
-        Text('No games found', style: TextStyle(color: Colors.white70, fontSize: 15.r)),
+        Text(
+          'No games found',
+          style: TextStyle(color: Colors.white70, fontSize: 15.r),
+        ),
       ],
     ),
   );
 
-  Widget _header(GameModel game) {
-    final themeLogo = widget.theme.rasterSystemLogo(widget.system.folderName);
+  Widget _header() {
+    final logo = widget.theme.rasterSystemLogo(widget.system.folderName);
     return SizedBox(
-      height: 76.r,
+      height: 72.r,
       child: Row(
         children: [
-          if (themeLogo != null)
-            Image.file(File(themeLogo), height: 62.r, width: 180.r, fit: BoxFit.contain)
+          if (logo != null)
+            Image.file(
+              File(logo),
+              width: 190.r,
+              height: 62.r,
+              fit: BoxFit.contain,
+            )
           else
-            Text(
-              widget.system.realName.toUpperCase(),
-              style: TextStyle(
-                color: Colors.white,
-                fontFamily: 'NeoStationFullThemeBold',
-                fontSize: 29.r,
-                letterSpacing: 1.1,
-                shadows: const [Shadow(color: Colors.black, blurRadius: 8)],
+            Flexible(
+              child: Text(
+                widget.system.realName.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'NeoStationFullThemeBold',
+                  fontSize: 28.r,
+                  letterSpacing: 1.2,
+                  shadows: const [Shadow(color: Colors.black, blurRadius: 8)],
+                ),
               ),
             ),
           const Spacer(),
@@ -374,7 +405,7 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
             style: TextStyle(
               color: Colors.white70,
               fontFamily: 'NeoStationFullTheme',
-              fontSize: 16.r,
+              fontSize: 15.r,
             ),
           ),
         ],
@@ -393,41 +424,50 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
         borderRadius: BorderRadius.circular(14.r),
         child: ListView.builder(
           controller: _listController,
-          padding: EdgeInsets.symmetric(vertical: 10.r),
           itemExtent: 54.r,
+          padding: EdgeInsets.symmetric(vertical: 10.r),
           itemCount: _games.length,
           itemBuilder: (context, index) {
-            final item = _games[index];
+            final game = _games[index];
             final selected = index == _selectedIndex;
             return InkWell(
               onTap: () {
+                if (selected) return;
                 SfxService().playNavSound();
                 setState(() => _selectedIndex = index);
               },
-              onDoubleTap: _launchSelected,
+              onDoubleTap: selected ? _launchSelected : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 130),
                 margin: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
                 padding: EdgeInsets.symmetric(horizontal: 14.r),
                 decoration: BoxDecoration(
-                  color: selected ? _accent.withValues(alpha: 0.78) : Colors.transparent,
+                  color: selected
+                      ? _accent.withValues(alpha: 0.78)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(7.r),
                 ),
                 child: Row(
                   children: [
-                    if (item.isFavorite == true)
+                    if (game.isFavorite == true)
                       Padding(
                         padding: EdgeInsets.only(right: 8.r),
-                        child: Icon(Icons.star_rounded, size: 17.r, color: Colors.amberAccent),
+                        child: Icon(
+                          Icons.star_rounded,
+                          size: 17.r,
+                          color: Colors.amberAccent,
+                        ),
                       ),
                     Expanded(
                       child: Text(
-                        item.name,
+                        game.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: selected ? Colors.white : Colors.white70,
-                          fontFamily: selected ? 'NeoStationFullThemeBold' : 'NeoStationFullTheme',
+                          fontFamily: selected
+                              ? 'NeoStationFullThemeBold'
+                              : 'NeoStationFullTheme',
                           fontSize: 17.r,
                         ),
                       ),
@@ -442,14 +482,14 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     );
   }
 
-  Widget _gamePresentation(GameModel game) {
+  Widget _presentation(GameModel game) {
     final screenshot = _screenshot(game);
-    final box = _box(game);
-    final wheel = _wheel(game);
-    final locale = Localizations.localeOf(context).languageCode;
-    final description = game.getDescriptionForLanguage(locale) ??
-        game.getDescriptionForLanguage('en') ??
-        '';
+    final box = _media(game, 'box2d');
+    final wheel = _media(game, 'wheels');
+    final language = Localizations.localeOf(context).languageCode;
+    final description = game.getDescriptionForLanguage(language).isNotEmpty
+        ? game.getDescriptionForLanguage(language)
+        : game.getDescriptionForLanguage('en');
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -469,24 +509,32 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
                     flex: 6,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12.r),
-                      child: screenshot != null
-                          ? Image.file(File(screenshot), fit: BoxFit.cover, width: double.infinity, height: double.infinity)
-                          : _artPlaceholder(Icons.image_rounded),
+                      child: screenshot == null
+                          ? _placeholder(Icons.image_rounded)
+                          : Image.file(
+                              File(screenshot),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
                     ),
                   ),
                   SizedBox(width: 18.r),
                   Expanded(
                     flex: 3,
-                    child: box != null
-                        ? Image.file(File(box), fit: BoxFit.contain)
-                        : _artPlaceholder(Icons.view_in_ar_rounded),
+                    child: box == null
+                        ? _placeholder(Icons.view_in_ar_rounded)
+                        : Image.file(File(box), fit: BoxFit.contain),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: 14.r),
+            SizedBox(height: 12.r),
             if (wheel != null)
-              SizedBox(height: 66.r, child: Image.file(File(wheel), fit: BoxFit.contain))
+              SizedBox(
+                height: 62.r,
+                child: Image.file(File(wheel), fit: BoxFit.contain),
+              )
             else
               Align(
                 alignment: Alignment.centerLeft,
@@ -497,11 +545,11 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
                   style: TextStyle(
                     color: Colors.white,
                     fontFamily: 'NeoStationFullThemeBold',
-                    fontSize: 28.r,
+                    fontSize: 27.r,
                   ),
                 ),
               ),
-            SizedBox(height: 10.r),
+            SizedBox(height: 9.r),
             Expanded(
               flex: 3,
               child: Align(
@@ -557,29 +605,27 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
     );
   }
 
-  Widget _artPlaceholder(IconData icon) => ColoredBox(
+  Widget _placeholder(IconData icon) => ColoredBox(
     color: Colors.black.withValues(alpha: 0.28),
     child: Center(child: Icon(icon, size: 54.r, color: Colors.white24)),
   );
 
-  Widget _footer(GameModel game) {
-    return Row(
-      children: [
-        _hint('A', widget.system.folderName == 'music' ? 'Play / Pause' : 'Play'),
-        SizedBox(width: 16.r),
-        _hint('B', 'Back'),
-        SizedBox(width: 16.r),
-        _hint('Y', game.isFavorite == true ? 'Unfavorite' : 'Favorite'),
-        SizedBox(width: 16.r),
-        _hint('START', 'Game settings'),
-        const Spacer(),
-        Text(
-          widget.theme.name,
-          style: TextStyle(color: Colors.white38, fontSize: 11.r),
-        ),
-      ],
-    );
-  }
+  Widget _footer(GameModel game) => Row(
+    children: [
+      _hint('A', widget.system.folderName == 'music' ? 'Play / Pause' : 'Play'),
+      SizedBox(width: 16.r),
+      _hint('B', 'Back'),
+      SizedBox(width: 16.r),
+      _hint('Y', game.isFavorite == true ? 'Unfavorite' : 'Favorite'),
+      SizedBox(width: 16.r),
+      _hint('START', 'Game settings'),
+      const Spacer(),
+      Text(
+        widget.theme.name,
+        style: TextStyle(color: Colors.white38, fontSize: 11.r),
+      ),
+    ],
+  );
 
   Widget _hint(String key, String label) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -605,8 +651,8 @@ class _FullThemeGamesScreenState extends State<FullThemeGamesScreen> {
   );
 }
 
-class _FullThemeBackdrop extends StatelessWidget {
-  const _FullThemeBackdrop({required this.path, required this.accent});
+class _Backdrop extends StatelessWidget {
+  const _Backdrop({required this.path, required this.accent});
 
   final String? path;
   final Color accent;
