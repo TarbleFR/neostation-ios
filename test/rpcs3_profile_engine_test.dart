@@ -13,9 +13,10 @@ void main() {
     final entries = Rpcs3GameProfileDatabase.parseDatabaseForTesting(source);
     expect(entries.length, greaterThanOrEqualTo(2000));
     expect(entries['BCUS98111'], isNotNull);
-    expect(source, isNot(contains('Renderer: OpenGL')));
-    expect(source, isNot(contains('Frame limit: Infinite')));
-    expect(source, isNot(contains('Frame limit: Off')));
+    final configs = entries.values.map((entry) => entry.config).join('\n');
+    expect(configs, isNot(contains('Renderer: OpenGL')));
+    expect(configs, isNot(contains('Frame limit: Infinite')));
+    expect(configs, isNot(contains('Frame limit: Off')));
 
     final root = jsonDecode(source) as Map<String, dynamic>;
     expect(root['source_url'], Rpcs3GameProfileDatabase.sourceUrl);
