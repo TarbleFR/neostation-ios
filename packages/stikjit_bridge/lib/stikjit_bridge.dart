@@ -16,6 +16,32 @@ class StikjitBridge {
     return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
   }
 
+  /// Returns a route that StikJIT can validate for the game-launch path.
+  ///
+  /// NeoStation still owns and manages only its embedded tunnel. If iOS reports
+  /// another active VPN, do not attempt to replace it here: LocalDevVPN may
+  /// already provide the 10.7.0.1 RemotePairing route. The subsequent StikJIT
+  /// preparation remains the authoritative reachability/DDI validation and
+  /// will reject an unrelated VPN with its normal actionable error.
+  static Future<LocalJitTunnelState> ensureJitRoute() async {
+    try {
+      return await ensureLocalTunnel();
+    } on PlatformException catch (error) {
+      if (error.code != 'local_tunnel_vpn_conflict') rethrow;
+      return const LocalJitTunnelState(
+        active: true,
+        status: 'externalRoute',
+        managedByNeoStation: false,
+        configured: false,
+        authorized: false,
+        enabled: true,
+        interfaceAddress: null,
+        peerAddress: '10.7.0.1',
+        onDemand: false,
+      );
+    }
+  }
+
   static Future<LocalJitTunnelState> localTunnelStatus() async {
     final raw = await _channel.invokeMethod<Object?>('localTunnelStatus');
     if (raw is! Map) {
@@ -37,7 +63,7 @@ class StikjitBridge {
     required String bundleId,
     required String gameUrl,
   }) async {
-    await ensureLocalTunnel();
+    await ensureJitRoute();
     final raw = await _channel.invokeMethod<Object?>('enableMeloNxJit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
@@ -74,7 +100,7 @@ class StikjitBridge {
     required String bundleId,
     required String gameUrl,
   }) async {
-    await ensureLocalTunnel();
+    await ensureJitRoute();
     final raw = await _armsx2Channel.invokeMethod<Object?>('enableArmsx2Jit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
