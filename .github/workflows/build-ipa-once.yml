@@ -1,39 +1,37 @@
-name: NeoStation Build 265 source audit
-run-name: Build 265 source audit • ${{ github.sha }}
+name: NeoStation Build 265 source integration
+run-name: Integrate Build 265 sources • ${{ github.sha }}
 on:
   workflow_dispatch:
   push:
     branches: [experimental]
 permissions:
-  contents: read
+  contents: write
 concurrency:
-  group: neostation-ios-build-264
+  group: neostation-ios-build-265-integration
   cancel-in-progress: true
 jobs:
-  sources:
-    name: Prepare exact sources for regression fixes
+  integrate:
+    name: Commit narrowly scoped Build 265 source changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: experimental
           fetch-depth: 0
-          persist-credentials: false
-      - name: Export Build 264 and pinned RPCS3 sources
+      - name: Integrate and verify tracked sources
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p source-audit
-          git archive --format=tar.gz ec0373de3abb16de1815e47d0a7b406715a1eca0 > source-audit/neostation-264.tar.gz
-          git init -q "$RUNNER_TEMP/rpcs3-audit"
-          git -C "$RUNNER_TEMP/rpcs3-audit" remote add origin https://github.com/XITRIX/rpcs3.git
-          git -C "$RUNNER_TEMP/rpcs3-audit" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
-          git -C "$RUNNER_TEMP/rpcs3-audit" archive --format=tar.gz FETCH_HEAD > source-audit/rpcs3-pinned.tar.gz
-          sha256sum source-audit/*.tar.gz > source-audit/SHA256SUMS
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Build-265-pinned-source-audit
-          path: source-audit/
-          retention-days: 2
-          if-no-files-found: error
-          compression-level: 0
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 build-utils/integrate_build265.py
+          python3 build-utils/integrate_build265.py
+          python3 test/theme_importer_retirement_test.py
+          python3 test/rpcs3_build265_host_test.py
+          git diff --check
+          git add -- THEMES.md lib/l10n/app_locale*.dart lib/main.dart lib/providers/theme_provider.dart lib/screens/settings_screen/new_settings_options/themes_settings_content.dart lib/services/custom_theme_service.dart lib/themes/app_themes.dart lib/themes/custom_theme.dart lib/widgets/theme_card.dart test/custom_theme_test.dart build-utils/build_rpcs3_embedded_core.sh packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: retire theme importer and wire Build 265 RPCS3 core improvements'
+            git push origin HEAD:experimental
+          fi
+          git show --stat --oneline HEAD

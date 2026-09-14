@@ -1,0 +1,302 @@
+diff --git a/rpcs3/Emu/Cell/Modules/cellVdec.cpp b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
+index 1847c8c..0c0a006 100644
+--- a/rpcs3/Emu/Cell/Modules/cellVdec.cpp
++++ b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
+@@ -197,6 +197,14 @@ struct vdec_context final
+ 	const AVCodecDescriptor* codec_desc{};
+ 	AVCodecContext* ctx{};
+ 	SwsContext* sws{};
++#ifdef RPCS3_IOS
++	// NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1: reuse conversion resources without
++	// racing concurrent GetPicture callers. The producer's queue lock is separate.
++	shared_mutex conversion_mutex;
++	std::vector<u8> alpha_scratch;
++	u8 alpha_scratch_value = 0;
++	bool alpha_scratch_valid = false;
++#endif
+ 
+ 	shared_mutex mutex; // Used for 'out' queue (TODO)
+ 
+@@ -581,7 +589,7 @@ struct vdec_context final
+ 							{
+ 								std::lock_guard lock{mutex};
+ 
+-								if (out_queue.size() <= out_max)
++								if (out_queue.size() < out_max)
+ 								{
+ 									break;
+ 								}
+@@ -591,7 +599,12 @@ struct vdec_context final
+ 
+ 							if (elapsed++ >= 500) // 5 seconds
+ 							{
+-								cellVdec.error("Video au decode has been waiting for a consumer for 5 seconds. (handle=0x%x, seq_id=%d, cmd_id=%d, queue_size=%d)", handle, cmd->seq_id, cmd->id, out_queue.size());
++								usz queued_frames;
++								{
++									std::lock_guard lock{mutex};
++									queued_frames = out_queue.size();
++								}
++								cellVdec.error("Video au decode has been waiting for a consumer for 5 seconds. (handle=0x%x, seq_id=%d, cmd_id=%d, queue_size=%d)", handle, cmd->seq_id, cmd->id, queued_frames);
+ 								elapsed = 0;
+ 							}
+ 						}
+@@ -1742,7 +1755,7 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 		sequence_id = vdec->seq_id;
+ 
+ 		vdec->out_queue.pop_front();
+-		if (vdec->out_queue.size() + 1 == vdec->out_max)
++		if (vdec->out_queue.size() + 1 >= vdec->out_max)
+ 			notify = true;
+ 	}
+ 
+@@ -1759,17 +1772,21 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 
+ 	if (outBuff)
+ 	{
++#ifdef RPCS3_IOS
++		std::lock_guard conversion_lock{vdec->conversion_mutex};
++#endif
+ 		const int w = frame->width;
+ 		const int h = frame->height;
+ 
+ 		AVPixelFormat out_f = AV_PIX_FMT_YUV420P;
+ 
+-		std::unique_ptr<u8[]> alpha_plane;
++		std::unique_ptr<u8[]> alpha_storage;
++		u8* alpha_plane = nullptr;
+ 
+ 		switch (const u32 type = format->formatType)
+ 		{
+-		case CELL_VDEC_PICFMT_ARGB32_ILV: out_f = AV_PIX_FMT_ARGB; alpha_plane.reset(new u8[w * h]); break;
+-		case CELL_VDEC_PICFMT_RGBA32_ILV: out_f = AV_PIX_FMT_RGBA; alpha_plane.reset(new u8[w * h]); break;
++		case CELL_VDEC_PICFMT_ARGB32_ILV: out_f = AV_PIX_FMT_ARGB; break;
++		case CELL_VDEC_PICFMT_RGBA32_ILV: out_f = AV_PIX_FMT_RGBA; break;
+ 		case CELL_VDEC_PICFMT_UYVY422_ILV: out_f = AV_PIX_FMT_UYVY422; break;
+ 		case CELL_VDEC_PICFMT_YUV420_PLANAR: out_f = AV_PIX_FMT_YUV420P; break;
+ 		default:
+@@ -1780,9 +1797,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 
+ 		// TODO: color matrix
+ 
+-		if (alpha_plane)
++		if (out_f == AV_PIX_FMT_ARGB || out_f == AV_PIX_FMT_RGBA)
+ 		{
+-			std::memset(alpha_plane.get(), format->alpha, w * h);
++			if (av_image_get_buffer_size(out_f, w, h, 1) < 0)
++				fmt::throw_exception("cellVdecGetPictureExt: invalid output dimensions %dx%d", w, h);
++			const usz alpha_bytes = static_cast<usz>(w) * h;
++#ifdef RPCS3_IOS
++			if (!vdec->alpha_scratch_valid || vdec->alpha_scratch.size() != alpha_bytes ||
++				vdec->alpha_scratch_value != format->alpha)
++			{
++				vdec->alpha_scratch.assign(alpha_bytes, format->alpha);
++				vdec->alpha_scratch_value = format->alpha;
++				vdec->alpha_scratch_valid = true;
++			}
++			alpha_plane = vdec->alpha_scratch.data();
++#else
++			alpha_storage.reset(new u8[alpha_bytes]);
++			std::memset(alpha_storage.get(), format->alpha, alpha_bytes);
++			alpha_plane = alpha_storage.get();
++#endif
+ 		}
+ 
+ 		AVPixelFormat in_f = AV_PIX_FMT_YUV420P;
+@@ -1801,9 +1834,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 
+ 		cellVdec.trace("cellVdecGetPictureExt: handle=0x%x, seq_id=%d, cmd_id=%d, w=%d, h=%d, frameFormat=%d, formatType=%d, in_f=%d, out_f=%d, alpha_plane=%d, alpha=%d, colorMatrixType=%d", handle, frame.seq_id, frame.cmd_id, w, h, frame->format, format->formatType, +in_f, +out_f, !!alpha_plane, format->alpha, format->colorMatrixType);
+ 
++#ifdef RPCS3_IOS
++		// Same-format planar output needs a stride-aware copy, not a scaler.
++		// Do not take this path for full-range YUVJ: retain swscale's conversion.
++		if (in_f == AV_PIX_FMT_YUV420P && out_f == AV_PIX_FMT_YUV420P)
++		{
++			const int size = av_image_get_buffer_size(out_f, w, h, 1);
++			if (size < 0 || av_image_copy_to_buffer(outBuff.get_ptr(), size,
++				frame->data, frame->linesize, out_f, w, h, 1) < 0)
++				fmt::throw_exception("cellVdecGetPictureExt: planar copy failed");
++			return CELL_OK;
++		}
++#endif
++
+ 		vdec->sws = sws_getCachedContext(vdec->sws, w, h, in_f, w, h, out_f, SWS_POINT, nullptr, nullptr, nullptr);
+ 
+-		const u8* in_data[4] = { frame->data[0], frame->data[1], frame->data[2], alpha_plane.get() };
++		if (!vdec->sws)
++			fmt::throw_exception("cellVdecGetPictureExt: failed to allocate converter");
++
++		const u8* in_data[4] = { frame->data[0], frame->data[1], frame->data[2], alpha_plane };
+ 		const int in_line[4] = { frame->linesize[0], frame->linesize[1], frame->linesize[2], w * 1 };
+ 		u8* out_data[4] = { outBuff.get_ptr() };
+ 		int out_line[4] = { w * 4 }; // RGBA32 or ARGB32
+@@ -1824,7 +1873,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 			}
+ 		}
+ 
+-		sws_scale(vdec->sws, in_data, in_line, 0, h, out_data, out_line);
++		if (sws_scale(vdec->sws, in_data, in_line, 0, h, out_data, out_line) != h)
++			fmt::throw_exception("cellVdecGetPictureExt: incomplete converted frame");
+ 	}
+ 
+ 	return CELL_OK;
+diff --git a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
+index 1923286..91cfeba 100644
+--- a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
++++ b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
+@@ -7669,6 +7669,18 @@ public:
+ 		[[maybe_unused]] const bool consts_never_allones = known_idx.One[5];
+ 		[[maybe_unused]] const bool idx_selects_single = known_idx.extractBits(1, 4).isConstant();
+ 
++#ifdef ARCH_ARM64
++		// NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1: selectors with bit 7 set
++		// never read either input. Emit only the special-constant lookup, not
++		// two vector loads, endian folds and a two-register TBX dependency.
++		if (consts_only)
++		{
++			const auto lut = build<u8[16]>(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x80, 0x80);
++			set_vr(op.rt4, tbl(lut, (c >> 4)));
++			return;
++		}
++#endif
++
+ 		const auto a = get_vr<u8[16]>(op.ra);
+ 		const auto b = get_vr<u8[16]>(op.rb);
+ 
+@@ -7727,12 +7739,12 @@ public:
+ 			cv = eval(c ^ 0xf);
+ 		}
+ 
+-		// ARM64's KnownBits bit-4 shortcut is not sufficient when an index
+-		// selects an SPU special constant rather than either source. Keep the
+-		// shortcut for the established non-ARM64 lowering and use a source
+-		// only when both operands are actually the same on ARM64.
++		// Bit 4 alone is unsafe for SPU special constants. A proven
++		// permutation-only mask (bit 7 clear) plus constant bit 4 safely
++		// reduces TBL2 to TBL1 without loading the unused operand at runtime.
+ #ifdef ARCH_ARM64
+-		const std::optional<value_t<u8[16]>> single_src = (op.ra == op.rb && !m_interp_magn)
++		const std::optional<value_t<u8[16]>> single_src = (!m_interp_magn &&
++			((perm_only && idx_selects_single) || op.ra == op.rb))
+ #else
+ 		const std::optional<value_t<u8[16]>> single_src = (idx_selects_single || (op.ra == op.rb && !m_interp_magn))
+ #endif
+diff --git a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
+index bbb239c..5ddada0 100644
+--- a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
++++ b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
+@@ -10,6 +10,7 @@
+ 
+ // NEOSTATION_BUILD258_RUNTIME_RESILIENCE_V1
+ // NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1
++// NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1
+ 
+ #include "context_accessors.define.h"
+ 
+@@ -60,6 +61,7 @@ namespace rsx
+ 			u64 last_check_val = wait_started;
+ 			bool recovery_attempted = false;
+ 			bool timed_out = false;
++			u64 last_stall_report = 0;
+ 
+ 			while (observed != arg)
+ 			{
+@@ -113,10 +115,25 @@ namespace rsx
+ 						}
+ #endif
+ 						timed_out = true;
++#ifdef RPCS3_IOS
++						// A timeout is NOT a guest release. Advancing GET here loses
++						// ordering (GOW3: expected N, observed N-1 on successive waits).
++						// Keep servicing real GPU/CPU dependencies; Stop/pause and
++						// savestate cancellation still use test_stopped()/cpu_wait().
++						if (!last_stall_report || current - last_stall_report >= 5'000'000)
++						{
++							rsx_log.error(
++								"RSX acquire still pending (FIFO preserved): address=0x%X expected=0x%X observed=0x%X waited_us=%llu",
++								addr, arg, static_cast<u32>(observed), current - wait_started);
++							last_stall_report = current;
++						}
++						progress_started = current;
++#else
+ 						rsx_log.error(
+ 							"nv406e::semaphore_acquire timed out: address=0x%X expected=0x%X observed=0x%X waited_us=%llu",
+ 							addr, arg, static_cast<u32>(observed), current - wait_started);
+ 						break;
++#endif
+ 					}
+ 				}
+ 
+diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.cpp b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
+index 6a6e6c5..8fc4317 100644
+--- a/rpcs3/Emu/RSX/VK/VKGSRender.cpp
++++ b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
+@@ -1022,12 +1022,39 @@ void VKGSRender::on_invalidate_memory_range(const utils::address_range32 &range,
+ 
+ void VKGSRender::on_semaphore_acquire_wait()
+ {
++#ifdef RPCS3_IOS
++	// NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1
++	// Query resolution may itself submit commands and re-enter the wait hook.
++	if (m_servicing_semaphore_wait) return;
++	struct service_guard
++	{
++		bool& flag;
++		explicit service_guard(bool& value) : flag(value) { flag = true; }
++		~service_guard() { flag = false; }
++	} guard(m_servicing_semaphore_wait);
++#endif
+ 	if (m_flush_requests.pending() ||
++#ifdef RPCS3_IOS
++		(m_eng_interrupt_mask & rsx::pipe_flush_interrupt) ||
++#endif
+ 		(async_flip_requested & flip_request::emu_requested) ||
+ 		(m_queue_status & flush_queue_state::deadlock))
+ 	{
+ 		do_local_task(rsx::FIFO::state::lock_wait);
+ 	}
++#ifdef RPCS3_IOS
++	// The outer FIFO loop normally updates ZCULL and deferred host writes.
++	// An acquire blocks that loop: completed reports/labels must also progress
++	// here, or a PPU producer waiting for them can never release this acquire.
++	// Do not force a Vulkan submit per poll or re-enter an active submit.
++	if ((m_queue_status & flush_queue_state::flushing) ||
++		(++m_semaphore_wait_polls & 15) != 0) return;
++	const u64 now = get_system_time();
++	if (now < m_next_semaphore_service) return;
++	m_next_semaphore_service = now + 1'000;
++	if (zcull_ctrl) zcull_ctrl->update(this);
++	if (m_host_dma_ctrl) m_host_dma_ctrl->update();
++#endif
+ }
+ 
+ bool VKGSRender::on_vram_exhausted(rsx::problem_severity severity)
+diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.h b/rpcs3/Emu/RSX/VK/VKGSRender.h
+index e3817d8..1c07ddc 100644
+--- a/rpcs3/Emu/RSX/VK/VKGSRender.h
++++ b/rpcs3/Emu/RSX/VK/VKGSRender.h
+@@ -190,6 +190,12 @@ private:
+ 	vk::flush_request_task m_flush_requests;
+ 
+ 	ullong m_last_cond_render_eval_hint = 0;
++#ifdef RPCS3_IOS
++	// NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1: renderer-thread-only state.
++	u64 m_next_semaphore_service = 0;
++	u32 m_semaphore_wait_polls = 0;
++	bool m_servicing_semaphore_wait = false;
++#endif
+ 
+ 	// Offloader thread deadlock recovery
+ 	rsx::atomic_bitmask_t<flush_queue_state> m_queue_status;
+diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
+index 471b582..f7d422e 100644
+--- a/rpcs3/ios/RPCS3IOS.cpp
++++ b/rpcs3/ios/RPCS3IOS.cpp
+@@ -1287,7 +1287,7 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
+ 
+ extern "C" const char* rpcs3_ios_build_info(void) noexcept
+ {
+-	return "{\"abi\":30,\"frontend\":\"ios\",\"upstream\":\"fdcfded8dfd3060af66bda0a3ac4635458980038\",\"llvm\":\"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\"jit\":\"sealed-arena\",\"neostation_jit\":\"NEOSTATION_DYNAMIC_JIT_V4\",\"renderer\":\"vulkan-moltenvk\",\"moltenvk\":\"1.4.2\",\"ffmpeg\":\"8.1.1\",\"audio\":\"remoteio\",\"input\":\"gamecontroller-multiplayer-rumble\",\"games\":\"pkg-rap-iso-zip-folder-updates-runtime-patches-library-delete-cache-management-trophies-big-picture-savestate-management-selected-boot\",\"settings\":\"global-and-per-game-cfg-root-catalog-title-database-recommendations-presets\",\"rpcn\":\"servers-account-social-online\",\"build264\":\"NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1\",\"lto\":\"thin-rpcs3-core-only\",\"performance\":\"fps-cpu-rsx-memory\",\"lifecycle\":\"pause-resume-stop-big-picture\",\"media_codecs\":true}";
++	return "{\"abi\":30,\"frontend\":\"ios\",\"upstream\":\"fdcfded8dfd3060af66bda0a3ac4635458980038\",\"llvm\":\"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\"jit\":\"sealed-arena\",\"neostation_jit\":\"NEOSTATION_DYNAMIC_JIT_V4\",\"renderer\":\"vulkan-moltenvk\",\"moltenvk\":\"1.4.2\",\"ffmpeg\":\"8.1.1\",\"audio\":\"remoteio\",\"input\":\"gamecontroller-multiplayer-rumble\",\"games\":\"pkg-rap-iso-zip-folder-updates-runtime-patches-library-delete-cache-management-trophies-big-picture-savestate-management-selected-boot\",\"settings\":\"global-and-per-game-cfg-root-catalog-title-database-recommendations-presets\",\"rpcn\":\"servers-account-social-online\",\"build264\":\"NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1\",\"build265\":\"NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1\",\"lto\":\"thin-rpcs3-core-only\",\"performance\":\"fps-cpu-rsx-memory\",\"lifecycle\":\"pause-resume-stop-big-picture\",\"media_codecs\":true}";
+ }
+ 
+ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config) noexcept
