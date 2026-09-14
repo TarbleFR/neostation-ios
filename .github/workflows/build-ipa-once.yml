@@ -65,6 +65,8 @@ jobs:
           python3 build-utils/patch_rpcs3_build256_host.py
           python3 build-utils/patch_rpcs3_build256_host.py
           python3 build-utils/patch_rpcs3_build260_modern_menu.py
+          python3 build-utils/patch_rpcs3_build265_host.py
+          python3 build-utils/patch_rpcs3_build265_host.py
           python3 test/rpcs3_ingame_ui_contract_test.py
           python3 test/rpcs3_build260_modern_menu_test.py
           python3 test/dolphin_achievements_hacks_menu_test.py
@@ -89,6 +91,7 @@ jobs:
           set -euo pipefail
           mkdir -p build/rpcs3-ci
           CONTRACT_SRC="$RUNNER_TEMP/rpcs3-input-contract-source"
+          mkdir -p "$CONTRACT_SRC/rpcs3-input-contract-source"
           mkdir -p "$CONTRACT_SRC/rpcs3/ios"
           curl -fL --retry 3 --retry-delay 2 \
             https://raw.githubusercontent.com/XITRIX/rpcs3/22f1152783cef1f7e04af7b1c895173e28fd5b03/rpcs3/ios/RPCS3IOS.h \

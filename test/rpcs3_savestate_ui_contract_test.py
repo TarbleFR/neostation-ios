@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 classes = root / 'packages/rpcs3_internal_bridge/ios/Classes'
@@ -31,7 +32,8 @@ build = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
 assert workflow.count('patch_rpcs3_savestate_ui.py') == 2
 assert build.count('patch_rpcs3_savestate_stability.py') == 2
 assert 'rpcs3_savestate_native_test.py' in build
-assert 'BUILD_NUMBER=264' in build and "BUILD_NUMBER: '264'" in workflow
+version = re.search(r"BUILD_NUMBER: '([0-9]+)'", workflow)
+assert version and f'BUILD_NUMBER={version.group(1)}' in build, 'Workflow and core build version must match'
 assert build.count('patch_rpcs3_armsx3_performance.py') == 2
 assert build.count('patch_rpcs3_serial_profiles.py') == 2
 assert workflow.count('patch_rpcs3_performance_telemetry.py') >= 2

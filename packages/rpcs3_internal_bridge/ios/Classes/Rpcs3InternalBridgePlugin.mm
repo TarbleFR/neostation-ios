@@ -11,7 +11,6 @@
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
 #import <errno.h>
-#import <string.h>
 #import <sys/mman.h>
 #import <unistd.h>
 
@@ -208,11 +207,7 @@ static UIViewController* RPCS3RootViewController(void) {
 
 static void RPCS3Log(void* context, int32_t level, const char* message) {
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
-  if (!bridge || !message) return;
-  // NEOSTATION_BUILD265_COREPROF_LOG: retain the sampled profiler summaries
-  // without enabling the high-volume debug/trace stream or any Dart events.
-  if (level > 5 && strstr(message, "COREPROF ") == nullptr &&
-      strstr(message, "COREPROF_RESILIENCE ") == nullptr) return;
+  if (!bridge || !message || level > 5) return;
   NSString* text = [NSString stringWithUTF8String:message] ?: @"";
   // Keep notices/errors needed for crash diagnosis; do not fsync debug/trace
   // output on the render or emulation hot paths.
