@@ -72,9 +72,9 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
-  /// Stops the connection and persists on-demand as disabled while retaining
-  /// the system configuration. A later enable therefore reuses the permission
-  /// already granted by iOS instead of creating a duplicate VPN profile.
+  /// Stops the connection and persists the profile as disabled while retaining
+  /// the accepted system configuration. A later enable reuses the same profile
+  /// instead of creating a duplicate VPN entry.
   func disable(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
       self.disableWaiters.append(completion)
@@ -187,17 +187,15 @@ final class NeoStationLocalTunnelManager {
             self.finishDisable(.failure(Self.configurationFailure(error)))
             return
           }
-          // Repair signer rewrites or stale provider metadata before keeping
-          // the accepted profile in its disabled state.
-          self.configure(
-            manager,
-            providerBundleIdentifier: providerBundleIdentifier
-          )
+
+          // Do not call configure() while disabling: configure() deliberately
+          // re-enables both the profile and its on-demand rule. Persist the
+          // exact opposite state first so iOS cannot immediately reassert the
+          // tunnel after stopVPNTunnel(). The saved manager remains available
+          // and configure() will re-enable it on the next explicit start.
           manager.isOnDemandEnabled = false
-          // The on-demand flag represents the user's persisted service choice;
-          // isEnabled keeps the profile reusable without another authorization
-          // transaction.
-          manager.isEnabled = true
+          manager.onDemandRules = []
+          manager.isEnabled = false
           self.saveReloadAndStop(manager)
         }
       }
