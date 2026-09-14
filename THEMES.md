@@ -38,10 +38,6 @@ Keep identifiers stable once shipped because the selected theme name is persiste
 - Prefer the established corner-radius, typography and responsive-sizing conventions.
 - Do not hardcode user-visible labels inside theme widgets.
 
-## Imported custom UI themes
-
-NeoStation can also load user-imported custom color themes. Imported theme IDs must not collide with built-in/reserved theme names. Deleting the active imported theme must safely fall back to a built-in/system theme.
-
 ## System Art packs
 
 System Art packs are not UI color themes. They provide downloadable artwork used by system cards and related presentation surfaces. Their manifest/cache code may still contain historical `theme` naming; do not merge those concepts with `ThemeProvider`.

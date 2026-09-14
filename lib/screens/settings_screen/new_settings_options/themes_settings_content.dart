@@ -15,7 +15,6 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/widgets/theme_card.dart';
 import 'package:neostation/widgets/custom_notification.dart';
-import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/tv_directory_picker.dart';
 import 'package:neostation/widgets/shaders/shader_gif_widget.dart';
 import 'package:neostation/utils/image_utils.dart';
@@ -67,11 +66,11 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
     if (mounted) setState(() {});
   }
 
-  /// Native System Theme + Registered Theme Variants + Custom Background + Import.
+  /// System theme + built-in variants + custom background + menu music.
   void _initializeKeys() {
     _itemKeys.clear();
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final count = themeProvider.getThemeList().length + 4;
+    final count = themeProvider.getThemeList().length + 3;
     for (int i = 0; i < count; i++) {
       _itemKeys.add(GlobalKey());
     }
@@ -86,7 +85,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
 
   int getItemCount(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    return themeProvider.getThemeList().length + 4;
+    return themeProvider.getThemeList().length + 3;
   }
 
   int get _gridColumns => Responsive.getThemesCrossAxisCount(context);
@@ -150,11 +149,11 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
   }
 
   void selectItem(int index) async {
+    if (index < 0 || index >= getItemCount(context)) return;
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final themes = themeProvider.getThemeList();
     final customBackgroundIndex = themes.length + 1;
     final menuMusicIndex = themes.length + 2;
-    final importIndex = themes.length + 3;
 
     if (index == 0) {
       await themeProvider.setTheme('system');
@@ -165,9 +164,6 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
       return;
     } else if (index == menuMusicIndex) {
       await _toggleHomeMusic();
-      return;
-    } else if (index == importIndex) {
-      await _importTheme();
       return;
     } else {
       return;
@@ -250,69 +246,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
     );
   }
 
-  /// Opens a file picker, imports the selected daisyUI theme JSON, and applies it.
-  Future<void> _importTheme() async {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final pickerTitle = AppLocale.importTheme.getString(context);
-    try {
-      String? filePath;
-
-      if (Platform.isAndroid && await PermissionService.isTelevision()) {
-        if (mounted) {
-          filePath = await TvDirectoryPicker.showFilePicker(
-            context,
-            extensions: ['json'],
-          );
-        }
-      } else {
-        final result = await FilePicker.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-          dialogTitle: pickerTitle,
-        );
-        filePath = result?.files.single.path;
-      }
-
-      if (filePath == null) return;
-
-      final result = await themeProvider.importTheme(File(filePath));
-      if (mounted) setState(() {});
-      if (mounted) {
-        final name = result.theme.name;
-        AppNotification.showNotification(
-          context,
-          (result.created
-                  ? AppLocale.importThemeSuccess
-                  : AppLocale.importThemeExists)
-              .getString(context)
-              .replaceAll('%s', name),
-          type: result.created
-              ? NotificationType.success
-              : NotificationType.info,
-        );
-      }
-    } on FormatException catch (e) {
-      _log.e('Theme import failed (malformed): $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.importThemeError.getString(context),
-          type: NotificationType.error,
-        );
-      }
-    } catch (e) {
-      _log.e('Theme import failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.importThemeError.getString(context),
-          type: NotificationType.error,
-        );
-      }
-    }
-  }
-
-  /// Gamepad entry point: deletes the custom background or an imported theme.
+  /// Gamepad entry point: clears only the custom background or menu music.
   void deleteFocusedTheme(int index) {
     if (index <= 0) return;
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
@@ -328,29 +262,6 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
       if (HomeMusicService().hasMusic) _clearHomeMusic();
       return;
     }
-
-    final themeIndex = index - 1;
-    if (themeIndex >= themes.length) return;
-    final t = themes[themeIndex];
-    if (!themeProvider.isCustomTheme(t['name']!)) return;
-    _deleteTheme(t['name']!, t['displayName']!);
-  }
-
-  Future<void> _deleteTheme(String themeName, String displayName) async {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final confirmed = await ConfirmActionDialog.show(
-      context,
-      title: AppLocale.deleteThemeTitle.getString(context),
-      body: AppLocale.deleteThemeConfirm
-          .getString(context)
-          .replaceAll('%s', displayName),
-      confirmLabel: AppLocale.delete.getString(context),
-      icon: Symbols.delete_rounded,
-    );
-    if (!confirmed) return;
-
-    await themeProvider.deleteTheme(themeName);
-    if (mounted) setState(() {});
   }
 
   @override
@@ -367,8 +278,7 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
 
     final customBackgroundIndex = allThemes.length;
     final menuMusicIndex = allThemes.length + 1;
-    final importIndex = allThemes.length + 2;
-    final itemCount = allThemes.length + 3;
+    final itemCount = allThemes.length + 2;
 
     if (_itemKeys.length != itemCount) {
       _initializeKeys();
@@ -455,26 +365,10 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                 );
               }
 
-              if (index == importIndex) {
-                return Container(
-                  key: _itemKeys[index],
-                  child: ImportThemeCard(
-                    label: AppLocale.importTheme.getString(context),
-                    isFocused: isFocused,
-                    onTap: () {
-                      SfxService().playNavSound();
-                      widget.onSelectionChanged?.call(index);
-                      selectItem(index);
-                    },
-                  ),
-                );
-              }
-
               final t = allThemes[index];
               final isSelected =
                   themeProvider.currentThemeName == t['name'] ||
                   (index == 0 && themeProvider.currentThemeName == 'system');
-              final isCustom = themeProvider.isCustomTheme(t['name']!);
 
               return Container(
                 key: _itemKeys[index],
@@ -488,12 +382,6 @@ class ThemesSettingsContentState extends State<ThemesSettingsContent> {
                     widget.onSelectionChanged?.call(index);
                     selectItem(index);
                   },
-                  onLongPress: isCustom
-                      ? () => _deleteTheme(t['name']!, t['displayName']!)
-                      : null,
-                  onDelete: isCustom
-                      ? () => _deleteTheme(t['name']!, t['displayName']!)
-                      : null,
                 ),
               );
             },

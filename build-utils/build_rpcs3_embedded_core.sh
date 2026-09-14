@@ -52,9 +52,9 @@ ccache --max-size=3G >/dev/null
 # These values are consumed by all subsequent workflow steps.
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
-    echo "BUILD_NUMBER=264"
-    echo "IPA_NAME=NeoStation-iOS-Build-264-RPCS3-ARM64-LTO"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-264-RPCS3-ARM64-LTO"
+    echo "BUILD_NUMBER=265"
+    echo "IPA_NAME=NeoStation-iOS-Build-265-RSX-SPU-Video"
+    echo "ARTIFACT_NAME=NeoStation-iOS-Build-265-RSX-SPU-Video"
   } >> "$GITHUB_ENV"
 fi
 
@@ -142,6 +142,9 @@ python3 "$PWD/build-utils/patch_rpcs3_build258_runtime_resilience.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build258_runtime_resilience.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build264_gow3_core.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build264_gow3_core.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_build265_core.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_build265_core.py" "$SRC"
+python3 "$PWD/test/rpcs3_build265_core_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_serial_profile_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_iso_integrity_patch_test.py" "$SRC"

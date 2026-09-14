@@ -85,13 +85,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.hideRecentCardSubtitle: '시스템 그리드에 최근 플레이한 게임 카드를 표시합니다',
   AppLocale.themesSubtitle: 'NeoStation의 화면을 원하는 스타일로 꾸밉니다',
   AppLocale.systemTheme: '시스템',
-  AppLocale.importTheme: '테마 가져오기',
-  AppLocale.importThemeSuccess: '"%s" 가져옴',
-  AppLocale.importThemeExists: '"%s" 테마가 이미 가져와졌습니다',
-  AppLocale.importThemeError: '테마를 가져올 수 없음 - 잘못된 파일',
-  AppLocale.deleteThemeTitle: '테마를 삭제할까요?',
-  AppLocale.deleteThemeConfirm: '가져온 테마 "%s"를 제거할까요?',
-
   AppLocale.generalSettings: '일반 설정',
   AppLocale.alwaysShowRomName: '항상 ROM 파일 이름 표시',
   AppLocale.hideExtension: '파일 확장자 숨기기(ROM 파일명만 표시)',

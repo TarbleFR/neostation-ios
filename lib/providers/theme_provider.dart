@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/services/config_service.dart';
-import 'package:neostation/services/custom_theme_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/startup_theme_cache.dart';
 import 'package:neostation/themes/app_themes.dart';
@@ -125,17 +124,6 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentTheme = brightness == Brightness.dark
         ? availableThemes['dark']!
         : availableThemes['light']!;
-  }
-
-  Future<void> _loadCustomThemes() async {
-    try {
-      final themes = await CustomThemeService.loadAll();
-      AppThemes.customThemes
-        ..clear()
-        ..addEntries(themes.map((t) => MapEntry(t.id, t)));
-    } catch (e) {
-      _log.e('Error loading custom themes: $e');
-    }
   }
 
   Future<Directory> _customBackgroundDirectory() async {
@@ -301,7 +289,6 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _loadSavedTheme() async {
     try {
-      await _loadCustomThemes();
       await _loadCustomBackground();
 
       final savedThemeName = await ConfigRepository.getThemeName();
@@ -311,10 +298,6 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         _notifyThemeChanged();
       } else if (availableThemes.containsKey(savedThemeName)) {
         _currentTheme = availableThemes[savedThemeName]!;
-        _currentThemeName = savedThemeName;
-        _notifyThemeChanged();
-      } else if (AppThemes.customThemes.containsKey(savedThemeName)) {
-        _currentTheme = AppThemes.customThemes[savedThemeName]!.themeData;
         _currentThemeName = savedThemeName;
         _notifyThemeChanged();
       } else {
@@ -344,8 +327,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    ThemeData? resolved = availableThemes[themeName];
-    resolved ??= AppThemes.customThemes[themeName]?.themeData;
+    final resolved = availableThemes[themeName];
 
     if (resolved != null) {
       _currentTheme = resolved;
@@ -433,44 +415,10 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  List<Map<String, String>> getThemeList() {
-    final list = availableThemes.keys.map((key) {
-      return {'name': key, 'displayName': themeDisplayNames[key] ?? key};
-    }).toList();
-
-    for (final custom in AppThemes.customThemes.values) {
-      list.add({'name': custom.id, 'displayName': custom.name});
-    }
-
-    return list;
-  }
-
-  bool isCustomTheme(String themeName) =>
-      AppThemes.customThemes.containsKey(themeName);
-
-  Future<ThemeImportResult> importTheme(File file) async {
-    final reserved = {...availableThemes.keys, 'system'};
-    final result = await CustomThemeService.importFromFile(
-      file.path,
-      reservedIds: reserved,
-      existing: AppThemes.customThemes.values.toList(),
-    );
-    AppThemes.customThemes[result.theme.id] = result.theme;
-    notifyListeners();
-    await setTheme(result.theme.id);
-    return result;
-  }
-
-  Future<void> deleteTheme(String themeName) async {
-    if (!AppThemes.customThemes.containsKey(themeName)) return;
-
-    await CustomThemeService.delete(themeName);
-    AppThemes.customThemes.remove(themeName);
-
-    if (_currentThemeName == themeName) {
-      await setTheme('system');
-    } else {
-      notifyListeners();
-    }
-  }
+  // NEOSTATION_THEME_IMPORTER_RETIRED_265: built-ins only; unknown persisted
+  // theme IDs already fall back to system in _loadSavedTheme(). Background and
+  // music preferences are deliberately independent and are never reset here.
+  List<Map<String, String>> getThemeList() => availableThemes.keys.map((key) {
+    return {'name': key, 'displayName': themeDisplayNames[key] ?? key};
+  }).toList();
 }

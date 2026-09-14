@@ -92,14 +92,6 @@ const Map<String, dynamic> appLocaleFr = {
       'Afficher la carte des jeux récents dans la grille',
   AppLocale.themesSubtitle: 'Personnalisez le look de NeoStation',
   AppLocale.systemTheme: 'Thème du Système',
-  AppLocale.importTheme: 'Importer un thème',
-  AppLocale.importThemeSuccess: 'Thème « %s » importé',
-  AppLocale.importThemeExists: 'Le thème « %s » est déjà importé',
-  AppLocale.importThemeError:
-      'Impossible d’importer le thème — fichier invalide',
-  AppLocale.deleteThemeTitle: 'Supprimer le thème ?',
-  AppLocale.deleteThemeConfirm: 'Supprimer le thème importé « %s » ?',
-
   AppLocale.generalSettings: 'Paramètres Généraux',
   AppLocale.alwaysShowRomName: 'Toujours afficher le nom du ROM',
   AppLocale.hideExtension:

@@ -198,16 +198,22 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 /// the user's selected data directory.
 Future<void> _cleanupRetiredThemePackages() async {
   const preferenceKey = 'neostation_full_theme_active_id';
-  const directoryName = 'full_themes';
+  const directoryNames = ['full_themes', 'custom_themes'];
 
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(preferenceKey);
 
     final dataPath = await ConfigService.getUserDataPath();
-    final retiredDirectory = Directory(path.join(dataPath, directoryName));
-    if (await retiredDirectory.exists()) {
-      await retiredDirectory.delete(recursive: true);
+    for (final directoryName in directoryNames) {
+      final retiredDirectory = Directory(path.join(dataPath, directoryName));
+      // Never follow a link into other user data during an upgrade cleanup.
+      final type = await FileSystemEntity.type(retiredDirectory.path, followLinks: false);
+      if (type == FileSystemEntityType.directory) {
+        await retiredDirectory.delete(recursive: true);
+      } else if (type == FileSystemEntityType.link) {
+        await Link(retiredDirectory.path).delete();
+      }
     }
   } catch (e) {
     // Cleanup must never block startup. Retry on the next launch if the

@@ -84,13 +84,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.hideRecentCardSubtitle: '在系统网格中显示最近游玩卡片',
   AppLocale.themesSubtitle: '个性化您的 NeoStation 外观',
   AppLocale.systemTheme: '系统默认',
-  AppLocale.importTheme: '导入主题',
-  AppLocale.importThemeSuccess: '已导入主题“%s”',
-  AppLocale.importThemeExists: '主题“%s”已导入',
-  AppLocale.importThemeError: '无法导入主题 — 文件无效',
-  AppLocale.deleteThemeTitle: '删除主题？',
-  AppLocale.deleteThemeConfirm: '移除导入的主题“%s”？',
-
   AppLocale.generalSettings: '常规设置',
   AppLocale.alwaysShowRomName: '始终显示 ROM 文件名',
   AppLocale.hideExtension: '隐藏文件扩展名 (仅显示 ROM 名称)',

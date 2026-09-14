@@ -93,13 +93,6 @@ const Map<String, dynamic> appLocaleRu = {
       'Показать карточку недавних игр в сетке систем',
   AppLocale.themesSubtitle: 'Персонализируйте внешний вид вашей NeoStation',
   AppLocale.systemTheme: 'Системная',
-  AppLocale.importTheme: 'Импорт темы',
-  AppLocale.importThemeSuccess: 'Тема «%s» импортирована',
-  AppLocale.importThemeExists: 'Тема «%s» уже импортирована',
-  AppLocale.importThemeError: 'Не удалось импортировать тему — неверный файл',
-  AppLocale.deleteThemeTitle: 'Удалить тему?',
-  AppLocale.deleteThemeConfirm: 'Удалить импортированную тему «%s»?',
-
   AppLocale.generalSettings: 'Общие настройки',
   AppLocale.alwaysShowRomName: 'Всегда показывать имя файла ROM',
   AppLocale.hideExtension: 'Скрывать расширение файла (только имя ROM)',
