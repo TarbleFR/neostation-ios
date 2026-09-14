@@ -52,9 +52,9 @@ ccache --max-size=3G >/dev/null
 # These values are consumed by all subsequent workflow steps.
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
-    echo "BUILD_NUMBER=263"
-    echo "IPA_NAME=NeoStation-iOS-Build-263-VPN-Theme-Fix"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-263-VPN-Theme-Fix"
+    echo "BUILD_NUMBER=264"
+    echo "IPA_NAME=NeoStation-iOS-Build-264-RPCS3-ARM64-LTO"
+    echo "ARTIFACT_NAME=NeoStation-iOS-Build-264-RPCS3-ARM64-LTO"
   } >> "$GITHUB_ENV"
 fi
 
@@ -140,6 +140,8 @@ python3 "$PWD/build-utils/patch_rpcs3_build258_core_architecture.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build258_core_architecture.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build258_runtime_resilience.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build258_runtime_resilience.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_build264_gow3_core.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_build264_gow3_core.py" "$SRC"
 python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_serial_profile_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_iso_integrity_patch_test.py" "$SRC"
@@ -148,6 +150,7 @@ python3 "$PWD/test/rpcs3_build256_core_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build258_core_architecture_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build258_runtime_resilience_test.py" "$SRC"
+python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \
@@ -158,6 +161,7 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
   -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
   -DCMAKE_C_COMPILER_TARGET="$TARGET" -DCMAKE_CXX_COMPILER_TARGET="$TARGET" \
   -DCMAKE_CXX_STANDARD_LIBRARIES="$IOS_COMPILER_RT" \
@@ -173,8 +177,11 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
   -DLLVM_TARGETS_TO_BUILD=AArch64 \
   -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF \
   -DBUILD_RPCS3_TESTS=OFF -DRUN_RPCS3_TESTS=OFF \
+  -DRPCS3_IOS_SELECTIVE_THINLTO=ON \
   -DUSE_PRECOMPILED_HEADERS=OFF -DUSE_NATIVE_INSTRUCTIONS=OFF \
   -DWITH_DISCORD_RPC=OFF -DWITH_FAUDIO=OFF
+
+python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC" "$BUILD"
 
 log "Compile RPCS3Core only"
 cmake --build "$BUILD" --target RPCS3Core --parallel "$BUILD_JOBS"

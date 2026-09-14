@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 from pathlib import Path
 
 
 SPU_MARKER = "NEOSTATION_ARMSX3_NEON_RESERVATION_COPY_V1"
 RANGE_MARKER = "NEOSTATION_ARMSX3_RANGE_LOCK_WAIT_V1"
 SPU_LLVM_MARKER = "NEOSTATION_ARMSX3_SPU_BYTE_FAST_PATHS_V1"
+SPU_ARM64_LOWERING_MARKER = "NEOSTATION_SPU_ARM64_LOWERING_41F0ECC_V1"
 
 
 def replace_once(text: str, old: str, new: str, description: str) -> str:
@@ -240,6 +242,48 @@ def patch_spu_llvm(source: Path) -> None:
     path.write_text(text)
 
 
+def patch_spu_arm64_lowering(source: Path) -> None:
+    """Keep x86-only LLVM idioms out of the AArch64 SPU compiler.
+
+    This is the architecture-neutral portion of upstream RPCS3 41f0ecc. The
+    later NeoStation architecture patch already handles its conditional-branch
+    portion with native ARM64 lane extraction, so this patch carries the other
+    audited AVX/AVX-512 guards only.
+    """
+    path = source / "rpcs3/Emu/Cell/SPULLVMRecompiler.cpp"
+    text = path.read_text()
+    if SPU_ARM64_LOWERING_MARKER in text:
+        return
+
+    patch = (
+        Path(__file__).resolve().parent
+        / "patches/rpcs3_build264_spu_arm64_lowering.patch"
+    )
+    checked = subprocess.run(
+        ["git", "-C", str(source), "apply", "--check", str(patch)],
+        capture_output=True,
+        text=True,
+    )
+    if checked.returncode:
+        raise SystemExit(
+            "SPU ARM64 lowering guards no longer apply cleanly:\n"
+            + checked.stderr
+        )
+    subprocess.run(
+        ["git", "-C", str(source), "apply", str(patch)], check=True
+    )
+
+    text = path.read_text()
+    marker_anchor = '#include "stdafx.h"\n'
+    marker_patch = (
+        '#include "stdafx.h"\n\n'
+        f'// {SPU_ARM64_LOWERING_MARKER}: ported from upstream 41f0ecc.\n'
+    )
+    path.write_text(
+        replace_once(text, marker_anchor, marker_patch, "SPU ARM64 marker")
+    )
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_rpcs3_armsx3_performance.py <rpcs3-source-root>")
@@ -247,6 +291,7 @@ def main() -> None:
     patch_spu(source)
     patch_vm(source)
     patch_spu_llvm(source)
+    patch_spu_arm64_lowering(source)
     print("RPCS3 ARMSX3-derived ARM64 performance patch: OK")
 
 

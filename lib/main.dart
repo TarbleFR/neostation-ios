@@ -190,6 +190,32 @@ Future<void> _configureImageCache() async {
 /// created them. Used by [AppNotification] for progress notifications.
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Removes packages downloaded by the retired presentation-layer importer.
+///
+/// This migration is intentionally data-only: the importer, its settings and
+/// its runtime UI no longer ship. Keeping the cleanup here for one release
+/// prevents an application upgrade from leaving large, unreachable archives in
+/// the user's selected data directory.
+Future<void> _cleanupRetiredThemePackages() async {
+  const preferenceKey = 'neostation_full_theme_active_id';
+  const directoryName = 'full_themes';
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(preferenceKey);
+
+    final dataPath = await ConfigService.getUserDataPath();
+    final retiredDirectory = Directory(path.join(dataPath, directoryName));
+    if (await retiredDirectory.exists()) {
+      await retiredDirectory.delete(recursive: true);
+    }
+  } catch (e) {
+    // Cleanup must never block startup. Retry on the next launch if the
+    // selected external storage is temporarily unavailable.
+    LoggerService.instance.w('Could not remove retired theme packages: $e');
+  }
+}
+
 /// One-time cleanup for the removed iFly integration.
 ///
 /// Earlier iOS builds could import Dreamcast rows directly from iFly's ROMs
@@ -283,6 +309,8 @@ void main() async {
   if (Platform.isAndroid) {
     await _awaitUserDataStorage();
   }
+
+  await _cleanupRetiredThemePackages();
 
   // iOS: re-activate access to any previously-linked external folder (e.g.
   // RetroArch's) before anything tries to scan it. Security-scoped bookmark

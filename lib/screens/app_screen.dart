@@ -11,7 +11,6 @@ import 'package:neostation/widgets/systems_update_dialog.dart';
 import 'package:neostation/services/logger_service.dart';
 
 import '../widgets/fixed_header.dart';
-import 'full_theme/full_theme_systems_view.dart';
 import 'systems_screen/system_content.dart';
 import 'systems_screen/custom_main_menu_background.dart';
 import 'search_screen/search_screen.dart';
@@ -381,42 +380,38 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   // Directional inputs are delegated to the active tab component
   // to allow for context-aware navigation patterns (Grid vs List vs Paged).
 
-  bool _navigateContentRight() {
+  void _navigateContentRight() {
     if (_selectedTabIndex == AppTabs.systems) {
-      return FullThemeSystemsView.navigateRight();
+      return; // Grid navigation delegated to my_systems.dart via provider.
     }
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateRight();
-      return true;
+      return;
     }
     if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.navigateRight();
-      return true;
+      return;
     }
     if (_selectedTabIndex == AppTabs.library) {
       LibraryScreen.navigateRight();
-      return true;
+      return;
     }
-    return true;
   }
 
-  bool _navigateContentLeft() {
-    if (_selectedTabIndex == AppTabs.systems) {
-      return FullThemeSystemsView.navigateLeft();
-    }
+  void _navigateContentLeft() {
+    if (_selectedTabIndex == AppTabs.systems) return;
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateLeft();
-      return true;
+      return;
     }
     if (_selectedTabIndex == AppTabs.settings) {
       NewSettingsScreen.navigateLeft();
-      return true;
+      return;
     }
     if (_selectedTabIndex == AppTabs.library) {
       LibraryScreen.navigateLeft();
-      return true;
+      return;
     }
-    return true;
   }
 
   /// Returns whether the selection moved, so the gamepad handler can suppress
@@ -427,9 +422,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   /// mounted. Keeping a second route to the same screen is what caused the
   /// double-dispatch bug fixed in #255.
   bool _navigateContentDown() {
-    if (_selectedTabIndex == AppTabs.systems) {
-      return FullThemeSystemsView.navigateDown();
-    }
+    if (_selectedTabIndex == AppTabs.systems) return true;
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateDown();
       return true;
@@ -444,9 +437,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   }
 
   bool _navigateContentUp() {
-    if (_selectedTabIndex == AppTabs.systems) {
-      return FullThemeSystemsView.navigateUp();
-    }
+    if (_selectedTabIndex == AppTabs.systems) return true;
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.navigateUp();
       return true;
@@ -475,10 +466,7 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
   }
 
   void _selectCurrentItem() async {
-    if (_selectedTabIndex == AppTabs.systems) {
-      await FullThemeSystemsView.selectCurrent();
-      return;
-    }
+    if (_selectedTabIndex == AppTabs.systems) return;
 
     if (_selectedTabIndex == AppTabs.scraper) {
       NewScraperOptionsScreen.selectCurrent();

@@ -48,6 +48,14 @@ def main() -> None:
             "SPU compare-result ABSDB fast path is missing")
     require("splat<u8[16]>(0x80)" in spu_llvm,
             "SPU compare-result SHUFB fast path is missing")
+    require("NEOSTATION_SPU_ARM64_LOWERING_41F0ECC_V1" in spu_llvm,
+            "recent upstream ARM64 SPU lowering guards are missing")
+    require(spu_llvm.count("#ifdef ARCH_X64") >= 12,
+            "x86-only AVX/AVX-512 SPU lowering still reaches ARM64")
+    require("#ifdef ARCH_X64\n\t\tif (m_use_avx512)" in spu_llvm,
+            "SUMB/float AVX-512 lowering is not architecture-gated")
+    require("pshufb_for_x86_and_tbl_for_aarch64" in spu_llvm,
+            "the native AArch64 table-lookup fallback was lost")
     print("RPCS3 ARMSX3-derived performance patch contract: OK")
 
 

@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 263
-run-name: NeoStation iOS Build 263 (VPN 259 + Full Theme navigation) • ${{ github.sha }}
+name: NeoStation iOS Build 264
+run-name: NeoStation iOS Build 264 (RPCS3 ARM64 stability + selective ThinLTO) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-263
+  group: neostation-ios-build-264
   cancel-in-progress: true
 
 jobs:
@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '263'
-      IPA_NAME: 'NeoStation-iOS-Build-263-VPN-Theme-Fix'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-263-VPN-Theme-Fix'
+      BUILD_NUMBER: '264'
+      IPA_NAME: 'NeoStation-iOS-Build-264-RPCS3-ARM64-LTO'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-264-RPCS3-ARM64-LTO'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       # First upstream commit containing the iOS RemotePairing OPACK
@@ -69,7 +69,6 @@ jobs:
           python3 test/rpcs3_build260_modern_menu_test.py
           python3 test/dolphin_achievements_hacks_menu_test.py
           python3 test/integrated_import_tab_contract_test.py
-          python3 test/full_theme_navigation_contract_test.py
           python3 test/rpcs3_build251_contract_test.py
           python3 test/rpcs3_savestate_ui_contract_test.py
           python3 test/rpcs3_performance_telemetry_patch_test.py
@@ -100,6 +99,7 @@ jobs:
           python3 test/rpcs3_diagnostics_native_test.py 2>&1 | tee build/rpcs3-ci/diagnostics-native.log
           python3 test/rpcs3_build258_core_profile_comparison_test.py
           python3 test/rpcs3_build258_pipeline_scheduler_benchmark_test.py
+          python3 -m py_compile build-utils/patch_rpcs3_build264_gow3_core.py test/rpcs3_build264_gow3_core_test.py
           python3 test/stikjit_remote_pairing_compat_test.py
           python3 test/local_jit_tunnel_contract_test.py
           python3 build-utils/benchmark_rpcs3_pipeline_scheduler.py | tee build/rpcs3-ci/pipeline-scheduler-benchmark.log
@@ -272,8 +272,7 @@ jobs:
           python3 test/rpcs3_telemetry_comparison_test.py
           python3 test/stikjit_remote_pairing_compat_test.py
           python3 test/local_jit_tunnel_contract_test.py
-          python3 test/full_theme_navigation_contract_test.py
-          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_build258_runtime_resilience_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_build258_runtime_resilience.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
+          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_build258_runtime_resilience_test.py test/rpcs3_build264_gow3_core_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_build258_runtime_resilience.py build-utils/patch_rpcs3_build264_gow3_core.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host

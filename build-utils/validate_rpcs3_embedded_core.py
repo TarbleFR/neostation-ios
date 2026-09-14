@@ -8,6 +8,8 @@ from patch_rpcs3_jit_memory import PATCH_ID
 
 REQUIRED_MARKERS = (
     PATCH_ID.encode('ascii'),
+    b'NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1',
+    b'thin-rpcs3-core-only',
     b'NeoStation: SPU cache warmup deferred; LLVM compiles blocks on demand;',
     b'RPCS3 LLVM JIT self-test entry=%p',
 )
@@ -29,4 +31,7 @@ if __name__ == '__main__':
     if len(sys.argv) != 2:
         raise SystemExit('usage: validate_rpcs3_embedded_core.py <libRPCS3Core.dylib>')
     validate_core(Path(sys.argv[1]).read_bytes())
-    print(f'Validated embedded RPCS3: {PATCH_ID}, SPU on-demand policy and LLVM self-test')
+    print(
+        f'Validated embedded RPCS3: {PATCH_ID}, Build 264 ARM64/ThinLTO, '
+        'SPU on-demand policy and LLVM self-test'
+    )

@@ -1,38 +1,7 @@
 #!/usr/bin/env python3
-"""Present RPCS3 in-game choices as modern anchored iOS sheets.
-
-Build 262 deliberately reuses the validated Build 260 CI pipeline. On the
-converged branch this early host patcher also materializes the Build 262 VPN and
-full-theme integration before Flutter analysis/AOT compilation.
-"""
+"""Present RPCS3 in-game choices as modern anchored iOS sheets."""
 
 from pathlib import Path
-import subprocess
-import sys
-
-
-ROOT = Path(__file__).resolve().parents[1]
-subprocess.run(
-    [sys.executable, str(ROOT / "build-utils/patch_build262_integration.py")],
-    cwd=ROOT,
-    check=True,
-)
-
-# Dart's num.clamp returns num even when the receiver is a double. Normalize
-# the generated progress value explicitly before static analysis.
-full_theme_service = ROOT / "lib/services/full_theme_service.dart"
-full_theme_text = full_theme_service.read_text(encoding="utf-8")
-full_theme_text = full_theme_text.replace(
-    ".clamp(0.0, 1.0));",
-    ".clamp(0.0, 1.0).toDouble());",
-)
-full_theme_service.write_text(full_theme_text, encoding="utf-8")
-
-subprocess.run(
-    [sys.executable, str(ROOT / "test/build262_integration_contract_test.py")],
-    cwd=ROOT,
-    check=True,
-)
 
 PLUGIN = Path("packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm")
 text = PLUGIN.read_text()
