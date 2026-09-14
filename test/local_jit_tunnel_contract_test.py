@@ -45,7 +45,7 @@ class LocalJitTunnelContractTests(unittest.TestCase):
             ['packet-tunnel-provider'],
         )
 
-    def test_manager_persists_on_demand_and_handles_signer_rewrites(self):
+    def test_manager_persists_on_demand_and_hard_disables_before_stop(self):
         manager = (
             ROOT /
             'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
@@ -71,8 +71,19 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('NEVPNError.configurationReadWriteFailed', manager)
         self.assertIn('manager.connection.stopVPNTunnel()', manager)
         self.assertIn('manager.isOnDemandEnabled = false', manager)
+        self.assertIn('manager.onDemandRules = []', manager)
+        self.assertIn('manager.isEnabled = false', manager)
         self.assertIn('"authorized": configured', manager)
         self.assertIn('"configured": configured', manager)
+
+        disable_start = manager.index('private func performDisable()')
+        disable_end = manager.index('private func removeDuplicateManagers(', disable_start)
+        disable_body = manager[disable_start:disable_end]
+        self.assertNotIn('self.configure(', disable_body)
+        self.assertLess(
+            disable_body.index('manager.isEnabled = false'),
+            disable_body.index('self.saveReloadAndStop(manager)'),
+        )
 
     def test_tools_exposes_authorize_enable_disable_and_resume_refresh(self):
         tools = (
@@ -97,6 +108,19 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('if (!current.authorized || !current.enabled)', service)
         self.assertIn('no system authorization prompt was requested', service)
 
+    def test_game_launch_reuses_external_localdevvpn_route(self):
+        bridge = (ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart').read_text()
+        service = (ROOT / 'lib/services/local_jit_tunnel_service.dart').read_text()
+
+        self.assertIn('Future<LocalJitTunnelState> ensureJitRoute()', bridge)
+        self.assertIn("error.code != 'local_tunnel_vpn_conflict'", bridge)
+        self.assertIn("status: 'externalRoute'", bridge)
+        self.assertIn('managedByNeoStation: false', bridge)
+        self.assertEqual(bridge.count('await ensureJitRoute();'), 2)
+        self.assertIn('StikjitBridge.ensureJitRoute()', service)
+        self.assertIn('StikjitBridge.ensureLocalTunnel()', service)
+        self.assertIn('managedByNeoStation=${state.managedByNeoStation}', service)
+
     def test_vpn_locale_declares_all_twelve_supported_languages(self):
         locale = (ROOT / 'lib/l10n/local_jit_tunnel_locale.dart').read_text()
         for key in (
@@ -108,11 +132,11 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('missingKeysForLocale', locale)
         self.assertNotIn('LocalDevVPN', locale)
 
-    def test_every_jit_path_ensures_tunnel_before_remote_pairing(self):
+    def test_every_jit_path_ensures_route_before_remote_pairing(self):
         bridge = (
             ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart'
         ).read_text()
-        self.assertEqual(bridge.count('await ensureLocalTunnel();'), 2)
+        self.assertEqual(bridge.count('await ensureJitRoute();'), 2)
 
         rpcs3 = (ROOT / 'lib/services/rpcs3_internal_service.dart').read_text()
         dolphin = (
@@ -123,6 +147,17 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('if (Platform.isIOS)', rpcs3)
         self.assertIn('if (Platform.isIOS)', dolphin)
         self.assertIn('stikjit.local_tunnel_failed', dolphin)
+
+    def test_full_theme_import_control_is_retired(self):
+        settings = (
+            ROOT /
+            'lib/screens/settings_screen/new_settings_options/themes_settings_content.dart'
+        ).read_text()
+        self.assertNotIn('full_theme', settings.lower())
+        self.assertNotIn('FullTheme', settings)
+        self.assertFalse((ROOT / 'lib/l10n/full_theme_locale.dart').exists())
+        self.assertFalse((ROOT / 'lib/services/full_theme_service.dart').exists())
+        self.assertFalse((ROOT / 'lib/models/full_theme_definition.dart').exists())
 
     def test_generated_host_embeds_and_signs_the_extension(self):
         configurator = (
