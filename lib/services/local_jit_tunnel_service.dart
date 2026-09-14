@@ -34,13 +34,11 @@ class LocalJitTunnelService {
     }
   }
 
-  /// Saving the first system configuration is the operation that asks iOS to
-  /// display its native VPN authorization sheet. Existing configurations are
-  /// reloaded and reused, so accepting once does not cause repeated prompts.
-  static Future<LocalJitTunnelState> authorizeAndEnable() =>
-      ensureRunningForJit();
-
-  static Future<LocalJitTunnelState> ensureRunningForJit() async {
+  /// Explicit settings action: this manages NeoStation's embedded tunnel only.
+  /// It intentionally does not treat another active VPN as success, otherwise
+  /// the Tools toggle could claim to control a LocalDevVPN connection that
+  /// belongs to another application.
+  static Future<LocalJitTunnelState> authorizeAndEnable() async {
     if (!Platform.isIOS) {
       throw const LocalJitTunnelException(
         'unsupportedPlatform',
@@ -56,10 +54,38 @@ class LocalJitTunnelService {
           'The NeoStation local JIT tunnel is ${state.status}.',
         );
       }
+      return state;
+    } on PlatformException catch (error) {
+      throw _platformException(error, 'start');
+    }
+  }
+
+  /// Game-launch preflight. If LocalDevVPN is already active, the bridge returns
+  /// an external-route state instead of trying to replace that VPN. StikJIT's
+  /// preparation immediately afterwards remains responsible for validating the
+  /// actual RemotePairing endpoint and pairing file.
+  static Future<LocalJitTunnelState> ensureRunningForJit() async {
+    if (!Platform.isIOS) {
+      throw const LocalJitTunnelException(
+        'unsupportedPlatform',
+        'The integrated local JIT tunnel is available only on iOS.',
+      );
+    }
+
+    try {
+      final state = await StikjitBridge.ensureJitRoute();
+      if (!state.active) {
+        throw LocalJitTunnelException(
+          'notConnected',
+          'The local JIT route is ${state.status}.',
+        );
+      }
       _log.i(
-        'NeoStation local JIT tunnel ready: '
-        '${state.interfaceAddress ?? 'unknown'} -> '
-        '${state.peerAddress ?? 'unknown'}; onDemand=${state.onDemand}.',
+        'Local JIT route ready: '
+        '${state.interfaceAddress ?? 'external'} -> '
+        '${state.peerAddress ?? 'unknown'}; '
+        'managedByNeoStation=${state.managedByNeoStation}; '
+        'onDemand=${state.onDemand}.',
       );
       return state;
     } on PlatformException catch (error) {
@@ -99,7 +125,9 @@ class LocalJitTunnelService {
         return;
       }
       if (current.active) return;
-      await ensureRunningForJit();
+      // Background refresh is about NeoStation's own persisted service choice,
+      // not about adopting a third-party VPN. Keep it explicit here.
+      await authorizeAndEnable();
       _log.i('NeoStation local JIT tunnel refreshed after $reason.');
     } catch (error) {
       _log.w(
