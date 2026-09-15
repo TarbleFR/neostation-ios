@@ -10,6 +10,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from local_jit_transport_behavior_test import (
+    check_manager_transport,
+    check_provider_transport,
+)
+
 
 def check_state_machine(manager_source: str) -> str:
     swift = shutil.which('swift')
@@ -182,4 +187,11 @@ dispatchMain()
         )
     if 'PASS: queued-stop cancellation' not in result.stdout:
         raise AssertionError(f'Swift checks produced no success marker: {result.stdout}')
-    return result.stdout.strip()
+    # Keep every existing queue regression, then exercise the actual transport
+    # and provider paths too. The existing CI contract entry point runs all three.
+    provider = Path(__file__).resolve().parents[1] / 'native/local_jit_tunnel/PacketTunnelProvider.swift'
+    return '\n'.join((
+        result.stdout.strip(),
+        check_manager_transport(manager_source),
+        check_provider_transport(provider.read_text()),
+    ))

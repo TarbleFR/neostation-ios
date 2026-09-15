@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/local_jit_tunnel_service.dart';
+import 'package:neostation/services/local_jit_lifecycle_policy.dart';
 import 'package:neostation/services/music_player_service.dart';
 import 'package:provider/provider.dart';
 
@@ -90,14 +91,10 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       return;
     }
 
-    // NeoStationLocalTunnel is strictly foreground-session scoped. Inactive is
-    // intentionally included (not only paused/hidden) so a scene losing active
-    // status invalidates an in-flight activation before it can reconnect late.
-    if (Platform.isIOS &&
-        (state == AppLifecycleState.inactive ||
-            state == AppLifecycleState.paused ||
-            state == AppLifecycleState.hidden ||
-            state == AppLifecycleState.detached)) {
+    // AppLifecycleState.inactive can be a native VPN permission dialog, not
+    // a background transition. Do not invalidate the authorization it awaits.
+    // AppLifecycleState.paused/hidden/detached still stop immediately.
+    if (Platform.isIOS && shouldStopLocalJitForLifecycle(state)) {
       unawaited(
         LocalJitTunnelService.stopForLifecycle(
           reason: 'app lifecycle ${state.name}',

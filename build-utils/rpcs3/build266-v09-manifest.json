@@ -1,0 +1,72 @@
+{
+  "upstream_revision": "505a85e5a8f2cdff1cd63168bd2c56b0f92282bf",
+  "baseline": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
+  "stage": "after Build 265 patch chain",
+  "upstream_sha256": {
+    "Utilities/JITASM.cpp": "ff80564bf4d688fba0b9c35387cf19c44a55a65b8810626326df28857576ec8d",
+    "Utilities/JITIOS.cpp": "9fa9e0e4733f46c85f39823b4890f807819096044e8b6ef16bb4188cfead7ceb",
+    "Utilities/JITIOS.h": "4988afa9fff4ab56ed04778f1baa3ffbe70bd313ea3367723c6684e426ad8ce3",
+    "Utilities/JITIOSLayoutPolicy.h": "6cb25a160d68e2dfa546b62d0720d88d278010e08598d25fc0627882a101ac87",
+    "Utilities/JITLLVM.cpp": "a2dc861d77522615849eb587fe8c236453b4b4c4c1ef2bd74f6d75e549d55fac",
+    "rpcs3/Emu/system_progress.cpp": "6d026a5ae7f6d829b170d2bc82f21fe02573bc726936acc84909a94ced90681a",
+    "rpcs3/ios/RPCS3IOS.cpp": "5abbac7dce9c15ada28d39af18220600a60c91c0ddec2fd69c05969672f70720",
+    "rpcs3/ios/RPCS3IOS.h": "73bb1a1fe7e8593d8bf6dab4cde2a8cd5463fc73098d923475961b1f48d74d06",
+    "rpcs3/ios/RPCS3IOSContract.h": "ee8fba7e0354a7351dc1989e568926fd2fc4d3467a743d86060f2d530d609c39",
+    "rpcs3/ios/tests/JITArenaAllocatorTests.cpp": "e66e65363931bd08a30d511c1e5d49ea992640ad3b64eb3b19de02652f475dbc",
+    "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577"
+  },
+  "targets": {
+    "Utilities/JITASM.cpp": {
+      "before": "0512eee71b810f08172adda5d58445f5451922a5c5481618454445d42948cfef",
+      "after": "ff80564bf4d688fba0b9c35387cf19c44a55a65b8810626326df28857576ec8d"
+    },
+    "Utilities/JITIOS.cpp": {
+      "before": "fdb2970001ade69da6c38d03ffe9770a8e9341a8fef157aa3eaef635a523d8db",
+      "after": "7bcd1cf3888d4198407a1ef5d2d75f2b8eb086db5a5e05e93f4e86a10b7cd553"
+    },
+    "Utilities/JITIOS.h": {
+      "before": "c192e0f33f29169b9bce000a528677eba9c7c20b4d0b8b74db3a0df8da859e35",
+      "after": "4988afa9fff4ab56ed04778f1baa3ffbe70bd313ea3367723c6684e426ad8ce3"
+    },
+    "Utilities/JITIOSLayoutPolicy.h": {
+      "before": "675edd365104773fa3feaa7b480470116b7c7698197720c33fee79ec67cafa6f",
+      "after": "6cb25a160d68e2dfa546b62d0720d88d278010e08598d25fc0627882a101ac87"
+    },
+    "Utilities/JITLLVM.cpp": {
+      "before": "1567c2ec26620ace348ddf15fe9feb9e82587851ed4eed9c76d6683c7787302d",
+      "after": "a2dc861d77522615849eb587fe8c236453b4b4c4c1ef2bd74f6d75e549d55fac"
+    },
+    "rpcs3/Emu/RSX/VK/VKGSRender.cpp": {
+      "before": "b28ef580cb7f611771ee11a04c92385fed24890d8fd566a07261d7a6769f56a1",
+      "after": "0cbc68b4244d4bbf81e16d24e7ba843ca20a33666a337f2d38b4c8ce72ebff6f"
+    },
+    "rpcs3/Emu/RSX/VK/vkutils/device.h": {
+      "before": "49ee7ec096c364487d3241037243da7f019eea98b8c4b57dc8901d86fb3fd0df",
+      "after": "426a38863cacdae8a03411840ca48d14c649fff3386fe509f239c84dfeaa35f3"
+    },
+    "rpcs3/Emu/system_progress.cpp": {
+      "before": "829674260defec798b72fb4222d7683adf66ee09cd1aeb778ad38e6043814813",
+      "after": "6d026a5ae7f6d829b170d2bc82f21fe02573bc726936acc84909a94ced90681a"
+    },
+    "rpcs3/ios/RPCS3IOS.cpp": {
+      "before": "c115f96f17c75a4681d959e4d7b7b92950754a0857180d2727cf610d1034a97d",
+      "after": "ae19fb8bc5cc5e7a1fbc87efac8ceb16ddff1e65cab2e3088e5d29cbee3fb785"
+    },
+    "rpcs3/ios/RPCS3IOS.h": {
+      "before": "65782f8b25d557cfecd22c0670b76d12b5d796dd8141edceb96d71f53e24b793",
+      "after": "73bb1a1fe7e8593d8bf6dab4cde2a8cd5463fc73098d923475961b1f48d74d06"
+    },
+    "rpcs3/ios/RPCS3IOSContract.h": {
+      "before": "02a410de0648467557c5bc3946cb18358e8af8189a81b3d723a9b2841c92929a",
+      "after": "ee8fba7e0354a7351dc1989e568926fd2fc4d3467a743d86060f2d530d609c39"
+    },
+    "rpcs3/ios/tests/JITArenaAllocatorTests.cpp": {
+      "before": "37cd053cb47ed833b7381eaadf1cc9ce350ceb8b54aacc875082fbea7dcd0480",
+      "after": "e66e65363931bd08a30d511c1e5d49ea992640ad3b64eb3b19de02652f475dbc"
+    },
+    "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": {
+      "before": null,
+      "after": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577"
+    }
+  }
+}

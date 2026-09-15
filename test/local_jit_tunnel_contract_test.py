@@ -161,14 +161,16 @@ class LocalJitTunnelContractTests(unittest.TestCase):
     def test_lifecycle_starts_on_resume_and_stops_on_every_background_state(self):
         main = (ROOT / 'lib/main.dart').read_text()
         lifecycle = (ROOT / 'lib/widgets/app_lifecycle_handler.dart').read_text()
+        policy = (ROOT / 'lib/services/local_jit_lifecycle_policy.dart').read_text()
+        self.assertIn('shouldStopLocalJitForLifecycle(state)', lifecycle)
         service = (ROOT / 'lib/services/local_jit_tunnel_service.dart').read_text()
 
         self.assertIn("refreshInBackground(reason: 'cold start')", main)
         self.assertIn("refreshInBackground(reason: 'app resume')", lifecycle)
         self.assertIn('AppLifecycleState.inactive', lifecycle)
         self.assertIn('AppLifecycleState.paused', lifecycle)
-        self.assertIn('AppLifecycleState.hidden', lifecycle)
-        self.assertIn('AppLifecycleState.detached', lifecycle)
+        self.assertIn('AppLifecycleState.hidden', policy)
+        self.assertIn('AppLifecycleState.detached', policy)
         self.assertIn("reason: 'normal app exit'", lifecycle)
         self.assertIn('LocalJitTunnelService.stopForLifecycle(', lifecycle)
         self.assertIn('++_lifecycleGeneration', service)

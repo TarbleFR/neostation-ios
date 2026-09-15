@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 265
-run-name: NeoStation iOS Build 265 (RSX progress, SPU and video; theme importer removed) • ${{ github.sha }}
+name: NeoStation iOS Build 266
+run-name: NeoStation iOS Build 266 (VPN-JIT and selective RPCS3 v0.9 backports) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -11,19 +11,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: neostation-ios-build-265
+  group: neostation-ios-build-266
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event.head_commit.message != 'ci: source audit only'
     name: Build NeoStation IPA
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '265'
-      IPA_NAME: 'NeoStation-iOS-Build-265-RSX-SPU-Video'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-265-RSX-SPU-Video'
+      BUILD_NUMBER: '266'
+      IPA_NAME: 'NeoStation-iOS-Build-266-JIT-v09'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-266-JIT-v09'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       # First upstream commit containing the iOS RemotePairing OPACK
@@ -100,6 +99,7 @@ jobs:
           test "$(git hash-object "$CONTRACT_SRC/rpcs3/ios/RPCS3IOS.h")" = 20526d090154733100d83fea27c20201db86c7f1
           python3 test/rpcs3_input_abi_test.py "$CONTRACT_SRC" 2>&1 | tee build/rpcs3-ci/input-abi.log
           python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/rpcs3-ci/input-routing.log
+          python3 test/build266_identity_test.py
           python3 test/rpcs3_ipa_validation_test.py 2>&1 | tee build/rpcs3-ci/ipa-validator.log
           python3 test/rpcs3_ingame_ui_contract_test.py 2>&1 | tee build/rpcs3-ci/ingame-ui.log
           python3 test/rpcs3_diagnostics_native_test.py 2>&1 | tee build/rpcs3-ci/diagnostics-native.log
@@ -117,13 +117,13 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Validate theme removal before native compilation
+      - name: Validate frontend and JIT before native compilation
         shell: bash
         run: |
           set -euo pipefail
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
-          flutter test --no-pub test/builtin_theme_catalog_test.dart test/theme_provider_background_persistence_test.dart
+          flutter test --no-pub test/builtin_theme_catalog_test.dart test/theme_provider_background_persistence_test.dart test/local_jit_session_coordinator_test.dart test/local_jit_route_proof_test.dart test/local_jit_lifecycle_policy_test.dart
 
       - name: Prepare build tools
         shell: bash
@@ -148,6 +148,7 @@ jobs:
           import json, os
           from pathlib import Path
           required = ('SCREENSCRAPER_DEV_ID', 'SCREENSCRAPER_DEV_PASSWORD')
+          values = {key: os.environ.get(key, '').strip() for key, value in {}.items()}
           values = {key: os.environ.get(key, '').strip() for key in required}
           missing = [key for key, value in values.items() if not value]
           if missing:
@@ -270,6 +271,10 @@ jobs:
           shasum -a 256 "$CORE"
           strings "$CORE" > build/rpcs3-embedded-core/build265-strings.txt
           grep -q 'NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1' build/rpcs3-embedded-core/build265-strings.txt
+          grep -q 'NEOSTATION_BUILD266_JIT_V09_SHADER_V1' build/rpcs3-embedded-core/build265-strings.txt
+          grep -q 'NEOSTATION_DYNAMIC_JIT_V5' build/rpcs3-embedded-core/build265-strings.txt
+          grep -q 'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1' build/rpcs3-embedded-core/build265-strings.txt
+          cp build-utils/rpcs3/build266-v09-manifest.json build/rpcs3-ci/
 
       - name: Analyze and test
         shell: bash
@@ -290,7 +295,7 @@ jobs:
           python3 test/rpcs3_build265_host_test.py
           python3 test/stikjit_remote_pairing_compat_test.py
           python3 test/local_jit_tunnel_contract_test.py
-          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_build258_runtime_resilience_test.py test/rpcs3_build264_gow3_core_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_build258_runtime_resilience.py build-utils/patch_rpcs3_build264_gow3_core.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
+          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_build258_runtime_resilience_test.py test/rpcs3_build264_gow3_core_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_build258_runtime_resilience.py build-utils/patch_rpcs3_build264_gow3_core.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -409,6 +414,7 @@ jobs:
             "dist/$IPA_NAME.ipa" \
             --report "dist/single-ipa-distribution.json" \
             2>&1 | tee build/rpcs3-ci/single-ipa-validation.log
+          python3 build-utils/validate_build266_identity.py "dist/$IPA_NAME.ipa" --report dist/build266-identity.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
@@ -452,40 +458,3 @@ jobs:
         if: always()
         shell: bash
         run: rm -f .dart-defines.json
-
-  source-audit:
-    if: github.event.head_commit.message == 'ci: source audit only'
-    name: Read-only source snapshot for v0.9 comparison (not an IPA build)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Export exact sources without credentials or build secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p source-audit
-          git bundle create source-audit/neostation.bundle --all
-          SRC="$RUNNER_TEMP/rpcs3-audit"
-          git init -q "$SRC"
-          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
-          BASE=22f1152783cef1f7e04af7b1c895173e28fd5b03
-          HEAD=505a85e5a8f2cdff1cd63168bd2c56b0f92282bf
-          git -C "$SRC" fetch --depth 100 origin "$BASE" "$HEAD"
-          git -C "$SRC" archive "$BASE" | gzip > source-audit/rpcs3-baseline.tar.gz
-          git -C "$SRC" archive "$HEAD" | gzip > source-audit/rpcs3-upstream.tar.gz
-          git -C "$SRC" diff "$BASE" "$HEAD" > source-audit/upstream.diff
-          git -C "$SRC" log --format=fuller "$BASE..$HEAD" > source-audit/upstream-commits.txt
-          curl -fL --retry 3 https://api.github.com/repos/XITRIX/RPCS3-iOS-Releases/releases/tags/v0.9 > source-audit/release-v0.9.json
-          printf 'neostation=%s\nbase=%s\nupstream=%s\n' "$GITHUB_SHA" "$BASE" "$HEAD" > source-audit/revisions.txt
-          sha256sum source-audit/* > source-audit/SHA256SUMS
-      - uses: actions/upload-artifact@v4
-        with:
-          name: neostation-rpcs3-source-audit-${{ github.sha }}
-          path: source-audit/
-          retention-days: 3
-          if-no-files-found: error

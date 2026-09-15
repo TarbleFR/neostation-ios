@@ -4,18 +4,22 @@ import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
 
+import 'local_jit_session_coordinator.dart';
+
 /// Coordinates the local StikJIT route for one foreground NeoStation session.
-///
-/// Route ownership and route availability are separate concepts: LocalDevVPN
-/// may already expose the RemotePairing endpoint, while NeoStation only manages
-/// NeoStationLocalTunnel. All launch paths ask for a validated route through
-/// [ensureRunningForJit] and never start a VPN directly.
+/// Only the native bridge selects/controls a VPN; LocalDevVPN is never mutated.
 class LocalJitTunnelService {
   LocalJitTunnelService._();
 
   static final LoggerService _log = LoggerService.instance;
-  static bool _coldSessionResetDone = false;
   static int _lifecycleGeneration = 0;
+  static final _session = LocalJitSessionCoordinator<LocalJitTunnelState>(
+    ensureRoute: _ensureNativeRoute,
+    stopTunnel: _disableNativeTunnel,
+    onResetError: (error) {
+      _log.w('Could not reset a stale NeoStation local tunnel: $error');
+    },
+  );
 
   static Future<LocalJitTunnelState> status() async {
     if (!Platform.isIOS) {
@@ -31,7 +35,6 @@ class LocalJitTunnelService {
         onDemand: false,
       );
     }
-
     try {
       return await StikjitBridge.localTunnelStatus();
     } on PlatformException catch (error) {
@@ -39,15 +42,12 @@ class LocalJitTunnelService {
     }
   }
 
-  /// Manual compatibility action retained for the Tools screen. The native
-  /// bridge is route-aware, so this reuses a working external JIT route and
-  /// starts NeoStationLocalTunnel only when it is genuinely needed.
   static Future<LocalJitTunnelState> authorizeAndEnable() async {
     return ensureRunningForJit();
   }
 
-  /// Single authoritative JIT preflight shared by RPCS3, Dolphin, MeloNX,
-  /// ARMSX2 and future JIT launch paths.
+  /// Shared by lifecycle activation and all emulators. A game cannot overtake
+  /// the cold reset, and a stale Dart continuation cannot undo a manual stop.
   static Future<LocalJitTunnelState> ensureRunningForJit() async {
     if (!Platform.isIOS) {
       throw const LocalJitTunnelException(
@@ -55,10 +55,20 @@ class LocalJitTunnelService {
         'The integrated local JIT tunnel is available only on iOS.',
       );
     }
+    try {
+      return await _session.ensure();
+    } on LocalJitSessionCancelled {
+      throw const LocalJitTunnelException(
+        'local_tunnel_cancelled',
+        'The local JIT route request was cancelled by a newer stop.',
+      );
+    }
+  }
 
+  static Future<LocalJitTunnelState> _ensureNativeRoute() async {
     try {
       final state = await StikjitBridge.ensureJitRoute();
-      if (!state.active) {
+      if (!state.active || !state.routeVerified) {
         throw LocalJitTunnelException(
           'notConnected',
           'The local JIT route is ${state.status}.',
@@ -77,8 +87,7 @@ class LocalJitTunnelService {
     }
   }
 
-  /// Stops only the manager owned by NeoStation. The native layer filters by
-  /// provider bundle/ownership marker and never mutates LocalDevVPN.
+  /// Invalidates both native requests and not-yet-submitted Dart continuations.
   static Future<LocalJitTunnelState> disable() async {
     if (!Platform.isIOS) {
       throw const LocalJitTunnelException(
@@ -86,6 +95,11 @@ class LocalJitTunnelService {
         'The integrated local JIT tunnel is available only on iOS.',
       );
     }
+    ++_lifecycleGeneration;
+    return _session.stop();
+  }
+
+  static Future<LocalJitTunnelState> _disableNativeTunnel() async {
     try {
       return await StikjitBridge.disableLocalTunnel();
     } on PlatformException catch (error) {
@@ -93,31 +107,10 @@ class LocalJitTunnelService {
     }
   }
 
-  /// Cold start/resume activation is intentionally best-effort so VPN signing
-  /// or authorization errors never block NeoStation's frontend. Game launch
-  /// repeats the same route validation synchronously and surfaces the error.
-  ///
-  /// On the first activation of a process we first neutralize any NeoStation
-  /// tunnel left by an abnormal previous session. The subsequent native route
-  /// check can then distinguish LocalDevVPN from NeoStationLocalTunnel instead
-  /// of mistaking a stale owned route for an external one.
+  /// Best-effort frontend activation. The game repeats the same real preflight.
   static Future<void> refreshInBackground({required String reason}) async {
     if (!Platform.isIOS) return;
     final generation = ++_lifecycleGeneration;
-
-    if (!_coldSessionResetDone) {
-      _coldSessionResetDone = true;
-      try {
-        await disable();
-      } catch (error) {
-        _log.w(
-          'Could not reset a stale NeoStation local tunnel before $reason: '
-          '$error',
-        );
-      }
-      if (generation != _lifecycleGeneration) return;
-    }
-
     try {
       final route = await ensureRunningForJit();
       if (generation != _lifecycleGeneration) return;
@@ -129,16 +122,10 @@ class LocalJitTunnelService {
       );
     } catch (error) {
       if (generation != _lifecycleGeneration) return;
-      _log.w(
-        'Local JIT route activation failed after $reason: $error',
-      );
+      _log.w('Local JIT route activation failed after $reason: $error');
     }
   }
 
-  /// Called for inactive/background/hidden/detached/normal-exit lifecycle
-  /// transitions. Incrementing the generation invalidates a Flutter-side
-  /// activation result while the native manager gives the stop request
-  /// priority over any in-flight start operation.
   static Future<void> stopForLifecycle({required String reason}) async {
     if (!Platform.isIOS) return;
     ++_lifecycleGeneration;
@@ -157,20 +144,21 @@ class LocalJitTunnelService {
     PlatformException error,
     String operation,
   ) {
+    _log.w(
+      'Local JIT tunnel $operation failed (${error.code}): '
+      '${error.message}; details=${error.details}',
+    );
     return LocalJitTunnelException(
       error.code,
-      error.message ??
-          'The NeoStation local JIT tunnel could not $operation.',
+      error.message ?? 'The NeoStation local JIT tunnel could not $operation.',
     );
   }
 }
 
 class LocalJitTunnelException implements Exception {
   const LocalJitTunnelException(this.code, this.message);
-
   final String code;
   final String message;
-
   @override
   String toString() => message;
 }

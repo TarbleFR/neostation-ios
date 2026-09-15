@@ -13,14 +13,18 @@ class StikjitBridge {
     if (raw is! Map) {
       throw StateError('NeoStation local tunnel returned an invalid response.');
     }
-    return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
+    final state = LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
+    if (!state.active || !state.routeVerified) {
+      throw PlatformException(
+        code: 'local_tunnel_jit_route_unavailable',
+        message: 'The native preflight did not verify the RemotePairing route.',
+        details: raw,
+      );
+    }
+    return state;
   }
 
-  /// Returns a route that is already proven usable by StikJIT.
-  ///
-  /// The native manager probes 10.7.0.1:49152 before deciding whether to reuse
-  /// an external LocalDevVPN route or start NeoStationLocalTunnel. No VPN is
-  /// considered valid merely because iOS reports it as connected.
+  /// The native preflight proves endpoint reachability, not merely VPN status.
   static Future<LocalJitTunnelState> ensureJitRoute() => ensureLocalTunnel();
 
   static Future<LocalJitTunnelState> localTunnelStatus() async {
@@ -50,23 +54,19 @@ class StikjitBridge {
       'bundleId': bundleId,
       'gameUrl': gameUrl,
     });
-
     if (raw is! Map) {
       throw StateError('StikJIT bridge returned an invalid response.');
     }
-
     final data = Map<String, dynamic>.from(raw);
     final pidValue = data['pid'];
     if (pidValue is! num) {
       throw StateError('StikJIT bridge did not return the MeloNX PID.');
     }
-
     final logs = <String>[];
     final rawLogs = data['logs'];
     if (rawLogs is List) {
       logs.addAll(rawLogs.map((entry) => entry.toString()));
     }
-
     return StikjitLaunchResult(
       pid: pidValue.toInt(),
       bundleId: data['bundleId']?.toString(),
@@ -87,23 +87,19 @@ class StikjitBridge {
       'bundleId': bundleId,
       'gameUrl': gameUrl,
     });
-
     if (raw is! Map) {
       throw StateError('ARMSX2 StikJIT bridge returned an invalid response.');
     }
-
     final data = Map<String, dynamic>.from(raw);
     final pidValue = data['pid'];
     if (pidValue is! num) {
       throw StateError('ARMSX2 StikJIT bridge did not return the target PID.');
     }
-
     final logs = <String>[];
     final rawLogs = data['logs'];
     if (rawLogs is List) {
       logs.addAll(rawLogs.map((entry) => entry.toString()));
     }
-
     return StikjitLaunchResult(
       pid: pidValue.toInt(),
       bundleId: data['bundleId']?.toString(),
@@ -125,6 +121,7 @@ class LocalJitTunnelState {
     required this.interfaceAddress,
     required this.peerAddress,
     required this.onDemand,
+    this.routeVerified = false,
   });
 
   factory LocalJitTunnelState.fromMap(Map<String, dynamic> data) =>
@@ -138,6 +135,7 @@ class LocalJitTunnelState {
         interfaceAddress: data['interfaceAddress']?.toString(),
         peerAddress: data['peerAddress']?.toString(),
         onDemand: data['onDemand'] == true,
+        routeVerified: data['routeVerified'] == true,
       );
 
   final bool active;
@@ -149,6 +147,7 @@ class LocalJitTunnelState {
   final String? interfaceAddress;
   final String? peerAddress;
   final bool onDemand;
+  final bool routeVerified;
 }
 
 class StikjitLaunchResult {
@@ -159,7 +158,6 @@ class StikjitLaunchResult {
     required this.gameUrlOpened,
     required this.logs,
   });
-
   final int pid;
   final String? bundleId;
   final bool? txmPresent;

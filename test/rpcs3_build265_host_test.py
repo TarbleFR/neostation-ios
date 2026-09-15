@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Build 265 packaging identity, patch order and bounded diagnostic contract."""
+"""Current packaging identity and retained Build 265, patch order and bounded diagnostic contract."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     build = (ROOT / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
-    assert 'BUILD_NUMBER=265' in build
-    assert 'NeoStation-iOS-Build-265-RSX-SPU-Video' in build
+    assert 'BUILD_NUMBER=266' in build
+    assert 'NeoStation-iOS-Build-266-JIT-v09' in build
+    assert build.count('patch_rpcs3_build266_v09_core.py') == 2
+    assert 'rpcs3_build266_v09_core_test.py' in build
     assert build.index('patch_rpcs3_build264_gow3_core.py') < build.index('patch_rpcs3_build265_core.py')
     assert build.count('patch_rpcs3_build265_core.py') == 2
     assert 'rpcs3_build265_core_test.py' in build
