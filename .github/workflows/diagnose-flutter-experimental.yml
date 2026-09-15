@@ -27,6 +27,34 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Export pinned sources for RPCS3 v0.9 review
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source-audit
+          git bundle create source-audit/neostation.bundle --all
+          SRC="$RUNNER_TEMP/rpcs3-audit"
+          git init -q "$SRC"
+          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
+          BASE=22f1152783cef1f7e04af7b1c895173e28fd5b03
+          UPSTREAM=505a85e5a8f2cdff1cd63168bd2c56b0f92282bf
+          git -C "$SRC" fetch --depth 100 origin "$BASE" "$UPSTREAM"
+          git -C "$SRC" archive "$BASE" | gzip > source-audit/rpcs3-baseline.tar.gz
+          git -C "$SRC" archive "$UPSTREAM" | gzip > source-audit/rpcs3-upstream.tar.gz
+          git -C "$SRC" diff "$BASE" "$UPSTREAM" > source-audit/upstream.diff
+          git -C "$SRC" log --format=fuller "$BASE..$UPSTREAM" > source-audit/upstream-commits.txt
+          curl -fL --retry 3 https://api.github.com/repos/XITRIX/RPCS3-iOS-Releases/releases/tags/v0.9 > source-audit/release-v0.9.json
+          printf 'neostation=%s\nbase=%s\nupstream=%s\n' "$GITHUB_SHA" "$BASE" "$UPSTREAM" > source-audit/revisions.txt
+          shasum -a 256 source-audit/* > source-audit/SHA256SUMS
+
+      - name: Upload source audit before running tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: neostation-rpcs3-source-audit-${{ github.sha }}
+          path: source-audit/
+          retention-days: 3
+          if-no-files-found: error
+
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
         with:
