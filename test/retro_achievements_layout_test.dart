@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,16 +8,40 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/screens/retro_achievements_screen/ra_content.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
+    // Localization reads the saved locale before the widget tree is mounted.
+    // Widget tests have no native SharedPreferences implementation.
+    SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('xyz.luan/gamepads'),
+          (call) async => <dynamic>[],
+        );
+
     await FlutterLocalization.instance.ensureInitialized();
     FlutterLocalization.instance.init(
       mapLocales: [MapLocale('en', AppLocale.en)],
       initLanguageCode: 'en',
     );
+  });
+
+  tearDownAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('xyz.luan/gamepads'), null);
+  });
+
+  setUp(() {
+    // Exercise iOS layout and scroll behavior even on a macOS/Linux CI host.
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+  });
+
+  tearDown(() {
+    debugDefaultTargetPlatformOverride = null;
   });
 
   Future<void> pumpDisconnectedRA(
@@ -41,7 +67,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   final cases = <String, ({Size size, bool stacked})>{
@@ -111,6 +137,11 @@ void main() {
           expect(text.softWrap, isNot(false));
         }
 
+        expect(tester.takeException(), isNull);
+        // Dispose focus nodes, gamepad subscriptions and scroll controllers
+        // while the iOS test environment is still active.
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
         expect(tester.takeException(), isNull);
       },
     );
