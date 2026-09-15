@@ -1,9 +1,13 @@
 import Foundation
+import Network
 import NetworkExtension
 
-/// Owns the system VPN configuration for NeoStation's device-local JIT route.
-/// Calls are coalesced so startup, resume and game launch cannot create duplicate
-/// NETunnelProviderManager records.
+/// Owns only NeoStation's system VPN configuration while exposing a route-level
+/// JIT preflight that can reuse a compatible route created by another app.
+///
+/// The important distinction is deliberate: a VPN connection is not a JIT
+/// route. The RemotePairing endpoint at 10.7.0.1:49152 must answer before an
+/// external VPN is accepted. NeoStation never mutates a manager it does not own.
 @available(iOS 17.4, *)
 final class NeoStationLocalTunnelManager {
   static let shared = NeoStationLocalTunnelManager()
@@ -15,40 +19,58 @@ final class NeoStationLocalTunnelManager {
     static let peerAddressKey = "peerAddress"
     static let interfaceAddress = "10.7.1.1"
     static let peerAddress = "10.7.0.1"
+    static let jitPort: UInt16 = 49152
     static let extensionName = "NeoStationLocalTunnel.appex"
     static let localizedDescription = "NeoStation Local JIT Tunnel"
     static let serverAddress = "On-device RemotePairing route"
     static let connectionPollInterval: TimeInterval = 0.25
-    static let connectionTimeout: TimeInterval = 45
-    static let disconnectionTimeout: TimeInterval = 10
+    static let connectionTimeout: TimeInterval = 12
+    static let disconnectionTimeout: TimeInterval = 6
+    static let routeProbeTimeout: TimeInterval = 1.25
+    static let heartbeatInterval: TimeInterval = 1.5
+    static let heartbeatMessage = "heartbeat"
   }
 
   typealias Response = Result<[String: Any], NeoStationLocalTunnelError>
 
   private var ensureInFlight = false
-  private var ensureWaiters = [(Response) -> Void]()
+  private var activeEnsureGeneration: UInt64?
+  private var activeEnsureWaiters = [(Response) -> Void]()
+  private var queuedEnsureWaiters = [(Response) -> Void]()
+
   private var disableInFlight = false
   private var disableWaiters = [(Response) -> Void]()
 
+  /// Incremented by every stop request. Async callbacks from an older start
+  /// generation must observe the mismatch and are therefore unable to restart
+  /// the tunnel after the application asked it to stop.
+  private var operationGeneration: UInt64 = 0
+  private var stopRequested = false
+
+  private var activeManager: NETunnelProviderManager?
+  private var heartbeatTimer: DispatchSourceTimer?
+
   private init() {}
 
+  /// Compatibility entry point used by the Flutter bridge. Despite the legacy
+  /// name, this now guarantees a usable JIT route rather than blindly starting
+  /// NeoStation's own packet tunnel.
   func ensureRunning(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
-      self.ensureWaiters.append(completion)
-      self.beginEnsureIfPossible()
+      if self.disableInFlight || self.stopRequested {
+        self.queuedEnsureWaiters.append(completion)
+      } else if self.ensureInFlight {
+        self.activeEnsureWaiters.append(completion)
+      } else {
+        self.queuedEnsureWaiters.append(completion)
+        self.beginEnsureIfPossible()
+      }
     }
   }
 
   func status(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
-      guard let providerBundleIdentifier = self.providerBundleIdentifier() else {
-        completion(.failure(.extensionMissing))
-        return
-      }
-      if let signingFailure = Self.signingCapabilityFailure() {
-        completion(.failure(signingFailure))
-        return
-      }
+      let providerBundleIdentifier = self.providerBundleIdentifier()
       NETunnelProviderManager.loadAllFromPreferences { managers, error in
         DispatchQueue.main.async {
           if let error {
@@ -64,7 +86,8 @@ final class NeoStationLocalTunnelManager {
           let manager = matching.first(where: {
             Self.isActive($0.connection.status)
           }) ?? matching.first(where: {
-            Self.providerIdentifier(for: $0) == providerBundleIdentifier
+            providerBundleIdentifier != nil &&
+              Self.providerIdentifier(for: $0) == providerBundleIdentifier
           }) ?? matching.first
           completion(.success(self.response(for: manager)))
         }
@@ -72,35 +95,104 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
-  /// Stops the connection and persists the profile as disabled while retaining
-  /// the accepted system configuration. A later enable reuses the same profile
-  /// instead of creating a duplicate VPN entry.
+  /// Stops and disables only NeoStationLocalTunnel. A stop request invalidates
+  /// the current start generation immediately, stops an already-created tunnel
+  /// synchronously, then persists the disabled profile once any in-flight
+  /// preference write has unwound.
   func disable(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
       self.disableWaiters.append(completion)
+      self.stopRequested = true
+      self.operationGeneration &+= 1
+      self.stopHeartbeat()
+      self.activeManager?.connection.stopVPNTunnel()
       self.beginDisableIfPossible()
     }
   }
 
   private func beginEnsureIfPossible() {
     dispatchPrecondition(condition: .onQueue(.main))
-    guard !ensureInFlight, !disableInFlight, !ensureWaiters.isEmpty else {
+    guard !ensureInFlight,
+          !disableInFlight,
+          !stopRequested,
+          !queuedEnsureWaiters.isEmpty else {
       return
     }
+
     ensureInFlight = true
-    performEnsureRunning()
+    operationGeneration &+= 1
+    let generation = operationGeneration
+    activeEnsureGeneration = generation
+    activeEnsureWaiters.append(contentsOf: queuedEnsureWaiters)
+    queuedEnsureWaiters.removeAll(keepingCapacity: true)
+    performEnsureJitRoute(generation: generation)
   }
 
   private func beginDisableIfPossible() {
     dispatchPrecondition(condition: .onQueue(.main))
-    guard !disableInFlight, !ensureInFlight, !disableWaiters.isEmpty else {
+    guard !disableInFlight,
+          !ensureInFlight,
+          !disableWaiters.isEmpty else {
       return
     }
     disableInFlight = true
     performDisable()
   }
 
-  private func performEnsureRunning() {
+  private func performEnsureJitRoute(generation: UInt64) {
+    guard ensureIsCurrent(generation) else {
+      finishEnsure(.failure(.cancelled))
+      return
+    }
+
+    // A manager created in this app process is known to belong to NeoStation;
+    // reuse it without misclassifying its endpoint as an external VPN route.
+    if let manager = activeManager,
+       manager.connection.status == .connected {
+      probeJitRoute { available in
+        guard self.ensureIsCurrent(generation) else {
+          self.finishEnsure(.failure(.cancelled))
+          return
+        }
+        if available {
+          self.startHeartbeat(for: manager)
+          self.finishEnsure(.success(self.response(for: manager)))
+        } else {
+          manager.connection.stopVPNTunnel()
+          self.activeManager = nil
+          self.probeExternalThenEnsureOwned(generation: generation)
+        }
+      }
+      return
+    }
+
+    probeExternalThenEnsureOwned(generation: generation)
+  }
+
+  private func probeExternalThenEnsureOwned(generation: UInt64) {
+    // External route first. This intentionally happens before extension/signing
+    // checks and before looking for another app's VPN manager. LocalDevVPN is a
+    // valid provider only when the actual StikJIT endpoint answers.
+    probeJitRoute { available in
+      guard self.ensureIsCurrent(generation) else {
+        self.finishEnsure(.failure(.cancelled))
+        return
+      }
+      if available {
+        self.stopHeartbeat()
+        self.activeManager = nil
+        self.finishEnsure(.success(self.externalRouteResponse()))
+        return
+      }
+      self.ensureOwnedTunnel(generation: generation)
+    }
+  }
+
+  private func ensureOwnedTunnel(generation: UInt64) {
+    guard ensureIsCurrent(generation) else {
+      finishEnsure(.failure(.cancelled))
+      return
+    }
     guard let providerBundleIdentifier = providerBundleIdentifier() else {
       finishEnsure(.failure(.extensionMissing))
       return
@@ -112,14 +204,24 @@ final class NeoStationLocalTunnelManager {
 
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
+        guard self.ensureIsCurrent(generation) else {
+          self.finishEnsure(.failure(.cancelled))
+          return
+        }
         if let error {
           self.finishEnsure(.failure(Self.configurationFailure(error)))
           return
         }
+
         let loaded = managers ?? []
+        // The endpoint probe already failed. An active non-NeoStation VPN is
+        // therefore not a usable JIT route. Never stop or rewrite that VPN and
+        // never attempt to run two VPN providers simultaneously.
         if let conflicting = loaded.first(where: {
-          !Self.isOwned($0, providerBundleIdentifier: providerBundleIdentifier) &&
-            Self.isActive($0.connection.status)
+          !Self.isOwned(
+            $0,
+            providerBundleIdentifier: providerBundleIdentifier
+          ) && Self.isActive($0.connection.status)
         }) {
           let name = conflicting.localizedDescription ?? "another VPN"
           self.finishEnsure(.failure(.activeVPNConflict(name)))
@@ -127,14 +229,23 @@ final class NeoStationLocalTunnelManager {
         }
 
         let matching = loaded.filter {
-          Self.isOwned($0, providerBundleIdentifier: providerBundleIdentifier)
+          Self.isOwned(
+            $0,
+            providerBundleIdentifier: providerBundleIdentifier
+          )
         }
         let manager = matching.first(where: {
           Self.providerIdentifier(for: $0) == providerBundleIdentifier
         }) ?? matching.first ?? NETunnelProviderManager()
+        self.activeManager = manager
+
         self.removeDuplicateManagers(
           matching.filter { $0 !== manager }
         ) { error in
+          guard self.ensureIsCurrent(generation) else {
+            self.finishEnsure(.failure(.cancelled))
+            return
+          }
           if let error {
             self.finishEnsure(.failure(Self.configurationFailure(error)))
             return
@@ -143,22 +254,14 @@ final class NeoStationLocalTunnelManager {
             manager,
             providerBundleIdentifier: providerBundleIdentifier
           )
-          self.saveReloadAndStart(manager)
+          self.saveReloadAndStart(manager, generation: generation)
         }
       }
     }
   }
 
   private func performDisable() {
-    guard let providerBundleIdentifier = providerBundleIdentifier() else {
-      finishDisable(.failure(.extensionMissing))
-      return
-    }
-    if let signingFailure = Self.signingCapabilityFailure() {
-      finishDisable(.failure(signingFailure))
-      return
-    }
-
+    let providerBundleIdentifier = providerBundleIdentifier()
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
         if let error {
@@ -174,12 +277,16 @@ final class NeoStationLocalTunnelManager {
         guard let manager = matching.first(where: {
           Self.isActive($0.connection.status)
         }) ?? matching.first(where: {
-          Self.providerIdentifier(for: $0) == providerBundleIdentifier
+          providerBundleIdentifier != nil &&
+            Self.providerIdentifier(for: $0) == providerBundleIdentifier
         }) ?? matching.first else {
+          self.activeManager = nil
           self.finishDisable(.success(self.response(for: nil)))
           return
         }
 
+        self.activeManager = manager
+        manager.connection.stopVPNTunnel()
         self.removeDuplicateManagers(
           matching.filter { $0 !== manager }
         ) { error in
@@ -188,11 +295,8 @@ final class NeoStationLocalTunnelManager {
             return
           }
 
-          // Do not call configure() while disabling: configure() deliberately
-          // re-enables both the profile and its on-demand rule. Persist the
-          // exact opposite state first so iOS cannot immediately reassert the
-          // tunnel after stopVPNTunnel(). The saved manager remains available
-          // and configure() will re-enable it on the next explicit start.
+          // Persist the exact disabled state before the final stop. No On-Demand
+          // rule exists anywhere in NeoStation's configuration path.
           manager.isOnDemandEnabled = false
           manager.onDemandRules = []
           manager.isEnabled = false
@@ -240,28 +344,41 @@ final class NeoStationLocalTunnelManager {
     ]
     manager.protocolConfiguration = tunnelProtocol
     manager.localizedDescription = Constants.localizedDescription
-
-    let onDemand = NEOnDemandRuleConnect()
-    onDemand.interfaceTypeMatch = .any
-    manager.onDemandRules = [onDemand]
-    manager.isOnDemandEnabled = true
+    manager.onDemandRules = []
+    manager.isOnDemandEnabled = false
     manager.isEnabled = true
   }
 
-  private func saveReloadAndStart(_ manager: NETunnelProviderManager) {
+  private func saveReloadAndStart(
+    _ manager: NETunnelProviderManager,
+    generation: UInt64
+  ) {
+    guard ensureIsCurrent(generation) else {
+      finishEnsure(.failure(.cancelled))
+      return
+    }
     manager.saveToPreferences { error in
       DispatchQueue.main.async {
+        guard self.ensureIsCurrent(generation) else {
+          self.finishEnsure(.failure(.cancelled))
+          return
+        }
         if let error {
           self.finishEnsure(.failure(Self.configurationFailure(error)))
           return
         }
         manager.loadFromPreferences { error in
           DispatchQueue.main.async {
+            guard self.ensureIsCurrent(generation) else {
+              self.finishEnsure(.failure(.cancelled))
+              return
+            }
             if let error {
               self.finishEnsure(.failure(Self.configurationFailure(error)))
               return
             }
-            self.start(manager)
+            self.activeManager = manager
+            self.start(manager, generation: generation)
           }
         }
       }
@@ -294,9 +411,16 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
-  private func start(_ manager: NETunnelProviderManager) {
+  private func start(
+    _ manager: NETunnelProviderManager,
+    generation: UInt64
+  ) {
+    guard ensureIsCurrent(generation) else {
+      finishEnsure(.failure(.cancelled))
+      return
+    }
     if manager.connection.status == .connected {
-      finishEnsure(.success(response(for: manager)))
+      verifyOwnedRoute(manager, generation: generation)
       return
     }
     if !Self.isActive(manager.connection.status) {
@@ -312,17 +436,24 @@ final class NeoStationLocalTunnelManager {
     }
     waitUntilConnected(
       manager,
+      generation: generation,
       deadline: Date().addingTimeInterval(Constants.connectionTimeout)
     )
   }
 
   private func waitUntilConnected(
     _ manager: NETunnelProviderManager,
+    generation: UInt64,
     deadline: Date
   ) {
+    guard ensureIsCurrent(generation) else {
+      finishEnsure(.failure(.cancelled))
+      return
+    }
+
     switch manager.connection.status {
     case .connected:
-      finishEnsure(.success(response(for: manager)))
+      verifyOwnedRoute(manager, generation: generation)
       return
     case .invalid:
       finishEnsure(
@@ -340,7 +471,50 @@ final class NeoStationLocalTunnelManager {
     DispatchQueue.main.asyncAfter(
       deadline: .now() + Constants.connectionPollInterval
     ) {
-      self.waitUntilConnected(manager, deadline: deadline)
+      self.waitUntilConnected(
+        manager,
+        generation: generation,
+        deadline: deadline
+      )
+    }
+  }
+
+  private func verifyOwnedRoute(
+    _ manager: NETunnelProviderManager,
+    generation: UInt64
+  ) {
+    probeJitRoute { available in
+      guard self.ensureIsCurrent(generation) else {
+        self.finishEnsure(.failure(.cancelled))
+        return
+      }
+      guard available else {
+        self.disableFailedOwnedRoute(manager, generation: generation)
+        return
+      }
+      self.activeManager = manager
+      self.startHeartbeat(for: manager)
+      self.finishEnsure(.success(self.response(for: manager)))
+    }
+  }
+
+  private func disableFailedOwnedRoute(
+    _ manager: NETunnelProviderManager,
+    generation: UInt64
+  ) {
+    manager.connection.stopVPNTunnel()
+    manager.isOnDemandEnabled = false
+    manager.onDemandRules = []
+    manager.isEnabled = false
+    manager.saveToPreferences { _ in
+      DispatchQueue.main.async {
+        guard self.ensureIsCurrent(generation) else {
+          self.finishEnsure(.failure(.cancelled))
+          return
+        }
+        self.activeManager = nil
+        self.finishEnsure(.failure(.routeUnavailable))
+      }
     }
   }
 
@@ -350,6 +524,7 @@ final class NeoStationLocalTunnelManager {
   ) {
     switch manager.connection.status {
     case .disconnected, .invalid:
+      activeManager = nil
       finishDisable(.success(response(for: manager)))
       return
     default:
@@ -357,6 +532,9 @@ final class NeoStationLocalTunnelManager {
     }
 
     guard Date() < deadline else {
+      // The profile is already persisted disabled and stopVPNTunnel() was sent.
+      // Report the timeout without ever trying to re-enable it.
+      activeManager = nil
       finishDisable(.failure(.stop("The VPN connection did not stop.")))
       return
     }
@@ -367,12 +545,111 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
+  /// Bounded TCP probe of the real StikJIT/RemotePairing route. This is the
+  /// authority for external-route reuse; NEVPNStatus alone is never enough.
+  private func probeJitRoute(completion: @escaping (Bool) -> Void) {
+    let queue = DispatchQueue(
+      label: "com.neogamelab.neostation.localtunnel.route-probe",
+      qos: .userInitiated
+    )
+    let port = NWEndpoint.Port(rawValue: Constants.jitPort)!
+    let connection = NWConnection(
+      host: NWEndpoint.Host(Constants.peerAddress),
+      port: port,
+      using: .tcp
+    )
+    var finished = false
+    let finish: (Bool) -> Void = { success in
+      guard !finished else { return }
+      finished = true
+      connection.stateUpdateHandler = nil
+      connection.cancel()
+      DispatchQueue.main.async {
+        completion(success)
+      }
+    }
+
+    connection.stateUpdateHandler = { state in
+      switch state {
+      case .ready:
+        finish(true)
+      case .failed, .cancelled:
+        finish(false)
+      default:
+        break
+      }
+    }
+    connection.start(queue: queue)
+    queue.asyncAfter(
+      deadline: .now() + Constants.routeProbeTimeout
+    ) {
+      finish(false)
+    }
+  }
+
+  private func startHeartbeat(for manager: NETunnelProviderManager) {
+    dispatchPrecondition(condition: .onQueue(.main))
+    stopHeartbeat()
+    guard manager.connection.status == .connected else { return }
+    sendHeartbeat(to: manager)
+
+    let timer = DispatchSource.makeTimerSource(queue: .main)
+    timer.schedule(
+      deadline: .now() + Constants.heartbeatInterval,
+      repeating: Constants.heartbeatInterval,
+      leeway: .milliseconds(200)
+    )
+    timer.setEventHandler { [weak self, weak manager] in
+      guard let self, let manager else { return }
+      guard manager.connection.status == .connected else {
+        self.stopHeartbeat()
+        return
+      }
+      self.sendHeartbeat(to: manager)
+    }
+    heartbeatTimer = timer
+    timer.resume()
+  }
+
+  private func stopHeartbeat() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    heartbeatTimer?.setEventHandler {}
+    heartbeatTimer?.cancel()
+    heartbeatTimer = nil
+  }
+
+  private func sendHeartbeat(to manager: NETunnelProviderManager) {
+    guard let session = manager.connection as? NETunnelProviderSession else {
+      return
+    }
+    do {
+      try session.sendProviderMessage(Data(Constants.heartbeatMessage.utf8)) { _ in }
+    } catch {
+      // The watchdog is authoritative. A transient IPC failure simply means
+      // the extension will close itself if subsequent heartbeats also fail.
+    }
+  }
+
+  private func ensureIsCurrent(_ generation: UInt64) -> Bool {
+    ensureInFlight &&
+      activeEnsureGeneration == generation &&
+      operationGeneration == generation &&
+      !stopRequested
+  }
+
   private func finishEnsure(_ response: Response) {
     dispatchPrecondition(condition: .onQueue(.main))
-    let waiters = ensureWaiters
-    ensureWaiters.removeAll(keepingCapacity: true)
+    guard ensureInFlight else { return }
+    let waiters = activeEnsureWaiters
+    activeEnsureWaiters.removeAll(keepingCapacity: true)
     ensureInFlight = false
-    beginDisableIfPossible()
+    activeEnsureGeneration = nil
+
+    if !disableWaiters.isEmpty {
+      beginDisableIfPossible()
+    } else {
+      beginEnsureIfPossible()
+    }
     for waiter in waiters {
       waiter(response)
     }
@@ -383,6 +660,8 @@ final class NeoStationLocalTunnelManager {
     let waiters = disableWaiters
     disableWaiters.removeAll(keepingCapacity: true)
     disableInFlight = false
+    stopRequested = false
+    activeManager = nil
     beginEnsureIfPossible()
     for waiter in waiters {
       waiter(response)
@@ -395,9 +674,6 @@ final class NeoStationLocalTunnelManager {
        !identifier.isEmpty {
       return identifier
     }
-    // Never manufacture an identifier when a sideload signer removed the
-    // nested extension. Doing so turns a packaging failure into the misleading
-    // NEVPNError.configurationReadWriteFailed shown by iOS.
     return nil
   }
 
@@ -440,9 +716,6 @@ final class NeoStationLocalTunnelManager {
     return (value as? String) == requiredValue
   }
 
-  /// A provisioning profile is a CMS envelope containing an XML property list.
-  /// Reading the embedded property list avoids private entitlement-inspection
-  /// APIs and reflects the profile produced by the user's final sideload signer.
   private static func provisioningEntitlements(
     in bundle: Bundle
   ) -> [String: Any]? {
@@ -479,21 +752,32 @@ final class NeoStationLocalTunnelManager {
     )
   }
 
+  private func externalRouteResponse() -> [String: Any] {
+    [
+      "active": true,
+      "status": "externalRoute",
+      "managedByNeoStation": false,
+      "configured": false,
+      "authorized": false,
+      "enabled": true,
+      "interfaceAddress": NSNull(),
+      "peerAddress": Constants.peerAddress,
+      "onDemand": false,
+    ]
+  }
+
   private func response(
     for manager: NETunnelProviderManager?
   ) -> [String: Any] {
     let status = manager?.connection.status ?? .invalid
     let configured = manager != nil
     let onDemand = manager?.isOnDemandEnabled ?? false
-    let enabled = (manager?.isEnabled ?? false) && onDemand
+    let enabled = manager?.isEnabled ?? false
     return [
       "active": status == .connected,
       "status": Self.statusName(status),
       "managedByNeoStation": true,
       "configured": configured,
-      // NetworkExtension exposes no standalone permission bit. A manager
-      // successfully loaded from preferences is the durable proof that iOS
-      // accepted this app's VPN configuration.
       "authorized": configured,
       "enabled": enabled,
       "interfaceAddress": Constants.interfaceAddress,
@@ -522,9 +806,10 @@ final class NeoStationLocalTunnelManager {
 
   private static func isOwned(
     _ manager: NETunnelProviderManager,
-    providerBundleIdentifier: String
+    providerBundleIdentifier: String?
   ) -> Bool {
-    if providerIdentifier(for: manager) == providerBundleIdentifier {
+    if let providerBundleIdentifier,
+       providerIdentifier(for: manager) == providerBundleIdentifier {
       return true
     }
     guard manager.localizedDescription == Constants.localizedDescription,
@@ -560,22 +845,26 @@ enum NeoStationLocalTunnelError: LocalizedError {
   case extensionMissing
   case signingMissing
   case activeVPNConflict(String)
+  case routeUnavailable
   case configuration(String)
   case start(String)
   case stop(String)
   case permissionDenied
   case timeout
+  case cancelled
 
   var code: String {
     switch self {
     case .extensionMissing: return "extension_missing"
     case .signingMissing: return "signing_missing"
     case .activeVPNConflict: return "vpn_conflict"
+    case .routeUnavailable: return "jit_route_unavailable"
     case .configuration: return "configuration_failed"
     case .start: return "start_failed"
     case .stop: return "stop_failed"
     case .permissionDenied: return "permission_denied"
     case .timeout: return "connection_timeout"
+    case .cancelled: return "cancelled"
     }
   }
 
@@ -586,7 +875,9 @@ enum NeoStationLocalTunnelError: LocalizedError {
     case .signingMissing:
       return "The installed NeoStation signature does not include Apple's packet-tunnel entitlement. Re-sign the complete NeoStation IPA with app extensions enabled and a provisioning profile that authorizes Network Extensions."
     case .activeVPNConflict(let name):
-      return "NeoStation cannot start its local JIT tunnel while \(name) is active. Disconnect the other VPN and retry."
+      return "\(name) is active but does not expose the StikJIT route at 10.7.0.1:49152. NeoStation will not modify that VPN or start a second VPN at the same time."
+    case .routeUnavailable:
+      return "The local tunnel connected, but the StikJIT route at 10.7.0.1:49152 is not reachable."
     case .configuration(let message):
       return "iOS could not save the NeoStation local tunnel. Confirm the VPN permission and preserve the Network Extension entitlement when signing. Technical detail: \(message)"
     case .start(let message):
@@ -596,7 +887,9 @@ enum NeoStationLocalTunnelError: LocalizedError {
     case .permissionDenied:
       return "iOS refused the NeoStation VPN configuration. If no native authorization dialog appeared, the signing profile does not authorize the embedded Network Extension."
     case .timeout:
-      return "The NeoStation local JIT tunnel did not become ready before the timeout."
+      return "The NeoStation local JIT tunnel did not become ready before the bounded connection timeout."
+    case .cancelled:
+      return "The NeoStation local JIT route activation was cancelled because the application requested the tunnel to stop."
     }
   }
 }

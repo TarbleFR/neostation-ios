@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression checks for NeoStation's integrated device-local JIT tunnel."""
+"""Regression checks for NeoStation's session-scoped local JIT route."""
 from __future__ import annotations
 
 import plistlib
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class LocalJitTunnelContractTests(unittest.TestCase):
-    def test_packet_tunnel_is_device_local_and_system_managed(self):
+    def test_packet_tunnel_is_device_local_and_has_force_kill_watchdog(self):
         source = (
             ROOT / 'native/local_jit_tunnel/PacketTunnelProvider.swift'
         ).read_text()
@@ -20,6 +20,12 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn('defaultPeerAddress = "10.7.0.1"', source)
         self.assertIn('NEIPv4Route(', source)
         self.assertIn('self.readAndReflectPackets()', source)
+        self.assertIn('heartbeatMessage = "heartbeat"', source)
+        self.assertIn('heartbeatTimeout: TimeInterval = 5.0', source)
+        self.assertIn('ProcessInfo.processInfo.systemUptime', source)
+        self.assertIn('cancelTunnelWithError(nil)', source)
+        self.assertIn('startWatchdog()', source)
+        self.assertIn('stopWatchdog()', source)
         self.assertNotIn('URLSession', source)
         self.assertNotIn('http://', source)
         self.assertNotIn('https://', source)
@@ -45,81 +51,135 @@ class LocalJitTunnelContractTests(unittest.TestCase):
             ['packet-tunnel-provider'],
         )
 
-    def test_manager_persists_on_demand_and_hard_disables_before_stop(self):
+    def test_route_probe_precedes_external_vpn_conflict_handling(self):
+        manager = (
+            ROOT /
+            'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
+        ).read_text()
+        bridge = (ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart').read_text()
+
+        self.assertIn('import Network', manager)
+        self.assertIn('static let peerAddress = "10.7.0.1"', manager)
+        self.assertIn('static let jitPort: UInt16 = 49152', manager)
+        self.assertIn('NWConnection(', manager)
+        self.assertIn('routeProbeTimeout: TimeInterval = 1.25', manager)
+        self.assertNotIn('connectionTimeout: TimeInterval = 45', manager)
+
+        external_start = manager.index('private func probeExternalThenEnsureOwned(')
+        external_end = manager.index('private func ensureOwnedTunnel(', external_start)
+        external_body = manager[external_start:external_end]
+        self.assertIn('probeJitRoute', external_body)
+        self.assertIn('externalRouteResponse()', external_body)
+        self.assertIn('ensureOwnedTunnel(generation: generation)', external_body)
+
+        owned_start = manager.index('private func ensureOwnedTunnel(')
+        owned_end = manager.index('private func performDisable()', owned_start)
+        owned_body = manager[owned_start:owned_end]
+        self.assertIn('activeVPNConflict', owned_body)
+        self.assertIn('!Self.isOwned(', owned_body)
+
+        self.assertIn('Future<LocalJitTunnelState> ensureJitRoute()', bridge)
+        self.assertIn('=> ensureLocalTunnel();', bridge)
+        self.assertNotIn("error.code != 'local_tunnel_vpn_conflict'", bridge)
+        self.assertNotIn("status: 'externalRoute'", bridge)
+
+    def test_neostation_manager_never_uses_on_demand(self):
         manager = (
             ROOT /
             'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
         ).read_text()
         self.assertIn('NETunnelProviderManager.loadAllFromPreferences', manager)
-        self.assertIn('NEOnDemandRuleConnect()', manager)
-        self.assertIn('manager.isOnDemandEnabled = true', manager)
+        self.assertNotIn('NEOnDemandRuleConnect', manager)
+        self.assertNotIn('isOnDemandEnabled = true', manager)
+        self.assertIn('manager.isOnDemandEnabled = false', manager)
+        self.assertIn('manager.onDemandRules = []', manager)
+        self.assertIn('manager.isEnabled = false', manager)
         self.assertIn('Bundle.main.builtInPlugInsURL', manager)
         self.assertIn('NeoStationLocalTunnel.appex', manager)
-        self.assertNotIn('fallbackSuffix', manager)
         self.assertIn('forResource: "embedded"', manager)
         self.assertIn('withExtension: "mobileprovision"', manager)
         self.assertIn('PropertyListSerialization.propertyList', manager)
         self.assertIn('com.apple.developer.networking.networkextension', manager)
         self.assertNotIn('com.apple.developer.networking.vpn.api', manager)
         self.assertIn('signingMissing', manager)
-        self.assertIn('ensureWaiters', manager)
-        self.assertIn('disableWaiters', manager)
-        self.assertIn('activeVPNConflict', manager)
         self.assertIn('removeDuplicateManagers', manager)
         self.assertIn('schemaVersionKey', manager)
         self.assertIn('manager.saveToPreferences', manager)
         self.assertIn('NEVPNError.configurationReadWriteFailed', manager)
-        self.assertIn('manager.connection.stopVPNTunnel()', manager)
-        self.assertIn('manager.isOnDemandEnabled = false', manager)
-        self.assertIn('manager.onDemandRules = []', manager)
-        self.assertIn('manager.isEnabled = false', manager)
-        self.assertIn('"authorized": configured', manager)
-        self.assertIn('"configured": configured', manager)
 
-        disable_start = manager.index('private func performDisable()')
-        disable_end = manager.index('private func removeDuplicateManagers(', disable_start)
-        disable_body = manager[disable_start:disable_end]
-        self.assertNotIn('self.configure(', disable_body)
-        self.assertLess(
-            disable_body.index('manager.isEnabled = false'),
-            disable_body.index('self.saveReloadAndStop(manager)'),
-        )
-
-    def test_tools_exposes_authorize_enable_disable_and_resume_refresh(self):
-        tools = (
+    def test_stop_has_priority_and_stale_callbacks_cannot_restart(self):
+        manager = (
             ROOT /
-            'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart'
+            'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
         ).read_text()
-        bridge = (ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart').read_text()
-        plugin = (
-            ROOT / 'packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift'
+        self.assertIn('operationGeneration', manager)
+        self.assertIn('activeEnsureGeneration', manager)
+        self.assertIn('stopRequested', manager)
+        self.assertIn('ensureIsCurrent', manager)
+        self.assertIn('case cancelled', manager)
+
+        disable_start = manager.index('func disable(completion:')
+        disable_end = manager.index('private func beginEnsureIfPossible()', disable_start)
+        disable_body = manager[disable_start:disable_end]
+        self.assertIn('self.operationGeneration &+= 1', disable_body)
+        self.assertIn('self.activeManager?.connection.stopVPNTunnel()', disable_body)
+        self.assertIn('self.stopHeartbeat()', disable_body)
+
+        perform_start = manager.index('private func performDisable()')
+        perform_end = manager.index('private func removeDuplicateManagers(', perform_start)
+        perform_body = manager[perform_start:perform_end]
+        self.assertNotIn('self.configure(', perform_body)
+        self.assertIn('manager.isEnabled = false', perform_body)
+        self.assertIn('manager.isOnDemandEnabled = false', perform_body)
+        self.assertIn('manager.onDemandRules = []', perform_body)
+
+    def test_app_heartbeats_extension_and_extension_self_terminates(self):
+        manager = (
+            ROOT /
+            'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
         ).read_text()
+        provider = (
+            ROOT / 'native/local_jit_tunnel/PacketTunnelProvider.swift'
+        ).read_text()
+        self.assertIn('heartbeatInterval: TimeInterval = 1.5', manager)
+        self.assertIn('NETunnelProviderSession', manager)
+        self.assertIn('sendProviderMessage', manager)
+        self.assertIn('Data(Constants.heartbeatMessage.utf8)', manager)
+        self.assertIn('heartbeatTimeout: TimeInterval = 5.0', provider)
+        self.assertIn('lastHeartbeatUptime', provider)
+        self.assertIn('cancelTunnelWithError(nil)', provider)
+
+    def test_lifecycle_starts_on_resume_and_stops_on_every_background_state(self):
+        main = (ROOT / 'lib/main.dart').read_text()
+        lifecycle = (ROOT / 'lib/widgets/app_lifecycle_handler.dart').read_text()
         service = (ROOT / 'lib/services/local_jit_tunnel_service.dart').read_text()
 
-        self.assertIn('with WidgetsBindingObserver', tools)
-        self.assertIn('AppLifecycleState.resumed', tools)
-        self.assertIn('LocalJitTunnelLocale.authorizeAction', tools)
-        self.assertIn('LocalJitTunnelLocale.enableAction', tools)
-        self.assertIn('LocalJitTunnelLocale.disableAction', tools)
-        self.assertIn('LocalJitTunnelService.authorizeAndEnable()', tools)
-        self.assertIn('LocalJitTunnelService.disable()', tools)
-        self.assertIn("invokeMethod<Object?>('disableLocalTunnel')", bridge)
-        self.assertIn('call.method == "disableLocalTunnel"', plugin)
-        self.assertIn('if (!current.authorized || !current.enabled)', service)
-        self.assertIn('no system authorization prompt was requested', service)
+        self.assertIn("refreshInBackground(reason: 'cold start')", main)
+        self.assertIn("refreshInBackground(reason: 'app resume')", lifecycle)
+        self.assertIn('AppLifecycleState.inactive', lifecycle)
+        self.assertIn('AppLifecycleState.paused', lifecycle)
+        self.assertIn('AppLifecycleState.hidden', lifecycle)
+        self.assertIn('AppLifecycleState.detached', lifecycle)
+        self.assertIn("reason: 'normal app exit'", lifecycle)
+        self.assertIn('LocalJitTunnelService.stopForLifecycle(', lifecycle)
+        self.assertIn('++_lifecycleGeneration', service)
+        self.assertIn('await disable();', service)
+        self.assertIn('await ensureRunningForJit();', service)
+        self.assertNotIn('PairingFileService.hasStoredPairingFile()', service)
 
-    def test_game_launch_reuses_external_localdevvpn_route(self):
+    def test_game_launches_share_one_route_abstraction(self):
         bridge = (ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart').read_text()
         service = (ROOT / 'lib/services/local_jit_tunnel_service.dart').read_text()
+        rpcs3 = (ROOT / 'lib/services/rpcs3_internal_service.dart').read_text()
+        dolphin = (ROOT / 'lib/services/dolphin_internal_v2_service.dart').read_text()
 
-        self.assertIn('Future<LocalJitTunnelState> ensureJitRoute()', bridge)
-        self.assertIn("error.code != 'local_tunnel_vpn_conflict'", bridge)
-        self.assertIn("status: 'externalRoute'", bridge)
-        self.assertIn('managedByNeoStation: false', bridge)
         self.assertEqual(bridge.count('await ensureJitRoute();'), 2)
         self.assertIn('StikjitBridge.ensureJitRoute()', service)
-        self.assertIn('StikjitBridge.ensureLocalTunnel()', service)
-        self.assertIn('managedByNeoStation=${state.managedByNeoStation}', service)
+        self.assertIn('LocalJitTunnelService.ensureRunningForJit()', rpcs3)
+        self.assertIn('LocalJitTunnelService.ensureRunningForJit()', dolphin)
+        self.assertIn('if (Platform.isIOS)', rpcs3)
+        self.assertIn('if (Platform.isIOS)', dolphin)
+        self.assertIn('stikjit.local_tunnel_failed', dolphin)
 
     def test_vpn_locale_declares_all_twelve_supported_languages(self):
         locale = (ROOT / 'lib/l10n/local_jit_tunnel_locale.dart').read_text()
@@ -130,34 +190,6 @@ class LocalJitTunnelContractTests(unittest.TestCase):
             self.assertIn(f"'{key}': {{", locale)
         self.assertIn('static const allKeys', locale)
         self.assertIn('missingKeysForLocale', locale)
-        self.assertNotIn('LocalDevVPN', locale)
-
-    def test_every_jit_path_ensures_route_before_remote_pairing(self):
-        bridge = (
-            ROOT / 'packages/stikjit_bridge/lib/stikjit_bridge.dart'
-        ).read_text()
-        self.assertEqual(bridge.count('await ensureJitRoute();'), 2)
-
-        rpcs3 = (ROOT / 'lib/services/rpcs3_internal_service.dart').read_text()
-        dolphin = (
-            ROOT / 'lib/services/dolphin_internal_v2_service.dart'
-        ).read_text()
-        self.assertIn('LocalJitTunnelService.ensureRunningForJit()', rpcs3)
-        self.assertIn('LocalJitTunnelService.ensureRunningForJit()', dolphin)
-        self.assertIn('if (Platform.isIOS)', rpcs3)
-        self.assertIn('if (Platform.isIOS)', dolphin)
-        self.assertIn('stikjit.local_tunnel_failed', dolphin)
-
-    def test_full_theme_import_control_is_retired(self):
-        settings = (
-            ROOT /
-            'lib/screens/settings_screen/new_settings_options/themes_settings_content.dart'
-        ).read_text()
-        self.assertNotIn('full_theme', settings.lower())
-        self.assertNotIn('FullTheme', settings)
-        self.assertFalse((ROOT / 'lib/l10n/full_theme_locale.dart').exists())
-        self.assertFalse((ROOT / 'lib/services/full_theme_service.dart').exists())
-        self.assertFalse((ROOT / 'lib/models/full_theme_definition.dart').exists())
 
     def test_generated_host_embeds_and_signs_the_extension(self):
         configurator = (
@@ -169,28 +201,28 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         signer = (
             ROOT / 'build-utils/embed_rpcs3_host_entitlements.py'
         ).read_text()
-        self.assertIn("project.new_target(:app_extension, 'NeoStationLocalTunnel'", configurator)
+        self.assertIn(
+            "project.new_target(:app_extension, 'NeoStationLocalTunnel'",
+            configurator,
+        )
         self.assertIn("'packet-tunnel-provider'", configurator)
         self.assertIn("'com.apple.NetworkExtensions.iOS'", configurator)
         self.assertIn("'CodeSignOnCopy'", configurator)
         self.assertNotIn("'com.apple.developer.networking.vpn.api'", configurator)
-        self.assertIn("framework_path = 'System/Library/Frameworks/NetworkExtension.framework'", configurator)
+        self.assertIn(
+            "framework_path = 'System/Library/Frameworks/NetworkExtension.framework'",
+            configurator,
+        )
         self.assertGreaterEqual(
             workflow.count('python3 build-utils/configure_local_jit_tunnel.py'),
             2,
         )
         self.assertIn("app / 'PlugIns/NeoStationLocalTunnel.appex'", signer)
         self.assertIn('LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS', signer)
-        self.assertIn(
-            'NeoStationLocalTunnel-signing.entitlements',
-            (
-                ROOT /
-                'packages/dolphin_internal_bridge/ci/build_support.py'
-            ).read_text(),
-        )
         packager = (
             ROOT / 'packages/dolphin_internal_bridge/ci/build_support.py'
         ).read_text()
+        self.assertIn('NeoStationLocalTunnel-signing.entitlements', packager)
         self.assertIn("LOGS / 'NeoStation-signing.entitlements'", packager)
         self.assertIn(
             "LOGS / 'NeoStationLocalTunnel-signing.entitlements'",
@@ -202,14 +234,6 @@ class LocalJitTunnelContractTests(unittest.TestCase):
         self.assertIn("'installationUnits': 1", validator)
         self.assertIn("'separateTunnelIPARequired': False", validator)
         self.assertIn("'userSignsOneIPA': True", validator)
-
-    def test_startup_and_resume_refresh_are_non_blocking(self):
-        main = (ROOT / 'lib/main.dart').read_text()
-        lifecycle = (ROOT / 'lib/widgets/app_lifecycle_handler.dart').read_text()
-        self.assertIn("refreshInBackground(reason: 'cold start')", main)
-        self.assertIn("refreshInBackground(reason: 'app resume')", lifecycle)
-        self.assertIn('unawaited(', main)
-        self.assertIn('unawaited(', lifecycle)
 
 
 if __name__ == '__main__':

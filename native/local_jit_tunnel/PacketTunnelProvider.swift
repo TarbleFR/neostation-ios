@@ -10,13 +10,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     static let peerAddressKey = "peerAddress"
     static let defaultInterfaceAddress = "10.7.1.1"
     static let defaultPeerAddress = "10.7.0.1"
+    static let heartbeatMessage = "heartbeat"
+    static let heartbeatTimeout: TimeInterval = 5.0
+    static let watchdogInterval: TimeInterval = 1.0
   }
 
   private let logger = Logger(
     subsystem: "com.neogamelab.neostation.localtunnel",
     category: "PacketTunnelProvider"
   )
+  private let watchdogQueue = DispatchQueue(
+    label: "com.neogamelab.neostation.localtunnel.watchdog",
+    qos: .utility
+  )
+
   private var stopped = false
+  private var watchdogTimer: DispatchSourceTimer?
+  private var lastHeartbeatUptime: TimeInterval = 0
 
   override func startTunnel(
     options: [String: NSObject]?,
@@ -58,18 +68,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
           NSError(
             domain: "NeoStationLocalTunnel",
             code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "Tunnel provider was released during startup."]
+            userInfo: [
+              NSLocalizedDescriptionKey:
+                "Tunnel provider was released during startup.",
+            ]
           )
         )
         return
       }
       if let error {
-        self.logger.error("Could not apply local tunnel settings: \(error.localizedDescription, privacy: .public)")
+        self.logger.error(
+          "Could not apply local tunnel settings: \(error.localizedDescription, privacy: .public)"
+        )
         completionHandler(error)
         return
       }
 
       self.logger.info("Device-local JIT tunnel is ready.")
+      self.startWatchdog()
       self.readAndReflectPackets()
       completionHandler(nil)
     }
@@ -80,7 +96,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     completionHandler: @escaping () -> Void
   ) {
     stopped = true
-    logger.info("Device-local JIT tunnel stopped with reason \(reason.rawValue).")
+    stopWatchdog()
+    logger.info(
+      "Device-local JIT tunnel stopped with reason \(reason.rawValue)."
+    )
     completionHandler()
   }
 
@@ -88,7 +107,61 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     _ messageData: Data,
     completionHandler: ((Data?) -> Void)? = nil
   ) {
-    completionHandler?(Data("ready".utf8))
+    guard String(data: messageData, encoding: .utf8) ==
+      Configuration.heartbeatMessage else {
+      completionHandler?(Data("ready".utf8))
+      return
+    }
+
+    watchdogQueue.async { [weak self] in
+      guard let self else {
+        completionHandler?(nil)
+        return
+      }
+      self.lastHeartbeatUptime = ProcessInfo.processInfo.systemUptime
+      completionHandler?(Data("alive".utf8))
+    }
+  }
+
+  private func startWatchdog() {
+    watchdogQueue.async { [weak self] in
+      guard let self else { return }
+      self.watchdogTimer?.cancel()
+      self.lastHeartbeatUptime = ProcessInfo.processInfo.systemUptime
+
+      let timer = DispatchSource.makeTimerSource(queue: self.watchdogQueue)
+      timer.schedule(
+        deadline: .now() + Configuration.watchdogInterval,
+        repeating: Configuration.watchdogInterval,
+        leeway: .milliseconds(200)
+      )
+      timer.setEventHandler { [weak self] in
+        guard let self, !self.stopped else { return }
+        let elapsed =
+          ProcessInfo.processInfo.systemUptime - self.lastHeartbeatUptime
+        guard elapsed >= Configuration.heartbeatTimeout else { return }
+
+        self.logger.error(
+          "NeoStation heartbeat expired after \(elapsed, privacy: .public)s; closing the local tunnel."
+        )
+        self.stopped = true
+        self.watchdogTimer?.setEventHandler {}
+        self.watchdogTimer?.cancel()
+        self.watchdogTimer = nil
+        self.cancelTunnelWithError(nil)
+      }
+      self.watchdogTimer = timer
+      timer.resume()
+    }
+  }
+
+  private func stopWatchdog() {
+    watchdogQueue.async { [weak self] in
+      guard let self else { return }
+      self.watchdogTimer?.setEventHandler {}
+      self.watchdogTimer?.cancel()
+      self.watchdogTimer = nil
+    }
   }
 
   private func readAndReflectPackets() {

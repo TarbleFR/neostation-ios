@@ -33,18 +33,8 @@ class _RAContentState extends State<RAContent>
   final ScrollController _loginScrollController = ScrollController();
   final ScrollController _dashboardScrollController = ScrollController();
 
-  /// Connected dashboard: whether the cursor is parked on the header's logout
-  /// button. Nothing is selected at rest — Right parks on it, Left releases it,
-  /// and Up/Down stay dedicated to scrolling the dashboard.
   bool _logoutSelected = false;
-
-  /// Set while Right is scrolling the header back into view, so the scroll
-  /// listener doesn't read that movement as the user leaving the button.
   bool _scrollingToLogout = false;
-
-  /// Matches the ScreenScraper login's password field, which the RA card sits
-  /// next to: an API key is as worth hiding as a password, and as easy to
-  /// mistype without being able to check it.
   bool _obscureApiKey = true;
   GamepadNavigation? _gamepadNav;
 
@@ -107,8 +97,6 @@ class _RAContentState extends State<RAContent>
     return true;
   }
 
-  /// Releases the logout parking when the dashboard scrolls off the top by any
-  /// means, so a touch scroll can't leave the button armed behind the content.
   void _releaseLogoutOnScroll() {
     if (_scrollingToLogout) return;
     if (!_logoutSelected || !_dashboardScrollController.hasClients) return;
@@ -141,9 +129,6 @@ class _RAContentState extends State<RAContent>
   Future<void> _connectToRA() async {
     final raProvider = context.read<RetroAchievementsProvider>();
     if (raProvider.isLoading) return;
-    // Same up-front check (and message) as the ScreenScraper login: without it
-    // an empty submit round-trips to the API and surfaces a raw connection
-    // error instead of telling the user what is missing.
     if (_usernameController.text.trim().isEmpty ||
         _apiKeyController.text.trim().isEmpty) {
       AppNotification.showNotification(
@@ -197,8 +182,6 @@ class _RAContentState extends State<RAContent>
     super.dispose();
   }
 
-  /// Returns whether the selection/scroll actually moved, so the gamepad
-  /// handler can suppress the nav sound at a boundary.
   bool _handleNavigateUp() {
     if (!context.read<RetroAchievementsProvider>().isConnected) {
       return moveSelection(-1);
@@ -213,11 +196,6 @@ class _RAContentState extends State<RAContent>
     return _scrollDashboard(160.r);
   }
 
-  /// Right parks the cursor on the header's logout button.
-  ///
-  /// The header scrolls with the content, so anything below the top has to come
-  /// back into view first — parking on a button that is off screen would leave
-  /// the highlight invisible and A destructive-looking out of nowhere.
   bool _handleNavigateRight() {
     if (!context.read<RetroAchievementsProvider>().isConnected) return false;
     if (_logoutSelected) return false;
@@ -290,45 +268,77 @@ class _RAContentState extends State<RAContent>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: 64.r), // Space for header (32.r + margin)
-          // Contenido principal
-          if (!raProvider.isConnected) ...[
+          SizedBox(height: 64.r),
+          if (!raProvider.isConnected)
             Expanded(
-              child: Scrollbar(
-                controller: _loginScrollController,
-                thumbVisibility: true,
-                child: SingleChildScrollView(
-                  controller: _loginScrollController,
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.only(bottom: keyboardInset + 16.r),
-                  child: Center(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16.r),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              constraints: BoxConstraints(maxWidth: 260.r),
-                              child: _buildLandscapeConnectionForm(
-                                context,
-                                raProvider,
-                              ),
+              child: LayoutBuilder(
+                builder: (context, viewport) {
+                  return SingleChildScrollView(
+                    key: const ValueKey('ra-login-scroll'),
+                    controller: _loginScrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.only(bottom: keyboardInset + 16.r),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minWidth: viewport.maxWidth,
+                      ),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 960),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16.r),
+                            child: LayoutBuilder(
+                              key: const ValueKey('ra-responsive-layout'),
+                              builder: (context, content) {
+                                final useColumns = content.maxWidth >= 720;
+                                if (useColumns) {
+                                  return Row(
+                                    key: const ValueKey(
+                                      'ra-two-column-layout',
+                                    ),
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        flex: 10,
+                                        child: _buildLandscapeConnectionForm(
+                                          context,
+                                          raProvider,
+                                        ),
+                                      ),
+                                      SizedBox(width: 16.r),
+                                      Expanded(
+                                        flex: 11,
+                                        child: _buildInfoBox(context),
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return Column(
+                                  key: const ValueKey('ra-stacked-layout'),
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildLandscapeConnectionForm(
+                                      context,
+                                      raProvider,
+                                    ),
+                                    SizedBox(height: 16.r),
+                                    _buildInfoBox(context),
+                                  ],
+                                );
+                              },
                             ),
-                            SizedBox(width: 16.r),
-                            SizedBox(width: 300.r, child: _buildInfoBox(context)),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
-            ),
-          ] else ...[
+            )
+          else
             Expanded(
               child: RepaintBoundary(
                 child: RADashboardHub(
@@ -338,7 +348,6 @@ class _RAContentState extends State<RAContent>
                 ),
               ),
             ),
-          ],
         ],
       ),
     );
@@ -373,6 +382,8 @@ class _RAContentState extends State<RAContent>
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Container(
+      key: const ValueKey('ra-connection-card'),
+      width: double.infinity,
       padding: EdgeInsets.all(16.r),
       decoration: BoxDecoration(
         color: theme.cardColor.withValues(alpha: 0.25),
@@ -385,7 +396,6 @@ class _RAContentState extends State<RAContent>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Header principal con logo y titre
           Row(
             children: [
               Expanded(
@@ -400,10 +410,7 @@ class _RAContentState extends State<RAContent>
               ),
             ],
           ),
-
           SizedBox(height: 12.r),
-
-          // Username field
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
             child: _buildFieldHighlight(
@@ -465,8 +472,6 @@ class _RAContentState extends State<RAContent>
             ),
           ),
           SizedBox(height: 6.r),
-
-          // API key field
           Container(
             constraints: BoxConstraints(maxWidth: 220.r),
             child: _buildFieldHighlight(
@@ -552,9 +557,6 @@ class _RAContentState extends State<RAContent>
             ),
           ),
           SizedBox(height: 6.r),
-
-          // Direct users to the page where RetroAchievements exposes their
-          // personal Web API key, without asking the app to handle passwords.
           Container(
             constraints: BoxConstraints(maxWidth: 320.r),
             decoration: isSelected(2)
@@ -599,8 +601,6 @@ class _RAContentState extends State<RAContent>
             ),
           ),
           SizedBox(height: 6.r),
-
-          // Connect button
           Container(
             constraints: BoxConstraints(maxWidth: 320.r),
             decoration: isSelected(submitSlot)
@@ -658,6 +658,8 @@ class _RAContentState extends State<RAContent>
   Widget _buildInfoBox(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
+      key: const ValueKey('ra-info-card'),
+      width: double.infinity,
       padding: EdgeInsets.all(16.r),
       decoration: BoxDecoration(
         color: theme.cardColor.withValues(alpha: 0.25),
@@ -686,6 +688,7 @@ class _RAContentState extends State<RAContent>
                     color: theme.colorScheme.primary,
                     fontSize: 14.r,
                   ),
+                  softWrap: true,
                 ),
               ),
             ],
@@ -757,6 +760,7 @@ class _RAContentState extends State<RAContent>
     return Padding(
       padding: EdgeInsets.only(bottom: 8.r),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
             icon,

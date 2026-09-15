@@ -16,31 +16,12 @@ class StikjitBridge {
     return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
   }
 
-  /// Returns a route that StikJIT can validate for the game-launch path.
+  /// Returns a route that is already proven usable by StikJIT.
   ///
-  /// NeoStation still owns and manages only its embedded tunnel. If iOS reports
-  /// another active VPN, do not attempt to replace it here: LocalDevVPN may
-  /// already provide the 10.7.0.1 RemotePairing route. The subsequent StikJIT
-  /// preparation remains the authoritative reachability/DDI validation and
-  /// will reject an unrelated VPN with its normal actionable error.
-  static Future<LocalJitTunnelState> ensureJitRoute() async {
-    try {
-      return await ensureLocalTunnel();
-    } on PlatformException catch (error) {
-      if (error.code != 'local_tunnel_vpn_conflict') rethrow;
-      return const LocalJitTunnelState(
-        active: true,
-        status: 'externalRoute',
-        managedByNeoStation: false,
-        configured: false,
-        authorized: false,
-        enabled: true,
-        interfaceAddress: null,
-        peerAddress: '10.7.0.1',
-        onDemand: false,
-      );
-    }
-  }
+  /// The native manager probes 10.7.0.1:49152 before deciding whether to reuse
+  /// an external LocalDevVPN route or start NeoStationLocalTunnel. No VPN is
+  /// considered valid merely because iOS reports it as connected.
+  static Future<LocalJitTunnelState> ensureJitRoute() => ensureLocalTunnel();
 
   static Future<LocalJitTunnelState> localTunnelStatus() async {
     final raw = await _channel.invokeMethod<Object?>('localTunnelStatus');
