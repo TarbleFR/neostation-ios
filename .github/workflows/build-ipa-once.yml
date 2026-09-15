@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event.head_commit.message != 'ci: source audit only'
     name: Build NeoStation IPA
     runs-on: macos-15
     timeout-minutes: 240
@@ -289,7 +290,7 @@ jobs:
           python3 test/rpcs3_build265_host_test.py
           python3 test/stikjit_remote_pairing_compat_test.py
           python3 test/local_jit_tunnel_contract_test.py
-          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_build258_runtime_resilience_test.py test/rpcs3_build264_gow3_core_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_build258_runtime_resilience.py build-utils/patch_rpcs3_build264_gow3_core.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
+          python3 -m py_compile test/local_jit_tunnel_contract_test.py test/rpcs3_build258_runtime_resilience_test.py test/rpcs3_build264_gow3_core_test.py test/rpcs3_jit_memory_test.py test/stikjit_rpcs3_patch_test.py test/rpcs3_input_bridge_test.py test/rpcs3_input_abi_test.py test/rpcs3_neostation_session_patch_test.py test/rpcs3_serial_profile_patch_test.py test/rpcs3_profile_database_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_telemetry_comparison_test.py test/rpcs3_iso_integrity_patch_test.py test/rpcs3_ingame_ui_contract_test.py test/rpcs3_armsx3_performance_patch_test.py test/rpcs3_performance_telemetry_patch_test.py test/rpcs3_build256_core_patch_test.py test/rpcs3_build256_host_patch_test.py build-utils/configure_local_jit_tunnel.py build-utils/generate_rpcs3_ios_profiles.py build-utils/compare_rpcs3_telemetry.py build-utils/patch_rpcs3_neostation_session.py build-utils/patch_rpcs3_serial_profiles.py build-utils/patch_rpcs3_iso_integrity.py build-utils/patch_rpcs3_savestate_stability.py build-utils/patch_rpcs3_build256_savestates.py build-utils/patch_rpcs3_armsx3_performance.py build-utils/patch_rpcs3_build258_runtime_resilience.py build-utils/patch_rpcs3_build264_gow3_core.py build-utils/patch_rpcs3_performance_telemetry.py build-utils/patch_rpcs3_build256_host.py build-utils/validate_rpcs3_ipa.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -451,3 +452,40 @@ jobs:
         if: always()
         shell: bash
         run: rm -f .dart-defines.json
+
+  source-audit:
+    if: github.event.head_commit.message == 'ci: source audit only'
+    name: Read-only source snapshot for v0.9 comparison (not an IPA build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export exact sources without credentials or build secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source-audit
+          git bundle create source-audit/neostation.bundle --all
+          SRC="$RUNNER_TEMP/rpcs3-audit"
+          git init -q "$SRC"
+          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
+          BASE=22f1152783cef1f7e04af7b1c895173e28fd5b03
+          HEAD=505a85e5a8f2cdff1cd63168bd2c56b0f92282bf
+          git -C "$SRC" fetch --depth 100 origin "$BASE" "$HEAD"
+          git -C "$SRC" archive "$BASE" | gzip > source-audit/rpcs3-baseline.tar.gz
+          git -C "$SRC" archive "$HEAD" | gzip > source-audit/rpcs3-upstream.tar.gz
+          git -C "$SRC" diff "$BASE" "$HEAD" > source-audit/upstream.diff
+          git -C "$SRC" log --format=fuller "$BASE..$HEAD" > source-audit/upstream-commits.txt
+          curl -fL --retry 3 https://api.github.com/repos/XITRIX/RPCS3-iOS-Releases/releases/tags/v0.9 > source-audit/release-v0.9.json
+          printf 'neostation=%s\nbase=%s\nupstream=%s\n' "$GITHUB_SHA" "$BASE" "$HEAD" > source-audit/revisions.txt
+          sha256sum source-audit/* > source-audit/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neostation-rpcs3-source-audit-${{ github.sha }}
+          path: source-audit/
+          retention-days: 3
+          if-no-files-found: error
