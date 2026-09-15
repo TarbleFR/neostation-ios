@@ -235,8 +235,8 @@ NATIVE_PREAMBLE = r'''
 #include <unistd.h>
 using namespace rpcs3::ios::jit;
 std::mutex g_arena_mutex;
-std::string last_error;
-void set_error(std::string message) { last_error=std::move(message); }
+std::string native_test_last_error;
+void set_error(std::string message) { native_test_last_error=std::move(message); }
 u64 physical_memory_size() { return 4ull*1024*1024*1024; }
 usz page_size() { return static_cast<usz>(::getpagesize()); }
 bool legacy_debugger_is_ready() { return true; }
