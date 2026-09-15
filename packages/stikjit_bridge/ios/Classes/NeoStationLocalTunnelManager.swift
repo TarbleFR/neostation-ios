@@ -101,12 +101,19 @@ final class NeoStationLocalTunnelManager {
   /// preference write has unwound.
   func disable(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
+      // A later stop also invalidates foreground resumes queued behind an
+      // earlier stop. Only requests arriving after this stop may restart.
+      let cancelledWaiters = self.queuedEnsureWaiters
+      self.queuedEnsureWaiters.removeAll(keepingCapacity: true)
       self.disableWaiters.append(completion)
       self.stopRequested = true
       self.operationGeneration &+= 1
       self.stopHeartbeat()
       self.activeManager?.connection.stopVPNTunnel()
       self.beginDisableIfPossible()
+      for waiter in cancelledWaiters {
+        waiter(.failure(.cancelled))
+      }
     }
   }
 

@@ -6,11 +6,20 @@ import plistlib
 import unittest
 from pathlib import Path
 
+from local_jit_state_machine_check import check_state_machine
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class LocalJitTunnelContractTests(unittest.TestCase):
+    def test_real_swift_queue_cancels_resumes_older_than_the_last_stop(self):
+        manager = (
+            ROOT /
+            'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
+        ).read_text()
+        self.assertIn('PASS: queued-stop cancellation', check_state_machine(manager))
+
     def test_packet_tunnel_is_device_local_and_has_force_kill_watchdog(self):
         source = (
             ROOT / 'native/local_jit_tunnel/PacketTunnelProvider.swift'
