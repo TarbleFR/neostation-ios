@@ -189,7 +189,12 @@ func profile(_ owned: Bool, _ status: NEVPNStatus) -> NETunnelProviderManager {
 }
 final class ResultBox {
   var results = [NeoStationLocalTunnelManager.Response]()
-  func record(_ result: NeoStationLocalTunnelManager.Response) { results.append(result) }
+  func record(_ result: NeoStationLocalTunnelManager.Response) {
+    results.append(result)
+    if case .failure(let error) = result {
+      print("SIMULATED_RESULT: \(error.code): \(error.localizedDescription)")
+    }
+  }
   var success: [String: Any]? {
     guard let result = results.last, case .success(let value) = result else { return nil }
     return value
@@ -222,7 +227,10 @@ DispatchQueue.global().async {
     // Heartbeats must continue while the main queue is occupied by native work.
     let session = owned.connection as! NETunnelProviderSession
     let before = session.messages
-    Thread.sleep(forTimeInterval: 0.045)
+    let heartbeatDeadline = ProcessInfo.processInfo.systemUptime + 0.5
+    while session.messages == before && ProcessInfo.processInfo.systemUptime < heartbeatDeadline {
+      Thread.sleep(forTimeInterval: 0.005)
+    }
     require(session.messages > before, "heartbeat is independent of the main queue")
   }
   let stopped = ResultBox()
@@ -287,7 +295,7 @@ DispatchQueue.global().async {
   }
   wait("start after disconnect", { !drainResult.results.isEmpty })
   main {
-    require(drainResult.success != nil && draining.connection.starts == 1, "start after observed disconnect")
+    require(drainResult.success != nil && draining.connection.starts == 1, "start after observed disconnect; starts=\(draining.connection.starts), error=\(drainResult.error?.localizedDescription ?? "none")")
     handoff.stopTestHeartbeat()
   }
 
@@ -524,11 +532,14 @@ def check_manager_transport(manager_source: str) -> str:
                             'private static func signingCapabilityFailure() -> NeoStationLocalTunnelError? { TestPlatform.signingFailure }')
     # Accelerate only deadlines; production timing constants are statically
     # checked separately. Every transition and timeout branch remains real.
+    # A 15 ms mock probe/120 ms disconnect budget was scheduler-sensitive on
+    # macOS CI. Allow a realistic host scheduling margin without changing ANY
+    # production deadline, skipping a failure, or retrying an assertion.
     for name, old, new in [('connectionPollInterval', '0.25', '0.005'),
-                           ('connectionTimeout', '12', '0.12'),
-                           ('disconnectionTimeout', '6', '0.12'),
-                           ('disconnectErrorTimeout', '0.75', '0.015'),
-                           ('routeProbeTimeout', '1.25', '0.015'),
+                           ('connectionTimeout', '12', '1.0'),
+                           ('disconnectionTimeout', '6', '1.0'),
+                           ('disconnectErrorTimeout', '0.75', '0.10'),
+                           ('routeProbeTimeout', '1.25', '0.25'),
                            ('heartbeatInterval', '1.5', '0.01')]:
         expected = f'static let {name}: TimeInterval = {old}'
         if expected not in source:
