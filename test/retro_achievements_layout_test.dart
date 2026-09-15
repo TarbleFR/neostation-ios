@@ -35,15 +35,6 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('xyz.luan/gamepads'), null);
   });
 
-  setUp(() {
-    // Exercise iOS layout and scroll behavior even on a macOS/Linux CI host.
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-  });
-
-  tearDown(() {
-    debugDefaultTargetPlatformOverride = null;
-  });
-
   Future<void> pumpDisconnectedRA(
     WidgetTester tester,
     Size size,
@@ -144,6 +135,9 @@ void main() {
         await tester.pump();
         expect(tester.takeException(), isNull);
       },
+      // TestVariant restores the platform before Flutter verifies its global
+      // invariants; an outer tearDown callback runs too late for that check.
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
     );
   }
 }
