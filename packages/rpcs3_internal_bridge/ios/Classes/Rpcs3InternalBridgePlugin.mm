@@ -293,17 +293,26 @@ static void RPCS3Progress(void* context,
     [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks/libRPCS3Core.dylib"],
   ];
   void* handle = NULL;
+  NSString* lastLoadError = @"unknown";
   dlerror();
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
       RPCS3Diagnostic(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
       handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
-      RPCS3Diagnostic(@"core_load_end", handle ? @"loaded" : @"dlopen failed");
+      if (handle) {
+        RPCS3Diagnostic(@"core_load_end", @"loaded");
+      } else {
+        const char* loadError = dlerror();
+        if (loadError) lastLoadError = [NSString stringWithUTF8String:loadError] ?: @"unknown";
+        RPCS3Diagnostic(@"core_load_end",
+                        [NSString stringWithFormat:@"dlopen failed: %@", lastLoadError]);
+      }
       if (handle) break;
     }
   }
   if (!handle) {
-    if (error) *error = [NSString stringWithFormat:@"libRPCS3Core.dylib is missing or could not load: %s", dlerror() ?: "unknown"];
+    if (error) *error = [NSString stringWithFormat:
+        @"libRPCS3Core.dylib is missing or could not load: %@", lastLoadError];
     return NO;
   }
 #define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"Missing RPCS3 symbol %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); self.coreLoadedWithExpandedJit = NO; return NO; } } while (0)

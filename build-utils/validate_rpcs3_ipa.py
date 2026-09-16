@@ -23,6 +23,10 @@ from embed_rpcs3_host_entitlements import (
     require_entitlements,
     require_runtime_entitlements,
 )
+from validate_rpcs3_embedded_core import (
+    FORBIDDEN_UNDEFINED_SYMBOLS,
+    validate_core,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_NAME = 'libRPCS3Core.dylib'
@@ -107,6 +111,7 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
         demand(core.is_file(), f'Packaged RPCS3 core missing: Frameworks/{CORE_NAME}')
         demand(core.stat().st_size >= 60_000_000,
                f'Packaged RPCS3 core is unexpectedly small: {core.stat().st_size} bytes')
+        validate_core(core.read_bytes())
 
         symbols = command_output('nm', '-g', str(core))
         missing_symbols = [symbol for symbol in REQUIRED_CORE_SYMBOLS if f' {symbol}' not in symbols]
@@ -168,6 +173,8 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'bundleIdentifier': str(info.get('CFBundleIdentifier', '')),
             'rpcS3CoreBytes': core.stat().st_size,
             'rpcS3RequiredSymbols': list(REQUIRED_CORE_SYMBOLS),
+            'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),
+            'rpcS3LoadTimeImportsValidated': True,
             'runtimeEntitlements': {
                 key: entitlements.get(key) for key in REQUIRED_RUNTIME_ENTITLEMENTS
             },

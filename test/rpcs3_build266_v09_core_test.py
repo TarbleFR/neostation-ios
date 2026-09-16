@@ -88,6 +88,17 @@ class Core266Tests(unittest.TestCase):
         text += function(source, 'u8* reserve_code_data_layout(') + '\n' + RESERVATION_CASES
         self.run_cpp(text, 'reservation')
 
+    def test_v5_reservation_has_no_forbidden_load_time_import_sources(self):
+        source = (SOURCE / 'Utilities/JITIOS.cpp').read_text()
+        self.assertNotIn('#include <os/log.h>', source)
+        self.assertNotIn('os_log_error(', source)
+        self.assertNotIn('::vm_map(', source)
+        reservation = function(source, 'u8* reserve_arena_layout(')
+        self.assertIn('MAP_PRIVATE | MAP_ANON', reservation)
+        self.assertNotIn('MAP_FIXED | MAP_PRIVATE', reservation)
+        self.assertIn('mapping == reinterpret_cast<void*>(candidate)', reservation)
+        self.assertIn('::munmap(mapping, size)', reservation)
+
     def test_shader_checkpoint_order_optout_and_stop(self):
         render = (SOURCE / 'rpcs3/Emu/RSX/VK/VKGSRender.cpp').read_text()
         body = function(render, 'void VKGSRender::on_init_thread()')
@@ -130,26 +141,26 @@ RESERVATION_STUBS = r'''
 #include <vector>
 using vm_address_t = std::uintptr_t;
 using vm_size_t = std::size_t;
-constexpr int VM_FLAGS_FIXED=0, VM_PROT_NONE=0, VM_PROT_ALL=7;
-constexpr int VM_INHERIT_DEFAULT=1, MACH_PORT_NULL=0, KERN_SUCCESS=0;
+constexpr int PROT_NONE=0, MAP_PRIVATE=1, MAP_ANON=2, KERN_SUCCESS=0;
 constexpr int jit_vm_tag=123;
+void* const MAP_FAILED=reinterpret_cast<void*>(~std::uintptr_t{0});
 int mach_task_self() { return 1; }
 struct Range { vm_address_t a, b; };
 std::vector<Range> holes, allocations;
 unsigned maps=0, rollbacks=0;
-int vm_map(int, vm_address_t* address, vm_size_t size, int, int flags,
-           int, int, bool copy, int prot, int maxprot, int) {
- assert(flags == (VM_FLAGS_FIXED | jit_vm_tag));
- assert(!copy && prot==VM_PROT_NONE && maxprot==VM_PROT_ALL);
+void* mmap(void* hint, vm_size_t size, int prot, int flags, int fd, long offset) {
+ assert(prot==PROT_NONE && flags==(MAP_PRIVATE|MAP_ANON));
+ assert(fd==jit_vm_tag && offset==0);
  ++maps;
- const Range want{*address, *address+size};
+ const auto address=reinterpret_cast<vm_address_t>(hint);
+ const Range want{address,address+size};
  bool allowed=false;
  for (auto h:holes) if (h.a<=want.a && want.b<=h.b) allowed=true;
  for (auto r:allocations) if (want.a<r.b && r.a<want.b) allowed=false;
- if (!allowed) return 1;
- allocations.push_back(want); return KERN_SUCCESS;
+ if (!allowed) return MAP_FAILED;
+ allocations.push_back(want); return hint;
 }
-int vm_deallocate(int, vm_address_t address, vm_size_t size) {
+int release(vm_address_t address, vm_size_t size) {
  ++rollbacks;
  vm_size_t removed=0;
  allocations.erase(std::remove_if(allocations.begin(), allocations.end(), [&](Range r) {
@@ -159,6 +170,12 @@ int vm_deallocate(int, vm_address_t address, vm_size_t size) {
  // The code must release only ranges it successfully reserved, never a hole,
  // an occupied foreign mapping, or an adjacent unrelated reservation.
  assert(removed==size); return KERN_SUCCESS;
+}
+int munmap(void* address, vm_size_t size) {
+ return release(reinterpret_cast<vm_address_t>(address),size);
+}
+int vm_deallocate(int, vm_address_t address, vm_size_t size) {
+ return release(address,size);
 }
 '''
 RESERVATION_CASES = r'''
@@ -170,7 +187,7 @@ int main() {
  reset({{B,E}});
  auto code=reserve_code_data_layout(512*mib,data,size);
  assert(reinterpret_cast<vm_address_t>(code)==B);
- assert(data==code+512*mib && size==512*mib && maps==64);
+ assert(data==code+512*mib && size==512*mib && maps==1);
  // Occupied initial address is skipped without overwriting it.
  reset({{B+64*mib,E}});
  code=reserve_code_data_layout(512*mib,data,size);
@@ -180,7 +197,6 @@ int main() {
  code=reserve_code_data_layout(512*mib,data,size);
  assert(reinterpret_cast<vm_address_t>(code)==B);
  assert(reinterpret_cast<vm_address_t>(data)==B+768*mib && size==256*mib);
- assert(rollbacks>0);
  auto total=vm_size_t{0}; for(auto r:allocations) total+=r.b-r.a;
  assert(total==768*mib);
  // A distant data hole outside ADRP reach is NOT accepted; no partial leak.

@@ -71,6 +71,54 @@ def patch(source: Path, upstream_source: Path | None = None) -> None:
     for name in COPIED:
         updated[name] = upstream[name]
 
+    # The v0.9 source adds direct imports of vm_map and os_log helpers that are
+    # absent from the known-good V4 Core.
+    # Build 266 device logs show dyld terminating while dlopen resolves the Core,
+    # before rpcs3_ios_initialize or any arena code can run. Keep the v0.9
+    # low-address policy, but reserve exact non-overwriting ranges with mmap --
+    # a public primitive already used by the proven V4 Core -- and leave early
+    # errors in g_last_error for the host instead of importing os_log internals.
+    jit_ios = updated['Utilities/JITIOS.cpp']
+    jit_ios = jit_ios.replace('#include <os/log.h>\n', '')
+    jit_ios = jit_ios.replace(
+        '\t// Core constructors can fail before the frontend log callback is installed.\n'
+        '\tos_log_error(OS_LOG_DEFAULT, "RPCS3 JIT: %{public}s", message.c_str());\n',
+        '')
+    upstream_reservation = function(jit_ios, 'u8* reserve_arena_layout(')
+    safe_reservation = '''u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_begin,
+\tvm_address_t end = arena_address_end) noexcept
+{
+\t// Reserve the whole candidate without MAP_FIXED. Darwin may treat the
+\t// requested address as a hint, so accept only an exact result and release
+\t// every fallback mapping. This never overwrites an occupied dylib/stack
+\t// range and avoids the Build 266-only load-time dependency on vm_map.
+\tif (!size || begin < arena_address_begin || end > arena_address_end || begin >= end || size > end - begin)
+\t{
+\t\treturn nullptr;
+\t}
+
+\tbegin = (begin + arena_address_step - 1) & ~(arena_address_step - 1);
+\tfor (vm_address_t candidate = begin; candidate <= end - size; candidate += arena_address_step)
+\t{
+\t\tvoid* const mapping = ::mmap(reinterpret_cast<void*>(candidate), size, PROT_NONE,
+\t\t\tMAP_PRIVATE | MAP_ANON, jit_vm_tag, 0);
+\t\tif (mapping == MAP_FAILED)
+\t\t{
+\t\t\tcontinue;
+\t\t}
+\t\tif (mapping == reinterpret_cast<void*>(candidate))
+\t\t{
+\t\t\treturn static_cast<u8*>(mapping);
+\t\t}
+\t\t::munmap(mapping, size);
+\t}
+\treturn nullptr;
+}'''
+    jit_ios = jit_ios.replace(upstream_reservation, safe_reservation)
+    if '#include <os/log.h>' in jit_ios or 'os_log_error(' in jit_ios or '::vm_map(' in jit_ios:
+        raise RuntimeError('Build 266 retained a forbidden load-time JIT import')
+    updated['Utilities/JITIOS.cpp'] = jit_ios
+
     # Preserve the existing shared RW/RX proof; the upstream allocator alone
     # does not demonstrate that its writable alias is coherent with RX pages.
     original = (ROOT / 'build-utils/rpcs3/jit_arena.cpp.inc').read_text()
