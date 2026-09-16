@@ -252,13 +252,6 @@
      dispatch_async(dispatch_get_main_queue(), ^{
        RPCS3GameViewController* controller = self.gameController;
        [controller.inputController stop];
-@@ -977,4 +995,4 @@
-   });
- }
-
--@end
-\ No newline at end of file
-+@end
 --- a/packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm
 +++ b/packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm
 @@ -1,5 +1,6 @@
