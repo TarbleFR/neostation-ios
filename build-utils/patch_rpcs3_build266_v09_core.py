@@ -14,6 +14,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = '505a85e5a8f2cdff1cd63168bd2c56b0f92282bf'
+JIT_MARKER = 'NEOSTATION_DYNAMIC_JIT_V5'
+BUILD_MARKER = 'NEOSTATION_BUILD266_JIT_V09_SHADER_V1'
+SHADER_CHECKPOINT_MARKER = 'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1'
 MANIFEST = ROOT / 'build-utils/rpcs3/build266-v09-manifest.json'
 COPIED = (
     'Utilities/JITIOS.cpp', 'Utilities/JITIOS.h', 'Utilities/JITIOSLayoutPolicy.h',
@@ -79,7 +82,7 @@ def patch(source: Path, upstream_source: Path | None = None) -> None:
         'discard_layout(layout, capacity, data, data_capacity, alias);')
     updated['Utilities/JITIOS.cpp'] = updated['Utilities/JITIOS.cpp'].replace(
         '\tg_arena.code_allocator.reset(capacity);',
-        '\t// NEOSTATION_DYNAMIC_JIT_V5: low-VA code/data plus shared-alias proof.\n' +
+        f'\t// {JIT_MARKER}: low-VA code/data plus shared-alias proof.\n' +
         proof + '\n\tg_arena.code_allocator.reset(capacity);')
 
     api = updated['rpcs3/ios/RPCS3IOS.cpp']
@@ -87,11 +90,11 @@ def patch(source: Path, upstream_source: Path | None = None) -> None:
                       function(upstream['rpcs3/ios/RPCS3IOS.cpp'], 'void emit_jit_arena_statistics('))
     api = api.replace('prepare_arena(config->expanded_jit_arena != 0)',
                       'prepare_arena(config->expanded_jit_arena)')
-    api = api.replace('NEOSTATION_DYNAMIC_JIT_V4', 'NEOSTATION_DYNAMIC_JIT_V5')
+    api = api.replace('NEOSTATION_DYNAMIC_JIT_V4', JIT_MARKER)
     api = api.replace('contiguous debugger-prepared RX/RW arena verified',
                       'low-address debugger-prepared RX/RW arena verified')
     api = api.replace('\\"lto\\":',
-                      '\\"build266\\":\\"NEOSTATION_BUILD266_JIT_V09_SHADER_V1\\",'
+                      f'\\"build266\\":\\"{BUILD_MARKER}\\",'
                       f'\\"jit_backport\\":\\"{REVISION}\\",\\"lto\\":')
     updated['rpcs3/ios/RPCS3IOS.cpp'] = api
 

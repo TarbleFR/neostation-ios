@@ -100,6 +100,7 @@ jobs:
           python3 test/rpcs3_input_abi_test.py "$CONTRACT_SRC" 2>&1 | tee build/rpcs3-ci/input-abi.log
           python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/rpcs3-ci/input-routing.log
           python3 test/build266_identity_test.py
+          python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_ipa_validation_test.py 2>&1 | tee build/rpcs3-ci/ipa-validator.log
           python3 test/rpcs3_ingame_ui_contract_test.py 2>&1 | tee build/rpcs3-ci/ingame-ui.log
           python3 test/rpcs3_diagnostics_native_test.py 2>&1 | tee build/rpcs3-ci/diagnostics-native.log
