@@ -8,7 +8,6 @@ the app are rebuilt; Dolphin retains its existing source-hash cache checks.
 from pathlib import Path
 import hashlib
 import json
-import shutil
 import subprocess
 import sys
 import zipfile
@@ -25,6 +24,7 @@ ALLOWED = {
     'build-utils/reuse_build266_rpcs3_for267.py',
     'build-utils/validate_build266_identity.py',
     'test/dolphin_account_267_test.py',
+    'test/rpcs3_savestate_ui_contract_test.py',
 }
 changed = set(subprocess.check_output(
     ['git', 'diff', '--name-only', BASE, 'HEAD'], cwd=ROOT, text=True).splitlines())
