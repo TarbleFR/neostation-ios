@@ -162,11 +162,71 @@ print("PASS: build269 startup grace, first heartbeat transition, five-second nor
 '''
 
 
+
+def check_native_dispatch():
+    """Compile the production Flutter handler, replacing only platform effects."""
+    bridge = (ROOT / 'packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift').read_text()
+    begin = bridge.index('  public func handle(')
+    end = bridge.index('    guard call.method == "enableMeloNxJit"', begin)
+    handler = bridge[begin:end] + '    result(FlutterError(code: "unsupported", message: nil, details: nil))\n  }\n'
+    harness = r'''
+import Foundation
+public struct FlutterMethodCall { let method: String; let arguments: Any? }
+public typealias FlutterResult = (Any?) -> Void
+struct FlutterError { let code: String; let message: String?; let details: Any? }
+enum RouteFailure: Error {
+  case failed
+  var code: String { "test_failure" }
+  var localizedDescription: String { "test failure" }
+}
+final class NeoStationLocalTunnelManager {
+  static let shared = NeoStationLocalTunnelManager()
+  typealias Response = Result<[String: Any], RouteFailure>
+  var calls = [String]()
+  var fail = false
+  func reply(_ name: String, _ completion: (Response) -> Void) {
+    calls.append(name)
+    completion(fail ? .failure(.failed) : .success(["operation": name]))
+  }
+  func ensureRunning(completion: (Response) -> Void) { reply("automatic", completion) }
+  func enableOwned(completion: (Response) -> Void) { reply("owned", completion) }
+  func status(completion: (Response) -> Void) { reply("status", completion) }
+  func disable(completion: (Response) -> Void) { reply("disable", completion) }
+  func beginDebuggerLease(completion: (Response) -> Void) { reply("leaseBegin", completion) }
+  func endDebuggerLease(token: String, completion: (Response) -> Void) { reply("leaseEnd", completion) }
+}
+final class ProductionHandler {
+/* HANDLER */
+}
+let handler = ProductionHandler()
+let manager = NeoStationLocalTunnelManager.shared
+let token = "00000000-0000-4000-8000-000000000001"
+for (method, operation) in [
+  ("activateOwnedTunnel", "owned"), ("ensureLocalTunnel", "automatic"),
+  ("localTunnelStatus", "status"), ("disableLocalTunnel", "disable"),
+  ("beginDebuggerLease", "leaseBegin"), ("endDebuggerLease", "leaseEnd")
+] {
+  for failing in [false, true] {
+    manager.calls = []; manager.fail = failing
+    var results = [Any?]()
+    handler.handle(FlutterMethodCall(method: method, arguments: ["token": token])) { results.append($0) }
+    precondition(manager.calls == [operation], "dispatch must call only its own operation once")
+    precondition(results.count == 1, "Flutter result must complete exactly once")
+    if failing { precondition((results[0] as? FlutterError)?.code == "local_tunnel_test_failure") }
+    else { precondition((results[0] as? [String: String])?["operation"] == operation) }
+  }
+}
+print("PASS: build269 production Flutter-native dispatch compiles; explicit ON and automatic routing remain distinct")
+'''.replace('/* HANDLER */', handler)
+    print(transport.run_swift(harness, 'PASS: build269'))
+
+
 def main():
     before = [M.read_bytes(), P.read_bytes()]
     subprocess.run(['python3', str(ROOT / 'build-utils/patch_local_tunnel_build269.py')], check=True)
     assert before == [M.read_bytes(), P.read_bytes()], 'Current patch must be idempotent'
     manager, provider = M.read_text(), P.read_text()
+    check_native_dispatch()
     print(transport.check_manager_transport(manager, scenarios=HELPERS + SCENARIOS, marker='PASS: build269'))
     source = provider.replace('import NetworkExtension\n', '').replace('import os.log\n', '')
     print(transport.run_swift(transport.PROVIDER_PLATFORM + source + PROVIDER_TESTS, 'PASS: build269'))
