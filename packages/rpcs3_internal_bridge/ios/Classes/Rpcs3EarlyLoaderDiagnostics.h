@@ -1,5 +1,9 @@
 #pragma once
+// CocoaPods also imports public headers from Objective-C and Swift. The RAII
+// capture is implementation-only C++ and must not leak into those importers.
+#ifdef __cplusplus
 #import <Foundation/Foundation.h>
+#import "Rpcs3Diagnostics.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdio>
@@ -66,3 +70,4 @@ public:
     }
   }
 };
+#endif // __cplusplus
