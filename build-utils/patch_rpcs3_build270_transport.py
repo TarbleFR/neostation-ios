@@ -248,7 +248,7 @@ private final class Rpcs3HelperJournal {
   }
   func takePrevious() -> [String] {
     guard let path else { return [] }
-    defer { try? FileManager.defaultManager.removeItem(at: path) }
+    defer { try? FileManager.default.removeItem(at: path) }
     guard let size = try? path.resourceValues(forKeys: [.fileSizeKey]).fileSize,
           size <= 262144, let data = try? Data(contentsOf: path),
           let previous = (try? JSONSerialization.jsonObject(with: data)) as? [String] else { return [] }
