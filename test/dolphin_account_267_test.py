@@ -164,11 +164,20 @@ def contracts():
 
 
 def native():
+    # Do not select the newest installed OS: newer Xcode runtimes coexist on
+    # hosted runners and can fail to connect to the older XCTest manager.
+    sdk = subprocess.check_output(['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], text=True).strip()
+    runtime_key = 'com.apple.CoreSimulator.SimRuntime.iOS-' + sdk.replace('.', '-')
     devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
-    candidates = [device for runtime, items in sorted(devices.items(), reverse=True)
-                  if '.iOS-' in runtime for device in items if device['name'].startswith('iPhone') and device.get('isAvailable')]
+    candidates = [device for runtime, items in devices.items() if runtime == runtime_key
+                  for device in items if device['name'].startswith('iPhone') and device.get('isAvailable')]
     if not candidates:
-        raise RuntimeError('An available iOS simulator is required for account-tap validation')
+        raise RuntimeError(f'A simulator matching the selected Xcode SDK {sdk} is required; installed: {sorted(devices)}')
+    device = candidates[0]
+    print(f"Testing on {device['name']} / iOS {sdk} / {device['udid']}", flush=True)
+    if device.get('state') != 'Booted':
+        subprocess.run(['xcrun', 'simctl', 'boot', device['udid']], check=True, timeout=60)
+    subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=180)
     with tempfile.TemporaryDirectory(prefix='dolphin-account-tests-') as folder:
         directory = Path(folder)
         (directory / 'main.m').write_text(APP)
@@ -178,8 +187,8 @@ def native():
             'name': 'DolphinAccount267',
             'options': {'deploymentTarget': {'iOS': '17.4'}},
             'settings': {'base': {'CLANG_ENABLE_OBJC_ARC': 'YES', 'CLANG_ENABLE_MODULES': 'YES',
-                                  'CODE_SIGNING_ALLOWED': 'NO', 'GENERATE_INFOPLIST_FILE': 'YES',
-                                  'HEADER_SEARCH_PATHS': str(CLASSES)}},
+                                  'CODE_SIGNING_ALLOWED': 'YES', 'CODE_SIGN_IDENTITY': '-',
+                                  'GENERATE_INFOPLIST_FILE': 'YES', 'HEADER_SEARCH_PATHS': str(CLASSES)}},
             'targets': {
                 'DolphinAccountHost': {'type': 'application', 'platform': 'iOS',
                     'sources': [str(directory / 'main.m'), str(CLASSES / 'DolphinSessionMenu.mm'),
@@ -203,8 +212,11 @@ def native():
         result = ROOT / 'build/rpcs3-ci/DolphinAccount267.xcresult'
         result.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(['xcodebuild', 'test', '-project', str(directory / 'DolphinAccount267.xcodeproj'),
-            '-scheme', 'DolphinAccount267', '-destination', 'platform=iOS Simulator,id=' + candidates[0]['udid'],
-            '-parallel-testing-enabled', 'NO', '-resultBundlePath', str(result), 'CODE_SIGNING_ALLOWED=NO'], check=True)
+            '-scheme', 'DolphinAccount267', '-destination', 'platform=iOS Simulator,id=' + device['udid'],
+            '-destination-timeout', '60', '-parallel-testing-enabled', 'NO',
+            '-test-timeouts-enabled', 'YES', '-default-test-execution-time-allowance', '60',
+            '-maximum-test-execution-time-allowance', '120', '-resultBundlePath', str(result),
+            'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'DEVELOPMENT_TEAM='], check=True, timeout=600)
 
 
 if __name__ == '__main__':
