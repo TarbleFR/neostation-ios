@@ -37,7 +37,7 @@ assert version, 'Workflow must declare an explicit build number'
 if f'BUILD_NUMBER={version.group(1)}' not in build:
     # A host-only release may retain the exact known-good core. Never pretend
     # that the old core was recompiled with the new application's build number.
-    assert version.group(1) == '267' and 'BUILD_NUMBER=266' in build
+    assert version.group(1) in ('267', '268') and 'BUILD_NUMBER=266' in build
     reuse = (root / 'build-utils/reuse_build266_rpcs3_for267.py').read_text()
     assert 'python3 build-utils/reuse_build266_rpcs3_for267.py build/reference266' in workflow
     assert 'run-id: 35140629752' in workflow
@@ -45,6 +45,9 @@ if f'BUILD_NUMBER={version.group(1)}' not in build:
     assert 'changed - ALLOWED' in reuse
     assert "hashlib.sha256(data).hexdigest() != CORE_SHA256" in reuse
     assert "CORE_SHA256 = 'dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'" in reuse
+    if version.group(1) == '268':
+        assert 'python3 test/rpcs3_build268_tunnel_test.py' in workflow
+        assert 'local_jit_debugger_lease_test.dart' in workflow
 assert build.count('patch_rpcs3_armsx3_performance.py') == 2
 assert build.count('patch_rpcs3_serial_profiles.py') == 2
 assert workflow.count('patch_rpcs3_performance_telemetry.py') >= 2
