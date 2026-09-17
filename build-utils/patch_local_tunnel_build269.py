@@ -331,7 +331,7 @@ change(UI, '''    try {
       disable = _shouldDisableTunnel(previous);
       if (!mounted) return;
       setState(() { _tunnelState = previous; _isDisablingTunnel = disable; });
-      final wasAuthorized = previous?.authorized == true;''')
+      final wasAuthorized = previous.authorized;''')
 # Both error branches independently refresh and preserve their original error.
 change(UI, '''        'Could not change the local JIT tunnel state.',
         error: error,
