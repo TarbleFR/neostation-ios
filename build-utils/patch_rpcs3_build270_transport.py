@@ -293,6 +293,14 @@ private final class Rpcs3HelperJournal {
            'enum NEVPNStatus { case connected, disconnected }\nfinal class TestConnection {\n  var status = NEVPNStatus.connected')
     change('test/local_jit_state_machine_check.py', '  private func stopHeartbeat() { heartbeatStops += 1 }',
            '  private func stopHeartbeat() { heartbeatStops += 1 }\n  private func response(for manager: NETunnelProviderManager, routeVerified: Bool) -> [String: Any] { ["active": true] }')
+    # Retain the 268 error/timeout/late-callback tests against the new lease
+    # methods. Their queue-only fixture needs the added state and timer effects.
+    lease_test = 'test/rpcs3_build268_tunnel_test.py'
+    change(lease_test,
+           "    subprocess.run(['python3', str(ROOT / 'build-utils/patch_local_tunnel_build269.py')], check=True)",
+           "    subprocess.run(['python3', str(ROOT / 'build-utils/patch_rpcs3_build270_transport.py')], check=True)")
+    change(lease_test, '  var operationGeneration: UInt64 = 0',
+           '  var operationGeneration: UInt64 = 0\n  var activeDebuggerToken: String?\n  var trace = [String]()\n  func stopHeartbeat() {}\n  func startHeartbeat(for manager: NETunnelProviderManager) {}')
     # Allowlisted host-only additions; this never permits a changed core source.
     reuse = 'build-utils/reuse_build266_rpcs3_for267.py'
     change(reuse, "ALLOWED = {", "ALLOWED = {\n    'build-utils/patch_rpcs3_build270_transport.py',\n    'build-utils/rpcs3/build270_packet_pump.swift.inc',\n    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3EarlyLoaderDiagnostics.h',\n    'test/rpcs3_build270_transport_test.py',\n    'test/native/rpcs3_early_loader_test.mm',\n    'build-utils/validate_build270_identity.py',")
