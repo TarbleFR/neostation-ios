@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify retained Build 266 fixes and optional Build 267 Dolphin account code.
+"""Verify retained core fixes, Dolphin account flow and Build 268 JIT transport.
 
 This supplements validate_rpcs3_ipa.py's Mach-O, dependency, entitlement and
 package checks. Binary identity checks are not on-device execution tests.
@@ -21,6 +21,10 @@ PROVIDER_MARKER = b'Local tunnel startup was cancelled by a newer stop.'
 MANAGER_MARKERS = (b'iOS supplied no disconnect error', b'localtunnel.heartbeat')
 DOLPHIN_ACCOUNT_MARKERS = (b'DolphinRetroAchievementsAccount', b'loginRequestForUsername:password:',
                            b'emulator-player', b'raRestartRequired')
+LEASE_PROVIDER_MARKERS = (b'jitLeaseBegin', b'jitLeaseEnd',
+                          b'RPCS3 debugger lease armed; watchdog remains bounded.')
+LEASE_MANAGER_MARKERS = (b'beginDebuggerLease', b'endDebuggerLease',
+                         b'RPCS3 debugger lease acknowledgement timed out.')
 
 
 def validate(path: Path, build_number: str = '266') -> dict:
@@ -46,21 +50,28 @@ def validate(path: Path, build_number: str = '266') -> dict:
                           '.framework/' in n and n.rsplit('/', 1)[1] == n.split('.framework/')[0].rsplit('/', 1)[1]]
         owner = None
         account_owner = None
+        lease_owner = None
         for name in host_binaries:
             data = archive.read(name)
             if all(marker in data for marker in MANAGER_MARKERS):
                 owner = name
             if all(marker in data for marker in DOLPHIN_ACCOUNT_MARKERS):
                 account_owner = name
+            if all(marker in data for marker in LEASE_MANAGER_MARKERS):
+                lease_owner = name
         require(owner is not None, 'Final host lacks bounded disconnect diagnostics/dedicated heartbeat')
-        if str(build_number) == '267':
+        if str(build_number) in ('267', '268'):
             require(account_owner is not None, 'Final Dolphin bridge lacks the Build 267 account flow')
+        if str(build_number) == '268':
+            require(all(marker in provider for marker in LEASE_PROVIDER_MARKERS),
+                    'Final provider lacks the Build 268 debugger lease')
+            require(lease_owner is not None, 'Final host lacks the Build 268 lease handshake')
         return {
             'build': str(build_number), 'coreMarkersVerified': [m.decode() for m in CORE_MARKERS],
             'coreSHA256': hashlib.sha256(core).hexdigest(),
             'providerSHA256': hashlib.sha256(provider).hexdigest(),
             'managerBinary': owner, 'dolphinAccountBinary': account_owner,
-            'deviceTested': False,
+            'debuggerLeaseBinary': lease_owner, 'deviceTested': False,
         }
 
 
