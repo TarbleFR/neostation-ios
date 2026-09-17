@@ -226,16 +226,16 @@ change(MANAGER, '''      "onDemand": manager?.isOnDemandEnabled ?? false, "route
 change(BRIDGE, '    if call.method == "ensureLocalTunnel" {',
        '    if call.method == "ensureLocalTunnel" || call.method == "activateOwnedTunnel" {')
 change(BRIDGE, '      NeoStationLocalTunnelManager.shared.ensureRunning { response in',
-       '      let complete: (NeoStationLocalTunnelManager.Response) -> Void = { response in')
+       '      let activationCompletion: (NeoStationLocalTunnelManager.Response) -> Void = { response in')
 change(BRIDGE, '''      }
       return
     }
 
     if call.method == "localTunnelStatus"''', '''      }
       if call.method == "activateOwnedTunnel" {
-        NeoStationLocalTunnelManager.shared.enableOwned(completion: complete)
+        NeoStationLocalTunnelManager.shared.enableOwned(completion: activationCompletion)
       } else {
-        NeoStationLocalTunnelManager.shared.ensureRunning(completion: complete)
+        NeoStationLocalTunnelManager.shared.ensureRunning(completion: activationCompletion)
       }
       return
     }
