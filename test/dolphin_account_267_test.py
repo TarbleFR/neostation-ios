@@ -159,7 +159,6 @@ def contracts():
     all_keys = set(translations['en'])
     for language, values in translations.items():
         assert set(values) == all_keys and all(values.values()), language
-    # New form keys and replacement status text must exist in every locale.
     assert {'raAccount', 'raUsername', 'raPassword', 'raLinked', 'raRestartRequired'} <= all_keys
     print('Dolphin account Build 267 source contracts: OK', flush=True)
 
@@ -174,20 +173,23 @@ def native():
         directory = Path(folder)
         (directory / 'main.m').write_text(APP)
         (directory / 'DolphinAccountTests.mm').write_text(TESTS)
+        sdk_dependencies = [{'sdk': 'UIKit.framework'}, {'sdk': 'Foundation.framework'}, {'sdk': 'Security.framework'}]
         project = {
             'name': 'DolphinAccount267',
             'options': {'deploymentTarget': {'iOS': '17.4'}},
-            'settings': {'base': {'CLANG_ENABLE_OBJC_ARC': 'YES', 'CODE_SIGNING_ALLOWED': 'NO',
-                                  'GENERATE_INFOPLIST_FILE': 'YES', 'HEADER_SEARCH_PATHS': str(CLASSES)}},
+            'settings': {'base': {'CLANG_ENABLE_OBJC_ARC': 'YES', 'CLANG_ENABLE_MODULES': 'YES',
+                                  'CODE_SIGNING_ALLOWED': 'NO', 'GENERATE_INFOPLIST_FILE': 'YES',
+                                  'HEADER_SEARCH_PATHS': str(CLASSES)}},
             'targets': {
                 'DolphinAccountHost': {'type': 'application', 'platform': 'iOS',
                     'sources': [str(directory / 'main.m'), str(CLASSES / 'DolphinSessionMenu.mm'),
                                 str(CLASSES / 'DolphinRetroAchievementsAccount.mm')],
+                    'dependencies': sdk_dependencies,
                     'settings': {'base': {'PRODUCT_BUNDLE_IDENTIFIER': 'org.neostation.accounttests.host',
                         'INFOPLIST_KEY_UILaunchScreen_Generation': 'YES'}}},
                 'DolphinAccountTests': {'type': 'bundle.unit-test', 'platform': 'iOS',
                     'sources': [str(directory / 'DolphinAccountTests.mm')],
-                    'dependencies': [{'target': 'DolphinAccountHost'}],
+                    'dependencies': [{'target': 'DolphinAccountHost'}] + sdk_dependencies,
                     'settings': {'base': {'PRODUCT_BUNDLE_IDENTIFIER': 'org.neostation.accounttests.tests',
                         'TEST_HOST': '$(BUILT_PRODUCTS_DIR)/DolphinAccountHost.app/DolphinAccountHost',
                         'BUNDLE_LOADER': '$(TEST_HOST)'}}},
