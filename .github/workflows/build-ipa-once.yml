@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 269
-run-name: NeoStation iOS Build 269 (Integrated VPN activation and handoff fix) • ${{ github.sha }}
+name: NeoStation iOS Build 270
+run-name: NeoStation iOS Build 270 (RPCS3 JIT packet transport and loader fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: neostation-ios-build-269
+  group: neostation-ios-build-270
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '269'
-      IPA_NAME: 'NeoStation-iOS-Build-269-VPN-Activation'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-269-VPN-Activation'
+      BUILD_NUMBER: '270'
+      IPA_NAME: 'NeoStation-iOS-Build-270-RPCS3-JIT-Transport'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-270-RPCS3-JIT-Transport'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       IDEVICE_SHA: 6fb49aeb33e8e27f2e52267729b631e53c87e1d9
@@ -75,6 +75,10 @@ jobs:
           python3 build-utils/patch_local_tunnel_build269.py
           python3 build-utils/patch_local_tunnel_build269.py
           python3 test/local_tunnel_build269_test.py 2>&1 | tee build/rpcs3-ci/vpn-activation-tests.log
+          cp native/local_jit_tunnel/PacketTunnelProvider.swift build/rpcs3-ci/provider269-baseline.swift
+          python3 build-utils/patch_rpcs3_build270_transport.py
+          python3 build-utils/patch_rpcs3_build270_transport.py
+          python3 test/rpcs3_build270_transport_test.py --baseline build/rpcs3-ci/provider269-baseline.swift 2>&1 | tee build/rpcs3-ci/rpcs3-build270-transport-tests.log
           python3 test/dolphin_account_267_test.py
           python3 test/rpcs3_ingame_ui_contract_test.py
           python3 test/rpcs3_build260_modern_menu_test.py
@@ -409,9 +413,10 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report "dist/single-ipa-distribution.json" \
             2>&1 | tee build/rpcs3-ci/single-ipa-validation.log
-          python3 build-utils/validate_build269_identity.py "dist/$IPA_NAME.ipa" --report dist/build269-identity.json
+          python3 build-utils/validate_build270_identity.py "dist/$IPA_NAME.ipa" --report dist/build270-identity.json
           cp build/rpcs3-ci/rpcs3-core-provenance.json dist/
           cp build/rpcs3-ci/rpcs3-tunnel-lease-tests.log dist/
+          cp build/rpcs3-ci/rpcs3-build270-transport-tests.log dist/
           cp build/rpcs3-ci/vpn-activation-tests.log dist/
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
