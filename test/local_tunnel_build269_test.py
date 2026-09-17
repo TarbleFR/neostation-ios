@@ -175,6 +175,10 @@ def main():
     ui = (ROOT / 'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart').read_text()
     assert 'return state?.canStopOwnedTunnel ?? false;' in ui
     assert 'previous = await LocalJitTunnelService.status();' in ui
+    toggle = ui.split('Future<void> _toggleTunnel()', 1)[1].split('Future<void> _refreshPairingState()', 1)[0]
+    assert 'final disable = _shouldDisableTunnel(previous);' in toggle
+    assert toggle.count('disable = _shouldDisableTunnel(previous);') == 1, 'Native status must not invert the displayed button action'
+    assert toggle.index('final disable =') < toggle.index('await LocalJitTunnelService.status()')
     assert '_tunnelState!.lastErrorDetail!' in ui
     assert 'LocalJitDebuggerLease' in (ROOT / 'lib/services/rpcs3_internal_service.dart').read_text()
     assert 'subnetMasks: ["255.255.255.0"]' in provider
