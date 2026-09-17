@@ -21,8 +21,12 @@ PROVIDER_MARKER = b'Local tunnel startup was cancelled by a newer stop.'
 MANAGER_MARKERS = (b'iOS supplied no disconnect error', b'localtunnel.heartbeat')
 DOLPHIN_ACCOUNT_MARKERS = (b'DolphinRetroAchievementsAccount', b'loginRequestForUsername:password:',
                            b'emulator-player', b'raRestartRequired')
-LEASE_PROVIDER_MARKERS = (b'jitLeaseBegin', b'jitLeaseEnd',
-                          b'RPCS3 debugger lease armed; watchdog remains bounded.')
+# Swift may encode short strings in instruction immediates instead of storing
+# contiguous UTF-8. These long diagnostics identify both real lease branches.
+LEASE_PROVIDER_MARKERS = (
+    b'RPCS3 debugger lease armed; watchdog remains bounded.',
+    b'RPCS3 debugger lease released; normal watchdog restored.',
+)
 LEASE_MANAGER_MARKERS = (b'beginDebuggerLease', b'endDebuggerLease',
                          b'RPCS3 debugger lease acknowledgement timed out.')
 
