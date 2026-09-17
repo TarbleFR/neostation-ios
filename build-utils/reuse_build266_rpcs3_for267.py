@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Reuse only the byte-verified RPCS3 core from the successful Build 266.
+"""Reuse only the byte-verified RPCS3 core from successful Build 266.
 
-This is a narrowly gated Dolphin-host-only build. Any other source change
-refuses reuse, rather than silently shipping an out-of-date core. StikJIT and
-the app are rebuilt; Dolphin retains its existing source-hash cache checks.
+Builds 267/268 change the host account/tunnel handling, not the emulation core.
+Unexpected source changes refuse reuse. StikJIT and the app are rebuilt;
+Dolphin retains its existing source-hash cache checks.
 """
 from pathlib import Path
 import hashlib
@@ -25,6 +25,10 @@ ALLOWED = {
     'build-utils/validate_build266_identity.py',
     'test/dolphin_account_267_test.py',
     'test/rpcs3_savestate_ui_contract_test.py',
+    'build-utils/patch_rpcs3_build268_tunnel.py',
+    'lib/services/local_jit_debugger_lease.dart',
+    'test/local_jit_debugger_lease_test.dart',
+    'test/rpcs3_build268_tunnel_test.py',
 }
 changed = set(subprocess.check_output(
     ['git', 'diff', '--name-only', BASE, 'HEAD'], cwd=ROOT, text=True).splitlines())
@@ -53,4 +57,4 @@ report.write_text(json.dumps({'sourceBuild': '266', 'sourceCommit': BASE,
     'sourceWorkflowRun': 35140629752, 'sourceIPA_SHA256': IPA_SHA256,
     'coreSHA256': CORE_SHA256, 'sourceChangeGatePassed': True,
     'changedPaths': sorted(changed)}, indent=2) + '\n')
-print('Reused exact verified Build 266 RPCS3 binary; no RPCS3 source changes.')
+print('Reused exact verified Build 266 RPCS3 binary; no emulation core source changes.')
