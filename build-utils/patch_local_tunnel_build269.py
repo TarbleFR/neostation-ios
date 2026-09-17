@@ -320,15 +320,15 @@ change(UI, '''    if (state == null) return false;
 change(UI, '''        _tunnelStateLoaded = true;
         _tunnelErrorCode = null;''', '''        _tunnelStateLoaded = true;
         _tunnelErrorCode = state.lastErrorCode;''')
-# Read actual status at click time, and after errors. Do not restore stale UI
-# state from before a trip to iOS Settings or a failed activation.
+# Capture the action shown on the button BEFORE awaiting native status. A
+# concurrent automatic connection must never invert the user's ON/OFF intent.
+# Refresh native state only for authorization and diagnostics.
 change(UI, '''    final previous = _tunnelState;
     final disable = _shouldDisableTunnel(previous);''', '''    var previous = _tunnelState;
-    var disable = _shouldDisableTunnel(previous);''')
+    final disable = _shouldDisableTunnel(previous);''')
 change(UI, '''    try {
       final wasAuthorized = previous?.authorized == true;''', '''    try {
       previous = await LocalJitTunnelService.status();
-      disable = _shouldDisableTunnel(previous);
       if (!mounted) return;
       setState(() { _tunnelState = previous; _isDisablingTunnel = disable; });
       final wasAuthorized = previous.authorized;''')
