@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 268
-run-name: NeoStation iOS Build 268 (RPCS3 integrated JIT tunnel fix) • ${{ github.sha }}
+name: NeoStation iOS Build 269
+run-name: NeoStation iOS Build 269 (Integrated VPN activation and handoff fix) • ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: neostation-ios-build-268
+  group: neostation-ios-build-269
   cancel-in-progress: true
 
 jobs:
@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 240
     env:
-      BUILD_NUMBER: '268'
-      IPA_NAME: 'NeoStation-iOS-Build-268-RPCS3-Local-JIT'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-268-RPCS3-Local-JIT'
+      BUILD_NUMBER: '269'
+      IPA_NAME: 'NeoStation-iOS-Build-269-VPN-Activation'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-269-VPN-Activation'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       STIKJIT_SHA: 640fac91de403fdb85a3778aa0bbb7f30737b74c
       IDEVICE_SHA: 6fb49aeb33e8e27f2e52267729b631e53c87e1d9
@@ -72,6 +72,9 @@ jobs:
           python3 build-utils/patch_rpcs3_build268_tunnel.py
           mkdir -p build/rpcs3-ci
           python3 test/rpcs3_build268_tunnel_test.py 2>&1 | tee build/rpcs3-ci/rpcs3-tunnel-lease-tests.log
+          python3 build-utils/patch_local_tunnel_build269.py
+          python3 build-utils/patch_local_tunnel_build269.py
+          python3 test/local_tunnel_build269_test.py 2>&1 | tee build/rpcs3-ci/vpn-activation-tests.log
           python3 test/dolphin_account_267_test.py
           python3 test/rpcs3_ingame_ui_contract_test.py
           python3 test/rpcs3_build260_modern_menu_test.py
@@ -129,7 +132,7 @@ jobs:
           set -euo pipefail
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
-          flutter test --no-pub test/builtin_theme_catalog_test.dart test/theme_provider_background_persistence_test.dart test/local_jit_session_coordinator_test.dart test/local_jit_route_proof_test.dart test/local_jit_lifecycle_policy_test.dart test/local_jit_debugger_lease_test.dart
+          flutter test --no-pub test/builtin_theme_catalog_test.dart test/theme_provider_background_persistence_test.dart test/local_jit_session_coordinator_test.dart test/local_jit_route_proof_test.dart test/local_jit_lifecycle_policy_test.dart test/local_jit_debugger_lease_test.dart test/local_tunnel_build269_test.dart
 
       - name: Prepare build tools
         shell: bash
@@ -288,6 +291,7 @@ jobs:
           python3 test/local_jit_tunnel_contract_test.py
           python3 test/dolphin_account_267_test.py
           python3 test/rpcs3_build268_tunnel_test.py
+          python3 test/local_tunnel_build269_test.py
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Generate iOS host
@@ -405,9 +409,10 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report "dist/single-ipa-distribution.json" \
             2>&1 | tee build/rpcs3-ci/single-ipa-validation.log
-          python3 build-utils/validate_build266_identity.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --report dist/build268-identity.json
+          python3 build-utils/validate_build269_identity.py "dist/$IPA_NAME.ipa" --report dist/build269-identity.json
           cp build/rpcs3-ci/rpcs3-core-provenance.json dist/
           cp build/rpcs3-ci/rpcs3-tunnel-lease-tests.log dist/
+          cp build/rpcs3-ci/vpn-activation-tests.log dist/
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
