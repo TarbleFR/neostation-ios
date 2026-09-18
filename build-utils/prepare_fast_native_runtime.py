@@ -55,7 +55,9 @@ def normalize_swift_interfaces(xcframework: Path) -> int:
     changed = 0
     for interface in interfaces:
         text = interface.read_text(encoding='utf-8')
-        patched = text.replace('StikJIT.DDIPaths', 'DDIPaths')
+        patched = text
+        for type_name in ('DDIPaths', 'DeveloperDiskImageService', 'StikJITError'):
+            patched = patched.replace(f'StikJIT.{type_name}', type_name)
         patched = patched.replace('StikJIT.StikJIT.', 'StikJIT.')
         if patched != text:
             interface.write_text(patched, encoding='utf-8')
@@ -63,7 +65,15 @@ def normalize_swift_interfaces(xcframework: Path) -> int:
     for interface in interfaces:
         text = interface.read_text(encoding='utf-8')
         demand(
-            'StikJIT.DDIPaths' not in text and 'StikJIT.StikJIT.' not in text,
+            all(
+                ref not in text
+                for ref in (
+                    'StikJIT.DDIPaths',
+                    'StikJIT.DeveloperDiskImageService',
+                    'StikJIT.StikJITError',
+                    'StikJIT.StikJIT.',
+                )
+            ),
             f'Invalid StikJIT textual-interface qualification remains: {interface}',
         )
     return changed
