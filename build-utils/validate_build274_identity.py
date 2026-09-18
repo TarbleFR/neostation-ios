@@ -31,6 +31,7 @@ def verify(path):
    b'Diagnostic-VPN-RPCS3-precedent.txt',
   ):
    assert marker in manager,'Missing compiled VPN policy marker: '+repr(marker)
+  assert b'NEOSTATION_VPN_STABLE_PREFLIGHT_274: route stable; VPN frozen for RPCS3 boot' in manager,'Build 274 stable VPN preflight missing'
   assert b'nativeDebuggerLease270=active' not in manager
   assert b'stage=status.load-preferences' in manager,'Manual/status preferences path unexpectedly missing'
 
@@ -50,9 +51,14 @@ def verify(path):
   helper=archive.read(prefix+'PlugIns/RPCS3JITHelper.appex/RPCS3JITHelper')
   assert b'NEOSTATION_RPCS3_STOP_REPLY_270' not in helper,'Abandoned JIT transport code returned'
 
+  internal=archive.read(prefix+'Frameworks/rpcs3_internal_bridge.framework/rpcs3_internal_bridge')
+  assert b'RPCS3 virtual memory layout validated and cached for this process.' in internal,'Build 274 cached memory preflight missing'
+  assert b'com.neogamelab.neostation.rpcs3.diagnostics' in internal,'Build 274 async diagnostic queue missing'
+
   dart=archive.read(prefix+'Frameworks/App.framework/App')
   assert b'Diagnostic-VPN-RPCS3.txt' in dart,'VPN diagnostic file reference missing'
   assert b'The selected VPN route is unavailable.' in dart,'Manual-only route error missing'
+  assert b'RPCS3 JIT did not remain active after the initial StikJIT attach.' in dart,'Build 274 single-attach Dart path missing'
 
   return {
    'build':274,
