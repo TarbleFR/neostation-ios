@@ -23,7 +23,9 @@ def verify(path):
    checked[name]=digest
   assert prefix+'Frameworks/StikJIT.framework/rpcs3-universal.js' not in archive.namelist(), 'Do not ship the abandoned experimental JIT script'
   manager=archive.read(prefix+'Frameworks/stikjit_bridge.framework/stikjit_bridge')
-  for marker in [b'Diagnostic-VPN-RPCS3.txt',b'Diagnostic-VPN-RPCS3-precedent.txt',b'stage=status.load-preferences',b'activate-owned',b'verify.remote-pairing-tcp']:
+  # Short Swift strings may be encoded as immediates. Long diagnostics prove
+  # the compiled implementation without depending on that optimization detail.
+  for marker in [b'Diagnostic-VPN-RPCS3.txt',b'Diagnostic-VPN-RPCS3-precedent.txt',b'stage=status.load-preferences',b'verify.remote-pairing-tcp']:
    assert marker in manager, 'Missing VPN or report implementation: '+repr(marker)
   assert b'nativeDebuggerLease270=active' not in manager, 'Abandoned debugger lease remains'
   provider=archive.read(prefix+'PlugIns/NeoStationLocalTunnel.appex/NeoStationLocalTunnel')
