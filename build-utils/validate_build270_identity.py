@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""Verify IPA270 and retained 269/268/267 fixes; not runtime success."""
+"""Verify IPA270 transport changes with the exact Build 269 runtime scripts.
+
+Tests of an inactive experimental resource do not authorize selecting it in the
+production helper. Binary/package checks do not establish iPhone runtime success.
+"""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import zipfile
 from validate_build269_identity import verify as verify269
-from patch_rpcs3_stop_reply270 import protocol_script
+from patch_rpcs3_stop_reply270 import protocol_script, BASELINE_MARKER
+
+UNIVERSAL_269_SHA256 = '22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1'
+LEGACY_269_SHA256 = '787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'
 
 
 def verify(path):
@@ -28,20 +35,35 @@ def verify(path):
                    if name.endswith('.framework/rpcs3_jit_helper') or
                    name.endswith('/RPCS3JITHelper.appex/RPCS3JITHelper')]
         assert helpers, 'RPCS3 helper framework missing'
-        assert any(b'RPCS3-JIT-last.json' in archive.read(name) and
-                   b'previous_helper_log' in archive.read(name) for name in helpers), 'Durable helper journal missing'
-        assert any(b'NEOSTATION_RPCS3_STOP_REPLY_270: dedicated protocol selected.' in archive.read(name)
-                   for name in helpers), 'RPCS3-only custom script selection missing'
+        helper_data = [archive.read(name) for name in helpers]
+        assert any(b'RPCS3-JIT-last.json' in data and b'previous_helper_log' in data
+                   for data in helper_data), 'Durable helper journal missing'
+        assert any(BASELINE_MARKER.encode() in data for data in helper_data), 'Baseline RPCS3 script selection missing'
+        assert all(b'NEOSTATION_RPCS3_STOP_REPLY_270: dedicated protocol selected.' not in data
+                   for data in helper_data), 'Experimental runtime script selection must be absent'
         script_root = prefix + 'Frameworks/StikJIT.framework/'
         original = archive.read(script_root + 'universal.js')
-        fixed = archive.read(script_root + 'rpcs3-universal.js')
-        assert hashlib.sha256(original).hexdigest() == '22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1', 'Shared Universal script changed unexpectedly'
-        assert fixed.decode('utf-8') == protocol_script(original.decode('utf-8')), 'RPCS3 script differs from the tested transformation'
+        legacy = archive.read(script_root + 'legacy.js')
+        assert hashlib.sha256(original).hexdigest() == UNIVERSAL_269_SHA256, 'RPCS3 must use the exact pre-hotfix 269 script'
+        assert hashlib.sha256(legacy).hexdigest() == LEGACY_269_SHA256, 'Dolphin script changed unexpectedly'
+        experimental_name = script_root + 'rpcs3-universal.js'
+        experimental_hash = None
+        if experimental_name in archive.namelist():
+            inactive = archive.read(experimental_name)
+            assert inactive.decode('utf-8') == protocol_script(original.decode('utf-8'))
+            experimental_hash = hashlib.sha256(inactive).hexdigest()
+    helper_source = (Path(__file__).resolve().parents[1] /
+                    'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift').read_text()
+    assert 'script: .universal,' in helper_source
+    assert 'script: selectedScript,' not in helper_source and '.custom(scriptURL)' not in helper_source
     report.update({'build270TransportVerified': True,
                    'nativeIdentity': 'NEOSTATION_RPCSS3_TRANSPORT_270',
                    'rpcs3BridgeBinary': host_path, 'helperJournalBinaries': helpers,
-                   'scopedRPCS3ScriptSHA256': hashlib.sha256(fixed).hexdigest(),
+                   'runtimeRPCS3Script': 'universal.js (exact Build 269 baseline)',
+                   'experimentalStopReplyScriptSelected': False,
+                   'inactiveExperimentalResourceSHA256': experimental_hash,
                    'originalUniversalSHA256': hashlib.sha256(original).hexdigest(),
+                   'originalLegacySHA256': hashlib.sha256(legacy).hexdigest(),
                    'deviceTested': False})
     return report
 
