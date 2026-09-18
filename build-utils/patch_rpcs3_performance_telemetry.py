@@ -155,20 +155,26 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         plugin.write_text(text)
 
     diagnostic_text = diagnostics.read_text()
-    buffered_old = """        if (![stage isEqualToString:@"core_log"]) {
+    if "dispatch_async(queue" in diagnostic_text and "synchronizeFile" not in diagnostic_text:
+        # Build 280 makes every diagnostic record asynchronous, including
+        # performance samples. There is no synchronous fsync policy left to
+        # special-case here.
+        pass
+    else:
+        buffered_old = """        if (![stage isEqualToString:@"core_log"]) {
 """
-    buffered_new = """        if (![stage isEqualToString:@"core_log"] &&
+        buffered_new = """        if (![stage isEqualToString:@"core_log"] &&
             ![stage isEqualToString:@"performance_sample"]) {
 """
-    if buffered_new not in diagnostic_text:
-        diagnostics.write_text(
-            replace_once(
-                diagnostic_text,
-                buffered_old,
-                buffered_new,
-                "buffered performance diagnostics",
+        if buffered_new not in diagnostic_text:
+            diagnostics.write_text(
+                replace_once(
+                    diagnostic_text,
+                    buffered_old,
+                    buffered_new,
+                    "buffered performance diagnostics",
+                )
             )
-        )
 
     print("RPCS3 device performance telemetry patch: OK")
 
