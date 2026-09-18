@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reuse only the byte-verified RPCS3 core from successful Build 266.
 
-Builds 267/268 change the host account/tunnel handling, not the emulation core.
+Host-only releases change account/tunnel handling, not the emulation core.
 Unexpected source changes refuse reuse. StikJIT and the app are rebuilt;
 Dolphin retains its existing source-hash cache checks.
 """
@@ -29,6 +29,7 @@ ALLOWED = {
     'lib/services/local_jit_debugger_lease.dart',
     'test/local_jit_debugger_lease_test.dart',
     'test/rpcs3_build268_tunnel_test.py',
+    'test/rpcs3_jit_handshake_test.py',
 }
 changed = set(subprocess.check_output(
     ['git', 'diff', '--name-only', BASE, 'HEAD'], cwd=ROOT, text=True).splitlines())
