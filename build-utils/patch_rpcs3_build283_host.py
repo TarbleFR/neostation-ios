@@ -81,12 +81,11 @@ def main() -> None:
         'llvm_self_test_begin', 'llvm_self_test_end',
         'game_boot_begin', 'game_boot_return',
     ):
-        text = replace_once(
-            text,
-            f'RPCS3Diagnostic(@"{stage}"',
-            f'RPCS3Milestone(@"{stage}"',
-            f'{stage} milestone',
-        )
+        old_stage = f'RPCS3Diagnostic(@"{stage}"'
+        count = text.count(old_stage)
+        if count < 1:
+            raise SystemExit(f'{stage} milestone: expected at least one source anchor')
+        text = text.replace(old_stage, f'RPCS3Milestone(@"{stage}"')
 
     HOST.write_text(text)
     print('Build 283 RPCS3 bounded diagnostics + durable milestones applied')
