@@ -1,0 +1,56 @@
+name: NeoStation iOS FAST / NORMAL
+
+run-name: NeoStation iOS ${{ inputs.level == 'normal' && 'NORMAL' || 'FAST' }} stable validation • ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: Validation depth
+        required: true
+        default: fast
+        type: choice
+        options:
+          - fast
+          - normal
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Stable Flutter validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Resolve and analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.level }}" = "normal" ]; then
+            flutter clean
+          fi
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+
+      - name: FAST smoke tests
+        if: inputs.level == 'fast'
+        run: flutter test --no-pub test/audio_policy_service_test.dart
+
+      - name: NORMAL test suite
+        if: inputs.level == 'normal'
+        run: flutter test --no-pub
