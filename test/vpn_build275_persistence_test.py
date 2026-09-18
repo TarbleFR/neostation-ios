@@ -3,6 +3,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+template = (ROOT/'build-utils/vpn271/provider.swift.inc').read_text()
+assert 'NEOSTATION_VPN_PERSISTENCE_275' in template
+assert 'cancelTunnelWithError(failure("packet write failed after bounded retries"' not in template
+
 provider = (ROOT/'native/local_jit_tunnel/PacketTunnelProvider.swift').read_text()
 assert 'NEOSTATION_VPN_PERSISTENCE_275' in provider
 assert 'cancelTunnelWithError(failure("packet write failed after bounded retries"' not in provider

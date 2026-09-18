@@ -117,8 +117,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     } else {
       writeFailures &+= 1
       guard attempt < 3 else {
-        running = false; ready = false; self.epoch &+= 1
-        cancelTunnelWithError(failure("packet write failed after bounded retries", code: 4)); return
+        // NEOSTATION_VPN_PERSISTENCE_275: transient packet backpressure must
+        // never tear down a user-enabled local tunnel. Drop this batch only.
+        droppedCount &+= UInt64(packets.count)
+        readNext()
+        return
       }
       queue.asyncAfter(deadline: .now() + .milliseconds(10 * (attempt + 1))) {
         self.deliver(packets, families, epoch: epoch, attempt: attempt + 1)
