@@ -30,6 +30,7 @@ final class NeoStationLocalTunnelManager {
     static let serverAddress = "10.7.0.1"
     static let routeProbeTimeout: TimeInterval = 1.25
     static let connectionPollInterval: TimeInterval = 0.20
+    static let handoffSettleDelay: TimeInterval = 1.0
     static let activationTimeout: TimeInterval = 45
     static let stopTimeout: TimeInterval = 12
   }
@@ -141,8 +142,32 @@ final class NeoStationLocalTunnelManager {
           return
         }
 
-        let owned = (managers ?? []).filter {
+        let allManagers = managers ?? []
+        let owned = allManagers.filter {
           Self.isOwned($0, providerBundleIdentifier: providerIdentifier)
+        }
+
+        // LocalDevVPN and NeoStation are both packet-tunnel VPNs. Explicit ON
+        // must hand off from any already-active foreign tunnel before asking
+        // iOS to start NeoStation's tunnel. stopVPNTunnel() is asynchronous, so
+        // wait for the foreign connection to be fully quiescent before retrying.
+        let foreignActive = allManagers.filter {
+          !Self.isOwned($0, providerBundleIdentifier: providerIdentifier) &&
+            Self.needsHandoff($0.connection.status)
+        }
+        if !foreignActive.isEmpty {
+          self.stopForeignManagersForHandoff(
+            foreignActive,
+            index: 0,
+            command: command
+          ) {
+            DispatchQueue.main.asyncAfter(
+              deadline: .now() + Constants.handoffSettleDelay
+            ) {
+              self.loadAndEnable(command)
+            }
+          }
+          return
         }
 
         // A NETunnelProviderManager profile can survive a sideload uninstall
@@ -171,14 +196,100 @@ final class NeoStationLocalTunnelManager {
           index: 0,
           command: command
         ) {
-          self.persistAndStart(
+          self.recoverOwnedTransitionIfNeeded(
             manager,
-            providerIdentifier: providerIdentifier,
-            installationToken: token,
             command: command
-          )
+          ) {
+            self.persistAndStart(
+              manager,
+              providerIdentifier: providerIdentifier,
+              installationToken: token,
+              command: command
+            )
+          }
         }
       }
+    }
+  }
+
+  private func stopForeignManagersForHandoff(
+    _ managers: [NETunnelProviderManager],
+    index: Int,
+    command: Command,
+    completion: @escaping () -> Void
+  ) {
+    guard isCurrent(command) else { return }
+    guard index < managers.count else {
+      completion()
+      return
+    }
+
+    let manager = managers[index]
+    if Self.needsStopRequest(manager.connection.status) {
+      manager.connection.stopVPNTunnel()
+    }
+    waitUntilQuiescent(manager, command: command, settle: false) {
+      self.stopForeignManagersForHandoff(
+        managers,
+        index: index + 1,
+        command: command,
+        completion: completion
+      )
+    }
+  }
+
+  private func recoverOwnedTransitionIfNeeded(
+    _ manager: NETunnelProviderManager,
+    command: Command,
+    completion: @escaping () -> Void
+  ) {
+    guard isCurrent(command) else { return }
+
+    switch manager.connection.status {
+    case .connecting, .reasserting, .disconnecting:
+      // This can be left behind when an earlier explicit ON collided with an
+      // already-active LocalDevVPN. A new explicit ON is allowed to recover our
+      // own unfinished transition before making a fresh start request.
+      if Self.needsStopRequest(manager.connection.status) {
+        manager.connection.stopVPNTunnel()
+      }
+      waitUntilQuiescent(manager, command: command, settle: true, completion)
+    default:
+      completion()
+    }
+  }
+
+  private func waitUntilQuiescent(
+    _ manager: NETunnelProviderManager,
+    command: Command,
+    settle: Bool,
+    _ completion: @escaping () -> Void
+  ) {
+    guard isCurrent(command) else { return }
+
+    if Self.isQuiescent(manager.connection.status) {
+      if settle {
+        DispatchQueue.main.asyncAfter(
+          deadline: .now() + Constants.handoffSettleDelay
+        ) {
+          guard self.isCurrent(command) else { return }
+          completion()
+        }
+      } else {
+        completion()
+      }
+      return
+    }
+
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + Constants.connectionPollInterval
+    ) {
+      self.waitUntilQuiescent(
+        manager,
+        command: command,
+        settle: settle,
+        completion
+      )
     }
   }
 
@@ -434,32 +545,37 @@ final class NeoStationLocalTunnelManager {
     }
 
     let manager = managers[index]
-    manager.connection.stopVPNTunnel()
-    manager.isOnDemandEnabled = false
-    manager.onDemandRules = []
-    manager.isEnabled = false
+    if Self.needsStopRequest(manager.connection.status) {
+      manager.connection.stopVPNTunnel()
+    }
 
-    manager.saveToPreferences { error in
-      DispatchQueue.main.async {
-        guard self.isCurrent(command) else { return }
-        if let error {
-          self.finish(command, .failure(Self.configurationFailure(error)))
-          return
-        }
+    waitUntilQuiescent(manager, command: command, settle: false) {
+      manager.isOnDemandEnabled = false
+      manager.onDemandRules = []
+      manager.isEnabled = false
 
-        manager.removeFromPreferences { error in
-          DispatchQueue.main.async {
-            guard self.isCurrent(command) else { return }
-            if let error {
-              self.finish(command, .failure(Self.configurationFailure(error)))
-              return
+      manager.saveToPreferences { error in
+        DispatchQueue.main.async {
+          guard self.isCurrent(command) else { return }
+          if let error {
+            self.finish(command, .failure(Self.configurationFailure(error)))
+            return
+          }
+
+          manager.removeFromPreferences { error in
+            DispatchQueue.main.async {
+              guard self.isCurrent(command) else { return }
+              if let error {
+                self.finish(command, .failure(Self.configurationFailure(error)))
+                return
+              }
+              self.disableAndRemoveDuplicates(
+                managers,
+                index: index + 1,
+                command: command,
+                completion: completion
+              )
             }
-            self.disableAndRemoveDuplicates(
-              managers,
-              index: index + 1,
-              command: command,
-              completion: completion
-            )
           }
         }
       }
@@ -723,6 +839,20 @@ final class NeoStationLocalTunnelManager {
     status == .connected ||
       status == .connecting ||
       status == .reasserting
+  }
+
+  private static func needsHandoff(_ status: NEVPNStatus) -> Bool {
+    isActive(status) || status == .disconnecting
+  }
+
+  private static func needsStopRequest(_ status: NEVPNStatus) -> Bool {
+    status == .connected ||
+      status == .connecting ||
+      status == .reasserting
+  }
+
+  private static func isQuiescent(_ status: NEVPNStatus) -> Bool {
+    status == .disconnected || status == .invalid
   }
 
   private static func statusName(_ status: NEVPNStatus) -> String {

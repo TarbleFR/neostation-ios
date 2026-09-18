@@ -116,7 +116,41 @@ assert current == ['same-install'] and stale == []
 current, stale = profile_plan([None, 'same-install'], 'same-install')
 assert current == ['same-install'] and stale == [None]
 
+
+# LocalDevVPN handoff: explicit ON may stop an active foreign packet tunnel,
+# waits until it is truly disconnected, then settles before starting NeoStation.
+assert 'let foreignActive = allManagers.filter' in manager
+assert '!Self.isOwned($0, providerBundleIdentifier: providerIdentifier)' in manager
+assert 'stopForeignManagersForHandoff' in manager
+assert 'manager.connection.stopVPNTunnel()' in manager
+assert 'waitUntilQuiescent' in manager
+assert 'handoffSettleDelay: TimeInterval = 1.0' in manager
+assert 'recoverOwnedTransitionIfNeeded' in manager
+assert 'case .connecting, .reasserting, .disconnecting:' in manager
+assert 'status == .disconnected || status == .invalid' in manager
+
+# Game launch may wait for a user-requested ON already in flight, but must
+# never start a VPN itself.
+assert 'static Future<LocalJitTunnelState>? _activationInFlight;' in service
+assert 'final activation = _activationInFlight;' in service
+assert 'await activation;' in service
+assert service.count('StikjitBridge.activateOwnedTunnel()') == 1
+ensure_jit = service.split('static Future<LocalJitTunnelState> ensureRunningForJit()', 1)[1].split('/// Explicit Settings OFF', 1)[0]
+assert 'StikjitBridge.activateOwnedTunnel()' not in ensure_jit
+assert ensure_jit.index('await activation;') < ensure_jit.index('StikjitBridge.ensureJitRoute()')
+
+def handoff_plan(foreign_status, owned_status):
+    stop_foreign = foreign_status in ('connected', 'connecting', 'reasserting')
+    wait_foreign = foreign_status in ('connected', 'connecting', 'reasserting', 'disconnecting')
+    recover_owned = owned_status in ('connecting', 'reasserting', 'disconnecting')
+    return stop_foreign, wait_foreign, recover_owned
+
+assert handoff_plan('connected', 'disconnected') == (True, True, False)
+assert handoff_plan('disconnecting', 'disconnected') == (False, True, False)
+assert handoff_plan('disconnected', 'connecting') == (False, False, True)
+assert handoff_plan('disconnected', 'connected') == (False, False, False)
+
 assert 'schemaVersion = 277' in manager
 assert '"version": 277' in provider
 
-print('PASS: internal VPN lifecycle + bounded provider + reinstall-safe profile identity')
+print('PASS: VPN 279 provider + reinstall identity + LocalDevVPN handoff + pending activation coordination')

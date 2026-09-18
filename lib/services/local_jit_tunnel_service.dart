@@ -12,6 +12,7 @@ class LocalJitTunnelService {
   LocalJitTunnelService._();
 
   static final LoggerService _log = LoggerService.instance;
+  static Future<LocalJitTunnelState>? _activationInFlight;
 
   static Future<LocalJitTunnelState> status() async {
     if (!Platform.isIOS) {
@@ -43,6 +44,22 @@ class LocalJitTunnelService {
         'The integrated local JIT tunnel is available only on iOS.',
       );
     }
+
+    final existing = _activationInFlight;
+    if (existing != null) return existing;
+
+    final activation = _authorizeAndEnableInternal();
+    _activationInFlight = activation;
+    try {
+      return await activation;
+    } finally {
+      if (identical(_activationInFlight, activation)) {
+        _activationInFlight = null;
+      }
+    }
+  }
+
+  static Future<LocalJitTunnelState> _authorizeAndEnableInternal() async {
     try {
       final state = await StikjitBridge.activateOwnedTunnel();
       _log.i(
@@ -65,6 +82,14 @@ class LocalJitTunnelService {
       );
     }
     try {
+      final activation = _activationInFlight;
+      if (activation != null) {
+        _log.i(
+          'Local JIT preflight waiting for the user-requested VPN activation.',
+        );
+        await activation;
+      }
+
       final state = await StikjitBridge.ensureJitRoute();
       _log.i(
         'Local JIT endpoint reachable: ${state.peerAddress ?? 'unknown'}; '

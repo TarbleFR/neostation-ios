@@ -17,6 +17,8 @@ assert subprocess.check_output(
 manager = text('packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift')
 assert 'NeoStationLocalTunnel.installationToken' in manager
 assert 'stale + duplicates' in manager
+assert 'stopForeignManagersForHandoff' in manager
+assert 'recoverOwnedTransitionIfNeeded' in manager
 
 host = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 diag = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h')
