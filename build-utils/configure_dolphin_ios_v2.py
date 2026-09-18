@@ -317,7 +317,7 @@ def main() -> None:
         raise SystemExit('Generate the clean Flutter iOS host first')
     if not (RUNNER / 'Sys').is_dir():
         raise SystemExit('Dolphin Data/Sys must be copied to ios/Runner/Sys first')
-    framework = ROOT / 'packages/dolphin_jit_helper/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT'
+    framework = ROOT / 'packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT'
     if not framework.is_file():
         raise SystemExit(f'StikJIT device framework missing: {framework}')
     configure_helper_files()
