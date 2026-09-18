@@ -1,0 +1,110 @@
+name: One-shot Actions history cleanup
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-actions-history.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cleanup:
+    name: Purge obsolete workflow runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Delete obsolete completed runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          repo = os.environ['REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          current = int(os.environ['CURRENT_RUN_ID'])
+
+          # These historical runs are still consumed as immutable native donors
+          # by the maintained experimental FAST/RELEASE workflows.
+          preserve = {35321768668, 35140629752, current}
+
+          active_paths = {
+              '.github/workflows/ios-ci.yml',
+              '.github/workflows/release-ipa.yml',
+          }
+
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f'Bearer {token}',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'neostation-actions-history-cleanup',
+          }
+
+          def request(path, method='GET'):
+              req = urllib.request.Request(
+                  f'https://api.github.com/repos/{repo}{path}',
+                  headers=headers,
+                  method=method,
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=45) as response:
+                      body = response.read()
+                      return json.loads(body.decode()) if body else None
+              except urllib.error.HTTPError as error:
+                  body = error.read().decode(errors='replace')
+                  raise SystemExit(f'{method} {path} failed: HTTP {error.code}: {body}')
+
+          runs = []
+          page = 1
+          while True:
+              data = request(f'/actions/runs?per_page=100&page={page}')
+              batch = data.get('workflow_runs', [])
+              runs.extend(batch)
+              if len(batch) < 100:
+                  break
+              page += 1
+
+          # For each maintained workflow keep the newest completed run and the
+          # newest successful run for troubleshooting/reference.
+          for path in active_paths:
+              matching = [
+                  run for run in runs
+                  if run.get('path') == path and run.get('status') == 'completed'
+              ]
+              if matching:
+                  preserve.add(int(matching[0]['id']))
+              successful = [run for run in matching if run.get('conclusion') == 'success']
+              if successful:
+                  preserve.add(int(successful[0]['id']))
+
+          deleted = []
+          skipped_live = []
+          kept = []
+          for run in runs:
+              run_id = int(run['id'])
+              status = run.get('status')
+              if run_id in preserve:
+                  kept.append(run_id)
+                  continue
+              if status != 'completed':
+                  skipped_live.append(run_id)
+                  continue
+              request(f'/actions/runs/{run_id}', method='DELETE')
+              deleted.append(run_id)
+
+          print(f'total_before={len(runs)}')
+          print(f'deleted={len(deleted)}')
+          print('preserved=' + ','.join(map(str, sorted(preserve))))
+          print('live_not_deleted=' + ','.join(map(str, skipped_live)))
+          print('deleted_ids=' + ','.join(map(str, deleted)))
+          PY
