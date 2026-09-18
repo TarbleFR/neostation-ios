@@ -17,6 +17,16 @@ BASE = '013d5fc5082e3e3af28e27c7409a1c030086ee9a'
 IPA_SHA256 = 'caf5861359b8578d7315a4678064c53882b85961fe8dcd207f92332fac63999b'
 CORE_SHA256 = 'dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'
 ALLOWED = {
+    # These archived host patches remain tracked but Build 271 never applies
+    # them. Keeping an explicit list does not authorize any core source change.
+    'build-utils/patch_rpcs3_build270_transport.py',
+    'build-utils/rpcs3/build270_packet_pump.swift.inc',
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3EarlyLoaderDiagnostics.h',
+    'test/rpcs3_build270_transport_test.py',
+    'test/native/rpcs3_early_loader_test.mm',
+    'build-utils/validate_build270_identity.py',
+    'build-utils/patch_rpcs3_stop_reply270.py',
+    'test/rpcs3_stop_reply270_test.py',
     '.github/workflows/build-ipa-once.yml',
     'packages/dolphin_internal_bridge/ios/Classes/DolphinRetroAchievementsAccount.h',
     'packages/dolphin_internal_bridge/ios/Classes/DolphinRetroAchievementsAccount.mm',
