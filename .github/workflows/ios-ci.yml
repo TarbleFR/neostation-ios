@@ -1,39 +1,225 @@
-name: NeoStation iOS source audit
-run-name: Source audit only - ${{ github.sha }}
+name: NeoStation iOS Build 277 VPN Single Source
+run-name: NeoStation iOS Build 277 • ${{ github.sha }}
 
 on:
   push:
-    branches: [experimental]
+    branches:
+      - experimental
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
+# Shared with the full native workflow so a fast build replaces any older
+# experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-experimental-audit
+  group: neostation-ios-build-277
   cancel-in-progress: true
 
 jobs:
-  source-audit:
-    name: Export exact source for regression audit (no IPA)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  build:
+    name: Build 277 Experimental IPA
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      BUILD_NUMBER: '277'
+      IPA_NAME: 'NeoStation-iOS-Build-277-VPN-Single-Source'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-277-VPN-Single-Source'
+            DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
+      SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
+      SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
-      - name: Archive tracked source only
+
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Apply stable non-VPN stack and validate VPN v277
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p audit-export
-          git archive --format=tar HEAD | gzip > audit-export/neostation-source.tar.gz
-          git rev-parse HEAD > audit-export/commit.txt
-          sha256sum audit-export/neostation-source.tar.gz > audit-export/source.sha256
-      - uses: actions/upload-artifact@v4
+          mkdir -p build/rpcs3-ci build/fast-native
+
+          git apply --check build-utils/patches/rpcs3_build243_host.patch
+          git apply build-utils/patches/rpcs3_build243_host.patch
+          git apply --check build-utils/patches/rpcs3_build243_menu_transition.patch
+          git apply build-utils/patches/rpcs3_build243_menu_transition.patch
+          git apply --check build-utils/patches/rpcs3_build246_safe_controls.patch
+          git apply build-utils/patches/rpcs3_build246_safe_controls.patch
+          git apply --check build-utils/patches/rpcs3_build247_localization.patch
+          git apply build-utils/patches/rpcs3_build247_localization.patch
+          git apply --check build-utils/patches/rpcs3_build251_upscale.patch
+          git apply build-utils/patches/rpcs3_build251_upscale.patch
+          git apply --check build-utils/patches/grid_title_build243.patch
+          git apply build-utils/patches/grid_title_build243.patch
+
+          python3 build-utils/patch_rpcs3_savestate_ui.py
+          python3 build-utils/patch_rpcs3_performance_telemetry.py
+          python3 build-utils/patch_rpcs3_build256_host.py
+          python3 build-utils/patch_rpcs3_build260_modern_menu.py
+          python3 build-utils/patch_rpcs3_build265_host.py
+          python3 build-utils/patch_dolphin_build267_account.py
+
+          git diff --check
+          python3 test/vpn_internal_single_source_test.py 2>&1 | tee build/rpcs3-ci/vpn-v277-single-source.log
+          python3 test/dolphin_account_267_test.py
+
+      - name: Resolve Flutter and analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter clean
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+
+      - name: Run VPN v277 regression guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/vpn_internal_single_source_test.py
+          python3 test/dolphin_account_267_test.py
+
+      - name: Prepare lightweight build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BUNDLE_PATH="$RUNNER_TEMP/dolphin-ruby-gems"
+          echo "BUNDLE_PATH=$BUNDLE_PATH" >> "$GITHUB_ENV"
+          bundle install
+
+      - name: Generate iOS host
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter config --no-enable-swift-package-manager
+          python3 packages/dolphin_internal_bridge/ci/build_support.py scaffold
+
+      - name: Download validated native donor
+        uses: actions/download-artifact@v4
         with:
-          name: NeoStation-source-audit
-          path: audit-export/
-          retention-days: 3
+          name: NeoStation-iOS-Build-270-RPCS3-JIT-Transport
+          run-id: 35321768668
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/native-donor
+
+      - name: Reuse validated native runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 \
+            https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
+            -o build/StikJIT-1.5.0.xcframework.zip
+          python3 build-utils/prepare_fast_native_runtime.py \
+            build/native-donor --build-number "$BUILD_NUMBER" \
+            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+
+      - name: Prepare emulator build definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+          values={key:os.environ.get(key,'').strip() for key in required}
+          missing=[key for key,value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing build secrets: '+', '.join(missing))
+          values.update({
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+              'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2':'true',
+              'NEOSTATION_ARMSX2_BUNDLE_ID':'xyz.aethersx2.AetherSX2',
+          })
+          Path('.dart-defines.json').write_text(json.dumps(values))
+          PY
+
+      - name: Configure release host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/patch_ios_video_player_audio_session.py
+          flutter build ios --release --no-codesign --config-only --no-pub             --build-number="$BUILD_NUMBER" --dart-define-from-file=.dart-defines.json
+          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_local_jit_tunnel.py
+          dart run flutter_launcher_icons
+          bash build-utils/force_ios_fork_icon.sh
+          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Compile only NeoStation and extensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner             -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'             -derivedDataPath build/ios/DolphinDerivedData             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=''             DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER=''             COMPILER_INDEX_STORE_ENABLE=NO build 2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+
+      - name: Embed immutable RPCS3 core and signing metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/embed_rpcs3_core_lazy.py
+          python3 build-utils/embed_rpcs3_host_entitlements.py
+
+      - name: Package and validate Build 277 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 test/vpn_internal_single_source_test.py
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/validate_rpcs3_ipa.py             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+          python3 build-utils/validate_single_ipa_distribution.py             "dist/$IPA_NAME.ipa" --report dist/single-ipa-distribution.json
+          cp build/fast-native/identity.json dist/fast-native-identity.json
+          cp build/rpcs3-ci/vpn-v277-single-source.log dist/
+          shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+          ls -lah dist
+
+      - name: Upload fast IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Collect fast diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build/fast-diagnostics
+          test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
+                    cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
+          printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/fast-diagnostics/build.txt
+
+      - name: Upload fast diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-diagnostics
+          path: build/fast-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove temporary secrets
+        if: always()
+        shell: bash
+        run: rm -f .dart-defines.json
