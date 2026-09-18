@@ -91,12 +91,14 @@ jobs:
           python3 build-utils/patch_local_tunnel_build269.py
           python3 build-utils/patch_vpn_build271.py
           python3 build-utils/patch_vpn_build273.py
-          python3 build-utils/patch_rpcs3_build274_launch.py
 
           git diff --check
           python3 test/vpn_build273_test.py 2>&1 | tee build/rpcs3-ci/vpn-build273-tests.log
-          python3 test/rpcs3_build274_launch_test.py 2>&1 | tee build/rpcs3-ci/rpcs3-build274-launch-tests.log
           python3 test/vpn271_baseline_test.py
+
+          python3 build-utils/patch_rpcs3_build274_launch.py
+          git diff --check
+          python3 test/rpcs3_build274_launch_test.py 2>&1 | tee build/rpcs3-ci/rpcs3-build274-launch-tests.log
           python3 -m py_compile build-utils/prepare_fast_native_runtime.py
 
       - name: Resolve Flutter and analyze
