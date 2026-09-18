@@ -293,6 +293,13 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
             ? payload[@"message"]
             : @"";
 
+        if (message.length > 0) {
+          NSString* bounded = message.length > 4096
+              ? [message substringToIndex:4096]
+              : message;
+          RPCS3Diagnostic([@"jit_helper_" stringByAppendingString:event], bounded);
+        }
+
         [strongSelf->_condition lock];
         if ([event isEqualToString:@"helper_connected"]) {
           strongSelf->_connected = YES;
@@ -305,7 +312,12 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
             strongSelf->_attached = YES;
           }
         } else if ([event isEqualToString:@"log"]) {
-          if (message.length > 0) [strongSelf->_mutableLogs addObject:message];
+          if (message.length > 0) {
+            [strongSelf->_mutableLogs addObject:message];
+            if (strongSelf->_mutableLogs.count > 64) {
+              [strongSelf->_mutableLogs removeObjectAtIndex:0];
+            }
+          }
         } else if ([event isEqualToString:@"complete"]) {
           strongSelf->_finished = YES;
           strongSelf->_success = [payload[@"success"] boolValue];

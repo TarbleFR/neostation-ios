@@ -242,6 +242,7 @@ private final class Rpcs3HelperReporter {
   private let token: String
   private let sendLock = NSLock()
   private var started = false
+  private var pendingLogs = 0
 
   init(port: UInt16, token: String) throws {
     guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
@@ -299,19 +300,43 @@ private final class Rpcs3HelperReporter {
     success: Bool? = nil,
     targetPID: Int32? = nil
   ) throws {
-    sendLock.lock()
-    defer { sendLock.unlock() }
-
     var payload: [String: Any] = [
       "token": token,
       "event": event,
-      "message": message,
+      "message": String(message.prefix(4096)),
     ]
     if let success { payload["success"] = success }
     if let targetPID { payload["targetPID"] = targetPID }
 
     var data = try JSONSerialization.data(withJSONObject: payload)
     data.append(0x0A)
+
+    if event == "log" {
+      // universal.js can stop every host thread while it handles a JIT BRK.
+      // Diagnostic traffic must therefore never wait for that stopped host.
+      sendLock.lock()
+      guard pendingLogs < 32 else {
+        sendLock.unlock()
+        return
+      }
+      pendingLogs += 1
+      connection.send(
+        content: data,
+        completion: .contentProcessed { [weak self] _ in
+          guard let self else { return }
+          self.sendLock.lock()
+          self.pendingLogs -= 1
+          self.sendLock.unlock()
+        }
+      )
+      sendLock.unlock()
+      return
+    }
+
+    // Lifecycle/control messages are rare and authoritative. Keep them ordered
+    // and acknowledged so attach/completion state cannot be guessed.
+    sendLock.lock()
+    defer { sendLock.unlock() }
     let semaphore = DispatchSemaphore(value: 0)
     var sendError: Error?
     connection.send(content: data, completion: .contentProcessed { error in
@@ -320,7 +345,7 @@ private final class Rpcs3HelperReporter {
     })
     guard semaphore.wait(timeout: .now() + 20) == .success else {
       throw Rpcs3HelperError.connection(
-        "Timed out writing to NeoStation."
+        "Timed out writing control state to NeoStation."
       )
     }
     if let sendError { throw sendError }

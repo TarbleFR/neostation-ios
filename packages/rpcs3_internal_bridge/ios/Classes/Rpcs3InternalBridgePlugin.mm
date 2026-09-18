@@ -2,6 +2,7 @@
 #import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
 #import "Rpcs3Diagnostics.h"
+#import "Rpcs3EarlyLoaderDiagnostics.h"
 #import "Rpcs3MemoryPreflight.h"
 #import "RPCS3GameInputController.h"
 
@@ -189,6 +190,7 @@ static UIViewController* RPCS3RootViewController(void) {
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
+  RPCS3RecoverEarlyLoaderLog();
   FlutterMethodChannel* channel = [FlutterMethodChannel methodChannelWithName:kRpcs3Channel
                                                               binaryMessenger:registrar.messenger];
   Rpcs3InternalBridgePlugin* instance = [[Rpcs3InternalBridgePlugin alloc] init];
@@ -298,7 +300,13 @@ static void RPCS3Progress(void* context,
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
       RPCS3Diagnostic(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
-      handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
+      {
+        // Keep stderr capture completely local to dlopen. If dyld or a static
+        // initializer terminates the process, the next NeoStation launch can
+        // recover the last constructor diagnostics from Documents.
+        RPCS3EarlyLoaderCapture earlyLoaderCapture;
+        handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
+      }
       if (handle) {
         RPCS3Diagnostic(@"core_load_end", @"loaded");
       } else {
