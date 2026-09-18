@@ -1,4 +1,5 @@
 #import "Rpcs3JitBridgePlugin.h"
+#import "Rpcs3Diagnostics.h"
 
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
