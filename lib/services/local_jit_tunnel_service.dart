@@ -4,22 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
 
-import 'local_jit_session_coordinator.dart';
-
-/// Coordinates the local StikJIT route for one foreground NeoStation session.
-/// Only the native bridge selects/controls a VPN; LocalDevVPN is never mutated.
+/// Single-source policy for NeoStation's integrated local JIT VPN.
+///
+/// Settings ON/OFF are the only mutating operations. Emulator/JIT preflight is
+/// read-only and application lifecycle events never change the VPN state.
 class LocalJitTunnelService {
   LocalJitTunnelService._();
 
   static final LoggerService _log = LoggerService.instance;
-  static int _lifecycleGeneration = 0;
-  static final _session = LocalJitSessionCoordinator<LocalJitTunnelState>(
-    ensureRoute: _ensureNativeRoute,
-    stopTunnel: _disableNativeTunnel,
-    onResetError: (error) {
-      _log.w('Could not reset a stale NeoStation local tunnel: $error');
-    },
-  );
 
   static Future<LocalJitTunnelState> status() async {
     if (!Platform.isIOS) {
@@ -42,12 +34,29 @@ class LocalJitTunnelService {
     }
   }
 
+  /// Explicit Settings ON. No RemotePairing/JIT diagnostic is allowed to undo
+  /// this choice after NetworkExtension reaches an active state.
   static Future<LocalJitTunnelState> authorizeAndEnable() async {
-    return ensureRunningForJit();
+    if (!Platform.isIOS) {
+      throw const LocalJitTunnelException(
+        'unsupportedPlatform',
+        'The integrated local JIT tunnel is available only on iOS.',
+      );
+    }
+    try {
+      final state = await StikjitBridge.activateOwnedTunnel();
+      _log.i(
+        'NeoStationLocalTunnel explicit ON: ${state.status}; '
+        'enabled=${state.enabled}; onDemand=${state.onDemand}.',
+      );
+      return state;
+    } on PlatformException catch (error) {
+      throw _platformException(error, 'start');
+    }
   }
 
-  /// Shared by lifecycle activation and all emulators. A game cannot overtake
-  /// the cold reset, and a stale Dart continuation cannot undo a manual stop.
+  /// Read-only game/JIT preflight. This method never starts, stops, saves or
+  /// reconfigures a VPN profile.
   static Future<LocalJitTunnelState> ensureRunningForJit() async {
     if (!Platform.isIOS) {
       throw const LocalJitTunnelException(
@@ -56,38 +65,19 @@ class LocalJitTunnelService {
       );
     }
     try {
-      return await _session.ensure();
-    } on LocalJitSessionCancelled {
-      throw const LocalJitTunnelException(
-        'local_tunnel_cancelled',
-        'The local JIT route request was cancelled by a newer stop.',
-      );
-    }
-  }
-
-  static Future<LocalJitTunnelState> _ensureNativeRoute() async {
-    try {
       final state = await StikjitBridge.ensureJitRoute();
-      if (!state.active || !state.routeVerified) {
-        throw LocalJitTunnelException(
-          'notConnected',
-          'The local JIT route is ${state.status}.',
-        );
-      }
       _log.i(
-        'Local JIT route ready: '
-        '${state.interfaceAddress ?? 'external'} -> '
-        '${state.peerAddress ?? 'unknown'}; '
-        'managedByNeoStation=${state.managedByNeoStation}; '
-        'onDemand=${state.onDemand}.',
+        'Local JIT endpoint reachable: ${state.peerAddress ?? 'unknown'}; '
+        'managedByNeoStation=${state.managedByNeoStation}.',
       );
       return state;
     } on PlatformException catch (error) {
-      throw _platformException(error, 'start');
+      throw _platformException(error, 'probe');
     }
   }
 
-  /// Invalidates both native requests and not-yet-submitted Dart continuations.
+  /// Explicit Settings OFF. This is the only application path that stops the
+  /// NeoStation-owned tunnel.
   static Future<LocalJitTunnelState> disable() async {
     if (!Platform.isIOS) {
       throw const LocalJitTunnelException(
@@ -95,48 +85,15 @@ class LocalJitTunnelService {
         'The integrated local JIT tunnel is available only on iOS.',
       );
     }
-    ++_lifecycleGeneration;
-    return _session.stop();
-  }
-
-  static Future<LocalJitTunnelState> _disableNativeTunnel() async {
     try {
-      return await StikjitBridge.disableLocalTunnel();
+      final state = await StikjitBridge.disableLocalTunnel();
+      _log.i(
+        'NeoStationLocalTunnel explicit OFF: ${state.status}; '
+        'enabled=${state.enabled}.',
+      );
+      return state;
     } on PlatformException catch (error) {
       throw _platformException(error, 'stop');
-    }
-  }
-
-  /// Best-effort frontend activation. The game repeats the same real preflight.
-  static Future<void> refreshInBackground({required String reason}) async {
-    if (!Platform.isIOS) return;
-    final generation = ++_lifecycleGeneration;
-    try {
-      final route = await ensureRunningForJit();
-      if (generation != _lifecycleGeneration) return;
-      _log.i(
-        route.managedByNeoStation
-            ? 'NeoStationLocalTunnel is ready after $reason.'
-            : 'External StikJIT route reused after $reason; '
-                'NeoStationLocalTunnel remains off.',
-      );
-    } catch (error) {
-      if (generation != _lifecycleGeneration) return;
-      _log.w('Local JIT route activation failed after $reason: $error');
-    }
-  }
-
-  static Future<void> stopForLifecycle({required String reason}) async {
-    if (!Platform.isIOS) return;
-    ++_lifecycleGeneration;
-    try {
-      final state = await disable();
-      _log.i(
-        'NeoStation local tunnel stopped for $reason: ${state.status}; '
-        'enabled=${state.enabled}; onDemand=${state.onDemand}.',
-      );
-    } catch (error) {
-      _log.w('NeoStation local tunnel stop failed for $reason: $error');
     }
   }
 
@@ -157,8 +114,10 @@ class LocalJitTunnelService {
 
 class LocalJitTunnelException implements Exception {
   const LocalJitTunnelException(this.code, this.message);
+
   final String code;
   final String message;
+
   @override
   String toString() => message;
 }
