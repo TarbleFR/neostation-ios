@@ -25,6 +25,9 @@ def main():
   tail=text[text.index('  private func providerBundleIdentifier()'):text.index('// This code stays in the manager')]
   tail=tail.replace('(schema == 1 || schema == Constants.schemaVersion)', '(schema == 1 || schema == 2 || schema == Constants.schemaVersion)')
   write(name,(RES/'manager.swift.inc').read_text()+tail)
+ # The retained tail ends before the removed extension's separator.
+ # Keep one terminal newline on both fresh and already-patched sources.
+ write(name,read(name).rstrip()+'\n')
  write('native/local_jit_tunnel/PacketTunnelProvider.swift',(RES/'provider.swift.inc').read_text())
  name='packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift'
  text=read(name)

@@ -107,6 +107,7 @@ jobs:
           python3 test/local_jit_tunnel_contract_test.py
           python3 build-utils/patch_vpn_build271.py
           python3 build-utils/patch_vpn_build271.py
+          git diff --check 2>&1 | tee build/rpcs3-ci/source-whitespace-check.log
           python3 test/vpn_build271_test.py 2>&1 | tee build/rpcs3-ci/vpn-build271-tests.log
           python3 test/vpn271_baseline_test.py
 
@@ -424,7 +425,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
+          git diff --check 2>&1 | tee build/rpcs3-ci/package-whitespace-check.log
           python3 packages/dolphin_internal_bridge/ci/build_support.py package 2>&1 | tee build/rpcs3-ci/package.log
           python3 build-utils/validate_rpcs3_ipa.py --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" 2>&1 | tee build/rpcs3-ci/validation.log
           python3 build-utils/validate_single_ipa_distribution.py \

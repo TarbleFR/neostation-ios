@@ -195,6 +195,25 @@ print("PASS: 271 provider no host dependency, packet reflection, counters, manua
 '''
 
 def main():
+ # Packaging runs git diff --check. Validate the generated file here too,
+ # before spending time compiling the app; do not suppress whitespace errors.
+ generated=ROOT/'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'
+ payload=generated.read_bytes()
+ assert payload.endswith(b'\n') and not payload.endswith(b'\n\n'), 'Generated VPN manager must have exactly one terminal newline'
+ with tempfile.TemporaryDirectory(prefix='vpn271-whitespace-') as temporary:
+  directory=Path(temporary)
+  subprocess.run(['git','init','--quiet'],cwd=directory,check=True,capture_output=True)
+  fixture=directory/'generated.swift'
+  fixture.write_bytes(b'// Generated source baseline.\n')
+  subprocess.run(['git','add','generated.swift'],cwd=directory,check=True,capture_output=True)
+  command=['git','--no-pager','diff','--check','--','generated.swift']
+  fixture.write_bytes(payload+b'\n')
+  negative=subprocess.run(command,cwd=directory,capture_output=True,text=True)
+  assert negative.returncode!=0 and 'new blank line at EOF' in negative.stdout, 'The packaging regression must fail the real Git gate'
+  fixture.write_bytes(payload)
+  check=subprocess.run(command,cwd=directory,capture_output=True,text=True)
+  assert check.returncode==0, 'Generated VPN manager failed git diff --check:\n'+check.stdout+check.stderr
+ print('PASS: 271 generated VPN source passes the actual Git whitespace gate')
  manager=(ROOT/'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift').read_text()
  assert 'NEOSTATION_VPN_CONTROL_271' in manager
  manager=manager.replace('import Network\n','').replace('import NetworkExtension\n','')
