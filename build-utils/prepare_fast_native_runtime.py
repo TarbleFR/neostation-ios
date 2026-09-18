@@ -179,11 +179,12 @@ def main() -> None:
             ROOT/'packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework',
         )
 
-        copytree(
-            dolphin,
-            ROOT/'packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework',
-        )
-        info_path=ROOT/'packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/Info.plist'
+        dolphin_dst=ROOT/'packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework'
+        copytree(dolphin, dolphin_dst)
+        # zipfile extraction does not reliably restore POSIX executable bits.
+        # Restore the verified donor Mach-O mode before Xcode/IPA packaging.
+        (dolphin_dst/'DolphinCore').chmod(0o755)
+        info_path=dolphin_dst/'Info.plist'
         if info_path.is_file():
             info=plistlib.loads(info_path.read_bytes())
             info['CFBundleVersion']=str(args.build_number)
