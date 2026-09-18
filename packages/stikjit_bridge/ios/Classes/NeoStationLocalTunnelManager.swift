@@ -205,7 +205,11 @@ final class NeoStationLocalTunnelManager {
       finish(command, .success(response(for: manager)))
       return
     case .connecting, .reasserting:
-      waitUntilConnected(manager, command: command)
+      waitUntilConnected(
+        manager,
+        command: command,
+        observedConnecting: true
+      )
       return
     case .disconnecting:
       DispatchQueue.main.asyncAfter(
@@ -234,16 +238,22 @@ final class NeoStationLocalTunnelManager {
       return
     }
 
-    waitUntilConnected(manager, command: command)
+    waitUntilConnected(
+      manager,
+      command: command,
+      observedConnecting: false
+    )
   }
 
   private func waitUntilConnected(
     _ manager: NETunnelProviderManager,
-    command: Command
+    command: Command,
+    observedConnecting: Bool
   ) {
     guard isCurrent(command) else { return }
 
-    switch manager.connection.status {
+    let status = manager.connection.status
+    switch status {
     case .connected:
       activeManager = manager
       finish(command, .success(response(for: manager)))
@@ -254,12 +264,16 @@ final class NeoStationLocalTunnelManager {
         .failure(.start("The integrated VPN entered an invalid state."))
       )
       return
-    case .disconnected:
+    case .disconnected where observedConnecting:
+      // Only a return to disconnected AFTER iOS entered connecting/reasserting
+      // proves that this activation attempt actually stopped. Immediately after
+      // startVPNTunnel(), NEVPNConnection may still report its previous
+      // disconnected state for a short time.
       manager.connection.fetchLastDisconnectError { error in
         DispatchQueue.main.async {
           guard self.isCurrent(command) else { return }
           let detail = error.map(Self.errorDetail) ??
-            "iOS stopped the tunnel without a disconnect error."
+            "iOS stopped the tunnel after activation began without a disconnect error."
           self.finish(command, .failure(.start(detail)))
         }
       }
@@ -268,10 +282,19 @@ final class NeoStationLocalTunnelManager {
       break
     }
 
+    let observed =
+      observedConnecting ||
+      status == .connecting ||
+      status == .reasserting
+
     DispatchQueue.main.asyncAfter(
       deadline: .now() + Constants.connectionPollInterval
     ) {
-      self.waitUntilConnected(manager, command: command)
+      self.waitUntilConnected(
+        manager,
+        command: command,
+        observedConnecting: observed
+      )
     }
   }
 

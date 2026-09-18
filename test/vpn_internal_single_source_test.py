@@ -56,7 +56,36 @@ assert 'LocalJitTunnelService' not in lifecycle
 assert 'refreshInBackground' not in service
 assert 'stopForLifecycle' not in service
 
+
+
+# Regression guard: iOS may still report the previous disconnected state
+# immediately after startVPNTunnel(). It is terminal only after a real
+# connecting/reasserting state was observed.
+assert 'observedConnecting: false' in manager
+assert 'observedConnecting: true' in manager
+assert 'case .disconnected where observedConnecting:' in manager
+assert 'status == .connecting' in manager
+assert 'status == .reasserting' in manager
+
+def activation_result(states):
+    observed = False
+    for state in states:
+        if state == 'connected':
+            return 'connected'
+        if state == 'invalid':
+            return 'failed'
+        if state == 'disconnected' and observed:
+            return 'failed'
+        if state in ('connecting', 'reasserting'):
+            observed = True
+    return 'pending'
+
+assert activation_result(['disconnected', 'connecting', 'connected']) == 'connected'
+assert activation_result(['disconnected', 'disconnected', 'connecting', 'connected']) == 'connected'
+assert activation_result(['connecting', 'disconnected']) == 'failed'
+assert activation_result(['reasserting', 'disconnected']) == 'failed'
+
 assert 'schemaVersion = 277' in manager
 assert '"version": 277' in provider
 
-print('PASS: internal VPN v277 single-source lifecycle invariants')
+print('PASS: internal VPN single-source lifecycle + delayed start state transition')
