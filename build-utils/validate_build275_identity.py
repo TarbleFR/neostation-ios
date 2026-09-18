@@ -32,14 +32,16 @@ def verify(path):
    b'Diagnostic-VPN-RPCS3-precedent.txt',
   ):
    assert marker in manager,'Missing compiled VPN policy marker: '+repr(marker)
-  assert b'NEOSTATION_VPN_PERSISTENCE_275: using live cached manager' in manager,'Build 275 live-manager status marker missing'\n  assert b'nativeDebuggerLease270=active' not in manager
+  assert b'NEOSTATION_VPN_PERSISTENCE_275: using live cached manager' in manager,'Build 275 live-manager status marker missing'
+  assert b'nativeDebuggerLease270=active' not in manager
   assert b'stage=status.load-preferences' in manager,'Manual/status preferences path unexpectedly missing'
 
   provider=archive.read(prefix+'PlugIns/NeoStationLocalTunnel.appex/NeoStationLocalTunnel')
   assert b'neostation.vpn271.packets' in provider,'Retain validated packet transport'
   assert b'network settings callback missing after 10s' in provider,'Manual start remains bounded'
   assert b'heartbeat expired' not in provider,'Host lifecycle must not terminate tunnel'
-  assert b'packet write failed after bounded retries' not in provider,'Transient packet writes must not terminate the VPN'\n
+  assert b'packet write failed after bounded retries' not in provider,'Transient packet writes must not terminate the VPN'
+
   dolphin=archive.read(prefix+'Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
   assert b'DolphinRetroAchievementsAccount' in dolphin,'Dolphin RA account flow changed'
 
