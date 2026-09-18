@@ -1,85 +1,86 @@
 import Foundation
 import NetworkExtension
-import os.log
 
-/// Device-local RemotePairing route. Every lifecycle mutation, packet callback
-/// and watchdog tick is serialized; a completed stop cannot be undone by an
-/// older setTunnelNetworkSettings callback.
+/// Minimal device-local packet tunnel used only to expose the RemotePairing
+/// endpoint required by StikJIT. It never self-terminates because of a heartbeat,
+/// diagnostics, packet backpressure or application lifecycle state.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-  private enum Configuration {
-    static let interfaceAddressKey = "interfaceAddress"
-    static let peerAddressKey = "peerAddress"
-    static let defaultInterfaceAddress = "10.7.1.1"
-    static let defaultPeerAddress = "10.7.0.1"
-    static let heartbeatMessage = "heartbeat"
-    static let heartbeatTimeout: TimeInterval = 5.0
-    static let watchdogInterval: TimeInterval = 1.0
-  }
+  private let queue = DispatchQueue(
+    label: "com.neogamelab.neostation.localtunnel.packets",
+    qos: .userInitiated,
+    autoreleaseFrequency: .workItem
+  )
 
-  private let logger = Logger(
-    subsystem: "com.neogamelab.neostation.localtunnel",
-    category: "PacketTunnelProvider"
-  )
-  private let watchdogQueue = DispatchQueue(
-    label: "com.neogamelab.neostation.localtunnel.watchdog",
-    qos: .utility
-  )
-  // Access only on watchdogQueue, including NetworkExtension callbacks.
-  private var stopped = true
   private var generation: UInt64 = 0
-  private var startCompletion: ((Error?) -> Void)?
-  private var watchdogTimer: DispatchSourceTimer?
-  private var lastHeartbeatUptime: TimeInterval = 0
+  private var running = false
+  private var ready = false
+  private var readPending = false
+  private var pendingStart: ((Error?) -> Void)?
+  private var startedAt: TimeInterval = 0
+  private var readPackets: UInt64 = 0
+  private var writtenPackets: UInt64 = 0
+  private var droppedPackets: UInt64 = 0
+  private var writeFailures: UInt64 = 0
 
   override func startTunnel(
     options: [String: NSObject]?,
     completionHandler: @escaping (Error?) -> Void
   ) {
-    watchdogQueue.async {
-      // Also makes an unexpected overlapping start settle the older caller.
+    queue.async {
       self.finishPendingStart(Self.cancelledStartError())
-      self.stopWatchdog()
       self.generation &+= 1
       let generation = self.generation
-      self.stopped = false
-      self.startCompletion = completionHandler
+      self.running = true
+      self.ready = false
+      self.readPending = false
+      self.startedAt = ProcessInfo.processInfo.systemUptime
+      self.readPackets = 0
+      self.writtenPackets = 0
+      self.droppedPackets = 0
+      self.writeFailures = 0
+      self.pendingStart = completionHandler
+
       let provider =
-        (self.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
+        (self.protocolConfiguration as? NETunnelProviderProtocol)?
+        .providerConfiguration
       let interfaceAddress =
-        options?[Configuration.interfaceAddressKey] as? String ??
-        provider?[Configuration.interfaceAddressKey] as? String ??
-        Configuration.defaultInterfaceAddress
+        options?["interfaceAddress"] as? String ??
+        provider?["interfaceAddress"] as? String ??
+        "10.7.1.1"
       let peerAddress =
-        options?[Configuration.peerAddressKey] as? String ??
-        provider?[Configuration.peerAddressKey] as? String ??
-        Configuration.defaultPeerAddress
+        options?["peerAddress"] as? String ??
+        provider?["peerAddress"] as? String ??
+        "10.7.0.1"
 
       let ipv4 = NEIPv4Settings(
         addresses: [interfaceAddress],
         subnetMasks: ["255.255.255.255"]
       )
       ipv4.includedRoutes = [
-        NEIPv4Route(destinationAddress: peerAddress, subnetMask: "255.255.255.255"),
+        NEIPv4Route(
+          destinationAddress: peerAddress,
+          subnetMask: "255.255.255.255"
+        ),
       ]
       ipv4.excludedRoutes = [.default()]
-      let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: peerAddress)
+
+      let settings = NEPacketTunnelNetworkSettings(
+        tunnelRemoteAddress: peerAddress
+      )
       settings.ipv4Settings = ipv4
-      settings.mtu = 1500
 
       self.setTunnelNetworkSettings(settings) { error in
-        self.watchdogQueue.async {
-          // stopTunnel has already completed the cancelled startup. Do not
-          // announce success, restart a reader, or arm a watchdog for it.
-          guard self.generation == generation, !self.stopped else { return }
+        self.queue.async {
+          guard self.generation == generation, self.running else { return }
           if let error {
-            self.stopped = true
-            self.logger.error("Local tunnel settings failed: \(error.localizedDescription, privacy: .public)")
+            self.running = false
+            self.ready = false
             self.finishPendingStart(error)
             return
           }
-          self.logger.info("Device-local JIT tunnel is ready.")
-          self.startWatchdog()
-          self.readAndReflectPackets()
+
+          self.ready = true
+          self.readNext()
           self.finishPendingStart(nil)
         }
       }
@@ -90,12 +91,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     with reason: NEProviderStopReason,
     completionHandler: @escaping () -> Void
   ) {
-    watchdogQueue.async {
+    queue.async {
       self.generation &+= 1
-      self.stopped = true
-      self.stopWatchdog()
+      self.running = false
+      self.ready = false
+      self.readPending = false
       self.finishPendingStart(Self.cancelledStartError())
-      self.logger.info("Device-local JIT tunnel stopped with reason \(reason.rawValue).")
       completionHandler()
     }
   }
@@ -104,24 +105,126 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     _ messageData: Data,
     completionHandler: ((Data?) -> Void)? = nil
   ) {
-    watchdogQueue.async {
-      guard !self.stopped, self.startCompletion == nil else {
+    queue.async {
+      guard self.running, self.ready else {
         completionHandler?(nil)
         return
       }
-      if String(data: messageData, encoding: .utf8) == Configuration.heartbeatMessage {
-        self.lastHeartbeatUptime = ProcessInfo.processInfo.systemUptime
+
+      if messageData == Data("heartbeat".utf8) {
+        // Compatibility ping only. It has no lifecycle authority.
         completionHandler?(Data("alive".utf8))
-      } else {
-        completionHandler?(Data("ready".utf8))
+        return
+      }
+
+      if messageData == Data("vpn-status".utf8) ||
+         messageData == Data("vpn271-status".utf8) {
+        let payload: [String: Any] = [
+          "version": 277,
+          "ready": true,
+          "readPackets": self.readPackets,
+          "writtenPackets": self.writtenPackets,
+          "droppedPackets": self.droppedPackets,
+          "writeFailures": self.writeFailures,
+          "uptime": ProcessInfo.processInfo.systemUptime - self.startedAt,
+        ]
+        completionHandler?(
+          try? JSONSerialization.data(withJSONObject: payload)
+        )
+        return
+      }
+
+      completionHandler?(Data("ready".utf8))
+    }
+  }
+
+  private func readNext() {
+    dispatchPrecondition(condition: .onQueue(queue))
+    guard running, ready, !readPending else { return }
+
+    readPending = true
+    let generation = self.generation
+
+    packetFlow.readPackets { [weak self] packets, protocols in
+      guard let self else { return }
+
+      self.queue.async {
+        self.readPending = false
+        guard
+          self.running,
+          self.ready,
+          self.generation == generation
+        else {
+          return
+        }
+
+        self.readPackets &+= UInt64(packets.count)
+        var reflected = [Data]()
+        var families = [NSNumber]()
+        reflected.reserveCapacity(packets.count)
+        families.reserveCapacity(protocols.count)
+
+        for (index, packet) in packets.enumerated() {
+          guard
+            index < protocols.count,
+            protocols[index].int32Value == AF_INET,
+            packet.count >= 20,
+            packet[0] >> 4 == 4
+          else {
+            self.droppedPackets &+= 1
+            continue
+          }
+
+          let headerLength = Int(packet[0] & 0x0f) * 4
+          let totalLength = Int(packet[2]) * 256 + Int(packet[3])
+          guard
+            headerLength >= 20,
+            headerLength <= totalLength,
+            totalLength <= packet.count
+          else {
+            self.droppedPackets &+= 1
+            continue
+          }
+
+          var copy = packet
+          copy.withUnsafeMutableBytes { rawBuffer in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            for offset in 0..<4 {
+              let source = bytes[12 + offset]
+              bytes[12 + offset] = bytes[16 + offset]
+              bytes[16 + offset] = source
+            }
+          }
+
+          reflected.append(copy)
+          families.append(protocols[index])
+        }
+
+        guard !reflected.isEmpty else {
+          self.readNext()
+          return
+        }
+
+        if self.packetFlow.writePackets(
+          reflected,
+          withProtocols: families
+        ) {
+          self.writtenPackets &+= UInt64(reflected.count)
+        } else {
+          // Packet backpressure may drop one reflected batch. It must never
+          // tear down the user's VPN.
+          self.writeFailures &+= 1
+          self.droppedPackets &+= UInt64(reflected.count)
+        }
+
+        self.readNext()
       }
     }
   }
 
   private func finishPendingStart(_ error: Error?) {
-    dispatchPrecondition(condition: .onQueue(watchdogQueue))
-    let completion = startCompletion
-    startCompletion = nil
+    let completion = pendingStart
+    pendingStart = nil
     completion?(error)
   }
 
@@ -129,84 +232,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     NSError(
       domain: "NeoStationLocalTunnel",
       code: NSUserCancelledError,
-      userInfo: [NSLocalizedDescriptionKey: "Local tunnel startup was cancelled by a newer stop."]
+      userInfo: [
+        NSLocalizedDescriptionKey:
+          "Local tunnel startup was cancelled by an explicit stop.",
+      ]
     )
-  }
-
-  private func startWatchdog() {
-    dispatchPrecondition(condition: .onQueue(watchdogQueue))
-    stopWatchdog()
-    lastHeartbeatUptime = ProcessInfo.processInfo.systemUptime
-    let generation = self.generation
-    let timer = DispatchSource.makeTimerSource(queue: watchdogQueue)
-    timer.schedule(
-      deadline: .now() + Configuration.watchdogInterval,
-      repeating: Configuration.watchdogInterval,
-      leeway: .milliseconds(200)
-    )
-    timer.setEventHandler { [weak self] in
-      guard let self, self.generation == generation else { return }
-      self.expireHeartbeatIfNeeded(now: ProcessInfo.processInfo.systemUptime)
-    }
-    watchdogTimer = timer
-    timer.resume()
-  }
-
-  private func expireHeartbeatIfNeeded(now: TimeInterval) {
-    dispatchPrecondition(condition: .onQueue(watchdogQueue))
-    guard !stopped else { return }
-    let elapsed = now - lastHeartbeatUptime
-    guard elapsed >= Configuration.heartbeatTimeout else { return }
-    logger.error("NeoStation heartbeat expired after \(elapsed, privacy: .public)s; closing the local tunnel.")
-    stopped = true
-    generation &+= 1
-    stopWatchdog()
-    cancelTunnelWithError(nil)
-  }
-
-  private func stopWatchdog() {
-    dispatchPrecondition(condition: .onQueue(watchdogQueue))
-    watchdogTimer?.setEventHandler {}
-    watchdogTimer?.cancel()
-    watchdogTimer = nil
-  }
-
-  private func readAndReflectPackets() {
-    dispatchPrecondition(condition: .onQueue(watchdogQueue))
-    guard !stopped else { return }
-    let generation = self.generation
-    packetFlow.readPackets { [weak self] packets, protocols in
-      guard let self else { return }
-      self.watchdogQueue.async {
-        guard !self.stopped, self.generation == generation else { return }
-        var reflected = [Data]()
-        var reflectedProtocols = [NSNumber]()
-        reflected.reserveCapacity(packets.count)
-        reflectedProtocols.reserveCapacity(protocols.count)
-        for (index, packet) in packets.enumerated() {
-          guard index < protocols.count,
-                protocols[index].int32Value == AF_INET,
-                packet.count >= 20 else { continue }
-          var copy = packet
-          let isIPv4 = copy.withUnsafeMutableBytes { rawBuffer -> Bool in
-            guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress,
-                  bytes[0] >> 4 == 4 else { return false }
-            for offset in 0..<4 {
-              let source = bytes[12 + offset]
-              bytes[12 + offset] = bytes[16 + offset]
-              bytes[16 + offset] = source
-            }
-            return true
-          }
-          guard isIPv4 else { continue }
-          reflected.append(copy)
-          reflectedProtocols.append(protocols[index])
-        }
-        if !reflected.isEmpty {
-          self.packetFlow.writePackets(reflected, withProtocols: reflectedProtocols)
-        }
-        self.readAndReflectPackets()
-      }
-    }
   }
 }
