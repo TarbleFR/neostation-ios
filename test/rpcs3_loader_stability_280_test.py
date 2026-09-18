@@ -13,10 +13,10 @@ def text(path):
 # Build 279 VPN is frozen during this RPCS3-only fix.
 assert subprocess.check_output(
     ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
-    cwd=ROOT, text=True).strip() == 'cf81be9459a0e7dd32cb3b984eac52d11577f8da'
+    cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
 assert subprocess.check_output(
     ['git', 'hash-object', 'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'],
-    cwd=ROOT, text=True).strip() == '33a14340712eeb85c8b6e1a9caf34f64821073dd'
+    cwd=ROOT, text=True).strip() == '928c70f8cdb7ef156618a2d58091a4dee74069fe'
 
 host = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 diag = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h')
