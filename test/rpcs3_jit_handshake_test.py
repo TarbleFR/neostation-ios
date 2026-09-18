@@ -35,6 +35,17 @@ class Rpcs3JitHandshakeTests(unittest.TestCase):
 #include <unistd.h>
 #include <cassert>
 #include <cstdio>
+// Compile the real logger used by the extracted production session. Redirect
+// only its Documents lookup so the test never writes into the runner's home.
+static NSString* testDocuments;
+static NSArray<NSString*>* RPCS3TestDocuments(NSSearchPathDirectory directory,
+                                            NSSearchPathDomainMask domain,
+                                            BOOL expand) {
+  return @[testDocuments];
+}
+#define NSSearchPathForDirectoriesInDomains RPCS3TestDocuments
+#import "Rpcs3Diagnostics.h"
+#undef NSSearchPathForDirectoriesInDomains
 static NSTimeInterval const kRpcs3HelperConnectTimeout = 2.0;
 '''
         harness += session
@@ -57,10 +68,11 @@ static int connectClient(RPCS3JitSession* session) {
   assert(connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0);
   return fd;
 }
-static void sendEvent(int fd, NSString* token, id event, id pid = nil, id success = nil) {
+static void sendEvent(int fd, NSString* token, id event, id pid = nil, id success = nil, NSString* message = nil) {
   NSMutableDictionary* payload = [@{@"token": token, @"event": event} mutableCopy];
   if (pid) payload[@"targetPID"] = pid;
   if (success) payload[@"success"] = success;
+  if (message) payload[@"message"] = message;
   NSMutableData* bytes = [[NSJSONSerialization dataWithJSONObject:payload options:0 error:nil] mutableCopy];
   [bytes appendBytes:"\n" length:1];
   size_t sent = 0;
@@ -129,12 +141,42 @@ static void failureAndDisconnect() {
     [session close];
   }
 }
-int main() {
+static void helperDiagnostics() {
+  RPCS3JitSession* session = makeSession();
+  int fd = connectClient(session);
+  connected(fd, session);
+  sendEvent(fd, @"wrong-token", @"log", nil, nil, @"UNAUTHENTICATED_LOG_MUST_NOT_APPEAR");
+  NSString* longMessage = [@"x" stringByPaddingToLength:9000 withString:@"x" startingAtIndex:0];
+  sendEvent(fd, session.token, @"log", nil, nil, longMessage);
+  sendEvent(fd, session.token, @"complete", nil, @NO, @"expected-test-failure");
+  assert([session waitUntilFinished:2] && !session.success);
+  NSString* path = [testDocuments stringByAppendingPathComponent:@"RPCS3-diagnostic.log"];
+  NSString* text = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
+  assert(text && ![text containsString:@"UNAUTHENTICATED_LOG_MUST_NOT_APPEAR"]);
+  BOOL foundBoundedLog = NO;
+  for (NSString* line in [text componentsSeparatedByString:@"\n"]) {
+    if (!line.length) continue;
+    NSDictionary* entry = [NSJSONSerialization JSONObjectWithData:
+        [line dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    assert(entry);
+    if ([entry[@"stage"] isEqualToString:@"jit_helper_log"]) {
+      assert([entry[@"message"] length] <= 4096);
+      foundBoundedLog = YES;
+    }
+  }
+  assert(foundBoundedLog);
+  close(fd);
+  [session close];
+}
+int main(int argc, char** argv) {
   @autoreleasepool {
+    assert(argc == 2);
+    testDocuments = [NSString stringWithUTF8String:argv[1]];
     universalHandshake();
     legacyAttachWithoutScript();
     completionCannotReplaceUniversalAttach();
     failureAndDisconnect();
+    helperDiagnostics();
     puts("RPCS3 production handshake: all scenarios passed");
   }
 }
@@ -144,9 +186,9 @@ int main() {
             executable = Path(directory) / 'harness'
             source_file.write_text(harness)
             subprocess.run([compiler, '-std=c++17', '-fobjc-arc', '-fblocks',
-                            '-framework', 'Foundation', str(source_file), '-o',
+                            '-framework', 'Foundation', '-I', str(PLUGIN.parent), str(source_file), '-o',
                             str(executable)], check=True, timeout=60)
-            subprocess.run([str(executable)], check=True, timeout=30)
+            subprocess.run([str(executable), directory], check=True, timeout=30)
 
 
 if __name__ == '__main__':
