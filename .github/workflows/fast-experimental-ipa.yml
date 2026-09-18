@@ -95,6 +95,7 @@ jobs:
           git diff --check
           python3 test/vpn_build273_test.py 2>&1 | tee build/rpcs3-ci/vpn-build273-tests.log
           python3 test/vpn271_baseline_test.py
+          python3 -m py_compile build-utils/prepare_fast_native_runtime.py
 
       - name: Resolve Flutter and analyze
         shell: bash
