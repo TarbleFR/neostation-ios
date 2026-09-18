@@ -51,6 +51,13 @@ assert 'stopHeartbeat' not in manager
 assert 'writeFailures &+= 1' in provider
 assert 'droppedPackets &+= UInt64(reflected.count)' in provider
 
+# Provider startup must never leave startTunnel unresolved indefinitely.
+assert 'settings.mtu = 1500' in provider
+assert 'self.queue.asyncAfter(deadline: .now() + 10)' in provider
+assert 'self.pendingStart != nil' in provider
+assert 'networkSettingsTimeoutError()' in provider
+assert 'setTunnelNetworkSettings did not complete within 10 seconds.' in provider
+
 assert 'LocalJitTunnelService' not in main
 assert 'LocalJitTunnelService' not in lifecycle
 assert 'refreshInBackground' not in service
@@ -88,4 +95,4 @@ assert activation_result(['reasserting', 'disconnected']) == 'failed'
 assert 'schemaVersion = 277' in manager
 assert '"version": 277' in provider
 
-print('PASS: internal VPN single-source lifecycle + delayed start state transition')
+print('PASS: internal VPN single-source lifecycle + delayed state + bounded provider startup')

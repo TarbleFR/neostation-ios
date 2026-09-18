@@ -68,6 +68,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         tunnelRemoteAddress: peerAddress
       )
       settings.ipv4Settings = ipv4
+      settings.mtu = 1500
 
       self.setTunnelNetworkSettings(settings) { error in
         self.queue.async {
@@ -83,6 +84,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
           self.readNext()
           self.finishPendingStart(nil)
         }
+      }
+
+      // NetworkExtension must eventually resolve startTunnel. If iOS never
+      // invokes the setTunnelNetworkSettings callback, fail this startup
+      // attempt explicitly instead of leaving the manager waiting for 45 s.
+      self.queue.asyncAfter(deadline: .now() + 10) {
+        guard
+          self.generation == generation,
+          self.running,
+          !self.ready,
+          self.pendingStart != nil
+        else {
+          return
+        }
+
+        self.running = false
+        self.ready = false
+        self.generation &+= 1
+        self.finishPendingStart(Self.networkSettingsTimeoutError())
       }
     }
   }
@@ -235,6 +255,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       userInfo: [
         NSLocalizedDescriptionKey:
           "Local tunnel startup was cancelled by an explicit stop.",
+      ]
+    )
+  }
+
+  private static func networkSettingsTimeoutError() -> NSError {
+    NSError(
+      domain: "NeoStationLocalTunnel",
+      code: 3,
+      userInfo: [
+        NSLocalizedDescriptionKey:
+          "setTunnelNetworkSettings did not complete within 10 seconds.",
       ]
     )
   }
