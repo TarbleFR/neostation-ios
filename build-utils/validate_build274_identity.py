@@ -25,13 +25,13 @@ def verify(path):
 
   manager=archive.read(prefix+'Frameworks/stikjit_bridge.framework/stikjit_bridge')
   for marker in (
-   b'NEOSTATION_VPN_MANUAL_ONLY_273: endpoint reachable; VPN unchanged',
-   b'NEOSTATION_VPN_MANUAL_ONLY_273: endpoint unavailable; VPN unchanged',
+   b'NEOSTATION_VPN_STABLE_PREFLIGHT_274: initial route unavailable; VPN unchanged',
+   b'NEOSTATION_VPN_STABLE_PREFLIGHT_274: route stable; VPN frozen for RPCS3 boot',
+   b'NEOSTATION_VPN_STABLE_PREFLIGHT_274: route changed during preflight; VPN unchanged',
    b'Diagnostic-VPN-RPCS3.txt',
    b'Diagnostic-VPN-RPCS3-precedent.txt',
   ):
    assert marker in manager,'Missing compiled VPN policy marker: '+repr(marker)
-  assert b'NEOSTATION_VPN_STABLE_PREFLIGHT_274: route stable; VPN frozen for RPCS3 boot' in manager,'Build 274 stable VPN preflight missing'
   assert b'nativeDebuggerLease270=active' not in manager
   assert b'stage=status.load-preferences' in manager,'Manual/status preferences path unexpectedly missing'
 
