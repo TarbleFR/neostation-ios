@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Verify exact IPA270 and all retained 269/268/267 fixes, not runtime success."""
+"""Verify IPA270 and retained 269/268/267 fixes; not runtime success."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import zipfile
 from validate_build269_identity import verify as verify269
+from patch_rpcs3_stop_reply270 import protocol_script
 
 
 def verify(path):
@@ -28,9 +30,18 @@ def verify(path):
         assert helpers, 'RPCS3 helper framework missing'
         assert any(b'RPCS3-JIT-last.json' in archive.read(name) and
                    b'previous_helper_log' in archive.read(name) for name in helpers), 'Durable helper journal missing'
+        assert any(b'NEOSTATION_RPCS3_STOP_REPLY_270: dedicated protocol selected.' in archive.read(name)
+                   for name in helpers), 'RPCS3-only custom script selection missing'
+        script_root = prefix + 'Frameworks/StikJIT.framework/'
+        original = archive.read(script_root + 'universal.js')
+        fixed = archive.read(script_root + 'rpcs3-universal.js')
+        assert hashlib.sha256(original).hexdigest() == '37c2dea19651f03bc285482d7ff148574e09934ac6f52b6d6cb34a9584397c238', 'Shared Universal script changed unexpectedly'
+        assert fixed.decode('utf-8') == protocol_script(original.decode('utf-8')), 'RPCS3 script differs from the tested transformation'
     report.update({'build270TransportVerified': True,
                    'nativeIdentity': 'NEOSTATION_RPCSS3_TRANSPORT_270',
                    'rpcs3BridgeBinary': host_path, 'helperJournalBinaries': helpers,
+                   'scopedRPCS3ScriptSHA256': hashlib.sha256(fixed).hexdigest(),
+                   'originalUniversalSHA256': hashlib.sha256(original).hexdigest(),
                    'deviceTested': False})
     return report
 
