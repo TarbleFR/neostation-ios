@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""RPCS3-only Universal JIT stop-reply repair; retains both emulator cores.
+"""Keep Build 270 on the known Build 269 script while testing VPN transport.
 
-Generate a private script from the pinned, already patched StikJIT universal
-script. Other emulators keep their original script selection and resources.
+The experimental stop-reply transformation remains available to its standalone
+regression tests, but the production RPCS3 helper MUST NOT select it in this
+release. The user's script-only hotfix did not fix the crash and slowed launch.
 Apply after the native Build 270 transport patch. No entitlement changes.
 """
 from pathlib import Path
@@ -10,6 +11,7 @@ import argparse
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = 'NEOSTATION_RPCS3_STOP_REPLY_270'
+BASELINE_MARKER = 'NEOSTATION_RPCS3_BASELINE_SCRIPT_270: pinned universal.js selected.'
 
 
 def replace(text, old, new):
@@ -135,7 +137,6 @@ let totalBreakpoints = 0;''')
         return;''', '''        log(`putFailureX0Response = ${putFailureX0Response}`);
         requireOK(putFailureX0Response, 'preparation failure return');
         return;''')
-    # Only the active function, not the upstream commented example.
     start = source.index('function JIT26PrepareRegion(')
     end = source.index('// utilities', start)
     handler = source[start:end]
@@ -155,32 +156,17 @@ let totalBreakpoints = 0;''')
 
 def host():
     helper = 'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift'
-    change(helper, '      try StikJIT.enableJIT(\n', '''      // Only RPCS3 opts into the stop-reply repair. Other emulators are unchanged.
-      let selectedScript: StikJIT.Script
-      if requiresCoreHandshake {
-        guard let framework = Bundle(identifier: "com.stik.StikJIT"),
-              let scriptURL = framework.url(forResource: "rpcs3-universal", withExtension: "js") else {
-          throw Rpcs3HelperError.invalidRequest("The RPCS3 JIT protocol resource is missing.")
-        }
-        selectedScript = .custom(scriptURL)
-        try reporter?.send(event: "log", message: "NEOSTATION_RPCS3_STOP_REPLY_270: dedicated protocol selected.")
-      } else {
-        selectedScript = .universal
-      }
-      try StikJIT.enableJIT(
-''')
-    change(helper, '        script: .universal,', '        script: selectedScript,')
-    change(helper, '    guard reply.count >= 3, reply.first == "T" else { return false }',
-           '    guard reply.count >= 3, reply.first == "T" || reply.first == "S" else { return false }')
-    change('test/rpcs3_internal_integration_test.dart',
-           "      expect(helper, contains('script: .universal'));",
-           "      expect(helper, contains('script: selectedScript'));\n"
-           "      expect(helper, contains('selectedScript = .custom(scriptURL)'));\n"
-           "      expect(helper, contains('selectedScript = .universal'));\n"
-           "      expect(helper, contains('forResource: \"rpcs3-universal\"'));")
+    # Deliberately retain the exact pre-hotfix selection. Do not add a hidden
+    # fallback, a custom script, extra register requests or a new JIT algorithm.
+    source = (ROOT / helper).read_text()
+    if 'script: .universal,' not in source or 'script: selectedScript,' in source:
+        raise RuntimeError('Transport-only Build 270 requires the original RPCS3 script selection')
+    change(helper, '      try StikJIT.enableJIT(\n',
+           '      try reporter?.send(event: "log", message: "' + BASELINE_MARKER + '")\n'
+           '      try StikJIT.enableJIT(\n')
     change('build-utils/reuse_build266_rpcs3_for267.py', 'ALLOWED = {',
            "ALLOWED = {\n    'build-utils/patch_rpcs3_stop_reply270.py',\n    'test/rpcs3_stop_reply270_test.py',")
-    print('RPCS3-only stop-reply protocol selected; native transport diagnostics retained.')
+    print('RPCS3 baseline universal.js selection retained; experimental stop-reply script is NOT selected.')
 
 
 if __name__ == '__main__':
@@ -191,6 +177,6 @@ if __name__ == '__main__':
         resource = args.stik_source / 'Resources'
         original = (resource / 'universal.js').read_text()
         (resource / 'rpcs3-universal.js').write_text(protocol_script(original))
-        print('Generated dedicated RPCS3 stop-reply script; original universal.js unchanged.')
+        print('Generated inactive experimental resource for isolated regression tests; production uses universal.js.')
     else:
         host()
