@@ -2,14 +2,20 @@ import Foundation
 import Network
 import NetworkExtension
 
-/// Owns only NeoStation's VPN. A VPN status is not proof of a working JIT route:
-/// the RemotePairing TCP endpoint must answer before any preflight succeeds.
+/// Single-source controller for NeoStation's integrated local JIT VPN.
+///
+/// Invariants:
+/// - Only explicit Settings ON/OFF may start or stop NeoStation's VPN.
+/// - JIT/game preflight is read-only and never mutates any VPN profile.
+/// - A timeout, RemotePairing failure, provider diagnostic failure, app lifecycle
+///   transition or emulator failure can report an error, but can never turn an
+///   already-active NeoStation tunnel off.
 @available(iOS 17.4, *)
 final class NeoStationLocalTunnelManager {
   static let shared = NeoStationLocalTunnelManager()
 
   private enum Constants {
-    static let schemaVersion = 1
+    static let schemaVersion = 277
     static let schemaVersionKey = "schemaVersion"
     static let interfaceAddressKey = "interfaceAddress"
     static let peerAddressKey = "peerAddress"
@@ -18,45 +24,60 @@ final class NeoStationLocalTunnelManager {
     static let jitPort: UInt16 = 49152
     static let extensionName = "NeoStationLocalTunnel.appex"
     static let localizedDescription = "NeoStation Local JIT Tunnel"
-    static let serverAddress = "On-device RemotePairing route"
-    static let connectionPollInterval: TimeInterval = 0.25
-    static let connectionTimeout: TimeInterval = 12
-    static let disconnectionTimeout: TimeInterval = 6
-    static let disconnectErrorTimeout: TimeInterval = 0.75
+    static let serverAddress = "10.7.0.1"
     static let routeProbeTimeout: TimeInterval = 1.25
-    static let heartbeatInterval: TimeInterval = 1.5
-    static let heartbeatMessage = "heartbeat"
+    static let connectionPollInterval: TimeInterval = 0.20
+    static let activationTimeout: TimeInterval = 45
+    static let stopTimeout: TimeInterval = 12
   }
 
   typealias Response = Result<[String: Any], NeoStationLocalTunnelError>
-  private var ensureInFlight = false
-  private var activeEnsureGeneration: UInt64?
-  private var activeEnsureWaiters = [(Response) -> Void]()
-  private var queuedEnsureWaiters = [(Response) -> Void]()
-  private var disableInFlight = false
-  private var disableWaiters = [(Response) -> Void]()
-  private var operationGeneration: UInt64 = 0
-  private var stopRequested = false
+
+  private final class Command {
+    let id: UInt64
+    let intent: String
+    var completed = false
+    var waiters: [(Response) -> Void]
+    var timeout: DispatchWorkItem?
+
+    init(id: UInt64, intent: String, completion: @escaping (Response) -> Void) {
+      self.id = id
+      self.intent = intent
+      self.waiters = [completion]
+    }
+  }
+
+  private var serial: UInt64 = 0
+  private var command: Command?
   private var activeManager: NETunnelProviderManager?
-  private var heartbeatTimer: DispatchSourceTimer?
-  private let heartbeatQueue = DispatchQueue(
-    label: "com.neogamelab.neostation.localtunnel.heartbeat", qos: .utility
-  )
-  private var trace = [String]()
+  private var lastFailure: NeoStationLocalTunnelError?
+
   private init() {}
 
+  // MARK: - Read-only JIT preflight
+
   func ensureRunning(completion: @escaping (Response) -> Void) {
-    DispatchQueue.main.async {
-      if self.disableInFlight || self.stopRequested {
-        self.queuedEnsureWaiters.append(completion)
-      } else if self.ensureInFlight {
-        self.activeEnsureWaiters.append(completion)
-      } else {
-        self.queuedEnsureWaiters.append(completion)
-        self.beginEnsureIfPossible()
+    probeJitRoute { reachable in
+      guard reachable else {
+        completion(.failure(.routeUnavailable))
+        return
+      }
+
+      NETunnelProviderManager.loadAllFromPreferences { managers, _ in
+        DispatchQueue.main.async {
+          let identifier = self.providerBundleIdentifier()
+          let owned = (managers ?? []).filter {
+            Self.isOwned($0, providerBundleIdentifier: identifier)
+          }
+          let manager = owned.first(where: { Self.isActive($0.connection.status) })
+          if let manager { self.activeManager = manager }
+          completion(.success(self.routeResponse(for: manager)))
+        }
       }
     }
   }
+
+  // MARK: - Status
 
   func status(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
@@ -67,273 +88,330 @@ final class NeoStationLocalTunnelManager {
             completion(.failure(Self.configurationFailure(error)))
             return
           }
-          let matching = (managers ?? []).filter {
+          let owned = (managers ?? []).filter {
             Self.isOwned($0, providerBundleIdentifier: identifier)
           }
-          let manager = matching.first(where: { Self.isActive($0.connection.status) }) ??
-            matching.first(where: { identifier != nil && Self.providerIdentifier(for: $0) == identifier }) ??
-            matching.first
+          let manager = Self.preferredManager(
+            in: owned,
+            providerBundleIdentifier: identifier
+          )
+          self.activeManager = manager
           completion(.success(self.response(for: manager)))
         }
       }
     }
   }
 
+  // MARK: - Explicit Settings ON
+
+  func enableOwned(completion: @escaping (Response) -> Void) {
+    DispatchQueue.main.async {
+      if let command = self.command, command.intent == "enable" {
+        command.waiters.append(completion)
+        return
+      }
+      let command = self.beginCommand(
+        intent: "enable",
+        timeout: Constants.activationTimeout,
+        completion: completion
+      )
+      self.loadAndEnable(command)
+    }
+  }
+
+  private func loadAndEnable(_ command: Command) {
+    guard isCurrent(command) else { return }
+    guard let providerIdentifier = providerBundleIdentifier() else {
+      finish(command, .failure(.extensionMissing))
+      return
+    }
+    if let error = Self.signingCapabilityFailure() {
+      finish(command, .failure(error))
+      return
+    }
+
+    NETunnelProviderManager.loadAllFromPreferences { managers, error in
+      DispatchQueue.main.async {
+        guard self.isCurrent(command) else { return }
+        if let error {
+          self.finish(command, .failure(Self.configurationFailure(error)))
+          return
+        }
+
+        let owned = (managers ?? []).filter {
+          Self.isOwned($0, providerBundleIdentifier: providerIdentifier)
+        }
+        let manager = Self.preferredManager(
+          in: owned,
+          providerBundleIdentifier: providerIdentifier
+        ) ?? NETunnelProviderManager()
+        self.activeManager = manager
+
+        let duplicates = owned.filter { $0 !== manager }
+        self.disableAndRemoveDuplicates(
+          duplicates,
+          index: 0,
+          command: command
+        ) {
+          self.persistAndStart(
+            manager,
+            providerIdentifier: providerIdentifier,
+            command: command
+          )
+        }
+      }
+    }
+  }
+
+  private func persistAndStart(
+    _ manager: NETunnelProviderManager,
+    providerIdentifier: String,
+    command: Command
+  ) {
+    guard isCurrent(command) else { return }
+
+    configure(manager, providerIdentifier: providerIdentifier)
+    manager.saveToPreferences { error in
+      DispatchQueue.main.async {
+        guard self.isCurrent(command) else { return }
+        if let error {
+          self.finish(command, .failure(Self.configurationFailure(error)))
+          return
+        }
+
+        manager.loadFromPreferences { error in
+          DispatchQueue.main.async {
+            guard self.isCurrent(command) else { return }
+            if let error {
+              self.finish(command, .failure(Self.configurationFailure(error)))
+              return
+            }
+            self.activeManager = manager
+            self.startIfNeeded(manager, command: command)
+          }
+        }
+      }
+    }
+  }
+
+  private func startIfNeeded(
+    _ manager: NETunnelProviderManager,
+    command: Command
+  ) {
+    guard isCurrent(command) else { return }
+
+    switch manager.connection.status {
+    case .connected:
+      finish(command, .success(response(for: manager)))
+      return
+    case .connecting, .reasserting:
+      waitUntilConnected(manager, command: command)
+      return
+    case .disconnecting:
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + Constants.connectionPollInterval
+      ) {
+        self.startIfNeeded(manager, command: command)
+      }
+      return
+    case .disconnected, .invalid:
+      break
+    @unknown default:
+      finish(
+        command,
+        .failure(.start("Unknown NetworkExtension state before activation."))
+      )
+      return
+    }
+
+    do {
+      try manager.connection.startVPNTunnel(options: [
+        Constants.interfaceAddressKey: Constants.interfaceAddress as NSString,
+        Constants.peerAddressKey: Constants.peerAddress as NSString,
+      ])
+    } catch {
+      finish(command, .failure(.start(Self.errorDetail(error))))
+      return
+    }
+
+    waitUntilConnected(manager, command: command)
+  }
+
+  private func waitUntilConnected(
+    _ manager: NETunnelProviderManager,
+    command: Command
+  ) {
+    guard isCurrent(command) else { return }
+
+    switch manager.connection.status {
+    case .connected:
+      activeManager = manager
+      finish(command, .success(response(for: manager)))
+      return
+    case .invalid:
+      finish(
+        command,
+        .failure(.start("The integrated VPN entered an invalid state."))
+      )
+      return
+    case .disconnected:
+      manager.connection.fetchLastDisconnectError { error in
+        DispatchQueue.main.async {
+          guard self.isCurrent(command) else { return }
+          let detail = error.map(Self.errorDetail) ??
+            "iOS stopped the tunnel without a disconnect error."
+          self.finish(command, .failure(.start(detail)))
+        }
+      }
+      return
+    default:
+      break
+    }
+
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + Constants.connectionPollInterval
+    ) {
+      self.waitUntilConnected(manager, command: command)
+    }
+  }
+
+  // MARK: - Explicit Settings OFF
+
   func disable(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
-      let cancelledWaiters = self.queuedEnsureWaiters
-      self.queuedEnsureWaiters.removeAll(keepingCapacity: true)
-      self.disableWaiters.append(completion)
-      self.stopRequested = true
-      self.operationGeneration &+= 1
-      self.stopHeartbeat()
-      self.activeManager?.connection.stopVPNTunnel()
-      self.beginDisableIfPossible()
-      for waiter in cancelledWaiters { waiter(.failure(.cancelled)) }
-    }
-  }
-
-  private func beginEnsureIfPossible() {
-    dispatchPrecondition(condition: .onQueue(.main))
-    guard !ensureInFlight, !disableInFlight, !stopRequested,
-          !queuedEnsureWaiters.isEmpty else { return }
-    ensureInFlight = true
-    operationGeneration &+= 1
-    let generation = operationGeneration
-    activeEnsureGeneration = generation
-    activeEnsureWaiters.append(contentsOf: queuedEnsureWaiters)
-    queuedEnsureWaiters.removeAll(keepingCapacity: true)
-    performEnsureJitRoute(generation: generation)
-  }
-
-  private func beginDisableIfPossible() {
-    dispatchPrecondition(condition: .onQueue(.main))
-    guard !disableInFlight, !ensureInFlight, !disableWaiters.isEmpty else { return }
-    disableInFlight = true
-    performDisable()
-  }
-
-  private func performEnsureJitRoute(generation: UInt64) {
-    trace = ["generation=\(generation)"]
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation)
-      return
-    }
-    if let manager = activeManager, manager.connection.status == .connected {
-      startHeartbeat(for: manager)
-      probeJitRoute { available in
-        guard self.ensureIsCurrent(generation) else {
-          self.finishEnsure(.failure(.cancelled), generation: generation)
-          return
-        }
-        if available {
-          self.finishEnsure(.success(self.response(for: manager, routeVerified: true)), generation: generation)
-        } else {
-          // Do not probe an owned route while its asynchronous stop is still
-          // draining: that route could be mistaken for a surviving external VPN.
-          self.stopHeartbeat()
-          manager.connection.stopVPNTunnel()
-          self.waitForOwnedStop(
-            manager, generation: generation,
-            deadline: ProcessInfo.processInfo.systemUptime + Constants.disconnectionTimeout
-          ) {
-            self.activeManager = nil
-            self.probeExternalThenEnsureOwned(generation: generation)
-          }
-        }
-      }
-      return
-    }
-    probeExternalThenEnsureOwned(generation: generation)
-  }
-
-  private func probeExternalThenEnsureOwned(generation: UInt64) {
-    // Keep the external probe before signing/extension checks. A working
-    // LocalDevVPN route must remain usable without our extension entitlement.
-    probeJitRoute { available in
-      guard self.ensureIsCurrent(generation) else {
-        self.finishEnsure(.failure(.cancelled), generation: generation)
+      if let command = self.command, command.intent == "disable" {
+        command.waiters.append(completion)
         return
       }
-      self.trace.append("externalProbe=\(available)")
-      if available {
-        self.stopHeartbeat()
-        self.activeManager = nil
-        self.finishEnsure(.success(self.externalRouteResponse()), generation: generation)
-        return
-      }
-      self.ensureOwnedTunnel(generation: generation)
+      let command = self.beginCommand(
+        intent: "disable",
+        timeout: Constants.stopTimeout,
+        completion: completion
+      )
+      self.loadAndDisable(command)
     }
   }
 
-  private func ensureOwnedTunnel(generation: UInt64) {
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation)
-      return
-    }
-    guard let providerBundleIdentifier = providerBundleIdentifier() else {
-      finishEnsure(.failure(.extensionMissing), generation: generation)
-      return
-    }
-    if let failure = Self.signingCapabilityFailure() {
-      finishEnsure(.failure(failure), generation: generation)
-      return
-    }
-    NETunnelProviderManager.loadAllFromPreferences { managers, error in
-      DispatchQueue.main.async {
-        guard self.ensureIsCurrent(generation) else {
-          self.finishEnsure(.failure(.cancelled), generation: generation)
-          return
-        }
-        if let error {
-          self.finishEnsure(.failure(Self.configurationFailure(error)), generation: generation)
-          return
-        }
-        let loaded = managers ?? []
-        if let conflicting = loaded.first(where: {
-          !Self.isOwned($0, providerBundleIdentifier: providerBundleIdentifier) &&
-            Self.isActive($0.connection.status)
-        }) {
-          self.finishEnsure(.failure(.activeVPNConflict(conflicting.localizedDescription ?? "another VPN")), generation: generation)
-          return
-        }
-        let matching = loaded.filter {
-          Self.isOwned($0, providerBundleIdentifier: providerBundleIdentifier)
-        }
-        let manager = matching.first(where: {
-          Self.providerIdentifier(for: $0) == providerBundleIdentifier &&
-            Self.isActive($0.connection.status)
-        }) ?? matching.first(where: {
-          Self.providerIdentifier(for: $0) == providerBundleIdentifier
-        }) ?? matching.first ?? NETunnelProviderManager()
-        self.activeManager = manager
-        self.removeDuplicateManagers(matching.filter { $0 !== manager }) { error in
-          guard self.ensureIsCurrent(generation) else {
-            self.finishEnsure(.failure(.cancelled), generation: generation)
-            return
-          }
-          if let error {
-            self.finishEnsure(.failure(Self.configurationFailure(error)), generation: generation)
-            return
-          }
-          self.configure(manager, providerBundleIdentifier: providerBundleIdentifier)
-          self.saveReloadAndStart(manager, generation: generation)
-        }
-      }
-    }
-  }
-
-  private func performDisable() {
+  private func loadAndDisable(_ command: Command) {
+    guard isCurrent(command) else { return }
     let identifier = providerBundleIdentifier()
+
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
+        guard self.isCurrent(command) else { return }
         if let error {
-          self.finishDisable(.failure(Self.configurationFailure(error)))
+          self.finish(command, .failure(Self.configurationFailure(error)))
           return
         }
-        let matching = (managers ?? []).filter {
+
+        let owned = (managers ?? []).filter {
           Self.isOwned($0, providerBundleIdentifier: identifier)
         }
-        guard let manager = matching.first(where: { Self.isActive($0.connection.status) }) ??
-          matching.first(where: { identifier != nil && Self.providerIdentifier(for: $0) == identifier }) ??
-          matching.first else {
+        guard !owned.isEmpty else {
           self.activeManager = nil
-          self.finishDisable(.success(self.response(for: nil)))
+          self.finish(command, .success(self.response(for: nil)))
           return
         }
-        self.activeManager = manager
-        manager.connection.stopVPNTunnel()
-        self.removeDuplicateManagers(matching.filter { $0 !== manager }) { error in
-          if let error {
-            self.finishDisable(.failure(Self.configurationFailure(error)))
-            return
-          }
-          manager.isOnDemandEnabled = false
-          manager.onDemandRules = []
-          manager.isEnabled = false
-          self.saveReloadAndStop(manager)
-        }
+        self.stopOwnedManagers(owned, index: 0, command: command)
       }
     }
   }
 
-  private func removeDuplicateManagers(
-    _ managers: [NETunnelProviderManager], completion: @escaping (Error?) -> Void
+  private func stopOwnedManagers(
+    _ managers: [NETunnelProviderManager],
+    index: Int,
+    command: Command
   ) {
-    guard let manager = managers.first else { completion(nil); return }
-    // Callers supply owned managers only. Neutralize old On-Demand profiles
-    // before removal as well as the selected profile, never a third-party VPN.
+    guard isCurrent(command) else { return }
+    guard index < managers.count else {
+      waitUntilAllStopped(managers, command: command)
+      return
+    }
+
+    let manager = managers[index]
+    manager.connection.stopVPNTunnel()
     manager.isOnDemandEnabled = false
     manager.onDemandRules = []
     manager.isEnabled = false
-    manager.connection.stopVPNTunnel()
+
     manager.saveToPreferences { error in
       DispatchQueue.main.async {
-        if let error { completion(error); return }
+        guard self.isCurrent(command) else { return }
+        if let error {
+          self.finish(command, .failure(Self.configurationFailure(error)))
+          return
+        }
+        self.stopOwnedManagers(
+          managers,
+          index: index + 1,
+          command: command
+        )
+      }
+    }
+  }
+
+  private func waitUntilAllStopped(
+    _ managers: [NETunnelProviderManager],
+    command: Command
+  ) {
+    guard isCurrent(command) else { return }
+
+    if managers.allSatisfy({
+      !Self.isActive($0.connection.status) &&
+        $0.connection.status != .disconnecting
+    }) {
+      activeManager = nil
+      finish(command, .success(response(for: managers.first)))
+      return
+    }
+
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + Constants.connectionPollInterval
+    ) {
+      self.waitUntilAllStopped(managers, command: command)
+    }
+  }
+
+  // MARK: - Owned profile maintenance
+
+  private func disableAndRemoveDuplicates(
+    _ managers: [NETunnelProviderManager],
+    index: Int,
+    command: Command,
+    completion: @escaping () -> Void
+  ) {
+    guard isCurrent(command) else { return }
+    guard index < managers.count else {
+      completion()
+      return
+    }
+
+    let manager = managers[index]
+    manager.connection.stopVPNTunnel()
+    manager.isOnDemandEnabled = false
+    manager.onDemandRules = []
+    manager.isEnabled = false
+
+    manager.saveToPreferences { error in
+      DispatchQueue.main.async {
+        guard self.isCurrent(command) else { return }
+        if let error {
+          self.finish(command, .failure(Self.configurationFailure(error)))
+          return
+        }
+
         manager.removeFromPreferences { error in
           DispatchQueue.main.async {
-            if let error { completion(error); return }
-            self.removeDuplicateManagers(Array(managers.dropFirst()), completion: completion)
-          }
-        }
-      }
-    }
-  }
-
-  private func configure(_ manager: NETunnelProviderManager, providerBundleIdentifier: String) {
-    let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol ?? NETunnelProviderProtocol()
-    tunnelProtocol.providerBundleIdentifier = providerBundleIdentifier
-    tunnelProtocol.serverAddress = Constants.serverAddress
-    tunnelProtocol.providerConfiguration = [
-      Constants.schemaVersionKey: Constants.schemaVersion,
-      Constants.interfaceAddressKey: Constants.interfaceAddress,
-      Constants.peerAddressKey: Constants.peerAddress,
-    ]
-    manager.protocolConfiguration = tunnelProtocol
-    manager.localizedDescription = Constants.localizedDescription
-    manager.onDemandRules = []
-    manager.isOnDemandEnabled = false
-    manager.isEnabled = true
-  }
-
-  private func saveReloadAndStart(_ manager: NETunnelProviderManager, generation: UInt64) {
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation); return
-    }
-    manager.saveToPreferences { error in
-      DispatchQueue.main.async {
-        guard self.ensureIsCurrent(generation) else {
-          self.finishEnsure(.failure(.cancelled), generation: generation); return
-        }
-        if let error {
-          self.finishEnsure(.failure(Self.configurationFailure(error)), generation: generation); return
-        }
-        manager.loadFromPreferences { error in
-          DispatchQueue.main.async {
-            guard self.ensureIsCurrent(generation) else {
-              self.finishEnsure(.failure(.cancelled), generation: generation); return
-            }
+            guard self.isCurrent(command) else { return }
             if let error {
-              self.finishEnsure(.failure(Self.configurationFailure(error)), generation: generation); return
+              self.finish(command, .failure(Self.configurationFailure(error)))
+              return
             }
-            self.activeManager = manager
-            self.start(manager, generation: generation)
-          }
-        }
-      }
-    }
-  }
-
-  private func saveReloadAndStop(_ manager: NETunnelProviderManager) {
-    manager.saveToPreferences { error in
-      DispatchQueue.main.async {
-        if let error { self.finishDisable(.failure(Self.configurationFailure(error))); return }
-        manager.loadFromPreferences { error in
-          DispatchQueue.main.async {
-            if let error { self.finishDisable(.failure(Self.configurationFailure(error))); return }
-            manager.connection.stopVPNTunnel()
-            self.waitUntilDisconnected(
-              manager, deadline: ProcessInfo.processInfo.systemUptime + Constants.disconnectionTimeout
+            self.disableAndRemoveDuplicates(
+              managers,
+              index: index + 1,
+              command: command,
+              completion: completion
             )
           }
         }
@@ -341,196 +419,104 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
-  private func start(_ manager: NETunnelProviderManager, generation: UInt64) {
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation); return
-    }
-    trace.append("startStatus=\(Self.statusName(manager.connection.status))")
-    if manager.connection.status == .disconnecting {
-      // startVPNTunnel during disconnecting may be ignored by the system.
-      // Wait for that transition rather than timing out a start never accepted.
-      waitForOwnedStop(
-        manager, generation: generation,
-        deadline: ProcessInfo.processInfo.systemUptime + Constants.disconnectionTimeout
-      ) { self.start(manager, generation: generation) }
-      return
-    }
-    if manager.connection.status == .connected {
-      verifyOwnedRoute(manager, generation: generation)
-      return
-    }
-    if !Self.isActive(manager.connection.status) {
-      do {
-        try manager.connection.startVPNTunnel(options: [
-          Constants.interfaceAddressKey: Constants.interfaceAddress as NSString,
-          Constants.peerAddressKey: Constants.peerAddress as NSString,
-        ])
-      } catch {
-        disableFailedOwnedRoute(manager, generation: generation, failure: .start(Self.errorDetail(error)))
-        return
-      }
-    }
-    waitUntilConnected(
-      manager, generation: generation,
-      deadline: ProcessInfo.processInfo.systemUptime + Constants.connectionTimeout,
-      observedConnecting: false
-    )
-  }
-
-  private func waitForOwnedStop(
-    _ manager: NETunnelProviderManager, generation: UInt64,
-    deadline: TimeInterval, completion: @escaping () -> Void
+  private func configure(
+    _ manager: NETunnelProviderManager,
+    providerIdentifier: String
   ) {
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation); return
-    }
-    if manager.connection.status == .disconnected || manager.connection.status == .invalid {
-      completion()
-      return
-    }
-    guard ProcessInfo.processInfo.systemUptime < deadline else {
-      failConnection(manager, generation: generation, timedOut: true)
-      return
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + Constants.connectionPollInterval) {
-      self.waitForOwnedStop(manager, generation: generation, deadline: deadline, completion: completion)
-    }
-  }
+    let tunnelProtocol =
+      manager.protocolConfiguration as? NETunnelProviderProtocol ??
+      NETunnelProviderProtocol()
 
-  private func waitUntilConnected(
-    _ manager: NETunnelProviderManager, generation: UInt64,
-    deadline: TimeInterval, observedConnecting: Bool
-  ) {
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation); return
-    }
-    let status = manager.connection.status
-    switch status {
-    case .connected:
-      verifyOwnedRoute(manager, generation: generation)
-      return
-    case .invalid:
-      failConnection(manager, generation: generation, timedOut: false)
-      return
-    case .disconnected where observedConnecting:
-      // The provider actually stopped; do not hide its error behind 12 seconds
-      // of polling a terminal state.
-      failConnection(manager, generation: generation, timedOut: false)
-      return
-    default: break
-    }
-    guard ProcessInfo.processInfo.systemUptime < deadline else {
-      failConnection(manager, generation: generation, timedOut: true)
-      return
-    }
-    let observed = observedConnecting || status == .connecting || status == .reasserting
-    DispatchQueue.main.asyncAfter(deadline: .now() + Constants.connectionPollInterval) {
-      self.waitUntilConnected(
-        manager, generation: generation, deadline: deadline, observedConnecting: observed
-      )
-    }
-  }
+    tunnelProtocol.providerBundleIdentifier = providerIdentifier
+    tunnelProtocol.serverAddress = Constants.serverAddress
+    tunnelProtocol.providerConfiguration = [
+      Constants.schemaVersionKey: Constants.schemaVersion,
+      Constants.interfaceAddressKey: Constants.interfaceAddress,
+      Constants.peerAddressKey: Constants.peerAddress,
+    ]
 
-  private func failConnection(
-    _ manager: NETunnelProviderManager, generation: UInt64, timedOut: Bool
-  ) {
-    let status = Self.statusName(manager.connection.status)
-    // The disconnect-error API can itself be delayed. Settle once, bounded,
-    // and query BEFORE cleanup so our stop does not overwrite the useful error.
-    var completed = false
-    let complete: (Error?) -> Void = { error in
-      guard !completed else { return }
-      completed = true
-      guard self.ensureIsCurrent(generation) else {
-        self.finishEnsure(.failure(.cancelled), generation: generation); return
-      }
-      let details = "status=\(status); provider=\(Self.providerIdentifier(for: manager) ?? "missing"); " +
-        "trace=\(self.trace.joined(separator: ",")); " +
-        (error.map(Self.errorDetail) ?? "iOS supplied no disconnect error")
-      self.disableFailedOwnedRoute(
-        manager, generation: generation,
-        failure: timedOut ? .timeout(details) : .start(details)
-      )
-    }
-    manager.connection.fetchLastDisconnectError { error in
-      DispatchQueue.main.async { complete(error) }
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + Constants.disconnectErrorTimeout) {
-      complete(nil)
-    }
-  }
-
-  private func verifyOwnedRoute(_ manager: NETunnelProviderManager, generation: UInt64) {
-    // Keep the provider alive while the real endpoint is being verified; the
-    // provider watchdog must not depend on Flutter/UI-thread responsiveness.
-    startHeartbeat(for: manager)
-    probeJitRoute { available in
-      guard self.ensureIsCurrent(generation) else {
-        self.finishEnsure(.failure(.cancelled), generation: generation); return
-      }
-      guard available, manager.connection.status == .connected else {
-        self.disableFailedOwnedRoute(manager, generation: generation, failure: .routeUnavailable)
-        return
-      }
-      self.activeManager = manager
-      self.finishEnsure(.success(self.response(for: manager, routeVerified: true)), generation: generation)
-    }
-  }
-
-  private func disableFailedOwnedRoute(
-    _ manager: NETunnelProviderManager, generation: UInt64,
-    failure: NeoStationLocalTunnelError
-  ) {
-    guard ensureIsCurrent(generation) else {
-      finishEnsure(.failure(.cancelled), generation: generation); return
-    }
-    stopHeartbeat()
+    manager.protocolConfiguration = tunnelProtocol
+    manager.localizedDescription = Constants.localizedDescription
     manager.isOnDemandEnabled = false
     manager.onDemandRules = []
-    manager.isEnabled = false
-    manager.connection.stopVPNTunnel()
-    manager.saveToPreferences { error in
-      DispatchQueue.main.async {
-        guard self.ensureIsCurrent(generation) else {
-          self.finishEnsure(.failure(.cancelled), generation: generation); return
-        }
-        // No start remains outstanding after the error. A later legitimate
-        // ensure may enable the profile anew; no automatic retry is queued.
-        manager.connection.stopVPNTunnel()
-        self.activeManager = nil
-        if let error {
-          self.finishEnsure(.failure(.stop("\(failure.localizedDescription); cleanup: \(Self.errorDetail(error))")), generation: generation)
-        } else {
-          self.finishEnsure(.failure(failure), generation: generation)
-        }
-      }
-    }
+    manager.isEnabled = true
   }
 
-  private func waitUntilDisconnected(_ manager: NETunnelProviderManager, deadline: TimeInterval) {
-    switch manager.connection.status {
-    case .disconnected, .invalid:
-      activeManager = nil
-      finishDisable(.success(response(for: manager)))
-      return
-    default: break
+  // MARK: - Command lifecycle
+
+  private func beginCommand(
+    intent: String,
+    timeout: TimeInterval,
+    completion: @escaping (Response) -> Void
+  ) -> Command {
+    dispatchPrecondition(condition: .onQueue(.main))
+
+    if let previous = command {
+      finish(previous, .failure(.cancelled))
     }
-    guard ProcessInfo.processInfo.systemUptime < deadline else {
-      activeManager = nil
-      finishDisable(.failure(.stop("The VPN connection did not stop; status=\(Self.statusName(manager.connection.status)).")))
-      return
+
+    serial &+= 1
+    let command = Command(
+      id: serial,
+      intent: intent,
+      completion: completion
+    )
+    self.command = command
+
+    let work = DispatchWorkItem { [weak self, weak command] in
+      guard let self, let command, self.isCurrent(command) else { return }
+      self.finish(
+        command,
+        .failure(.timeout(
+          "intent=\(intent); limit=\(Int(timeout))s"
+        ))
+      )
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + Constants.connectionPollInterval) {
-      self.waitUntilDisconnected(manager, deadline: deadline)
-    }
+    command.timeout = work
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + timeout,
+      execute: work
+    )
+    return command
   }
+
+  private func isCurrent(_ command: Command) -> Bool {
+    self.command === command && !command.completed
+  }
+
+  private func finish(_ command: Command, _ response: Response) {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard isCurrent(command) else { return }
+
+    command.completed = true
+    command.timeout?.cancel()
+    command.timeout = nil
+    self.command = nil
+
+    if case .failure(let error) = response {
+      lastFailure = error
+    } else {
+      lastFailure = nil
+    }
+
+    let waiters = command.waiters
+    command.waiters.removeAll(keepingCapacity: false)
+    for waiter in waiters { waiter(response) }
+  }
+
+  // MARK: - Route probe
 
   private func probeJitRoute(completion: @escaping (Bool) -> Void) {
-    let queue = DispatchQueue(label: "com.neogamelab.neostation.localtunnel.route-probe", qos: .userInitiated)
+    let queue = DispatchQueue(
+      label: "com.neogamelab.neostation.localtunnel.route-probe",
+      qos: .userInitiated
+    )
     let connection = NWConnection(
       host: NWEndpoint.Host(Constants.peerAddress),
-      port: NWEndpoint.Port(rawValue: Constants.jitPort)!, using: .tcp
+      port: NWEndpoint.Port(rawValue: Constants.jitPort)!,
+      using: .tcp
     )
+
     var finished = false
     let finish: (Bool) -> Void = { success in
       guard !finished else { return }
@@ -539,168 +525,135 @@ final class NeoStationLocalTunnelManager {
       connection.cancel()
       DispatchQueue.main.async { completion(success) }
     }
+
     connection.stateUpdateHandler = { state in
       switch state {
-      case .ready: finish(true)
-      case .failed, .cancelled: finish(false)
-      default: break
+      case .ready:
+        finish(true)
+      case .failed, .cancelled:
+        finish(false)
+      default:
+        break
       }
     }
+
     connection.start(queue: queue)
-    queue.asyncAfter(deadline: .now() + Constants.routeProbeTimeout) { finish(false) }
-  }
-
-  private func startHeartbeat(for manager: NETunnelProviderManager) {
-    dispatchPrecondition(condition: .onQueue(.main))
-    stopHeartbeat()
-    guard manager.connection.status == .connected else { return }
-    // Sending from a dedicated queue avoids an accidental watchdog expiry
-    // during synchronous work in the native game controller on the main thread.
-    let timer = DispatchSource.makeTimerSource(queue: heartbeatQueue)
-    timer.schedule(deadline: .now(), repeating: Constants.heartbeatInterval, leeway: .milliseconds(200))
-    timer.setEventHandler { [weak manager] in
-      guard let manager, manager.connection.status == .connected else { return }
-      Self.sendHeartbeat(to: manager)
-    }
-    heartbeatTimer = timer
-    timer.resume()
-  }
-
-  private func stopHeartbeat() {
-    dispatchPrecondition(condition: .onQueue(.main))
-    heartbeatTimer?.setEventHandler {}
-    heartbeatTimer?.cancel()
-    heartbeatTimer = nil
-  }
-
-  private static func sendHeartbeat(to manager: NETunnelProviderManager) {
-    guard let session = manager.connection as? NETunnelProviderSession else { return }
-    do {
-      try session.sendProviderMessage(Data(Constants.heartbeatMessage.utf8)) { _ in }
-    } catch {
-      // A failed IPC does not pretend to renew the lease. The independent
-      // extension watchdog remains authoritative after app suspension/crash.
+    queue.asyncAfter(deadline: .now() + Constants.routeProbeTimeout) {
+      finish(false)
     }
   }
 
-  private func ensureIsCurrent(_ generation: UInt64) -> Bool {
-    ensureInFlight && activeEnsureGeneration == generation &&
-      operationGeneration == generation && !stopRequested
-  }
+  // MARK: - State helpers
 
-  private func finishEnsure(_ response: Response, generation: UInt64? = nil) {
-    dispatchPrecondition(condition: .onQueue(.main))
-    guard ensureInFlight else { return }
-    // A bounded diagnostic callback from an older operation must not settle a
-    // newer operation that started after it. Queue tests still use the default.
-    if let generation, activeEnsureGeneration != generation { return }
-    let waiters = activeEnsureWaiters
-    activeEnsureWaiters.removeAll(keepingCapacity: true)
-    ensureInFlight = false
-    activeEnsureGeneration = nil
-    if !disableWaiters.isEmpty { beginDisableIfPossible() }
-    else { beginEnsureIfPossible() }
-    for waiter in waiters { waiter(response) }
-  }
-
-  private func finishDisable(_ response: Response) {
-    dispatchPrecondition(condition: .onQueue(.main))
-    let waiters = disableWaiters
-    disableWaiters.removeAll(keepingCapacity: true)
-    disableInFlight = false
-    stopRequested = false
-    activeManager = nil
-    beginEnsureIfPossible()
-    for waiter in waiters { waiter(response) }
-  }
-
-  private func providerBundleIdentifier() -> String? {
-    guard let bundle = Self.installedExtensionBundle(),
-          let identifier = bundle.bundleIdentifier, !identifier.isEmpty else { return nil }
-    return identifier
-  }
-
-  private static func signingCapabilityFailure() -> NeoStationLocalTunnelError? {
-    guard let bundle = installedExtensionBundle() else { return .extensionMissing }
-    for bundle in [Bundle.main, bundle] {
-      if let values = provisioningEntitlements(in: bundle),
-         !entitlement(values, key: "com.apple.developer.networking.networkextension", contains: "packet-tunnel-provider") {
-        return .signingMissing
-      }
+  private func routeResponse(
+    for manager: NETunnelProviderManager?
+  ) -> [String: Any] {
+    if let manager, Self.isActive(manager.connection.status) {
+      return response(for: manager, routeVerified: true)
     }
-    return nil
-  }
 
-  private static func entitlement(_ entitlements: [String: Any], key: String, contains value: String) -> Bool {
-    if let values = entitlements[key] as? [String] { return values.contains(value) }
-    return (entitlements[key] as? String) == value
-  }
-
-  private static func provisioningEntitlements(in bundle: Bundle) -> [String: Any]? {
-    guard let url = bundle.url(forResource: "embedded", withExtension: "mobileprovision"),
-          let data = try? Data(contentsOf: url),
-          let start = data.range(of: Data("<?xml".utf8)),
-          let end = data.range(of: Data("</plist>".utf8), options: [], in: start.lowerBound..<data.endIndex)
-    else { return nil }
-    guard let root = try? PropertyListSerialization.propertyList(
-      from: Data(data[start.lowerBound..<end.upperBound]), options: [], format: nil
-    ) as? [String: Any] else { return nil }
-    return root["Entitlements"] as? [String: Any]
-  }
-
-  private static func installedExtensionBundle() -> Bundle? {
-    guard let plugIns = Bundle.main.builtInPlugInsURL else { return nil }
-    return Bundle(url: plugIns.appendingPathComponent(Constants.extensionName))
-  }
-
-  private func externalRouteResponse() -> [String: Any] {
-    ["active": true, "status": "externalRoute", "managedByNeoStation": false,
-     "configured": false, "authorized": false, "enabled": true,
-     "interfaceAddress": NSNull(), "peerAddress": Constants.peerAddress,
-     "onDemand": false, "routeVerified": true]
-  }
-
-  private func response(for manager: NETunnelProviderManager?, routeVerified: Bool = false) -> [String: Any] {
-    let status = manager?.connection.status ?? .invalid
     return [
-      "active": status == .connected, "status": Self.statusName(status),
-      "managedByNeoStation": true, "configured": manager != nil,
-      "authorized": manager != nil, "enabled": manager?.isEnabled ?? false,
-      "interfaceAddress": Constants.interfaceAddress, "peerAddress": Constants.peerAddress,
-      "onDemand": manager?.isOnDemandEnabled ?? false, "routeVerified": routeVerified,
+      "active": true,
+      "status": "reachableRoute",
+      "managedByNeoStation": false,
+      "configured": false,
+      "authorized": false,
+      "enabled": true,
+      "interfaceAddress": NSNull(),
+      "peerAddress": Constants.peerAddress,
+      "onDemand": false,
+      "routeVerified": true,
+      "lastErrorCode": NSNull(),
+      "lastErrorDetail": NSNull(),
     ]
   }
 
-  private static func configurationFailure(_ error: Error) -> NeoStationLocalTunnelError {
-    let error = error as NSError
-    if error.domain == NEVPNErrorDomain,
-       error.code == NEVPNError.configurationReadWriteFailed.rawValue { return .permissionDenied }
-    return .configuration(errorDetail(error))
+  private func response(
+    for manager: NETunnelProviderManager?,
+    routeVerified: Bool = false
+  ) -> [String: Any] {
+    let status = manager?.connection.status ?? .invalid
+
+    return [
+      "active": Self.isActive(status),
+      "status": Self.statusName(status),
+      "managedByNeoStation": true,
+      "configured": manager != nil,
+      "authorized": manager != nil,
+      "enabled": manager?.isEnabled ?? false,
+      "interfaceAddress": Constants.interfaceAddress,
+      "peerAddress": Constants.peerAddress,
+      "onDemand": manager?.isOnDemandEnabled ?? false,
+      "routeVerified": routeVerified,
+      "lastErrorCode":
+        lastFailure.map { "local_tunnel_" + $0.code } as Any? ?? NSNull(),
+      "lastErrorDetail":
+        lastFailure?.localizedDescription as Any? ?? NSNull(),
+    ]
   }
 
-  private static func errorDetail(_ error: Error) -> String {
-    let error = error as NSError
-    var detail = "\(error.domain)(\(error.code)): \(error.localizedDescription)"
-    if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
-      detail += "; underlying=\(underlying.domain)(\(underlying.code)): \(underlying.localizedDescription)"
+  private func providerBundleIdentifier() -> String? {
+    guard
+      let bundle = Self.installedExtensionBundle(),
+      let identifier = bundle.bundleIdentifier,
+      !identifier.isEmpty
+    else {
+      return nil
     }
-    return detail
+    return identifier
   }
 
-  private static func providerIdentifier(for manager: NETunnelProviderManager) -> String? {
-    (manager.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier
+  private static func preferredManager(
+    in managers: [NETunnelProviderManager],
+    providerBundleIdentifier: String?
+  ) -> NETunnelProviderManager? {
+    managers.first(where: {
+      providerBundleIdentifier != nil &&
+        providerIdentifier(for: $0) == providerBundleIdentifier &&
+        isActive($0.connection.status)
+    }) ??
+    managers.first(where: { isActive($0.connection.status) }) ??
+    managers.first(where: {
+      providerBundleIdentifier != nil &&
+        providerIdentifier(for: $0) == providerBundleIdentifier
+    }) ??
+    managers.first
   }
 
-  private static func isOwned(_ manager: NETunnelProviderManager, providerBundleIdentifier: String?) -> Bool {
-    if let providerBundleIdentifier, providerIdentifier(for: manager) == providerBundleIdentifier { return true }
-    guard manager.localizedDescription == Constants.localizedDescription,
-          let configuration = (manager.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration,
-          configuration[Constants.schemaVersionKey] as? Int == Constants.schemaVersion else { return false }
-    return true
+  private static func isOwned(
+    _ manager: NETunnelProviderManager,
+    providerBundleIdentifier: String?
+  ) -> Bool {
+    if let providerBundleIdentifier,
+       providerIdentifier(for: manager) == providerBundleIdentifier {
+      return true
+    }
+
+    guard manager.localizedDescription == Constants.localizedDescription else {
+      return false
+    }
+
+    let schema =
+      (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+      .providerConfiguration?[Constants.schemaVersionKey] as? Int
+
+    return schema == 1 ||
+      schema == 2 ||
+      schema == 3 ||
+      schema == Constants.schemaVersion
+  }
+
+  private static func providerIdentifier(
+    for manager: NETunnelProviderManager
+  ) -> String? {
+    (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+      .providerBundleIdentifier
   }
 
   private static func isActive(_ status: NEVPNStatus) -> Bool {
-    status == .connected || status == .connecting || status == .reasserting
+    status == .connected ||
+      status == .connecting ||
+      status == .reasserting
   }
 
   private static func statusName(_ status: NEVPNStatus) -> String {
@@ -714,19 +667,117 @@ final class NeoStationLocalTunnelManager {
     @unknown default: return "unknown"
     }
   }
+
+  private static func signingCapabilityFailure()
+    -> NeoStationLocalTunnelError? {
+    guard let extensionBundle = installedExtensionBundle() else {
+      return .extensionMissing
+    }
+
+    for bundle in [Bundle.main, extensionBundle] {
+      if let values = provisioningEntitlements(in: bundle),
+         !entitlement(
+          values,
+          key: "com.apple.developer.networking.networkextension",
+          contains: "packet-tunnel-provider"
+         ) {
+        return .signingMissing
+      }
+    }
+
+    return nil
+  }
+
+  private static func entitlement(
+    _ entitlements: [String: Any],
+    key: String,
+    contains value: String
+  ) -> Bool {
+    if let values = entitlements[key] as? [String] {
+      return values.contains(value)
+    }
+    return (entitlements[key] as? String) == value
+  }
+
+  private static func provisioningEntitlements(
+    in bundle: Bundle
+  ) -> [String: Any]? {
+    guard
+      let url = bundle.url(
+        forResource: "embedded",
+        withExtension: "mobileprovision"
+      ),
+      let data = try? Data(contentsOf: url),
+      let start = data.range(of: Data("<?xml".utf8)),
+      let end = data.range(
+        of: Data("</plist>".utf8),
+        options: [],
+        in: start.lowerBound..<data.endIndex
+      )
+    else {
+      return nil
+    }
+
+    guard let root = try? PropertyListSerialization.propertyList(
+      from: Data(data[start.lowerBound..<end.upperBound]),
+      options: [],
+      format: nil
+    ) as? [String: Any] else {
+      return nil
+    }
+
+    return root["Entitlements"] as? [String: Any]
+  }
+
+  private static func installedExtensionBundle() -> Bundle? {
+    guard let plugIns = Bundle.main.builtInPlugInsURL else { return nil }
+    return Bundle(
+      url: plugIns.appendingPathComponent(Constants.extensionName)
+    )
+  }
+
+  private static func configurationFailure(
+    _ error: Error
+  ) -> NeoStationLocalTunnelError {
+    let nsError = error as NSError
+    if nsError.domain == NEVPNErrorDomain,
+       nsError.code ==
+        NEVPNError.configurationReadWriteFailed.rawValue {
+      return .permissionDenied
+    }
+    return .configuration(errorDetail(error))
+  }
+
+  private static func errorDetail(_ error: Error) -> String {
+    let nsError = error as NSError
+    var detail =
+      "\(nsError.domain)(\(nsError.code)): \(nsError.localizedDescription)"
+    if let underlying =
+      nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+      detail +=
+        "; underlying=\(underlying.domain)(\(underlying.code)): " +
+        underlying.localizedDescription
+    }
+    return detail
+  }
 }
 
 @available(iOS 17.4, *)
 enum NeoStationLocalTunnelError: LocalizedError {
-  case extensionMissing, signingMissing, routeUnavailable, permissionDenied
+  case extensionMissing
+  case signingMissing
+  case routeUnavailable
+  case permissionDenied
   case cancelled
-  case activeVPNConflict(String), configuration(String), start(String), stop(String), timeout(String)
+  case configuration(String)
+  case start(String)
+  case stop(String)
+  case timeout(String)
 
   var code: String {
     switch self {
     case .extensionMissing: return "extension_missing"
     case .signingMissing: return "signing_missing"
-    case .activeVPNConflict: return "vpn_conflict"
     case .routeUnavailable: return "jit_route_unavailable"
     case .configuration: return "configuration_failed"
     case .start: return "start_failed"
@@ -740,25 +791,39 @@ enum NeoStationLocalTunnelError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .extensionMissing:
-      return "The NeoStation local tunnel extension is missing from this installation. Re-sign the complete IPA with app extensions enabled."
+      return
+        "The NeoStation local tunnel extension is missing from this installation. " +
+        "Re-sign the complete IPA with app extensions enabled."
     case .signingMissing:
-      return "The installed NeoStation signature does not include Apple's packet-tunnel entitlement. Re-sign the complete NeoStation IPA with app extensions enabled and a provisioning profile that authorizes Network Extensions."
-    case .activeVPNConflict(let name):
-      return "\(name) is active but does not expose the StikJIT route at 10.7.0.1:49152. NeoStation will not modify that VPN or start a second VPN at the same time."
+      return
+        "The installed NeoStation signature does not include Apple's packet-tunnel " +
+        "entitlement. Re-sign the complete NeoStation IPA with the Network Extension " +
+        "entitlement enabled."
     case .routeUnavailable:
-      return "The local tunnel connected, but the StikJIT route at 10.7.0.1:49152 is not reachable."
+      return
+        "The JIT transport at 10.7.0.1:49152 is not reachable. " +
+        "The VPN state was not changed."
     case .configuration(let message):
-      return "iOS could not save the NeoStation local tunnel. Technical detail: \(message)"
+      return
+        "iOS could not save the NeoStation local tunnel. Technical detail: \(message)"
     case .start(let message):
-      return "The NeoStation local JIT tunnel could not start: \(message)"
+      return
+        "The NeoStation local JIT tunnel could not start: \(message)"
     case .stop(let message):
-      return "The NeoStation local JIT tunnel could not stop: \(message)"
+      return
+        "The NeoStation local JIT tunnel could not stop: \(message)"
     case .permissionDenied:
-      return "iOS refused the NeoStation VPN configuration. If no native authorization dialog appeared, the signing profile does not authorize the embedded Network Extension."
+      return
+        "iOS refused the NeoStation VPN configuration. Verify the signed Network " +
+        "Extension entitlement and authorize the VPN when iOS asks."
     case .timeout(let message):
-      return "The NeoStation local JIT tunnel did not become ready before the bounded connection timeout. \(message)"
+      return
+        "The NeoStation VPN command did not finish before its timeout. " +
+        "The tunnel was not stopped automatically. \(message)"
     case .cancelled:
-      return "The NeoStation local JIT route activation was cancelled because the application requested the tunnel to stop."
+      return
+        "The previous NeoStation VPN command was superseded by a newer explicit " +
+        "Settings command."
     }
   }
 }
