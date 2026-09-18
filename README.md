@@ -63,6 +63,8 @@ The repository keeps three long-lived branches: `main` for the stable reference,
 
 GitHub Actions is intentionally limited to two workflow files: `ios-ci.yml` provides FAST/NORMAL validation, while `release-ipa.yml` is reserved for manual RELEASE builds.
 
+The current iOS reference baseline is **Build 273** (`8558dc782b98b114f944514e27722fe1a5faff48`, successful run `35363198588`). Later experimental builds are treated as deltas from that reference and do not replace it until they are successfully validated on-device. The machine-readable reference is stored in `build-utils/baselines/ios-273.json`.
+
 ## Books and manga
 
 NeoStation iOS allows users to import, organize and read books and manga. Users must add their own files or independently find and configure compatible sources. NeoStation iOS does not provide or host copyrighted content sources.
