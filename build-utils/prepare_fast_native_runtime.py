@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[1]
 DOLPHIN_SHA='60012e203c927d468cb6d82d21aa8f8e14299fedbf0b2f80ce0ea982d4e173ee'
 RPCS3_SHA='dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'
 UNIVERSAL_SHA='22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1'
-LEGACY_SHA='787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'
+LEGACY_SHA='787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'\nOFFICIAL_STIK_ZIP_SHA='444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85'
 
 def sha(path):
     h=hashlib.sha256()
@@ -80,15 +80,29 @@ def main():
         demand(sha(rpcs3)==RPCS3_SHA,'RPCS3Core donor hash mismatch')
         demand(sha(stik/'universal.js')==UNIVERSAL_SHA,'StikJIT universal.js donor hash mismatch')
         demand(sha(stik/'legacy.js')==LEGACY_SHA,'StikJIT legacy.js donor hash mismatch')
-        demand((stik/'Modules').is_dir(),'Donor StikJIT Swift module is missing')
 
-        # Turn the already-built iOS framework back into the XCFramework shape
-        # expected by the podspec. This is packaging only, not compilation.
+        # Embedded app frameworks are stripped of Swift interfaces. Use the
+        # official 1.5.0 XCFramework only as the module/interface shell, then
+        # replace its device runtime and scripts with the exact donor bytes.
+        official_root=work/'official-stik'
+        with zipfile.ZipFile(official_stik) as archive:
+            demand(archive.testzip() is None,'Official StikJIT archive is corrupt')
+            archive.extractall(official_root)
+        official_items=list(official_root.rglob('StikJIT.xcframework'))
+        demand(len(official_items)==1,f'Expected one official StikJIT XCFramework, found {official_items}')
         xcframework=work/'StikJIT.xcframework'
-        subprocess.run([
-            'xcodebuild','-create-xcframework','-framework',str(stik),
-            '-output',str(xcframework)
-        ],check=True)
+        copytree(official_items[0],xcframework)
+        device=xcframework/'ios-arm64/StikJIT.framework'
+        demand((device/'Modules').is_dir(),'Official StikJIT Swift module is missing')
+        shutil.copy2(stik/'StikJIT',device/'StikJIT')
+        (device/'StikJIT').chmod(0o755)
+        for script_name,expected in (('universal.js',UNIVERSAL_SHA),('legacy.js',LEGACY_SHA)):
+            shutil.copy2(stik/script_name,device/script_name)
+            demand(sha(device/script_name)==expected,f'Patched {script_name} hash mismatch')
+        donor_info=stik/'Info.plist'
+        if donor_info.is_file():
+            shutil.copy2(donor_info,device/'Info.plist')
+
         for package in ('stikjit_bridge','dolphin_jit_helper'):
             copytree(
                 xcframework,
@@ -141,7 +155,7 @@ def main():
             'universalJsSha256':UNIVERSAL_SHA,
             'legacyJsSha256':LEGACY_SHA,
             'platform':'ios-arm64',
-            'fastReuse':True,
+            'officialInterfaceArchiveSha256':OFFICIAL_STIK_ZIP_SHA,\n            'fastReuse':True,
         }
         (logs/'stikjit-release.json').write_text(json.dumps(release,indent=2)+'\n')
 

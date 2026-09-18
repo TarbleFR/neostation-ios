@@ -161,7 +161,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 build-utils/prepare_fast_native_runtime.py             build/native-donor --build-number "$BUILD_NUMBER"
+          curl -fL --retry 3 --retry-delay 2 \
+            https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
+            -o build/StikJIT-1.5.0.xcframework.zip
+          python3 build-utils/prepare_fast_native_runtime.py \
+            build/native-donor --build-number "$BUILD_NUMBER" \
+            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
 
       - name: Prepare emulator build definitions
         shell: bash
