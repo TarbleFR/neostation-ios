@@ -834,6 +834,77 @@ class Rpcs3InternalService {
     return true;
   }
 
+  static Future<File> _bootCrashMarker() async {
+    final cache = await cacheDirectory();
+    return File(path.join(cache.path, 'incomplete-boot-title.txt'));
+  }
+
+  static Future<void> _recoverPreviousIncompleteBoot(String titleId) async {
+    final marker = await _bootCrashMarker();
+    if (!await marker.exists()) return;
+
+    String previous = '';
+    try {
+      previous = (await marker.readAsString()).trim().toUpperCase();
+    } catch (_) {}
+    try {
+      await marker.delete();
+    } catch (_) {}
+
+    if (previous != titleId) return;
+
+    try {
+      final report = await Rpcs3InternalBridge.clearPpuCache(titleId).timeout(
+        const Duration(seconds: 20),
+      );
+      final removed = (report['bytesRemoved'] as num?)?.toInt() ?? 0;
+      if (report['success'] == true) {
+        _log.w(
+          'RPCS3 previous boot for $titleId ended before RUNNING; '
+          'cleared $removed byte(s) of title-local PPU cache before retry.',
+        );
+      } else {
+        _log.w(
+          'RPCS3 previous boot for $titleId was incomplete; PPU cache '
+          'recovery was unavailable: ${report['message'] ?? 'unknown error'}.',
+        );
+      }
+    } catch (error) {
+      _log.w(
+        'RPCS3 previous boot for $titleId was incomplete; PPU cache '
+        'recovery failed non-fatally: $error.',
+      );
+    }
+  }
+
+  static Future<File> _armBootCrashMarker(String titleId) async {
+    final marker = await _bootCrashMarker();
+    await marker.writeAsString(titleId, flush: true);
+    return marker;
+  }
+
+  static Future<void> _clearBootCrashMarkerWhenRunning(File marker) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 2));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final state = await Rpcs3InternalBridge.emulationState().timeout(
+          const Duration(seconds: 2),
+        );
+        // ABI 30: 5=running, 6=paused.
+        if (state == 5 || state == 6) {
+          if (await marker.exists()) await marker.delete();
+          return;
+        }
+        if (state == 1) {
+          // A clean stop is not a process crash and must not poison next boot.
+          if (await marker.exists()) await marker.delete();
+          return;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+  }
+
   static Future<bool> launchTitle(
     String titleId, {
     required String uiLocale,
@@ -856,23 +927,36 @@ class Rpcs3InternalService {
       );
     }
 
+    await _recoverPreviousIncompleteBoot(normalized);
+
     _emit(
       Rpcs3RuntimePhase.launching,
       'Lancement du jeu PS3…',
       jitReady: true,
       coreReady: true,
     );
+
+    final bootMarker = await _armBootCrashMarker(normalized);
     final report = await Rpcs3InternalBridge.launchGame(
       titleId: normalized,
       uiLocale: uiLocale,
       savestateId: savestateId,
     );
     if (report['success'] != true) {
+      try {
+        if (await bootMarker.exists()) await bootMarker.delete();
+      } catch (_) {}
       throw Rpcs3InternalException(
         'bootFailed',
         report['message']?.toString() ?? 'RPCS3 could not boot this game.',
       );
     }
+
+    // boot_game may return before PPU linking reaches RUNNING. Keep the marker
+    // until the Core actually publishes RUNNING/PAUSED so an abrupt process
+    // death during PPU linking can be recovered on the next launch.
+    unawaited(_clearBootCrashMarkerWhenRunning(bootMarker));
+
     _emit(
       Rpcs3RuntimePhase.ready,
       'RPCS3 en cours d’exécution.',

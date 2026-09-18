@@ -12,6 +12,8 @@
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
 #import <errno.h>
+#import <os/lock.h>
+#import <string.h>
 #import <sys/mman.h>
 #import <unistd.h>
 
@@ -209,13 +211,37 @@ static UIViewController* RPCS3RootViewController(void) {
 
 static void RPCS3Log(void* context, int32_t level, const char* message) {
   Rpcs3InternalBridgePlugin* bridge = (__bridge Rpcs3InternalBridgePlugin*)context;
-  if (!bridge || !message || level > 5) return;
+  if (!bridge || !message) return;
+
+  // NEOSTATION_BUILD283_BOUNDED_CORE_LOG
+  // RPCS3 levels: 0=always, 1=fatal, 2=error, 3=todo, 4=success,
+  // 5=warning, 6=notice, 7=trace. Build 282 persisted warning-level guest
+  // syscall chatter at thousands of records/second. Keep fatal/errors plus the
+  // two low-rate profiler summaries only.
+  const BOOL profiler =
+      strstr(message, "COREPROF ") != nullptr ||
+      strstr(message, "COREPROF_RESILIENCE ") != nullptr;
+  if (level > 2 && !profiler) return;
+
+  // Even error-level guest spam must not build an unbounded file-I/O queue.
+  static os_unfair_lock budgetLock = OS_UNFAIR_LOCK_INIT;
+  static CFTimeInterval budgetWindow = 0;
+  static uint32_t budgetCount = 0;
+  if (!profiler) {
+    const CFTimeInterval now = CACurrentMediaTime();
+    BOOL allowed = YES;
+    os_unfair_lock_lock(&budgetLock);
+    if (budgetWindow == 0 || now - budgetWindow >= 1.0) {
+      budgetWindow = now;
+      budgetCount = 0;
+    }
+    if (budgetCount >= 128) allowed = NO;
+    else budgetCount++;
+    os_unfair_lock_unlock(&budgetLock);
+    if (!allowed) return;
+  }
+
   NSString* text = [NSString stringWithUTF8String:message] ?: @"";
-  // Keep notices/errors needed for crash diagnosis; do not fsync debug/trace
-  // output on the render or emulation hot paths.
-  // Level 5 includes PPU linking / relocation and SPU worker milestones.
-  // Dart has no coreLog consumer. Do not flood its main queue with events
-  // while native boot callbacks are waiting for that same queue.
   RPCS3Diagnostic(@"core_log", text);
 }
 
@@ -299,7 +325,7 @@ static void RPCS3Progress(void* context,
   dlerror();
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
-      RPCS3Diagnostic(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
+      RPCS3Milestone(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
       {
         // Keep stderr capture completely local to dlopen. If dyld or a static
         // initializer terminates the process, the next NeoStation launch can
@@ -308,11 +334,11 @@ static void RPCS3Progress(void* context,
         handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
       }
       if (handle) {
-        RPCS3Diagnostic(@"core_load_end", @"loaded");
+        RPCS3Milestone(@"core_load_end", @"loaded");
       } else {
         const char* loadError = dlerror();
         if (loadError) lastLoadError = [NSString stringWithUTF8String:loadError] ?: @"unknown";
-        RPCS3Diagnostic(@"core_load_end",
+        RPCS3Milestone(@"core_load_end",
                         [NSString stringWithFormat:@"dlopen failed: %@", lastLoadError]);
       }
       if (handle) break;
@@ -434,9 +460,9 @@ static void RPCS3Progress(void* context,
       options.context = (__bridge void*)self;
       options.expanded_jit_region = expanded ? 1 : 0;
       options.reserved = 0;
-      RPCS3Diagnostic(@"core_initialize_begin", @"Calling rpcs3_ios_initialize");
+      RPCS3Milestone(@"core_initialize_begin", @"Calling rpcs3_ios_initialize");
       rpcs3_ios_status status = self->_api.initialize(&options);
-      RPCS3Diagnostic(@"core_initialize_end", [NSString stringWithFormat:@"status=%d", status]);
+      RPCS3Milestone(@"core_initialize_end", [NSString stringWithFormat:@"status=%d", status]);
       if (status == 0) {
         self.initialized = YES;
         self.initializedWithExpandedJit = expanded;
@@ -550,10 +576,10 @@ static void RPCS3Progress(void* context,
         typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
         auto selfTest = reinterpret_cast<SelfTest>(dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test"));
         uint64_t output = 0;
-        RPCS3Diagnostic(@"llvm_self_test_begin", @"Testing generated ARM64 code before game boot");
+        RPCS3Milestone(@"llvm_self_test_begin", @"Testing generated ARM64 code before game boot");
         rpcs3_ios_status testStatus = selfTest ? selfTest(11, &output) : -1;
         self.llvmSelfTestPassed = testStatus == 0 && output == 40;
-        RPCS3Diagnostic(@"llvm_self_test_end", [NSString stringWithFormat:@"status=%d output=%llu passed=%d", testStatus, (unsigned long long)output, self.llvmSelfTestPassed]);
+        RPCS3Milestone(@"llvm_self_test_end", [NSString stringWithFormat:@"status=%d output=%llu passed=%d", testStatus, (unsigned long long)output, self.llvmSelfTestPassed]);
         if (!self.llvmSelfTestPassed) {
           NSString* detail = selfTest ? [self lastError] : @"LLVM self-test export is missing.";
           [self stopAndDismiss:nil];
@@ -570,11 +596,11 @@ static void RPCS3Progress(void* context,
       surface.refresh_rate = refreshRate;
       surface.metal_layer = (__bridge void*)controller.metalLayer;
       rpcs3_ios_status surfaceStatus = self->_api.set_display_surface(&surface);
-      RPCS3Diagnostic(@"game_boot_begin", titleId);
+      RPCS3Milestone(@"game_boot_begin", titleId);
       rpcs3_ios_status bootStatus = surfaceStatus == 0
           ? self->_api.boot_game(titleId.UTF8String, savestateId.length ? savestateId.UTF8String : NULL)
           : surfaceStatus;
-      RPCS3Diagnostic(@"game_boot_return", [NSString stringWithFormat:@"%@ status=%d", titleId, bootStatus]);
+      RPCS3Milestone(@"game_boot_return", [NSString stringWithFormat:@"%@ status=%d", titleId, bootStatus]);
       NSDictionary* payload = [self statusPayload:bootStatus];
       if (bootStatus != 0) [self stopAndDismiss:nil];
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });

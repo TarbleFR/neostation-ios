@@ -31,8 +31,8 @@ assert 'RPCS3EarlyLoaderCapture earlyLoaderCapture;' in host
 assert 'RTLD_NOW | RTLD_LOCAL' in host
 
 assert 'dispatch_async(queue' in diag
-assert 'synchronizeFile' not in diag
-assert '@synchronized' not in diag
+assert 'RPCS3-milestones.log' in diag
+assert 'NEOSTATION_BUILD283_BOUNDED_CORE_LOG' in host
 
 assert 'pendingLogs < 32' in helper
 assert 'if event == "log"' in helper
