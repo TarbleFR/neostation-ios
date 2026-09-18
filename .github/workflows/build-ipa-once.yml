@@ -1,11 +1,8 @@
-name: NeoStation iOS Build 273
-run-name: NeoStation iOS Build 273 (VPN-only manual choice and persistence) • ${{ github.sha }}
+name: NeoStation iOS Full Native Build 273
+run-name: NeoStation iOS Level 3 Full Native Build 273 • ${{ github.sha }}
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - experimental
 
 permissions:
   contents: read
