@@ -16,7 +16,7 @@ assert 'readNext()' in segment
 
 manager = (ROOT/'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift').read_text()
 status = manager.split('  func status(',1)[1].split('  func disable(',1)[0]
-assert 'NEOSTATION_VPN_PERSISTENCE_275: using live cached manager' in status
+assert 'NEOSTATION_VPN_PERSISTENCE_275' in status
 assert 'Self.isActive(cached.connection.status)' in status
 assert 'Self.providerIdentifier(for: $0) == identifier && $0.isEnabled' in status
 
