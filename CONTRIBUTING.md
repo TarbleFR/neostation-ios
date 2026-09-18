@@ -26,6 +26,8 @@ Use the **Feature Request** issue template and describe the user problem first, 
 
 ## Pull requests
 
+The maintained long-lived branches are `main`, `experimental` and `backup`. Contributor branches are temporary and should be deleted after their changes are integrated.
+
 1. Fork the repository.
 2. Create a short-lived branch from `main`, for example:
    - `feature/your-feature-name`

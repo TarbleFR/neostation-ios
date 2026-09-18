@@ -57,6 +57,12 @@ flutter create --platforms=ios --org com.neogamelab --project-name neostation .
 
 Create your local build environment file from `.env.example`, provide the required ScreenScraper values and build with the project's normal iOS release process. `.env` must never be committed.
 
+## Development branches and CI
+
+The repository keeps three long-lived branches: `main` for the stable reference, `experimental` for active iOS development, and `backup` as a known restoration point. Other branches should be short-lived and removed after their work is integrated.
+
+GitHub Actions is intentionally limited to two workflow files: `ios-ci.yml` provides FAST/NORMAL validation, while `release-ipa.yml` is reserved for manual RELEASE builds.
+
 ## Books and manga
 
 NeoStation iOS allows users to import, organize and read books and manga. Users must add their own files or independently find and configure compatible sources. NeoStation iOS does not provide or host copyrighted content sources.
