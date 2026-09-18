@@ -56,7 +56,7 @@ SERVICE = "import 'dart:io';\nimport 'package:flutter/services.dart';\nimport 'p
 
 LOGGER = r'''#pragma once
 #import <Foundation/Foundation.h>
-#include <atomic>
+// Keep this exported header valid in both Objective-C and Objective-C++.
 
 // NEOSTATION_RPCS3_ASYNC_DIAGNOSTICS_272. Best-effort milestones only.
 // Sudden process termination may lose pending lines; no runtime path drains us.
@@ -71,9 +71,9 @@ static inline dispatch_queue_t RPCS3DiagnosticQueue() {
 }
 static inline void RPCS3Diagnostic(NSString* stage, NSString* message) {
   if ([stage isEqualToString:@"core_log"] || [stage isEqualToString:@"performance_sample"]) return;
-  static std::atomic<unsigned> pending{0};
-  if (pending.fetch_add(1, std::memory_order_relaxed) >= 128) {
-    pending.fetch_sub(1, std::memory_order_relaxed); return;
+  static unsigned pending = 0;
+  if (__atomic_fetch_add(&pending, 1u, __ATOMIC_RELAXED) >= 128) {
+    __atomic_fetch_sub(&pending, 1u, __ATOMIC_RELAXED); return;
   }
   NSString* safeStage = [(stage ?: @"") substringToIndex:MIN(stage.length, (NSUInteger)128)];
   NSString* safeMessage = [(message ?: @"") substringToIndex:MIN(message.length, (NSUInteger)2048)];
@@ -103,7 +103,7 @@ static inline void RPCS3Diagnostic(NSString* stage, NSString* message) {
         // Diagnostic failures cannot fail core startup or imports.
       } @finally {
         @try { [file closeFile]; } @catch (__unused NSException* ignored) {}
-        pending.fetch_sub(1, std::memory_order_relaxed);
+        __atomic_fetch_sub(&pending, 1u, __ATOMIC_RELAXED);
       }
     }
   });
@@ -111,7 +111,7 @@ static inline void RPCS3Diagnostic(NSString* stage, NSString* message) {
 '''
 
 NATIVE_TEST = r'''#import <Foundation/Foundation.h>
-#include <cassert>
+#include <assert.h>
 static NSString* testDocuments;
 #define NSSearchPathForDirectoriesInDomains(...) (@[testDocuments])
 #import "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h"
@@ -223,6 +223,7 @@ def main():
     sendLock.lock()''')
     (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h').write_text(LOGGER)
     (ROOT / 'test/native/rpcs3_diagnostics_test.mm').write_text(NATIVE_TEST)
+    (ROOT / 'test/rpcs3_diagnostics_native_test.py').write_text('#!/usr/bin/env python3\n"""Exercise the exported Foundation logger in both Objective-C and Objective-C++.\n\nCocoaPods exposes the header to Runner/GeneratedPluginRegistrant.m, so testing\nonly the .mm implementation misses module import regressions. Test-only drains\nexercise the real bounded logger; production never waits for its queue.\n"""\nimport pathlib\nimport subprocess\nimport sys\nimport tempfile\n\nif sys.platform != "darwin":\n    print("RPCS3 native diagnostics test: SKIP (requires macOS Foundation)")\n    sys.exit(0)\n\nroot = pathlib.Path(__file__).resolve().parents[1]\nfor compiler, language, standard in (\n    ("clang", "objective-c", "gnu11"),\n    ("clang++", "objective-c++", "c++20"),\n):\n    with tempfile.TemporaryDirectory(prefix="rpcs3-log-test-") as directory:\n        binary = pathlib.Path(directory) / "diagnostics-test"\n        subprocess.run([\n            "xcrun", compiler, "-x", language, "-fobjc-arc", "-fblocks",\n            "-std=" + standard, "-framework", "Foundation", "-I", str(root),\n            str(root / "test/native/rpcs3_diagnostics_test.mm"), "-o", str(binary),\n        ], check=True)\n        subprocess.run([str(binary), directory], check=True, timeout=60)\n        print("PASS: exported RPCS3 diagnostics header and behavior in " + language)\nprint("RPCS3 native diagnostics Objective-C/Objective-C++ tests: OK")\n')
     journal = 'packages/stikjit_bridge/ios/Classes/NeoStationVPNDiagnostics.swift'
     replace(journal, 'try file.write(contentsOf: Data(text.utf8)); try file.synchronize()',
                      'try file.write(contentsOf: Data(text.utf8))')
