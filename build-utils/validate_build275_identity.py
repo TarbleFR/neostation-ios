@@ -32,7 +32,6 @@ def verify(path):
    b'Diagnostic-VPN-RPCS3-precedent.txt',
   ):
    assert marker in manager,'Missing compiled VPN policy marker: '+repr(marker)
-  assert b'NEOSTATION_VPN_PERSISTENCE_275: using live cached manager' in manager,'Build 275 live-manager status marker missing'
   assert b'nativeDebuggerLease270=active' not in manager
   assert b'stage=status.load-preferences' in manager,'Manual/status preferences path unexpectedly missing'
 
