@@ -18,7 +18,6 @@ engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with legacy.js.
   # device interface. The helper target links the existing binary explicitly;
   # @executable_path/../../Frameworks resolves its single copy in Runner.app.
   s.static_framework = true
-  s.preserve_paths = 'Frameworks/StikJIT.xcframework'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
   s.swift_version = '5.0'
@@ -28,6 +27,6 @@ engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with legacy.js.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'APPLICATION_EXTENSION_API_ONLY' => 'YES',
-    'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/Frameworks/StikJIT.xcframework/ios-arm64"'
+    'FRAMEWORK_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/../../stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64"'
   }
 end

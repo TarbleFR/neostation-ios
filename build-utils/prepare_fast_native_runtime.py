@@ -48,6 +48,27 @@ def copytree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, symlinks=True)
 
 
+def normalize_swift_interfaces(xcframework: Path) -> int:
+    """Normalize known Swift qualification issues in StikJIT 1.5.0 interfaces."""
+    interfaces = sorted(xcframework.rglob('*.swiftinterface'))
+    demand(bool(interfaces), 'StikJIT XCFramework contains no textual Swift interfaces')
+    changed = 0
+    for interface in interfaces:
+        text = interface.read_text(encoding='utf-8')
+        patched = text.replace('StikJIT.DDIPaths', 'DDIPaths')
+        patched = patched.replace('StikJIT.StikJIT.', 'StikJIT.')
+        if patched != text:
+            interface.write_text(patched, encoding='utf-8')
+            changed += 1
+    for interface in interfaces:
+        text = interface.read_text(encoding='utf-8')
+        demand(
+            'StikJIT.DDIPaths' not in text and 'StikJIT.StikJIT.' not in text,
+            f'Invalid StikJIT textual-interface qualification remains: {interface}',
+        )
+    return changed
+
+
 def device_framework(xcframework: Path) -> Path:
     info=plistlib.loads((xcframework/'Info.plist').read_bytes())
     matches=[]
@@ -134,6 +155,7 @@ def main() -> None:
         )
         xcframework=work/'StikJIT.xcframework'
         copytree(official_items[0], xcframework)
+        normalized_interfaces=normalize_swift_interfaces(xcframework)
         device=device_framework(xcframework)
         demand((device/'Modules').is_dir(), 'Official StikJIT Swift module is missing')
 
@@ -150,11 +172,12 @@ def main() -> None:
         if (stik/'Info.plist').is_file():
             shutil.copy2(stik/'Info.plist', device/'Info.plist')
 
-        for package in ('stikjit_bridge', 'dolphin_jit_helper'):
-            copytree(
-                xcframework,
-                ROOT/f'packages/{package}/ios/Frameworks/StikJIT.xcframework',
-            )
+        # Keep one verified compile-time StikJIT XCFramework. Both helper
+        # targets resolve this same module instead of compiling duplicate copies.
+        copytree(
+            xcframework,
+            ROOT/'packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework',
+        )
 
         copytree(
             dolphin,
@@ -206,6 +229,7 @@ def main() -> None:
             'legacyJsSha256':LEGACY_SHA,
             'platform':'ios-arm64',
             'officialInterfaceArchiveSha256':OFFICIAL_STIK_ZIP_SHA,
+            'normalizedSwiftInterfaces':normalized_interfaces,
             'fastReuse':True,
         }
         (logs/'stikjit-release.json').write_text(
@@ -218,6 +242,7 @@ def main() -> None:
             'donorIpa':ipa.name,
             'donorRun':35321768668,
             'officialInterfaceArchiveSha256':OFFICIAL_STIK_ZIP_SHA,
+            'normalizedSwiftInterfaces':normalized_interfaces,
             'stikjitBinarySha256':stik_binary_sha,
             'universalJsSha256':sha(stik/'universal.js'),
             'legacyJsSha256':sha(stik/'legacy.js'),
