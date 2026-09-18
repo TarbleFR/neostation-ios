@@ -26,7 +26,7 @@ jobs:
       BUILD_NUMBER: '277'
       IPA_NAME: 'NeoStation-iOS-Build-277-VPN-Single-Source'
       ARTIFACT_NAME: 'NeoStation-iOS-Build-277-VPN-Single-Source'
-            DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
+      DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -207,7 +207,7 @@ jobs:
         run: |
           mkdir -p build/fast-diagnostics
           test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
-                    cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
+          cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
           printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/fast-diagnostics/build.txt
 
       - name: Upload fast diagnostics
