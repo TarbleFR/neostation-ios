@@ -177,6 +177,10 @@ def main():
 
     platform=old.PLATFORM
     platform=platform.replace(
+        '''    require(String(data: data, encoding: .utf8) == "heartbeat", "heartbeat payload")''',
+        '''    require(data == Data("vpn271-status".utf8), "diagnostic identity ping")''',
+    )
+    platform=platform.replace(
         'responseHandler?(acknowledgeHeartbeat ? Data("alive".utf8) : nil)',
         '''responseHandler?(acknowledgeHeartbeat ? try! JSONSerialization.data(withJSONObject:["version":271,"ready":true]) : nil)''',
     )
