@@ -23,7 +23,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-274
+  group: neostation-ios-build-275
   cancel-in-progress: true
 
 jobs:
@@ -32,9 +32,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '274'
-      IPA_NAME: 'NeoStation-iOS-Build-274-RPCS3-Stable-Fast'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-274-RPCS3-Stable-Fast'
+      BUILD_NUMBER: '275'
+      IPA_NAME: 'NeoStation-iOS-Build-275-VPN-Persistent-Fast'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-275-VPN-Persistent-Fast'
       VALIDATION_LEVEL: ${{ github.event_name == 'workflow_dispatch' && inputs.level || 'fast' }}
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -233,10 +233,10 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
           python3 build-utils/validate_rpcs3_ipa.py             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
           python3 build-utils/validate_single_ipa_distribution.py             "dist/$IPA_NAME.ipa" --report dist/single-ipa-distribution.json
-          python3 build-utils/validate_build274_identity.py             "dist/$IPA_NAME.ipa" --report dist/build274-identity.json
+          python3 build-utils/validate_build275_identity.py             "dist/$IPA_NAME.ipa" --report dist/build275-identity.json
           cp build/fast-native/identity.json dist/fast-native-identity.json
           cp build/rpcs3-ci/vpn-build273-tests.log dist/
-          cp build/rpcs3-ci/rpcs3-build274-launch-tests.log dist/
+          cp build/rpcs3-ci/rpcs3-build274-launch-tests.log dist/\n          cp build/rpcs3-ci/vpn-build275-persistence-tests.log dist/
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
