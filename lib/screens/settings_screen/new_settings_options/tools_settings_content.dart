@@ -137,7 +137,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
   bool _shouldDisableTunnel(LocalJitTunnelState? state) {
     if (state == null) return false;
     return state.active ||
-        state.enabled ||
         state.status == 'connecting' ||
         state.status == 'reasserting';
   }
