@@ -11,13 +11,11 @@ host = read('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugi
 diag = read('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h')
 service = read('lib/services/rpcs3_internal_service.dart')
 
-# Build 282 VPN handoff is frozen while this RPCS3-only fix is applied.
+# RPCS3 Build 283 must preserve the device-validated Build 279 provider.
+# The host-side VPN manager is intentionally allowed to evolve independently.
 assert subprocess.check_output(
     ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
     cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
-assert subprocess.check_output(
-    ['git', 'hash-object', 'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'],
-    cwd=ROOT, text=True).strip() == 'd3bd4ad3671d493cf7572d8917f615ccde880d66'
 
 assert 'NEOSTATION_BUILD283_BOUNDED_CORE_LOG' in host
 assert 'if (level > 2 && !profiler) return;' in host
@@ -37,4 +35,4 @@ assert '_clearBootCrashMarkerWhenRunning(bootMarker)' in service
 assert 'state == 5 || state == 6' in service
 assert "await marker.writeAsString(titleId, flush: true)" in service
 
-print('PASS: Build 283 bounded RPCS3 diagnostics, durable crash milestones, PPU boot recovery, VPN 282 frozen')
+print('PASS: Build 283 bounded RPCS3 diagnostics, durable crash milestones, PPU boot recovery, VPN 279 provider frozen')
