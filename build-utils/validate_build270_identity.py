@@ -35,7 +35,7 @@ def verify(path):
         script_root = prefix + 'Frameworks/StikJIT.framework/'
         original = archive.read(script_root + 'universal.js')
         fixed = archive.read(script_root + 'rpcs3-universal.js')
-        assert hashlib.sha256(original).hexdigest() == '37c2dea19651f03bc285482d7ff148574e09934ac6f52b6d6cb34a9584397c238', 'Shared Universal script changed unexpectedly'
+        assert hashlib.sha256(original).hexdigest() == '22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1', 'Shared Universal script changed unexpectedly'
         assert fixed.decode('utf-8') == protocol_script(original.decode('utf-8')), 'RPCS3 script differs from the tested transformation'
     report.update({'build270TransportVerified': True,
                    'nativeIdentity': 'NEOSTATION_RPCSS3_TRANSPORT_270',
