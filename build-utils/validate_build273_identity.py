@@ -41,7 +41,13 @@ def verify(path):
 
   dolphin=archive.read(prefix+'Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
   assert b'DolphinRetroAchievementsAccount' in dolphin,'Dolphin RA account flow changed'
-  helper=archive.read(prefix+'Frameworks/rpcs3_jit_helper.framework/rpcs3_jit_helper')
+
+  # rpcs3_jit_helper is a CocoaPods static framework. Its Swift implementation
+  # is linked into RPCS3JITHelper.appex and must not be emitted as a duplicate
+  # runtime framework under NeoStation.app/Frameworks.
+  dynamic_helper=prefix+'Frameworks/rpcs3_jit_helper.framework/rpcs3_jit_helper'
+  assert dynamic_helper not in archive.namelist(),'RPCS3 static helper unexpectedly packaged as a dynamic framework'
+  helper=archive.read(prefix+'PlugIns/RPCS3JITHelper.appex/RPCS3JITHelper')
   assert b'NEOSTATION_RPCS3_STOP_REPLY_270' not in helper,'Abandoned JIT transport code returned'
 
   dart=archive.read(prefix+'Frameworks/App.framework/App')
