@@ -189,7 +189,7 @@ jobs:
           python3 build-utils/validate_rpcs3_ipa.py             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
           python3 build-utils/validate_single_ipa_distribution.py             "dist/$IPA_NAME.ipa" --report dist/single-ipa-distribution.json
           cp build/fast-native/identity.json dist/fast-native-identity.json
-          cp build/rpcs3-ci/vpn-v277-single-source.log dist/
+          test -f build/rpcs3-ci/vpn-v277-single-source.log && cp build/rpcs3-ci/vpn-v277-single-source.log dist/ || true
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
