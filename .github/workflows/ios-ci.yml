@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 280 RPCS3 Loader Stability
-run-name: NeoStation iOS Build 280 • ${{ github.sha }}
+name: NeoStation iOS Build 281 VPN Reinstall Stability
+run-name: NeoStation iOS Build 281 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-280
+  group: neostation-ios-build-281
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 280 Experimental IPA
+    name: Build 281 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '280'
-      IPA_NAME: 'NeoStation-iOS-Build-280-RPCS3-Loader-Stability'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-280-RPCS3-Loader-Stability'
+      BUILD_NUMBER: '281'
+      IPA_NAME: 'NeoStation-iOS-Build-281-VPN-Reinstall-Stability'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-281-VPN-Reinstall-Stability'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -121,6 +121,14 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/native-donor
 
+      - name: Download validated VPN 279 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-279-VPN-Provider-Startup-Fix
+          run-id: 35393060176
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/vpn-reference279
+
       - name: Reuse validated native runtimes
         shell: bash
         run: |
@@ -180,7 +188,7 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 280 IPA
+      - name: Package and validate Build 281 IPA
         shell: bash
         run: |
           set -euo pipefail
@@ -189,6 +197,10 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
           python3 build-utils/validate_rpcs3_ipa.py             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
           python3 build-utils/validate_single_ipa_distribution.py             "dist/$IPA_NAME.ipa" --report dist/single-ipa-distribution.json
+          python3 build-utils/validate_vpn_build279_artifact.py \
+            --reference-dir build/vpn-reference279 \
+            --candidate "dist/$IPA_NAME.ipa" \
+            --report dist/vpn279-final-artifact.json
           cp build/fast-native/identity.json dist/fast-native-identity.json
           test -f build/rpcs3-ci/vpn-v277-single-source.log && cp build/rpcs3-ci/vpn-v277-single-source.log dist/ || true
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"

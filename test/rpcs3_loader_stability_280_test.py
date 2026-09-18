@@ -14,9 +14,9 @@ def text(path):
 assert subprocess.check_output(
     ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
     cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
-assert subprocess.check_output(
-    ['git', 'hash-object', 'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'],
-    cwd=ROOT, text=True).strip() == '928c70f8cdb7ef156618a2d58091a4dee74069fe'
+manager = text('packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift')
+assert 'NeoStationLocalTunnel.installationToken' in manager
+assert 'stale + duplicates' in manager
 
 host = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 diag = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h')

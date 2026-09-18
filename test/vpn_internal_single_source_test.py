@@ -92,7 +92,31 @@ assert activation_result(['disconnected', 'disconnected', 'connecting', 'connect
 assert activation_result(['connecting', 'disconnected']) == 'failed'
 assert activation_result(['reasserting', 'disconnected']) == 'failed'
 
+
+# A system VPN profile can outlive a sideload installation. The manager must
+# bind a profile to the current app-container installation and recreate only
+# stale profiles on explicit Settings ON.
+assert 'installationTokenKey = "installationToken"' in manager
+assert 'NeoStationLocalTunnel.installationToken' in manager
+assert 'let token = self.installationToken()' in manager
+assert 'Self.installationToken(for: $0) == token' in manager
+assert 'Self.installationToken(for: $0) != token' in manager
+assert 'stale + duplicates' in manager
+assert 'Constants.installationTokenKey: installationToken' in manager
+
+def profile_plan(stored_tokens, current_token):
+    current = [token for token in stored_tokens if token == current_token]
+    stale = [token for token in stored_tokens if token != current_token]
+    return current, stale
+
+current, stale = profile_plan(['old-install'], 'new-install')
+assert current == [] and stale == ['old-install']
+current, stale = profile_plan(['same-install'], 'same-install')
+assert current == ['same-install'] and stale == []
+current, stale = profile_plan([None, 'same-install'], 'same-install')
+assert current == ['same-install'] and stale == [None]
+
 assert 'schemaVersion = 277' in manager
 assert '"version": 277' in provider
 
-print('PASS: internal VPN single-source lifecycle + delayed state + bounded provider startup')
+print('PASS: internal VPN lifecycle + bounded provider + reinstall-safe profile identity')

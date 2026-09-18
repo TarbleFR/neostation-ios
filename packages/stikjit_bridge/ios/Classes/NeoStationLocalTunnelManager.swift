@@ -19,6 +19,9 @@ final class NeoStationLocalTunnelManager {
     static let schemaVersionKey = "schemaVersion"
     static let interfaceAddressKey = "interfaceAddress"
     static let peerAddressKey = "peerAddress"
+    static let installationTokenKey = "installationToken"
+    static let installationTokenDefaultsKey =
+      "NeoStationLocalTunnel.installationToken"
     static let interfaceAddress = "10.7.1.1"
     static let peerAddress = "10.7.0.1"
     static let jitPort: UInt16 = 49152
@@ -141,21 +144,37 @@ final class NeoStationLocalTunnelManager {
         let owned = (managers ?? []).filter {
           Self.isOwned($0, providerBundleIdentifier: providerIdentifier)
         }
+
+        // A NETunnelProviderManager profile can survive a sideload uninstall
+        // even though NeoStation receives a new application container/signing
+        // instance. Never reuse such a stale profile for a new installation.
+        // The token lives in this app container and is copied into the system
+        // VPN profile, so an ordinary in-place update keeps the same profile
+        // while a reinstall recreates it exactly once.
+        let token = self.installationToken()
+        let current = owned.filter {
+          Self.installationToken(for: $0) == token
+        }
+        let stale = owned.filter {
+          Self.installationToken(for: $0) != token
+        }
+
         let manager = Self.preferredManager(
-          in: owned,
+          in: current,
           providerBundleIdentifier: providerIdentifier
         ) ?? NETunnelProviderManager()
         self.activeManager = manager
 
-        let duplicates = owned.filter { $0 !== manager }
+        let duplicates = current.filter { $0 !== manager }
         self.disableAndRemoveDuplicates(
-          duplicates,
+          stale + duplicates,
           index: 0,
           command: command
         ) {
           self.persistAndStart(
             manager,
             providerIdentifier: providerIdentifier,
+            installationToken: token,
             command: command
           )
         }
@@ -166,11 +185,16 @@ final class NeoStationLocalTunnelManager {
   private func persistAndStart(
     _ manager: NETunnelProviderManager,
     providerIdentifier: String,
+    installationToken: String,
     command: Command
   ) {
     guard isCurrent(command) else { return }
 
-    configure(manager, providerIdentifier: providerIdentifier)
+    configure(
+      manager,
+      providerIdentifier: providerIdentifier,
+      installationToken: installationToken
+    )
     manager.saveToPreferences { error in
       DispatchQueue.main.async {
         guard self.isCurrent(command) else { return }
@@ -444,7 +468,8 @@ final class NeoStationLocalTunnelManager {
 
   private func configure(
     _ manager: NETunnelProviderManager,
-    providerIdentifier: String
+    providerIdentifier: String,
+    installationToken: String
   ) {
     let tunnelProtocol =
       manager.protocolConfiguration as? NETunnelProviderProtocol ??
@@ -456,6 +481,7 @@ final class NeoStationLocalTunnelManager {
       Constants.schemaVersionKey: Constants.schemaVersion,
       Constants.interfaceAddressKey: Constants.interfaceAddress,
       Constants.peerAddressKey: Constants.peerAddress,
+      Constants.installationTokenKey: installationToken,
     ]
 
     manager.protocolConfiguration = tunnelProtocol
@@ -613,6 +639,26 @@ final class NeoStationLocalTunnelManager {
       "lastErrorDetail":
         lastFailure?.localizedDescription as Any? ?? NSNull(),
     ]
+  }
+
+  private func installationToken() -> String {
+    let defaults = UserDefaults.standard
+    if let existing = defaults.string(
+      forKey: Constants.installationTokenDefaultsKey
+    ), !existing.isEmpty {
+      return existing
+    }
+
+    let token = UUID().uuidString
+    defaults.set(token, forKey: Constants.installationTokenDefaultsKey)
+    return token
+  }
+
+  private static func installationToken(
+    for manager: NETunnelProviderManager
+  ) -> String? {
+    (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+      .providerConfiguration?[Constants.installationTokenKey] as? String
   }
 
   private func providerBundleIdentifier() -> String? {
