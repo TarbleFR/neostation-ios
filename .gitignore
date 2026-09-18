@@ -298,3 +298,19 @@ ROMs/
 # Native build scratch from the vendored packages (never committed)
 .cxx/
 packages/rpcs3_internal_bridge/ios/Frameworks/
+
+# NeoStation iOS generated/local artifacts
+/ios/
+/dist/
+.dart-defines.json
+*.ipa
+*.xcarchive
+*.dSYM/
+*.xcresult/
+*.crash
+*.ips
+*.bak
+*.old
+*.tmp
+.dolphin-ccache/
+.ccache/
