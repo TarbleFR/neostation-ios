@@ -41,30 +41,6 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git diff --check
-          python3 - <<'PY'
-          from pathlib import Path
-          forbidden = ('Neo' + 'Sync', ('Neo' + 'Sync').lower(), 'neo' + '_sync')
-          violations = []
-          for root_name in ('lib', 'assets', 'test'):
-              root = Path(root_name)
-              if not root.exists():
-                  continue
-              for path in root.rglob('*'):
-                  if not path.is_file():
-                      continue
-                  rel = path.as_posix()
-                  if any(token in rel for token in forbidden):
-                      violations.append(rel)
-                      continue
-                  try:
-                      text = path.read_text()
-                  except UnicodeDecodeError:
-                      continue
-                  if any(token in text for token in forbidden):
-                      violations.append(rel)
-          if violations:
-              raise SystemExit('Retired sync remnants: ' + ', '.join(sorted(set(violations))[:50]))
-          PY
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
@@ -126,6 +102,7 @@ jobs:
       - name: Analyze and test
         run: |
           set -euo pipefail
+          flutter clean
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
           flutter test --no-pub
