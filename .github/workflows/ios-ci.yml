@@ -76,6 +76,7 @@ jobs:
           python3 build-utils/patch_rpcs3_build256_host.py
           python3 build-utils/patch_rpcs3_build260_modern_menu.py
           python3 build-utils/patch_rpcs3_build265_host.py
+          python3 build-utils/patch_rpcs3_build283_host.py
           python3 build-utils/patch_dolphin_build267_account.py
 
           git diff --check
