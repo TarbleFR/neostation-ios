@@ -177,7 +177,7 @@ def main():
         'require(String(data: data, encoding: .utf8) == "heartbeat", "heartbeat payload")',
         'require(String(data: data, encoding: .utf8) == "vpn271-status", "provider diagnostic payload")',
     )
-    platform += '\nenum NeoStationVPNDiagnostics { static func record(_ a:String,_ b:String) {}\\n static func snapshotRPCS3() {} }\\n'
+    platform += '\nenum NeoStationVPNDiagnostics { static func record(_ a:String,_ b:String) {}\n static func snapshotRPCS3() {} }\n'
 
     print(old.run_swift(platform + manager + HELPERS + SCENARIOS, 'PASS: Build 276 VPN lifecycle'))
 
