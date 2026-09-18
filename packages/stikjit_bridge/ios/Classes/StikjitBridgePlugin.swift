@@ -18,7 +18,7 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    if call.method == "ensureLocalTunnel" {
+    if call.method == "ensureLocalTunnel" || call.method == "activateOwnedTunnel" {
       guard #available(iOS 17.4, *) else {
         result(
           FlutterError(
@@ -29,7 +29,7 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
         )
         return
       }
-      NeoStationLocalTunnelManager.shared.ensureRunning { response in
+      let completion: (NeoStationLocalTunnelManager.Response) -> Void = { response in
         switch response {
         case .success(let state):
           result(state)
@@ -42,6 +42,11 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
             )
           )
         }
+      }
+      if call.method == "activateOwnedTunnel" {
+        NeoStationLocalTunnelManager.shared.enableOwned(completion: completion)
+      } else {
+        NeoStationLocalTunnelManager.shared.ensureRunning(completion: completion)
       }
       return
     }
