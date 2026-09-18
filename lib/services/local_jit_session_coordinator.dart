@@ -26,13 +26,13 @@ class LocalJitSessionCoordinator<T> {
     }
   }
 
-  Future<T> ensure() async {
+  Future<T> ensure({Future<T> Function()? routeOverride}) async {
     final generation = _generation;
     await (_coldReset ??= _resetOnce());
     if (generation != _generation) {
       throw const LocalJitSessionCancelled();
     }
-    final route = await _ensureRoute();
+    final route = await (routeOverride ?? _ensureRoute)();
     if (generation != _generation) {
       throw const LocalJitSessionCancelled();
     }
