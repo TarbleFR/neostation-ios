@@ -173,6 +173,10 @@ class LocalJitTunnelState {
   final bool routeVerified;
   final String? lastErrorCode;
   final String? lastErrorDetail;
+
+  bool get canStopOwnedTunnel =>
+      managedByNeoStation &&
+      (active || status == 'connecting' || status == 'reasserting');
 }
 
 class StikjitLaunchResult {
