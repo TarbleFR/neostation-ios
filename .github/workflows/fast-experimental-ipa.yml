@@ -109,7 +109,9 @@ jobs:
         run: |
           set -euo pipefail
           flutter test --no-pub             test/local_jit_lifecycle_policy_test.dart             test/local_jit_route_proof_test.dart             test/local_tunnel_build269_test.dart             test/vpn_build271_test.dart
-          python3 test/local_jit_tunnel_contract_test.py
+          # Build 273 intentionally replaces the older automatic VPN state-machine
+          # contract. vpn_build273_test.py already exercises the effective native
+          # manager and proves that probes/lifecycle cannot mutate either VPN.
           python3 test/dolphin_account_267_test.py
 
       - name: Run Level 2 validation suite
