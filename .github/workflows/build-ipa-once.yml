@@ -79,6 +79,8 @@ jobs:
           python3 build-utils/patch_rpcs3_build270_transport.py
           python3 build-utils/patch_rpcs3_build270_transport.py
           python3 test/rpcs3_build270_transport_test.py --baseline build/rpcs3-ci/provider269-baseline.swift 2>&1 | tee build/rpcs3-ci/rpcs3-build270-transport-tests.log
+          python3 build-utils/patch_rpcs3_stop_reply270.py
+          python3 build-utils/patch_rpcs3_stop_reply270.py
           python3 test/dolphin_account_267_test.py
           python3 test/rpcs3_ingame_ui_contract_test.py
           python3 test/rpcs3_build260_modern_menu_test.py
@@ -116,6 +118,7 @@ jobs:
           python3 test/rpcs3_ipa_validation_test.py 2>&1 | tee build/rpcs3-ci/ipa-validator.log
           python3 test/rpcs3_ingame_ui_contract_test.py 2>&1 | tee build/rpcs3-ci/ingame-ui.log
           python3 test/rpcs3_diagnostics_native_test.py 2>&1 | tee build/rpcs3-ci/diagnostics-native.log
+          python3 test/rpcs3_jit_handshake_test.py 2>&1 | tee build/rpcs3-ci/jit-handshake-tests.log
           python3 test/rpcs3_build258_core_profile_comparison_test.py
           python3 test/rpcs3_build258_pipeline_scheduler_benchmark_test.py
           python3 -m py_compile build-utils/patch_rpcs3_build264_gow3_core.py test/rpcs3_build264_gow3_core_test.py
@@ -215,6 +218,8 @@ jobs:
           python3 build-utils/patch_stikjit_remote_pairing.py "$STIK_SRC"
           python3 test/stikjit_rpcs3_patch_test.py "$STIK_SRC"
           python3 test/stikjit_remote_pairing_compat_test.py "$STIK_SRC"
+          python3 build-utils/patch_rpcs3_stop_reply270.py --stik-source "$STIK_SRC"
+          python3 test/rpcs3_stop_reply270_test.py "$STIK_SRC" 2>&1 | tee build/rpcs3-ci/stop-reply-protocol-tests.log
           python3 -m py_compile build-utils/patch_stikjit_rpcs3.py build-utils/patch_stikjit_remote_pairing.py build-utils/configure_local_jit_tunnel.py build-utils/install_patched_stikjit.py
           pushd "$STIK_SRC" >/dev/null
           xcodegen generate
@@ -278,6 +283,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee build/rpcs3-ci/full-test-suite.log) 2>&1
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
           flutter test --no-pub
@@ -418,6 +424,8 @@ jobs:
           cp build/rpcs3-ci/rpcs3-tunnel-lease-tests.log dist/
           cp build/rpcs3-ci/rpcs3-build270-transport-tests.log dist/
           cp build/rpcs3-ci/vpn-activation-tests.log dist/
+          cp build/rpcs3-ci/stop-reply-protocol-tests.log dist/
+          cp build/rpcs3-ci/jit-handshake-tests.log dist/
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
