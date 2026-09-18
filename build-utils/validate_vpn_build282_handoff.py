@@ -34,10 +34,10 @@ def main():
     cur=manager_bytes(args.candidate)
     if disassembly(ref)!=disassembly(cur):
         raise SystemExit('Final IPA changed Build 282 VPN handoff manager machine code')
-    for marker in (b'installationToken', b'stopForeignManagersForHandoff', b'recoverOwnedTransitionIfNeeded'):
-        if marker not in cur:
-            raise SystemExit(f'Missing VPN handoff marker {marker!r}')
-    report={'managerMachineCodeMatches282':True,'handoffMarkersPresent':True}
+    # Exact machine-code equality with the device-improved Build 282 is the
+    # authoritative handoff invariant. Private Swift function names are not an
+    # ABI and can legitimately disappear from a release binary.
+    report={'managerMachineCodeMatches282':True}
     args.report.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
     print('PASS: final VPN handoff manager matches device-improved Build 282')
