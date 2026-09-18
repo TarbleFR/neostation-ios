@@ -24,7 +24,26 @@ class StikjitBridge {
     return state;
   }
 
+  /// Explicit Settings ON. This is the only API allowed to start the
+  /// NeoStation-owned Network Extension.
+  static Future<LocalJitTunnelState> activateOwnedTunnel() async {
+    final raw = await _channel.invokeMethod<Object?>('activateOwnedTunnel');
+    if (raw is! Map) {
+      throw StateError('NeoStation owned tunnel returned an invalid response.');
+    }
+    final state = LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
+    if (!state.active || !state.managedByNeoStation) {
+      throw PlatformException(
+        code: 'local_tunnel_start_failed',
+        message: 'The integrated VPN did not enter an active state.',
+        details: raw,
+      );
+    }
+    return state;
+  }
+
   /// The native preflight proves endpoint reachability, not merely VPN status.
+  /// It never starts or stops a VPN.
   static Future<LocalJitTunnelState> ensureJitRoute() => ensureLocalTunnel();
 
   static Future<LocalJitTunnelState> localTunnelStatus() async {
@@ -122,6 +141,8 @@ class LocalJitTunnelState {
     required this.peerAddress,
     required this.onDemand,
     this.routeVerified = false,
+    this.lastErrorCode,
+    this.lastErrorDetail,
   });
 
   factory LocalJitTunnelState.fromMap(Map<String, dynamic> data) =>
@@ -136,6 +157,8 @@ class LocalJitTunnelState {
         peerAddress: data['peerAddress']?.toString(),
         onDemand: data['onDemand'] == true,
         routeVerified: data['routeVerified'] == true,
+        lastErrorCode: data['lastErrorCode']?.toString(),
+        lastErrorDetail: data['lastErrorDetail']?.toString(),
       );
 
   final bool active;
@@ -148,6 +171,8 @@ class LocalJitTunnelState {
   final String? peerAddress;
   final bool onDemand;
   final bool routeVerified;
+  final String? lastErrorCode;
+  final String? lastErrorDetail;
 }
 
 class StikjitLaunchResult {
