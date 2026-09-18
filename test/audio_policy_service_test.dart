@@ -76,7 +76,12 @@ void main() {
     final patch = File(
       'build-utils/patch_ios_video_player_audio_session.py',
     ).readAsStringSync();
-    final codemagic = File('codemagic.yaml').readAsStringSync();
+    final fastCi = File(
+      '.github/workflows/ios-ci.yml',
+    ).readAsStringSync();
+    final releaseCi = File(
+      '.github/workflows/release-ipa.yml',
+    ).readAsStringSync();
     final native = File(
       'packages/external_folder_access/ios/Classes/'
       'ExternalFolderAccessPlugin.swift',
@@ -84,7 +89,8 @@ void main() {
 
     expect(patch, contains('NEOSTATION_AUDIO_SESSION_OWNED_EXTERNALLY'));
     expect(patch, contains('requestedCategory: .playback'));
-    expect(codemagic, contains('patch_ios_video_player_audio_session.py'));
+    expect(fastCi, contains('patch_ios_video_player_audio_session.py'));
+    expect(releaseCi, contains('patch_ios_video_player_audio_session.py'));
     expect(native, contains('AVAudioSession.interruptionNotification'));
     expect(native, contains('AVAudioSession.routeChangeNotification'));
     expect(native, contains('session.category != .ambient'));
