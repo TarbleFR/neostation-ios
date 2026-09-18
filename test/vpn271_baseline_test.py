@@ -71,7 +71,7 @@ def compare_effective_baseline():
 
 def main():
     result = compare_effective_baseline()
-    workflow = (ROOT / '.github/workflows/build-ipa-once.yml').read_text()
+    workflow = (ROOT / '.github/workflows/release-ipa.yml').read_text()
     assert 'patch_rpcs3_build270_transport.py' not in workflow
     assert 'patch_rpcs3_stop_reply270.py' not in workflow
     helper = (ROOT / 'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift').read_text()
