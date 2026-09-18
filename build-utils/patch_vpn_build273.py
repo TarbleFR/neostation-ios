@@ -248,6 +248,22 @@ def main():
     )
     write(name,text)
     write('lib/services/local_jit_lifecycle_policy.dart', POLICY)
+    write('test/local_jit_lifecycle_policy_test.dart', r'''import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/services/local_jit_lifecycle_policy.dart';
+
+void main() {
+  test('no application lifecycle state controls the user VPN choice', () {
+    for (final state in AppLifecycleState.values) {
+      expect(
+        shouldStopLocalJitForLifecycle(state),
+        isFalse,
+        reason: state.name,
+      );
+    }
+  });
+}
+''')
 
     # 4) Read-only probe must fail quickly and may never wait 35 seconds.
     name='packages/stikjit_bridge/lib/stikjit_bridge.dart'
