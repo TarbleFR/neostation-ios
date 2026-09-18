@@ -155,10 +155,13 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         plugin.write_text(text)
 
     diagnostic_text = diagnostics.read_text()
-    if "dispatch_async(queue" in diagnostic_text and "synchronizeFile" not in diagnostic_text:
-        # Build 280 makes every diagnostic record asynchronous, including
-        # performance samples. There is no synchronous fsync policy left to
-        # special-case here.
+    if "dispatch_async(queue" in diagnostic_text and (
+        "RPCS3-milestones.log" in diagnostic_text
+        or "synchronizeFile" not in diagnostic_text
+    ):
+        # Build 280+ keeps ordinary diagnostics asynchronous. Build 283 adds a
+        # separate, low-frequency durable milestone file; its synchronous flush
+        # must not be mistaken for synchronous high-volume performance logging.
         pass
     else:
         buffered_old = """        if (![stage isEqualToString:@"core_log"]) {
