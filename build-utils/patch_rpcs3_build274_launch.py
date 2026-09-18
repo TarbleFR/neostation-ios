@@ -245,12 +245,15 @@ def main() -> None:
     # the layout on every later management/launch request.
     core_name = 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
     core = read(core_name)
-    prop_old = '@property(nonatomic, assign) BOOL llvmSelfTestPassed;\n@end'
-    prop_new = '@property(nonatomic, assign) BOOL llvmSelfTestPassed;\n@property(nonatomic, assign) BOOL memoryPreflightPassed;\n@end'
     if 'memoryPreflightPassed' not in core:
-        if core.count(prop_old) != 1:
-            raise RuntimeError('RPCS3 memory preflight property anchor changed')
-        core = core.replace(prop_old, prop_new, 1)
+        interface = '@interface Rpcs3InternalBridgePlugin ()'
+        start = core.index(interface)
+        end = core.index('@end', start)
+        core = (
+            core[:end]
+            + '@property(nonatomic, assign) BOOL memoryPreflightPassed;\n'
+            + core[end:]
+        )
 
     preflight_old = r'''      RPCS3Diagnostic(@"memory_preflight_begin", @"Checking RPCS3 virtual address space before JIT attachment");
       BOOL available = self.initialized || neostation::rpcs3::probe_virtual_layout();
