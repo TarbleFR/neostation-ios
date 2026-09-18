@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 283 RPCS3 Boot Stability
-run-name: NeoStation iOS Build 283 • ${{ github.sha }}
+name: NeoStation iOS Build 284 VPN Profile Stability
+run-name: NeoStation iOS Build 284 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-283
+  group: neostation-ios-build-284
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 283 Experimental IPA
+    name: Build 284 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '283'
-      IPA_NAME: 'NeoStation-iOS-Build-283-RPCS3-Boot-Stability'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-283-RPCS3-Boot-Stability'
+      BUILD_NUMBER: '284'
+      IPA_NAME: 'NeoStation-iOS-Build-284-VPN-Profile-Stability'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-284-VPN-Profile-Stability'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -131,14 +131,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/vpn-reference279
 
-      - name: Download validated VPN 282 handoff reference
-        uses: actions/download-artifact@v4
-        with:
-          name: NeoStation-iOS-Build-282-VPN-Handoff-Stability
-          run-id: 35401129774
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: build/vpn-reference282
-
       - name: Reuse validated native runtimes
         shell: bash
         run: |
@@ -198,7 +190,7 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 283 IPA
+      - name: Package and validate Build 284 IPA
         shell: bash
         run: |
           set -euo pipefail
@@ -211,10 +203,9 @@ jobs:
             --reference-dir build/vpn-reference279 \
             --candidate "dist/$IPA_NAME.ipa" \
             --report dist/vpn279-final-artifact.json
-          python3 build-utils/validate_vpn_build282_handoff.py \
-            --reference-dir build/vpn-reference282 \
+          python3 build-utils/validate_vpn_build284_manager.py \
             --candidate "dist/$IPA_NAME.ipa" \
-            --report dist/vpn282-handoff-final-artifact.json
+            --report dist/vpn284-manager-final-artifact.json
           cp build/fast-native/identity.json dist/fast-native-identity.json
           test -f build/rpcs3-ci/vpn-v277-single-source.log && cp build/rpcs3-ci/vpn-v277-single-source.log dist/ || true
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"

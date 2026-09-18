@@ -88,13 +88,6 @@ def validate(reference: Path, candidate: Path) -> dict:
     if ref_host_entitlements != cur_host_entitlements:
         raise SystemExit('Final IPA changed host entitlements from Build 279')
 
-    for marker in (
-        b'installationToken',
-        b'NeoStationLocalTunnel.installationToken',
-    ):
-        if marker not in cur['manager']:
-            raise SystemExit(f'Final manager is missing reinstall-safety marker: {marker!r}')
-
     return {
         'referenceIPA': reference.name,
         'candidateIPA': candidate.name,
@@ -102,7 +95,6 @@ def validate(reference: Path, candidate: Path) -> dict:
         'providerInfoMatches279ExceptBuild': True,
         'providerEntitlementsMatch279': True,
         'hostEntitlementsMatch279': True,
-        'reinstallProfileIdentityPresent': True,
     }
 
 

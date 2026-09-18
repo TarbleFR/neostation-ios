@@ -19,9 +19,6 @@ final class NeoStationLocalTunnelManager {
     static let schemaVersionKey = "schemaVersion"
     static let interfaceAddressKey = "interfaceAddress"
     static let peerAddressKey = "peerAddress"
-    static let installationTokenKey = "installationToken"
-    static let installationTokenDefaultsKey =
-      "NeoStationLocalTunnel.installationToken"
     static let interfaceAddress = "10.7.1.1"
     static let peerAddress = "10.7.0.1"
     static let jitPort: UInt16 = 49152
@@ -147,17 +144,24 @@ final class NeoStationLocalTunnelManager {
           Self.isOwned($0, providerBundleIdentifier: providerIdentifier)
         }
 
-        // LocalDevVPN and NeoStation are both packet-tunnel VPNs. Explicit ON
-        // must hand off from any already-active foreign tunnel before asking
-        // iOS to start NeoStation's tunnel. stopVPNTunnel() is asynchronous, so
-        // wait for the foreign connection to be fully quiescent before retrying.
-        let foreignActive = allManagers.filter {
+        // Keep NeoStation's own VPN profile stable across sideload updates and
+        // reinstalls. Build 279 proved that reusing the existing profile is the
+        // reliable path; do not delete/recreate it just because the app
+        // container changed.
+        //
+        // LocalDevVPN can remain On-Demand even after its UI says "stopped".
+        // Treat a matching local-JIT profile as a handoff contender when it is
+        // active OR still has On-Demand enabled. Neutralize its On-Demand rules,
+        // persist that change, then stop and wait for a real disconnected state
+        // before starting NeoStation.
+        let foreignContenders = allManagers.filter {
           !Self.isOwned($0, providerBundleIdentifier: providerIdentifier) &&
-            Self.needsHandoff($0.connection.status)
+            Self.isLocalJitForeignManager($0) &&
+            (Self.needsHandoff($0.connection.status) || $0.isOnDemandEnabled)
         }
-        if !foreignActive.isEmpty {
-          self.stopForeignManagersForHandoff(
-            foreignActive,
+        if !foreignContenders.isEmpty {
+          self.neutralizeForeignManagersForHandoff(
+            foreignContenders,
             index: 0,
             command: command
           ) {
@@ -170,29 +174,15 @@ final class NeoStationLocalTunnelManager {
           return
         }
 
-        // A NETunnelProviderManager profile can survive a sideload uninstall
-        // even though NeoStation receives a new application container/signing
-        // instance. Never reuse such a stale profile for a new installation.
-        // The token lives in this app container and is copied into the system
-        // VPN profile, so an ordinary in-place update keeps the same profile
-        // while a reinstall recreates it exactly once.
-        let token = self.installationToken()
-        let current = owned.filter {
-          Self.installationToken(for: $0) == token
-        }
-        let stale = owned.filter {
-          Self.installationToken(for: $0) != token
-        }
-
         let manager = Self.preferredManager(
-          in: current,
+          in: owned,
           providerBundleIdentifier: providerIdentifier
         ) ?? NETunnelProviderManager()
         self.activeManager = manager
 
-        let duplicates = current.filter { $0 !== manager }
+        let duplicates = owned.filter { $0 !== manager }
         self.disableAndRemoveDuplicates(
-          stale + duplicates,
+          duplicates,
           index: 0,
           command: command
         ) {
@@ -203,7 +193,6 @@ final class NeoStationLocalTunnelManager {
             self.persistAndStart(
               manager,
               providerIdentifier: providerIdentifier,
-              installationToken: token,
               command: command
             )
           }
@@ -212,7 +201,7 @@ final class NeoStationLocalTunnelManager {
     }
   }
 
-  private func stopForeignManagersForHandoff(
+  private func neutralizeForeignManagersForHandoff(
     _ managers: [NETunnelProviderManager],
     index: Int,
     command: Command,
@@ -225,16 +214,48 @@ final class NeoStationLocalTunnelManager {
     }
 
     let manager = managers[index]
-    if Self.needsStopRequest(manager.connection.status) {
-      manager.connection.stopVPNTunnel()
-    }
-    waitUntilQuiescent(manager, command: command, settle: false) {
-      self.stopForeignManagersForHandoff(
-        managers,
-        index: index + 1,
-        command: command,
-        completion: completion
-      )
+
+    // LocalDevVPN persists connectIfNeeded rules. stopVPNTunnel() alone does not
+    // make that profile inert, so remove On-Demand first and persist it before
+    // asking iOS to stop the connection.
+    manager.isOnDemandEnabled = false
+    manager.onDemandRules = []
+
+    manager.saveToPreferences { error in
+      DispatchQueue.main.async {
+        guard self.isCurrent(command) else { return }
+        if let error {
+          self.finish(command, .failure(Self.configurationFailure(error)))
+          return
+        }
+
+        manager.loadFromPreferences { error in
+          DispatchQueue.main.async {
+            guard self.isCurrent(command) else { return }
+            if let error {
+              self.finish(command, .failure(Self.configurationFailure(error)))
+              return
+            }
+
+            if Self.needsStopRequest(manager.connection.status) {
+              manager.connection.stopVPNTunnel()
+            }
+
+            self.waitUntilQuiescent(
+              manager,
+              command: command,
+              settle: false
+            ) {
+              self.neutralizeForeignManagersForHandoff(
+                managers,
+                index: index + 1,
+                command: command,
+                completion: completion
+              )
+            }
+          }
+        }
+      }
     }
   }
 
@@ -296,15 +317,13 @@ final class NeoStationLocalTunnelManager {
   private func persistAndStart(
     _ manager: NETunnelProviderManager,
     providerIdentifier: String,
-    installationToken: String,
     command: Command
   ) {
     guard isCurrent(command) else { return }
 
     configure(
       manager,
-      providerIdentifier: providerIdentifier,
-      installationToken: installationToken
+      providerIdentifier: providerIdentifier
     )
     manager.saveToPreferences { error in
       DispatchQueue.main.async {
@@ -584,8 +603,7 @@ final class NeoStationLocalTunnelManager {
 
   private func configure(
     _ manager: NETunnelProviderManager,
-    providerIdentifier: String,
-    installationToken: String
+    providerIdentifier: String
   ) {
     let tunnelProtocol =
       manager.protocolConfiguration as? NETunnelProviderProtocol ??
@@ -597,7 +615,6 @@ final class NeoStationLocalTunnelManager {
       Constants.schemaVersionKey: Constants.schemaVersion,
       Constants.interfaceAddressKey: Constants.interfaceAddress,
       Constants.peerAddressKey: Constants.peerAddress,
-      Constants.installationTokenKey: installationToken,
     ]
 
     manager.protocolConfiguration = tunnelProtocol
@@ -757,26 +774,6 @@ final class NeoStationLocalTunnelManager {
     ]
   }
 
-  private func installationToken() -> String {
-    let defaults = UserDefaults.standard
-    if let existing = defaults.string(
-      forKey: Constants.installationTokenDefaultsKey
-    ), !existing.isEmpty {
-      return existing
-    }
-
-    let token = UUID().uuidString
-    defaults.set(token, forKey: Constants.installationTokenDefaultsKey)
-    return token
-  }
-
-  private static func installationToken(
-    for manager: NETunnelProviderManager
-  ) -> String? {
-    (manager.protocolConfiguration as? NETunnelProviderProtocol)?
-      .providerConfiguration?[Constants.installationTokenKey] as? String
-  }
-
   private func providerBundleIdentifier() -> String? {
     guard
       let bundle = Self.installedExtensionBundle(),
@@ -833,6 +830,30 @@ final class NeoStationLocalTunnelManager {
   ) -> String? {
     (manager.protocolConfiguration as? NETunnelProviderProtocol)?
       .providerBundleIdentifier
+  }
+
+  private static func isLocalJitForeignManager(
+    _ manager: NETunnelProviderManager
+  ) -> Bool {
+    guard
+      let tunnelProtocol =
+        manager.protocolConfiguration as? NETunnelProviderProtocol
+    else {
+      return false
+    }
+
+    if manager.localizedDescription == "LocalDevVPN" {
+      return true
+    }
+
+    let configuration = tunnelProtocol.providerConfiguration ?? [:]
+    let interface =
+      configuration["TunnelIfaceIP"] as? String ?? ""
+    let peer =
+      configuration["TunnelPeerIP"] as? String ?? ""
+
+    return interface.hasPrefix("10.7.1.1") ||
+      peer.hasPrefix("10.7.0.1")
   }
 
   private static func isActive(_ status: NEVPNStatus) -> Bool {

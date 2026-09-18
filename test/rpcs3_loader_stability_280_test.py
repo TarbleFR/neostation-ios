@@ -15,9 +15,9 @@ assert subprocess.check_output(
     ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
     cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
 manager = text('packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift')
-assert 'NeoStationLocalTunnel.installationToken' in manager
-assert 'stale + duplicates' in manager
-assert 'stopForeignManagersForHandoff' in manager
+assert 'installationToken' not in manager
+assert 'neutralizeForeignManagersForHandoff' in manager
+assert 'manager.isOnDemandEnabled = false' in manager
 assert 'recoverOwnedTransitionIfNeeded' in manager
 
 host = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')

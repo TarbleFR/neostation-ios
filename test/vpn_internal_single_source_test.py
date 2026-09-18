@@ -93,36 +93,27 @@ assert activation_result(['connecting', 'disconnected']) == 'failed'
 assert activation_result(['reasserting', 'disconnected']) == 'failed'
 
 
-# A system VPN profile can outlive a sideload installation. The manager must
-# bind a profile to the current app-container installation and recreate only
-# stale profiles on explicit Settings ON.
-assert 'installationTokenKey = "installationToken"' in manager
-assert 'NeoStationLocalTunnel.installationToken' in manager
-assert 'let token = self.installationToken()' in manager
-assert 'Self.installationToken(for: $0) == token' in manager
-assert 'Self.installationToken(for: $0) != token' in manager
-assert 'stale + duplicates' in manager
-assert 'Constants.installationTokenKey: installationToken' in manager
+# Build 284: keep NeoStation's own profile stable. The Build 281 installation
+# token/recreate mechanism is forbidden because it can strand our own manager
+# in a transition after a sideload reinstall.
+assert 'installationToken' not in manager
+assert 'stale + duplicates' not in manager
+assert 'in: owned' in manager
+assert 'let duplicates = owned.filter { $0 !== manager }' in manager
 
-def profile_plan(stored_tokens, current_token):
-    current = [token for token in stored_tokens if token == current_token]
-    stale = [token for token in stored_tokens if token != current_token]
-    return current, stale
-
-current, stale = profile_plan(['old-install'], 'new-install')
-assert current == [] and stale == ['old-install']
-current, stale = profile_plan(['same-install'], 'same-install')
-assert current == ['same-install'] and stale == []
-current, stale = profile_plan([None, 'same-install'], 'same-install')
-assert current == ['same-install'] and stale == [None]
-
-
-# LocalDevVPN handoff: explicit ON may stop an active foreign packet tunnel,
-# waits until it is truly disconnected, then settles before starting NeoStation.
-assert 'let foreignActive = allManagers.filter' in manager
-assert '!Self.isOwned($0, providerBundleIdentifier: providerIdentifier)' in manager
-assert 'stopForeignManagersForHandoff' in manager
-assert 'manager.connection.stopVPNTunnel()' in manager
+# LocalDevVPN handoff is based on the real conflict, not merely UI state:
+# an active connection OR a still-enabled On-Demand local-JIT profile.
+assert 'let foreignContenders = allManagers.filter' in manager
+assert 'Self.isLocalJitForeignManager($0)' in manager
+assert 'Self.needsHandoff($0.connection.status) || $0.isOnDemandEnabled' in manager
+assert 'neutralizeForeignManagersForHandoff' in manager
+assert 'manager.isOnDemandEnabled = false' in manager
+assert 'manager.onDemandRules = []' in manager
+assert manager.index('manager.saveToPreferences') < manager.index('manager.connection.stopVPNTunnel()')
+assert 'configuration["TunnelIfaceIP"]' in manager
+assert 'configuration["TunnelPeerIP"]' in manager
+assert 'interface.hasPrefix("10.7.1.1")' in manager
+assert 'peer.hasPrefix("10.7.0.1")' in manager
 assert 'waitUntilQuiescent' in manager
 assert 'handoffSettleDelay: TimeInterval = 1.0' in manager
 assert 'recoverOwnedTransitionIfNeeded' in manager
@@ -139,18 +130,7 @@ ensure_jit = service.split('static Future<LocalJitTunnelState> ensureRunningForJ
 assert 'StikjitBridge.activateOwnedTunnel()' not in ensure_jit
 assert ensure_jit.index('await activation;') < ensure_jit.index('StikjitBridge.ensureJitRoute()')
 
-def handoff_plan(foreign_status, owned_status):
-    stop_foreign = foreign_status in ('connected', 'connecting', 'reasserting')
-    wait_foreign = foreign_status in ('connected', 'connecting', 'reasserting', 'disconnecting')
-    recover_owned = owned_status in ('connecting', 'reasserting', 'disconnecting')
-    return stop_foreign, wait_foreign, recover_owned
-
-assert handoff_plan('connected', 'disconnected') == (True, True, False)
-assert handoff_plan('disconnecting', 'disconnected') == (False, True, False)
-assert handoff_plan('disconnected', 'connecting') == (False, False, True)
-assert handoff_plan('disconnected', 'connected') == (False, False, False)
-
 assert 'schemaVersion = 277' in manager
 assert '"version": 277' in provider
 
-print('PASS: VPN 279 provider + reinstall identity + LocalDevVPN handoff + pending activation coordination')
+print('PASS: VPN 279 provider + stable own profile + On-Demand LocalDevVPN handoff + pending activation coordination')
