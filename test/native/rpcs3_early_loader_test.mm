@@ -34,7 +34,13 @@ int main(int argc, const char* argv[]) {
       fprintf(stderr, "SUCCESSFUL_LOAD_CAPTURE_270\n");
     }
     fprintf(stderr, "RESTORED_STDERR_270\n");
-    contents = [NSString stringWithContentsOfFile:log encoding:NSUTF8StringEncoding error:nil];
+    for (int attempt = 0; attempt < 100; ++attempt) {
+      contents = [NSString stringWithContentsOfFile:log
+                                          encoding:NSUTF8StringEncoding
+                                             error:nil];
+      if ([contents containsString:@"SUCCESSFUL_LOAD_CAPTURE_270"]) break;
+      usleep(10 * 1000);
+    }
     assert([contents containsString:@"SUCCESSFUL_LOAD_CAPTURE_270"]);
     assert(![contents containsString:@"RESTORED_STDERR_270"]);
     printf("PASS: build270 native early-loader failure recovery and stderr restoration\n");
