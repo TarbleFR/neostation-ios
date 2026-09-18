@@ -19,7 +19,14 @@ int main(int argc, const char* argv[]) {
     }
     RPCS3RecoverEarlyLoaderLog();
     NSString* log = [testDocuments stringByAppendingPathComponent:@"RPCS3-diagnostic.log"];
-    NSString* contents = [NSString stringWithContentsOfFile:log encoding:NSUTF8StringEncoding error:nil];
+    NSString* contents = nil;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+      contents = [NSString stringWithContentsOfFile:log
+                                          encoding:NSUTF8StringEncoding
+                                             error:nil];
+      if ([contents containsString:@"SIMULATED_CONSTRUCTOR_FAILURE_270"]) break;
+      usleep(10 * 1000);
+    }
     assert([contents containsString:@"SIMULATED_CONSTRUCTOR_FAILURE_270"]);
     assert(![NSFileManager.defaultManager fileExistsAtPath:RPCS3EarlyLoaderPath()]);
     {
