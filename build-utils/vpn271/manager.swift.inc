@@ -78,7 +78,15 @@ final class NeoStationLocalTunnelManager {
 
   func status(completion: @escaping (Response) -> Void) {
     DispatchQueue.main.async {
+      // NEOSTATION_VPN_PERSISTENCE_275: a live connection object is the
+      // authoritative state. Do not replace it with a stale saved duplicate.
+      if let cached = self.activeManager, Self.isActive(cached.connection.status) {
+        completion(.success(self.response(for: cached)))
+        return
+      }
+
       let generation = self.serial
+      let identifier = self.providerBundleIdentifier()
       var done = false
       let end: (Response) -> Void = { result in
         guard !done else { return }; done = true
@@ -90,14 +98,35 @@ final class NeoStationLocalTunnelManager {
         DispatchQueue.main.async {
           guard !done else { return }
           if let error { end(.failure(Self.configurationFailure(error))); return }
-          let owned = (managers ?? []).filter { Self.isOwned($0, providerBundleIdentifier: self.providerBundleIdentifier()) }
-          let manager = owned.first(where: { Self.isActive($0.connection.status) }) ?? owned.first
-          if self.serial == generation, self.current == nil { self.activeManager = manager }
+          let owned = (managers ?? []).filter {
+            Self.isOwned($0, providerBundleIdentifier: identifier)
+          }
+          let manager =
+            owned.first(where: {
+              Self.providerIdentifier(for: $0) == identifier &&
+              Self.isActive($0.connection.status)
+            }) ??
+            owned.first(where: { Self.isActive($0.connection.status) }) ??
+            owned.first(where: {
+              Self.providerIdentifier(for: $0) == identifier && $0.isEnabled
+            }) ??
+            owned.first(where: { $0.isEnabled }) ??
+            owned.first(where: { Self.providerIdentifier(for: $0) == identifier }) ??
+            owned.first
+
+          if self.serial == generation, self.current == nil {
+            if let cached = self.activeManager,
+               Self.isActive(cached.connection.status) {
+              end(.success(self.response(for: cached)))
+              return
+            }
+            self.activeManager = manager
+          }
           end(.success(self.response(for: manager)))
         }
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-        end(.failure(.timeout("build=271; stage=status.load-preferences; limit=4s")))
+        end(.failure(.timeout("build=275; stage=status.load-preferences; limit=4s")))
       }
     }
   }
@@ -207,7 +236,21 @@ final class NeoStationLocalTunnelManager {
       }
     }) { (managers: [NETunnelProviderManager]) in
       let owned = managers.filter { Self.isOwned($0, providerBundleIdentifier: identifier) }
-      let selected = owned.first(where: { Self.providerIdentifier(for: $0) == identifier }) ?? owned.first ?? NETunnelProviderManager()
+      // Prefer the live/current profile. A disabled duplicate left by an older
+      // signed build must never win selection and force a needless restart.
+      let selected =
+        owned.first(where: {
+          Self.providerIdentifier(for: $0) == identifier &&
+          Self.isActive($0.connection.status)
+        }) ??
+        owned.first(where: { Self.isActive($0.connection.status) }) ??
+        owned.first(where: {
+          Self.providerIdentifier(for: $0) == identifier && $0.isEnabled
+        }) ??
+        owned.first(where: { $0.isEnabled }) ??
+        owned.first(where: { Self.providerIdentifier(for: $0) == identifier }) ??
+        owned.first ??
+        NETunnelProviderManager()
       self.activeManager = selected
       // Existing duplicate profiles are not deleted. Prevent only *owned*
       // active duplicates from competing with this session.

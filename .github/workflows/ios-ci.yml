@@ -99,7 +99,11 @@ jobs:
           python3 build-utils/patch_rpcs3_build274_launch.py
           git diff --check
           python3 test/rpcs3_build274_launch_test.py 2>&1 | tee build/rpcs3-ci/rpcs3-build274-launch-tests.log
-          python3 -m py_compile build-utils/prepare_fast_native_runtime.py
+          python3 test/vpn_build275_persistence_test.py 2>&1 | tee build/rpcs3-ci/vpn-build275-persistence-tests.log
+          python3 -m py_compile \
+            build-utils/prepare_fast_native_runtime.py \
+            build-utils/validate_build275_identity.py \
+            test/vpn_build275_persistence_test.py
 
       - name: Resolve Flutter and analyze
         shell: bash
@@ -236,7 +240,8 @@ jobs:
           python3 build-utils/validate_build275_identity.py             "dist/$IPA_NAME.ipa" --report dist/build275-identity.json
           cp build/fast-native/identity.json dist/fast-native-identity.json
           cp build/rpcs3-ci/vpn-build273-tests.log dist/
-          cp build/rpcs3-ci/rpcs3-build274-launch-tests.log dist/\n          cp build/rpcs3-ci/vpn-build275-persistence-tests.log dist/
+          cp build/rpcs3-ci/rpcs3-build274-launch-tests.log dist/
+          cp build/rpcs3-ci/vpn-build275-persistence-tests.log dist/
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
