@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
@@ -6,13 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/game_service.dart';
-import 'package:neostation/services/local_jit_tunnel_service.dart';
-import 'package:neostation/services/local_jit_lifecycle_policy.dart';
 import 'package:neostation/services/music_player_service.dart';
 import 'package:provider/provider.dart';
 
 /// Restores input, audio, and secondary-display state when NeoStation resumes.
-/// On iOS it also enforces the session-only lifetime of NeoStationLocalTunnel.
+/// VPN ownership is intentionally independent of the Flutter lifecycle.
 class AppLifecycleHandler extends StatefulWidget {
   final Widget child;
 
@@ -32,11 +29,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     WidgetsBinding.instance.addObserver(this);
     _exitListener = AppLifecycleListener(
       onExitRequested: () async {
-        if (Platform.isIOS) {
-          await LocalJitTunnelService.stopForLifecycle(
-            reason: 'normal app exit',
-          );
-        }
         try {
           MusicPlayerService().dispose();
         } catch (_) {}
@@ -48,11 +40,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   @override
   void dispose() {
     _exitListener?.dispose();
-    if (Platform.isIOS) {
-      unawaited(
-        LocalJitTunnelService.stopForLifecycle(reason: 'lifecycle disposed'),
-      );
-    }
     GameService.onScreenStateChanged = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -63,15 +50,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
-      // Begin route selection immediately. This probes an existing external
-      // LocalDevVPN route before deciding whether NeoStationLocalTunnel is
-      // needed, while the rest of resume housekeeping proceeds normally.
-      if (Platform.isIOS) {
-        unawaited(
-          LocalJitTunnelService.refreshInBackground(reason: 'app resume'),
-        );
-      }
-
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
       await GameService.handleAppResumed();
@@ -89,17 +67,6 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
       MusicPlayerService().appResumed();
       return;
-    }
-
-    // AppLifecycleState.inactive can be a native VPN permission dialog, not
-    // a background transition. Do not invalidate the authorization it awaits.
-    // AppLifecycleState.paused/hidden/detached still stop immediately.
-    if (Platform.isIOS && shouldStopLocalJitForLifecycle(state)) {
-      unawaited(
-        LocalJitTunnelService.stopForLifecycle(
-          reason: 'app lifecycle ${state.name}',
-        ),
-      );
     }
 
     if (state == AppLifecycleState.paused ||
