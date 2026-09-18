@@ -35,9 +35,9 @@ assert 'rpcs3_savestate_native_test.py' in build
 version = re.search(r"BUILD_NUMBER: '([0-9]+)'", workflow)
 assert version, 'Workflow must declare an explicit build number'
 if f'BUILD_NUMBER={version.group(1)}' not in build:
-    # A host-only release may retain the exact known-good core. Never pretend
-    # that the old core was recompiled with the new application's build number.
-    assert version.group(1) in ('267', '268') and 'BUILD_NUMBER=266' in build
+    # Retain the historic patch anchor while admitting the rollback's host
+    # version. This does not claim that its unchanged core was recompiled.
+    assert (version.group(1) in ('267', '268') or version.group(1) == '271') and 'BUILD_NUMBER=266' in build
     reuse = (root / 'build-utils/reuse_build266_rpcs3_for267.py').read_text()
     assert 'python3 build-utils/reuse_build266_rpcs3_for267.py build/reference266' in workflow
     assert 'run-id: 35140629752' in workflow
@@ -48,6 +48,10 @@ if f'BUILD_NUMBER={version.group(1)}' not in build:
     if version.group(1) == '268':
         assert 'python3 test/rpcs3_build268_tunnel_test.py' in workflow
         assert 'local_jit_debugger_lease_test.dart' in workflow
+    if version.group(1) == '271':
+        assert 'python3 test/vpn271_baseline_test.py' in workflow
+        assert 'python3 test/vpn_build271_test.py' in workflow
+        assert 'validate_build271_identity.py' in workflow
 assert build.count('patch_rpcs3_armsx3_performance.py') == 2
 assert build.count('patch_rpcs3_serial_profiles.py') == 2
 assert workflow.count('patch_rpcs3_performance_telemetry.py') >= 2
