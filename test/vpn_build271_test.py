@@ -25,7 +25,6 @@ DispatchQueue.global().async {
     require(external.success?["managedByNeoStation"] as? Bool == false, "existing external route preserved")
     require(TestPlatform.loads == 0 && outsider.saves == 0 && outsider.connection.stops == 0, "no preferences or cold stop for external")
   }
-
   let owned = main { profile(true, .disconnected) }
   let control = main { NeoStationLocalTunnelManager.makeForTest() }
   setup([owned, outsider], [true])
@@ -46,8 +45,6 @@ DispatchQueue.global().async {
   control.disable(completion: off.record)
   wait("off", { off.results.count == 1 })
   main { require(off.success != nil && !owned.isEnabled, "OFF persists and settles"); require(outsider.saves == 0, "foreign profile untouched") }
-
-  // Withhold Apple's status callback, then deliver it after the deadline.
   setup([owned], [])
   main { TestPlatform.holdLoads = true; TestPlatform.loadCallbacks=[] }
   let status = ResultBox()
@@ -58,8 +55,6 @@ DispatchQueue.global().async {
     TestPlatform.loadCallbacks.forEach { $0([owned], nil) }
   }
   main {}; main { require(status.results.count == 1, "late status completes only once") }
-
-  // Every missing configuration callback is bounded, not only connection polling.
   for point in ["load", "save", "reload"] {
     let subject = main { profile(true, .disconnected) }
     let manager = main { NeoStationLocalTunnelManager.makeForTest() }
@@ -78,8 +73,6 @@ DispatchQueue.global().async {
     }
     main {}; main { require(result.results.count == 1 && subject.connection.starts == 0, "late callbacks cannot restart: " + point) }
   }
-
-  // OFF must not wait for the old activation's unresolved SAVE callback.
   let delayed = main { profile(true, .disconnected) }
   setup([delayed], [])
   main { delayed.holdSaves = true }
@@ -99,8 +92,6 @@ DispatchQueue.global().async {
     require(newOn.success != nil && delayed.connection.starts == 1, "old callback cannot touch newer activation")
     require(oldOn.results.count == 1 && stop.results.count == 1, "no double completions")
   }
-
-  // Manual intent and automatic launch share one owned activation, not two starts.
   let parallelProfile = main { profile(true, .disconnected) }
   setup([parallelProfile], [true])
   main { parallelProfile.holdSaves=true }
@@ -112,7 +103,6 @@ DispatchQueue.global().async {
   main {}; main { parallelProfile.saveCallbacks.forEach { $0(nil) } }
   wait("parallel complete", { results.results.count == 2 })
   main { require(parallelProfile.connection.starts == 1, "one start for all callers") }
-
   let refusing = main { profile(true, .disconnected) }
   setup([refusing], [])
   main { (refusing.connection as! NETunnelProviderSession).acknowledgeHeartbeat=false }
@@ -120,7 +110,6 @@ DispatchQueue.global().async {
   refuseManager.enableOwned(completion: refused.record)
   wait("missing provider", { refused.results.count == 1 })
   main { require(refused.error != nil, "TCP alone cannot prove an owned provider") }
-
   let broken=main { profile(true, .disconnected) }
   setup([broken], [])
   main {
@@ -135,7 +124,6 @@ DispatchQueue.global().async {
   failManager.status(completion: readFailure.record)
   wait("read error", { readFailure.results.count == 1 })
   main { require((readFailure.success?["lastErrorDetail"] as? String)?.contains("ProviderLaunch(77)")==true,"native error retained") }
-
   let hanging=main { profile(true, .disconnected) }
   setup([hanging], [])
   main { hanging.connection.onStart={ $0.status = .connecting }; hanging.connection.holdError=true }
@@ -151,12 +139,18 @@ dispatchMain()
 
 PROVIDER_TESTS=r'''
 extension PacketTunnelProvider { func flush() { queue.sync {} } }
+func eventually(_ message: String, _ test: () -> Bool) {
+  let deadline = ProcessInfo.processInfo.systemUptime + 2
+  while !test() {
+    require(ProcessInfo.processInfo.systemUptime < deadline, message)
+    Thread.sleep(forTimeInterval: 0.005)
+  }
+}
 let provider=PacketTunnelProvider()
 var starts=0
 provider.startTunnel(options:nil) { error in require(error == nil,"valid start"); starts += 1 }
 provider.flush(); provider.settingsCallbacks[0](nil); provider.flush()
 require(starts==1 && provider.packetFlow.readers.count==1,"one startup and reader")
-// No host pings are ever sent. This is intentionally independent of host JIT.
 var packet=Data(repeating:0,count:24)
 packet[0]=0x45; packet[2]=0; packet[3]=24
 packet.replaceSubrange(12..<16,with:[10,7,1,1]); packet.replaceSubrange(16..<20,with:[10,7,0,1])
@@ -184,7 +178,8 @@ cancelled.settingsCallbacks[0](nil); cancelled.flush()
 require(cancels==1 && cancelled.packetFlow.readers.isEmpty,"late startup callback cannot revive tunnel")
 let noCallback=PacketTunnelProvider(); var timedout=false
 noCallback.startTunnel(options:nil) { timedout = $0 != nil }
-noCallback.flush(); Thread.sleep(forTimeInterval:0.06); noCallback.flush()
+noCallback.flush()
+eventually("settings callback deadline settles") { noCallback.flush(); return timedout }
 require(timedout,"provider network-settings callback bounded")
 let dropped=PacketTunnelProvider()
 dropped.startTunnel(options:nil) { _ in }; dropped.flush(); dropped.settingsCallbacks[0](nil); dropped.flush()
@@ -194,7 +189,7 @@ let full=PacketTunnelProvider()
 full.packetFlow.accepts=false
 full.startTunnel(options:nil) { _ in }; full.flush(); full.settingsCallbacks[0](nil); full.flush()
 full.packetFlow.readers.removeFirst()([packet],[NSNumber(value:AF_INET)]); full.flush()
-Thread.sleep(forTimeInterval:0.15); full.flush()
+eventually("write retries settle") { full.flush(); return full.cancels == 1 }
 require(full.cancels==1 && full.packetFlow.attempts==4,"failed writes have bounded retries")
 print("PASS: 271 provider no host dependency, packet reflection, counters, manual stop, stale start, settings deadline, malformed input, bounded backpressure")
 '''
@@ -205,7 +200,6 @@ def main():
  manager=manager.replace('import Network\n','').replace('import NetworkExtension\n','')
  manager=old.replace_method(manager,'  private func providerBundleIdentifier()', '''  private func providerBundleIdentifier() -> String? { "test.neostation.localtunnel" }''')
  manager=old.replace_method(manager,'  private static func signingCapabilityFailure()', '''  private static func signingCapabilityFailure() -> NeoStationLocalTunnelError? { TestPlatform.signingFailure }''')
- # Shorten only deadlines, never control flow, for deterministic fault injection.
  manager=re.sub(r'(seconds: )(30|12|10|5|4)\b',lambda m:m[1]+str(float(m[2])*0.02),manager)
  manager=manager.replace('seconds: TimeInterval = 5','seconds: TimeInterval = 0.1')
  manager=re.sub(r'(\.now\(\) \+ |systemUptime \+ )(12|10|5|4|1.5|0.5|0.2)\b',lambda m:m[1]+str(float(m[2])*0.02),manager)
