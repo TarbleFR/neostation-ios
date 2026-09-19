@@ -264,13 +264,13 @@
       }
     },
     {
-      "name": "ARMSX2",
+      "name": "ARMSX2 (Embedded)",
       "unique_id": "ps2.ios.armsx2",
-      "description": "ARMSX2 standalone PlayStation 2 emulator for iOS.",
+      "description": "ARMSX2 PlayStation 2 Core embedded in NeoStation iOS.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "ios": {
-          "url_scheme": "armsx2"
+          "embedded": true
         }
       }
     },
