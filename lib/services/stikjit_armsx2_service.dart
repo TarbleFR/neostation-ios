@@ -1,16 +1,15 @@
 import 'dart:io';
 
 import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
-import 'package:external_folder_access/external_folder_access.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/services/armsx2_folder_service.dart';
+import 'package:neostation/services/armsx2_internal_service.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
 
 /// Native ARMSX2 launch transaction.
@@ -55,28 +54,21 @@ class StikJitArmsx2Service {
         return false;
       }
 
-      // Resolve the same ARMSX2 bookmark immediately before boot so a stale
-      // startup path is never trusted for BIOS/game access.
-      final bookmarked = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: Armsx2FolderService.bookmarkKey,
-      );
-      if (bookmarked == null || bookmarked.trim().isEmpty) {
-        _lastError = 'The ARMSX2 folder bookmark is unavailable.';
-        return false;
-      }
-      final root = await Armsx2FolderService.resolveRoot(bookmarked);
-      ConfigService.linkedArmsx2FolderPath = root;
-      if (!Armsx2FolderService.ownsRomPath(normalized, root)) {
-        _lastError = 'The selected PS2 game is outside the linked ARMSX2 root.';
+      // Embedded ARMSX2 owns a Files-visible NeoStation/Documents root.
+      // Games, BIOS and live saves all remain inside this canonical layout.
+      await Armsx2InternalService.ensureLayout();
+      final root = await Armsx2InternalService.rootDirectory();
+      final games = await Armsx2InternalService.gamesDirectory();
+      final bios = await Armsx2InternalService.biosDirectory();
+      ConfigService.linkedArmsx2FolderPath = root.path;
+      ConfigService.linkedArmsx2GameFolderPath = games.path;
+      if (!Armsx2FolderService.ownsRomPath(normalized, games.path)) {
+        _lastError = 'The selected PS2 game is outside NeoStation/ARMSX2/Games.';
         return false;
       }
 
-      final biosSubdirectory = Directory(path.join(root, 'bios'));
-      final biosDirectory =
-          await biosSubdirectory.exists() ? biosSubdirectory.path : root;
-      final appSupport = await getApplicationSupportDirectory();
-      final dataPath = path.join(appSupport.path, 'ARMSX2Core');
-      await Directory(dataPath).create(recursive: true);
+      final biosDirectory = bios.path;
+      final dataPath = root.path;
 
       // TCP reachability is a proof only. It has no side effect on either VPN.
       final route = await StikjitBridge.probeLocalDevVpnRoute();
