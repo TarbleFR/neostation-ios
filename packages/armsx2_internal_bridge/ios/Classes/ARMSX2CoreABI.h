@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define NEO_ARMSX2_ABI_VERSION 1u
+#define NEO_ARMSX2_ABI_VERSION 2u
 #define NEO_ARMSX2_BOOT_DISC 1u
 #define NEO_ARMSX2_BOOT_ELF 2u
 
@@ -42,6 +42,19 @@ typedef struct NeoARMSX2API {
   void (*set_paused)(int paused);
   void (*set_button)(uint32_t button, int pressed);
   void (*set_sticks)(float left_x, float left_y, float right_x, float right_y);
+
+  // In-game ARMSX2 controls/settings. Settings target the running game's
+  // per-game INI and are live-applied by the upstream ARMSX2 bridge.
+  float (*get_upscale_multiplier)(void);
+  uint32_t (*get_aspect_ratio)(void);
+  int (*get_cheats_enabled)(void);
+  int (*set_upscale_multiplier)(float value, char* error, size_t capacity);
+  int (*set_aspect_ratio)(uint32_t value, char* error, size_t capacity);
+  int (*set_cheats_enabled)(int enabled, char* error, size_t capacity);
+  int (*reload_cheats)(char* error, size_t capacity);
+  int (*has_save_state)(uint32_t slot);
+  int (*save_state)(uint32_t slot, uint32_t timeout_ms, char* error, size_t capacity);
+  int (*load_state)(uint32_t slot, uint32_t timeout_ms, char* error, size_t capacity);
 } NeoARMSX2API;
 
 typedef const NeoARMSX2API* (*NeoARMSX2GetAPI)(uint32_t version);
