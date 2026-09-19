@@ -573,10 +573,19 @@ static UIViewController* ARMSX2RootViewController(void) {
     }
     ARMSX2JitAbortTransaction();
     dispatch_async(dispatch_get_main_queue(), ^{
+      if (!ok) {
+        self.operationBusy = NO;
+        self.stopInProgress = NO;
+        self.gameController.closing = NO;
+        [self.gameController showStatus:message.length ? message :
+            @"ARMSX2 shutdown did not complete."];
+        if (completion) completion(NO, message);
+        return;
+      }
       [self dismissGameControllerWithCompletion:^{
         self.operationBusy = NO;
         self.stopInProgress = NO;
-        if (completion) completion(ok, message);
+        if (completion) completion(YES, message);
       }];
     });
   });
@@ -620,7 +629,7 @@ static UIViewController* ARMSX2RootViewController(void) {
   if (!self.api || !self.api->get_retroachievements_state_json) return nil;
   char json[32768] = {};
   if (!self.api->get_retroachievements_state_json(json, sizeof(json))) return nil;
-  NSData* data = [[NSData alloc] initWithBytes:json length:strlen(json)];
+  NSData* data = [NSData dataWithBytes:json length:strlen(json)];
   id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   return [decoded isKindOfClass:NSDictionary.class] ? decoded : nil;
 }
