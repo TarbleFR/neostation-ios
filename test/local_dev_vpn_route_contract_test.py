@@ -44,7 +44,11 @@ class LocalDevVpnRouteContractTest(unittest.TestCase):
             "static Future<LocalDevVpnRouteState> probeLocalDevVpnRoute()",
             dart,
         )
-        self.assertEqual(dart.count("await probeLocalDevVpnRoute();"), 2)
+        # ARMSX2 moved to its own in-IPA helper. stikjit_bridge now owns only
+        # the unchanged MeloNX preflight, while ARMSX2 probes from its launch service.
+        self.assertEqual(dart.count("await probeLocalDevVpnRoute();"), 1)
+        armsx2 = source("lib/services/stikjit_armsx2_service.dart")
+        self.assertIn("await StikjitBridge.probeLocalDevVpnRoute()", armsx2)
         for obsolete in (
             "NeoStationLocalTunnelManager",
             "ensureLocalTunnel",
@@ -78,8 +82,8 @@ class LocalDevVpnRouteContractTest(unittest.TestCase):
         entry_points = (
             "packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift",
             "packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift",
-            "packages/stikjit_bridge/ios/Classes/NeoStationStikjitBridgePlugin.swift",
             "packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift",
+            "packages/armsx2_jit_helper/ios/Classes/Armsx2JITRequestHandlerBase.swift",
             "packages/dolphin_jit_helper/ios/Classes/DolphinJITRequestHandlerBase.swift",
         )
         for relative in entry_points:
@@ -89,10 +93,7 @@ class LocalDevVpnRouteContractTest(unittest.TestCase):
                 self.assertIn('deviceAddress: "10.7.0.1"', contents)
                 self.assertIn("rsdPort: 49152", contents)
 
-        diagnostic_sources = entry_points + (
-            "packages/stikjit_bridge/ios/Classes/Armsx2NeoStationProcessActivator.swift",
-        )
-        for relative in diagnostic_sources:
+        for relative in entry_points:
             with self.subTest(relative=relative):
                 self.assertNotIn("local tunnel", source(relative).lower())
 
@@ -107,6 +108,7 @@ class LocalDevVpnRouteContractTest(unittest.TestCase):
         for relative in (
             "native/rpcs3_internal_helper/Info.plist",
             "native/dolphin_internal_helper/Info.plist",
+            "native/armsx2_internal_helper/Info.plist",
         ):
             with self.subTest(relative=relative):
                 contents = (ROOT / relative).read_bytes()
