@@ -4,10 +4,6 @@ class StikjitBridge {
   StikjitBridge._();
 
   static const MethodChannel _channel = MethodChannel('neostation/stikjit');
-  static const MethodChannel _armsx2Channel = MethodChannel(
-    'neostation/stikjit_armsx2',
-  );
-
   static Future<LocalDevVpnRouteState> probeLocalDevVpnRoute() async {
     final raw = await _channel.invokeMethod<Object?>('probeLocalDevVpnRoute');
     if (raw is! Map) {
@@ -63,38 +59,7 @@ class StikjitBridge {
     );
   }
 
-  static Future<StikjitLaunchResult> enableArmsx2Jit({
-    required String pairingFilePath,
-    required String bundleId,
-    required String gameUrl,
-  }) async {
-    await probeLocalDevVpnRoute();
-    final raw = await _armsx2Channel.invokeMethod<Object?>('enableArmsx2Jit', {
-      'pairingFilePath': pairingFilePath,
-      'bundleId': bundleId,
-      'gameUrl': gameUrl,
-    });
-    if (raw is! Map) {
-      throw StateError('ARMSX2 StikJIT bridge returned an invalid response.');
-    }
-    final data = Map<String, dynamic>.from(raw);
-    final pidValue = data['pid'];
-    if (pidValue is! num) {
-      throw StateError('ARMSX2 StikJIT bridge did not return the target PID.');
-    }
-    final logs = <String>[];
-    final rawLogs = data['logs'];
-    if (rawLogs is List) {
-      logs.addAll(rawLogs.map((entry) => entry.toString()));
-    }
-    return StikjitLaunchResult(
-      pid: pidValue.toInt(),
-      bundleId: data['bundleId']?.toString(),
-      txmPresent: data['txmPresent'] as bool?,
-      gameUrlOpened: data['gameUrlOpened'] as bool?,
-      logs: logs,
-    );
-  }
+
 }
 
 class LocalDevVpnRouteState {
