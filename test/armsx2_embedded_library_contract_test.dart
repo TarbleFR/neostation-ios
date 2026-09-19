@@ -76,12 +76,16 @@ void main() {
       'packages/armsx2_internal_bridge/core/ARMSX2Core.mm',
     ).readAsStringSync();
 
-    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 2u'));
+    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 3u'));
     expect(abi, contains('set_upscale_multiplier'));
     expect(abi, contains('set_aspect_ratio'));
     expect(abi, contains('set_cheats_enabled'));
     expect(abi, contains('save_state'));
     expect(abi, contains('load_state'));
+    expect(abi, contains('get_retroachievements_state_json'));
+    expect(abi, contains('set_retroachievements_option'));
+    expect(abi, contains('login_retroachievements'));
+    expect(abi, contains('logout_retroachievements'));
 
     expect(plugin, contains('armsx2-touch-controls'));
     expect(plugin, contains('armsx2-game-menu'));
@@ -97,6 +101,40 @@ void main() {
     expect(core, contains('setPerGameINIBool:@"EmuCore"'));
     expect(core, contains('saveStateToSlot'));
     expect(core, contains('loadStateFromSlot'));
+  });
+
+  test('ARMSX2 exit is host-safe and RetroAchievements uses Dolphin-style native UI', () {
+    final core = File(
+      'packages/armsx2_internal_bridge/core/ARMSX2Core.mm',
+    ).readAsStringSync();
+    final plugin = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+    ).readAsStringSync();
+    final raMenu = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2RetroAchievementsMenu.mm',
+    ).readAsStringSync();
+
+    expect(core, contains('r.phase=Phase::Stopping'));
+    expect(core, contains('VMManager::SetState(VMState::Stopping)'));
+    expect(core, contains('initialize_sdl=!r.sdl_initialized'));
+    expect(core, isNot(contains('SDL_QuitSubSystem(')));
+    expect(core, contains('if (!si.ContainsValue("Achievements","Enabled"))'));
+    expect(core, contains('parameters.disable_achievements_hardcore_mode=false'));
+    expect(core, contains('[ARMSX2Bridge retroAchievementsState]'));
+    expect(core, contains('[ARMSX2Bridge loginRetroAchievementsWithUsername:'));
+
+    expect(plugin, contains('stopInProgress'));
+    expect(plugin, contains('dismissGameControllerWithCompletion'));
+    expect(plugin, contains('dismissViewControllerAnimated:NO completion:releaseView'));
+    expect(plugin, contains('RetroAchievements'));
+    expect(plugin, contains('presentRetroAchievementsForController'));
+
+    expect(raMenu, contains('UITableViewStyleInsetGrouped'));
+    expect(raMenu, contains('UITableViewCellAccessoryCheckmark'));
+    expect(raMenu, contains('hardcore'));
+    expect(raMenu, contains('leaderboards'));
+    expect(raMenu, contains('overlays'));
+    expect(raMenu, contains('passwordField.text = @""'));
   });
 
   test('ARMSX2 import menu exposes BIOS and games', () {
