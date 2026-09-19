@@ -28,11 +28,12 @@ assert 'static NSFileHandle* file;' in diag
 assert '[file synchronizeFile];' in diag
 
 assert 'incomplete-boot-title.txt' in service
-assert '_recoverPreviousIncompleteBoot(normalized)' in service
-assert 'Rpcs3InternalBridge.clearPpuCache(titleId)' in service
+assert '_consumePreviousIncompleteBootMarker(normalized)' in service
+assert 'Rpcs3InternalBridge.clearPpuCache(titleId)' not in service
+assert 'preserving the title PPU cache for the retry.' in service
 assert '_armBootCrashMarker(normalized)' in service
 assert '_clearBootCrashMarkerWhenRunning(bootMarker)' in service
 assert 'state == 5 || state == 6' in service
 assert "await marker.writeAsString(titleId, flush: true)" in service
 
-print('PASS: Build 283 bounded RPCS3 diagnostics, durable crash milestones, PPU boot recovery, VPN 279 provider frozen')
+print('PASS: bounded RPCS3 diagnostics, durable milestones, non-destructive incomplete-boot recovery, VPN 279 provider frozen')

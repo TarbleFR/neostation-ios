@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 284 VPN Profile Stability
-run-name: NeoStation iOS Build 284 • ${{ github.sha }}
+name: NeoStation iOS Build 285 RPCS3 Core Handoff Stability
+run-name: NeoStation iOS Build 285 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-284
+  group: neostation-ios-build-285
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 284 Experimental IPA
+    name: Build 285 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '284'
-      IPA_NAME: 'NeoStation-iOS-Build-284-VPN-Profile-Stability'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-284-VPN-Profile-Stability'
+      BUILD_NUMBER: '285'
+      IPA_NAME: 'NeoStation-iOS-Build-285-RPCS3-Core-Handoff-Stability'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-285-RPCS3-Core-Handoff-Stability'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -99,6 +99,7 @@ jobs:
           python3 test/dolphin_account_267_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
+          python3 test/rpcs3_build285_core_handoff_test.py
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -130,6 +131,14 @@ jobs:
           run-id: 35393060176
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/vpn-reference279
+
+      - name: Download validated VPN 284 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-284-VPN-Profile-Stability
+          run-id: 35407128776
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/vpn-reference284
 
       - name: Reuse validated native runtimes
         shell: bash
@@ -190,7 +199,7 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 284 IPA
+      - name: Package and validate Build 285 IPA
         shell: bash
         run: |
           set -euo pipefail
@@ -203,9 +212,10 @@ jobs:
             --reference-dir build/vpn-reference279 \
             --candidate "dist/$IPA_NAME.ipa" \
             --report dist/vpn279-final-artifact.json
-          python3 build-utils/validate_vpn_build284_manager.py \
+          python3 build-utils/validate_vpn_build284_frozen.py \
+            --reference-dir build/vpn-reference284 \
             --candidate "dist/$IPA_NAME.ipa" \
-            --report dist/vpn284-manager-final-artifact.json
+            --report dist/vpn284-frozen-final-artifact.json
           cp build/fast-native/identity.json dist/fast-native-identity.json
           test -f build/rpcs3-ci/vpn-v277-single-source.log && cp build/rpcs3-ci/vpn-v277-single-source.log dist/ || true
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"

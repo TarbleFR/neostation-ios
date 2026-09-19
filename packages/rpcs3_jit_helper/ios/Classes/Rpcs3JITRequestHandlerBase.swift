@@ -173,6 +173,9 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
               targetPID: targetPID
             )
           }
+          if Self.firstUniversalContinue(message) {
+            reporter?.scheduleCoreLoadReady(targetPID: targetPID)
+          }
         }
       )
 
@@ -212,6 +215,11 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
     return reply.dropFirst().prefix(2).allSatisfy { $0.isHexDigit }
   }
 
+  private static func firstUniversalContinue(_ message: String) -> Bool {
+    message.trimmingCharacters(in: .whitespacesAndNewlines)
+      == "Handling signal 1"
+  }
+
   private static func preparationDescription(
     _ stage: StikJIT.PreparationStage
   ) -> String {
@@ -241,8 +249,10 @@ private final class Rpcs3HelperReporter {
   )
   private let token: String
   private let sendLock = NSLock()
+  private let stateLock = NSLock()
   private var started = false
   private var pendingLogs = 0
+  private var coreLoadReadyScheduled = false
 
   init(port: UInt16, token: String) throws {
     guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
@@ -290,6 +300,30 @@ private final class Rpcs3HelperReporter {
     if !isReady {
       throw Rpcs3HelperError.connection(
         "NeoStation helper socket did not become ready."
+      )
+    }
+  }
+
+  func scheduleCoreLoadReady(targetPID: Int32) {
+    stateLock.lock()
+    if coreLoadReadyScheduled {
+      stateLock.unlock()
+      return
+    }
+    coreLoadReadyScheduled = true
+    stateLock.unlock()
+
+    // The universal script logs "Handling signal 1" immediately before
+    // send_command("c"). Do not release the host at that exact edge. Give
+    // debugserver one bounded quarter-second to enter its continue/wait loop;
+    // then Core dlopen can safely produce the first BRK #0xf00d.
+    DispatchQueue.global(qos: .userInitiated).asyncAfter(
+      deadline: .now() + .milliseconds(250)
+    ) { [weak self] in
+      try? self?.send(
+        event: "core_load_ready",
+        message: "Universal JIT first continue is armed for Core loading.",
+        targetPID: targetPID
       )
     }
   }

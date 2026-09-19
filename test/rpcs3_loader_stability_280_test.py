@@ -14,11 +14,9 @@ def text(path):
 assert subprocess.check_output(
     ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
     cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
-manager = text('packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift')
-assert 'installationToken' not in manager
-assert 'neutralizeForeignManagersForHandoff' in manager
-assert 'manager.isOnDemandEnabled = false' in manager
-assert 'recoverOwnedTransitionIfNeeded' in manager
+assert subprocess.check_output(
+    ['git', 'hash-object', 'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'],
+    cwd=ROOT, text=True).strip() == 'db453b2fb2fbf1fe640afe7215d30e297b4b69a8'
 
 host = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 diag = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h')
@@ -41,6 +39,12 @@ assert 'Timed out writing control state to NeoStation.' in helper
 assert '#import "Rpcs3Diagnostics.h"' in jit
 assert 'jit_helper_' in jit
 assert '_mutableLogs.count > 64' in jit
+assert 'core_load_ready' in jit
+assert 'waitUntilCoreLoadReady' in jit
+assert 'session.coreLoadReady' in jit
+assert 'scheduleCoreLoadReady' in helper
+assert 'firstUniversalContinue' in helper
+assert '.milliseconds(250)' in helper
 
 # Verify abrupt dlopen-style termination leaves recoverable stderr on macOS CI.
 if sys.platform == 'darwin':

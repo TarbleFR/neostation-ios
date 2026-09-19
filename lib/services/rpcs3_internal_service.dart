@@ -839,7 +839,9 @@ class Rpcs3InternalService {
     return File(path.join(cache.path, 'incomplete-boot-title.txt'));
   }
 
-  static Future<void> _recoverPreviousIncompleteBoot(String titleId) async {
+  static Future<void> _consumePreviousIncompleteBootMarker(
+    String titleId,
+  ) async {
     final marker = await _bootCrashMarker();
     if (!await marker.exists()) return;
 
@@ -853,28 +855,14 @@ class Rpcs3InternalService {
 
     if (previous != titleId) return;
 
-    try {
-      final report = await Rpcs3InternalBridge.clearPpuCache(titleId).timeout(
-        const Duration(seconds: 20),
-      );
-      final removed = (report['bytesRemoved'] as num?)?.toInt() ?? 0;
-      if (report['success'] == true) {
-        _log.w(
-          'RPCS3 previous boot for $titleId ended before RUNNING; '
-          'cleared $removed byte(s) of title-local PPU cache before retry.',
-        );
-      } else {
-        _log.w(
-          'RPCS3 previous boot for $titleId was incomplete; PPU cache '
-          'recovery was unavailable: ${report['message'] ?? 'unknown error'}.',
-        );
-      }
-    } catch (error) {
-      _log.w(
-        'RPCS3 previous boot for $titleId was incomplete; PPU cache '
-        'recovery failed non-fatally: $error.',
-      );
-    }
+    // A process crash does not prove that RPCS3's compiled PPU cache is
+    // corrupt. Build 283 deleted it automatically, forcing expensive
+    // recompilation/linking on the next attempt. Preserve the cache and let
+    // RPCS3 validate/reuse it normally.
+    _log.w(
+      'RPCS3 previous boot for $titleId ended before RUNNING; '
+      'preserving the title PPU cache for the retry.',
+    );
   }
 
   static Future<File> _armBootCrashMarker(String titleId) async {
@@ -927,7 +915,7 @@ class Rpcs3InternalService {
       );
     }
 
-    await _recoverPreviousIncompleteBoot(normalized);
+    await _consumePreviousIncompleteBootMarker(normalized);
 
     _emit(
       Rpcs3RuntimePhase.launching,

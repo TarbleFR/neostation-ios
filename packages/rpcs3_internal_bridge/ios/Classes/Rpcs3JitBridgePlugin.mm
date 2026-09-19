@@ -19,6 +19,7 @@ static NSTimeInterval const kRpcs3HelperConnectTimeout = 30.0;
 // First use may download and mount a DDI. Dart allows this native deadline
 // (plus the connection deadline) to finish and report its actual error.
 static NSTimeInterval const kRpcs3AttachTimeout = 600.0;
+static NSTimeInterval const kRpcs3CoreLoadReadyTimeout = 5.0;
 static NSTimeInterval const kRpcs3CompletionTimeout = 120.0;
 
 extern "C" {
@@ -66,6 +67,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 @property(nonatomic, readonly) NSString* token;
 @property(nonatomic, readonly) BOOL connected;
 @property(nonatomic, readonly) BOOL attached;
+@property(nonatomic, readonly) BOOL coreLoadReady;
 @property(nonatomic, readonly) BOOL finished;
 @property(nonatomic, readonly) BOOL success;
 @property(nonatomic, readonly) NSString* finalMessage;
@@ -78,6 +80,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 - (void)startReader;
 - (BOOL)waitUntilConnected:(NSTimeInterval)timeout;
 - (BOOL)waitUntilAttached:(NSTimeInterval)timeout;
+- (BOOL)waitUntilCoreLoadReady:(NSTimeInterval)timeout;
 - (BOOL)waitUntilFinished:(NSTimeInterval)timeout;
 - (void)close;
 @end
@@ -90,6 +93,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
   NSCondition* _condition;
   BOOL _connected;
   BOOL _attached;
+  BOOL _coreLoadReady;
   BOOL _finished;
   BOOL _success;
   BOOL _closed;
@@ -188,6 +192,13 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 - (BOOL)attached {
   [_condition lock];
   BOOL value = _attached;
+  [_condition unlock];
+  return value;
+}
+
+- (BOOL)coreLoadReady {
+  [_condition lock];
+  BOOL value = _coreLoadReady;
   [_condition unlock];
   return value;
 }
@@ -312,6 +323,15 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
           if ([targetPID isEqualToNumber:@(getpid())]) {
             strongSelf->_attached = YES;
           }
+        } else if ([event isEqualToString:@"core_load_ready"] &&
+                   strongSelf->_connected &&
+                   strongSelf->_attached) {
+          NSNumber* targetPID = [payload[@"targetPID"] isKindOfClass:NSNumber.class]
+              ? payload[@"targetPID"]
+              : nil;
+          if ([targetPID isEqualToNumber:@(getpid())]) {
+            strongSelf->_coreLoadReady = YES;
+          }
         } else if ([event isEqualToString:@"log"]) {
           if (message.length > 0) {
             [strongSelf->_mutableLogs addObject:message];
@@ -364,6 +384,13 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
   // reply. Its successful completion is sufficient only on the legacy Core.
   return self.attached ||
       (!self.requiresCoreHandshake && self.connected && self.finished && self.success);
+}
+
+- (BOOL)waitUntilCoreLoadReady:(NSTimeInterval)timeout {
+  [self waitForPredicate:^BOOL {
+    return self->_coreLoadReady || self->_finished;
+  } timeout:timeout];
+  return self.coreLoadReady;
 }
 
 - (BOOL)waitUntilFinished:(NSTimeInterval)timeout {
@@ -509,7 +536,8 @@ static __weak Rpcs3JitBridgePlugin* gRpcs3JitBridge;
 BOOL RPCS3JitHasActiveCoreHandshake(void) {
   RPCS3JitSession* session = gRpcs3JitBridge.activeSession;
   return session != nil && session.requiresCoreHandshake &&
-      session.attached && !session.finished && !session.closed;
+      session.attached && session.coreLoadReady &&
+      !session.finished && !session.closed;
 }
 
 @implementation Rpcs3JitBridgePlugin {
@@ -631,6 +659,7 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
       @"pid" : @(getpid()),
       @"helperConnected" : @NO,
       @"pidAttached" : @NO,
+      @"coreLoadReady" : @NO,
       @"debugged" : @NO,
       @"logs" : @[],
     } mutableCopy];
@@ -694,6 +723,17 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
     }
     response[@"pidAttached"] = @YES;
 
+    if (session.requiresCoreHandshake &&
+        ![session waitUntilCoreLoadReady:kRpcs3CoreLoadReadyTimeout]) {
+      response[@"message"] = session.finalMessage.length
+          ? session.finalMessage
+          : @"Universal JIT attached, but its first continue loop was not armed before Core loading.";
+      response[@"logs"] = session.logs;
+      finish();
+      return;
+    }
+    response[@"coreLoadReady"] = @(session.requiresCoreHandshake ? session.coreLoadReady : YES);
+
     if (session.finished && !session.success) {
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
@@ -717,7 +757,7 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
     // Waiting before dlopen deadlocks host and helper (the old 90s failure).
     response[@"success"] = @YES;
     response[@"requiresCompletion"] = @YES;
-    response[@"message"] = @"RPCS3 helper attached; initialize the Core before completing JIT.";
+    response[@"message"] = @"RPCS3 helper attached and first Universal continue armed; initialize the Core before completing JIT.";
     dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
   });
 }
