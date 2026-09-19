@@ -44,6 +44,17 @@ jobs:
           path: .native-sources/ARMSX2
           submodules: recursive
           persist-credentials: false
+      - name: Export exact host sources
+        run: |
+          mkdir -p "$RUNNER_TEMP/armsx2-host-source"
+          git archive HEAD | gzip > "$RUNNER_TEMP/armsx2-host-source/neostation.tar.gz"
+          printf 'host=%s\narmsx2=%s\n' "$GITHUB_SHA" '${{ steps.source.outputs.revision }}' > "$RUNNER_TEMP/armsx2-host-source/identity.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ARMSX2-host-source-${{ github.sha }}
+          path: ${{ runner.temp }}/armsx2-host-source/
+          if-no-files-found: error
+          retention-days: 3
       - name: Select Xcode and validate scripts
         run: |
           set -euo pipefail

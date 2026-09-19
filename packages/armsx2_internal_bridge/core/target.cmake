@@ -5,6 +5,11 @@ endif()
 add_library(ARMSX2Core SHARED
   ios_main.mm IOS/GamepadHaptics.mm IOS/HostImpls.mm IOS/PlaySoundAsync.mm
   ARMSX2Bridge.mm "${NEO_ARMSX2_ADAPTER_DIR}/core/ARMSX2Core.mm")
+# IOSRuntime.h only forward-declares ARMSX2GameView. The embedded render-window
+# adapter converts it to UIView, which requires the actual superclass declaration.
+# Keep this source-specific: no cast and no change to other engines or upstream UI.
+set_property(SOURCE IOS/HostImpls.mm APPEND PROPERTY COMPILE_OPTIONS
+  "-include" "${CMAKE_CURRENT_SOURCE_DIR}/IOS/ARMSX2GameView.h")
 set_target_properties(ARMSX2Core PROPERTIES
   FRAMEWORK TRUE FRAMEWORK_VERSION A OUTPUT_NAME ARMSX2Core
   MACOSX_FRAMEWORK_IDENTIFIER com.neogamelab.neostation.ARMSX2Core
