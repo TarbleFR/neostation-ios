@@ -10,6 +10,10 @@ add_library(ARMSX2Core SHARED
 # Keep this source-specific: no cast and no change to other engines or upstream UI.
 set_property(SOURCE IOS/HostImpls.mm APPEND PROPERTY COMPILE_OPTIONS
   "-include" "${CMAKE_CURRENT_SOURCE_DIR}/IOS/ARMSX2GameView.h")
+# Upstream disables exceptions globally. Only the owned adapter worker uses
+# exceptions, catches them before returning, and never unwinds across the ABI.
+set_property(SOURCE "${NEO_ARMSX2_ADAPTER_DIR}/core/ARMSX2Core.mm"
+  APPEND PROPERTY COMPILE_OPTIONS "-fexceptions")
 set_target_properties(ARMSX2Core PROPERTIES
   FRAMEWORK TRUE FRAMEWORK_VERSION A OUTPUT_NAME ARMSX2Core
   MACOSX_FRAMEWORK_IDENTIFIER com.neogamelab.neostation.ARMSX2Core
