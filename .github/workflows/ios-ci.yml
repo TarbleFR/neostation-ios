@@ -65,7 +65,13 @@ jobs:
           import re
           from pathlib import Path
 
-          roots = (\n              Path('lib'), Path('native'), Path('packages/stikjit_bridge'),\n              Path('packages/armsx2_internal_bridge'),\n              Path('packages/armsx2_jit_helper'),\n          )
+          roots = (
+              Path('lib'),
+              Path('native'),
+              Path('packages/stikjit_bridge'),
+              Path('packages/armsx2_internal_bridge'),
+              Path('packages/armsx2_jit_helper'),
+          )
           suffixes = {
               '.dart', '.swift', '.m', '.mm', '.h', '.podspec', '.plist',
               '.entitlements',
