@@ -65,6 +65,40 @@ void main() {
     expect(deletion, isNot(contains("ARMSX2/BIOS")));
   });
 
+  test('embedded ARMSX2 game surface exposes touch controls and native game tools', () {
+    final abi = File(
+      'packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h',
+    ).readAsStringSync();
+    final plugin = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+    ).readAsStringSync();
+    final core = File(
+      'packages/armsx2_internal_bridge/core/ARMSX2Core.mm',
+    ).readAsStringSync();
+
+    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 2u'));
+    expect(abi, contains('set_upscale_multiplier'));
+    expect(abi, contains('set_aspect_ratio'));
+    expect(abi, contains('set_cheats_enabled'));
+    expect(abi, contains('save_state'));
+    expect(abi, contains('load_state'));
+
+    expect(plugin, contains('armsx2-touch-controls'));
+    expect(plugin, contains('armsx2-game-menu'));
+    expect(plugin, contains('Commandes tactiles'));
+    expect(plugin, contains('Résolution interne'));
+    expect(plugin, contains('Format d’écran'));
+    expect(plugin, contains('Recharger cheats / patches'));
+    expect(plugin, contains('Sauvegarder l’état'));
+    expect(plugin, contains('Charger l’état'));
+
+    expect(core, contains('setPerGameINIFloat:@"EmuCore/GS"'));
+    expect(core, contains('setPerGameINIString:@"EmuCore/GS"'));
+    expect(core, contains('setPerGameINIBool:@"EmuCore"'));
+    expect(core, contains('saveStateToSlot'));
+    expect(core, contains('loadStateFromSlot'));
+  });
+
   test('ARMSX2 import menu exposes BIOS and games', () {
     final widget = File(
       'lib/widgets/armsx2_internal_playlist_actions.dart',
