@@ -22,6 +22,7 @@ import 'dart:ui';
 import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
 import 'package:neostation/widgets/rpcs3_internal_playlist_actions.dart';
+import 'package:neostation/widgets/armsx2_internal_playlist_actions.dart';
 
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
@@ -111,6 +112,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
   bool _rpcs3FirmwareReady = false;
   bool get _isRpcs3Library =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps3';
+  bool get _isArmsx2Library =>
+      Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps2';
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -694,6 +697,30 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 },
               ),
             // DOLPHIN_ISOLATION_END: playlist_actions
+            if (!_isGameLaunching && _isArmsx2Library)
+              Consumer<SqliteConfigProvider>(
+                builder: (context, config, child) {
+                  final mode = config.config.gameViewMode;
+                  if (!_isLoading &&
+                      _games.isNotEmpty &&
+                      _selectedGame != null &&
+                      mode != 'grid' &&
+                      mode != 'carousel') {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    top: 8.r,
+                    right: 10.r,
+                    child: SafeArea(
+                      child: Material(
+                        color: Theme.of(context).colorScheme.tertiaryFixed,
+                        borderRadius: BorderRadius.circular(10.r),
+                        child: _buildArmsx2ImportAction(),
+                      ),
+                    ),
+                  );
+                },
+              ),
             // RPCS3_INTERNAL_BEGIN: playlist_actions
             if (!_isGameLaunching && _isRpcs3Library)
               Consumer<SqliteConfigProvider>(
@@ -776,6 +803,42 @@ class _SystemGamesListState extends State<SystemGamesList> {
       );
     },
   );
+
+  Widget _buildArmsx2ImportAction() => Armsx2InternalPlaylistActions(
+    onInteractionChanged: (active) {
+      if (!mounted) return;
+      if (active) {
+        _gamepadNav.deactivate();
+      } else {
+        _gamepadNav.activate();
+      }
+    },
+    onLibraryChanged: () async {
+      if (!mounted) return;
+      await context.read<SqliteConfigProvider>().refreshArmsx2InternalLibrary();
+      if (mounted) await _loadGames();
+    },
+  );
+
+  Widget _buildEmbeddedArmsx2ImportAction() =>
+      Armsx2InternalPlaylistActions(
+        embedded: true,
+        onInteractionChanged: (active) {
+          if (!mounted) return;
+          if (active) {
+            _gamepadNav.deactivate();
+          } else {
+            _gamepadNav.activate();
+          }
+        },
+        onLibraryChanged: () async {
+          if (!mounted) return;
+          await context
+              .read<SqliteConfigProvider>()
+              .refreshArmsx2InternalLibrary();
+          if (mounted) await _loadGames();
+        },
+      );
 
   Widget _buildEmbeddedRpcs3ImportAction() => Rpcs3InternalPlaylistActions(
     embedded: true,
@@ -1572,6 +1635,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
           Platform.isIOS &&
               DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)
           ? _buildEmbeddedDolphinImportAction()
+          : _isArmsx2Library
+          ? _buildEmbeddedArmsx2ImportAction()
           : _isRpcs3Library && _rpcs3FirmwareReady
           ? _buildEmbeddedRpcs3ImportAction()
           : null,
