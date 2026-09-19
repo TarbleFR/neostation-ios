@@ -29,8 +29,8 @@ jobs:
       IPA_NAME: 'NeoStation-iOS-Build-291-Embedded-ARMSX2'
       ARTIFACT_NAME: 'NeoStation-iOS-Build-291-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
-      ARMSX2_CORE_HOST_SHA: b395bd1d7e2d88c6e20238dc38378e814a8f260d
-      ARMSX2_CORE_RUN_ID: '35473628311'
+      ARMSX2_CORE_HOST_SHA: 2ea6d17a9182bd834f65ca0fa2f6615e14346820
+      ARMSX2_CORE_RUN_ID: '35476193222'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
