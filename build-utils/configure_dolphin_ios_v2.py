@@ -33,12 +33,12 @@ def configure_info_plist() -> None:
     orientations = ['UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight']
     payload['UISupportedInterfaceOrientations'] = orientations
     payload['UISupportedInterfaceOrientations~ipad'] = orientations
-    retired = {'dolphin', 'dolphinios', 'dolphin-emu'}
+    retired = {'dolphin', 'dolphinios', 'dolphin-emu', 'armsx2'}
     schemes = payload.get('LSApplicationQueriesSchemes', [])
     if not isinstance(schemes, list):
         raise SystemExit('Invalid existing LSApplicationQueriesSchemes; refusing to overwrite it')
     schemes = [value for value in schemes if not isinstance(value, str) or value.lower() not in retired]
-    for required in ('retroarch', 'shortcuts', 'armsx2', 'melonx'):
+    for required in ('retroarch', 'shortcuts', 'melonx'):
         if required not in schemes:
             schemes.append(required)
     payload['LSApplicationQueriesSchemes'] = schemes
