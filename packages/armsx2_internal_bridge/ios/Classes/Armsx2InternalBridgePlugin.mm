@@ -6,6 +6,7 @@
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
 #import <os/lock.h>
+#include <cmath>
 
 static NSString* const kARMSX2Channel = @"neostation/armsx2_internal";
 static const uint32_t kARMSX2ExpectedABI = NEO_ARMSX2_ABI_VERSION;
@@ -492,7 +493,13 @@ static UIViewController* ARMSX2RootViewController(void) {
   const NeoARMSX2API* api = getAPI ? getAPI(kARMSX2ExpectedABI) : NULL;
   if (!api || api->version != kARMSX2ExpectedABI ||
       api->size < sizeof(NeoARMSX2API) || !api->prepare ||
-      !api->request_jit_detach || !api->validate_jit || !api->boot) {
+      !api->request_jit_detach || !api->validate_jit || !api->boot ||
+      !api->set_button || !api->set_sticks ||
+      !api->get_upscale_multiplier || !api->get_aspect_ratio ||
+      !api->get_cheats_enabled || !api->set_upscale_multiplier ||
+      !api->set_aspect_ratio || !api->set_cheats_enabled ||
+      !api->reload_cheats || !api->has_save_state ||
+      !api->save_state || !api->load_state) {
     if (error) *error = @"Embedded ARMSX2 Core ABI is incompatible.";
     return NO;
   }
@@ -505,6 +512,7 @@ static UIViewController* ARMSX2RootViewController(void) {
   Armsx2GameViewController* controller = self.gameController;
   self.gameController = nil;
   if (controller) {
+    [controller resetInput];
     [controller dismissViewControllerAnimated:NO completion:nil];
   }
   if (self.api && self.api->release_render_view) self.api->release_render_view();
@@ -521,6 +529,68 @@ static UIViewController* ARMSX2RootViewController(void) {
   dispatch_async(dispatch_get_main_queue(), ^{
     [self dismissGameController];
     result(@{@"success": @NO, @"message": message ?: @"ARMSX2 launch failed."});
+  });
+}
+
+- (void)publishMenuStateForController:(Armsx2GameViewController*)controller
+                                   message:(NSString*)message {
+  if (!self.api || !controller) return;
+  const float upscale = self.api->get_upscale_multiplier();
+  const uint32_t aspect = self.api->get_aspect_ratio();
+  const BOOL cheats = self.api->get_cheats_enabled() != 0;
+  uint32_t mask = 0;
+  for (uint32_t slot = 1; slot <= 5; slot++) {
+    if (self.api->has_save_state(slot)) mask |= (1u << (slot - 1));
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.gameController != controller) return;
+    [controller updateRuntimeMenuWithUpscale:upscale
+                                      aspect:aspect
+                                      cheats:cheats
+                               saveStateMask:mask];
+    if (message.length) [controller showStatus:message];
+  });
+}
+
+- (void)performGameCommand:(NSString*)command
+                     value:(NSNumber*)value
+                controller:(Armsx2GameViewController*)controller {
+  dispatch_async(_runtimeQueue, ^{
+    if (!self.api || self.gameController != controller) return;
+    char error[1024] = {};
+    BOOL ok = NO;
+    NSString* success = @"";
+
+    if ([command isEqualToString:@"upscale"]) {
+      ok = self.api->set_upscale_multiplier(value.floatValue, error, sizeof(error)) != 0;
+      success = [controller en:[NSString stringWithFormat:@"Internal resolution: %.0f×", value.floatValue]
+                            fr:[NSString stringWithFormat:@"Résolution interne : %.0f×", value.floatValue]];
+    } else if ([command isEqualToString:@"aspect"]) {
+      ok = self.api->set_aspect_ratio(value.unsignedIntValue, error, sizeof(error)) != 0;
+      success = [controller en:@"Screen format updated." fr:@"Format d’écran mis à jour."];
+    } else if ([command isEqualToString:@"cheats"]) {
+      ok = self.api->set_cheats_enabled(value.boolValue ? 1 : 0, error, sizeof(error)) != 0;
+      success = value.boolValue
+          ? [controller en:@"Cheats enabled." fr:@"Cheats activés."]
+          : [controller en:@"Cheats disabled." fr:@"Cheats désactivés."];
+    } else if ([command isEqualToString:@"reloadCheats"]) {
+      ok = self.api->reload_cheats(error, sizeof(error)) != 0;
+      success = [controller en:@"Cheats and patches reloaded." fr:@"Cheats et patches rechargés."];
+    } else if ([command isEqualToString:@"saveState"]) {
+      const uint32_t slot = value.unsignedIntValue;
+      ok = self.api->save_state(slot, 60000, error, sizeof(error)) != 0;
+      success = [controller en:[NSString stringWithFormat:@"State saved in slot %u.", slot]
+                            fr:[NSString stringWithFormat:@"État sauvegardé dans le slot %u.", slot]];
+    } else if ([command isEqualToString:@"loadState"]) {
+      const uint32_t slot = value.unsignedIntValue;
+      ok = self.api->load_state(slot, 60000, error, sizeof(error)) != 0;
+      success = [controller en:[NSString stringWithFormat:@"State loaded from slot %u.", slot]
+                            fr:[NSString stringWithFormat:@"État chargé depuis le slot %u.", slot]];
+    }
+
+    NSString* message = ok ? success :
+        (error[0] ? [NSString stringWithUTF8String:error] : @"ARMSX2 command failed.");
+    [self publishMenuStateForController:controller message:message ?: @""];
   });
 }
 
@@ -599,9 +669,16 @@ static UIViewController* ARMSX2RootViewController(void) {
       controller = [Armsx2GameViewController new];
       controller.api = self.api;
       __weak Armsx2InternalBridgePlugin* weakSelf = self;
+      __weak Armsx2GameViewController* weakController = controller;
       controller.closeHandler = ^{ [weakSelf handleMethodCall:
           [FlutterMethodCall methodCallWithMethodName:@"stop" arguments:nil]
           result:^(id _){}]; };
+      controller.commandHandler = ^(NSString* command, NSNumber* value) {
+        Armsx2InternalBridgePlugin* strongSelf = weakSelf;
+        Armsx2GameViewController* strongController = weakController;
+        if (!strongSelf || !strongController) return;
+        [strongSelf performGameCommand:command value:value controller:strongController];
+      };
       [controller loadViewIfNeeded];
       if (!controller.coreView) { controller = nil; return; }
       [root presentViewController:controller animated:NO completion:nil];
@@ -662,6 +739,8 @@ static UIViewController* ARMSX2RootViewController(void) {
     }
 
     self.operationBusy = NO;
+    [self publishMenuStateForController:controller message:
+        [controller en:@"ARMSX2 ready." fr:@"ARMSX2 prêt."]];
     NSString* revision = self.api->source_revision
         ? [NSString stringWithUTF8String:self.api->source_revision] : @"";
     dispatch_async(dispatch_get_main_queue(), ^{
