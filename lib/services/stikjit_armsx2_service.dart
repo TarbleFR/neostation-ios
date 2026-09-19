@@ -1,127 +1,146 @@
 import 'dart:io';
 
+import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
+import 'package:external_folder_access/external_folder_access.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
+import 'package:neostation/services/armsx2_folder_service.dart';
+import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
 
-/// Experimental built-in StikJIT path dedicated to ARMSX2.
+/// Native ARMSX2 launch transaction.
 ///
-/// This service intentionally stays separate from the existing MeloNX service
-/// and uses a different compile-time gate, native method channel, bundle
-/// discovery path, and diagnostic file. Normal builds continue using the
-/// NeoStation+ARMSX2+JIT Shortcut unchanged.
+/// This path targets NeoStation's own PID. It never launches an ARMSX2 app,
+/// Shortcut, custom URL, or VPN. LocalDevVPN is only probed as the existing
+/// RemotePairing transport and is never toggled here.
 class StikJitArmsx2Service {
   StikJitArmsx2Service._();
 
   static final _log = LoggerService.instance;
   static String? _lastError;
+  static bool _busy = false;
+  static int _transactionSeed = 0;
 
   static String? get lastError => _lastError;
 
-  static const bool isExperimentalEnabled = bool.fromEnvironment(
-    'NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2',
-    defaultValue: false,
-  );
-
-  // Sideloaders may rewrite this identifier. The native bridge treats it only
-  // as a preferred hint and confirms the installed app through
-  // installation_proxy before launching anything.
-  static const String _bundleId = String.fromEnvironment(
-    'NEOSTATION_ARMSX2_BUNDLE_ID',
-    defaultValue: 'com.armsx2.ios',
-  );
-
-  static Future<bool> launch({required String gameUrl}) async {
-    if (!Platform.isIOS || !isExperimentalEnabled) return false;
-
-    _lastError = null;
-    await _writeDiagnostic(
-      'STATE: START\n'
-      'Game URL: $gameUrl\n'
-      'Bundle hint: $_bundleId\n',
-    );
-
-    final gameUri = Uri.tryParse(gameUrl);
-    if (gameUri == null || gameUri.scheme.toLowerCase() != 'armsx2') {
-      _lastError = 'Invalid ARMSX2 game URL.';
-      _log.e('StikJitArmsx2Service: invalid ARMSX2 game URL.');
-      await _appendDiagnostic('STATE: ERROR\nError: $_lastError\n');
+  static Future<bool> launch({required String gamePath}) async {
+    if (!Platform.isIOS || _busy) {
+      _lastError = _busy ? 'An ARMSX2 launch is already active.' : null;
+      return false;
+    }
+    final normalized = path.normalize(gamePath.trim());
+    if (!path.isAbsolute(normalized) || !await File(normalized).exists()) {
+      _lastError = 'The selected PS2 game is not readable.';
       return false;
     }
 
+    _busy = true;
+    _lastError = null;
+    final transaction =
+        (DateTime.now().microsecondsSinceEpoch << 8) | ((_transactionSeed++) & 0xff);
+
     try {
+      await _writeDiagnostic(
+        'STATE: START\nTransaction: $transaction\nGame: $normalized\n',
+      );
+
       final pairingFile = await _ensurePairingFile();
       if (pairingFile == null) {
         _lastError = 'Pairing file selection was cancelled.';
-        _log.w('StikJitArmsx2Service: pairing file selection was cancelled.');
-        await _appendDiagnostic('STATE: CANCELLED\nError: $_lastError\n');
         return false;
       }
 
+      // Resolve the same ARMSX2 bookmark immediately before boot so a stale
+      // startup path is never trusted for BIOS/game access.
+      final bookmarked = await ExternalFolderAccess.resolveBookmarkedFolder(
+        key: Armsx2FolderService.bookmarkKey,
+      );
+      if (bookmarked == null || bookmarked.trim().isEmpty) {
+        _lastError = 'The ARMSX2 folder bookmark is unavailable.';
+        return false;
+      }
+      final root = await Armsx2FolderService.resolveRoot(bookmarked);
+      ConfigService.linkedArmsx2FolderPath = root;
+      if (!Armsx2FolderService.ownsRomPath(normalized, root)) {
+        _lastError = 'The selected PS2 game is outside the linked ARMSX2 root.';
+        return false;
+      }
+
+      final biosSubdirectory = Directory(path.join(root, 'bios'));
+      final biosDirectory =
+          await biosSubdirectory.exists() ? biosSubdirectory.path : root;
+      final appSupport = await getApplicationSupportDirectory();
+      final dataPath = path.join(appSupport.path, 'ARMSX2Core');
+      await Directory(dataPath).create(recursive: true);
+
+      // TCP reachability is a proof only. It has no side effect on either VPN.
+      final route = await StikjitBridge.probeLocalDevVpnRoute();
       await _appendDiagnostic(
-        'STATE: PAIRING_READY\n'
-        'Stored pairing file: ${path.basename(pairingFile.path)}\n'
-        'Pairing bytes: ${await pairingFile.length()}\n',
+        'STATE: ROUTE_READY\n'
+        'Route: ${route.host}:${route.port}\n'
+        'ElapsedMs: ${route.elapsedMs}\n',
       );
 
-      final jit = await StikjitBridge.enableArmsx2Jit(
+      final jit = await Armsx2InternalBridge.prepareJit(
         pairingFilePath: pairingFile.path,
-        bundleId: _bundleId,
-        gameUrl: gameUrl,
       );
-
-      _log.i(
-        'StikJitArmsx2Service: JIT ready for ARMSX2 pid=${jit.pid} '
-        'bundle=${jit.bundleId ?? 'unknown'} '
-        'txm=${jit.txmPresent ?? 'unknown'} '
-        'urlOpened=${jit.gameUrlOpened ?? 'unknown'}.',
-      );
-      for (final message in jit.logs) {
-        _log.d('StikJIT ARMSX2: $message');
-      }
-
-      await _appendDiagnostic(
-        'STATE: JIT_READY\n'
-        'PID: ${jit.pid}\n'
-        'Detected bundle ID: ${jit.bundleId ?? 'unknown'}\n'
-        'TXM: ${jit.txmPresent ?? 'unknown'}\n'
-        'Native game URL opened: ${jit.gameUrlOpened ?? 'unknown'}\n'
-        'Native log:\n${jit.logs.join('\n')}\n',
-      );
-
-      if (jit.gameUrlOpened != true) {
-        _lastError =
-            'JIT succeeded, but NeoStation could not complete the direct ARMSX2 game handoff.';
-        await _appendDiagnostic(
-          'STATE: ARMSX2_GAME_URL_POST_JIT_OPEN_FAILED\n'
-          'Error: $_lastError\n',
+      if (jit['success'] != true ||
+          jit['helperConnected'] != true ||
+          jit['pidAttached'] != true ||
+          jit['debugged'] != true) {
+        throw StateError(
+          jit['message']?.toString() ?? 'ARMSX2 JIT attachment failed.',
         );
-        return false;
+      }
+      await _appendDiagnostic(
+        'STATE: JIT_ATTACHED\n'
+        'PID: ${jit['pid']}\n'
+        'Message: ${jit['message']}\n',
+      );
+
+      final launch = await Armsx2InternalBridge.launch(
+        transaction: transaction,
+        gamePath: normalized,
+        dataPath: dataPath,
+        biosDirectory: biosDirectory,
+      );
+      if (launch['success'] != true) {
+        throw StateError(
+          launch['message']?.toString() ?? 'ARMSX2 boot failed.',
+        );
       }
 
       await _appendDiagnostic(
-        'STATE: ARMSX2_GAME_URL_POST_JIT_OPENED\n'
-        'NeoStation delivered the ARMSX2 game URL to the already-JITed process.\n',
+        'STATE: RUNNING\n'
+        'BootKind: ${launch['bootKind']}\n'
+        'Source: ${launch['sourceRevision']}\n',
+      );
+      _log.i(
+        'ARMSX2 embedded Core running transaction=$transaction '
+        'game=$normalized.',
       );
       return true;
     } catch (error, stackTrace) {
       _lastError = error.toString();
       _log.e(
-        'StikJitArmsx2Service: built-in JIT launch failed: $error',
+        'Embedded ARMSX2 launch failed: $error',
         error: error,
         stackTrace: stackTrace,
       );
+      try {
+        await Armsx2InternalBridge.stop();
+      } catch (_) {}
       await _appendDiagnostic(
-        'STATE: ERROR\n'
-        'Error: $error\n'
-        'Stack: $stackTrace\n',
+        'STATE: ERROR\nError: $error\nStack: $stackTrace\n',
       );
       return false;
+    } finally {
+      _busy = false;
     }
   }
 
@@ -130,104 +149,68 @@ class StikJitArmsx2Service {
       return PairingFileService.storedFile();
     }
 
-    await _appendDiagnostic(
-      'STATE: PAIRING_REQUIRED\n'
-      'No stored pairing file was found. Showing the shared JIT explanation before the iOS picker.\n',
-    );
-
-    final confirmed = await _confirmPairingFileImport();
-    if (!confirmed) {
-      await _appendDiagnostic('STATE: PAIRING_PROMPT_CANCELLED\n');
-      return null;
+    final context = rootNavigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            PairingFileLocale.get(dialogContext, PairingFileLocale.setupTitle),
+          ),
+          content: Text(
+            PairingFileLocale.get(dialogContext, PairingFileLocale.setupBody),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                PairingFileLocale.get(dialogContext, PairingFileLocale.later),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.folder_open),
+              label: Text(
+                PairingFileLocale.get(
+                  dialogContext,
+                  PairingFileLocale.chooseFile,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (accepted != true) return null;
     }
 
-    final context = rootNavigatorKey.currentContext;
     final dialogTitle = context != null && context.mounted
         ? PairingFileLocale.get(context, PairingFileLocale.pickerTitle)
         : 'Select your pairing file';
-
     final imported = await PairingFileService.importFromPicker(
       dialogTitle: dialogTitle,
     );
     return imported?.file;
   }
 
-  static Future<bool> _confirmPairingFileImport() async {
-    final context = rootNavigatorKey.currentContext;
-    if (context == null || !context.mounted) {
-      _log.w(
-        'StikJitArmsx2Service: no navigator context for pairing explanation; '
-        'opening the picker directly.',
-      );
-      await _appendDiagnostic(
-        'PAIRING UI: navigator context unavailable; picker opened directly.\n',
-      );
-      return true;
-    }
-
-    final accepted = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          PairingFileLocale.get(
-            dialogContext,
-            PairingFileLocale.setupTitle,
-          ),
-        ),
-        content: Text(
-          PairingFileLocale.get(
-            dialogContext,
-            PairingFileLocale.setupBody,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              PairingFileLocale.get(
-                dialogContext,
-                PairingFileLocale.later,
-              ),
-            ),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            icon: const Icon(Icons.folder_open),
-            label: Text(
-              PairingFileLocale.get(
-                dialogContext,
-                PairingFileLocale.chooseFile,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return accepted ?? false;
-  }
-
   static Future<File> _diagnosticFile() async {
     final documents = await getApplicationDocumentsDirectory();
-    return File(path.join(documents.path, 'stikjit_armsx2_debug.txt'));
+    return File(path.join(documents.path, 'armsx2_internal_debug.txt'));
   }
 
   static Future<void> _writeDiagnostic(String content) async {
     try {
-      final file = await _diagnosticFile();
-      await file.writeAsString(content, flush: true);
-    } catch (_) {
-      // Diagnostic persistence must never block launching.
-    }
+      await (await _diagnosticFile()).writeAsString(content, flush: true);
+    } catch (_) {}
   }
 
   static Future<void> _appendDiagnostic(String content) async {
     try {
-      final file = await _diagnosticFile();
-      await file.writeAsString(content, mode: FileMode.append, flush: true);
-    } catch (_) {
-      // Diagnostic persistence must never block launching.
-    }
+      await (await _diagnosticFile()).writeAsString(
+        content,
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {}
   }
 }
