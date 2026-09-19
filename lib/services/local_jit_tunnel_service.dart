@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
@@ -13,9 +14,17 @@ class LocalJitTunnelService {
 
   static final LoggerService _log = LoggerService.instance;
   static Future<LocalJitTunnelState>? _activationInFlight;
+  static bool? _debugIOSOverride;
+
+  static bool get _isIOS => _debugIOSOverride ?? Platform.isIOS;
+
+  @visibleForTesting
+  static void debugOverrideIOS(bool? value) {
+    _debugIOSOverride = value;
+  }
 
   static Future<LocalJitTunnelState> status() async {
-    if (!Platform.isIOS) {
+    if (!_isIOS) {
       return const LocalJitTunnelState(
         active: false,
         status: 'unsupported',
@@ -38,7 +47,7 @@ class LocalJitTunnelService {
   /// Explicit Settings ON. No RemotePairing/JIT diagnostic is allowed to undo
   /// this choice after NetworkExtension reaches an active state.
   static Future<LocalJitTunnelState> authorizeAndEnable() async {
-    if (!Platform.isIOS) {
+    if (!_isIOS) {
       throw const LocalJitTunnelException(
         'unsupportedPlatform',
         'The integrated local JIT tunnel is available only on iOS.',
@@ -75,25 +84,34 @@ class LocalJitTunnelService {
   /// Read-only game/JIT preflight. This method never starts, stops, saves or
   /// reconfigures a VPN profile.
   static Future<LocalJitTunnelState> ensureRunningForJit() async {
-    if (!Platform.isIOS) {
+    if (!_isIOS) {
       throw const LocalJitTunnelException(
         'unsupportedPlatform',
         'The integrated local JIT tunnel is available only on iOS.',
       );
     }
+    final timer = Stopwatch()..start();
     try {
-      final activation = _activationInFlight;
-      if (activation != null) {
+      LocalJitTunnelState state;
+      try {
+        // LocalDevVPN and an already-connected internal VPN are both valid.
+        // Probe the real endpoint first so an unrelated Settings ON command
+        // cannot delay an already-usable external route for its full timeout.
+        state = await StikjitBridge.ensureJitRoute();
+      } on PlatformException {
+        final activation = _activationInFlight;
+        if (activation == null) rethrow;
         _log.i(
-          'Local JIT preflight waiting for the user-requested VPN activation.',
+          'Local JIT route unavailable after ${timer.elapsedMilliseconds}ms; '
+          'waiting for the user-requested internal VPN activation.',
         );
         await activation;
+        state = await StikjitBridge.ensureJitRoute();
       }
-
-      final state = await StikjitBridge.ensureJitRoute();
       _log.i(
         'Local JIT endpoint reachable: ${state.peerAddress ?? 'unknown'}; '
-        'managedByNeoStation=${state.managedByNeoStation}.',
+        'managedByNeoStation=${state.managedByNeoStation}; '
+        'preflightMs=${timer.elapsedMilliseconds}.',
       );
       return state;
     } on PlatformException catch (error) {
@@ -104,7 +122,7 @@ class LocalJitTunnelService {
   /// Explicit Settings OFF. This is the only application path that stops the
   /// NeoStation-owned tunnel.
   static Future<LocalJitTunnelState> disable() async {
-    if (!Platform.isIOS) {
+    if (!_isIOS) {
       throw const LocalJitTunnelException(
         'unsupportedPlatform',
         'The integrated local JIT tunnel is available only on iOS.',

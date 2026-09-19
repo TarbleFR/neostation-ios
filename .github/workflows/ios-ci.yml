@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 287 VPN JIT Deletion Regression Fix
-run-name: NeoStation iOS Build 287 • ${{ github.sha }}
+name: NeoStation iOS Build 288 VPN JIT RPCS3 Launch Fix
+run-name: NeoStation iOS Build 288 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-287
+  group: neostation-ios-build-288
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 287 Experimental IPA
+    name: Build 288 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '287'
-      IPA_NAME: 'NeoStation-iOS-Build-287-VPN-JIT-Deletion-Fix'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-287-VPN-JIT-Deletion-Fix'
+      BUILD_NUMBER: '288'
+      IPA_NAME: 'NeoStation-iOS-Build-288-VPN-JIT-RPCS3-Launch-Fix'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-288-VPN-JIT-RPCS3-Launch-Fix'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -81,7 +81,7 @@ jobs:
           python3 test/rpcs3_build285_core_handoff_test.py
           python3 test/vpn_state_machine_test.py
           node test/rpcs3_debugger_handshake_test.js
-          flutter test test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart
+          flutter test test/local_jit_route_proof_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -173,7 +173,7 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 287 IPA
+      - name: Package and validate Build 288 IPA
         shell: bash
         run: |
           set -euo pipefail

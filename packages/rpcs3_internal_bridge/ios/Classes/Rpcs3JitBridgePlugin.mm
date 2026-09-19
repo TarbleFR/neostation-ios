@@ -556,8 +556,17 @@ static __weak Rpcs3JitBridgePlugin* gRpcs3JitBridge;
 BOOL RPCS3JitHasActiveCoreHandshake(void) {
   RPCS3JitSession* session = gRpcs3JitBridge.activeSession;
   return session != nil && session.requiresCoreHandshake &&
-      session.attached && session.coreLoadReady &&
-      !session.finished && !session.closed;
+      session.attached && !session.finished && !session.closed &&
+      RPCS3HostHasLiveDebugger();
+}
+
+BOOL RPCS3JitConfirmCoreLoadHandoff(void) {
+  RPCS3JitSession* session = gRpcs3JitBridge.activeSession;
+  if (session == nil || !session.requiresCoreHandshake ||
+      !session.attached || session.finished || session.closed) {
+    return NO;
+  }
+  return [session confirmCoreLoadReady];
 }
 
 @implementation Rpcs3JitBridgePlugin {
@@ -603,6 +612,7 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
       return;
     }
     self.completionInProgress = YES;
+    RPCS3Milestone(@"jit_completion_begin", @"Waiting for Universal detach confirmation");
     dispatch_async(_jitQueue, ^{
       BOOL completed = [session waitUntilFinished:kRpcs3CompletionTimeout];
       BOOL success = completed && session.success && RPCS3HostIsDebugged();
@@ -613,6 +623,7 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
             (session.finalMessage.length ? session.finalMessage :
              @"RPCS3 JIT helper did not confirm completion. Relaunch NeoStation before retrying."),
       };
+      RPCS3Milestone(@"jit_completion_end", success ? @"detached" : @"failed or timed out");
       // A failed/incomplete handshake may still own a debugger. Keep the
       // transaction locked in that case instead of starting another attach.
       if (completed) {
@@ -674,6 +685,8 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
   }
 
   dispatch_async(_jitQueue, ^{
+    NSTimeInterval operationStarted = NSProcessInfo.processInfo.systemUptime;
+    RPCS3Milestone(@"jit_prepare_begin", @"Launching RPCS3 JIT helper");
     NSMutableDictionary* response = [@{
       @"success" : @NO,
       @"pid" : @(getpid()),
@@ -685,6 +698,7 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
     } mutableCopy];
 
     void (^finish)(void) = ^{
+      RPCS3Milestone(@"jit_prepare_failed", response[@"message"] ?: @"unknown failure");
       @synchronized(self) {
         [self.activeSession close];
         self.activeSession = nil;
@@ -732,6 +746,8 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
       return;
     }
     response[@"helperConnected"] = @YES;
+    response[@"helperConnectedMs"] = @((NSProcessInfo.processInfo.systemUptime - operationStarted) * 1000.0);
+    RPCS3Milestone(@"jit_helper_connected", @"Authenticated helper control channel connected");
 
     if (![session waitUntilAttached:kRpcs3AttachTimeout]) {
       response[@"message"] = session.finalMessage.length
@@ -742,17 +758,12 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
       return;
     }
     response[@"pidAttached"] = @YES;
-
-    if (session.requiresCoreHandshake &&
-        ![session confirmCoreLoadReady]) {
-      response[@"message"] = session.finalMessage.length
-          ? session.finalMessage
-          : @"debugserver did not complete the host nonce probe; Core loading was blocked.";
-      response[@"logs"] = session.logs;
-      finish();
-      return;
-    }
-    response[@"coreLoadReady"] = @(session.requiresCoreHandshake ? session.coreLoadReady : YES);
+    response[@"debuggerAttachedMs"] = @((NSProcessInfo.processInfo.systemUptime - operationStarted) * 1000.0);
+    RPCS3Milestone(@"jit_debugger_attached", @"PID identity verified; host resumed after vAttach");
+    // Do not spend the final readiness proof here and then cross two Flutter
+    // channels before loading the Core. The loader performs the nonce probe at
+    // the actual dlopen boundary, which closes that race completely.
+    response[@"coreLoadReady"] = @(!session.requiresCoreHandshake);
 
     if (session.finished && !session.success) {
       response[@"message"] = session.finalMessage.length
@@ -777,7 +788,10 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
     // Waiting before dlopen deadlocks host and helper (the old 90s failure).
     response[@"success"] = @YES;
     response[@"requiresCompletion"] = @YES;
-    response[@"message"] = @"RPCS3 debugger probe round trip verified; initialize the Core before completing JIT.";
+    response[@"message"] = session.requiresCoreHandshake
+        ? @"RPCS3 debugger attached; final nonce validation is reserved for the Core load boundary."
+        : @"RPCS3 JIT is enabled for Core loading.";
+    RPCS3Milestone(@"jit_prepare_ready", @"Returning attached session to Core loader");
     dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
   });
 }

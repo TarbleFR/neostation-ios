@@ -39,7 +39,7 @@ assert 'jit_helper_' in jit
 assert '_mutableLogs.count > 64' in jit
 
 
-assert 'session.coreLoadReady' in jit
+assert 'RPCS3JitHasActiveCoreHandshake' in jit
 
 
 
@@ -61,6 +61,7 @@ print('PASS: loader diagnostics recoverable; provider unchanged')
 assert 'confirmCoreLoadReady' in jit
 assert 'RPCS3DebuggerProbe(_probeNonce)' in jit
 assert 'RPCS3HostHasLiveDebugger' in jit
+assert 'RPCS3JitConfirmCoreLoadHandoff' in host
 assert 'scheduleCoreLoadReady' not in helper
 assert 'Handling signal 1' not in helper
 assert '.milliseconds(250)' not in helper

@@ -6,6 +6,7 @@ import Foundation
     let scenario = CommandLine.arguments[1]
     var finished = false
     var results = [NeoStationLocalTunnelManager.Response]()
+    var seededProfile: NETunnelProviderManager?
     func done(_ result: NeoStationLocalTunnelManager.Response) { results.append(result); finished = true }
     func demand(_ value: @autoclosure () -> Bool, _ detail: String) {
       if !value() { fatalError("\(scenario): \(detail); events=\(TunnelTestState.events)") }
@@ -26,6 +27,24 @@ import Foundation
       }
     case "fail-fast":
       TunnelTestState.startMode = "fail-fast"
+      manager.enableOwned(completion: done)
+    case "stale-plugin-rebuild":
+      let profile = NETunnelProviderManager()
+      let proto = NETunnelProviderProtocol(); proto.providerBundleIdentifier = "test.neostation.localtunnel"
+      profile.protocolConfiguration = proto; profile.isEnabled = true
+      profile.connection.startError = NSError(
+        domain: NEVPNConnectionErrorDomain,
+        code: NEVPNConnectionError.pluginFailed.rawValue
+      )
+      seededProfile = profile
+      TunnelTestState.profiles = [profile]
+      manager.enableOwned(completion: done)
+    case "plugin-rebuild-once":
+      let profile = NETunnelProviderManager()
+      let proto = NETunnelProviderProtocol(); proto.providerBundleIdentifier = "test.neostation.localtunnel"
+      profile.protocolConfiguration = proto; profile.isEnabled = true
+      TunnelTestState.profiles = [profile]
+      TunnelTestState.startMode = "always-plugin-fail"
       manager.enableOwned(completion: done)
     case "duplicate-on":
       manager.enableOwned { results.append($0) }
@@ -61,6 +80,15 @@ import Foundation
     case "fail-fast":
       if case .failure(let error) = results[0] { demand(error.localizedDescription.contains("ProviderFailure"), "native cause preserved") }
       else { fatalError("failed provider cannot succeed") }
+    case "stale-plugin-rebuild":
+      if case .failure = results[0] { fatalError("stale plugin profile must recover") }
+      demand(TunnelTestState.events.filter { $0 == "start" }.count == 2, "recreated profile starts once")
+      demand(TunnelTestState.events.filter { $0 == "remove" }.count == 1, "failed owned profile removed once")
+      demand(seededProfile != nil && TunnelTestState.profiles.count == 1 && TunnelTestState.profiles[0] !== seededProfile!, "replacement profile persisted")
+    case "plugin-rebuild-once":
+      if case .success = results[0] { fatalError("persistent plugin failure cannot succeed") }
+      demand(TunnelTestState.events.filter { $0 == "start" }.count == 2, "only one rebuild retry")
+      demand(TunnelTestState.events.filter { $0 == "remove" }.count == 1, "only one profile rebuild")
     case "duplicate-on": demand(TunnelTestState.events.filter { $0 == "start" }.count == 1 && results.count == 2, "coalesce duplicate ON")
     case "connected-no-save": demand(TunnelTestState.events == ["load"], "do not rewrite connected profile")
     case "readonly-route": demand(!TunnelTestState.events.contains(where: { $0 == "start" || $0 == "stop" || $0.hasPrefix("save") }), "route preflight is read-only")

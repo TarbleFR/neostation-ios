@@ -193,6 +193,7 @@ class Rpcs3InternalService {
   }
 
   static Future<void> _prepareJitInternal() async {
+    final transactionTimer = Stopwatch()..start();
     _emit(
       Rpcs3RuntimePhase.checkingJit,
       'Vérification du JIT RPCS3…',
@@ -232,8 +233,14 @@ class Rpcs3InternalService {
 
     final pairing = await PairingFileService.storedFile();
     if (Platform.isIOS) {
+      final routeTimer = Stopwatch()..start();
       try {
-        await LocalJitTunnelService.ensureRunningForJit();
+        final route = await LocalJitTunnelService.ensureRunningForJit();
+        _log.i(
+          'RPCS3 startup timing: stage=route_preflight; '
+          'elapsedMs=${routeTimer.elapsedMilliseconds}; '
+          'transport=${route.managedByNeoStation ? 'internal' : 'external'}.',
+        );
       } on LocalJitTunnelException catch (error) {
         throw Rpcs3InternalException(
           'localTunnel.${error.code}',
@@ -260,6 +267,7 @@ class Rpcs3InternalService {
       }
     });
     late final Map<String, dynamic> jit;
+    final attachTimer = Stopwatch()..start();
     try {
       jit = await _bounded(
         Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
@@ -280,6 +288,14 @@ class Rpcs3InternalService {
       );
     }
 
+    _log.i(
+      'RPCS3 startup timing: stage=debugger_attach; '
+      'elapsedMs=${attachTimer.elapsedMilliseconds}; '
+      'helperConnectedMs=${jit['helperConnectedMs'] ?? 'unknown'}; '
+      'debuggerAttachedMs=${jit['debuggerAttachedMs'] ?? 'unknown'}; '
+      'transactionMs=${transactionTimer.elapsedMilliseconds}.',
+    );
+
     _jitCompletionPending = jit['requiresCompletion'] == true;
 
     final status = await _jitStatus();
@@ -299,7 +315,8 @@ class Rpcs3InternalService {
       coreReady: _initialized,
     );
     _log.i(
-      'RPCS3 internal JIT prepared for NeoStation pid=${jit['pid'] ?? 'unknown'}.',
+      'RPCS3 debugger attached to NeoStation pid=${jit['pid'] ?? 'unknown'}; '
+      'final Core-load nonce proof pending.',
     );
   }
 
@@ -360,6 +377,7 @@ class Rpcs3InternalService {
   }
 
   static Future<void> _initializeRuntime() async {
+    final runtimeTimer = Stopwatch()..start();
     if (!supported) {
       throw const Rpcs3InternalException(
         'unsupported',
@@ -387,6 +405,7 @@ class Rpcs3InternalService {
       // Core initialization so the Universal script can service its BRKs.
       final data = await dataDirectory();
       final cache = await cacheDirectory();
+      final memoryTimer = Stopwatch()..start();
       final preflight = await _bounded(
         Rpcs3InternalBridge.preflight(),
         _statusTimeout,
@@ -400,7 +419,17 @@ class Rpcs3InternalService {
               'iOS refuse l’espace mémoire requis par RPCS3.',
         );
       }
+      _log.i(
+        'RPCS3 startup timing: stage=memory_preflight; '
+        'elapsedMs=${memoryTimer.elapsedMilliseconds}.',
+      );
+      final attachTimer = Stopwatch()..start();
       await _attachJitForCore();
+      _log.i(
+        'RPCS3 startup timing: stage=jit_transaction; '
+        'elapsedMs=${attachTimer.elapsedMilliseconds}; '
+        'runtimeMs=${runtimeTimer.elapsedMilliseconds}.',
+      );
       _emit(
         Rpcs3RuntimePhase.initializingCore,
         'Initialisation du Core RPCS3…',
@@ -411,6 +440,7 @@ class Rpcs3InternalService {
       // Build 234 forced the expanded 512 MiB arena here. On-device logs show
       // the Core initializes successfully, then generated ARM64 faults at
       // 0x7000000000 during the LLVM self-test. Use the stable standard arena.
+      final coreTimer = Stopwatch()..start();
       final report = await _bounded(
         Rpcs3InternalBridge.initialize(
           supportPath: data.path,
@@ -427,8 +457,14 @@ class Rpcs3InternalService {
           report['message']?.toString() ?? 'RPCS3 Core could not initialize.',
         );
       }
+      _log.i(
+        'RPCS3 startup timing: stage=core_load_and_initialize; '
+        'elapsedMs=${coreTimer.elapsedMilliseconds}; '
+        'runtimeMs=${runtimeTimer.elapsedMilliseconds}.',
+      );
 
       if (_jitCompletionPending) {
+        final completionTimer = Stopwatch()..start();
         final completion = await _bounded(
           Rpcs3InternalBridge.completeJit(),
           _jitCompletionTimeout,
@@ -442,6 +478,10 @@ class Rpcs3InternalService {
           );
         }
         _jitCompletionPending = false;
+        _log.i(
+          'RPCS3 startup timing: stage=jit_detach; '
+          'elapsedMs=${completionTimer.elapsedMilliseconds}.',
+        );
       }
       _jitPrepared = true;
       _initialized = true;
@@ -452,6 +492,10 @@ class Rpcs3InternalService {
         coreReady: true,
       );
       _log.i('RPCS3 internal Core initialized with validated standard JIT.');
+      _log.i(
+        'RPCS3 startup timing: stage=runtime_ready; '
+        'elapsedMs=${runtimeTimer.elapsedMilliseconds}.',
+      );
     } on Rpcs3InternalException catch (error) {
       _restartRequired =
           _jitCompletionPending ||
@@ -947,7 +991,12 @@ class Rpcs3InternalService {
     final normalized = titleId.trim().toUpperCase();
     if (normalized.isEmpty) return false;
 
+    final launchTimer = Stopwatch()..start();
     await ensureGameplayInitialized();
+    _log.i(
+      'RPCS3 launch timing $normalized: stage=runtime_ready; '
+      'elapsedMs=${launchTimer.elapsedMilliseconds}.',
+    );
     final firmware = (await _bounded(
       Rpcs3InternalBridge.firmwareVersion(),
       _statusTimeout,
@@ -971,6 +1020,7 @@ class Rpcs3InternalService {
     );
 
     final bootMarker = await _armBootCrashMarker(normalized);
+    final bootTimer = Stopwatch()..start();
     final report = await Rpcs3InternalBridge.launchGame(
       titleId: normalized,
       uiLocale: uiLocale,
@@ -985,6 +1035,11 @@ class Rpcs3InternalService {
         report['message']?.toString() ?? 'RPCS3 could not boot this game.',
       );
     }
+    _log.i(
+      'RPCS3 launch timing $normalized: stage=boot_submitted; '
+      'bootMs=${bootTimer.elapsedMilliseconds}; '
+      'totalMs=${launchTimer.elapsedMilliseconds}.',
+    );
 
     // boot_game may return before PPU linking reaches RUNNING. Keep the marker
     // until the Core actually publishes RUNNING/PAUSED so an abrupt process

@@ -409,6 +409,17 @@ static void RPCS3Progress(void* context,
   dlerror();
   for (NSString* path in candidates) {
     if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
+      if (@available(iOS 26.0, *)) {
+        RPCS3Milestone(@"core_handoff_begin", @"Final debugger nonce proof immediately before dlopen");
+        if (!RPCS3JitConfirmCoreLoadHandoff()) {
+          RPCS3Milestone(@"core_handoff_end", @"rejected; dlopen blocked");
+          if (error) {
+            *error = @"The Universal debugger did not acknowledge the final Core-load nonce; dlopen was blocked.";
+          }
+          return NO;
+        }
+        RPCS3Milestone(@"core_handoff_end", @"verified; entering dlopen");
+      }
       RPCS3Milestone(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
       {
         // Keep stderr capture completely local to dlopen. If dyld or a static

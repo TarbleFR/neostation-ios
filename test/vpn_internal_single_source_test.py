@@ -101,6 +101,14 @@ assert 'stale + duplicates' not in manager
 assert 'in: owned' in manager
 assert 'let duplicates = owned.filter { $0 !== manager }' in manager
 
+# A real NetworkExtension provider crash after a sideload update is repaired
+# by one targeted replacement of the failed owned profile. The retry is bounded
+# per explicit ON command and unrelated errors retain their original cause.
+assert 'NEVPNConnectionError.pluginFailed.rawValue' in manager
+assert 'rebuiltProfileAfterPluginFailure' in manager
+assert 'rebuild_profile_after_plugin_failure' in manager
+assert 'disableAndRemoveDuplicates(' in manager
+
 # LocalDevVPN handoff is based on the real conflict, not merely UI state:
 # an active connection OR a still-enabled On-Demand local-JIT profile.
 assert 'let foreignContenders = allManagers.filter' in manager
@@ -121,15 +129,17 @@ assert 'recoverOwnedTransitionIfNeeded' in manager
 assert 'case .connecting, .reasserting, .disconnecting:' in manager
 assert 'status == .disconnected || status == .invalid' in manager
 
-# Game launch may wait for a user-requested ON already in flight, but must
-# never start a VPN itself.
+# Game launch probes a live LocalDevVPN route before waiting for an internal ON
+# already in flight. It still never starts a VPN itself.
 assert 'static Future<LocalJitTunnelState>? _activationInFlight;' in service
 assert 'final activation = _activationInFlight;' in service
 assert 'await activation;' in service
 assert service.count('StikjitBridge.activateOwnedTunnel()') == 1
 ensure_jit = service.split('static Future<LocalJitTunnelState> ensureRunningForJit()', 1)[1].split('/// Explicit Settings OFF', 1)[0]
 assert 'StikjitBridge.activateOwnedTunnel()' not in ensure_jit
-assert ensure_jit.index('await activation;') < ensure_jit.index('StikjitBridge.ensureJitRoute()')
+assert ensure_jit.index('StikjitBridge.ensureJitRoute()') < ensure_jit.index('await activation;')
+assert 'if (activation == null) rethrow;' in ensure_jit
+assert ensure_jit.count('StikjitBridge.ensureJitRoute()') == 2
 
 assert 'schemaVersion = 277' in manager
 assert '"version": 277' in provider

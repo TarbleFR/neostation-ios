@@ -52,21 +52,39 @@ enum NeoStationVPNDiagnostics {
   static func snapshotRPCS3() {
     queue.async {
       guard let documents else { return }
-      let path = documents.appendingPathComponent("RPCS3-diagnostic.log")
-      guard let file = try? FileHandle(forReadingFrom: path) else { return }
-      defer { try? file.close() }
-      guard let size = try? file.seekToEnd() else { return }
-      try? file.seek(toOffset: size > 131072 ? size - 131072 : 0)
-      guard let bytes = try? file.read(upToCount: 131072) else { return }
-      let stages: Set<String> = ["memory_preflight_begin", "memory_preflight_end", "core_load_begin", "core_load_end", "core_initialize_begin", "core_initialize_end", "llvm_self_test_begin", "llvm_self_test_end", "game_boot_begin", "game_boot_return"]
-      var rows = [String]()
-      for line in String(decoding: bytes, as: UTF8.self).split(separator: "\n") {
-        guard let decoded = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-              let stage = decoded["stage"] as? String, stages.contains(stage),
-              let time = decoded["timestamp"] as? NSNumber else { continue }
-        // Stage and timestamp only: no user-supplied names or native log payload.
-        rows.append("native time=\(time) stage=\(stage)")
+      let diagnosticStages: Set<String> = [
+        "memory_preflight_begin", "memory_preflight_end",
+      ]
+      let milestoneStages: Set<String> = [
+        "jit_prepare_begin", "jit_helper_connected", "jit_debugger_attached",
+        "jit_prepare_ready", "jit_prepare_failed", "debugger_probe_begin",
+        "debugger_probe_end", "core_handoff_begin", "core_handoff_end",
+        "core_load_begin", "core_load_end", "core_initialize_begin",
+        "core_initialize_end", "jit_completion_begin", "jit_completion_end",
+        "llvm_self_test_begin", "llvm_self_test_end", "game_boot_begin",
+        "game_boot_return",
+      ]
+      func readStages(_ name: String, _ accepted: Set<String>) -> [(Double, String)] {
+        let path = documents.appendingPathComponent(name)
+        guard let file = try? FileHandle(forReadingFrom: path) else { return [] }
+        defer { try? file.close() }
+        guard let size = try? file.seekToEnd() else { return [] }
+        try? file.seek(toOffset: size > 131072 ? size - 131072 : 0)
+        guard let bytes = try? file.read(upToCount: 131072) else { return [] }
+        var rows = [(Double, String)]()
+        for line in String(decoding: bytes, as: UTF8.self).split(separator: "\n") {
+          guard let decoded = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                let stage = decoded["stage"] as? String, accepted.contains(stage),
+                let time = decoded["timestamp"] as? NSNumber else { continue }
+          // Stage and timestamp only: no user-supplied names or native payload.
+          rows.append((time.doubleValue, "native time=\(time) stage=\(stage)"))
+        }
+        return rows
       }
+      let rows = (
+        readStages("RPCS3-diagnostic.log", diagnosticStages) +
+        readStages("RPCS3-milestones.log", milestoneStages)
+      ).sorted { $0.0 < $1.0 }.map { $0.1 }
       guard let last = rows.last, last != lastNativeStamp else { return }
       lastNativeStamp = last
       append("--- RPCS3 : derniers jalons natifs recuperes, pas une preuve de la cause du crash ---\n" + rows.suffix(20).joined(separator: "\n") + "\n")

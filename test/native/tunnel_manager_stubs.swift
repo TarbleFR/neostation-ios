@@ -5,6 +5,8 @@ import Foundation
 enum NEVPNStatus { case invalid, disconnected, connecting, connected, reasserting, disconnecting }
 let NEVPNErrorDomain = "NEVPNErrorDomain"
 enum NEVPNError: Int { case configurationReadWriteFailed = 5 }
+let NEVPNConnectionErrorDomain = "NEVPNConnectionErrorDomain"
+enum NEVPNConnectionError: Int { case pluginFailed = 12 }
 extension Notification.Name { static let NEVPNStatusDidChange = Notification.Name("NEVPNStatusDidChange") }
 final class NETunnelProviderProtocol {
   var providerBundleIdentifier: String?
@@ -19,6 +21,7 @@ enum TunnelTestState {
   static var routeReachable = false
 }
 final class TestConnection: NSObject {
+  var startError: Error?
   var status: NEVPNStatus = .disconnected {
     didSet { NotificationCenter.default.post(name: .NEVPNStatusDidChange, object: self) }
   }
@@ -29,6 +32,19 @@ final class TestConnection: NSObject {
       throw NSError(domain: "StartFailure", code: 12)
     }
     status = .connecting
+    if let startError {
+      lastError = startError
+      status = .disconnected
+      return
+    }
+    if TunnelTestState.startMode == "always-plugin-fail" {
+      lastError = NSError(
+        domain: NEVPNConnectionErrorDomain,
+        code: NEVPNConnectionError.pluginFailed.rawValue
+      )
+      status = .disconnected
+      return
+    }
     if TunnelTestState.startMode == "success" {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { self.status = .connected }
     } else if TunnelTestState.startMode == "fail-fast" {
@@ -68,6 +84,7 @@ final class NETunnelProviderManager {
     DispatchQueue.main.async { completionHandler(nil) }
   }
   func removeFromPreferences(completionHandler: @escaping (Error?) -> Void) {
+    TunnelTestState.events.append("remove")
     TunnelTestState.profiles.removeAll { $0 === self }
     completionHandler(nil)
   }

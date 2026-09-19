@@ -8,8 +8,10 @@ def read(path):
     return (ROOT / path).read_text()
 
 jit = read('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm')
+host = read('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 helper = read('packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift')
 service = read('lib/services/rpcs3_internal_service.dart')
+support_diagnostics = read('packages/stikjit_bridge/ios/Classes/NeoStationVPNDiagnostics.swift')
 
 # Working VPN stack is frozen for this RPCS3-only build.
 assert subprocess.check_output(
@@ -22,7 +24,7 @@ assert subprocess.check_output(
 
 
 
-assert 'session.coreLoadReady' in jit
+assert 'RPCS3JitHasActiveCoreHandshake' in jit
 
 
 
@@ -40,6 +42,17 @@ print('PASS: Core gate uses debugger probe; PPU cache and VPN provider preserved
 assert 'confirmCoreLoadReady' in jit
 assert 'RPCS3DebuggerProbe(_probeNonce)' in jit
 assert 'RPCS3HostHasLiveDebugger' in jit
+assert 'RPCS3JitConfirmCoreLoadHandoff' in jit
+assert 'RPCS3JitConfirmCoreLoadHandoff()' in host
+load_boundary = host.split('for (NSString* path in candidates)', 1)[1].split('#define LOAD', 1)[0]
+assert load_boundary.index('RPCS3JitConfirmCoreLoadHandoff()') < load_boundary.index('dlopen(')
+assert 'core_handoff_begin' in load_boundary
+assert 'core_handoff_end' in load_boundary
+prepare_boundary = jit.split('if (![call.method isEqualToString:@"prepareJit"])', 1)[1]
+assert '[session confirmCoreLoadReady]' not in prepare_boundary
+assert 'final nonce validation is reserved for the Core load boundary' in prepare_boundary
+assert 'readStages("RPCS3-milestones.log", milestoneStages)' in support_diagnostics
+assert 'core_handoff_begin' in support_diagnostics
 assert 'scheduleCoreLoadReady' not in helper
 assert 'Handling signal 1' not in helper
 assert '.milliseconds(250)' not in helper

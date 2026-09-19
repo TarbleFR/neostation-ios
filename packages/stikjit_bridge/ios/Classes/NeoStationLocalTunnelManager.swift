@@ -52,6 +52,7 @@ final class NeoStationLocalTunnelManager {
     var startedTunnel = false
     var recovering = false
     var observedConnecting = false
+    var rebuiltProfileAfterPluginFailure = false
     var observer: NSObjectProtocol?
     let startedAt = ProcessInfo.processInfo.systemUptime
     var waiters: [(Response) -> Void]
@@ -425,7 +426,11 @@ final class NeoStationLocalTunnelManager {
         Constants.peerAddressKey: Constants.peerAddress as NSString,
       ])
     } catch {
-      finish(command, .failure(.start(Self.errorDetail(error))))
+      handleStartFailure(
+        error,
+        manager: manager,
+        command: command
+      )
       return
     }
 
@@ -467,7 +472,15 @@ final class NeoStationLocalTunnelManager {
           guard self.isCurrent(command) else { return }
           let detail = error.map(Self.errorDetail) ??
             "iOS stopped the tunnel after activation began without a disconnect error."
-          self.finish(command, .failure(.start(detail)))
+          if let error {
+            self.handleStartFailure(
+              error,
+              manager: manager,
+              command: command
+            )
+          } else {
+            self.finish(command, .failure(.start(detail)))
+          }
         }
       }
       return
@@ -488,6 +501,61 @@ final class NeoStationLocalTunnelManager {
         command: command,
         observedConnecting: observed
       )
+    }
+  }
+
+  /// Sideloaded updates can leave a system VPN profile bound to the provider
+  /// registration from the previous app container. Saving that profile again
+  /// does not repair the binding: iOS enters connecting, then reports
+  /// NEVPNConnectionError.pluginFailed. Recreate only that failed owned profile,
+  /// once per explicit ON command, and retry with the currently installed
+  /// provider. Other provider errors retain their original failure.
+  private func handleStartFailure(
+    _ error: Error,
+    manager: NETunnelProviderManager,
+    command: Command
+  ) {
+    guard isCurrent(command) else { return }
+    guard Self.requiresProfileRebuild(error),
+          !command.rebuiltProfileAfterPluginFailure,
+          let providerIdentifier = providerBundleIdentifier(),
+          Self.isOwned(manager, providerBundleIdentifier: providerIdentifier)
+    else {
+      finish(command, .failure(.start(Self.errorDetail(error))))
+      return
+    }
+
+    command.rebuiltProfileAfterPluginFailure = true
+    if let observer = command.observer {
+      NotificationCenter.default.removeObserver(observer)
+      command.observer = nil
+    }
+    trace(
+      command,
+      "rebuild_profile_after_plugin_failure",
+      detail: Self.errorDetail(error)
+    )
+
+    if Self.needsStopRequest(manager.connection.status) {
+      manager.connection.stopVPNTunnel()
+    }
+    waitUntilQuiescent(manager, command: command, settle: true) {
+      self.disableAndRemoveDuplicates(
+        [manager],
+        index: 0,
+        command: command
+      ) {
+        guard self.isCurrent(command) else { return }
+        let replacement = NETunnelProviderManager()
+        self.activeManager = replacement
+        command.manager = replacement
+        self.trace(command, "persist_rebuilt_profile")
+        self.persistAndStart(
+          replacement,
+          providerIdentifier: providerIdentifier,
+          command: command
+        )
+      }
     }
   }
 
@@ -1027,6 +1095,24 @@ final class NeoStationLocalTunnelManager {
 
   private static func isQuiescent(_ status: NEVPNStatus) -> Bool {
     status == .disconnected || status == .invalid
+  }
+
+  /// A provider crash after a sideload update is the one start failure for
+  /// which resaving the existing system profile cannot recover its provider
+  /// registration. Keep every other native error intact and rebuild only the
+  /// NeoStation-owned profile that produced NEVPNConnectionError.pluginFailed.
+  private static func requiresProfileRebuild(_ error: Error) -> Bool {
+    var current: NSError? = error as NSError
+    var inspected = 0
+    while let candidate = current, inspected < 4 {
+      if candidate.domain == NEVPNConnectionErrorDomain,
+         candidate.code == NEVPNConnectionError.pluginFailed.rawValue {
+        return true
+      }
+      current = candidate.userInfo[NSUnderlyingErrorKey] as? NSError
+      inspected += 1
+    }
+    return false
   }
 
   private static func statusName(_ status: NEVPNStatus) -> String {
