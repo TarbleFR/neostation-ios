@@ -60,7 +60,7 @@ private final class ReporterSendOrderHarness {
   }
 }
 
-let reporter = ReporterSendOrderHarness()
+private let reporter = ReporterSendOrderHarness()
 reporter.sendLog()
 precondition(
   reporter.sendControl(),

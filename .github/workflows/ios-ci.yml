@@ -59,15 +59,37 @@ jobs:
           mkdir -p build/rpcs3-ci build/fast-native
 
           git diff --check
-          if rg -n \
-            --glob '*.dart' --glob '*.swift' --glob '*.m' --glob '*.mm' \
-            --glob '*.h' --glob '*.podspec' --glob '*.plist' \
-            --glob '*.entitlements' \
-            'NeoStationLocalTunnel|NeoStationVPNDiagnostics|PacketTunnelProvider|NETunnelProvider|NEVPN|NetworkExtension|packet-tunnel-provider' \
-            lib native packages/stikjit_bridge; then
-            echo 'Retired internal VPN implementation remains in production sources.' >&2
-            exit 1
-          fi
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          roots = (Path('lib'), Path('native'), Path('packages/stikjit_bridge'))
+          suffixes = {
+              '.dart', '.swift', '.m', '.mm', '.h', '.podspec', '.plist',
+              '.entitlements',
+          }
+          retired = re.compile(
+              r'NeoStationLocalTunnel|NeoStationVPNDiagnostics|'
+              r'PacketTunnelProvider|NETunnelProvider|NEVPN|'
+              r'NetworkExtension|packet-tunnel-provider'
+          )
+          matches = []
+          for root in roots:
+              for path in root.rglob('*'):
+                  if path.is_file() and path.suffix in suffixes:
+                      for line_number, line in enumerate(
+                          path.read_text(errors='replace').splitlines(),
+                          start=1,
+                      ):
+                          if retired.search(line):
+                              matches.append(f'{path}:{line_number}:{line}')
+          if matches:
+              raise SystemExit(
+                  'Retired internal VPN implementation remains in production '
+                  'sources:\n' + '\n'.join(matches)
+              )
+          print('Production sources contain no internal VPN implementation.')
+          PY
           retired_vpn_build_files=(
             build-utils/configure_local_jit_tunnel.py
             build-utils/patch_local_tunnel_build269.py
