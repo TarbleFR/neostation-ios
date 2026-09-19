@@ -93,8 +93,9 @@ void initialize_settings() {
   EmuFolders::Resources = r.resources;
   folder(EmuFolders::Settings,r.data,"inis");
   folder(EmuFolders::Logs,r.data,"logs");
-  folder(EmuFolders::Savestates,r.data,"savestates");
-  folder(EmuFolders::MemoryCards,r.data,"memcards");
+  std::string saves_root; folder(saves_root,r.data,"Saves");
+  folder(EmuFolders::Savestates,saves_root,"Savestates");
+  folder(EmuFolders::MemoryCards,saves_root,"Memory Cards");
   folder(EmuFolders::Snapshots,r.data,"snaps");
   folder(EmuFolders::Cheats,r.data,"cheats");
   folder(EmuFolders::Patches,r.data,"patches");
