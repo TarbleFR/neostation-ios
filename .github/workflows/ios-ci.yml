@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 289 LocalDevVPN RPCS3 Fix
-run-name: NeoStation iOS Build 289 • ${{ github.sha }}
+name: NeoStation iOS Build 290 Embedded ARMSX2
+run-name: NeoStation iOS Build 290 • ${{ github.sha }}
 
 on:
   push:
@@ -14,20 +14,20 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-289
+  group: neostation-ios-build-290
   cancel-in-progress: true
 
 jobs:
   build:
     # Core-only development commits validate ARMSX2 separately, not a mislabeled IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') }}
-    name: Build 289 Experimental IPA
+    name: Build 290 Embedded ARMSX2 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '289'
-      IPA_NAME: 'NeoStation-iOS-Build-289-LocalDevVPN-RPCS3-Fix'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-289-LocalDevVPN-RPCS3-Fix'
+      BUILD_NUMBER: '290'
+      IPA_NAME: 'NeoStation-iOS-Build-290-Embedded-ARMSX2'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-290-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -65,7 +65,7 @@ jobs:
           import re
           from pathlib import Path
 
-          roots = (Path('lib'), Path('native'), Path('packages/stikjit_bridge'))
+          roots = (\n              Path('lib'), Path('native'), Path('packages/stikjit_bridge'),\n              Path('packages/armsx2_internal_bridge'),\n              Path('packages/armsx2_jit_helper'),\n          )
           suffixes = {
               '.dart', '.swift', '.m', '.mm', '.h', '.podspec', '.plist',
               '.entitlements',
@@ -158,7 +158,7 @@ jobs:
           python3 test/dolphin_ipa_validator_test.py
           python3 test/local_dev_vpn_route_contract_test.py
           node test/rpcs3_debugger_handshake_test.js
-          flutter test test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart
+          flutter test test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -195,6 +195,30 @@ jobs:
             build/native-donor --build-number "$BUILD_NUMBER" \
             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
 
+      - name: Download pinned embedded ARMSX2 Core
+        uses: actions/download-artifact@v4
+        with:
+          name: ARMSX2Core-eed63408d01e7c84ebd8359ce0adf96c385397cf
+          run-id: 35466894436
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/armsx2
+
+      - name: Verify downloaded ARMSX2 Core identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
+          test -f dist/armsx2/identity.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          identity=json.loads(Path('dist/armsx2/identity.json').read_text())
+          assert identity['revision'] == '8b5fad23dc290660aa394e75b0fd23e31099eaec', identity
+          assert identity['host_commit'] == 'eed63408d01e7c84ebd8359ce0adf96c385397cf', identity
+          assert identity['architectures'] == ['arm64'], identity
+          print(identity)
+          PY
+
       - name: Prepare emulator build definitions
         shell: bash
         run: |
@@ -210,8 +234,6 @@ jobs:
           values.update({
               'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
               'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
-              'NEOSTATION_EXPERIMENTAL_STIKJIT_ARMSX2':'true',
-              'NEOSTATION_ARMSX2_BUNDLE_ID':'xyz.aethersx2.AetherSX2',
           })
           Path('.dart-defines.json').write_text(json.dumps(values))
           PY
@@ -226,6 +248,7 @@ jobs:
             --dart-define-from-file=.dart-defines.json
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
           python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_armsx2_ios.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
@@ -284,7 +307,20 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 289 IPA
+      - name: Embed lazy-loaded ARMSX2 Core framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          test -d "$APP"
+          mkdir -p "$APP/Frameworks"
+          rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+          ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+          test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" | grep -qx '_NeoARMSX2_GetAPI'
+
+      - name: Package and validate Build 290 IPA
         shell: bash
         run: |
           set -euo pipefail
@@ -295,6 +331,9 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \\
+            --build-number "$BUILD_NUMBER" \\
+            --source-revision 8b5fad23dc290660aa394e75b0fd23e31099eaec
           cp build/fast-native/identity.json dist/fast-native-identity.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
