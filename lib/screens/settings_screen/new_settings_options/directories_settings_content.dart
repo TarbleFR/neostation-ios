@@ -8,7 +8,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
-import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -73,8 +72,7 @@ class DirectoriesSettingsContentState
   String? _currentUserDataPath;
   bool _isLoading = true;
 
-  // iOS-only security-scoped roots. RetroArch and ARMSX2 use independent
-  // bookmarks.
+  // iOS-only security-scoped root linking state for external emulators.
   String? _linkingFolderKey;
 
   // Migration progress state (shown inline, no dialog).
@@ -591,66 +589,6 @@ class DirectoriesSettingsContentState
     }
   }
 
-  Future<void> _linkArmsx2RootFolder() async {
-    if (_linkingFolderKey != null) return;
-    setState(() => _linkingFolderKey = Armsx2FolderService.bookmarkKey);
-    try {
-      final selected = await ExternalFolderAccess.pickAndBookmarkFolder(
-        key: Armsx2FolderService.bookmarkKey,
-      );
-      if (selected == null || !mounted) return;
-      final bookmarked = await ExternalFolderAccess.resolveBookmarkedFolder(
-        key: Armsx2FolderService.bookmarkKey,
-      );
-      final root = await Armsx2FolderService.resolveRoot(
-        bookmarked ?? selected,
-      );
-      final gameDir = await Armsx2FolderService.resolveGameDirectory(root);
-      final previousGameDir = ConfigService.linkedArmsx2GameFolderPath;
-
-      ConfigService.linkedArmsx2FolderPath = root;
-      ConfigService.linkedArmsx2GameFolderPath = gameDir;
-
-      if (!mounted) return;
-      final configProvider = Provider.of<SqliteConfigProvider>(
-        context,
-        listen: false,
-      );
-      if (previousGameDir != null &&
-          previousGameDir != gameDir &&
-          configProvider.config.romFolders.contains(previousGameDir)) {
-        await configProvider.removeRomFolder(previousGameDir);
-      }
-      if (gameDir != null && gameDir.isNotEmpty) {
-        if (configProvider.config.romFolders.contains(gameDir)) {
-          await configProvider.scanSystems();
-        } else {
-          await configProvider.addRomFolder(gameDir, scan: true);
-        }
-      }
-
-      if (!mounted) return;
-      await _loadCurrentPaths();
-      if (mounted) setState(() {});
-      _log.i(
-        'ARMSX2 isolated root linked: root=$root gameDir=${gameDir ?? "none"}',
-      );
-    } catch (e) {
-      _log.e('ARMSX2 root link failed: $e');
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.iosEmuLinkingFailed
-              .getString(context)
-              .replaceFirst('{error}', e.toString()),
-          type: NotificationType.error,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _linkingFolderKey = null);
-    }
-  }
-
   Future<void> _syncWithRetroArch() async {
     final opened = await RetroArchLibraryService.requestLibrarySync();
     if (!mounted) return;
@@ -660,40 +598,6 @@ class DirectoriesSettingsContentState
           ? AppLocale.iosRetroarchSyncRequested.getString(context)
           : AppLocale.iosRetroarchUnavailable.getString(context),
       type: opened ? NotificationType.info : NotificationType.error,
-    );
-  }
-
-  Future<void> _syncWithArmsx2() async {
-    final root = ConfigService.linkedArmsx2FolderPath;
-    if (root == null || root.isEmpty) {
-      AppNotification.showNotification(
-        context,
-        AppLocale.iosArmsx2StatusNeedsSync.getString(context),
-        type: NotificationType.info,
-      );
-      return;
-    }
-
-    final gameDir = await Armsx2FolderService.resolveGameDirectory(root);
-    ConfigService.linkedArmsx2GameFolderPath = gameDir;
-    if (!mounted) return;
-    final configProvider = Provider.of<SqliteConfigProvider>(
-      context,
-      listen: false,
-    );
-    if (gameDir != null && gameDir.isNotEmpty) {
-      if (configProvider.config.romFolders.contains(gameDir)) {
-        await configProvider.scanSystems();
-      } else {
-        await configProvider.addRomFolder(gameDir, scan: true);
-      }
-    }
-    if (!mounted) return;
-    setState(() {});
-    AppNotification.showNotification(
-      context,
-      AppLocale.iosArmsx2StatusSynced.getString(context),
-      type: NotificationType.success,
     );
   }
 
@@ -765,44 +669,6 @@ class DirectoriesSettingsContentState
             style: TextStyle(fontSize: 14.r),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildIOSArmsx2Section(ThemeData theme) {
-    final isRootLinked = ConfigService.linkedArmsx2FolderPath != null;
-    final hasLibrary = ConfigService.linkedArmsx2GameFolderPath != null;
-    final statusText = hasLibrary
-        ? AppLocale.iosArmsx2StatusSynced.getString(context)
-        : AppLocale.iosArmsx2StatusNeedsSync.getString(context);
-
-    return _buildIOSEmulatorCard(
-      theme: theme,
-      name: 'ARMSX2',
-      icon: Symbols.stadia_controller_rounded,
-      statusText: statusText,
-      isLinked: isRootLinked,
-      bookmarkKey: Armsx2FolderService.bookmarkKey,
-      successMessage: '',
-      onLinkPressed: _linkArmsx2RootFolder,
-      trailingAction: Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 48.r,
-              child: FilledButton.icon(
-                onPressed: _syncWithArmsx2,
-                icon: Icon(Symbols.bolt_rounded, size: 20.r),
-                label: Text(
-                  hasLibrary
-                      ? AppLocale.iosEmuResync.getString(context)
-                      : AppLocale.iosEmuSync.getString(context),
-                  style: TextStyle(fontSize: 14.r),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
