@@ -4,7 +4,7 @@ import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/config_service.dart';
-import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
+import 'package:neostation/services/stikjit_armsx2_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -48,17 +48,11 @@ class Armsx2LibraryService {
     if (romPath.trim().isEmpty) return false;
 
     if (isVirtualLibraryPath(romPath)) {
-      try {
-        final uri = _normalizeLegacyVirtualUri(romPath);
-        return await _runShortcut(
-          uri,
-          source: 'legacy ARMSX2 virtual row',
-          romPath: romPath,
-        );
-      } catch (e) {
-        _log.e('Armsx2LibraryService: legacy virtual launch failed: $e');
-        return false;
-      }
+      _log.w(
+        'ARMSX2 legacy URL row is retired; rescan the linked PS2 folder '
+        'to obtain a physical path.',
+      );
+      return false;
     }
 
     final ownsLinkedPhysicalRom = Armsx2FolderService.ownsRomPath(
@@ -143,61 +137,7 @@ class Armsx2LibraryService {
   }
 
   static Future<bool> _launchLinkedPhysicalRom(String romPath) async {
-    final fileName = path.basename(romPath);
-    if (fileName.isEmpty) return false;
-    final uri = _launchUriForFileName(fileName);
-    return _runShortcut(
-      uri,
-      source: 'linked ARMSX2 physical root',
-      romPath: romPath,
-    );
-  }
-
-  static Uri _launchUriForFileName(String fileName) {
-    // ARMSX2 treats '+' literally in its `game` query value. Percent encoding
-    // keeps spaces as `%20` and an actual plus sign as `%2B`.
-    final encodedFileName = Uri.encodeComponent(fileName);
-    return Uri.parse('armsx2://launch?game=$encodedFileName');
-  }
-
-  static Uri _normalizeLegacyVirtualUri(String romPath) {
-    final parsed = Uri.parse(romPath);
-    final fileName = parsed.queryParameters['game'];
-    if (fileName == null || fileName.isEmpty) return parsed;
-    return _launchUriForFileName(fileName);
-  }
-
-  static Future<bool> _runShortcut(
-    Uri uri, {
-    required String source,
-    required String romPath,
-  }) async {
-    try {
-      await _writeDebugFile(
-        'armsx2_shortcut_launch_debug.txt',
-        'STATE: SHORTCUT_REQUESTED\n'
-            'Shortcut: ${IosShortcutJitLaunchService.armsx2ShortcutName}\n'
-            'Game URL: $uri\n'
-            'Source: $source\n'
-            'ROM: $romPath',
-      );
-      return await IosShortcutJitLaunchService.run(
-        shortcutName: IosShortcutJitLaunchService.armsx2ShortcutName,
-        input: uri.toString(),
-      );
-    } catch (e) {
-      _log.e('Armsx2LibraryService: launch failed for $uri: $e');
-      await _writeDebugFile(
-        'armsx2_shortcut_launch_debug.txt',
-        'STATE: ERROR\n'
-            'Shortcut: ${IosShortcutJitLaunchService.armsx2ShortcutName}\n'
-            'Game URL: $uri\n'
-            'Source: $source\n'
-            'ROM: $romPath\n'
-            'Error: $e',
-      );
-      return false;
-    }
+    return StikJitArmsx2Service.launch(gamePath: path.normalize(romPath));
   }
 
   /// Device-readable diagnostics for sideloaded iOS builds where an Xcode
