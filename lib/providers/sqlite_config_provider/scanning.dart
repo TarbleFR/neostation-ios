@@ -90,19 +90,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     _error = null;
 
     if (Platform.isIOS) {
-      final armsx2GameDir = ConfigService.linkedArmsx2GameFolderPath?.trim();
-      if (armsx2GameDir != null &&
-          armsx2GameDir.isNotEmpty &&
-          !_config.romFolders.contains(armsx2GameDir) &&
-          _config.romFolders.length < 5) {
-        _config = _config.copyWith(
-          romFolders: [..._config.romFolders, armsx2GameDir],
-          lastScan: DateTime.now(),
-          setupCompleted: true,
-        );
-        await SqliteConfigService.saveConfig(_config);
-        SqliteConfigProvider._log.i('Registered isolated ARMSX2 PS2 library: $armsx2GameDir');
-      }
+      await Armsx2InternalService.ensureLayout();
     }
 
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
@@ -197,13 +185,16 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       }
 
       if (Platform.isIOS &&
-          ConfigService.linkedArmsx2GameFolderPath?.isNotEmpty == true &&
           !detectedSystems.any((system) => system.folderName == 'ps2')) {
         try {
-          final ps2 = _availableSystems.firstWhere((system) => system.folderName == 'ps2');
+          final ps2 = _availableSystems.firstWhere(
+            (system) => system.folderName == 'ps2',
+          );
           detectedSystems = [...detectedSystems, ps2];
         } catch (e) {
-          SqliteConfigProvider._log.w('Could not inject PS2 for ARMSX2 scan: $e');
+          SqliteConfigProvider._log.w(
+            'Could not expose embedded ARMSX2 PS2 playlist: $e',
+          );
         }
       }
 
@@ -240,7 +231,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         final List<String> fastScanFolders = Platform.isAndroid
             ? ['android']
             : Platform.isIOS
-            ? ['gc', 'wii']
+            ? ['gc', 'wii', 'ps2']
             : [];
         // DOLPHIN_ISOLATION_END: fast_scan_playlists
 
@@ -634,6 +625,26 @@ extension SqliteConfigScanning on SqliteConfigProvider {
   }
   // DOLPHIN_ISOLATION_END: targeted_refresh_api
 
+  /// Refreshes only NeoStation's Files-visible embedded ARMSX2 PS2 library.
+  Future<void> refreshArmsx2InternalLibrary() async {
+    if (!Platform.isIOS) {
+      throw StateError('Embedded ARMSX2 refresh is available on iOS only.');
+    }
+    await Armsx2InternalService.ensureLayout();
+    if (_availableSystems.isEmpty) await _loadAvailableSystems();
+    final system = _availableSystems.firstWhere(
+      (candidate) => candidate.folderName == 'ps2',
+    );
+    await SystemRepository.addDetectedSystem(system.id!, system.folderName);
+    if (!_detectedSystems.any((candidate) => candidate.id == system.id)) {
+      _detectedSystems = [..._detectedSystems, system];
+    }
+    await _scanSystemRoms(system);
+    await _refreshDetectedSystemsFromDatabase();
+    _sortDetectedSystems();
+    _notify();
+  }
+
   /// Performs an isolated scan for a specific system.
   Future<ScanSummary> _scanSystemRoms(
     SystemModel system, {
@@ -644,11 +655,15 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       final isDolphinInternalSystem =
           Platform.isIOS &&
           DolphinInternalV2Service.isDolphinSystem(system.folderName);
-      // Allow the private gc/wii root to scan even when no public ROM folder
-      // exists. Every non-Dolphin system retains the original early return.
+      final isArmsx2InternalSystem =
+          Platform.isIOS && system.folderName.toLowerCase() == 'ps2';
+      final isNativeInternalSystem =
+          isDolphinInternalSystem || isArmsx2InternalSystem;
+      // Native embedded playlists scan their own roots even when no public ROM
+      // folder exists. Every other system retains the original early return.
       if (_config.romFolders.isEmpty &&
           system.folderName != 'android' &&
-          !isDolphinInternalSystem) {
+          !isNativeInternalSystem) {
         return ScanSummary(
           added: 0,
           removed: 0,
@@ -656,12 +671,14 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           systemName: system.realName,
         );
       }
-      final dolphinScanRoots = isDolphinInternalSystem
+      final nativeScanRoots = isDolphinInternalSystem
           ? [await DolphinInternalV2Service.scanRootPath()]
+          : isArmsx2InternalSystem
+          ? [(await Armsx2InternalService.gamesDirectory()).path]
           : _config.romFolders;
       final effectiveRootFoldersMap = isDolphinInternalSystem
           ? await SqliteDatabaseService.getExistingSubdirectories(
-              dolphinScanRoots,
+              nativeScanRoots,
             )
           : rootFoldersMap;
       // DOLPHIN_ISOLATION_END: isolated_scan_root
@@ -669,7 +686,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // DOLPHIN_ISOLATION_BEGIN: isolated_scan_call
       final summary = await SqliteDatabaseService.scanSystemRoms(
         system,
-        dolphinScanRoots,
+        nativeScanRoots,
         ignoreHiddenFiles: _config.ignoreHiddenFiles,
         rootFoldersMap: effectiveRootFoldersMap,
       );
@@ -756,9 +773,10 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           updatedSystem.folderName == 'all' ||
           updatedSystem.folderName == SystemFolderNames.favorites ||
           (Platform.isIOS &&
-              DolphinInternalV2Service.isDolphinSystem(
-                updatedSystem.folderName,
-              ));
+              (DolphinInternalV2Service.isDolphinSystem(
+                    updatedSystem.folderName,
+                  ) ||
+                  updatedSystem.folderName.toLowerCase() == 'ps2'));
       // DOLPHIN_ISOLATION_END: refresh_keep_native_systems
 
       if (shouldKeep) {
