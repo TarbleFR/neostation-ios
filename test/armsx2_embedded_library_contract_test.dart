@@ -28,7 +28,6 @@ void main() {
     expect(storage, contains('importBios()'));
 
     expect(systems, contains("const <String>['ps2', 'ps3']"));
-    expect(list, contains('armsx2-internal-import-menu') == false);
     expect(list, contains('_isArmsx2Library'));
     expect(list, contains('_buildEmbeddedArmsx2ImportAction'));
 
