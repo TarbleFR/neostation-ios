@@ -16,6 +16,10 @@ if len(candidates) != 1:
     raise SystemExit(f'Expected one device framework, found: {candidates}')
 framework = candidates[0]
 binary = framework / 'ARMSX2Core'
+binary_bytes = binary.read_bytes()
+for forbidden in (b'/Users/runner/', b'/Users/builder/'):
+    if forbidden in binary_bytes:
+        raise SystemExit(f'Absolute CI path leaked into ARMSX2 Core: {forbidden!r}')
 def run(*args):
     return subprocess.check_output(args, text=True)
 if run('lipo', '-archs', str(binary)).strip() != 'arm64':
