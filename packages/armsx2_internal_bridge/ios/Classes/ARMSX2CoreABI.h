@@ -32,6 +32,9 @@ typedef struct NeoARMSX2API {
   void (*release_render_view)(void);
   // Blocking calls only off main. All VM operations run on one owned thread.
   int (*prepare)(const NeoARMSX2Configuration*, uint32_t timeout_ms, char*, size_t);
+  // Must be called while the authenticated helper still owns debugserver.
+  // The breakpoint requests a real GDB D detach; failure never becomes ready.
+  int (*request_jit_detach)(char*, size_t);
   int (*validate_jit)(char*, size_t);
   int (*boot)(const char* absolute_path, uint32_t kind, uint32_t timeout_ms, char*, size_t);
   void (*request_stop)(void);
