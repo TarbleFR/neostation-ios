@@ -1,7 +1,10 @@
-# Candidate 286 — VPN, debugger handoff, game deletion
+# Candidate 287 — VPN, debugger handoff, game deletion
 
 Starting revision: `1ebe245e3327102eae03e19d922e42ad288891c7` (Build 285).
 The Build 273 reference, main and backup are unchanged.
+Build 286 (`a575d323caea927a62af09e7ac39b9a2cf9c8e69`) passed macOS regression
+gates; Build 287 also protects metadata/media shared by same-named ROMs and
+checks filesystem permission denial on the macOS runner.
 
 ## Evidence and scope
 
@@ -63,7 +66,8 @@ is converted into a successful delete callback.
   are replaced by this behavior gate; the packet-provider identity guard stays.
 * `game_deletion_regression_test.dart` exercises actual temporary files and an
   in-memory SQLite database: failure preserves rows, retry, missing parent,
-  virtual URI rejection, PS3 multi-location deletion, retained user data,
+  virtual URI rejection, distinct same-named ROMs, denied filesystem permission
+  (macOS), PS3 multi-location deletion, retained user data,
   registration cleanup, path traversal and symlink rejection.
 * Existing repository/library/Dolphin deletion tests, Flutter analyze and the
   macOS early-loader diagnostic test run before xcodebuild. Packaging verifies

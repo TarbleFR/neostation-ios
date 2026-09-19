@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 286 VPN JIT Deletion Regression Fix
-run-name: NeoStation iOS Build 286 • ${{ github.sha }}
+name: NeoStation iOS Build 287 VPN JIT Deletion Regression Fix
+run-name: NeoStation iOS Build 287 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-286
+  group: neostation-ios-build-287
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 286 Experimental IPA
+    name: Build 287 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '286'
-      IPA_NAME: 'NeoStation-iOS-Build-286-VPN-JIT-Deletion-Fix'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-286-VPN-JIT-Deletion-Fix'
+      BUILD_NUMBER: '287'
+      IPA_NAME: 'NeoStation-iOS-Build-287-VPN-JIT-Deletion-Fix'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-287-VPN-JIT-Deletion-Fix'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -173,7 +173,7 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 286 IPA
+      - name: Package and validate Build 287 IPA
         shell: bash
         run: |
           set -euo pipefail

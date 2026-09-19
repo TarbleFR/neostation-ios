@@ -73,6 +73,7 @@ class GameRepository {
     if (romPath == null || romPath.isEmpty) {
       throw StateError('Cannot delete a game without its source path.');
     }
+    var canRemoveSharedMedia = true;
     try {
       if (Rpcs3LibraryService.isVirtualLibraryPath(romPath) ||
           (Platform.isIOS && systemFolderName.toLowerCase() == 'ps3')) {
@@ -87,7 +88,11 @@ class GameRepository {
       } else {
         await GameFileDeletion.delete(romPath);
         log.i('GameDelete[$operation] filesystem_complete');
-        await SqliteService.deleteGame(appSystemId, filename);
+        canRemoveSharedMedia = await SqliteService.deleteGame(
+          appSystemId,
+          filename,
+          romPath: romPath,
+        );
       }
       log.i('GameDelete[$operation] database_complete');
     } catch (error, stack) {
@@ -99,6 +104,7 @@ class GameRepository {
       rethrow;
     }
 
+    if (!canRemoveSharedMedia) return;
     final deletedMedia = await deleteNeoStationScrapedMedia(
       systemFolderName: systemFolderName,
       filename: filename,

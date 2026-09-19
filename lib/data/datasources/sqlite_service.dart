@@ -2462,20 +2462,30 @@ class SqliteService {
     );
   }
 
-  /// Permanently deletes a single game and its metadata from the database.
-  static Future<void> deleteGame(String appSystemId, String filename) async {
+  /// Deletes the exact ROM row; returns whether shared metadata/media may go.
+  static Future<bool> deleteGame(
+    String appSystemId,
+    String filename, {
+    required String romPath,
+  }) async {
     final db = await instance.database;
-    await db.transaction((txn) async {
+    return db.transaction<bool>((txn) async {
+      await txn.delete(
+        'user_roms',
+        where: 'app_system_id = ? AND filename = ? AND rom_path = ?',
+        whereArgs: [appSystemId, filename, romPath],
+      );
+      final remaining = await txn.rawQuery(
+        'SELECT 1 FROM user_roms WHERE app_system_id = ? AND filename = ? LIMIT 1',
+        [appSystemId, filename],
+      );
+      if (remaining.isNotEmpty) return false;
       await txn.delete(
         'user_screenscraper_metadata',
         where: 'app_system_id = ? AND filename = ?',
         whereArgs: [appSystemId, filename],
       );
-      await txn.delete(
-        'user_roms',
-        where: 'app_system_id = ? AND filename = ?',
-        whereArgs: [appSystemId, filename],
-      );
+      return true;
     });
   }
 

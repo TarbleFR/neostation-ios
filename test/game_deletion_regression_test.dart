@@ -79,6 +79,49 @@ void main() {
     },
   );
 
+  test('same filenames in different folders keep the other ROM row', () async {
+    final one = File(path.join(temp.path, 'one/game.sfc'));
+    final two = File(path.join(temp.path, 'two/game.sfc'));
+    for (final file in [one, two]) {
+      await file.parent.create();
+      await file.writeAsString('rom');
+      await insert(file.path);
+    }
+    await db.execute(
+      "INSERT INTO user_screenscraper_metadata (app_system_id, filename, title) VALUES ('snes', 'game.sfc', 'Shared title')",
+    );
+    await remove(one.path);
+    final rows = await db.rawQuery('SELECT rom_path FROM user_roms');
+    expect(rows, hasLength(1));
+    expect(rows.single['rom_path'], two.path);
+    expect(await two.exists(), isTrue);
+    expect(
+      await db.rawQuery('SELECT * FROM user_screenscraper_metadata'),
+      hasLength(1),
+    );
+    await remove(two.path);
+    expect(
+      await db.rawQuery('SELECT * FROM user_screenscraper_metadata'),
+      isEmpty,
+    );
+  });
+
+  test('permission-denied deletion preserves rows on macOS', () async {
+    final folder = Directory(path.join(temp.path, 'readonly'));
+    await folder.create();
+    final file = File(path.join(folder.path, 'game.sfc'));
+    await file.writeAsString('rom');
+    await insert(file.path);
+    await Process.run('chmod', ['500', folder.path]);
+    try {
+      await expectLater(remove(file.path), throwsA(isA<FileSystemException>()));
+      expect(await db.rawQuery('SELECT * FROM user_roms'), hasLength(1));
+      expect(await file.exists(), isTrue);
+    } finally {
+      await Process.run('chmod', ['700', folder.path]);
+    }
+  }, skip: !Platform.isMacOS);
+
   test('virtual paths are never silently passed to File.delete', () async {
     await expectLater(
       GameFileDeletion.delete('rpcs3-library://game?title-id=BLES00113'),
@@ -90,48 +133,52 @@ void main() {
     );
   });
 
-  test('PS3 folder + legacy disc alias + update removed; saves and other games retained', () async {
-    Future<File> file(String name) async {
-      final value = File(path.join(temp.path, name));
-      await value.parent.create(recursive: true);
-      await value.writeAsString('fixture');
-      return value;
-    }
+  test(
+    'PS3 folder + legacy disc alias + update removed; saves and other games retained',
+    () async {
+      Future<File> file(String name) async {
+        final value = File(path.join(temp.path, name));
+        await value.parent.create(recursive: true);
+        await value.writeAsString('fixture');
+        return value;
+      }
 
-    final extracted = await file(
-      'games/ExtractedGames/BLES00113/PS3_GAME/USRDIR/EBOOT.BIN',
-    );
-    final disc = await file('games/discImgs/BLES00113/game.iso');
-    final update = await file(
-      'dev_hdd0/game/BLES00113_UPDATE/USRDIR/EBOOT.BIN',
-    );
-    final other = await file(
-      'games/ExtractedGames/BLES00114/PS3_GAME/USRDIR/EBOOT.BIN',
-    );
-    final save = await file(
-      'dev_hdd0/home/00000001/savedata/BLES00113/save.dat',
-    );
-    final state = await file('savestates/BLES00113.state');
-    final firmware = await file('dev_flash/sys/external/lib.sprx');
-    final registrations = await file('games.yml');
-    await registrations.writeAsString(
-      'BLES00113: "/wrong/other-game"\nBLES00114: "keep"\n',
-    );
-    await Rpcs3GameDeletion.delete(dataRoot: temp.path, titleId: 'BLES00113');
-    for (final removed in [extracted, disc, update]) {
-      expect(await removed.exists(), isFalse);
-    }
-    for (final kept in [other, save, state, firmware]) {
-      expect(await kept.exists(), isTrue);
-    }
-    expect(await registrations.readAsString(), 'BLES00114: "keep"\n');
-    expect(
-      (await Rpcs3LibraryService.discoverLibrary(temp.path))
-          .where((g) => g.titleId == 'BLES00113'),
-      isEmpty,
-    );
-    await Rpcs3GameDeletion.delete(dataRoot: temp.path, titleId: 'BLES00113');
-  });
+      final extracted = await file(
+        'games/ExtractedGames/BLES00113/PS3_GAME/USRDIR/EBOOT.BIN',
+      );
+      final disc = await file('games/discImgs/BLES00113/game.iso');
+      final update = await file(
+        'dev_hdd0/game/BLES00113_UPDATE/USRDIR/EBOOT.BIN',
+      );
+      final other = await file(
+        'games/ExtractedGames/BLES00114/PS3_GAME/USRDIR/EBOOT.BIN',
+      );
+      final save = await file(
+        'dev_hdd0/home/00000001/savedata/BLES00113/save.dat',
+      );
+      final state = await file('savestates/BLES00113.state');
+      final firmware = await file('dev_flash/sys/external/lib.sprx');
+      final registrations = await file('games.yml');
+      await registrations.writeAsString(
+        'BLES00113: "/wrong/other-game"\nBLES00114: "keep"\n',
+      );
+      await Rpcs3GameDeletion.delete(dataRoot: temp.path, titleId: 'BLES00113');
+      for (final removed in [extracted, disc, update]) {
+        expect(await removed.exists(), isFalse);
+      }
+      for (final kept in [other, save, state, firmware]) {
+        expect(await kept.exists(), isTrue);
+      }
+      expect(await registrations.readAsString(), 'BLES00114: "keep"\n');
+      expect(
+        (await Rpcs3LibraryService.discoverLibrary(
+          temp.path,
+        )).where((g) => g.titleId == 'BLES00113'),
+        isEmpty,
+      );
+      await Rpcs3GameDeletion.delete(dataRoot: temp.path, titleId: 'BLES00113');
+    },
+  );
 
   test(
     'PS3 rejects linked installation before deleting any title files',
