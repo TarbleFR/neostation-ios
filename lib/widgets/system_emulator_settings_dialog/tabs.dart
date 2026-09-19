@@ -510,8 +510,7 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
           value: _system.hideBrackets,
           onChanged: _toggleHideBrackets,
         ),
-        if (widget.system.folderName != 'all' &&
-            widget.system.folderName != 'android') ...[
+        if (_showsRecursiveScan) ...[
           SizedBox(height: 4.r),
           _buildSwitchItem(
             index: 4,
