@@ -1,0 +1,62 @@
+name: ARMSX2 native core
+run-name: ARMSX2 native core • ${{ github.sha }}
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/armsx2-core.yml'
+      - 'packages/armsx2_internal_bridge/**'
+      - 'packages/armsx2_jit_helper/**'
+      - 'build-utils/armsx2/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: armsx2-native-core-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  sources:
+    name: Verify pinned sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read immutable source revision
+        id: source
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          source = json.loads(Path('build-utils/armsx2/source.json').read_text())
+          assert source['repository'] == 'https://github.com/ARMSX2/ARMSX2.git'
+          assert re.fullmatch('[0-9a-f]{40}', source['revision'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('revision=' + source['revision'], file=output)
+          PY
+      - uses: actions/checkout@v4
+        with:
+          repository: ARMSX2/ARMSX2
+          ref: ${{ steps.source.outputs.revision }}
+          path: .native-sources/ARMSX2
+          submodules: recursive
+          persist-credentials: false
+      - name: Verify source identities and export development snapshot
+        run: |
+          set -euo pipefail
+          test "$(git -C .native-sources/ARMSX2 rev-parse HEAD)" = '${{ steps.source.outputs.revision }}'
+          git -C .native-sources/ARMSX2 submodule status --recursive > "$RUNNER_TEMP/armsx2-submodules.txt"
+          ! grep -E '^[-+U]' "$RUNNER_TEMP/armsx2-submodules.txt"
+          git diff --check
+          mkdir -p "$RUNNER_TEMP/armsx2-snapshot"
+          git archive HEAD > "$RUNNER_TEMP/armsx2-snapshot/neostation.tar"
+          tar --exclude=.git -C .native-sources -cf "$RUNNER_TEMP/armsx2-snapshot/armsx2.tar" ARMSX2
+          cp "$RUNNER_TEMP/armsx2-submodules.txt" "$RUNNER_TEMP/armsx2-snapshot/"
+          printf 'neostation=%s\narmsx2=%s\n' "$GITHUB_SHA" '${{ steps.source.outputs.revision }}' > "$RUNNER_TEMP/armsx2-snapshot/identity.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ARMSX2-development-sources-${{ github.sha }}
+          path: ${{ runner.temp }}/armsx2-snapshot/
+          if-no-files-found: error
+          retention-days: 3
