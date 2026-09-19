@@ -16,6 +16,7 @@ import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../widgets/dolphin_multi_delete_dialog.dart';
 import '../../widgets/rpcs3_multi_delete_dialog.dart';
+import '../../widgets/armsx2_multi_delete_dialog.dart';
 import '../../widgets/marquee_text.dart';
 import '../../widgets/system_logo_fallback.dart';
 import '../../widgets/rainbow_selection_border.dart';
@@ -201,6 +202,17 @@ class GameListViewState extends State<GameListView>
 
   Future<void> _handleLongPress(GameModel game) async {
     if (!Platform.isIOS) return;
+
+    if (widget.system.folderName.toLowerCase() == 'ps2') {
+      SfxService().playNavSound();
+      await Armsx2MultiDeleteDialog.show(
+        context: context,
+        system: widget.system,
+        games: widget.games,
+        initialGame: game,
+      );
+      return;
+    }
 
     if (widget.system.folderName.toLowerCase() == 'ps3') {
       SfxService().playNavSound();
