@@ -51,6 +51,10 @@ struct Runtime {
   bool stop = false;
   bool boot_requested = false;
   bool initialized = false;
+  // SDL is process-lifetime in the embedded host. ARMSX2Core itself is never
+  // dlclosed, so tearing down UIKit's SDL event subsystem between sessions can
+  // race controller/render callbacks owned by the loaded core.
+  bool sdl_initialized = false;
   std::string failure, data, resources, bios_directory, bios_name, game;
   uint32_t kind = 0;
   uint64_t transaction = 0;
@@ -122,7 +126,12 @@ void initialize_settings() {
   si.SetStringValue("Folders","Savestates",EmuFolders::Savestates.c_str());
   si.SetStringValue("SPU2/Output","Backend","SDL");
   si.SetIntValue("EmuCore/GS","Renderer",static_cast<int>(GSRendererType::Metal));
-  si.SetBoolValue("Achievements","Enabled",false);
+  // Preserve RetroAchievements across launches. Previous builds forced this
+  // off on every prepare, making the native ARMSX2 account/settings unusable.
+  if (!si.ContainsValue("Achievements","Enabled"))
+    si.SetBoolValue("Achievements","Enabled",false);
+  if (!si.ContainsValue("Achievements","ChallengeMode"))
+    si.SetBoolValue("Achievements","ChallengeMode",false);
   si.SetBoolValue("PINE","Enabled",false);
   si.SetBoolValue("UI","EnableDiscordPresence",false);
   si.SetStringValue("ARMSX2iOS/JIT","ScriptProtocol","universal");
@@ -194,7 +203,9 @@ void vm_worker() {
       DarwinMisc::WaitForJITValidation();
       VMBootParameters parameters;
       parameters.fast_boot=true;
-      parameters.disable_achievements_hardcore_mode=true;
+      // Normal game launches must honor the persisted RA mode. This flag is
+      // only for one-off boot flows which intentionally suspend Hardcore.
+      parameters.disable_achievements_hardcore_mode=false;
       if (r.kind==NEO_ARMSX2_BOOT_ELF) {
         parameters.elf_override=r.game;
         parameters.source_type=CDVD_SourceType::NoDisc;
@@ -212,8 +223,19 @@ void vm_worker() {
       { std::lock_guard lock(r.mutex); r.phase=Phase::Running; }
       r.changed.notify_all();
       event("running",r.game);
-      while (!s_requestVMStop.load(std::memory_order_acquire) && !stopped()) {
+      while (true) {
         ARMSX2DrainCPUThreadTasks();
+        // Transition the VM to Stopping on its owned CPU thread before
+        // VMManager::Shutdown. The old loop exited as soon as the stop flag was
+        // raised, skipping the normal state transition used by upstream.
+        if (s_requestVMStop.load(std::memory_order_acquire) || stopped()) {
+          if (VMManager::HasValidVM()) {
+            const VMState current=VMManager::GetState();
+            if (current!=VMState::Stopping && current!=VMState::Shutdown)
+              VMManager::SetState(VMState::Stopping);
+          }
+          break;
+        }
         const VMState state=VMManager::GetState();
         if (state==VMState::Running) VMManager::Execute();
         else if (state==VMState::Stopping || state==VMState::Shutdown) break;
@@ -227,7 +249,12 @@ void vm_worker() {
       }
     } catch (const std::exception& e) { fail(e.what()); }
     catch (...) { fail("Unknown ARMSX2 native exception."); }
-    if (VMManager::HasValidVM()) VMManager::Shutdown(false);
+    if (VMManager::HasValidVM()) {
+      const VMState current=VMManager::GetState();
+      if (current!=VMState::Stopping && current!=VMState::Shutdown)
+        VMManager::SetState(VMState::Stopping);
+      VMManager::Shutdown(false);
+    }
     s_vmThreadActive.store(false,std::memory_order_release);
     DarwinMisc::WaitForJITValidation();
     if (cpu_initialized) VMManager::Internal::CPUThreadShutdown();
@@ -257,9 +284,15 @@ void vm_worker() {
 
 void* create_view(char* error,size_t capacity) {
   if (![NSThread isMainThread]) { error_out("create_render_view must run on main.",error,capacity); return nullptr; }
-  SDL_SetMainReady();
-  if (!SDL_InitSubSystem(SDL_INIT_AUDIO|SDL_INIT_GAMEPAD|SDL_INIT_EVENTS)) {
-    error_out(std::string("SDL initialization failed: ")+SDL_GetError(),error,capacity); return nullptr;
+  auto& r=runtime();
+  bool initialize_sdl=false;
+  { std::lock_guard lock(r.mutex); initialize_sdl=!r.sdl_initialized; }
+  if (initialize_sdl) {
+    SDL_SetMainReady();
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO|SDL_INIT_GAMEPAD|SDL_INIT_EVENTS)) {
+      error_out(std::string("SDL initialization failed: ")+SDL_GetError(),error,capacity); return nullptr;
+    }
+    std::lock_guard lock(r.mutex); r.sdl_initialized=true;
   }
   // Deliberately do not install the standalone app's persistent GCController
   // dpad handlers: they would steal handlers from NeoStation/other cores.
@@ -271,8 +304,13 @@ void release_view() {
   auto& r=runtime();
   { std::lock_guard lock(r.mutex); if(r.phase!=Phase::Empty) return; }
   for(auto& pad:s_gamepads) { if(pad) SDL_CloseGamepad(pad); pad=nullptr; }
-  SDL_QuitSubSystem(SDL_INIT_GAMEPAD|SDL_INIT_AUDIO|SDL_INIT_EVENTS);
-  [g_gameRenderView removeFromSuperview]; [g_gameRenderView release]; g_gameRenderView=nil;
+  // Do not SDL_QuitSubSystem here. UIKit/GCController event infrastructure is
+  // owned for the process lifetime just like this dlopened Objective-C core.
+  if (g_gameRenderView) {
+    [g_gameRenderView removeFromSuperview];
+    [g_gameRenderView release];
+    g_gameRenderView=nil;
+  }
   memset(g_touchPadState,0,sizeof(g_touchPadState));
 }
 int prepare(const NeoARMSX2Configuration* config,uint32_t timeout,char* error,size_t capacity) {
@@ -360,7 +398,13 @@ int boot(const char* path,uint32_t kind,uint32_t timeout,char* error,size_t capa
   return r.phase==Phase::Running && r.failure.empty()?1:error_out(r.failure.empty()?"ARMSX2 boot cancelled.":r.failure,error,capacity);
 }
 void request_stop() {
-  auto& r=runtime(); { std::lock_guard lock(r.mutex); r.stop=true; }
+  auto& r=runtime();
+  {
+    std::lock_guard lock(r.mutex);
+    r.stop=true;
+    if (r.phase!=Phase::Empty && r.phase!=Phase::Exited)
+      r.phase=Phase::Stopping;
+  }
   s_requestVMStop.store(true); r.changed.notify_all(); s_vmCV.notify_all();
 }
 int shutdown(uint32_t timeout,char* error,size_t capacity) {
@@ -475,10 +519,89 @@ int load_state(uint32_t slot,uint32_t timeout,char* error,size_t capacity) {
   return state_operation(true,slot,timeout,error,capacity);
 }
 
+NSDictionary* retroachievements_state() {
+  @autoreleasepool {
+    NSDictionary* state=[ARMSX2Bridge retroAchievementsState];
+    return [state isKindOfClass:NSDictionary.class] ? state : nil;
+  }
+}
+int get_retroachievements_state_json(char* output,size_t capacity) {
+  if(!output || capacity<2 || !has_running_game()) return 0;
+  @autoreleasepool {
+    NSDictionary* state=retroachievements_state();
+    if(!state || ![NSJSONSerialization isValidJSONObject:state]) return 0;
+    NSData* data=[NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
+    if(!data || data.length+1>capacity) return 0;
+    memcpy(output,data.bytes,data.length); output[data.length]=0;
+    return 1;
+  }
+}
+bool wait_ra_value(NSString* key,bool expected,uint32_t timeout) {
+  const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(std::max<uint32_t>(timeout,250u));
+  do {
+    @autoreleasepool {
+      id value=[ARMSX2Bridge retroAchievementsState][key];
+      if([value respondsToSelector:@selector(boolValue)] && [value boolValue]==expected) return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  } while(std::chrono::steady_clock::now()<deadline);
+  return false;
+}
+int set_retroachievements_option(uint32_t option,int enabled,uint32_t timeout,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("RetroAchievements requires a running ARMSX2 game.",error,capacity);
+  const BOOL value=enabled!=0;
+  NSString* key=nil;
+  switch(option) {
+    case NEO_ARMSX2_RA_ENABLED: key=@"enabled"; [ARMSX2Bridge setRetroAchievementsEnabled:value]; break;
+    case NEO_ARMSX2_RA_HARDCORE: key=@"hardcorePreference"; [ARMSX2Bridge setRetroAchievementsHardcore:value]; break;
+    case NEO_ARMSX2_RA_NOTIFICATIONS: key=@"notifications"; [ARMSX2Bridge setRetroAchievementsNotifications:value]; break;
+    case NEO_ARMSX2_RA_LEADERBOARDS: key=@"leaderboardNotifications"; [ARMSX2Bridge setRetroAchievementsLeaderboards:value]; break;
+    case NEO_ARMSX2_RA_OVERLAYS: key=@"overlays"; [ARMSX2Bridge setRetroAchievementsOverlays:value]; break;
+    default: return error_out("Unsupported RetroAchievements option.",error,capacity);
+  }
+  return wait_ra_value(key,value,timeout) ? 1 :
+      error_out("RetroAchievements setting did not settle before timeout.",error,capacity);
+}
+int login_retroachievements(const char* username,const char* password,uint32_t timeout,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("RetroAchievements login requires a running ARMSX2 game.",error,capacity);
+  if(!username || !password || !username[0] || !password[0])
+    return error_out("RetroAchievements username and password are required.",error,capacity);
+  if([NSThread isMainThread])
+    return error_out("RetroAchievements login must run off the main thread.",error,capacity);
+  __block BOOL completed=NO,success=NO;
+  dispatch_semaphore_t done=dispatch_semaphore_create(0);
+  NSString* user=[NSString stringWithUTF8String:username];
+  NSString* pass=[NSString stringWithUTF8String:password];
+  if(!user || !pass) return error_out("RetroAchievements credentials are not valid UTF-8.",error,capacity);
+  [ARMSX2Bridge loginRetroAchievementsWithUsername:user password:pass completion:^(BOOL ok,NSString* message){
+    success=ok; completed=YES; dispatch_semaphore_signal(done);
+  }];
+  const int64_t nanos=(int64_t)std::max<uint32_t>(timeout,1000u)*NSEC_PER_MSEC;
+  if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,nanos))!=0 || !completed)
+    return error_out("RetroAchievements login timed out.",error,capacity);
+  return success ? 1 : error_out("RetroAchievements login failed.",error,capacity);
+}
+int logout_retroachievements(uint32_t timeout,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("RetroAchievements logout requires a running ARMSX2 game.",error,capacity);
+  [ARMSX2Bridge logoutRetroAchievements];
+  const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(std::max<uint32_t>(timeout,250u));
+  do {
+    @autoreleasepool {
+      NSDictionary* state=[ARMSX2Bridge retroAchievementsState];
+      const bool logged=[state[@"loggedIn"] boolValue] || [state[@"savedLogin"] boolValue];
+      if(!logged) return 1;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  } while(std::chrono::steady_clock::now()<deadline);
+  return error_out("RetroAchievements logout did not settle before timeout.",error,capacity);
+}
+
 const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_SOURCE_REVISION,
   create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks,
   get_upscale_multiplier,get_aspect_ratio,get_cheats_enabled,set_upscale_multiplier,set_aspect_ratio,
-  set_cheats_enabled,reload_cheats,has_save_state,save_state,load_state};
+  set_cheats_enabled,reload_cheats,has_save_state,save_state,load_state,
+  get_retroachievements_state_json,set_retroachievements_option,
+  login_retroachievements,logout_retroachievements};
 }
 extern "C" bool ARMSX2_IsIdleVMPrewarmResolved() { return false; } // No autonomous prewarm in NeoStation.
 extern "C" const NeoARMSX2API* NeoARMSX2_GetAPI(uint32_t version) {
