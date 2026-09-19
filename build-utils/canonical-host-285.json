@@ -1,0 +1,17 @@
+{
+  "sourceCommit": "1ebe245e3327102eae03e19d922e42ad288891c7",
+  "reason": "One-time materialization of exact Build 285 CI host stack; no runtime change.",
+  "sha256": {
+    "lib/l10n/dolphin_import_locale.dart": "15e45c832a0b9f7f10917d30009c42e5e50c2cc13e8486624226a1d070c5c6b7",
+    "lib/widgets/game_view_footer.dart": "30b19514310d7046488a84349e3dc23766b9281acb5dab59f3660a1d2d8f70ef",
+    "packages/dolphin_internal_bridge/ios/Classes/DolphinInternalBridgePlugin.mm": "e89f7b1fdfabbc8a301d0e53303a453c3b04be6bf80b2aa6f0b5e77951099060",
+    "packages/dolphin_internal_bridge/ios/Classes/DolphinRetroAchievementsAccount.h": "b2b68dd6e01ebe8ce851d5089bb226fbb34bdd992a8afc6bb94fc15d4ad1bd0c",
+    "packages/dolphin_internal_bridge/ios/Classes/DolphinRetroAchievementsAccount.mm": "bf075f1a76a875305888d0c6dd011321a915568a79cf01d79f70e7ef1fc022a9",
+    "packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.mm": "0172bd00f7fc507f5e2bfd1a6016030ab8804484bc4b0e0fd8a303c5d311438b",
+    "packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm": "035bb3a4c52cf2f9e25a73c9833d4da737295d62feeb8dae05e1ca6d674cee5c",
+    "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h": "535ad53d038bbbad51a5cb346a55ae269363eaf6f7a04a9c8c2deba39c67b263",
+    "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm": "991874983862c26d9e65445e4aa0a2e7478aeb014434980360eab39194efde94",
+    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h": "d0d57c31c07d27a1277162d92a3644ee675a63863f9cfe70aa8f18537d79f98d",
+    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "ae35f6cbbcbf51869191aa39cb19ba09114bef68bfbca5b484f3a5ea16340c3e"
+  }
+}

@@ -1,4 +1,5 @@
 #import "DolphinSessionMenu.h"
+#import "DolphinRetroAchievementsAccount.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
   DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
@@ -414,17 +415,27 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     cell.textLabel.text = [self text:key];
     cell.detailTextLabel.text = [self text:[self.snapshot[@"hacks"][key] boolValue] ? @"on" : @"off"];
   } else if (self.page == DOLMenuAchievements) {
-    NSDictionary* achievements = self.snapshot[@"achievements"];
+    // NEOSTATION_DOLPHIN_ACCOUNT_267: keychain identity and runtime status differ.
+    NSDictionary* achievements = [self.snapshot[@"achievements"] isKindOfClass:NSDictionary.class]
+        ? self.snapshot[@"achievements"] : @{};
     NSString* key = @[@"raAccount", @"raStatus", @"raMode"][row];
     cell.textLabel.text = [self text:key];
-    cell.accessoryType = UITableViewCellAccessoryNone;
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    if (row == 0) cell.detailTextLabel.text = [achievements[@"username"] length]
-        ? achievements[@"username"] : [self text:@"notConnected"];
-    else if (row == 1) cell.detailTextLabel.text = [self text:
-        [achievements[@"enabled"] boolValue] ?
-          ([achievements[@"gameLoaded"] boolValue] ? @"active" : @"enabled") : @"disabled"];
-    else cell.detailTextLabel.text = [self text:[achievements[@"hardcore"] boolValue] ? @"hardcore" : @"standard"];
+    cell.accessoryType = row == 0 ? UITableViewCellAccessoryDisclosureIndicator : UITableViewCellAccessoryNone;
+    cell.selectionStyle = row == 0 ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
+    cell.userInteractionEnabled = row == 0;
+    if (row == 0) {
+      NSString* username = [DolphinRetroAchievementsAccount credentials][@"username"];
+      cell.detailTextLabel.text = username.length ? username : [self text:@"notConnected"];
+    } else if (row == 1) {
+      if ([DolphinRetroAchievementsAccount hasPendingChanges])
+        cell.detailTextLabel.text = [self text:@"raRestartRequired"];
+      else cell.detailTextLabel.text = [self text:
+          [achievements[@"enabled"] respondsToSelector:@selector(boolValue)] && [achievements[@"enabled"] boolValue]
+            ? ([achievements[@"gameLoaded"] respondsToSelector:@selector(boolValue)] && [achievements[@"gameLoaded"] boolValue]
+                ? @"active" : @"enabled") : @"disabled"];
+    } else cell.detailTextLabel.text = [self text:
+        [achievements[@"hardcore"] respondsToSelector:@selector(boolValue)] && [achievements[@"hardcore"] boolValue]
+          ? @"hardcore" : @"standard"];
   } else if (self.page == DOLMenuControls) {
     if (indexPath.section == 0) {
       cell.textLabel.text = [self text:(self.wii ? @[@"controllerType", @"player", @"physicalController", @"extension"] : @[@"controllerType", @"player", @"physicalController"])[row]];
@@ -452,6 +463,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (void)apply:(NSDictionary*)request thenReturn:(BOOL)returnToBindings {
   if (self.loading || !self.applySettings) return;
+  if (!DOLSerializeMenuRequest(request)) { [self showFailure]; return; }
   self.loading = YES;
   self.view.userInteractionEnabled = NO;
   self.navigationItem.rightBarButtonItem.enabled = NO;
@@ -479,6 +491,17 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
   if (self.loading) return;
   NSInteger row = indexPath.row;
+  if (indexPath.section < 0 || indexPath.section >= [self numberOfSectionsInTableView:tableView] ||
+      row < 0 || row >= [self tableView:tableView numberOfRowsInSection:indexPath.section]) return;
+  // Account is navigation, never a core-setting request. Status/mode are read-only.
+  if (self.page == DOLMenuAchievements) {
+    if (row == 0 && self.navigationController.topViewController == self) {
+      DolphinRetroAchievementsAccount* account = [[DolphinRetroAchievementsAccount alloc]
+          initWithLabels:self.labels];
+      [self.navigationController pushViewController:account animated:YES];
+    }
+    return;
+  }
   if (self.page == DOLMenuRoot) {
     NSString* key = self.rootKeys[row];
     if ([key isEqual:@"resume"]) { [self resumePressed]; return; }
@@ -589,8 +612,10 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     [self.navigationController pushViewController:child animated:YES];
   } else if (self.page == DOLMenuInputs) {
     [self apply:[self bindingRequest:self.choices[row][@"expression"]] thenReturn:YES];
-  } else {
+  } else if (self.page == DOLMenuChoices) {
+    if (row < 0 || row >= self.choices.count) return;
     NSDictionary* choice = self.choices[row];
+    if (![choice isKindOfClass:NSDictionary.class]) { [self showFailure]; return; }
     if (choice[@"wii"] || choice[@"slot"]) {
       if (choice[@"wii"]) self.returnPage.wii = [choice[@"wii"] boolValue];
       if (choice[@"slot"]) self.returnPage.slot = [choice[@"slot"] integerValue];

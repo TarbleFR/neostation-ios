@@ -82,6 +82,13 @@ class ExternalFolderAccess {
     }
   }
 
+  /// Removes a file while the native bookmark grant is active. Native errors
+  /// intentionally propagate so SQLite/UI cannot claim an unsuccessful delete.
+  static Future<void> deleteGameFile(String filePath) async {
+    if (!Platform.isIOS) throw UnsupportedError('iOS file deletion only');
+    await _channel.invokeMethod<void>('deleteGameFile', {'path': filePath});
+  }
+
   /// Forgets the folder linked under [key]. The next call to
   /// [resolveBookmarkedFolder] with the same key returns `null` until a new
   /// folder is picked via [pickAndBookmarkFolder]. Other keys are

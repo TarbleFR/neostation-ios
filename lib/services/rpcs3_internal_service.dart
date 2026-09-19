@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../data/datasources/sqlite_service.dart';
+import 'rpcs3_game_deletion.dart';
+import 'game_launch_manager.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -101,6 +105,7 @@ class Rpcs3InternalService {
 
   static Future<void>? _runtimePreparation;
   static bool _initialized = false;
+  static bool _libraryMutationInProgress = false;
   static bool _jitPrepared = false;
   static Future<void>? _jitPreparation;
   static bool _jitCompletionPending = false;
@@ -339,6 +344,12 @@ class Rpcs3InternalService {
   }
 
   static Future<void> _ensureRuntime() {
+    if (_libraryMutationInProgress) {
+      throw const Rpcs3InternalException(
+        'libraryBusy',
+        'A game deletion is still running.',
+      );
+    }
     final pending = _runtimePreparation;
     if (pending != null) return pending;
     final future = _initializeRuntime();
@@ -469,6 +480,47 @@ class Rpcs3InternalService {
   static Future<void> ensureJitReady() => _ensureRuntime();
 
   static Future<void> ensureManagementInitialized() => _ensureRuntime();
+
+  /// Management of files must remain usable when VPN/JIT/Core startup fails.
+  static Future<void> deleteInstalledGame(String titleId) async {
+    if (_libraryMutationInProgress ||
+        _runtimePreparation != null ||
+        _jitPreparation != null ||
+        GameLaunchManager().isActive ||
+        _state.phase == Rpcs3RuntimePhase.importingContent) {
+      throw const Rpcs3InternalException(
+        'libraryBusy',
+        'Stop the current launch or import before deleting a game.',
+      );
+    }
+    _libraryMutationInProgress = true;
+    final id = titleId.trim().toUpperCase();
+    _log.i('Rpcs3Delete[$id] begin; coreInitialized=$_initialized');
+    try {
+      if (_initialized) {
+        final emulation = await Rpcs3InternalBridge.emulationState();
+        if (emulation != 0 && emulation != 1) {
+          throw const Rpcs3InternalException(
+            'gameRunning',
+            'Stop emulation before deleting a game.',
+          );
+        }
+      }
+      final root = await dataDirectory();
+      await Rpcs3GameDeletion.delete(dataRoot: root.path, titleId: id);
+      _log.i('Rpcs3Delete[$id] filesystem_and_registration_complete');
+      await SqliteService.deleteRpcs3Title(id);
+      await Rpcs3LibraryService.forgetDeletedTitle(id);
+      await Rpcs3LibraryService.syncInternalLibrary();
+      _log.i('Rpcs3Delete[$id] database_cache_and_ui_complete');
+    } catch (error, stack) {
+      _log.e('Rpcs3Delete[$id] failed', error: error, stackTrace: stack);
+      rethrow;
+    } finally {
+      _libraryMutationInProgress = false;
+    }
+  }
+
   static Future<void> ensureInitialized() => _ensureRuntime();
   static Future<void> ensureGameplayInitialized() => _ensureRuntime();
   static Future<void> closeManagementRuntime() async {}
@@ -525,13 +577,7 @@ class Rpcs3InternalService {
     final data = await dataDirectory();
     final sources = <String, Directory>{
       'Game Saves': Directory(
-        path.join(
-          data.path,
-          'dev_hdd0',
-          'home',
-          '00000001',
-          'savedata',
-        ),
+        path.join(data.path, 'dev_hdd0', 'home', '00000001', 'savedata'),
       ),
       'Savestates': Directory(path.join(data.path, 'savestates')),
     };

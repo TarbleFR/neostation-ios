@@ -38,7 +38,7 @@ class GameViewFooter extends StatelessWidget {
   /// control that does nothing for this game.
   final bool hasVideo;
 
-  /// Hide only the scrolling title in console grid mode.
+  /// Hide the game identity text in console grid mode.
   final bool showTitle;
 
   const GameViewFooter({
@@ -76,14 +76,25 @@ class GameViewFooter extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (showTitle)
-                  MarqueeText(
-                    text: GameUtils.formatGameName(game.name),
-                  isActive: true,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 18.r,
-                    fontWeight: FontWeight.bold,
+                // Grid mode hides the identity text. Keep the exact title line
+                // geometry so the footer and the action pills retain their
+                // previous size and vertical alignment.
+                Visibility(
+                  visible: showTitle,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  maintainSize: true,
+                  child: ExcludeSemantics(
+                    excluding: !showTitle,
+                    child: MarqueeText(
+                      text: GameUtils.formatGameName(game.name),
+                      isActive: showTitle,
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontSize: 18.r,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 // Always reserve the ROM-filename subtitle's line height so the
@@ -92,7 +103,9 @@ class GameViewFooter extends StatelessWidget {
                 // re-centers the rating/RA pill + PLAY row upward. The empty
                 // string still lays out a full line box via the forced strut.
                 Text(
-                  game.showRomFileNameSubtitle ? game.romname : '',
+                  showTitle && game.showRomFileNameSubtitle
+                      ? game.romname
+                      : '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   strutStyle: StrutStyle(

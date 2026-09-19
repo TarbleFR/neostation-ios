@@ -123,6 +123,8 @@ typedef struct rpcs3_ios_api {
   int32_t (*get_emulation_state)(void);
   rpcs3_ios_status (*get_performance_metrics)(rpcs3_ios_performance_metrics*);
   rpcs3_ios_status (*save_state)(void);
+  rpcs3_ios_status (*save_state_slot)(uint32_t slot);
+  rpcs3_ios_status (*get_savestate_status)(uint32_t*, char*, size_t);
   rpcs3_ios_status (*enumerate_savestates_live)(const char*, rpcs3_ios_savestate_callback, void*);
   rpcs3_ios_status (*stop_emulation)(void);
   rpcs3_ios_status (*shutdown)(void);

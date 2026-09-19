@@ -92,6 +92,12 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "deleteGameFile":
+            guard let args = call.arguments as? [String: Any], let path = args["path"] as? String else {
+                result(FlutterError(code: "INVALID_PATH", message: "A game path is required", details: nil))
+                return
+            }
+            deleteGameFile(path: path, result: result)
         case "pickAndBookmarkFolder":
             pickFolder(key: Self.bookmarkKey(from: call), result: result)
         case "resolveBookmarkedFolder":
@@ -261,6 +267,75 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     private func clearBookmark(key: String, result: @escaping FlutterResult) {
         UserDefaults.standard.removeObject(forKey: Self.bookmarkDefaultsKey(for: key))
         result(nil)
+    }
+
+    /// Reacquire only a matching security scope for the entire coordinated
+    /// deletion. A stale/denied bookmark is an error, never a missing ROM.
+    private func deleteGameFile(path: String, result: @escaping FlutterResult) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let files = FileManager.default
+            let requested = URL(fileURLWithPath: path).standardizedFileURL
+            let target = requested.resolvingSymlinksInPath()
+            let home = URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath()
+            var grant: URL?
+            defer { grant?.stopAccessingSecurityScopedResource() }
+            func inside(_ child: URL, _ root: URL) -> Bool {
+                child.path.hasPrefix(root.path + "/")
+            }
+            do {
+                if !inside(target, home) {
+                    for (key, value) in UserDefaults.standard.dictionaryRepresentation()
+                        where key == Self.legacyBookmarkDefaultsKey || key.hasPrefix(Self.legacyBookmarkDefaultsKey + ".") {
+                        guard let data = value as? Data else { continue }
+                        var stale = false
+                        guard let root = try? URL(resolvingBookmarkData: data, options: [.withoutUI],
+                                                  relativeTo: nil, bookmarkDataIsStale: &stale),
+                              inside(requested, root.standardizedFileURL),
+                              root.startAccessingSecurityScopedResource() else { continue }
+                        if inside(target, root.resolvingSymlinksInPath()) {
+                            grant = root
+                            if stale, let refreshed = try? root.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+                                UserDefaults.standard.set(refreshed, forKey: key)
+                            }
+                            break
+                        }
+                        root.stopAccessingSecurityScopedResource()
+                    }
+                    guard grant != nil else {
+                        throw NSError(domain: "NeoStationGameDelete", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                            "The game's folder is no longer accessible. Relink its folder in NeoStation before deleting it."])
+                    }
+                }
+                // Refuse a library root/directory. Installed PS3 folders are
+                // removed only by the separately validated private-root plan.
+                let attributes: [FileAttributeKey: Any]
+                do { attributes = try files.attributesOfItem(atPath: target.path) }
+                catch let error as NSError where error.domain == NSCocoaErrorDomain &&
+                    (error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError) {
+                    _ = try files.contentsOfDirectory(atPath: target.deletingLastPathComponent().path)
+                    DispatchQueue.main.async { result(nil) }
+                    return
+                }
+                guard attributes[.type] as? FileAttributeType != .typeDirectory else {
+                    throw NSError(domain: "NeoStationGameDelete", code: 2, userInfo: [NSLocalizedDescriptionKey:
+                        "Refusing to remove a ROM folder through file deletion."])
+                }
+                var coordinationError: NSError?
+                var removalError: Error?
+                NSFileCoordinator().coordinate(writingItemAt: target, options: .forDeleting, error: &coordinationError) { url in
+                    do { try files.removeItem(at: url) } catch { removalError = error }
+                }
+                if let error = coordinationError { throw error }
+                if let error = removalError { throw error }
+                DispatchQueue.main.async { result(nil) }
+            } catch {
+                let native = error as NSError
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "GAME_DELETE_FAILED", message: native.localizedDescription,
+                                        details: ["domain": native.domain, "code": native.code]))
+                }
+            }
+        }
     }
 
     // MARK: - iOS audio session

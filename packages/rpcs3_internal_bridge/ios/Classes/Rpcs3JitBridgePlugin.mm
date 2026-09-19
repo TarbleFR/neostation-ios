@@ -11,6 +11,7 @@
 #import <netinet/in.h>
 #import <sys/socket.h>
 #import <sys/types.h>
+#import <sys/sysctl.h>
 #import <unistd.h>
 
 static NSString* const kRpcs3JitChannel = @"neostation/rpcs3_jit";
@@ -19,7 +20,6 @@ static NSTimeInterval const kRpcs3HelperConnectTimeout = 30.0;
 // First use may download and mount a DDI. Dart allows this native deadline
 // (plus the connection deadline) to finish and report its actual error.
 static NSTimeInterval const kRpcs3AttachTimeout = 600.0;
-static NSTimeInterval const kRpcs3CoreLoadReadyTimeout = 5.0;
 static NSTimeInterval const kRpcs3CompletionTimeout = 120.0;
 
 extern "C" {
@@ -57,13 +57,32 @@ static BOOL RPCS3HostIsDebugged(void) {
   return (flags & CS_DEBUGGED) != 0;
 }
 
+static BOOL RPCS3HostHasLiveDebugger(void) {
+  int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+  struct kinfo_proc info = {};
+  size_t size = sizeof(info);
+  return sysctl(mib, 4, &info, &size, NULL, 0) == 0 &&
+      size == sizeof(info) && (info.kp_proc.p_flag & P_TRACED) != 0;
+}
+
 static BOOL RPCS3RequiresCoreHandshake(void) {
   if (@available(iOS 26.0, *)) return YES;
   return NO;
 }
 
+// No allocation, Core code or executable-memory preparation occurs in this
+// probe. The script must advance PC, set x0 and continue this exact host thread.
+#if defined(__arm64__)
+__attribute__((naked, noinline)) static uint64_t RPCS3DebuggerProbe(uint64_t nonce) {
+  __asm__("mov x16, #3\n" "brk #0xf00d\n" "ret");
+}
+#else
+static uint64_t RPCS3DebuggerProbe(uint64_t nonce) { return 0; }
+#endif
+
 @interface RPCS3JitSession : NSObject
 @property(nonatomic, readonly) uint16_t port;
+@property(nonatomic, readonly) uint32_t probeNonce;
 @property(nonatomic, readonly) NSString* token;
 @property(nonatomic, readonly) BOOL connected;
 @property(nonatomic, readonly) BOOL attached;
@@ -80,7 +99,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 - (void)startReader;
 - (BOOL)waitUntilConnected:(NSTimeInterval)timeout;
 - (BOOL)waitUntilAttached:(NSTimeInterval)timeout;
-- (BOOL)waitUntilCoreLoadReady:(NSTimeInterval)timeout;
+- (BOOL)confirmCoreLoadReady;
 - (BOOL)waitUntilFinished:(NSTimeInterval)timeout;
 - (void)close;
 @end
@@ -89,6 +108,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
   int _listener;
   int _client;
   uint16_t _port;
+  uint32_t _probeNonce;
   NSString* _token;
   NSCondition* _condition;
   BOOL _connected;
@@ -149,6 +169,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 
   _port = ntohs(address.sin_port);
   _token = NSUUID.UUID.UUIDString;
+  _probeNonce = arc4random_uniform(UINT32_MAX - 1) + 1;
   _condition = [NSCondition new];
   _mutableLogs = [NSMutableArray new];
   _finalMessage = @"";
@@ -159,6 +180,7 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 }
 
 - (uint16_t)port { return _port; }
+- (uint32_t)probeNonce { return _probeNonce; }
 - (NSString*)token { return _token; }
 
 - (BOOL)closed {
@@ -323,15 +345,6 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
           if ([targetPID isEqualToNumber:@(getpid())]) {
             strongSelf->_attached = YES;
           }
-        } else if ([event isEqualToString:@"core_load_ready"] &&
-                   strongSelf->_connected &&
-                   strongSelf->_attached) {
-          NSNumber* targetPID = [payload[@"targetPID"] isKindOfClass:NSNumber.class]
-              ? payload[@"targetPID"]
-              : nil;
-          if ([targetPID isEqualToNumber:@(getpid())]) {
-            strongSelf->_coreLoadReady = YES;
-          }
         } else if ([event isEqualToString:@"log"]) {
           if (message.length > 0) {
             [strongSelf->_mutableLogs addObject:message];
@@ -371,31 +384,37 @@ static BOOL RPCS3RequiresCoreHandshake(void) {
 
 - (BOOL)waitUntilConnected:(NSTimeInterval)timeout {
   [self waitForPredicate:^BOOL {
-    return self->_connected || self->_finished;
+    return self->_connected || self->_finished || self->_closed;
   } timeout:timeout];
-  return self.connected;
+  return self.connected && !self.closed;
 }
 
 - (BOOL)waitUntilAttached:(NSTimeInterval)timeout {
   [self waitForPredicate:^BOOL {
-    return self->_attached || self->_finished;
+    return self->_attached || self->_finished || self->_closed;
   } timeout:timeout];
   // StikJIT's pre-TXM attach/detach path does not log a universal vAttach
   // reply. Its successful completion is sufficient only on the legacy Core.
-  return self.attached ||
+  return (self.attached && !self.closed && !self.finished) ||
       (!self.requiresCoreHandshake && self.connected && self.finished && self.success);
 }
 
-- (BOOL)waitUntilCoreLoadReady:(NSTimeInterval)timeout {
-  [self waitForPredicate:^BOOL {
-    return self->_coreLoadReady || self->_finished;
-  } timeout:timeout];
-  return self.coreLoadReady;
+- (BOOL)confirmCoreLoadReady {
+  if (!self.connected || !self.attached || self.finished || self.closed ||
+      !RPCS3HostHasLiveDebugger()) return NO;
+  RPCS3Milestone(@"debugger_probe_begin", @"Verifying debugger BRK/response/resume before dlopen");
+  uint64_t response = RPCS3DebuggerProbe(_probeNonce);
+  [_condition lock];
+  _coreLoadReady = response == (uint64_t)_probeNonce + 1 && !_closed && !_finished;
+  BOOL ready = _coreLoadReady;
+  [_condition unlock];
+  RPCS3Milestone(@"debugger_probe_end", ready ? @"verified target resumed with nonce response" : @"probe rejected; dlopen blocked");
+  return ready;
 }
 
 - (BOOL)waitUntilFinished:(NSTimeInterval)timeout {
   return [self waitForPredicate:^BOOL {
-    return self->_finished;
+    return self->_finished || self->_closed;
   } timeout:timeout];
 }
 
@@ -468,6 +487,7 @@ static BOOL RPCS3LaunchJitHelper(
 
   NSDictionary* request = @{
     @"protocolVersion" : @1,
+    @"probeNonce" : @(session.probeNonce),
     @"targetPID" : @(getpid()),
     @"port" : @(session.port),
     @"token" : session.token,
@@ -724,10 +744,10 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
     response[@"pidAttached"] = @YES;
 
     if (session.requiresCoreHandshake &&
-        ![session waitUntilCoreLoadReady:kRpcs3CoreLoadReadyTimeout]) {
+        ![session confirmCoreLoadReady]) {
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
-          : @"Universal JIT attached, but its first continue loop was not armed before Core loading.";
+          : @"debugserver did not complete the host nonce probe; Core loading was blocked.";
       response[@"logs"] = session.logs;
       finish();
       return;
@@ -757,7 +777,7 @@ BOOL RPCS3JitHasActiveCoreHandshake(void) {
     // Waiting before dlopen deadlocks host and helper (the old 90s failure).
     response[@"success"] = @YES;
     response[@"requiresCompletion"] = @YES;
-    response[@"message"] = @"RPCS3 helper attached and first Universal continue armed; initialize the Core before completing JIT.";
+    response[@"message"] = @"RPCS3 debugger probe round trip verified; initialize the Core before completing JIT.";
     dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
   });
 }

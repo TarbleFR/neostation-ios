@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Passive NeoStation overlay for RPCS3's lock-independent iOS performance API.
 /// The owner samples only while this view is visible.
 @interface RPCS3PerformanceOverlay : UIView
+- (void)setLocaleIdentifier:(NSString*)localeIdentifier;
 - (void)appendMetricsWithFPS:(double)fps
                          cpu:(double)cpu
                          gpu:(double)gpu

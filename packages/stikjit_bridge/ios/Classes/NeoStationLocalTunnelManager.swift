@@ -1,6 +1,8 @@
 import Foundation
+#if !NEOSTATION_TUNNEL_TESTING
 import Network
 import NetworkExtension
+#endif
 
 /// Single-source controller for NeoStation's integrated local JIT VPN.
 ///
@@ -26,10 +28,17 @@ final class NeoStationLocalTunnelManager {
     static let localizedDescription = "NeoStation Local JIT Tunnel"
     static let serverAddress = "10.7.0.1"
     static let routeProbeTimeout: TimeInterval = 1.25
+#if NEOSTATION_TUNNEL_TESTING
+    static let connectionPollInterval: TimeInterval = 0.005
+    static let handoffSettleDelay: TimeInterval = 0.005
+    static let activationTimeout: TimeInterval = 0.15
+    static let stopTimeout: TimeInterval = 0.10
+#else
     static let connectionPollInterval: TimeInterval = 0.20
     static let handoffSettleDelay: TimeInterval = 1.0
     static let activationTimeout: TimeInterval = 45
     static let stopTimeout: TimeInterval = 12
+#endif
   }
 
   typealias Response = Result<[String: Any], NeoStationLocalTunnelError>
@@ -38,6 +47,13 @@ final class NeoStationLocalTunnelManager {
     let id: UInt64
     let intent: String
     var completed = false
+    var phase = "created"
+    var manager: NETunnelProviderManager?
+    var startedTunnel = false
+    var recovering = false
+    var observedConnecting = false
+    var observer: NSObjectProtocol?
+    let startedAt = ProcessInfo.processInfo.systemUptime
     var waiters: [(Response) -> Void]
     var timeout: DispatchWorkItem?
 
@@ -51,6 +67,7 @@ final class NeoStationLocalTunnelManager {
   private var serial: UInt64 = 0
   private var command: Command?
   private var activeManager: NETunnelProviderManager?
+  private var preferenceWrites = 0
   private var lastFailure: NeoStationLocalTunnelError?
 
   private init() {}
@@ -96,7 +113,7 @@ final class NeoStationLocalTunnelManager {
             in: owned,
             providerBundleIdentifier: identifier
           )
-          self.activeManager = manager
+          if self.command == nil { self.activeManager = manager }
           completion(.success(self.response(for: manager)))
         }
       }
@@ -116,7 +133,7 @@ final class NeoStationLocalTunnelManager {
         timeout: Constants.activationTimeout,
         completion: completion
       )
-      self.loadAndEnable(command)
+      self.afterPreferenceWrites(command) { self.loadAndEnable(command) }
     }
   }
 
@@ -131,6 +148,7 @@ final class NeoStationLocalTunnelManager {
       return
     }
 
+    trace(command, "load_profiles")
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
         guard self.isCurrent(command) else { return }
@@ -179,6 +197,7 @@ final class NeoStationLocalTunnelManager {
           providerBundleIdentifier: providerIdentifier
         ) ?? NETunnelProviderManager()
         self.activeManager = manager
+        command.manager = manager
 
         let duplicates = owned.filter { $0 !== manager }
         self.disableAndRemoveDuplicates(
@@ -221,7 +240,7 @@ final class NeoStationLocalTunnelManager {
     manager.isOnDemandEnabled = false
     manager.onDemandRules = []
 
-    manager.saveToPreferences { error in
+    save(manager, command: command) { error in
       DispatchQueue.main.async {
         guard self.isCurrent(command) else { return }
         if let error {
@@ -321,11 +340,18 @@ final class NeoStationLocalTunnelManager {
   ) {
     guard isCurrent(command) else { return }
 
+    if manager.connection.status == .connected &&
+       Self.providerIdentifier(for: manager) == providerIdentifier &&
+       manager.isEnabled && !manager.isOnDemandEnabled {
+      finish(command, .success(response(for: manager)))
+      return
+    }
+    trace(command, "save_owned_profile")
     configure(
       manager,
       providerIdentifier: providerIdentifier
     )
-    manager.saveToPreferences { error in
+    save(manager, command: command) { error in
       DispatchQueue.main.async {
         guard self.isCurrent(command) else { return }
         if let error {
@@ -382,6 +408,17 @@ final class NeoStationLocalTunnelManager {
       return
     }
 
+    trace(command, "start_requested")
+    command.observer = NotificationCenter.default.addObserver(
+      forName: .NEVPNStatusDidChange, object: manager.connection, queue: .main
+    ) { [weak self, weak command] _ in
+      guard let self, let command, self.isCurrent(command) else { return }
+      let status = manager.connection.status
+      if status == .connecting || status == .reasserting {
+        command.observedConnecting = true
+      }
+      self.trace(command, "status_" + Self.statusName(status))
+    }
     do {
       try manager.connection.startVPNTunnel(options: [
         Constants.interfaceAddressKey: Constants.interfaceAddress as NSString,
@@ -392,6 +429,7 @@ final class NeoStationLocalTunnelManager {
       return
     }
 
+    command.startedTunnel = true
     waitUntilConnected(
       manager,
       command: command,
@@ -406,6 +444,7 @@ final class NeoStationLocalTunnelManager {
   ) {
     guard isCurrent(command) else { return }
 
+    guard !command.recovering else { return }
     let status = manager.connection.status
     switch status {
     case .connected:
@@ -418,7 +457,7 @@ final class NeoStationLocalTunnelManager {
         .failure(.start("The integrated VPN entered an invalid state."))
       )
       return
-    case .disconnected where observedConnecting:
+    case .disconnected where observedConnecting || command.observedConnecting:
       // Only a return to disconnected AFTER iOS entered connecting/reasserting
       // proves that this activation attempt actually stopped. Immediately after
       // startVPNTunnel(), NEVPNConnection may still report its previous
@@ -465,7 +504,7 @@ final class NeoStationLocalTunnelManager {
         timeout: Constants.stopTimeout,
         completion: completion
       )
-      self.loadAndDisable(command)
+      self.afterPreferenceWrites(command) { self.loadAndDisable(command) }
     }
   }
 
@@ -473,6 +512,7 @@ final class NeoStationLocalTunnelManager {
     guard isCurrent(command) else { return }
     let identifier = providerBundleIdentifier()
 
+    trace(command, "load_profiles")
     NETunnelProviderManager.loadAllFromPreferences { managers, error in
       DispatchQueue.main.async {
         guard self.isCurrent(command) else { return }
@@ -489,6 +529,7 @@ final class NeoStationLocalTunnelManager {
           self.finish(command, .success(self.response(for: nil)))
           return
         }
+        command.manager = owned.first
         self.stopOwnedManagers(owned, index: 0, command: command)
       }
     }
@@ -511,7 +552,7 @@ final class NeoStationLocalTunnelManager {
     manager.onDemandRules = []
     manager.isEnabled = false
 
-    manager.saveToPreferences { error in
+    save(manager, command: command) { error in
       DispatchQueue.main.async {
         guard self.isCurrent(command) else { return }
         if let error {
@@ -573,7 +614,7 @@ final class NeoStationLocalTunnelManager {
       manager.onDemandRules = []
       manager.isEnabled = false
 
-      manager.saveToPreferences { error in
+      self.save(manager, command: command) { error in
         DispatchQueue.main.async {
           guard self.isCurrent(command) else { return }
           if let error {
@@ -581,7 +622,7 @@ final class NeoStationLocalTunnelManager {
             return
           }
 
-          manager.removeFromPreferences { error in
+          self.writePreferences(command, phase: "remove_duplicate", operation: { manager.removeFromPreferences(completionHandler: $0) }) { error in
             DispatchQueue.main.async {
               guard self.isCurrent(command) else { return }
               if let error {
@@ -647,12 +688,7 @@ final class NeoStationLocalTunnelManager {
 
     let work = DispatchWorkItem { [weak self, weak command] in
       guard let self, let command, self.isCurrent(command) else { return }
-      self.finish(
-        command,
-        .failure(.timeout(
-          "intent=\(intent); limit=\(Int(timeout))s"
-        ))
-      )
+      self.recoverTimedOutCommand(command, limit: timeout)
     }
     command.timeout = work
     DispatchQueue.main.asyncAfter(
@@ -662,15 +698,23 @@ final class NeoStationLocalTunnelManager {
     return command
   }
 
-  private func isCurrent(_ command: Command) -> Bool {
-    self.command === command && !command.completed
+  private func isCurrent(_ command: Command, allowRecovery: Bool = false) -> Bool {
+    self.command === command && !command.completed && (allowRecovery || !command.recovering)
   }
 
   private func finish(_ command: Command, _ response: Response) {
     dispatchPrecondition(condition: .onQueue(.main))
-    guard isCurrent(command) else { return }
+    guard isCurrent(command, allowRecovery: true) else { return }
 
+    switch response {
+    case .success: trace(command, "finished_success")
+    case .failure(let error): trace(command, "finished_failure", detail: error.localizedDescription)
+    }
     command.completed = true
+    if let observer = command.observer {
+      NotificationCenter.default.removeObserver(observer)
+      command.observer = nil
+    }
     command.timeout?.cancel()
     command.timeout = nil
     self.command = nil
@@ -686,9 +730,110 @@ final class NeoStationLocalTunnelManager {
     for waiter in waiters { waiter(response) }
   }
 
+  // Writes cannot be cancelled by ignoring their callback: NetworkExtension
+  // still commits them. Fence every save/remove before a newer Settings intent
+  // loads a manager, including after timeout. A stale callback releases only
+  // its fence and must never resume its superseded command.
+  private func writePreferences(
+    _ command: Command,
+    phase: String,
+    operation: (@escaping (Error?) -> Void) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    guard isCurrent(command) else { return }
+    preferenceWrites += 1
+    trace(command, phase)
+    operation { error in
+      DispatchQueue.main.async {
+        self.preferenceWrites -= 1
+        guard self.isCurrent(command) else { return }
+        completion(error)
+      }
+    }
+  }
+
+  private func save(
+    _ manager: NETunnelProviderManager,
+    command: Command,
+    completion: @escaping (Error?) -> Void
+  ) {
+    writePreferences(command, phase: "save_preferences", operation: {
+      manager.saveToPreferences(completionHandler: $0)
+    }, completion: completion)
+  }
+
+  private func afterPreferenceWrites(_ command: Command, _ action: @escaping () -> Void) {
+    guard isCurrent(command) else { return }
+    guard preferenceWrites == 0 else {
+      trace(command, "waiting_previous_save")
+      DispatchQueue.main.asyncAfter(deadline: .now() + Constants.connectionPollInterval) {
+        self.afterPreferenceWrites(command, action)
+      }
+      return
+    }
+    action()
+  }
+
+  private func trace(_ command: Command, _ phase: String, detail: String = "") {
+    guard command.phase != phase || !detail.isEmpty else { return }
+    command.phase = phase
+    let status = command.manager.map { Self.statusName($0.connection.status) } ?? "none"
+    NeoStationVPNDiagnostics.record("vpn_command",
+      "id=\(command.id); intent=\(command.intent); phase=\(phase); status=\(status); " +
+      "elapsed=\(Int((ProcessInfo.processInfo.systemUptime - command.startedAt) * 1000))ms; " +
+      "writes=\(preferenceWrites); \(detail)")
+  }
+
+  private func recoverTimedOutCommand(_ command: Command, limit: TimeInterval) {
+    guard isCurrent(command), !command.recovering else { return }
+    let failedPhase = command.phase
+    command.recovering = true
+    let manager = command.manager
+    // Never tear down a connected VPN or an unrelated/foreign profile.
+    // Only this explicit ON's unfinished start is eligible for rollback.
+    if command.intent == "enable", command.startedTunnel,
+       let manager, manager.connection.status == .connected {
+      finish(command, .success(response(for: manager)))
+      return
+    }
+    trace(command, "recovering_timeout", detail: "failedPhase=\(failedPhase)")
+    let fallback = "intent=\(command.intent); phase=\(failedPhase); limit=\(Int(limit))s"
+    var disconnectDetail = ""
+    manager?.connection.fetchLastDisconnectError { error in
+      DispatchQueue.main.async {
+        guard self.isCurrent(command, allowRecovery: true) else { return }
+        if let error { disconnectDetail = Self.errorDetail(error) }
+      }
+    }
+    if command.intent == "enable", command.startedTunnel, let manager,
+       manager.connection.status == .connecting || manager.connection.status == .reasserting {
+      manager.connection.stopVPNTunnel()
+    }
+    let deadline = ProcessInfo.processInfo.systemUptime + Constants.stopTimeout
+    func reconcile() {
+      guard self.isCurrent(command, allowRecovery: true) else { return }
+      let status = manager?.connection.status ?? .invalid
+      if self.preferenceWrites == 0 && Self.isQuiescent(status) {
+        self.activeManager = nil // next explicit ON must load fresh preferences
+        self.finish(command, .failure(.timeout(fallback + "; recovered=quiescent; " + disconnectDetail)))
+      } else if status == .connected && command.intent == "enable" {
+        self.finish(command, .success(self.response(for: manager)))
+      } else if ProcessInfo.processInfo.systemUptime >= deadline {
+        self.activeManager = nil
+        self.finish(command, .failure(.timeout(fallback + "; recoveryStatus=" + Self.statusName(status) + "; " + disconnectDetail)))
+      } else {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.connectionPollInterval) { reconcile() }
+      }
+    }
+    DispatchQueue.main.async { reconcile() }
+  }
+
   // MARK: - Route probe
 
   private func probeJitRoute(completion: @escaping (Bool) -> Void) {
+#if NEOSTATION_TUNNEL_TESTING
+    completion(TunnelTestState.routeReachable)
+#else
     let queue = DispatchQueue(
       label: "com.neogamelab.neostation.localtunnel.route-probe",
       qos: .userInitiated
@@ -723,6 +868,7 @@ final class NeoStationLocalTunnelManager {
     queue.asyncAfter(deadline: .now() + Constants.routeProbeTimeout) {
       finish(false)
     }
+#endif
   }
 
   // MARK: - State helpers
@@ -757,7 +903,10 @@ final class NeoStationLocalTunnelManager {
     let status = manager?.connection.status ?? .invalid
 
     return [
-      "active": Self.isActive(status),
+      "active": status == .connected,
+      "commandPending": command != nil,
+      "commandPhase": command?.phase as Any? ?? NSNull(),
+      "commandId": command.map { $0.id } as Any? ?? NSNull(),
       "status": Self.statusName(status),
       "managedByNeoStation": true,
       "configured": manager != nil,
@@ -768,13 +917,16 @@ final class NeoStationLocalTunnelManager {
       "onDemand": manager?.isOnDemandEnabled ?? false,
       "routeVerified": routeVerified,
       "lastErrorCode":
-        lastFailure.map { "local_tunnel_" + $0.code } as Any? ?? NSNull(),
+        (status == .connected ? nil : lastFailure).map { "local_tunnel_" + $0.code } as Any? ?? NSNull(),
       "lastErrorDetail":
-        lastFailure?.localizedDescription as Any? ?? NSNull(),
+        (status == .connected ? nil : lastFailure)?.localizedDescription as Any? ?? NSNull(),
     ]
   }
 
   private func providerBundleIdentifier() -> String? {
+#if NEOSTATION_TUNNEL_TESTING
+    return "test.neostation.localtunnel"
+#else
     guard
       let bundle = Self.installedExtensionBundle(),
       let identifier = bundle.bundleIdentifier,
@@ -783,6 +935,7 @@ final class NeoStationLocalTunnelManager {
       return nil
     }
     return identifier
+#endif
   }
 
   private static func preferredManager(
@@ -890,6 +1043,9 @@ final class NeoStationLocalTunnelManager {
 
   private static func signingCapabilityFailure()
     -> NeoStationLocalTunnelError? {
+#if NEOSTATION_TUNNEL_TESTING
+    return nil
+#else
     guard let extensionBundle = installedExtensionBundle() else {
       return .extensionMissing
     }
@@ -906,6 +1062,7 @@ final class NeoStationLocalTunnelManager {
     }
 
     return nil
+#endif
   }
 
   private static func entitlement(
@@ -1039,7 +1196,7 @@ enum NeoStationLocalTunnelError: LocalizedError {
     case .timeout(let message):
       return
         "The NeoStation VPN command did not finish before its timeout. " +
-        "The tunnel was not stopped automatically. \(message)"
+        "Recovery details: \(message)"
     case .cancelled:
       return
         "The previous NeoStation VPN command was superseded by a newer explicit " +

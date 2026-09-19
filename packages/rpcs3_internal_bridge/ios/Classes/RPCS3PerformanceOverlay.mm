@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "RPCS3PerformanceOverlay.h"
+#import "RPCS3InGameLocalization.h"
 
 #include <array>
 #include <cmath>
@@ -32,6 +33,7 @@ NSString* MemoryText(uint64_t value) {
 @property(nonatomic, strong) UILabel* ratesLabel;
 @property(nonatomic, strong) UILabel* memoryLabel;
 @property(nonatomic, strong) UILabel* graphLabel;
+@property(nonatomic, copy) NSString* localeIdentifier;
 @end
 
 @implementation RPCS3PerformanceOverlay
@@ -46,16 +48,23 @@ NSString* MemoryText(uint64_t value) {
   self.userInteractionEnabled = NO;
   self.isAccessibilityElement = YES;
   self.accessibilityTraits = UIAccessibilityTraitStaticText;
-  self.accessibilityLabel = @"RPCS3 Performance";
   self.accessibilityIdentifier = @"rpcs3.performance.overlay";
 
   self.ratesLabel = [self newLabelWithSize:13 weight:UIFontWeightSemibold];
   self.memoryLabel = [self newLabelWithSize:11 weight:UIFontWeightRegular];
   self.graphLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
-  self.graphLabel.text = @"Frame time (ms) · 60 s";
   self.graphLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+  [self setLocaleIdentifier:NSLocale.preferredLanguages.firstObject ?: @"en"];
   [self reset];
   return self;
+}
+
+- (void)setLocaleIdentifier:(NSString*)localeIdentifier {
+  _localeIdentifier = RPCS3CanonicalLocale(localeIdentifier);
+  self.accessibilityLabel = RPCS3LocalizedString(@"performance", _localeIdentifier);
+  self.graphLabel.text = [NSString stringWithFormat:@"%@ · 60 s",
+      RPCS3LocalizedString(@"frameTime", _localeIdentifier)];
+  if (self.ratesLabel) [self reset];
 }
 
 - (UILabel*)newLabelWithSize:(CGFloat)size weight:(UIFontWeight)weight {
@@ -85,7 +94,8 @@ NSString* MemoryText(uint64_t value) {
   _sampleStart = 0;
   _sampleCount = 0;
   self.ratesLabel.text = @"FPS — · CPU — · RSX —";
-  self.memoryLabel.text = @"Memory —";
+  self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
+      RPCS3LocalizedString(@"memory", self.localeIdentifier)];
   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
   [self setNeedsDisplay];
 }
@@ -109,9 +119,12 @@ NSString* MemoryText(uint64_t value) {
   self.ratesLabel.text = [NSString stringWithFormat:@"FPS %@ · CPU %@ · RSX %@", fpsText, cpuText, gpuText];
 
   if ((validFields & kMemoryValid) && memoryTotal > 0 && memoryUsed <= memoryTotal) {
-    self.memoryLabel.text = [NSString stringWithFormat:@"Memory %@ / %@", MemoryText(memoryUsed), MemoryText(memoryTotal)];
+    self.memoryLabel.text = [NSString stringWithFormat:@"%@ %@ / %@",
+        RPCS3LocalizedString(@"memory", self.localeIdentifier),
+        MemoryText(memoryUsed), MemoryText(memoryTotal)];
   } else {
-    self.memoryLabel.text = @"Memory —";
+    self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
+        RPCS3LocalizedString(@"memory", self.localeIdentifier)];
   }
 
   if ((validFields & kFPSValid) && std::isfinite(fps) && fps > 0) {

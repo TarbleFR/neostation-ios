@@ -70,7 +70,7 @@ assert 'stopForLifecycle' not in service
 # connecting/reasserting state was observed.
 assert 'observedConnecting: false' in manager
 assert 'observedConnecting: true' in manager
-assert 'case .disconnected where observedConnecting:' in manager
+assert 'case .disconnected where observedConnecting || command.observedConnecting:' in manager
 assert 'status == .connecting' in manager
 assert 'status == .reasserting' in manager
 
@@ -109,7 +109,8 @@ assert 'Self.needsHandoff($0.connection.status) || $0.isOnDemandEnabled' in mana
 assert 'neutralizeForeignManagersForHandoff' in manager
 assert 'manager.isOnDemandEnabled = false' in manager
 assert 'manager.onDemandRules = []' in manager
-assert manager.index('manager.saveToPreferences') < manager.index('manager.connection.stopVPNTunnel()')
+handoff = manager.split('private func neutralizeForeignManagersForHandoff', 1)[1].split('private func recoverOwnedTransitionIfNeeded', 1)[0]
+assert handoff.index('save(manager, command: command)') < handoff.index('manager.connection.stopVPNTunnel()')
 assert 'configuration["TunnelIfaceIP"]' in manager
 assert 'configuration["TunnelPeerIP"]' in manager
 assert 'interface.hasPrefix("10.7.1.1")' in manager

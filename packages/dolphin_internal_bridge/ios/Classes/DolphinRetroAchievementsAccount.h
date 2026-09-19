@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
+FOUNDATION_EXPORT NSData* _Nullable DOLSerializeMenuRequest(id _Nullable request);
 // Emulator login tokens are separate from NeoStation's dashboard Web API key.
 @interface DolphinRetroAchievementsAccount : UIViewController <NSURLSessionTaskDelegate>
 + (nullable NSDictionary<NSString*, NSString*>*)credentials;

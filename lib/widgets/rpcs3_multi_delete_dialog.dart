@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 
 import '../models/game_model.dart';
 import '../models/system_model.dart';
@@ -15,11 +14,8 @@ import '../services/rpcs3_launch_service.dart';
 
 /// Multi-selection deletion UI for NeoStation's embedded RPCS3 library.
 ///
-/// The RPCS3 Core owns installed-game removal. Calling its native deletion API
-/// is important because a PS3 title may span several internal directories and
-/// registration files. RPCS3 removes the installed title while deliberately
-/// retaining save data and savestates; NeoStation then rescans the Core-owned
-/// Data directory so the deleted games disappear immediately from the library.
+/// Uses the same verified installation deletion as the per-game settings.
+/// It works without JIT and retains saves, firmware and savestates.
 class Rpcs3MultiDeleteDialog extends StatefulWidget {
   const Rpcs3MultiDeleteDialog({
     super.key,
@@ -53,8 +49,7 @@ class Rpcs3MultiDeleteDialog extends StatefulWidget {
   }
 
   @override
-  State<Rpcs3MultiDeleteDialog> createState() =>
-      _Rpcs3MultiDeleteDialogState();
+  State<Rpcs3MultiDeleteDialog> createState() => _Rpcs3MultiDeleteDialogState();
 }
 
 class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
@@ -131,24 +126,12 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
     });
 
     try {
-      // Native deletion requires the Core, but does not launch a game.
-      await Rpcs3InternalService.ensureManagementInitialized();
       final fileProvider = context.read<FileProvider>();
 
       for (final game in selectedGames) {
         final titleId = _titleId(game)!;
-        final report = await Rpcs3InternalBridge.deleteGame(titleId);
-        if (report['success'] != true) {
-          throw Rpcs3InternalException(
-            'gameDeleteFailed',
-            report['message']?.toString() ??
-                'RPCS3 could not delete $titleId.',
-          );
-        }
+        await Rpcs3InternalService.deleteInstalledGame(titleId);
 
-        // Native RPCS3 deletion owns the game files. NeoStation only removes
-        // its generated artwork; save data and savestates are intentionally
-        // left untouched by the Core.
         await GameRepository.deleteNeoStationScrapedMedia(
           systemFolderName: 'ps3',
           filename: game.romname,
@@ -156,10 +139,13 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
           fileProvider: fileProvider,
         );
 
-        if (mounted) setState(() => _deletedCount++);
+        if (mounted)
+          setState(() {
+            _deletedCount++;
+            _selected.remove(titleId);
+          });
       }
 
-      await Rpcs3LibraryService.syncInternalLibrary();
       if (!mounted) return;
       await context.read<SqliteDatabaseProvider>().loadDatabase();
       if (!mounted) return;
@@ -243,9 +229,7 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
             if (_deleting) ...[
               const SizedBox(height: 8),
               LinearProgressIndicator(
-                value: _targetCount == 0
-                    ? null
-                    : _deletedCount / _targetCount,
+                value: _targetCount == 0 ? null : _deletedCount / _targetCount,
               ),
               const SizedBox(height: 6),
               Text(
@@ -256,10 +240,7 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
+              Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ],
           ],
         ),

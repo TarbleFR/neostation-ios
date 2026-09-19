@@ -11,6 +11,7 @@ engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with universal.js.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*.swift'
+  s.resources        = 'Resources/*.js'
   s.static_framework = true
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'

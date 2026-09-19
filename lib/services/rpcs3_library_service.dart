@@ -147,6 +147,11 @@ class Rpcs3LibraryService {
     return _cache?[normalized];
   }
 
+  static Future<void> forgetDeletedTitle(String titleId) async {
+    _cache?.remove(titleId.toLowerCase());
+    await _persistCache();
+  }
+
   static bool isVirtualLibraryPath(String romPath) {
     final uri = Uri.tryParse(romPath);
     return uri != null &&
@@ -795,8 +800,7 @@ class Rpcs3LibraryService {
     }
   }
 
-  /// Parses Sony's binary PSF/SFO format used by PARAM.SFO.
-  @visibleForTesting
+  /// Parses Sony's binary PSF/SFO format used by import and deletion.
   static Map<String, Object> parseParamSfoBytes(Uint8List bytes) {
     if (bytes.length < 20 ||
         bytes[0] != 0x00 ||
@@ -1070,6 +1074,14 @@ class Rpcs3LibraryService {
 
     await db.transaction((txn) async {
       for (final game in games) {
+        // An asynchronous catalog refresh may finish after deletion. It may
+        // enrich a live installation, but must not recreate a removed title.
+        if (_linkedDataPath != null &&
+            path.isWithin(_linkedDataPath!, game.sourcePath) &&
+            await FileSystemEntity.type(game.sourcePath, followLinks: false) ==
+                FileSystemEntityType.notFound) {
+          continue;
+        }
         Map<String, Object?>? physical =
             physicalByTitleId[game.titleId.toLowerCase()] ??
             physicalByTitleName[game.title.toLowerCase()];

@@ -63,8 +63,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
   String get _targetSystemFolder =>
       widget.isAllMode && widget.game.systemFolderName != null
-          ? widget.game.systemFolderName!
-          : widget.system.folderName;
+      ? widget.game.systemFolderName!
+      : widget.system.folderName;
 
   @override
   void dispose() {
@@ -201,6 +201,13 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       deleted = true;
     } catch (e) {
       _log.e('Game deletion failed: $e');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          e.toString(),
+          type: NotificationType.error,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -251,12 +258,16 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
                       decoration: BoxDecoration(
                         color: canReset
                             ? theme.colorScheme.error.withValues(alpha: 0.15)
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.05,
+                              ),
                         borderRadius: BorderRadius.circular(4.r),
                         border: Border.all(
                           color: canReset
                               ? theme.colorScheme.error.withValues(alpha: 0.4)
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.1,
+                                ),
                           width: 1.r,
                         ),
                       ),
@@ -267,7 +278,9 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
                           fontWeight: FontWeight.w600,
                           color: canReset
                               ? theme.colorScheme.error
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.3,
+                                ),
                         ),
                       ),
                     ),

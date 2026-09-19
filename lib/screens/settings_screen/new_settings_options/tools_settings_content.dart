@@ -16,6 +16,7 @@ import 'package:neostation/services/pairing_file_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/custom_toggle_switch.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
+
 import 'settings_title.dart';
 import 'widgets/settings_card_row.dart';
 import 'widgets/settings_action_button.dart';
@@ -105,7 +106,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
       setState(() {
         _tunnelState = state;
         _tunnelStateLoaded = true;
-        _tunnelErrorCode = null;
+        _tunnelErrorCode = state.lastErrorCode;
       });
     } on LocalJitTunnelException catch (error, stackTrace) {
       _log.log(
@@ -186,10 +187,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
         : LocalJitTunnelLocale.enableAction;
   }
 
-  String _tunnelStatusText(
-    BuildContext context,
-    LocalJitTunnelState? state,
-  ) {
+  String _tunnelStatusText(BuildContext context, LocalJitTunnelState? state) {
     final authorizedButInactive =
         !_isUpdatingTunnel &&
         _tunnelErrorCode == null &&
@@ -266,10 +264,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
       });
       AppNotification.showNotification(
         context,
-        LocalJitTunnelLocale.get(
-          context,
-          LocalJitTunnelLocale.genericError,
-        ),
+        LocalJitTunnelLocale.get(context, LocalJitTunnelLocale.genericError),
         type: NotificationType.error,
       );
     } finally {
@@ -279,6 +274,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
           _isDisablingTunnel = false;
           _tunnelStateLoaded = true;
         });
+        await _refreshTunnelState();
       }
     }
   }
@@ -308,8 +304,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
 
   Future<void> _refreshJitFallbackState() async {
     try {
-      final enabled =
-          await JitBackendPreferenceService.useStikDebugFallback();
+      final enabled = await JitBackendPreferenceService.useStikDebugFallback();
       if (!mounted) return;
       setState(() {
         _useStikDebugFallback = enabled;
@@ -412,10 +407,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
       if (!mounted) return;
       AppNotification.showNotification(
         context,
-        PairingFileLocale.get(
-          context,
-          PairingFileLocale.importFailed,
-        ),
+        PairingFileLocale.get(context, PairingFileLocale.importFailed),
         type: NotificationType.error,
       );
     } finally {
@@ -431,20 +423,14 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
           PairingFileLocale.invalidExtension,
         );
       case PairingFileError.invalidFile:
-        return PairingFileLocale.get(
-          context,
-          PairingFileLocale.invalidFile,
-        );
+        return PairingFileLocale.get(context, PairingFileLocale.invalidFile);
       case PairingFileError.remotePairingRequired:
         return PairingFileLocale.get(
           context,
           PairingFileLocale.remotePairingRequired,
         );
       case PairingFileError.unreadable:
-        return PairingFileLocale.get(
-          context,
-          PairingFileLocale.importFailed,
-        );
+        return PairingFileLocale.get(context, PairingFileLocale.importFailed);
     }
   }
 
@@ -468,10 +454,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
         : PairingFileLocale.get(context, PairingFileLocale.notConfigured);
 
     final pairingDescription = _hasPairingFile
-        ? PairingFileLocale.get(
-            context,
-            PairingFileLocale.configuredSubtitle,
-          )
+        ? PairingFileLocale.get(context, PairingFileLocale.configuredSubtitle)
         : PairingFileLocale.get(
             context,
             PairingFileLocale.notConfiguredSubtitle,
@@ -512,10 +495,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
             children: [
               SettingsCardRow(
                 icon: Symbols.key_rounded,
-                title: PairingFileLocale.get(
-                  context,
-                  PairingFileLocale.title,
-                ),
+                title: PairingFileLocale.get(context, PairingFileLocale.title),
                 subtitle: '$pairingStatus — $pairingDescription',
                 subtitleMaxLines: 3,
                 selected: pairingSelected,
@@ -576,18 +556,13 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent>
                 ),
               SettingsCardRow(
                 icon: Symbols.swap_horiz_rounded,
-                title: JitFallbackLocale.get(
-                  context,
-                  JitFallbackLocale.title,
-                ),
+                title: JitFallbackLocale.get(context, JitFallbackLocale.title),
                 subtitle: '$fallbackStatus — $fallbackDescription',
                 subtitleMaxLines: 4,
                 selected: fallbackSelected,
                 onTap: !_jitFallbackStateLoaded || _isUpdatingJitFallback
                     ? null
-                    : () => _setUseStikDebugFallback(
-                        !_useStikDebugFallback,
-                      ),
+                    : () => _setUseStikDebugFallback(!_useStikDebugFallback),
                 trailing: !_jitFallbackStateLoaded || _isUpdatingJitFallback
                     ? SizedBox(
                         width: 22.r,

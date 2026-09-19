@@ -14,9 +14,7 @@ def text(path):
 assert subprocess.check_output(
     ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
     cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
-assert subprocess.check_output(
-    ['git', 'hash-object', 'packages/stikjit_bridge/ios/Classes/NeoStationLocalTunnelManager.swift'],
-    cwd=ROOT, text=True).strip() == 'db453b2fb2fbf1fe640afe7215d30e297b4b69a8'
+# Manager behavior is now tested by vpn_state_machine_test.py.
 
 host = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 diag = text('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h')
@@ -39,12 +37,12 @@ assert 'Timed out writing control state to NeoStation.' in helper
 assert '#import "Rpcs3Diagnostics.h"' in jit
 assert 'jit_helper_' in jit
 assert '_mutableLogs.count > 64' in jit
-assert 'core_load_ready' in jit
-assert 'waitUntilCoreLoadReady' in jit
+
+
 assert 'session.coreLoadReady' in jit
-assert 'scheduleCoreLoadReady' in helper
-assert 'firstUniversalContinue' in helper
-assert '.milliseconds(250)' in helper
+
+
+
 
 # Verify abrupt dlopen-style termination leaves recoverable stderr on macOS CI.
 if sys.platform == 'darwin':
@@ -58,4 +56,12 @@ if sys.platform == 'darwin':
         assert subprocess.run([exe, directory, 'crash'], check=False).returncode == 23
         subprocess.run([exe, directory, 'recover'], check=True)
 
-print('PASS: Build 280 RPCS3 loader is nonblocking, recoverable, and VPN 279 is frozen')
+print('PASS: loader diagnostics recoverable; provider unchanged')
+
+assert 'confirmCoreLoadReady' in jit
+assert 'RPCS3DebuggerProbe(_probeNonce)' in jit
+assert 'RPCS3HostHasLiveDebugger' in jit
+assert 'scheduleCoreLoadReady' not in helper
+assert 'Handling signal 1' not in helper
+assert '.milliseconds(250)' not in helper
+subprocess.run(['node', 'test/rpcs3_debugger_handshake_test.js'], cwd=ROOT, check=True)

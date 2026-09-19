@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 285 RPCS3 Core Handoff Stability
-run-name: NeoStation iOS Build 285 • ${{ github.sha }}
+name: NeoStation iOS Build 286 VPN JIT Deletion Regression Fix
+run-name: NeoStation iOS Build 286 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-285
+  group: neostation-ios-build-286
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 285 Experimental IPA
+    name: Build 286 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '285'
-      IPA_NAME: 'NeoStation-iOS-Build-285-RPCS3-Core-Handoff-Stability'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-285-RPCS3-Core-Handoff-Stability'
+      BUILD_NUMBER: '286'
+      IPA_NAME: 'NeoStation-iOS-Build-286-VPN-JIT-Deletion-Fix'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-286-VPN-JIT-Deletion-Fix'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -52,32 +52,11 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply stable non-VPN stack and validate VPN v277
+      - name: Validate canonical host sources
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/rpcs3-ci build/fast-native
-
-          git apply --check build-utils/patches/rpcs3_build243_host.patch
-          git apply build-utils/patches/rpcs3_build243_host.patch
-          git apply --check build-utils/patches/rpcs3_build243_menu_transition.patch
-          git apply build-utils/patches/rpcs3_build243_menu_transition.patch
-          git apply --check build-utils/patches/rpcs3_build246_safe_controls.patch
-          git apply build-utils/patches/rpcs3_build246_safe_controls.patch
-          git apply --check build-utils/patches/rpcs3_build247_localization.patch
-          git apply build-utils/patches/rpcs3_build247_localization.patch
-          git apply --check build-utils/patches/rpcs3_build251_upscale.patch
-          git apply build-utils/patches/rpcs3_build251_upscale.patch
-          git apply --check build-utils/patches/grid_title_build243.patch
-          git apply build-utils/patches/grid_title_build243.patch
-
-          python3 build-utils/patch_rpcs3_savestate_ui.py
-          python3 build-utils/patch_rpcs3_performance_telemetry.py
-          python3 build-utils/patch_rpcs3_build256_host.py
-          python3 build-utils/patch_rpcs3_build260_modern_menu.py
-          python3 build-utils/patch_rpcs3_build265_host.py
-          python3 build-utils/patch_rpcs3_build283_host.py
-          python3 build-utils/patch_dolphin_build267_account.py
 
           git diff --check
           python3 test/vpn_internal_single_source_test.py 2>&1 | tee build/rpcs3-ci/vpn-v277-single-source.log
@@ -91,7 +70,7 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
 
-      - name: Run VPN v277 regression guard
+      - name: Run state-machine, debugger and deletion regression tests
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +79,9 @@ jobs:
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
+          python3 test/vpn_state_machine_test.py
+          node test/rpcs3_debugger_handshake_test.js
+          flutter test test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -131,14 +113,6 @@ jobs:
           run-id: 35393060176
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/vpn-reference279
-
-      - name: Download validated VPN 284 reference
-        uses: actions/download-artifact@v4
-        with:
-          name: NeoStation-iOS-Build-284-VPN-Profile-Stability
-          run-id: 35407128776
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: build/vpn-reference284
 
       - name: Reuse validated native runtimes
         shell: bash
@@ -199,7 +173,7 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 285 IPA
+      - name: Package and validate Build 286 IPA
         shell: bash
         run: |
           set -euo pipefail
@@ -212,10 +186,7 @@ jobs:
             --reference-dir build/vpn-reference279 \
             --candidate "dist/$IPA_NAME.ipa" \
             --report dist/vpn279-final-artifact.json
-          python3 build-utils/validate_vpn_build284_frozen.py \
-            --reference-dir build/vpn-reference284 \
-            --candidate "dist/$IPA_NAME.ipa" \
-            --report dist/vpn284-frozen-final-artifact.json
+          python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
           cp build/fast-native/identity.json dist/fast-native-identity.json
           test -f build/rpcs3-ci/vpn-v277-single-source.log && cp build/rpcs3-ci/vpn-v277-single-source.log dist/ || true
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"

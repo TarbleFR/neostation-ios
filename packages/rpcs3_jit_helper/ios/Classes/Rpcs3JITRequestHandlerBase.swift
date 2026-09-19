@@ -73,6 +73,7 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
   private func process(data: Data, context: NSExtensionContext) {
     var reporter: Rpcs3HelperReporter?
     var temporaryPairingURL: URL?
+    var temporaryScriptURL: URL?
 
     do {
       guard
@@ -96,6 +97,10 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
       }
 
       let targetPID = targetPIDNumber.int32Value
+      guard let probeNonce = object["probeNonce"] as? NSNumber,
+            probeNonce.uint64Value > 0, probeNonce.uint64Value <= UInt64(UInt32.max) else {
+        throw Rpcs3HelperError.invalidRequest("Missing debugger probe nonce.")
+      }
       // RPCS3 selects its mirrored Universal arena by OS version, not TXM
       // detection. Even a non-TXM device on iOS 26 needs this script running
       // when Core constructors request their executable regions.
@@ -151,12 +156,27 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         message: "Starting StikJIT universal.js for the in-process RPCS3 engine."
       )
 
+      var script = StikJIT.Script.universal
+      if requiresCoreHandshake {
+        let resource = Bundle(for: Rpcs3JITRequestHandlerBase.self)
+          .url(forResource: "rpcs3-universal", withExtension: "js") ??
+          Bundle.main.url(forResource: "rpcs3-universal", withExtension: "js")
+        guard let resource else {
+          throw Rpcs3HelperError.invalidRequest("The RPCS3 debugger handshake script is missing.")
+        }
+        let source = try String(contentsOf: resource, encoding: .utf8)
+        let scriptURL = temporaryDirectory.appendingPathComponent(UUID().uuidString + ".js")
+        try ("const neostationProbeNonce = \(probeNonce.uint64Value);\n" + source)
+          .write(to: scriptURL, atomically: true, encoding: .utf8)
+        temporaryScriptURL = scriptURL
+        script = .custom(scriptURL)
+      }
       try StikJIT.enableJIT(
         targetPID: targetPID,
         pairingFile: pairingURL,
         ddiPaths: ddiPaths,
         configuration: configuration,
-        script: .universal,
+        script: script,
         forceScript: requiresCoreHandshake,
         preparationProgress: { stage in
           try? reporter?.send(
@@ -166,15 +186,13 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         },
         progress: { message in
           try? reporter?.send(event: "log", message: message)
-          if Self.successfulAttachReply(message) {
+          let attached = "NEOSTATION_DEBUGGER_ATTACHED_V1 pid=\(targetPID) nonce=\(probeNonce.uint64Value)"
+          if requiresCoreHandshake && message == attached {
             try? reporter?.send(
               event: "pid_attached",
-              message: "Fresh universal.js vAttach stop reply received.",
+              message: "debugserver verified the target PID; awaiting host probe round trip.",
               targetPID: targetPID
             )
-          }
-          if Self.firstUniversalContinue(message) {
-            reporter?.scheduleCoreLoadReady(targetPID: targetPID)
           }
         }
       )
@@ -184,6 +202,7 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         message: "StikJIT completed the RPCS3 universal transaction and detached.",
         success: true
       )
+      if let temporaryScriptURL { try? FileManager.default.removeItem(at: temporaryScriptURL) }
       if let temporaryPairingURL {
         try? FileManager.default.removeItem(at: temporaryPairingURL)
       }
@@ -195,29 +214,13 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         message: error.localizedDescription,
         success: false
       )
+      if let temporaryScriptURL { try? FileManager.default.removeItem(at: temporaryScriptURL) }
       if let temporaryPairingURL {
         try? FileManager.default.removeItem(at: temporaryPairingURL)
       }
       reporter?.close()
       context.cancelRequest(withError: error)
     }
-  }
-
-  /// A fresh vAttach reply is stronger evidence than the persistent
-  /// CS_DEBUGGED flag and is required for every RPCS3 JIT transaction.
-  private static func successfulAttachReply(_ message: String) -> Bool {
-    guard let marker = message.range(of: "attach_response = ") else {
-      return false
-    }
-    let reply = message[marker.upperBound...]
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    guard reply.count >= 3, reply.first == "T" else { return false }
-    return reply.dropFirst().prefix(2).allSatisfy { $0.isHexDigit }
-  }
-
-  private static func firstUniversalContinue(_ message: String) -> Bool {
-    message.trimmingCharacters(in: .whitespacesAndNewlines)
-      == "Handling signal 1"
   }
 
   private static func preparationDescription(
@@ -249,10 +252,8 @@ private final class Rpcs3HelperReporter {
   )
   private let token: String
   private let sendLock = NSLock()
-  private let stateLock = NSLock()
   private var started = false
   private var pendingLogs = 0
-  private var coreLoadReadyScheduled = false
 
   init(port: UInt16, token: String) throws {
     guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
@@ -300,30 +301,6 @@ private final class Rpcs3HelperReporter {
     if !isReady {
       throw Rpcs3HelperError.connection(
         "NeoStation helper socket did not become ready."
-      )
-    }
-  }
-
-  func scheduleCoreLoadReady(targetPID: Int32) {
-    stateLock.lock()
-    if coreLoadReadyScheduled {
-      stateLock.unlock()
-      return
-    }
-    coreLoadReadyScheduled = true
-    stateLock.unlock()
-
-    // The universal script logs "Handling signal 1" immediately before
-    // send_command("c"). Do not release the host at that exact edge. Give
-    // debugserver one bounded quarter-second to enter its continue/wait loop;
-    // then Core dlopen can safely produce the first BRK #0xf00d.
-    DispatchQueue.global(qos: .userInitiated).asyncAfter(
-      deadline: .now() + .milliseconds(250)
-    ) { [weak self] in
-      try? self?.send(
-        event: "core_load_ready",
-        message: "Universal JIT first continue is armed for Core loading.",
-        targetPID: targetPID
       )
     }
   }

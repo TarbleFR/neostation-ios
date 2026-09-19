@@ -2465,16 +2465,39 @@ class SqliteService {
   /// Permanently deletes a single game and its metadata from the database.
   static Future<void> deleteGame(String appSystemId, String filename) async {
     final db = await instance.database;
-    await db.delete(
-      'user_screenscraper_metadata',
-      where: 'app_system_id = ? AND filename = ?',
-      whereArgs: [appSystemId, filename],
-    );
-    await db.delete(
-      'user_roms',
-      where: 'app_system_id = ? AND filename = ?',
-      whereArgs: [appSystemId, filename],
-    );
+    await db.transaction((txn) async {
+      await txn.delete(
+        'user_screenscraper_metadata',
+        where: 'app_system_id = ? AND filename = ?',
+        whereArgs: [appSystemId, filename],
+      );
+      await txn.delete(
+        'user_roms',
+        where: 'app_system_id = ? AND filename = ?',
+        whereArgs: [appSystemId, filename],
+      );
+    });
+  }
+
+  static Future<void> deleteRpcs3Title(String titleId) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      final rows = await txn.rawQuery(
+        "SELECT app_system_id, filename FROM user_roms WHERE "
+        "app_system_id IN (SELECT id FROM app_systems WHERE lower(folder_name) = 'ps3') "
+        "AND (upper(title_id) = ? OR filename = ? OR rom_path = ?)",
+        [titleId, titleId, 'rpcs3-library://game?title-id=$titleId'],
+      );
+      for (final row in rows) {
+        for (final table in ['user_screenscraper_metadata', 'user_roms']) {
+          await txn.delete(
+            table,
+            where: 'app_system_id = ? AND filename = ?',
+            whereArgs: [row['app_system_id'], row['filename']],
+          );
+        }
+      }
+    });
   }
 
   static Future<void> saveUserConfig({
@@ -2948,7 +2971,6 @@ class SqliteService {
 
       mutableRow['folders'] = folderMap[sid] ?? [];
       mutableRow['extensions'] = extensionMap[sid] ?? [];
-
 
       return SystemModel.fromJson(mutableRow);
     }).toList();

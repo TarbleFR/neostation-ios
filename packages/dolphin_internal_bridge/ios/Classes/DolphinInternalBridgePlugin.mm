@@ -1,5 +1,6 @@
 #import "DolphinInternalBridgePlugin.h"
 #import "DolphinSessionMenu.h"
+#import "DolphinRetroAchievementsAccount.h"
 #import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
 #import "DolphinRecordingController.h"
@@ -860,10 +861,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
                           ? arguments[@"logPath"] : @"";
   NSString* pairingPath = [arguments[@"pairingFilePath"] isKindOfClass:NSString.class]
                               ? arguments[@"pairingFilePath"] : @"";
-  NSString* raUsername = [arguments[@"raUsername"] isKindOfClass:NSString.class]
-                              ? arguments[@"raUsername"] : @"";
-  NSString* raApiToken = [arguments[@"raApiToken"] isKindOfClass:NSString.class]
-                              ? arguments[@"raApiToken"] : @"";
+  // Only a validated emulator token is accepted. Do not use the Web API key.
+  NSDictionary* raCredentials = [DolphinRetroAchievementsAccount credentials];
+  NSString* raUsername = raCredentials[@"username"] ?: @"";
+  NSString* raApiToken = raCredentials[@"token"] ?: @"";
   self.activeLogPath = logPath;
 
   void (^fail)(NSString*, NSString*) = ^(NSString* stage, NSString* message) {
@@ -908,8 +909,9 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       fail(@"core.initialize_failed", @"The embedded Dolphin core could not initialize.");
       return [self finishFailedLaunch:state];
     }
-    // Configure the core without ever logging or persisting credentials in the
-    // Objective-C host. Missing credentials simply disable achievements.
+    // Take account changes only at a fresh launch, before booting the game.
+    // The password is never persisted; the emulator token is read from Keychain.
+    [DolphinRetroAchievementsAccount beginSession];
     neostation_dolphin_configure_achievements(raUsername.UTF8String,
                                               raApiToken.UTF8String);
 
@@ -1186,9 +1188,17 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
         DolphinInternalBridgePlugin* bridge = weakSelf;
         if (!bridge) { completion(NO); return; }
         dispatch_async(bridge->_runtimeQueue, ^{
-          NSData* data = [NSJSONSerialization dataWithJSONObject:request options:0 error:nil];
-          NSString* text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-          const BOOL success = text && neostation_dolphin_menu_apply(text.UTF8String) != 0;
+          NSData* data = DOLSerializeMenuRequest(request);
+          NSString* text = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+          BOOL success = NO;
+          @try {
+            if (text && !bridge.stopInProgress && bridge.dolphinController == owner)
+              success = neostation_dolphin_menu_apply(text.UTF8String) != 0;
+          } @catch (NSException* exception) {
+            success = NO;
+          }
+          if (!data) DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"menu.request_rejected",
+              @"Invalid Dolphin settings request rejected safely.", nil);
           dispatch_async(dispatch_get_main_queue(), ^{
             if (!bridge.stopInProgress && bridge.dolphinController == owner) completion(success);
           });

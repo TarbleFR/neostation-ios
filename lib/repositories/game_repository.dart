@@ -6,7 +6,9 @@ import '../models/database_game_model.dart';
 import '../data/datasources/sqlite_database_service.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../providers/file_provider.dart';
-import '../services/saf_directory_service.dart';
+import '../services/game_file_deletion.dart';
+import '../services/rpcs3_internal_service.dart';
+import '../services/rpcs3_library_service.dart';
 
 /// Repository for game data access operations.
 class GameRepository {
@@ -61,31 +63,40 @@ class GameRepository {
   }) async {
     final log = LoggerService.instance;
 
+    final operation = DateTime.now().microsecondsSinceEpoch;
+    log.i(
+      'GameDelete[$operation] begin system=$systemFolderName file=$filename',
+    );
     if (appSystemId == null) {
-      log.e('deleteGame: appSystemId is null, cannot delete from DB');
-      return;
+      throw StateError('Cannot delete a game without its system ID.');
     }
-    await SqliteService.deleteGame(appSystemId, filename);
-
-    if (romPath != null) {
-      try {
-        if (romPath.startsWith('content://') &&
-            await SafDirectoryService.deleteFile(romPath)) {
-          log.i('deleteGame: Deleted ROM file via SAF: $romPath');
-        } else {
-          final romFile = File(romPath);
-          if (await romFile.exists()) {
-            await romFile.delete();
-            log.i('deleteGame: Deleted ROM file: $romPath');
-          } else {
-            log.w('deleteGame: ROM file not found: $romPath');
-          }
+    if (romPath == null || romPath.isEmpty) {
+      throw StateError('Cannot delete a game without its source path.');
+    }
+    try {
+      if (Rpcs3LibraryService.isVirtualLibraryPath(romPath) ||
+          (Platform.isIOS && systemFolderName.toLowerCase() == 'ps3')) {
+        final row = await SqliteService.getSingleGame(appSystemId, filename);
+        final titleId = Rpcs3LibraryService.isVirtualLibraryPath(romPath)
+            ? Uri.parse(romPath).queryParameters['title-id']
+            : row?.titleId;
+        if (systemFolderName.toLowerCase() != 'ps3' || titleId == null) {
+          throw StateError('Invalid RPCS3 library entry.');
         }
-      } catch (e) {
-        log.e('deleteGame: Failed to delete ROM file $romPath: $e');
+        await Rpcs3InternalService.deleteInstalledGame(titleId);
+      } else {
+        await GameFileDeletion.delete(romPath);
+        log.i('GameDelete[$operation] filesystem_complete');
+        await SqliteService.deleteGame(appSystemId, filename);
       }
-    } else {
-      log.w('deleteGame: romPath is null, skipping ROM file deletion');
+      log.i('GameDelete[$operation] database_complete');
+    } catch (error, stack) {
+      log.e(
+        'GameDelete[$operation] failed; deletion not acknowledged',
+        error: error,
+        stackTrace: stack,
+      );
+      rethrow;
     }
 
     final deletedMedia = await deleteNeoStationScrapedMedia(
