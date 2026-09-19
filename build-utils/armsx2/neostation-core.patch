@@ -1,0 +1,421 @@
+--- a/common/Darwin/DarwinMisc.cpp
++++ b/common/Darwin/DarwinMisc.cpp
+@@ -881,22 +881,32 @@
+ }
+ 
+ #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
+-__attribute__((noinline, optnone))
+-static void JIT26PrepareRegion(void* addr, size_t len)
+-{
+-	asm volatile("mov x0, %0\n"
+-	             "mov x1, %1\n"
+-	             "mov x16, #1\n"
+-	             "brk #0xf00d\n"
+-	             :: "r"(addr), "r"(len) : "x0", "x1", "x16", "memory");
+-}
+-
+-__attribute__((noinline, optnone))
+-static void JIT26Detach(void)
+-{
+-	asm volatile("mov x16, #0\n"
+-	             "brk #0xf00d\n"
+-	             ::: "x16", "memory");
++// Only the NeoStation helper may acknowledge this transaction. The return
++// register is checked; resuming the breakpoint alone is not success.
++__attribute__((naked, noinline))
++static void* JIT26PrepareRegion(void* addr, size_t len)
++{
++    asm volatile("mov x16, #1\n brk #0xf00d\n ret");
++}
++static thread_local sigjmp_buf* s_neostation_prepare_trap = nullptr;
++static struct sigaction s_neostation_previous_trap = {};
++static void NeoStationPrepareTrap(int number, siginfo_t* info, void* context)
++{
++    if (s_neostation_prepare_trap)
++        siglongjmp(*s_neostation_prepare_trap, 1);
++    // A signal on a different thread must never jump into this worker's stack.
++    const auto previous = s_neostation_previous_trap;
++    if (previous.sa_handler == SIG_IGN)
++        return;
++    if (previous.sa_handler == SIG_DFL || previous.sa_handler == nullptr)
++    {
++        sigaction(number, &previous, nullptr);
++        raise(number);
++    }
++    else if (previous.sa_flags & SA_SIGINFO)
++        previous.sa_sigaction(number, info, context);
++    else
++        previous.sa_handler(number);
+ }
+ #endif
+ 
+@@ -1031,132 +1041,34 @@
+ 		rx_ptr, size, JitModeName(mode));
+ 	std::fflush(stderr);
+ 
+-	struct sigaction sa_brk_old = {};
+-	if (mode == JitMode::LuckTXM)
+-	{
+-		static thread_local sigjmp_buf s_alloc_brk_jmp;
+-		struct sigaction sa_brk = {};
+-		sa_brk.sa_handler = +[](int) { siglongjmp(s_alloc_brk_jmp, 1); };
+-		sigemptyset(&sa_brk.sa_mask);
+-		sigaction(SIGTRAP, &sa_brk, &sa_brk_old);
+-
+-		const bool useLegacy = []() {
+-			const char* proto = std::getenv("ARMSX2_JIT_PROTOCOL");
+-			return proto && std::strcmp(proto, "legacy") == 0;
+-		}();
+-
+-		std::fprintf(stderr, "@@JIT_ALLOC@@ txm_protocol=%s\n", useLegacy ? "legacy" : "universal");
+-		std::fflush(stderr);
+-
+-		bool brk_ok = false;
+-		if (useLegacy)
+-		{
+-			std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_begin rx=%p size=0x%zx\n", rx_ptr, size);
+-			std::fflush(stderr);
+-			if (sigsetjmp(s_alloc_brk_jmp, 1) == 0)
+-			{
+-				asm volatile("mov x0, %0\n"
+-				             "mov x1, %1\n"
+-				             "brk #0x69"
+-				             :: "r"(rx_ptr), "r"(size) : "x0", "x1");
+-				brk_ok = true;
+-				std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_ok\n");
+-				std::fflush(stderr);
+-			}
+-			else
+-			{
+-				std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_sigtrap\n");
+-				std::fflush(stderr);
+-			}
+-		}
+-		else // universal protocol
+-		{
+-			// Run TXM prepare on a worker thread with an 8-second timeout.
+-			// The brk #0xf00d instruction can hang on large code regions; if it
+-			// doesn't complete in 8 seconds, fall back to the Legacy brk #0x69 path.
+-			std::atomic<bool> universal_done{false};
+-			std::atomic<bool> universal_ok{false};
+-
+-			std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_universal_begin rx=%p size=0x%zx\n", rx_ptr, size);
+-			std::fflush(stderr);
+-
+-			std::thread txm_worker([&]() {
+-				if (sigsetjmp(s_alloc_brk_jmp, 1) == 0)
+-				{
+-					JIT26PrepareRegion(rx_ptr, size);
+-					std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_universal_ok\n");
+-					std::fflush(stderr);
+-
+-					std::fprintf(stderr, "@@JIT_ALLOC@@ txm_detach_begin\n");
+-					std::fflush(stderr);
+-					if (sigsetjmp(s_alloc_brk_jmp, 1) == 0)
+-					{
+-						JIT26Detach();
+-						universal_ok.store(true);
+-						std::fprintf(stderr, "@@JIT_ALLOC@@ txm_detach_ok\n");
+-						std::fflush(stderr);
+-					}
+-					else
+-					{
+-						std::fprintf(stderr, "@@JIT_ALLOC@@ txm_detach_sigtrap\n");
+-						std::fflush(stderr);
+-					}
+-				}
+-				else
+-				{
+-					std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_universal_sigtrap\n");
+-					std::fflush(stderr);
+-				}
+-				universal_done.store(true);
+-			});
+-			txm_worker.detach();
+-
+-			// Wait up to 8 seconds
+-			for (int i = 0; i < 80; i++)
+-			{
+-				if (universal_done.load(std::memory_order_relaxed))
+-					break;
+-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+-			}
+-
+-			if (universal_done.load() && universal_ok.load())
+-			{
+-				brk_ok = true;
+-			}
+-			else if (!universal_done.load())
+-			{
+-				// Worker hung — try Legacy fallback
+-				std::fprintf(stderr, "@@JIT_ALLOC@@ txm_universal_timeout — falling back to legacy brk #0x69\n");
+-				std::fflush(stderr);
+-				// The worker thread is still running (hung). It's detached so it won't
+-				// block shutdown, but the SIGTRAP handler is still installed. Try Legacy.
+-				std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_begin rx=%p size=0x%zx\n", rx_ptr, size);
+-				std::fflush(stderr);
+-				if (sigsetjmp(s_alloc_brk_jmp, 1) == 0)
+-				{
+-					asm volatile("mov x0, %0\n"
+-					             "mov x1, %1\n"
+-					             "brk #0x69"
+-					             :: "r"(rx_ptr), "r"(size) : "x0", "x1");
+-					brk_ok = true;
+-					std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_ok\n");
+-					std::fflush(stderr);
+-				}
+-				else
+-				{
+-					std::fprintf(stderr, "@@JIT_ALLOC@@ txm_register_sigtrap\n");
+-					std::fflush(stderr);
+-				}
+-			}
+-			// else: universal completed but failed (sigtrap) — brk_ok stays false
+-		}
+-		if (!brk_ok)
+-		{
+-			munmap(rx_ptr, size);
+-			sigaction(SIGTRAP, &sa_brk_old, nullptr);
+-			return nullptr;
+-		}
+-	}
++    if (mode == JitMode::LuckTXM)
++    {
++        // Run the breakpoint on the owned CPU worker. No detached stack
++        // captures, arbitrary sleeps, fallback or allocator-driven detach.
++        sigjmp_buf context;
++        struct sigaction action = {};
++        action.sa_sigaction = NeoStationPrepareTrap;
++        action.sa_flags = SA_SIGINFO;
++        sigemptyset(&action.sa_mask);
++        if (sigaction(SIGTRAP, &action, &s_neostation_previous_trap) != 0)
++        {
++            munmap(rx_ptr, size);
++            return nullptr;
++        }
++        volatile bool prepared = false;
++        s_neostation_prepare_trap = &context;
++        if (sigsetjmp(context, 1) == 0)
++            prepared = (JIT26PrepareRegion(rx_ptr, size) == rx_ptr);
++        s_neostation_prepare_trap = nullptr;
++        sigaction(SIGTRAP, &s_neostation_previous_trap, nullptr);
++        if (!prepared)
++        {
++            munmap(rx_ptr, size);
++            return nullptr;
++        }
++        // The host requests detach only after all code memory is prepared,
++        // and requires the helper's explicit, nonce-bound GDB D=OK response.
++    }
+ 
+ 	vm_address_t rw_region = 0;
+ 	vm_address_t target = reinterpret_cast<vm_address_t>(rx_ptr);
+@@ -1169,8 +1081,6 @@
+ 		std::fprintf(stderr, "@@JIT_ALLOC@@ dualmap_remap_fail kr=%d\n", kr);
+ 		std::fflush(stderr);
+ 		munmap(rx_ptr, size);
+-		if (mode == JitMode::LuckTXM)
+-			sigaction(SIGTRAP, &sa_brk_old, nullptr);
+ 		return nullptr;
+ 	}
+ 
+@@ -1181,8 +1091,6 @@
+ 		std::fflush(stderr);
+ 		vm_deallocate(mach_task_self(), rw_region, static_cast<vm_size_t>(size));
+ 		munmap(rx_ptr, size);
+-		if (mode == JitMode::LuckTXM)
+-			sigaction(SIGTRAP, &sa_brk_old, nullptr);
+ 		return nullptr;
+ 	}
+ 
+@@ -1195,8 +1103,6 @@
+ 	std::fprintf(stderr, "@@JIT_ALLOC@@ dualmap_ok rx=%p rw=%p offset=%td size=0x%zx mode=%s\n",
+ 		rx_ptr, rw_ptr, g_code_rw_offset, size, JitModeName(mode));
+ 	std::fflush(stderr);
+-	if (mode == JitMode::LuckTXM)
+-		sigaction(SIGTRAP, &sa_brk_old, nullptr);
+ 	return rx_ptr;
+ #endif
+ }
+--- a/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
++++ b/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
+@@ -117,57 +117,24 @@
+     void RequestResetSettings(bool) {} 
+     const char* GetTranslatedStringImpl(const char* key) { return key; }
+     u32 GetDisplayRefreshRate() { return 60; }
+-    std::optional<WindowInfo> AcquireRenderWindow(bool recreate_window) {
+-        Console.WriteLn("Host::AcquireRenderWindow(recreate=%d) called.", recreate_window);
+-        if (!g_sdl_window) {
+-            Console.Error("Host::AcquireRenderWindow: g_sdl_window is NULL");
+-            return std::nullopt;
+-        }
+-        
++    std::optional<WindowInfo> AcquireRenderWindow(bool /*recreate_window*/) {
+         __block WindowInfo wi = {};
+         wi.type = WindowInfo::Type::MacOS;
+-        
+-        // SDL calls that interact with UIKit must run on the main thread
+-        dispatch_sync(dispatch_get_main_queue(), ^{
+-            // SDL3 properties for UIKit
+-            SDL_PropertiesID props = SDL_GetWindowProperties(g_sdl_window);
+-            UIWindow* window = (__bridge UIWindow*)SDL_GetPointerProperty(props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, NULL);
+-            
+-            if (window) {
+-                // Use dedicated game render view if available (sized for portrait).
+-                if (g_gameRenderView) {
+-                    wi.window_handle = (__bridge void*)g_gameRenderView;
+-                } else {
+-                    wi.window_handle = (__bridge void*)[window rootViewController].view;
+-                }
+-            }
+-
+-            if (!wi.window_handle) {
+-                 Console.Error("Host::AcquireRenderWindow: Failed to get UIKit View (UIWindow=%p)", window);
+-                 // Last resort: some older SDL versions might put the view in the window property or vice versa
+-                 if (!wi.window_handle) wi.window_handle = (__bridge void*)window;
+-            }
+-
+-            // Get render size from the actual render view.
+-            UIView* renderView = (__bridge UIView*)wi.window_handle;
+-            CGFloat scale = renderView.contentScaleFactor > 0.0 ? renderView.contentScaleFactor : UIScreen.mainScreen.nativeScale;
+-            if (scale <= 0.0)
+-                scale = 1.0;
+-            wi.surface_width = static_cast<u32>(std::max<CGFloat>(1.0, renderView.bounds.size.width * scale));
+-            wi.surface_height = static_cast<u32>(std::max<CGFloat>(1.0, renderView.bounds.size.height * scale));
++        void (^resolve)(void) = ^{
++            UIView* view = g_gameRenderView;
++            if (!view || !view.window) return;
++            wi.window_handle = (__bridge void*)view;
++            CGFloat scale = view.contentScaleFactor;
++            if (scale <= 0) scale = view.window.screen.nativeScale;
++            if (scale <= 0) scale = 1;
++            wi.surface_width = static_cast<u32>(std::max<CGFloat>(1, view.bounds.size.width * scale));
++            wi.surface_height = static_cast<u32>(std::max<CGFloat>(1, view.bounds.size.height * scale));
+             wi.surface_scale = static_cast<float>(scale);
+-            
+-            SDL_DisplayID display = SDL_GetDisplayForWindow(g_sdl_window);
+-            const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
+-            if (mode)
+-                wi.surface_refresh_rate = mode->refresh_rate;
+-            else
+-                wi.surface_refresh_rate = 60.0f;
+-        });
+-
+-        Console.WriteLn("Host::AcquireRenderWindow: Returning WindowInfo (Type=%d, View=%p, Size=%ux%u, Scale=%.2f)",
+-            (int)wi.type, wi.window_handle, wi.surface_width, wi.surface_height, wi.surface_scale);
+-
++            wi.surface_refresh_rate = view.window.screen.maximumFramesPerSecond;
++        };
++        if ([NSThread isMainThread]) resolve();
++        else dispatch_sync(dispatch_get_main_queue(), resolve);
++        if (!wi.window_handle) return std::nullopt;
+         return wi;
+     }
+     void ReleaseRenderWindow() {}
+@@ -215,6 +182,7 @@
+             std::lock_guard<std::mutex> lock(s_cpuTaskMutex);
+             s_cpuTasks.push_back(task);
+         }
++        s_vmCV.notify_all();
+ 
+         if (!block)
+             return;
+--- a/pcsx2/CDVD/CDVD.cpp
++++ b/pcsx2/CDVD/CDVD.cpp
+@@ -170,7 +170,7 @@
+ 
+ static std::string cdvdGetNVRAMPath()
+ {
+-	return Path::ReplaceExtension(BiosPath, "nvm");
++	return Path::Combine(Path::Combine(EmuFolders::DataRoot, "bios-state"), Path::ReplaceExtension(Path::GetFileName(BiosPath), "nvm"));
+ }
+ 
+ void cdvdLoadNVRAM()
+@@ -199,7 +199,7 @@
+ 	}
+ 
+ 	// Also load the mechacon version while we're here.
+-	const std::string mecfile = Path::ReplaceExtension(BiosPath, "mec");
++	const std::string mecfile = Path::Combine(Path::Combine(EmuFolders::DataRoot, "bios-state"), Path::ReplaceExtension(Path::GetFileName(BiosPath), "mec"));
+ 	fp = FileSystem::OpenManagedCFileTryIgnoreCase(mecfile.c_str(), "rb", &error);
+ 	if (!fp || std::fread(&s_mecha_version, sizeof(s_mecha_version), 1, fp.get()) != 1)
+ 	{
+--- a/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
++++ b/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
+@@ -11,14 +11,11 @@
+ 
+ static id<MTLLibrary> loadMainLibrary(id<MTLDevice> dev, NSString* name)
+ {
+-	NSString* path = [[NSBundle mainBundle] pathForResource:name ofType:@"metallib"];
+-	if (!path)
+-	{
+-		std::string ssname = std::string([name UTF8String]) + ".metallib";
+-		std::string sspath = Path::Combine(EmuFolders::Resources, ssname);
+-		path = [[NSString alloc] initWithBytes:sspath.data() length:sspath.length() encoding:NSUTF8StringEncoding];
+-	}
+-	return path ? [dev newLibraryWithFile:path error:nullptr] : nullptr;
++    // Never fall back to the host's default.metallib (Dolphin/other cores).
++    const std::string path = Path::Combine(EmuFolders::Resources,
++        std::string(name.UTF8String) + ".metallib");
++    NSString* resource = [NSString stringWithUTF8String:path.c_str()];
++    return resource ? [dev newLibraryWithFile:resource error:nullptr] : nullptr;
+ }
+ 
+ static MRCOwned<id<MTLLibrary>> loadMainLibrary(id<MTLDevice> dev)
+@@ -34,7 +31,7 @@
+ 			return MRCTransfer(lib);
+ 	if (id<MTLLibrary> lib = loadMainLibrary(dev, @"default"))
+ 		return MRCTransfer(lib);
+-	return MRCTransfer([dev newDefaultLibrary]);
++	return MRCTransfer(static_cast<id<MTLLibrary>>(nil));
+ }
+ 
+ static GSMTLDevice::MetalVersion detectLibraryVersion(id<MTLLibrary> lib)
+--- a/pcsx2/Host.cpp
++++ b/pcsx2/Host.cpp
+@@ -422,14 +422,14 @@
+ 
+ void Host::Internal::SetBaseSettingsLayer(SettingsInterface* sif)
+ {
+-	pxAssertRel(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE) == nullptr,
++	pxAssertRel(sif == nullptr || s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE) == nullptr,
+ 		"Base layer has already been set");
+ 	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_BASE, sif);
+ }
+ 
+ void Host::Internal::SetSecretsSettingsLayer(SettingsInterface* sif)
+ {
+-	pxAssertRel(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
++	pxAssertRel(sif == nullptr || s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
+ 		"Secrets layer has already been set");
+ 	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_SECRETS, sif);
+ }
+--- a/platforms/ios/app/src/main/cpp/CMakeLists.txt
++++ b/platforms/ios/app/src/main/cpp/CMakeLists.txt
+@@ -57,7 +57,13 @@
+ endif()
+ 
+ # Project Name
+-project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX)
++if(NEO_ARMSX2_ADAPTER_DIR)
++    set(CMAKE_C_VISIBILITY_PRESET hidden)
++    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
++    set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
++    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
++endif()
++project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX OBJC OBJCXX)
+ 
+ add_compile_definitions(ARMSX2_VERSION_STR="${ARMSX2_VERSION}")
+ 
+@@ -122,6 +128,11 @@
+ 
+ # make pcsx2
+ add_subdirectory(${ARMSX2_ROOT}/pcsx2 ${CMAKE_BINARY_DIR}/pcsx2)
++if(NEO_ARMSX2_ADAPTER_DIR)
++    # Build the core only, with no standalone UI/application delegates.
++    include("${NEO_ARMSX2_ADAPTER_DIR}/core/target.cmake")
++    return()
++endif()
+ # Fetched and cargo-built, never vendored. Must follow pcsx2 so PCSX2_FLAGS exists by the
+ # time the link block below runs.
+ add_subdirectory(3rdparty/librashader)

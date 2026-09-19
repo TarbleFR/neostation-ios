@@ -15,10 +15,12 @@ concurrency:
   group: armsx2-native-core-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  sources:
-    name: Verify pinned sources
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  core:
+    name: Compile pinned ARMSX2 iOS framework
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,21 +44,33 @@ jobs:
           path: .native-sources/ARMSX2
           submodules: recursive
           persist-credentials: false
-      - name: Verify source identities and export development snapshot
+      - name: Select Xcode and validate scripts
         run: |
           set -euo pipefail
-          test "$(git -C .native-sources/ARMSX2 rev-parse HEAD)" = '${{ steps.source.outputs.revision }}'
-          git -C .native-sources/ARMSX2 submodule status --recursive > "$RUNNER_TEMP/armsx2-submodules.txt"
-          ! grep -E '^[-+U]' "$RUNNER_TEMP/armsx2-submodules.txt"
+          sudo xcode-select -switch /Applications/Xcode.app
+          xcodebuild -version
+          python3 -m py_compile build-utils/armsx2/*.py
+          bash -n build-utils/armsx2/build_core.sh
           git diff --check
-          mkdir -p "$RUNNER_TEMP/armsx2-snapshot"
-          git archive HEAD > "$RUNNER_TEMP/armsx2-snapshot/neostation.tar"
-          tar --exclude=.git -C .native-sources -cf "$RUNNER_TEMP/armsx2-snapshot/armsx2.tar" ARMSX2
-          cp "$RUNNER_TEMP/armsx2-submodules.txt" "$RUNNER_TEMP/armsx2-snapshot/"
-          printf 'neostation=%s\narmsx2=%s\n' "$GITHUB_SHA" '${{ steps.source.outputs.revision }}' > "$RUNNER_TEMP/armsx2-snapshot/identity.txt"
+      - name: Compile native core and verify binary ABI
+        run: bash build-utils/armsx2/build_core.sh .native-sources/ARMSX2
       - uses: actions/upload-artifact@v4
         with:
-          name: ARMSX2-development-sources-${{ github.sha }}
-          path: ${{ runner.temp }}/armsx2-snapshot/
+          name: ARMSX2Core-${{ github.sha }}
+          path: dist/armsx2/
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 14
+      - name: Collect native diagnostics
+        if: always()
+        run: |
+          mkdir -p build/armsx2-diagnostics
+          cp build/armsx2-core/*.log build/armsx2-diagnostics/ 2>/dev/null || true
+          cp build/armsx2-core/CMakeCache.txt build/armsx2-diagnostics/ 2>/dev/null || true
+          printf 'host=%s\narmsx2=%s\n' "$GITHUB_SHA" '${{ steps.source.outputs.revision }}' > build/armsx2-diagnostics/identity.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ARMSX2Core-diagnostics-${{ github.sha }}
+          path: build/armsx2-diagnostics/
+          if-no-files-found: error
+          retention-days: 7
