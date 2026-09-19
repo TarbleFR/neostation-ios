@@ -40,6 +40,31 @@ void main() {
     expect(launcher, isNot(contains('resolveBookmarkedFolder')));
   });
 
+  test('PS2 embedded library hides recursive scan and supports guarded long press deletion', () {
+    final dialog = File(
+      'lib/widgets/system_emulator_settings_dialog.dart',
+    ).readAsStringSync();
+    final tabs = File(
+      'lib/widgets/system_emulator_settings_dialog/tabs.dart',
+    ).readAsStringSync();
+    final list = File(
+      'lib/screens/game_screen/game_list_view.dart',
+    ).readAsStringSync();
+    final deletion = File(
+      'lib/widgets/armsx2_multi_delete_dialog.dart',
+    ).readAsStringSync();
+
+    expect(dialog, contains('_showsRecursiveScan'));
+    expect(dialog, contains("{'gc', 'wii', 'ps2', 'ps3'}"));
+    expect(tabs, contains('if (_showsRecursiveScan)'));
+    expect(list, contains('Armsx2MultiDeleteDialog.show'));
+    expect(deletion, contains('linkedArmsx2GameFolderPath'));
+    expect(deletion, contains('refreshArmsx2InternalLibrary'));
+    expect(deletion, contains("systemFolderName: 'ps2'"));
+    expect(deletion, isNot(contains("ARMSX2/Saves")));
+    expect(deletion, isNot(contains("ARMSX2/BIOS")));
+  });
+
   test('ARMSX2 import menu exposes BIOS and games', () {
     final widget = File(
       'lib/widgets/armsx2_internal_playlist_actions.dart',
