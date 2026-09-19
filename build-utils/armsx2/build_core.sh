@@ -7,8 +7,18 @@ BUILD="$ROOT/build/armsx2-core"
 REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$ROOT/build-utils/armsx2/source.json")"
 mkdir -p "$BUILD" "$ROOT/dist/armsx2"
 python3 "$ROOT/build-utils/armsx2/prepare_source.py" "$SOURCE"
+
+# Make the native artifact independent from GitHub runner/workspace paths.
+# These flags cover normal debug/source records and __FILE__-style macro paths
+# across the upstream C/C++/Objective-C/Objective-C++ objects linked into Core.
+PREFIX_MAP_FLAGS="-ffile-prefix-map=$ROOT=/neostation -fdebug-prefix-map=$ROOT=/neostation -fmacro-prefix-map=$ROOT=/neostation -ffile-prefix-map=$SOURCE=/armsx2 -fdebug-prefix-map=$SOURCE=/armsx2 -fmacro-prefix-map=$SOURCE=/armsx2 -ffile-prefix-map=$BUILD=/build -fdebug-prefix-map=$BUILD=/build -fmacro-prefix-map=$BUILD=/build"
+
 cmake -S "$SOURCE/platforms/ios/app/src/main/cpp" -B "$BUILD" -G Xcode \
   -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DCMAKE_C_FLAGS="$PREFIX_MAP_FLAGS" \
+  -DCMAKE_CXX_FLAGS="$PREFIX_MAP_FLAGS" \
+  -DCMAKE_OBJC_FLAGS="$PREFIX_MAP_FLAGS" \
+  -DCMAKE_OBJCXX_FLAGS="$PREFIX_MAP_FLAGS" \
   -DARMSX2_REAL_DEVICE=ON -DLTO_PCSX2_CORE=OFF \
   -DNEO_ARMSX2_ADAPTER_DIR="$ROOT/packages/armsx2_internal_bridge" \
   -DNEO_ARMSX2_SOURCE_REVISION="$REVISION" \
