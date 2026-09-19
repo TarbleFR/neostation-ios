@@ -67,16 +67,17 @@ class SystemRepository {
       return true;
     }).toList();
 
-    // RPCS3 is an internal NeoStation iOS library. It must remain reachable
-    // from the main menu even before the first PS3 game has been imported;
-    // otherwise the RPCS3 import/firmware actions are trapped behind a system
-    // tile that cannot appear yet. Exposing the playlist here does not load or
-    // initialize the dormant RPCS3 Core.
-    if (Platform.isIOS && !visible.any((system) => system.folderName == 'ps3')) {
-      for (final system in allSystems) {
-        if (system.folderName == 'ps3') {
-          visible.add(system);
-          break;
+    // Embedded iOS emulator playlists must remain reachable even at zero
+    // games so their import actions are never trapped behind a missing tile.
+    // Merely exposing these systems does not initialize either native Core.
+    if (Platform.isIOS) {
+      for (final folderName in const <String>['ps2', 'ps3']) {
+        if (visible.any((system) => system.folderName == folderName)) continue;
+        for (final system in allSystems) {
+          if (system.folderName == folderName) {
+            visible.add(system);
+            break;
+          }
         }
       }
     }
