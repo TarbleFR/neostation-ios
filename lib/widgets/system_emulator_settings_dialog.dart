@@ -85,6 +85,19 @@ class _SystemEmulatorSettingsDialogState
 
   late SystemModel _system;
 
+  bool get _showsRecursiveScan {
+    final folder = _system.folderName.toLowerCase();
+    if (folder == 'all' || folder == 'android') return false;
+    // Embedded iOS libraries own a fixed private scan root. A recursive-scan
+    // switch is misleading here and previously caused the same UI issue for
+    // Dolphin/RPCS3.
+    if (Platform.isIOS &&
+        const <String>{'gc', 'wii', 'ps2', 'ps3'}.contains(folder)) {
+      return false;
+    }
+    return true;
+  }
+
   // Focus nodes for arrow key navigation blocking
   late final FocusNode _headerCloseButtonFocusNode;
   late final FocusNode _footerCloseButtonFocusNode;
@@ -113,10 +126,7 @@ class _SystemEmulatorSettingsDialogState
 
     // Initialize local system state
     _system = widget.system;
-    _totalGeneralItems =
-        (_system.folderName == 'all' || _system.folderName == 'android')
-        ? 4
-        : 5;
+    _totalGeneralItems = _showsRecursiveScan ? 5 : 4;
 
     _generalScrollController = ScrollController();
     _systemInfoScrollController = ScrollController();
