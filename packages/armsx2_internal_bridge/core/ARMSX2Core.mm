@@ -32,6 +32,7 @@
 #include <thread>
 #include <condition_variable>
 #include <signal.h>
+#include <setjmp.h>
 #include <sys/stat.h>
 
 #ifndef NEO_ARMSX2_SOURCE_REVISION
@@ -315,6 +316,8 @@ int request_jit_detach(char* error,size_t capacity) {
       return error_out("ARMSX2 cannot detach JIT outside Prepared state.",error,capacity);
   }
 #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR && defined(__arm64__)
+  if (DarwinMisc::GetJitMode() == DarwinMisc::JitMode::Legacy)
+    return 1;
   // If the debugger disappeared unexpectedly, catch the local SIGTRAP instead
   // of terminating NeoStation. A real helper advances PC and detaches, so this
   // handler is never invoked on the successful path.
