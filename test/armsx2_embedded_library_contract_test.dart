@@ -61,8 +61,8 @@ void main() {
     expect(deletion, contains('linkedArmsx2GameFolderPath'));
     expect(deletion, contains('refreshArmsx2InternalLibrary'));
     expect(deletion, contains("systemFolderName: 'ps2'"));
-    expect(deletion, isNot(contains("ARMSX2/Saves")));
-    expect(deletion, isNot(contains("ARMSX2/BIOS")));
+    expect(deletion, isNot(contains('savesDirectory()')));
+    expect(deletion, isNot(contains('biosDirectory()')));
   });
 
   test('embedded ARMSX2 game surface exposes touch controls and native game tools', () {
