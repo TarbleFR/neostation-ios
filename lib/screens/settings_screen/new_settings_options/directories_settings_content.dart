@@ -726,7 +726,8 @@ class DirectoriesSettingsContentState
 
     return [
       _buildIOSRetroArchSection(theme),
-      _buildIOSArmsx2Section(theme),
+      // ARMSX2 is embedded and manages its own Files-visible storage from the
+      // PS2 library import menu; the retired external-link card stays hidden.
       _buildIOSMeloNXSection(theme),
     ];
   }
