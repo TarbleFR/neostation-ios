@@ -697,18 +697,6 @@ class DirectoriesSettingsContentState
     );
   }
 
-  Future<void> _configureArmsx2Launch() async {
-    final opened =
-        await IosShortcutJitLaunchService.openArmsx2ShortcutInstaller();
-    if (!mounted || opened) return;
-
-    AppNotification.showNotification(
-      context,
-      AppLocale.shortcutSetupOpenError.getString(context),
-      type: NotificationType.error,
-    );
-  }
-
   Future<void> _syncWithMeloNX() async {
     final opened = await MelonxLibraryService.requestLibrarySync();
     if (!mounted) return;
@@ -809,22 +797,6 @@ class DirectoriesSettingsContentState
                       ? AppLocale.iosEmuResync.getString(context)
                       : AppLocale.iosEmuSync.getString(context),
                   style: TextStyle(fontSize: 14.r),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 10.r),
-          Expanded(
-            child: SizedBox(
-              height: 48.r,
-              child: OutlinedButton.icon(
-                onPressed: _configureArmsx2Launch,
-                icon: Icon(Symbols.rocket_launch_rounded, size: 20.r),
-                label: Text(
-                  AppLocale.configureLaunch.getString(context),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13.r),
                 ),
               ),
             ),
