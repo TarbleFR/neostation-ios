@@ -519,17 +519,11 @@ int load_state(uint32_t slot,uint32_t timeout,char* error,size_t capacity) {
   return state_operation(true,slot,timeout,error,capacity);
 }
 
-NSDictionary* retroachievements_state() {
-  @autoreleasepool {
-    NSDictionary* state=[ARMSX2Bridge retroAchievementsState];
-    return [state isKindOfClass:NSDictionary.class] ? state : nil;
-  }
-}
 int get_retroachievements_state_json(char* output,size_t capacity) {
   if(!output || capacity<2 || !has_running_game()) return 0;
   @autoreleasepool {
-    NSDictionary* state=retroachievements_state();
-    if(!state || ![NSJSONSerialization isValidJSONObject:state]) return 0;
+    NSDictionary* state=[ARMSX2Bridge retroAchievementsState];
+    if(![state isKindOfClass:NSDictionary.class] || ![NSJSONSerialization isValidJSONObject:state]) return 0;
     NSData* data=[NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
     if(!data || data.length+1>capacity) return 0;
     memcpy(output,data.bytes,data.length); output[data.length]=0;
