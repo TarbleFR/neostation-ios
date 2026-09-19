@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 290 Embedded ARMSX2
-run-name: NeoStation iOS Build 290 • ${{ github.sha }}
+name: NeoStation iOS Build 291 Embedded ARMSX2
+run-name: NeoStation iOS Build 291 • ${{ github.sha }}
 
 on:
   push:
@@ -14,23 +14,23 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-290
+  group: neostation-ios-build-291
   cancel-in-progress: true
 
 jobs:
   build:
     # Core-only development commits validate ARMSX2 separately, not a mislabeled IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') }}
-    name: Build 290 Embedded ARMSX2 IPA
+    name: Build 291 Embedded ARMSX2 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '290'
-      IPA_NAME: 'NeoStation-iOS-Build-290-Embedded-ARMSX2'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-290-Embedded-ARMSX2'
+      BUILD_NUMBER: '291'
+      IPA_NAME: 'NeoStation-iOS-Build-291-Embedded-ARMSX2'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-291-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
-      ARMSX2_CORE_HOST_SHA: 69352dad756df2014e2421ce274ac77a160042b0
-      ARMSX2_CORE_RUN_ID: '35470012627'
+      ARMSX2_CORE_HOST_SHA: b10c40f6d2f0e61f1101670f0ea9e17bdcbd5c73
+      ARMSX2_CORE_RUN_ID: '35471702712'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -330,7 +330,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 290 IPA
+      - name: Package and validate Build 291 IPA
         shell: bash
         run: |
           set -euo pipefail
