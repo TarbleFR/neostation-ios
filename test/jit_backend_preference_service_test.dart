@@ -21,7 +21,7 @@ void main() {
     expect(await JitBackendPreferenceService.useStikDebugFallback(), isFalse);
   });
 
-  test('one preference gates both integrated emulator paths', () {
+  test('global fallback remains scoped to the legacy MeloNX shortcut path', () {
     final launcher = File(
       'lib/services/ios_shortcut_jit_launch_service.dart',
     ).readAsStringSync();
@@ -36,12 +36,8 @@ void main() {
       ).hasMatch(launcher),
       isTrue,
     );
-    expect(
-      RegExp(
-        r'!useStikDebugFallback\s*&&\s*shortcutName == armsx2ShortcutName',
-      ).hasMatch(launcher),
-      isTrue,
-    );
+    expect(launcher, isNot(contains('armsx2ShortcutName')));
+    expect(launcher, isNot(contains('StikJitArmsx2Service')));
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
