@@ -239,7 +239,15 @@
  }
 --- a/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
 +++ b/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
-@@ -117,57 +117,24 @@
+@@ -43,6 +43,7 @@
+ #import <UIKit/UIKit.h>
+ 
+ #include "IOSRuntime.h"
++#import "IOS/ARMSX2GameView.h"
+ 
+ #pragma mark - namespace Host
+ namespace Host
+@@ -117,57 +118,24 @@
      void RequestResetSettings(bool) {} 
      const char* GetTranslatedStringImpl(const char* key) { return key; }
      u32 GetDisplayRefreshRate() { return 60; }
