@@ -97,14 +97,15 @@ void main() {
     expect(offenders, isEmpty, reason: offenders.join('\n'));
   });
 
-  test('every iOS emulator declares a non-empty url_scheme', () {
+  test('every iOS emulator is either embedded or declares a URL scheme', () {
     final offenders = <String>[];
     for (final system in systems) {
       for (final emulator in system.emulators) {
         final ios = emulator.platforms['ios'];
         if (ios is! Map) continue;
         final scheme = ios['url_scheme']?.toString().trim() ?? '';
-        if (scheme.isEmpty) {
+        final embedded = ios['embedded'] == true;
+        if (scheme.isEmpty && !embedded) {
           offenders.add('${system.name}: ${emulator.uniqueId}');
         }
       }
@@ -112,14 +113,15 @@ void main() {
     expect(offenders, isEmpty, reason: offenders.join('\n'));
   });
 
-  test('PS2 exposes ARMSX2 on iOS through the armsx2 URL scheme', () {
+  test('PS2 exposes ARMSX2 on iOS as an embedded runtime', () {
     final ps2 = systems.firstWhere((s) => s.name == 'ps2.json');
     final armsx2 = ps2.emulators.firstWhere(
       (e) => e.uniqueId == 'ps2.ios.armsx2',
     );
     final ios = Map<String, dynamic>.from(armsx2.platforms['ios'] as Map);
 
-    expect(ios['url_scheme'], 'armsx2');
+    expect(ios['embedded'], isTrue);
+    expect(ios.containsKey('url_scheme'), isFalse);
   });
 
   test('Switch exposes MeloNX on iOS through the melonx URL scheme', () {
