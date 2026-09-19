@@ -29,6 +29,8 @@ jobs:
       IPA_NAME: 'NeoStation-iOS-Build-290-Embedded-ARMSX2'
       ARTIFACT_NAME: 'NeoStation-iOS-Build-290-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
+      ARMSX2_CORE_HOST_SHA: 69352dad756df2014e2421ce274ac77a160042b0
+      ARMSX2_CORE_RUN_ID: '35470012627'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -204,8 +206,8 @@ jobs:
       - name: Download pinned embedded ARMSX2 Core
         uses: actions/download-artifact@v4
         with:
-          name: ARMSX2Core-eed63408d01e7c84ebd8359ce0adf96c385397cf
-          run-id: 35466894436
+          name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
+          run-id: ${{ env.ARMSX2_CORE_RUN_ID }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: dist/armsx2
 
@@ -216,11 +218,12 @@ jobs:
           test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
           test -f dist/armsx2/identity.json
           python3 - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
           identity=json.loads(Path('dist/armsx2/identity.json').read_text())
-          assert identity['revision'] == '8b5fad23dc290660aa394e75b0fd23e31099eaec', identity
-          assert identity['host_commit'] == 'eed63408d01e7c84ebd8359ce0adf96c385397cf', identity
+          source=json.loads(Path('build-utils/armsx2/source.json').read_text())
+          assert identity['revision'] == source['revision'], identity
+          assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
           assert identity['architectures'] == ['arm64'], identity
           print(identity)
           PY
@@ -338,9 +341,10 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
           python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
             --build-number "$BUILD_NUMBER" \
-            --source-revision 8b5fad23dc290660aa394e75b0fd23e31099eaec
+            --source-revision "$ARMSX2_SOURCE_REVISION"
           cp build/fast-native/identity.json dist/fast-native-identity.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
