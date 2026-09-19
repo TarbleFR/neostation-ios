@@ -36,6 +36,11 @@ EXPECTED_HELPERS = {
         'principalClass': 'Rpcs3JITRequestHandler',
         'marker': 'NeoStationRPCS3JITHelper',
     },
+    'ARMSX2JITHelper.appex': {
+        'bundleSuffix': '.armsx2jithelper',
+        'principalClass': 'Armsx2JITRequestHandler',
+        'marker': 'NeoStationARMSX2JITHelper',
+    },
 }
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
 NETWORK_EXTENSION_DEPENDENCY = (
