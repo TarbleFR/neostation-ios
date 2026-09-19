@@ -41,7 +41,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/retroarch_library_service.dart';
 import 'package:neostation/services/armsx2_library_service.dart';
-import 'package:neostation/services/armsx2_folder_service.dart';
+import 'package:neostation/services/armsx2_internal_service.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
@@ -317,24 +317,17 @@ void main() async {
     ConfigService.linkedExternalFolderPath =
         await ExternalFolderAccess.resolveBookmarkedFolder();
 
-    // Restore the security-scoped ARMSX2 library root.
-    final linkedArmsx2Path =
-        await ExternalFolderAccess.resolveBookmarkedFolder(
-          key: Armsx2FolderService.bookmarkKey,
-        );
-    if (linkedArmsx2Path != null && linkedArmsx2Path.trim().isNotEmpty) {
-      final root = await Armsx2FolderService.resolveRoot(linkedArmsx2Path);
-      ConfigService.linkedArmsx2FolderPath = root;
-      ConfigService.linkedArmsx2GameFolderPath =
-          await Armsx2FolderService.resolveGameDirectory(root);
-      log.i(
-        'ARMSX2 isolated root restored: root=$root '
-        'gameDir=${ConfigService.linkedArmsx2GameFolderPath ?? "none"}',
-      );
-    } else {
-      ConfigService.linkedArmsx2FolderPath = null;
-      ConfigService.linkedArmsx2GameFolderPath = null;
-    }
+    // ARMSX2 is embedded in NeoStation. Its canonical library/data root is
+    // NeoStation's own Files-visible Documents/ARMSX2 directory.
+    await Armsx2InternalService.ensureLayout();
+    final armsx2Root = await Armsx2InternalService.rootDirectory();
+    final armsx2Games = await Armsx2InternalService.gamesDirectory();
+    ConfigService.linkedArmsx2FolderPath = armsx2Root.path;
+    ConfigService.linkedArmsx2GameFolderPath = armsx2Games.path;
+    log.i(
+      'Embedded ARMSX2 storage ready: root=${armsx2Root.path} '
+      'games=${armsx2Games.path}',
+    );
     // Load the last exported emulator libraries so direct-launch matching
     // works immediately after a cold start without forcing a fresh sync.
     await RetroArchLibraryService.loadCachedLibrary();
