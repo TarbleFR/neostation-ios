@@ -39,6 +39,12 @@ class Rpcs3JitHandshakeTests(unittest.TestCase):
 static NSString* testDocuments;
 #import "Rpcs3Diagnostics.h"
 static NSTimeInterval const kRpcs3HelperConnectTimeout = 2.0;
+// The extracted production session calls these process/debugger primitives.
+// A macOS unit test has no attached iOS debugserver, so provide the successful
+// deterministic boundary while the separate JS contract exercises the real
+// BRK command, nonce, PC/register acknowledgement and resume protocol.
+static BOOL RPCS3HostHasLiveDebugger(void) { return YES; }
+static uint64_t RPCS3DebuggerProbe(uint64_t nonce) { return nonce + 1; }
 '''
         harness += session
         harness += r'''
@@ -92,6 +98,8 @@ static void universalHandshake() {
   assert([session waitUntilAttached:2]);
   assert(!session.finished);
   assert(![session waitUntilFinished:0.03]);
+  assert([session confirmCoreLoadReady]);
+  assert(session.coreLoadReady);
   // Simulate Core preparing and sealing its arena AFTER host was released.
   sendEvent(fd, session.token, @"complete", nil, @YES);
   assert([session waitUntilFinished:2] && session.success);
