@@ -34,10 +34,8 @@ def write_plist(path: Path, data: dict) -> None:
 
 def source_snapshot() -> None:
     paths = ['build-utils', 'native/dolphin_internal_helper',
-             'native/local_jit_tunnel',
              'packages/dolphin_internal_bridge', 'packages/dolphin_jit_helper',
              'packages/stikjit_bridge', 'lib/services/dolphin_internal_v2_service.dart',
-             'lib/services/local_jit_tunnel_service.dart',
              'lib/widgets/dolphin_internal_playlist_actions.dart',
              'lib/services/game/game_launch_service.dart',
              'lib/providers/sqlite_config_provider.dart',
@@ -107,9 +105,9 @@ end
     info_path = ios / 'Runner/Info.plist'
     info = plist(info_path)
     info['CFBundleDisplayName'] = 'NeoStation iOS'
-    info['NSBonjourServices'] = ['_remotepairing._tcp']
     info['NSLocalNetworkUsageDescription'] = (
-        "NeoStation discovers this iPhone's Remote Pairing service to enable JIT."
+        "NeoStation connects to this iPhone's LocalDevVPN Remote Pairing "
+        "endpoint to enable JIT."
     )
     write_plist(info_path, info)
     generate_plugin_registrant(ios)
@@ -265,15 +263,11 @@ def package() -> None:
                    'stikjitRelease': json.loads((LOGS / 'stikjit-release.json').read_text())})
     (dist / 'dolphin-build-report.json').write_text(json.dumps(report, indent=2) + '\n')
     (dist / (ipa.name + '.sha256')).write_text(report['sha256'] + '  ' + ipa.name + '\n')
-    # These plists are diagnostic inputs for signing automation, not separate
-    # applications for the user to install. The distribution remains one IPA.
+    # This plist is a diagnostic input for signing automation, not a separate
+    # application for the user to install. The distribution remains one IPA.
     shutil.copy2(
         ROOT / 'ios/Runner/Runner.entitlements',
         LOGS / 'NeoStation-signing.entitlements',
-    )
-    shutil.copy2(
-        ROOT / 'ios/NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements',
-        LOGS / 'NeoStationLocalTunnel-signing.entitlements',
     )
     print(json.dumps({k: report[k] for k in ('ipa', 'bytes', 'sha256', 'signatureState', 'structuralValidation')}, indent=2))
 

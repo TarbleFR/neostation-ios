@@ -10,6 +10,7 @@ int main(int argc, const char* argv[]) {
   @autoreleasepool {
     assert(argc == 3);
     testDocuments = [NSString stringWithUTF8String:argv[1]];
+    RPCS3DiagnosticsSetDirectoryForTesting(testDocuments);
     if (strcmp(argv[2], "crash") == 0) {
       RPCS3EarlyLoaderCapture capture;
       const char marker[] = "SIMULATED_CONSTRUCTOR_FAILURE_270\n";

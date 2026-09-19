@@ -10,24 +10,15 @@ void main() {
   });
 
   test('global JIT fallback defaults to integrated StikJIT', () async {
-    expect(
-      await JitBackendPreferenceService.useStikDebugFallback(),
-      isFalse,
-    );
+    expect(await JitBackendPreferenceService.useStikDebugFallback(), isFalse);
   });
 
   test('global JIT fallback persists both backend choices', () async {
     await JitBackendPreferenceService.setUseStikDebugFallback(true);
-    expect(
-      await JitBackendPreferenceService.useStikDebugFallback(),
-      isTrue,
-    );
+    expect(await JitBackendPreferenceService.useStikDebugFallback(), isTrue);
 
     await JitBackendPreferenceService.setUseStikDebugFallback(false);
-    expect(
-      await JitBackendPreferenceService.useStikDebugFallback(),
-      isFalse,
-    );
+    expect(await JitBackendPreferenceService.useStikDebugFallback(), isFalse);
   });
 
   test('one preference gates both integrated emulator paths', () {
@@ -40,30 +31,29 @@ void main() {
       contains('JitBackendPreferenceService.useStikDebugFallback()'),
     );
     expect(
-      RegExp(r'!useStikDebugFallback\s*&&\s*shortcutName == melonxShortcutName')
-          .hasMatch(launcher),
+      RegExp(
+        r'!useStikDebugFallback\s*&&\s*shortcutName == melonxShortcutName',
+      ).hasMatch(launcher),
       isTrue,
     );
     expect(
-      RegExp(r'!useStikDebugFallback\s*&&\s*shortcutName == armsx2ShortcutName')
-          .hasMatch(launcher),
+      RegExp(
+        r'!useStikDebugFallback\s*&&\s*shortcutName == armsx2ShortcutName',
+      ).hasMatch(launcher),
       isTrue,
     );
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools exposes pairing, the iOS VPN, and one fallback switch', () {
+  test('Tools exposes pairing and one fallback switch', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
     ).readAsStringSync();
 
-    expect(
-      tools,
-      contains('int getItemCount() => Platform.isIOS ? 3 : 2;'),
-    );
-    expect(tools, contains('LocalJitTunnelLocale.title'));
-    expect(tools, contains('LocalJitTunnelService.status()'));
+    expect(tools, contains('int getItemCount() => 2;'));
+    expect(tools, isNot(contains('LocalJitTunnel')));
+    expect(tools, isNot(contains('VPN')));
     expect(tools, contains('JitFallbackLocale.title'));
     expect(tools, contains('CustomToggleSwitch'));
     expect(tools, contains('setUseStikDebugFallback'));

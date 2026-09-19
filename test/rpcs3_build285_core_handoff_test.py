@@ -11,13 +11,6 @@ jit = read('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm')
 host = read('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm')
 helper = read('packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift')
 service = read('lib/services/rpcs3_internal_service.dart')
-support_diagnostics = read('packages/stikjit_bridge/ios/Classes/NeoStationVPNDiagnostics.swift')
-
-# Working VPN stack is frozen for this RPCS3-only build.
-assert subprocess.check_output(
-    ['git', 'hash-object', 'native/local_jit_tunnel/PacketTunnelProvider.swift'],
-    cwd=ROOT, text=True).strip() == 'f68c3e4f596cd75e554f91e6596fc9c234ceb4de'
-# Manager behavior is now tested by vpn_state_machine_test.py.
 
 # A vAttach stop reply alone may not release Core dlopen. The helper must first
 # enter universal.js's first continue loop and publish an explicit ready event.
@@ -37,7 +30,7 @@ assert '_consumePreviousIncompleteBootMarker(normalized)' in service
 assert 'Rpcs3InternalBridge.clearPpuCache(titleId)' not in service
 assert 'preserving the title PPU cache for the retry.' in service
 
-print('PASS: Core gate uses debugger probe; PPU cache and VPN provider preserved')
+print('PASS: Core gate uses debugger probe; PPU cache preserved')
 
 assert 'confirmCoreLoadReady' in jit
 assert 'RPCS3DebuggerProbe(_probeNonce)' in jit
@@ -51,8 +44,9 @@ assert 'core_handoff_end' in load_boundary
 prepare_boundary = jit.split('if (![call.method isEqualToString:@"prepareJit"])', 1)[1]
 assert '[session confirmCoreLoadReady]' not in prepare_boundary
 assert 'final nonce validation is reserved for the Core load boundary' in prepare_boundary
-assert 'readStages("RPCS3-milestones.log", milestoneStages)' in support_diagnostics
-assert 'core_handoff_begin' in support_diagnostics
+assert 'helperToAttachMs=%.1f' in jit
+assert 'final nonce resume proof pending' in jit
+assert 'host resumed after vAttach' not in jit
 assert 'scheduleCoreLoadReady' not in helper
 assert 'Handling signal 1' not in helper
 assert '.milliseconds(250)' not in helper

@@ -145,29 +145,12 @@ revision, route, save, temperature class and capture interval. No post-change
 God of War III device capture was available while implementing this patch, so
 the diagnostic above is the baseline and no FPS uplift is claimed yet.
 
-## Local JIT VPN control
+## External LocalDevVPN route
 
-Settings → Tools now contains a dedicated Local JIT VPN row on iOS. The first
-authorization/enable action saves a `NETunnelProviderManager`, which invokes the
-native iOS authorization flow. NeoStation neither bypasses nor simulates that
-permission.
-
-The native manager reports configured, authorized, enabled, on-demand and live
-connection status independently. Disable first persists on-demand as off, then
-stops the tunnel; it retains the accepted manager so a later enable does not
-create a duplicate configuration or unnecessarily repeat authorization. Enable
-and disable operations are serialized, duplicate managers are removed, signer
-bundle-ID rewrites are repaired, active third-party VPNs are rejected, and both
-connection directions have bounded waits.
-
-Cold-start and resume refreshes are best-effort and never display a permission
-prompt in the background. The Tools screen refreshes on every foreground return,
-including after the system authorization sheet or changes in iOS Settings.
-
-All actions, states, descriptions and error explanations are present in the 12
-NeoStation locales: English, German, Spanish, French, Indonesian, Italian,
-Japanese, Korean, Portuguese, Russian, Simplified Chinese and Traditional
-Chinese. A locale-completeness test rejects missing keys and fallback text.
+NeoStation does not manage a VPN profile. A StikJIT workflow checks the live
+RemotePairing endpoint exposed by a separately installed, user-controlled
+LocalDevVPN instance. That check is read-only: NeoStation never starts, stops or
+reconfigures LocalDevVPN.
 
 ## Remaining limitations
 

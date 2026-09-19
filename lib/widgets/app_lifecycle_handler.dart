@@ -9,7 +9,6 @@ import 'package:neostation/services/music_player_service.dart';
 import 'package:provider/provider.dart';
 
 /// Restores input, audio, and secondary-display state when NeoStation resumes.
-/// VPN ownership is intentionally independent of the Flutter lifecycle.
 class AppLifecycleHandler extends StatefulWidget {
   final Widget child;
 

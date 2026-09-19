@@ -164,8 +164,6 @@ def host():
     change(helper, '      try StikJIT.enableJIT(\n',
            '      try reporter?.send(event: "log", message: "' + BASELINE_MARKER + '")\n'
            '      try StikJIT.enableJIT(\n')
-    change('build-utils/reuse_build266_rpcs3_for267.py', 'ALLOWED = {',
-           "ALLOWED = {\n    'build-utils/patch_rpcs3_stop_reply270.py',\n    'test/rpcs3_stop_reply270_test.py',")
     print('RPCS3 baseline universal.js selection retained; experimental stop-reply script is NOT selected.')
 
 

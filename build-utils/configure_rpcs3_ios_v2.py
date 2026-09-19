@@ -30,10 +30,12 @@ REQUIRED_RUNTIME_ENTITLEMENTS = {
     'com.apple.developer.kernel.extended-virtual-addressing': True,
     'com.apple.developer.kernel.increased-memory-limit': True,
     'com.apple.developer.kernel.increased-debugging-memory-limit': True,
-    'com.apple.developer.networking.networkextension': [
-        'packet-tunnel-provider',
-    ],
 }
+
+RETIRED_VPN_ENTITLEMENTS = (
+    'com.apple.developer.networking.networkextension',
+    'com.apple.developer.networking.vpn.api',
+)
 
 
 def configure_runner_entitlements() -> None:
@@ -41,6 +43,10 @@ def configure_runner_entitlements() -> None:
     payload = plistlib.loads(path.read_bytes()) if path.is_file() else {}
     if not isinstance(payload, dict):
         raise SystemExit('Existing Runner entitlements are not a dictionary')
+    # A generated iOS host can survive between local builds. Remove the retired
+    # internal packet-tunnel capability instead of relying on a clean checkout.
+    for entitlement in RETIRED_VPN_ENTITLEMENTS:
+        payload.pop(entitlement, None)
     payload.update(REQUIRED_RUNTIME_ENTITLEMENTS)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False))

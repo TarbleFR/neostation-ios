@@ -112,7 +112,10 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
 
         Self.handoffQueue.async {
           do {
-            let configuration = StikJIT.Configuration.default
+            let configuration = StikJIT.Configuration(
+              deviceAddress: "10.7.0.1",
+              rsdPort: 49152
+            )
             let activatedPID = try Armsx2NeoStationProcessActivator().activate(
               bundleId: neoStationBundleId,
               pairingFilePath: pairingFilePath,
@@ -200,12 +203,15 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
       withIntermediateDirectories: true
     )
 
-    let configuration = StikJIT.Configuration.default
+    let configuration = StikJIT.Configuration(
+      deviceAddress: "10.7.0.1",
+      rsdPort: 49152
+    )
     let ddiPaths = DDIPaths.default(in: stikRoot)
     var logs = [String]()
 
     logs.append(
-      "Preparing NeoStation local tunnel/RSD and Developer Disk Image for ARMSX2."
+      "Preparing the LocalDevVPN RemotePairing/RSD route and Developer Disk Image for ARMSX2."
     )
     let readiness = StikJIT.prepareDevice(
       pairingFile: pairingFile,
@@ -272,7 +278,7 @@ public final class StikjitArmsx2BridgePlugin: NSObject, FlutterPlugin {
   ) -> String {
     switch stage {
     case .checkingReachability:
-      return "Checking NeoStation local tunnel/RSD reachability."
+      return "Checking LocalDevVPN RemotePairing/RSD reachability."
     case .checkingDDI:
       return "Checking Developer Disk Image."
     case .downloadingDDI(let fraction, let status):
@@ -396,7 +402,7 @@ enum Armsx2BridgeError: LocalizedError {
     case .symbolMissing(let symbol):
       return "StikJIT framework is missing required ARMSX2 symbol \(symbol)."
     case .invalidDeviceAddress(let address):
-      return "Invalid NeoStation local tunnel device address: \(address)"
+      return "Invalid LocalDevVPN device address: \(address)"
     case .idevice(let message):
       return message
     case .incompleteHandle(let name):

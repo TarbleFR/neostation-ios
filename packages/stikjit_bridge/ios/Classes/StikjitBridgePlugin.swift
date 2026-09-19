@@ -18,95 +18,9 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    if call.method == "ensureLocalTunnel" || call.method == "activateOwnedTunnel" {
-      guard #available(iOS 17.4, *) else {
-        result(
-          FlutterError(
-            code: "local_tunnel_unsupported_ios",
-            message: "The integrated local JIT tunnel requires iOS 17.4 or newer.",
-            details: nil
-          )
-        )
-        return
-      }
-      let completion: (NeoStationLocalTunnelManager.Response) -> Void = { response in
-        switch response {
-        case .success(let state):
-          result(state)
-        case .failure(let error):
-          result(
-            FlutterError(
-              code: "local_tunnel_\(error.code)",
-              message: error.localizedDescription,
-              details: nil
-            )
-          )
-        }
-      }
-      if call.method == "activateOwnedTunnel" {
-        NeoStationLocalTunnelManager.shared.enableOwned(completion: completion)
-      } else {
-        NeoStationLocalTunnelManager.shared.ensureRunning(completion: completion)
-      }
-      return
-    }
-
-    if call.method == "localTunnelStatus" {
-      guard #available(iOS 17.4, *) else {
-        result([
-          "active": false,
-          "status": "unsupported",
-          "managedByNeoStation": true,
-          "configured": false,
-          "authorized": false,
-          "enabled": false,
-          "onDemand": false,
-        ])
-        return
-      }
-      NeoStationLocalTunnelManager.shared.status { response in
-        switch response {
-        case .success(let state):
-          result(state)
-        case .failure(let error):
-          result(
-            FlutterError(
-              code: "local_tunnel_\(error.code)",
-              message: error.localizedDescription,
-              details: nil
-            )
-          )
-        }
-      }
-      return
-    }
-
-    if call.method == "disableLocalTunnel" {
-      guard #available(iOS 17.4, *) else {
-        result([
-          "active": false,
-          "status": "unsupported",
-          "managedByNeoStation": true,
-          "configured": false,
-          "authorized": false,
-          "enabled": false,
-          "onDemand": false,
-        ])
-        return
-      }
-      NeoStationLocalTunnelManager.shared.disable { response in
-        switch response {
-        case .success(let state):
-          result(state)
-        case .failure(let error):
-          result(
-            FlutterError(
-              code: "local_tunnel_\(error.code)",
-              message: error.localizedDescription,
-              details: nil
-            )
-          )
-        }
+    if call.method == "probeLocalDevVpnRoute" {
+      LocalDevVpnRouteProbe.probe { response in
+        result(response)
       }
       return
     }
@@ -187,11 +101,14 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
       withIntermediateDirectories: true
     )
 
-    let configuration = StikJIT.Configuration.default
+    let configuration = StikJIT.Configuration(
+      deviceAddress: "10.7.0.1",
+      rsdPort: 49152
+    )
     let ddiPaths = DDIPaths.default(in: stikRoot)
     var logs = [String]()
 
-    logs.append("Preparing NeoStation local tunnel/RSD and Developer Disk Image.")
+    logs.append("Preparing the LocalDevVPN RemotePairing/RSD route and Developer Disk Image.")
     let readiness = StikJIT.prepareDevice(
       pairingFile: pairingFile,
       paths: ddiPaths,
@@ -262,7 +179,7 @@ public final class StikjitBridgePlugin: NSObject, FlutterPlugin {
   ) -> String {
     switch stage {
     case .checkingReachability:
-      return "Checking NeoStation local tunnel/RSD reachability."
+      return "Checking LocalDevVPN RemotePairing/RSD reachability."
     case .checkingDDI:
       return "Checking Developer Disk Image."
     case .downloadingDDI(let fraction, let status):
@@ -297,7 +214,7 @@ private enum StikjitBridgeError: LocalizedError {
     case .symbolMissing(let symbol):
       return "StikJIT framework is missing required idevice symbol \(symbol)."
     case .invalidDeviceAddress(let address):
-      return "Invalid NeoStation local tunnel device address: \(address)"
+      return "Invalid LocalDevVPN device address: \(address)"
     case .idevice(let message):
       return message
     case .incompleteHandle(let name):

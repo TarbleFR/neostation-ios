@@ -1,12 +1,12 @@
 #import <Foundation/Foundation.h>
 #include <cassert>
 
-static NSString* testDocuments;
-// Compile the production implementation unchanged, but never write to the
-// developer/runner's Documents directory.
-#define NSSearchPathForDirectoriesInDomains(...) (@[testDocuments])
 #import "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h"
-#undef NSSearchPathForDirectoriesInDomains
+
+extern "C" void RPCS3TestWriteCoreDiagnostics(NSUInteger diagnosticCount,
+                                                NSUInteger milestoneCount);
+extern "C" void RPCS3TestWriteJitDiagnostics(NSUInteger diagnosticCount,
+                                               NSUInteger milestoneCount);
 
 static NSArray<NSDictionary*>* readEntries(NSString* path) {
   NSString* data = [NSString stringWithContentsOfFile:path
@@ -28,31 +28,52 @@ static NSArray<NSDictionary*>* readEntries(NSString* path) {
 int main(int argc, const char* argv[]) {
   @autoreleasepool {
     assert(argc == 2);
-    testDocuments = [NSString stringWithUTF8String:argv[1]];
+    NSString* testDocuments = [NSString stringWithUTF8String:argv[1]];
+    RPCS3DiagnosticsSetDirectoryForTesting(testDocuments);
     NSString* path = [testDocuments stringByAppendingPathComponent:@"RPCS3-diagnostic.log"];
-    RPCS3Diagnostic(@"boot", @"start");
-    dispatch_apply(1000, dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^(size_t i) {
-      RPCS3Diagnostic(@"core_log", [NSString stringWithFormat:@"line-%zu", i]);
+    NSString* milestonePath = [testDocuments
+        stringByAppendingPathComponent:@"RPCS3-milestones.log"];
+
+    // Calls originate from two independently compiled translation units. The
+    // old static-inline implementation gave each one a different queue, file
+    // descriptor, length counter and milestone lock for these same paths.
+    dispatch_group_t producers = dispatch_group_create();
+    dispatch_queue_t concurrent = dispatch_get_global_queue(
+        QOS_CLASS_USER_INITIATED, 0);
+    dispatch_group_async(producers, concurrent, ^{
+      RPCS3TestWriteCoreDiagnostics(1000, 64);
     });
-    // Writes must already be readable before any milestone flush/close.
+    dispatch_group_async(producers, concurrent, ^{
+      RPCS3TestWriteJitDiagnostics(1000, 64);
+    });
+    assert(dispatch_group_wait(
+        producers, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC)) == 0);
+    RPCS3DiagnosticsFlushForTesting();
+
     NSArray* entries = readEntries(path);
-    assert(entries.count == 1001);
+    assert(entries.count == 2000);
     NSMutableSet* messages = [NSMutableSet new];
     for (NSDictionary* entry in entries) [messages addObject:entry[@"message"]];
-    assert(messages.count == 1001);
-    RPCS3Diagnostic(@"stopped", @"durable");
-    assert(readEntries(path).count == 1002);
+    assert(messages.count == 2000);
 
-    // A milestone releases the descriptor. The next stream must reopen the
-    // actual path after an export/rotation of the previous file.
+    NSArray* milestones = readEntries(milestonePath);
+    assert(milestones.count == 128);
+    [messages removeAllObjects];
+    for (NSDictionary* entry in milestones) [messages addObject:entry[@"message"]];
+    assert(messages.count == 128);
+
+    // An external export can move the path while the process retains its file
+    // descriptor. The next write must detect that and reopen the real path.
     assert([NSFileManager.defaultManager moveItemAtPath:path
         toPath:[path stringByAppendingString:@".previous"] error:nil]);
     RPCS3Diagnostic(@"core_log", @"reopened");
+    RPCS3DiagnosticsFlushForTesting();
     assert(readEntries(path).count == 1);
 
     NSString* large = [@"x" stringByPaddingToLength:4096 withString:@"x" startingAtIndex:0];
     for (int i = 0; i < 700; ++i) RPCS3Diagnostic(@"core_log", large);
     RPCS3Diagnostic(@"stopped", @"after rotation");
+    RPCS3DiagnosticsFlushForTesting();
     unsigned long long size = [[NSFileManager.defaultManager
         attributesOfItemAtPath:path error:nil] fileSize];
     assert(size <= 2 * 1024 * 1024);
@@ -60,6 +81,7 @@ int main(int argc, const char* argv[]) {
     assert(entries.count > 1 && entries.count < 700);
     assert([entries.lastObject[@"message"] isEqualToString:@"after rotation"]);
     RPCS3Diagnostic(nil, nil);
+    RPCS3DiagnosticsFlushForTesting();
     assert([readEntries(path).lastObject[@"stage"] isEqualToString:@""]);
   }
   return 0;

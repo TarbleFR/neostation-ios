@@ -105,11 +105,9 @@ native/dolphin_internal_helper/. It uses the Dolphin-specific legacy mechanism
 and targets the host NeoStation PID. Existing external-emulator bridges keep
 their own JIT behavior. No Pairing Files or signing credentials are distributed.
 
-NeoStation also ships its own Packet Tunnel app extension for the device-local
-`10.7.1.1` to `10.7.0.1` RemotePairing route. It is an independent NeoStation
-implementation built with Apple's NetworkExtension framework; it does not
-embed or redistribute the separate LocalDevVPN application. The system keeps
-the tunnel on demand after the user accepts iOS's first-use VPN prompt.
+NeoStation does not embed or redistribute LocalDevVPN. Users who choose the
+LocalDevVPN route install, configure and control that separate application
+independently before starting a StikJIT workflow in NeoStation.
 
 ---
 

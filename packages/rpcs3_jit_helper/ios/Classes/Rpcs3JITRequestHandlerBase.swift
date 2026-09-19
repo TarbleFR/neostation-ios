@@ -149,7 +149,10 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         withIntermediateDirectories: true
       )
 
-      let configuration = StikJIT.Configuration.default
+      let configuration = StikJIT.Configuration(
+        deviceAddress: "10.7.0.1",
+        rsdPort: 49152
+      )
       let ddiPaths = DDIPaths.default(in: stikRoot)
       try reporter?.send(
         event: "log",
@@ -228,7 +231,7 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
   ) -> String {
     switch stage {
     case .checkingReachability:
-      return "StikJIT: checking NeoStation local tunnel/RSD reachability."
+      return "StikJIT: checking LocalDevVPN RemotePairing/RSD reachability."
     case .checkingDDI:
       return "StikJIT: checking the Developer Disk Image."
     case .downloadingDDI(let fraction, let status):
@@ -345,15 +348,19 @@ private final class Rpcs3HelperReporter {
     }
 
     // Lifecycle/control messages are rare and authoritative. Keep them ordered
-    // and acknowledged so attach/completion state cannot be guessed.
+    // and acknowledged so attach/completion state cannot be guessed. Only the
+    // enqueue belongs under sendLock. A prior log completion runs on Network's
+    // serial queue and also takes this lock to decrement pendingLogs; retaining
+    // it while waiting for the control acknowledgement deadlocks that queue
+    // ahead of this control completion until the 20-second timeout expires.
     sendLock.lock()
-    defer { sendLock.unlock() }
     let semaphore = DispatchSemaphore(value: 0)
     var sendError: Error?
     connection.send(content: data, completion: .contentProcessed { error in
       sendError = error
       semaphore.signal()
     })
+    sendLock.unlock()
     guard semaphore.wait(timeout: .now() + 20) == .success else {
       throw Rpcs3HelperError.connection(
         "Timed out writing control state to NeoStation."

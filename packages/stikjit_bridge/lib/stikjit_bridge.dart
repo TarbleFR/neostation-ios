@@ -8,58 +8,26 @@ class StikjitBridge {
     'neostation/stikjit_armsx2',
   );
 
-  static Future<LocalJitTunnelState> ensureLocalTunnel() async {
-    final raw = await _channel.invokeMethod<Object?>('ensureLocalTunnel');
+  static Future<LocalDevVpnRouteState> probeLocalDevVpnRoute() async {
+    final raw = await _channel.invokeMethod<Object?>('probeLocalDevVpnRoute');
     if (raw is! Map) {
-      throw StateError('NeoStation local tunnel returned an invalid response.');
+      throw StateError('LocalDevVPN route probe returned an invalid response.');
     }
-    final state = LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
-    if (!state.active || !state.routeVerified) {
+    final state = LocalDevVpnRouteState.fromMap(Map<String, dynamic>.from(raw));
+    if (!state.reachable ||
+        state.host != LocalDevVpnRouteState.expectedHost ||
+        state.port != LocalDevVpnRouteState.expectedPort) {
       throw PlatformException(
-        code: 'local_tunnel_jit_route_unavailable',
-        message: 'The native preflight did not verify the RemotePairing route.',
+        code: 'localdevvpn_route_unavailable',
+        message:
+            'LocalDevVPN did not expose RemotePairing at '
+            '${LocalDevVpnRouteState.expectedHost}:'
+            '${LocalDevVpnRouteState.expectedPort} '
+            '(state=${state.state}, elapsedMs=${state.elapsedMs}).',
         details: raw,
       );
     }
     return state;
-  }
-
-  /// Explicit Settings ON. This is the only API allowed to start the
-  /// NeoStation-owned Network Extension.
-  static Future<LocalJitTunnelState> activateOwnedTunnel() async {
-    final raw = await _channel.invokeMethod<Object?>('activateOwnedTunnel');
-    if (raw is! Map) {
-      throw StateError('NeoStation owned tunnel returned an invalid response.');
-    }
-    final state = LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
-    if (!state.active || !state.managedByNeoStation) {
-      throw PlatformException(
-        code: 'local_tunnel_start_failed',
-        message: 'The integrated VPN did not enter an active state.',
-        details: raw,
-      );
-    }
-    return state;
-  }
-
-  /// The native preflight proves endpoint reachability, not merely VPN status.
-  /// It never starts or stops a VPN.
-  static Future<LocalJitTunnelState> ensureJitRoute() => ensureLocalTunnel();
-
-  static Future<LocalJitTunnelState> localTunnelStatus() async {
-    final raw = await _channel.invokeMethod<Object?>('localTunnelStatus');
-    if (raw is! Map) {
-      throw StateError('NeoStation local tunnel returned an invalid status.');
-    }
-    return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
-  }
-
-  static Future<LocalJitTunnelState> disableLocalTunnel() async {
-    final raw = await _channel.invokeMethod<Object?>('disableLocalTunnel');
-    if (raw is! Map) {
-      throw StateError('NeoStation local tunnel returned an invalid status.');
-    }
-    return LocalJitTunnelState.fromMap(Map<String, dynamic>.from(raw));
   }
 
   static Future<StikjitLaunchResult> enableMeloNxJit({
@@ -67,7 +35,7 @@ class StikjitBridge {
     required String bundleId,
     required String gameUrl,
   }) async {
-    await ensureJitRoute();
+    await probeLocalDevVpnRoute();
     final raw = await _channel.invokeMethod<Object?>('enableMeloNxJit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
@@ -100,7 +68,7 @@ class StikjitBridge {
     required String bundleId,
     required String gameUrl,
   }) async {
-    await ensureJitRoute();
+    await probeLocalDevVpnRoute();
     final raw = await _armsx2Channel.invokeMethod<Object?>('enableArmsx2Jit', {
       'pairingFilePath': pairingFilePath,
       'bundleId': bundleId,
@@ -129,54 +97,44 @@ class StikjitBridge {
   }
 }
 
-class LocalJitTunnelState {
-  const LocalJitTunnelState({
-    required this.active,
-    required this.status,
-    required this.managedByNeoStation,
-    required this.configured,
-    required this.authorized,
-    required this.enabled,
-    required this.interfaceAddress,
-    required this.peerAddress,
-    required this.onDemand,
-    this.routeVerified = false,
-    this.lastErrorCode,
-    this.lastErrorDetail,
+class LocalDevVpnRouteState {
+  const LocalDevVpnRouteState({
+    required this.reachable,
+    required this.host,
+    required this.port,
+    required this.elapsedMs,
+    required this.state,
+    required this.networkState,
+    this.errorDomain,
+    this.errorCode,
+    this.errorDescription,
   });
 
-  factory LocalJitTunnelState.fromMap(Map<String, dynamic> data) =>
-      LocalJitTunnelState(
-        active: data['active'] == true,
-        status: data['status']?.toString() ?? 'unknown',
-        managedByNeoStation: data['managedByNeoStation'] == true,
-        configured: data['configured'] == true,
-        authorized: data['authorized'] == true,
-        enabled: data['enabled'] == true,
-        interfaceAddress: data['interfaceAddress']?.toString(),
-        peerAddress: data['peerAddress']?.toString(),
-        onDemand: data['onDemand'] == true,
-        routeVerified: data['routeVerified'] == true,
-        lastErrorCode: data['lastErrorCode']?.toString(),
-        lastErrorDetail: data['lastErrorDetail']?.toString(),
+  factory LocalDevVpnRouteState.fromMap(Map<String, dynamic> data) =>
+      LocalDevVpnRouteState(
+        reachable: data['reachable'] == true,
+        host: data['host']?.toString() ?? '',
+        port: (data['port'] as num?)?.toInt() ?? 0,
+        elapsedMs: (data['elapsedMs'] as num?)?.toInt() ?? 0,
+        state: data['state']?.toString() ?? 'unknown',
+        networkState: data['networkState']?.toString() ?? 'unknown',
+        errorDomain: data['errorDomain']?.toString(),
+        errorCode: data['errorCode']?.toString(),
+        errorDescription: data['errorDescription']?.toString(),
       );
 
-  final bool active;
-  final String status;
-  final bool managedByNeoStation;
-  final bool configured;
-  final bool authorized;
-  final bool enabled;
-  final String? interfaceAddress;
-  final String? peerAddress;
-  final bool onDemand;
-  final bool routeVerified;
-  final String? lastErrorCode;
-  final String? lastErrorDetail;
+  static const expectedHost = '10.7.0.1';
+  static const expectedPort = 49152;
 
-  bool get canStopOwnedTunnel =>
-      managedByNeoStation &&
-      (active || status == 'connecting' || status == 'reasserting');
+  final bool reachable;
+  final String host;
+  final int port;
+  final int elapsedMs;
+  final String state;
+  final String networkState;
+  final String? errorDomain;
+  final String? errorCode;
+  final String? errorDescription;
 }
 
 class StikjitLaunchResult {

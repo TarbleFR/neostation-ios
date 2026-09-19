@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import plistlib
-import shutil
 import subprocess
 import tempfile
 import zipfile
@@ -18,9 +17,8 @@ from pathlib import Path
 
 from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
-    LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS,
+    FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
-    require_entitlements,
     require_runtime_entitlements,
 )
 from validate_rpcs3_embedded_core import (
@@ -30,6 +28,20 @@ from validate_rpcs3_embedded_core import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_NAME = 'libRPCS3Core.dylib'
+EXPECTED_HELPERS = {
+    'DolphinJITHelper.appex': {
+        'bundleSuffix': '.dolphinjithelper',
+        'principalClass': 'DolphinJITRequestHandler',
+        'marker': 'NeoStationDolphinJITHelper',
+    },
+    'RPCS3JITHelper.appex': {
+        'bundleSuffix': '.rpcs3jithelper',
+        'principalClass': 'Rpcs3JITRequestHandler',
+        'marker': 'NeoStationRPCS3JITHelper',
+    },
+}
+PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
+SHARE_EXTENSION_POINT = 'com.apple.share-services'
 REQUIRED_CORE_SYMBOLS = (
     '_rpcs3_ios_initialize',
     '_rpcs3_ios_run_llvm_self_test',
@@ -61,6 +73,14 @@ def safe_members(archive: zipfile.ZipFile) -> None:
         path = Path(info.filename)
         demand(not path.is_absolute(), f'Unsafe absolute IPA member: {info.filename}')
         demand('..' not in path.parts, f'Unsafe parent traversal in IPA: {info.filename}')
+
+
+def reject_vpn_entitlements(entitlements: dict, owner: str) -> None:
+    forbidden = [key for key in FORBIDDEN_NETWORK_ENTITLEMENTS if key in entitlements]
+    demand(
+        not forbidden,
+        f'{owner} contains retired VPN entitlements: {", ".join(forbidden)}',
+    )
 
 
 def command_output(*args: str) -> str:
@@ -136,30 +156,69 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
 
         entitlements = embedded_entitlements(executable.read_bytes())
         require_runtime_entitlements(entitlements)
+        reject_vpn_entitlements(entitlements, 'NeoStation')
 
-        tunnel = app / 'PlugIns/NeoStationLocalTunnel.appex'
-        demand(tunnel.is_dir(), 'NeoStation local tunnel extension is missing')
-        tunnel_info = plistlib.loads((tunnel / 'Info.plist').read_bytes())
-        demand(
-            tunnel_info.get('CFBundleIdentifier') ==
-            f"{info.get('CFBundleIdentifier')}.localtunnel",
-            'NeoStation local tunnel bundle identifier is inconsistent',
+        extensions = sorted(
+            path for path in app.rglob('*.appex') if path.is_dir()
         )
         demand(
-            tunnel_info.get('NSExtension', {}).get(
+            all(path.parent == app / 'PlugIns' for path in extensions),
+            'Every app extension must be nested in NeoStation/PlugIns',
+        )
+        extension_names = {path.name for path in extensions}
+        demand(
+            extension_names == set(EXPECTED_HELPERS),
+            'Unexpected app-extension set: expected '
+            f'{sorted(EXPECTED_HELPERS)}, got {sorted(extension_names)}',
+        )
+        helper_identifiers = {}
+        for extension in extensions:
+            contract = EXPECTED_HELPERS[extension.name]
+            extension_info = plistlib.loads(
+                (extension / 'Info.plist').read_bytes()
+            )
+            extension_point = extension_info.get('NSExtension', {}).get(
                 'NSExtensionPointIdentifier'
-            ) == 'com.apple.networkextension.packet-tunnel',
-            'NeoStation local tunnel extension point is invalid',
-        )
-        tunnel_executable = tunnel / tunnel_info['CFBundleExecutable']
-        tunnel_entitlements = embedded_entitlements(
-            tunnel_executable.read_bytes()
-        )
-        require_entitlements(
-            tunnel_entitlements,
-            LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS,
-            'NeoStationLocalTunnel',
-        )
+            )
+            demand(
+                extension_point != PACKET_TUNNEL_EXTENSION_POINT,
+                f'{extension.name} is a forbidden packet-tunnel provider',
+            )
+            demand(
+                extension_point == SHARE_EXTENSION_POINT,
+                f'{extension.name} has an unexpected extension point: '
+                f'{extension_point!r}',
+            )
+            demand(
+                extension_info.get('NSExtension', {}).get(
+                    'NSExtensionPrincipalClass'
+                ) == contract['principalClass'],
+                f'{extension.name} principal class is inconsistent',
+            )
+            demand(
+                extension_info.get(contract['marker']) == '1',
+                f'{extension.name} identity marker is missing',
+            )
+            expected_identifier = (
+                f"{info.get('CFBundleIdentifier')}"
+                f"{contract['bundleSuffix']}"
+            )
+            demand(
+                extension_info.get('CFBundleIdentifier') == expected_identifier,
+                f'{extension.name} bundle identifier is inconsistent',
+            )
+            extension_executable = extension / str(
+                extension_info.get('CFBundleExecutable', '')
+            )
+            demand(
+                extension_executable.is_file(),
+                f'{extension.name} executable is missing',
+            )
+            extension_entitlements = embedded_entitlements(
+                extension_executable.read_bytes()
+            )
+            reject_vpn_entitlements(extension_entitlements, extension.name)
+            helper_identifiers[extension.name] = expected_identifier
 
         actual_head = command_output('git', '-C', str(ROOT), 'rev-parse', 'HEAD').strip()
         demand(actual_head == commit,
@@ -178,8 +237,9 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'runtimeEntitlements': {
                 key: entitlements.get(key) for key in REQUIRED_RUNTIME_ENTITLEMENTS
             },
-            'localTunnelBundleIdentifier': tunnel_info['CFBundleIdentifier'],
-            'localTunnelEntitlements': tunnel_entitlements,
+            'jitHelperBundleIdentifiers': helper_identifiers,
+            'embeddedPacketTunnelPresent': False,
+            'networkExtensionEntitlementPresent': False,
             'lazyLoadValidated': True,
         }
 

@@ -24,7 +24,7 @@ NeoStation iOS is an iPhone and iPad port of [NeoStation](https://github.com/mis
 - **ARMSX2** PS2 library synchronization, direct launching and JIT-oriented launch flows.
 - **RPCS3** PS3 Data-folder library synchronization, PARAM.SFO metadata repair and JIT-assisted launch flow.
 - **[StikJIT](https://github.com/StikDebug/StikJIT)** integration for supported iOS emulator workflows.
-- A system-managed **local JIT tunnel embedded in the NeoStation IPA**, so StikJIT no longer requires a separately installed LocalDevVPN application. iOS asks for VPN approval on first use.
+- A read-only JIT route check compatible with a separately installed and user-controlled **LocalDevVPN**.
 - [ScreenScraper](https://www.screenscraper.fr/) metadata/media scraping and [RetroAchievements](https://retroachievements.org/).
 - Gamepad-focused landscape navigation and multi-language UI.
 
@@ -34,8 +34,13 @@ NeoStation iOS is an iPhone and iPad port of [NeoStation](https://github.com/mis
 
 - iOS 18 or newer.
 - An IPA signing/sideloading method such as [SideStore](https://sidestore.io/) or another compatible installer, or Apple Developer signing.
-- A signer that preserves the embedded app extension and the `packet-tunnel-provider` Network Extension entitlement when using the integrated local JIT tunnel.
+- LocalDevVPN configured and active before starting a workflow that requires StikJIT.
 - RetroArch, MeloNX, ARMSX2 or RPCS3 when using the corresponding external integration.
+
+When upgrading from a NeoStation build that included its own JIT tunnel,
+remove the old **NeoStation Local JIT Tunnel** profile in iOS Settings and
+reactivate or recreate LocalDevVPN once. Older builds could overwrite its
+on-demand rules; the LocalDevVPN application owns that configuration.
 
 ### To build locally
 

@@ -20,7 +20,7 @@ private enum Armsx2NeoStationActivationError: LocalizedError {
     case .pairingFileMissing:
       return "The pairing file is no longer readable during the ARMSX2 post-JIT handoff."
     case .invalidDeviceAddress(let address):
-      return "Invalid NeoStation local tunnel device address during ARMSX2 handoff: \(address)"
+      return "Invalid LocalDevVPN device address during ARMSX2 handoff: \(address)"
     case .symbolMissing(let symbol):
       return "StikJIT framework is missing required ARMSX2 handoff symbol \(symbol)."
     case .incompleteHandle(let name):

@@ -746,8 +746,14 @@ BOOL RPCS3JitConfirmCoreLoadHandoff(void) {
       return;
     }
     response[@"helperConnected"] = @YES;
-    response[@"helperConnectedMs"] = @((NSProcessInfo.processInfo.systemUptime - operationStarted) * 1000.0);
-    RPCS3Milestone(@"jit_helper_connected", @"Authenticated helper control channel connected");
+    NSTimeInterval helperConnectedMs =
+        (NSProcessInfo.processInfo.systemUptime - operationStarted) * 1000.0;
+    response[@"helperConnectedMs"] = @(helperConnectedMs);
+    RPCS3Milestone(
+        @"jit_helper_connected",
+        [NSString stringWithFormat:
+            @"Authenticated helper control channel connected; elapsedMs=%.1f",
+            helperConnectedMs]);
 
     if (![session waitUntilAttached:kRpcs3AttachTimeout]) {
       response[@"message"] = session.finalMessage.length
@@ -758,8 +764,16 @@ BOOL RPCS3JitConfirmCoreLoadHandoff(void) {
       return;
     }
     response[@"pidAttached"] = @YES;
-    response[@"debuggerAttachedMs"] = @((NSProcessInfo.processInfo.systemUptime - operationStarted) * 1000.0);
-    RPCS3Milestone(@"jit_debugger_attached", @"PID identity verified; host resumed after vAttach");
+    NSTimeInterval debuggerAttachedMs =
+        (NSProcessInfo.processInfo.systemUptime - operationStarted) * 1000.0;
+    response[@"debuggerAttachedMs"] = @(debuggerAttachedMs);
+    RPCS3Milestone(
+        @"jit_debugger_attached",
+        [NSString stringWithFormat:
+            @"PID identity verified at vAttach stop; elapsedMs=%.1f; "
+             "helperToAttachMs=%.1f; final nonce resume proof pending",
+            debuggerAttachedMs,
+            debuggerAttachedMs - helperConnectedMs]);
     // Do not spend the final readiness proof here and then cross two Flutter
     // channels before loading the Core. The loader performs the nonce probe at
     // the actual dlopen boundary, which closes that race completely.

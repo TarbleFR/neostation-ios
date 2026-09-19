@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 288 VPN JIT RPCS3 Launch Fix
-run-name: NeoStation iOS Build 288 • ${{ github.sha }}
+name: NeoStation iOS Build 289 LocalDevVPN RPCS3 Fix
+run-name: NeoStation iOS Build 289 • ${{ github.sha }}
 
 on:
   push:
@@ -14,18 +14,18 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-288
+  group: neostation-ios-build-289
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build 288 Experimental IPA
+    name: Build 289 Experimental IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '288'
-      IPA_NAME: 'NeoStation-iOS-Build-288-VPN-JIT-RPCS3-Launch-Fix'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-288-VPN-JIT-RPCS3-Launch-Fix'
+      BUILD_NUMBER: '289'
+      IPA_NAME: 'NeoStation-iOS-Build-289-LocalDevVPN-RPCS3-Fix'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-289-LocalDevVPN-RPCS3-Fix'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -59,7 +59,55 @@ jobs:
           mkdir -p build/rpcs3-ci build/fast-native
 
           git diff --check
-          python3 test/vpn_internal_single_source_test.py 2>&1 | tee build/rpcs3-ci/vpn-v277-single-source.log
+          if rg -n \
+            --glob '*.dart' --glob '*.swift' --glob '*.m' --glob '*.mm' \
+            --glob '*.h' --glob '*.podspec' --glob '*.plist' \
+            --glob '*.entitlements' \
+            'NeoStationLocalTunnel|NeoStationVPNDiagnostics|PacketTunnelProvider|NETunnelProvider|NEVPN|NetworkExtension|packet-tunnel-provider' \
+            lib native packages/stikjit_bridge; then
+            echo 'Retired internal VPN implementation remains in production sources.' >&2
+            exit 1
+          fi
+          retired_vpn_build_files=(
+            build-utils/configure_local_jit_tunnel.py
+            build-utils/patch_local_tunnel_build269.py
+            build-utils/patch_rpcs3_build268_tunnel.py
+            build-utils/patch_rpcs3_build270_transport.py
+            build-utils/patch_rpcs3_build274_launch.py
+            build-utils/patch_stikjit_remote_pairing.py
+            build-utils/patch_vpn_build271.py
+            build-utils/patch_vpn_build273.py
+            build-utils/patch_vpn_build276_final.py
+            build-utils/reuse_build266_rpcs3_for267.py
+            build-utils/rpcs3/build270_packet_pump.swift.inc
+            build-utils/validate_build266_identity.py
+            build-utils/validate_build269_identity.py
+            build-utils/validate_build270_identity.py
+            build-utils/validate_build271_identity.py
+            build-utils/validate_build273_identity.py
+            build-utils/validate_build274_identity.py
+            build-utils/validate_build275_identity.py
+            build-utils/validate_build276_identity.py
+            build-utils/validate_vpn_build279_artifact.py
+            build-utils/validate_vpn_build282_handoff.py
+            build-utils/validate_vpn_build284_frozen.py
+            build-utils/validate_vpn_build284_manager.py
+            build-utils/vpn271/manager.swift.inc
+            build-utils/vpn271/provider.swift.inc
+          )
+          for retired in "${retired_vpn_build_files[@]}"; do
+            test ! -e "$retired" || {
+              echo "Retired internal-VPN build source remains: $retired" >&2
+              exit 1
+            }
+          done
+          python3 -m py_compile \
+            build-utils/configure_rpcs3_ios_v2.py \
+            build-utils/embed_rpcs3_host_entitlements.py \
+            build-utils/validate_rpcs3_ipa.py \
+            build-utils/validate_single_ipa_distribution.py \
+            packages/dolphin_internal_bridge/ci/build_support.py \
+            packages/dolphin_internal_bridge/ci/verify_ipa.py
           python3 test/dolphin_account_267_test.py
 
       - name: Resolve Flutter and analyze
@@ -70,18 +118,23 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
 
-      - name: Run state-machine, debugger and deletion regression tests
+      - name: Run route, debugger, packaging and deletion regression tests
         shell: bash
         run: |
           set -euo pipefail
-          python3 test/vpn_internal_single_source_test.py
           python3 test/dolphin_account_267_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
-          python3 test/vpn_state_machine_test.py
+          python3 test/rpcs3_diagnostics_native_test.py
+          python3 test/rpcs3_jit_handshake_test.py
+          python3 test/rpcs3_reporter_send_order_test.py
+          python3 test/rpcs3_host_entitlements_test.py
+          python3 test/rpcs3_ipa_validation_test.py
+          python3 test/dolphin_ipa_validator_test.py
+          python3 test/local_dev_vpn_route_contract_test.py
           node test/rpcs3_debugger_handshake_test.js
-          flutter test test/local_jit_route_proof_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart
+          flutter test test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -96,6 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           flutter config --no-enable-swift-package-manager
+          rm -rf ios
           python3 packages/dolphin_internal_bridge/ci/build_support.py scaffold
 
       - name: Download validated native donor
@@ -105,14 +159,6 @@ jobs:
           run-id: 35321768668
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/native-donor
-
-      - name: Download validated VPN 279 reference
-        uses: actions/download-artifact@v4
-        with:
-          name: NeoStation-iOS-Build-279-VPN-Provider-Startup-Fix
-          run-id: 35393060176
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: build/vpn-reference279
 
       - name: Reuse validated native runtimes
         shell: bash
@@ -151,20 +197,61 @@ jobs:
         run: |
           set -euo pipefail
           python3 build-utils/patch_ios_video_player_audio_session.py
-          flutter build ios --release --no-codesign --config-only --no-pub             --build-number="$BUILD_NUMBER" --dart-define-from-file=.dart-defines.json
+          flutter build ios --release --no-codesign --config-only --no-pub \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define-from-file=.dart-defines.json
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
           python3 build-utils/configure_rpcs3_ios_v2.py
-          python3 build-utils/configure_local_jit_tunnel.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          entitlements = plistlib.loads(
+              Path('ios/Runner/Runner.entitlements').read_bytes()
+          )
+          retired = {
+              'com.apple.developer.networking.networkextension',
+              'com.apple.developer.networking.vpn.api',
+          }
+          remaining = retired.intersection(entitlements)
+          if remaining:
+              raise SystemExit(
+                  'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
+              )
+          generated = (
+              Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
+              Path('ios/Podfile').read_text(),
+          )
+          markers = (
+              'NeoStationLocalTunnel',
+              'NetworkExtension.framework',
+              'com.apple.NetworkExtensions.iOS',
+              'packet-tunnel-provider',
+          )
+          found = [marker for marker in markers if any(marker in text for text in generated)]
+          if found:
+              raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
+          if Path('ios/NeoStationLocalTunnel').exists():
+              raise SystemExit('Generated iOS host retains the internal VPN directory')
+          print('Generated iOS host is LocalDevVPN-only.')
+          PY
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
       - name: Compile only NeoStation and extensions
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner             -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'             -derivedDataPath build/ios/DolphinDerivedData             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=''             DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER=''             COMPILER_INDEX_STORE_ENABLE=NO build 2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/DolphinDerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+            COMPILER_INDEX_STORE_ENABLE=NO build \
+            2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
 
       - name: Embed immutable RPCS3 core and signing metadata
         shell: bash
@@ -173,22 +260,18 @@ jobs:
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
 
-      - name: Package and validate Build 288 IPA
+      - name: Package and validate Build 289 IPA
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          python3 test/vpn_internal_single_source_test.py
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
-          python3 build-utils/validate_rpcs3_ipa.py             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
-          python3 build-utils/validate_single_ipa_distribution.py             "dist/$IPA_NAME.ipa" --report dist/single-ipa-distribution.json
-          python3 build-utils/validate_vpn_build279_artifact.py \
-            --reference-dir build/vpn-reference279 \
-            --candidate "dist/$IPA_NAME.ipa" \
-            --report dist/vpn279-final-artifact.json
+          python3 build-utils/validate_rpcs3_ipa.py \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+          python3 build-utils/validate_single_ipa_distribution.py \
+            "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
           cp build/fast-native/identity.json dist/fast-native-identity.json
-          test -f build/rpcs3-ci/vpn-v277-single-source.log && cp build/rpcs3-ci/vpn-v277-single-source.log dist/ || true
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 

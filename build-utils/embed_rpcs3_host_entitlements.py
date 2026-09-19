@@ -13,15 +13,14 @@ import struct
 import subprocess
 from pathlib import Path
 
-from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
+from configure_rpcs3_ios_v2 import (
+    REQUIRED_RUNTIME_ENTITLEMENTS,
+    RETIRED_VPN_ENTITLEMENTS,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS = ROOT / 'build/ios/DolphinDerivedData/Build/Products/Release-iphoneos'
-LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS = {
-    'com.apple.developer.networking.networkextension': [
-        'packet-tunnel-provider',
-    ],
-}
+FORBIDDEN_NETWORK_ENTITLEMENTS = RETIRED_VPN_ENTITLEMENTS
 
 
 def embedded_entitlements(data: bytes) -> dict:
@@ -89,6 +88,12 @@ def require_runtime_entitlements(payload: dict) -> None:
     ]
     if missing:
         raise ValueError('Runner executable is missing RPCS3 entitlements: ' + ', '.join(missing))
+    forbidden = [key for key in FORBIDDEN_NETWORK_ENTITLEMENTS if key in payload]
+    if forbidden:
+        raise ValueError(
+            'Runner executable still contains retired VPN entitlements: ' +
+            ', '.join(forbidden)
+        )
 
 
 def require_entitlements(payload: dict, expected: dict, owner: str) -> None:
@@ -138,22 +143,11 @@ def main() -> None:
     if len(apps) != 1:
         raise SystemExit('Expected one built NeoStation app')
     app = apps[0]
-    extension = app / 'PlugIns/NeoStationLocalTunnel.appex'
-    if not extension.is_dir():
-        raise SystemExit('NeoStation local tunnel extension is missing from the build')
-    extension_info = plistlib.loads((extension / 'Info.plist').read_bytes())
-    extension_executable = extension / extension_info['CFBundleExecutable']
-    embed(
-        extension_executable,
-        ROOT / 'ios/NeoStationLocalTunnel/NeoStationLocalTunnel.entitlements',
-        required=LOCAL_TUNNEL_EXTENSION_ENTITLEMENTS,
-        owner='NeoStationLocalTunnel',
-    )
     info = plistlib.loads((app / 'Info.plist').read_bytes())
     executable = app / info['CFBundleExecutable']
     embed(executable, ROOT / 'ios/Runner/Runner.entitlements')
     print(
-        'RPCS3 and local-tunnel entitlements verified inside the app; '
+        'RPCS3 host entitlements verified inside the app; '
         'user sideload signing is still required.'
     )
 

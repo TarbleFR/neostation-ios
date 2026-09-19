@@ -35,17 +35,9 @@ class Rpcs3JitHandshakeTests(unittest.TestCase):
 #include <unistd.h>
 #include <cassert>
 #include <cstdio>
-// Compile the real logger used by the extracted production session. Redirect
-// only its Documents lookup so the test never writes into the runner's home.
+// Compile the real logger used by the extracted production session.
 static NSString* testDocuments;
-static NSArray<NSString*>* RPCS3TestDocuments(NSSearchPathDirectory directory,
-                                            NSSearchPathDomainMask domain,
-                                            BOOL expand) {
-  return @[testDocuments];
-}
-#define NSSearchPathForDirectoriesInDomains RPCS3TestDocuments
 #import "Rpcs3Diagnostics.h"
-#undef NSSearchPathForDirectoriesInDomains
 static NSTimeInterval const kRpcs3HelperConnectTimeout = 2.0;
 '''
         harness += session
@@ -150,6 +142,7 @@ static void helperDiagnostics() {
   sendEvent(fd, session.token, @"log", nil, nil, longMessage);
   sendEvent(fd, session.token, @"complete", nil, @NO, @"expected-test-failure");
   assert([session waitUntilFinished:2] && !session.success);
+  RPCS3DiagnosticsFlushForTesting();
   NSString* path = [testDocuments stringByAppendingPathComponent:@"RPCS3-diagnostic.log"];
   NSString* text = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
   assert(text && ![text containsString:@"UNAUTHENTICATED_LOG_MUST_NOT_APPEAR"]);
@@ -172,6 +165,7 @@ int main(int argc, char** argv) {
   @autoreleasepool {
     assert(argc == 2);
     testDocuments = [NSString stringWithUTF8String:argv[1]];
+    RPCS3DiagnosticsSetDirectoryForTesting(testDocuments);
     universalHandshake();
     legacyAttachWithoutScript();
     completionCannotReplaceUniversalAttach();
@@ -186,7 +180,9 @@ int main(int argc, char** argv) {
             executable = Path(directory) / 'harness'
             source_file.write_text(harness)
             subprocess.run([compiler, '-std=c++17', '-fobjc-arc', '-fblocks',
-                            '-framework', 'Foundation', '-I', str(PLUGIN.parent), str(source_file), '-o',
+                            '-DRPCS3_DIAGNOSTICS_TESTING=1',
+                            '-framework', 'Foundation', '-I', str(PLUGIN.parent),
+                            str(PLUGIN.parent / 'Rpcs3Diagnostics.mm'), str(source_file), '-o',
                             str(executable)], check=True, timeout=60)
             subprocess.run([str(executable), directory], check=True, timeout=30)
 

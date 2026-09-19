@@ -6,6 +6,216 @@ import 'package:neostation/services/rpcs3_game_profile_service.dart';
 import 'package:neostation/services/rpcs3_internal_service.dart';
 import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 
+typedef Rpcs3BootProgressReader = Future<Map<String, dynamic>> Function();
+typedef Rpcs3BootControl = Future<void> Function();
+typedef Rpcs3BootProgressLogger =
+    void Function(String stage, int current, int total);
+
+/// Guards only the synchronous native boot transaction.
+///
+/// RPCS3 can legitimately spend time compiling while `boot_game` is still on
+/// the Core queue, so progress is watched until that call settles. Once the
+/// native call succeeds or fails, its result is authoritative: a missing or
+/// stale diagnostic progress stage must never keep the launch UI waiting.
+class Rpcs3BootWatchdog {
+  const Rpcs3BootWatchdog({
+    this.pollInterval = const Duration(seconds: 1),
+    this.spuNoProgressLimit = const Duration(seconds: 90),
+    this.ppuNoProgressLimit = const Duration(minutes: 10),
+    this.ppuApplyNoProgressLimit = const Duration(minutes: 5),
+    this.finishedStageLimit = const Duration(minutes: 5),
+    this.abortTimeout = const Duration(seconds: 8),
+    this.stopTimeout = const Duration(seconds: 12),
+    this.recoveryStopTimeout = const Duration(seconds: 20),
+    this.clock,
+  });
+
+  final Duration pollInterval;
+  final Duration spuNoProgressLimit;
+  final Duration ppuNoProgressLimit;
+  final Duration ppuApplyNoProgressLimit;
+  final Duration finishedStageLimit;
+  final Duration abortTimeout;
+  final Duration stopTimeout;
+  final Duration recoveryStopTimeout;
+  final DateTime Function()? clock;
+
+  DateTime _now() => clock?.call() ?? DateTime.now();
+
+  bool _isPpuStage(String stage) => stage.toLowerCase().contains('ppu');
+
+  Duration? _stallLimitForStage(String stage) {
+    final value = stage.toLowerCase();
+    final ppuStage =
+        value.contains('ppu') &&
+        (value.contains('compil') ||
+            value.contains('applying') ||
+            value.contains('linking') ||
+            value.contains('code'));
+    if (ppuStage) {
+      return value.contains('applying')
+          ? ppuApplyNoProgressLimit
+          : ppuNoProgressLimit;
+    }
+
+    final spuStage =
+        value.contains('spu') &&
+        (value.contains('cache') || value.contains('compil'));
+    if (spuStage) return spuNoProgressLimit;
+    return null;
+  }
+
+  Future<void> _waitForPollOrLaunch(Future<void> launchSettled) {
+    final completer = Completer<void>();
+    final timer = Timer(pollInterval, () {
+      if (!completer.isCompleted) completer.complete();
+    });
+    unawaited(
+      launchSettled.then((_) {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }),
+    );
+    return completer.future;
+  }
+
+  Future<void> _monitor({
+    required Future<void> launchSettled,
+    required bool Function() launchCompleted,
+    required Rpcs3BootProgressReader readProgress,
+    required Rpcs3BootControl abortBoot,
+    required Rpcs3BootControl stop,
+    required Rpcs3BootProgressLogger logProgress,
+  }) async {
+    String lastStage = '';
+    int lastCurrent = -1;
+    int lastTotal = -1;
+    var lastMovement = _now();
+
+    while (!launchCompleted()) {
+      final report = await Future.any<Map<String, dynamic>?>([
+        readProgress(),
+        launchSettled.then<Map<String, dynamic>?>((_) => null),
+      ]);
+      if (report == null || launchCompleted()) return;
+      if (report['success'] != true) {
+        // Boot progress is diagnostic. An older compatible Core may omit it;
+        // the native launch future remains the source of truth.
+        return;
+      }
+
+      final stage = report['stage']?.toString().trim() ?? '';
+      final current = (report['current'] as num?)?.toInt() ?? 0;
+      final total = (report['total'] as num?)?.toInt() ?? 0;
+
+      if (stage.isNotEmpty &&
+          (stage != lastStage ||
+              current != lastCurrent ||
+              total != lastTotal)) {
+        lastStage = stage;
+        lastCurrent = current;
+        lastTotal = total;
+        lastMovement = _now();
+        logProgress(stage, current, total);
+      }
+
+      final limit = stage.isEmpty ? null : _stallLimitForStage(stage);
+      if (limit != null && !launchCompleted()) {
+        final noMovement = _now().difference(lastMovement);
+        final stageComplete = total > 0 && current >= total;
+        final effectiveLimit = stageComplete ? finishedStageLimit : limit;
+        if (noMovement > effectiveLimit && !launchCompleted()) {
+          // The normal stop path is serialized behind BootGame. Interrupt the
+          // pending native call through the independent tuning queue first.
+          try {
+            await abortBoot().timeout(abortTimeout);
+          } catch (_) {}
+          try {
+            await stop().timeout(stopTimeout);
+          } catch (_) {}
+
+          final progress = total > 0 ? ' ($current/$total)' : '';
+          final ppuStage = _isPpuStage(stage);
+          throw Rpcs3InternalException(
+            ppuStage ? 'ppuBootPreparationStalled' : 'bootPreparationStalled',
+            ppuStage
+                ? 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
+                      'Consultez RPCS3-diagnostic.log ; les caches sont conservés.'
+                : 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
+                      'Le démarrage a été arrêté au lieu de rester figé.',
+          );
+        }
+      }
+
+      if (launchCompleted()) return;
+      await _waitForPollOrLaunch(launchSettled);
+    }
+  }
+
+  Future<T> guard<T>({
+    required Future<T> launchFuture,
+    required Rpcs3BootProgressReader readProgress,
+    required Rpcs3BootControl abortBoot,
+    required Rpcs3BootControl stop,
+    required Rpcs3BootProgressLogger logProgress,
+  }) async {
+    var completed = false;
+    T? launched;
+    Object? launchError;
+    StackTrace? launchStackTrace;
+    final launchSettled = Completer<void>();
+
+    unawaited(
+      launchFuture.then(
+        (value) {
+          launched = value;
+          completed = true;
+          if (!launchSettled.isCompleted) launchSettled.complete();
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          launchError = error;
+          launchStackTrace = stackTrace;
+          completed = true;
+          if (!launchSettled.isCompleted) launchSettled.complete();
+        },
+      ),
+    );
+
+    try {
+      await _monitor(
+        launchSettled: launchSettled.future,
+        launchCompleted: () => completed,
+        readProgress: readProgress,
+        abortBoot: abortBoot,
+        stop: stop,
+        logProgress: logProgress,
+      );
+    } on Rpcs3InternalException catch (error) {
+      if (error.code == 'ppuBootPreparationStalled' ||
+          error.code == 'bootPreparationStalled') {
+        // Do not start a recovery launch while the interrupted BootGame call is
+        // still unwinding on the native Core queue.
+        try {
+          await launchFuture.timeout(recoveryStopTimeout);
+        } catch (_) {}
+      }
+      rethrow;
+    }
+
+    if (!completed) {
+      // Progress is optional. If it is unavailable, await the native result.
+      return launchFuture;
+    }
+    if (launchError != null) {
+      Error.throwWithStackTrace(
+        launchError!,
+        launchStackTrace ?? StackTrace.current,
+      );
+    }
+    return launched as T;
+  }
+}
+
 /// Direct launcher for the in-process RPCS3 engine.
 ///
 /// NeoStation enables JIT for its own process and calls the embedded RPCS3
@@ -13,14 +223,7 @@ import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 /// application is queried, opened or foregrounded.
 abstract final class Rpcs3LaunchService {
   static final LoggerService _log = LoggerService.instance;
-
-  static const Duration _bootPollInterval = Duration(seconds: 1);
-  static const Duration _bootStageGrace = Duration(seconds: 12);
-  static const Duration _spuNoProgressLimit = Duration(seconds: 90);
-  static const Duration _ppuNoProgressLimit = Duration(minutes: 10);
-  static const Duration _ppuApplyNoProgressLimit = Duration(minutes: 5);
-  static const Duration _finishedStageLimit = Duration(minutes: 5);
-  static const Duration _recoveryStopTimeout = Duration(seconds: 20);
+  static const Rpcs3BootWatchdog _bootWatchdog = Rpcs3BootWatchdog();
 
   static String? _lastError;
   static String? _lastErrorCode;
@@ -53,121 +256,6 @@ abstract final class Rpcs3LaunchService {
     }
   }
 
-  static bool _isPpuStage(String stage) => stage.toLowerCase().contains('ppu');
-
-  static Duration? _stallLimitForStage(String stage) {
-    final value = stage.toLowerCase();
-    final ppuStage =
-        value.contains('ppu') &&
-        (value.contains('compil') ||
-            value.contains('applying') ||
-            value.contains('linking') ||
-            value.contains('code'));
-    if (ppuStage) {
-      return value.contains('applying')
-          ? _ppuApplyNoProgressLimit
-          : _ppuNoProgressLimit;
-    }
-
-    final spuStage =
-        value.contains('spu') &&
-        (value.contains('cache') || value.contains('compil'));
-    if (spuStage) return _spuNoProgressLimit;
-    return null;
-  }
-
-  /// Watches native boot preparation while `rpcs3_ios_boot_game` itself may
-  /// still be executing on the Core queue.
-  ///
-  /// This matters for PPU compilation: RPCS3 can spend the synchronous part of
-  /// BootGame inside "Compiling PPU Modules" or "Applying PPU Code". Waiting
-  /// for the method call to return before starting a watchdog cannot detect
-  /// that failure mode. The progress API is independent, so poll it in parallel
-  /// and use the Core's stop symbol on a separate control queue if it stops
-  /// advancing.
-  static Future<void> _waitForBootOrDetectStall(
-    String titleId, {
-    required bool Function() launchCompleted,
-  }) async {
-    String lastStage = '';
-    int lastCurrent = -1;
-    int lastTotal = -1;
-    var lastMovement = DateTime.now();
-    final started = DateTime.now();
-    var sawActiveStage = false;
-
-    while (true) {
-      final report = await Rpcs3InternalBridge.bootProgress();
-      if (report['success'] != true) {
-        // Boot-progress support is diagnostic. Never make an older compatible
-        // Core fail to launch solely because that optional symbol is absent.
-        return;
-      }
-
-      final stage = report['stage']?.toString().trim() ?? '';
-      final current = (report['current'] as num?)?.toInt() ?? 0;
-      final total = (report['total'] as num?)?.toInt() ?? 0;
-
-      if (stage.isEmpty) {
-        if (launchCompleted()) {
-          if (sawActiveStage ||
-              DateTime.now().difference(started) >= _bootStageGrace) {
-            return;
-          }
-        }
-        await Future<void>.delayed(_bootPollInterval);
-        continue;
-      }
-      sawActiveStage = true;
-
-      if (stage != lastStage || current != lastCurrent || total != lastTotal) {
-        lastStage = stage;
-        lastCurrent = current;
-        lastTotal = total;
-        lastMovement = DateTime.now();
-        _log.i(
-          'RPCS3 boot progress $titleId: $stage '
-          '${total > 0 ? '$current/$total' : current.toString()}',
-        );
-      }
-
-      final limit = _stallLimitForStage(stage);
-      if (limit != null) {
-        final noMovement = DateTime.now().difference(lastMovement);
-        final stageComplete = total > 0 && current >= total;
-        final effectiveLimit = stageComplete ? _finishedStageLimit : limit;
-        if (noMovement > effectiveLimit) {
-          // The normal `stop` path is serialized behind BootGame. First use the
-          // Core stop symbol through the independent tuning queue so a PPU
-          // compile/apply operation that has not returned can be interrupted.
-          try {
-            await Rpcs3InternalBridge.abortBoot().timeout(
-              const Duration(seconds: 8),
-            );
-          } catch (_) {}
-          try {
-            await Rpcs3InternalBridge.stop().timeout(
-              const Duration(seconds: 12),
-            );
-          } catch (_) {}
-
-          final progress = total > 0 ? ' ($current/$total)' : '';
-          final ppuStage = _isPpuStage(stage);
-          throw Rpcs3InternalException(
-            ppuStage ? 'ppuBootPreparationStalled' : 'bootPreparationStalled',
-            ppuStage
-                ? 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
-                      'Consultez RPCS3-diagnostic.log ; les caches sont conservés.'
-                : 'La préparation RPCS3 est restée bloquée sur « $stage »$progress. '
-                      'Le démarrage a été arrêté au lieu de rester figé.',
-          );
-        }
-      }
-
-      await Future<void>.delayed(_bootPollInterval);
-    }
-  }
-
   static Future<bool> _launchWithBootWatchdog(
     String titleId, {
     required String uiLocale,
@@ -176,53 +264,22 @@ abstract final class Rpcs3LaunchService {
       titleId,
       uiLocale: uiLocale,
     );
-    var completed = false;
-    bool? launched;
-    Object? launchError;
-    StackTrace? launchStackTrace;
-
-    unawaited(
-      launchFuture.then(
-        (value) {
-          launched = value;
-          completed = true;
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          launchError = error;
-          launchStackTrace = stackTrace;
-          completed = true;
-        },
-      ),
+    return _bootWatchdog.guard<bool>(
+      launchFuture: launchFuture,
+      readProgress: Rpcs3InternalBridge.bootProgress,
+      abortBoot: () async {
+        await Rpcs3InternalBridge.abortBoot();
+      },
+      stop: () async {
+        await Rpcs3InternalBridge.stop();
+      },
+      logProgress: (stage, current, total) {
+        _log.i(
+          'RPCS3 boot progress $titleId: $stage '
+          '${total > 0 ? '$current/$total' : current.toString()}',
+        );
+      },
     );
-
-    try {
-      await _waitForBootOrDetectStall(
-        titleId,
-        launchCompleted: () => completed,
-      );
-    } on Rpcs3InternalException catch (error) {
-      if (error.code == 'ppuBootPreparationStalled' ||
-          error.code == 'bootPreparationStalled') {
-        // Do not start a recovery launch while the previous native BootGame is
-        // still unwinding after the independent stop request.
-        try {
-          await launchFuture.timeout(_recoveryStopTimeout);
-        } catch (_) {}
-      }
-      rethrow;
-    }
-
-    if (!completed) {
-      // The progress API may be unavailable on a compatible older Core.
-      return launchFuture;
-    }
-    if (launchError != null) {
-      Error.throwWithStackTrace(
-        launchError!,
-        launchStackTrace ?? StackTrace.current,
-      );
-    }
-    return launched ?? false;
   }
 
   static Future<bool> launchTitle(

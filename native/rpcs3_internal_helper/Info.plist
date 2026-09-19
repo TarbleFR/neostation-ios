@@ -24,12 +24,8 @@
   <string>17.4</string>
   <key>NeoStationRPCS3JITHelper</key>
   <string>1</string>
-  <key>NSBonjourServices</key>
-  <array>
-    <string>_remotepairing._tcp</string>
-  </array>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>NeoStation discovers this iPhone's Remote Pairing service to enable JIT.</string>
+  <string>NeoStation connects to this iPhone's LocalDevVPN Remote Pairing endpoint to enable JIT.</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionAttributes</key>

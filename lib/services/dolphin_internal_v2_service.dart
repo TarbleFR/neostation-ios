@@ -15,7 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import '../repositories/retro_achievements_repository.dart';
 import 'logger_service.dart';
 import 'dolphin_system_files.dart';
-import 'local_jit_tunnel_service.dart';
+import 'local_dev_vpn_route_service.dart';
 import 'pairing_file_service.dart';
 
 /// IPL slots exposed by the native GameCube playlist.
@@ -577,18 +577,29 @@ class DolphinInternalV2Service {
 
     if (Platform.isIOS) {
       try {
-        await LocalJitTunnelService.ensureRunningForJit();
-      } on LocalJitTunnelException catch (error) {
+        final route = await LocalDevVpnRouteService.ensureReachable();
         await _appendLogTo(
           logPath,
-          'stikjit.local_tunnel_failed',
+          'stikjit.localdevvpn_route_ready',
+          'LocalDevVPN RemotePairing endpoint is reachable.',
+          {
+            'host': route.host,
+            'port': route.port,
+            'nativeElapsedMs': route.elapsedMs,
+            'networkState': route.networkState,
+          },
+        );
+      } on LocalDevVpnRouteException catch (error) {
+        await _appendLogTo(
+          logPath,
+          'stikjit.localdevvpn_route_failed',
           error.message,
           {'code': error.code},
         );
         return DolphinLaunchReport(
           ready: false,
           message: error.message,
-          failedStage: 'stikjit.local_tunnel_failed',
+          failedStage: 'stikjit.localdevvpn_route_failed',
           errorCode: error.code,
           logPath: logPath,
           gates: _emptyGates(),

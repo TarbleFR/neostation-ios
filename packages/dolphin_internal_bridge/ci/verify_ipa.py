@@ -25,6 +25,22 @@ BRIDGE = {
     '_neostation_dolphin_restart', '_neostation_dolphin_refresh_controllers',
     '_neostation_dolphin_touch_event', '_neostation_dolphin_release_touches',
 }
+EXPECTED_HELPERS = {
+    'DolphinJITHelper.appex': {
+        'bundleSuffix': '.dolphinjithelper',
+        'principalClass': 'DolphinJITRequestHandler',
+        'marker': 'NeoStationDolphinJITHelper',
+    },
+    'RPCS3JITHelper.appex': {
+        'bundleSuffix': '.rpcs3jithelper',
+        'principalClass': 'Rpcs3JITRequestHandler',
+        'marker': 'NeoStationRPCS3JITHelper',
+    },
+}
+SHARE_EXTENSION_POINT = 'com.apple.share-services'
+NETWORK_EXTENSION_DEPENDENCY = (
+    '/NetworkExtension.framework/NetworkExtension'
+)
 
 
 def demand(condition: bool, message: str) -> None:
@@ -132,29 +148,48 @@ def validate(ipa: Path) -> dict:
         info = plistlib.loads(z.read(app + '/Info.plist'))
         demand(info['CFBundleIdentifier'] == 'com.neogamelab.neostation', 'Wrong NeoStation bundle ID')
         main = app + '/' + info['CFBundleExecutable']
-        helper_infos = [n for n in names if n.endswith('/DolphinJITHelper.appex/Info.plist')]
-        demand(len(helper_infos) == 1, 'Expected exactly one DolphinJITHelper')
-        helper_info = plistlib.loads(z.read(helper_infos[0]))
-        helper_root = posixpath.dirname(helper_infos[0])
-        demand(helper_root == app + '/PlugIns/DolphinJITHelper.appex', 'Helper must be embedded in PlugIns')
-        demand(helper_info['CFBundleIdentifier'] == info['CFBundleIdentifier'] + '.dolphinjithelper', 'Helper ID is inconsistent')
-        demand(bool(helper_info.get('NSExtension', {}).get('NSExtensionPrincipalClass')), 'Helper principal class is missing')
-        helper = helper_root + '/' + helper_info['CFBundleExecutable']
-        tunnel_infos = [n for n in names if n.endswith('/NeoStationLocalTunnel.appex/Info.plist')]
-        demand(len(tunnel_infos) == 1, 'Expected exactly one NeoStationLocalTunnel')
-        tunnel_info = plistlib.loads(z.read(tunnel_infos[0]))
-        tunnel_root = posixpath.dirname(tunnel_infos[0])
-        demand(tunnel_root == app + '/PlugIns/NeoStationLocalTunnel.appex',
-               'Local tunnel must be embedded in PlugIns')
-        demand(tunnel_info['CFBundleIdentifier'] == info['CFBundleIdentifier'] + '.localtunnel',
-               'Local tunnel ID is inconsistent')
-        tunnel_extension = tunnel_info.get('NSExtension', {})
-        demand(tunnel_extension.get('NSExtensionPointIdentifier') ==
-               'com.apple.networkextension.packet-tunnel',
-               'Local tunnel extension point is invalid')
-        demand(bool(tunnel_extension.get('NSExtensionPrincipalClass')),
-               'Local tunnel principal class is missing')
-        tunnel = tunnel_root + '/' + tunnel_info['CFBundleExecutable']
+        extension_infos = [
+            name for name in names
+            if name.startswith(app + '/PlugIns/')
+            and name.endswith('.appex/Info.plist')
+        ]
+        extension_roots = {
+            posixpath.basename(posixpath.dirname(name)): posixpath.dirname(name)
+            for name in extension_infos
+        }
+        demand(
+            set(extension_roots) == set(EXPECTED_HELPERS),
+            'Unexpected app-extension set: expected '
+            f'{sorted(EXPECTED_HELPERS)}, got {sorted(extension_roots)}',
+        )
+        helper_images = {}
+        for bundle_name, contract in EXPECTED_HELPERS.items():
+            helper_root = extension_roots[bundle_name]
+            helper_info = plistlib.loads(z.read(helper_root + '/Info.plist'))
+            demand(
+                helper_info['CFBundleIdentifier'] ==
+                info['CFBundleIdentifier'] + contract['bundleSuffix'],
+                f'{bundle_name} ID is inconsistent',
+            )
+            extension = helper_info.get('NSExtension', {})
+            demand(
+                extension.get('NSExtensionPointIdentifier') ==
+                SHARE_EXTENSION_POINT,
+                f'{bundle_name} has an unexpected extension point',
+            )
+            demand(
+                extension.get('NSExtensionPrincipalClass') ==
+                contract['principalClass'],
+                f'{bundle_name} principal class is inconsistent',
+            )
+            demand(
+                helper_info.get(contract['marker']) == '1',
+                f'{bundle_name} identity marker is missing',
+            )
+            helper_images[bundle_name] = (
+                helper_root + '/' + helper_info['CFBundleExecutable']
+            )
+        helper = helper_images['DolphinJITHelper.appex']
         core = app + '/Frameworks/DolphinCore.framework/DolphinCore'
         stik = app + '/Frameworks/StikJIT.framework/StikJIT'
         demand([n for n in names if n.endswith('/StikJIT.framework/StikJIT')] == [stik], 'StikJIT must have one shared host copy')
@@ -172,7 +207,7 @@ def validate(ipa: Path) -> dict:
                 image = macho(z.read(name))
                 demand(image['platform'] == 2, f'Non-iOS Mach-O embedded: {name}')
                 images[name] = image
-        for name in (main, helper, tunnel, core, stik):
+        for name in (main, *helper_images.values(), core, stik):
             demand(name in images, f'Required arm64 executable is missing: {name}')
             demand((z.getinfo(name).external_attr >> 16) & 0o111 != 0, f'Executable mode missing: {name}')
         demand(BRIDGE.issubset(set(images[core]['definedSymbols'])), 'Actual Dolphin bridge exports are missing')
@@ -181,9 +216,14 @@ def validate(ipa: Path) -> dict:
         for token in ('BootCore', 'JitArm64'):
             demand(any(token in s for s in core_symbols), f'Real Dolphin implementation symbol missing: {token}')
         demand(any(d['path'] == '@rpath/StikJIT.framework/StikJIT' for d in images[helper]['dependencies']), 'Helper does not dynamically link StikJIT')
-        demand(any('/NetworkExtension.framework/NetworkExtension' in d['path']
-                   for d in images[tunnel]['dependencies']),
-               'Local tunnel does not link NetworkExtension')
+        for name, image in images.items():
+            demand(
+                not any(
+                    NETWORK_EXTENSION_DEPENDENCY in dependency['path']
+                    for dependency in image['dependencies']
+                ),
+                f'Retired NetworkExtension dependency found in {name}',
+            )
         demand(any(d['path'] == '@rpath/DolphinCore.framework/DolphinCore'
                    for name, image in images.items() if name != core
                    for d in image['dependencies']), 'No host image links DolphinCore (self-ID is not evidence)')
@@ -212,13 +252,31 @@ def validate(ipa: Path) -> dict:
         demand(not schemes & {'dolphin', 'dolphinios', 'dolphin-emu'}, 'External Dolphin query scheme found')
         dependency_checks = []
         system_dependencies = set()
+        helper_roots_by_image = {
+            image: posixpath.dirname(image)
+            for image in helper_images.values()
+        }
         for name, image in images.items():
-            executable_dir = helper_root if name.startswith(helper_root + '/') else app
+            executable_dir = next(
+                (
+                    root for helper_image, root in helper_roots_by_image.items()
+                    if name == helper_image or name.startswith(root + '/')
+                ),
+                app,
+            )
             loader_dir = posixpath.dirname(name)
             def expand(value: str) -> str:
                 return posixpath.normpath(value.replace('@executable_path', executable_dir).replace('@loader_path', loader_dir))
             rpaths = [expand(r) for r in image['rpaths']]
-            root_image = images[helper] if executable_dir == helper_root else images[main]
+            owner_image = next(
+                (
+                    helper_image for helper_image, root in
+                    helper_roots_by_image.items()
+                    if executable_dir == root
+                ),
+                main,
+            )
+            root_image = images[owner_image]
             for r in root_image['rpaths']:
                 rpaths.append(posixpath.normpath(r.replace('@executable_path', executable_dir).replace('@loader_path', executable_dir)))
             for dep in image['dependencies']:
@@ -247,6 +305,8 @@ def validate(ipa: Path) -> dict:
             'ipa': ipa.name, 'bytes': ipa.stat().st_size,
             'sha256': file_sha256(ipa),
             'zipIntegrity': 'passed', 'mainApplicationCount': 1,
+            'embeddedExtensions': sorted(EXPECTED_HELPERS),
+            'networkExtensionDependencyPresent': False,
             'requiredBridgeExports': sorted(BRIDGE), 'machOImages': summary_images,
             'resolvedDependencies': dependency_checks, 'systemDependencies': sorted(system_dependencies),
             'systemDependenciesOnDevice': 'OS-provided; runtime dyld validation still requires an iOS device',

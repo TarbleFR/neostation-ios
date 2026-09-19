@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 
 import 'logger_service.dart';
-import 'local_jit_tunnel_service.dart';
+import 'local_dev_vpn_route_service.dart';
 import 'pairing_file_service.dart';
 import 'rpcs3_library_service.dart';
 
@@ -235,15 +235,17 @@ class Rpcs3InternalService {
     if (Platform.isIOS) {
       final routeTimer = Stopwatch()..start();
       try {
-        final route = await LocalJitTunnelService.ensureRunningForJit();
+        final route = await LocalDevVpnRouteService.ensureReachable();
         _log.i(
           'RPCS3 startup timing: stage=route_preflight; '
           'elapsedMs=${routeTimer.elapsedMilliseconds}; '
-          'transport=${route.managedByNeoStation ? 'internal' : 'external'}.',
+          'endpoint=${route.host}:${route.port}; '
+          'nativeElapsedMs=${route.elapsedMs}; '
+          'nativeState=${route.state}/${route.networkState}.',
         );
-      } on LocalJitTunnelException catch (error) {
+      } on LocalDevVpnRouteException catch (error) {
         throw Rpcs3InternalException(
-          'localTunnel.${error.code}',
+          'localdevvpn.${error.code}',
           error.message,
         );
       }
@@ -332,8 +334,8 @@ class Rpcs3InternalService {
     return 'Remote Pairing rejected the saved credentials. NeoStation found '
         'the Pairing File, but iOS closed the session. In iLoader, delete the '
         'saved RPPairing entry for this iPhone, pair again, export the new '
-        'Pairing File, then reimport it in NeoStation. NeoStation will refresh '
-        'its integrated local JIT tunnel automatically before retrying. '
+        'Pairing File, then reimport it in NeoStation. Restart LocalDevVPN and '
+        'verify that 10.7.0.1:49152 is reachable before retrying. '
         'Technical detail: $message';
   }
 

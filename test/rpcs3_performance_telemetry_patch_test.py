@@ -13,7 +13,7 @@ def require(condition: bool, message: str) -> None:
 def main() -> None:
     root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(".")
     plugin = (root / "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm").read_text()
-    diagnostics = (root / "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.h").read_text()
+    diagnostics = (root / "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3Diagnostics.mm").read_text()
 
     require(plugin.count("NEOSTATION_RPCS3_PERFORMANCE_TELEMETRY_V1") == 1,
             "performance telemetry marker is missing or duplicated")
@@ -29,8 +29,13 @@ def main() -> None:
             "sampling must start only after a successful boot")
     require(plugin.count("[self stopDiagnosticPerformanceSampling];") == 2,
             "shutdown and ordinary stop must both flush a summary")
-    require("![stage isEqualToString:@\"performance_sample\"]" in diagnostics,
-            "per-second samples must not synchronously fsync the emulation session")
+    writer_implementation = diagnostics.split("@implementation RPCS3DiagnosticsWriter", 1)[1]
+    diagnostic_writer = writer_implementation.split("- (void)writeDiagnosticStage:", 1)[1].split(
+        "- (void)writeMilestoneStage:", 1
+    )[0]
+    require("dispatch_async(_diagnosticQueue" in diagnostic_writer and
+            "synchronizeFile" not in diagnostic_writer,
+            "per-second samples must stay on the asynchronous diagnostic writer")
     print("RPCS3 performance telemetry patch contract: OK")
 
 
