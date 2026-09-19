@@ -39,6 +39,11 @@ EXPECTED_HELPERS = {
         'principalClass': 'Rpcs3JITRequestHandler',
         'marker': 'NeoStationRPCS3JITHelper',
     },
+    'ARMSX2JITHelper.appex': {
+        'bundleSuffix': '.armsx2jithelper',
+        'principalClass': 'Armsx2JITRequestHandler',
+        'marker': 'NeoStationARMSX2JITHelper',
+    },
 }
 PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
