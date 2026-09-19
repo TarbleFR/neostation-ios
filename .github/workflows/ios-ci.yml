@@ -338,8 +338,8 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
-          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \\
-            --build-number "$BUILD_NUMBER" \\
+          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" \
             --source-revision 8b5fad23dc290660aa394e75b0fd23e31099eaec
           cp build/fast-native/identity.json dist/fast-native-identity.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
