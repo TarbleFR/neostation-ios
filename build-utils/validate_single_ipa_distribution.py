@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the LocalDevVPN-only NeoStation IPA distribution contract.
 
-NeoStation ships as one application with its Dolphin and RPCS3 JIT helpers.
+NeoStation ships as one application with its Dolphin, RPCS3, and ARMSX2 JIT helpers.
 The RemotePairing route is supplied by the separately installed LocalDevVPN;
 the IPA must not contain a packet-tunnel extension or VPN entitlement.
 """
@@ -31,6 +31,11 @@ EXPECTED_EXTENSIONS = {
         'bundleSuffix': '.rpcs3jithelper',
         'principalClass': 'Rpcs3JITRequestHandler',
         'marker': 'NeoStationRPCS3JITHelper',
+    },
+    'ARMSX2JITHelper.appex': {
+        'bundleSuffix': '.armsx2jithelper',
+        'principalClass': 'Armsx2JITRequestHandler',
+        'marker': 'NeoStationARMSX2JITHelper',
     },
 }
 PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
