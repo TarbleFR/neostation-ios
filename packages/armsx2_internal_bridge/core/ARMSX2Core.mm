@@ -300,6 +300,39 @@ int prepare(const NeoARMSX2Configuration* config,uint32_t timeout,char* error,si
   if(r.phase!=Phase::Prepared || !r.failure.empty()) return error_out(r.failure.empty()?"ARMSX2 preparation cancelled.":r.failure,error,capacity);
   return 1;
 }
+#if defined(__arm64__)
+__attribute__((naked, noinline)) static void jit_detach_breakpoint() {
+  __asm__("mov x16, #0\n" "brk #0xf00d\n" "ret");
+}
+#else
+static void jit_detach_breakpoint() {}
+#endif
+int request_jit_detach(char* error,size_t capacity) {
+  auto& r=runtime();
+  {
+    std::lock_guard lock(r.mutex);
+    if(r.phase!=Phase::Prepared || !r.initialized || r.stop)
+      return error_out("ARMSX2 cannot detach JIT outside Prepared state.",error,capacity);
+  }
+#if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR && defined(__arm64__)
+  // If the debugger disappeared unexpectedly, catch the local SIGTRAP instead
+  // of terminating NeoStation. A real helper advances PC and detaches, so this
+  // handler is never invoked on the successful path.
+  static thread_local sigjmp_buf detach_context;
+  static thread_local volatile sig_atomic_t detach_trapped=0;
+  struct sigaction old_action={}, action={};
+  action.sa_handler=+[](int){ detach_trapped=1; siglongjmp(detach_context,1); };
+  sigemptyset(&action.sa_mask);
+  if(sigaction(SIGTRAP,&action,&old_action)!=0)
+    return error_out("ARMSX2 could not install detach safety handler.",error,capacity);
+  detach_trapped=0;
+  if(sigsetjmp(detach_context,1)==0) jit_detach_breakpoint();
+  sigaction(SIGTRAP,&old_action,nullptr);
+  if(detach_trapped)
+    return error_out("ARMSX2 debugger detached before the explicit detach handshake.",error,capacity);
+#endif
+  return 1;
+}
 int validate_jit(char* error,size_t capacity) {
   auto& r=runtime(); std::lock_guard lock(r.mutex);
   if(r.phase!=Phase::Prepared || !r.initialized || r.stop ||
@@ -353,7 +386,7 @@ void sticks(float lx,float ly,float rx,float ry) {
   s_vmCV.notify_all();
 }
 const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_SOURCE_REVISION,
-  create_view,release_view,prepare,validate_jit,boot,request_stop,shutdown,paused,button,sticks};
+  create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks};
 }
 extern "C" bool ARMSX2_IsIdleVMPrewarmResolved() { return false; } // No autonomous prewarm in NeoStation.
 extern "C" const NeoARMSX2API* NeoARMSX2_GetAPI(uint32_t version) {
