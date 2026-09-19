@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// ARMSX2 library discovery no longer depends on an exported-library callback
 /// or cache. NeoStation scans the physical PS2 library derived from the single
 /// `armsx2` security-scoped bookmark, while this service is responsible only
-/// for handing an ARMSX2-owned game to the existing Shortcut/JIT launch path.
+/// for handing an ARMSX2-owned game directly to the embedded Core/JIT path.
 class Armsx2LibraryService {
   Armsx2LibraryService._();
 
@@ -26,7 +26,7 @@ class Armsx2LibraryService {
 
   /// True for a legacy NeoStation row backed by an ARMSX2 direct-launch URL.
   ///
-  /// These rows are kept launchable during migration, but new library scans
+  /// These rows are recognized only for migration cleanup; new library scans
   /// always create normal physical rows from the linked ARMSX2 root.
   static bool isVirtualLibraryPath(String romPath) {
     final uri = Uri.tryParse(romPath);
