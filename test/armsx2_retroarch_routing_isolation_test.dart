@@ -31,20 +31,13 @@ void main() {
 
     expect(service, contains('ownsLinkedPhysicalRom'));
     expect(service, contains('_launchLinkedPhysicalRom(romPath)'));
-    expect(service, contains('Uri.encodeComponent(fileName)'));
+    expect(service, contains('StikJitArmsx2Service.launch'));
     expect(service, isNot(contains('requestLibrarySync()')));
     expect(service, isNot(contains('handleIncomingUri(Uri uri)')));
     expect(service, isNot(contains('_importIntoNeoStation')));
     expect(service, isNot(contains('hasSyncedLibrary')));
     expect(service, contains('cleanupLegacyExportArtifacts'));
-    expect(
-      service,
-      contains("Uri.parse('armsx2://launch?game=\$encodedFileName')"),
-    );
-    expect(
-      service,
-      isNot(contains("queryParameters: {'game': fileName}")),
-    );
+    expect(service, isNot(contains('armsx2://launch?game=')));
   });
 
   test('ARMSX2 no longer registers exported-library callbacks at startup', () {
