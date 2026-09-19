@@ -1,6 +1,7 @@
 #import "Armsx2InternalBridgePlugin.h"
 #import "Armsx2JitBridgePlugin.h"
 #import "ARMSX2CoreABI.h"
+#import "Armsx2RetroAchievementsMenu.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -95,6 +96,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) uint32_t aspectRatio;
 @property(nonatomic, assign) BOOL cheatsEnabled;
 @property(nonatomic, assign) uint32_t saveStateMask;
+@property(nonatomic, assign) BOOL closing;
 - (void)updateRuntimeMenuWithUpscale:(float)upscale
                               aspect:(uint32_t)aspect
                               cheats:(BOOL)cheats
@@ -328,7 +330,12 @@ static UIViewController* ARMSX2RootViewController(void) {
   self.leftX=self.leftY=self.rightX=self.rightY=0;
   [self sendSticks];
 }
-- (void)closePressed { [self resetInput]; if (self.closeHandler) self.closeHandler(); }
+- (void)closePressed {
+  if (self.closing) return;
+  self.closing=YES;
+  [self resetInput];
+  if (self.closeHandler) self.closeHandler();
+}
 
 - (UIAction*)commandAction:(NSString*)title
                    command:(NSString*)command
@@ -375,6 +382,8 @@ static UIViewController* ARMSX2RootViewController(void) {
     command:@"cheats" value:@(!self.cheatsEnabled) selected:self.cheatsEnabled enabled:ready];
   UIAction* reload=[self commandAction:[self en:@"Reload cheats / patches" fr:@"Recharger cheats / patches"]
     command:@"reloadCheats" value:@0 selected:NO enabled:ready];
+  UIAction* achievements=[self commandAction:@"RetroAchievements"
+    command:@"retroAchievements" value:@0 selected:NO enabled:ready];
 
   NSMutableArray<UIMenuElement*>* saves=[NSMutableArray array];
   NSMutableArray<UIMenuElement*>* loads=[NSMutableArray array];
@@ -398,7 +407,7 @@ static UIViewController* ARMSX2RootViewController(void) {
       [UIMenu menuWithTitle:[self en:@"Save state" fr:@"Sauvegarder l’état"] children:saves],
       [UIMenu menuWithTitle:[self en:@"Load state" fr:@"Charger l’état"] children:loads],
     ]];
-  self.menuButton.menu=[UIMenu menuWithTitle:@"ARMSX2" children:@[touch,graphics,cheatMenu,states]];
+  self.menuButton.menu=[UIMenu menuWithTitle:@"ARMSX2" children:@[touch,graphics,cheatMenu,states,achievements]];
 }
 
 - (void)updateRuntimeMenuWithUpscale:(float)upscale
@@ -432,6 +441,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) void* coreHandle;
 @property(nonatomic, assign) const NeoARMSX2API* api;
 @property(nonatomic, assign) BOOL operationBusy;
+@property(nonatomic, assign) BOOL stopInProgress;
 @end
 
 @implementation Armsx2InternalBridgePlugin {
@@ -499,7 +509,10 @@ static UIViewController* ARMSX2RootViewController(void) {
       !api->get_cheats_enabled || !api->set_upscale_multiplier ||
       !api->set_aspect_ratio || !api->set_cheats_enabled ||
       !api->reload_cheats || !api->has_save_state ||
-      !api->save_state || !api->load_state) {
+      !api->save_state || !api->load_state ||
+      !api->get_retroachievements_state_json ||
+      !api->set_retroachievements_option ||
+      !api->login_retroachievements || !api->logout_retroachievements) {
     if (error) *error = @"Embedded ARMSX2 Core ABI is incompatible.";
     return NO;
   }
@@ -508,14 +521,65 @@ static UIViewController* ARMSX2RootViewController(void) {
   return YES;
 }
 
-- (void)dismissGameController {
+- (void)dismissGameControllerWithCompletion:(dispatch_block_t)completion {
+  NSAssert(NSThread.isMainThread, @"ARMSX2 UIKit teardown must run on main");
   Armsx2GameViewController* controller = self.gameController;
   self.gameController = nil;
-  if (controller) {
-    [controller resetInput];
-    [controller dismissViewControllerAnimated:NO completion:nil];
+  if (controller) [controller resetInput];
+
+  __weak Armsx2InternalBridgePlugin* weakSelf = self;
+  void (^releaseView)(void) = ^{
+    Armsx2InternalBridgePlugin* strongSelf = weakSelf;
+    if (strongSelf.api && strongSelf.api->release_render_view)
+      strongSelf.api->release_render_view();
+    controller.coreView = nil;
+    if (completion) completion();
+  };
+
+  // Dismiss from the presenter so any child settings/account controller is
+  // removed with the game surface. Only release g_gameRenderView after UIKit
+  // confirms that the presentation hierarchy no longer owns it.
+  UIViewController* presenter = controller.presentingViewController;
+  if (presenter) {
+    [presenter dismissViewControllerAnimated:NO completion:releaseView];
+  } else if (controller.presentedViewController) {
+    [controller dismissViewControllerAnimated:NO completion:releaseView];
+  } else {
+    releaseView();
   }
-  if (self.api && self.api->release_render_view) self.api->release_render_view();
+}
+
+- (void)dismissGameController {
+  [self dismissGameControllerWithCompletion:nil];
+}
+
+- (void)stopActiveSessionWithCompletion:(void (^)(BOOL success, NSString* message))completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (self.stopInProgress) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (completion) completion(NO, @"ARMSX2 shutdown is already in progress.");
+      });
+      return;
+    }
+    self.stopInProgress = YES;
+    self.operationBusy = YES;
+    BOOL ok = YES;
+    NSString* message = @"";
+    if (self.api) {
+      char error[512] = {};
+      self.api->request_stop();
+      ok = self.api->shutdown(30000, error, sizeof(error)) != 0;
+      if (!ok && error[0]) message = [NSString stringWithUTF8String:error] ?: @"";
+    }
+    ARMSX2JitAbortTransaction();
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self dismissGameControllerWithCompletion:^{
+        self.operationBusy = NO;
+        self.stopInProgress = NO;
+        if (completion) completion(ok, message);
+      }];
+    });
+  });
 }
 
 - (void)failTransaction:(NSString*)message result:(FlutterResult)result {
@@ -552,9 +616,107 @@ static UIViewController* ARMSX2RootViewController(void) {
   });
 }
 
+- (NSDictionary<NSString*, id>*)decodeRetroAchievementsState {
+  if (!self.api || !self.api->get_retroachievements_state_json) return nil;
+  char json[32768] = {};
+  if (!self.api->get_retroachievements_state_json(json, sizeof(json))) return nil;
+  NSData* data = [[NSData alloc] initWithBytes:json length:strlen(json)];
+  id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  return [decoded isKindOfClass:NSDictionary.class] ? decoded : nil;
+}
+
+- (void)readRetroAchievementsForController:(Armsx2GameViewController*)controller
+                                completion:(void (^)(NSDictionary<NSString*, id>* state))completion {
+  dispatch_async(_runtimeQueue, ^{
+    NSDictionary* state = self.gameController == controller ? [self decodeRetroAchievementsState] : nil;
+    dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(state); });
+  });
+}
+
+- (void)performRetroAchievementsCommand:(NSString*)command
+                                  value:(id)value
+                             controller:(Armsx2GameViewController*)controller
+                             completion:(void (^)(BOOL success, NSString* message))completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (!self.api || self.gameController != controller) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+      });
+      return;
+    }
+
+    char error[1024] = {};
+    BOOL ok = NO;
+    NSString* success = @"";
+    uint32_t option = 0;
+    if ([command isEqualToString:@"enabled"]) option = NEO_ARMSX2_RA_ENABLED;
+    else if ([command isEqualToString:@"hardcore"]) option = NEO_ARMSX2_RA_HARDCORE;
+    else if ([command isEqualToString:@"notifications"]) option = NEO_ARMSX2_RA_NOTIFICATIONS;
+    else if ([command isEqualToString:@"leaderboards"]) option = NEO_ARMSX2_RA_LEADERBOARDS;
+    else if ([command isEqualToString:@"overlays"]) option = NEO_ARMSX2_RA_OVERLAYS;
+
+    if (option) {
+      ok = self.api->set_retroachievements_option(option, [value boolValue] ? 1 : 0,
+                                                   5000, error, sizeof(error)) != 0;
+      success = [controller en:@"RetroAchievements setting updated."
+                            fr:@"Paramètre RetroAchievements mis à jour."];
+    } else if ([command isEqualToString:@"login"] && [value isKindOfClass:NSDictionary.class]) {
+      NSString* username = [value[@"username"] isKindOfClass:NSString.class] ? value[@"username"] : @"";
+      NSString* password = [value[@"password"] isKindOfClass:NSString.class] ? value[@"password"] : @"";
+      ok = self.api->login_retroachievements(username.UTF8String, password.UTF8String,
+                                              30000, error, sizeof(error)) != 0;
+      success = [controller en:@"RetroAchievements account linked."
+                            fr:@"Compte RetroAchievements lié."];
+    } else if ([command isEqualToString:@"logout"]) {
+      ok = self.api->logout_retroachievements(5000, error, sizeof(error)) != 0;
+      success = [controller en:@"RetroAchievements account unlinked."
+                            fr:@"Compte RetroAchievements déconnecté."];
+    }
+
+    NSString* message = ok ? success :
+        (error[0] ? [NSString stringWithUTF8String:error] : @"RetroAchievements operation failed.");
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (completion) completion(ok, message ?: @"");
+    });
+  });
+}
+
+- (void)presentRetroAchievementsForController:(Armsx2GameViewController*)controller {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.gameController != controller || controller.presentedViewController) return;
+    Armsx2RetroAchievementsMenu* menu = [Armsx2RetroAchievementsMenu new];
+    __weak Armsx2InternalBridgePlugin* weakSelf = self;
+    __weak Armsx2GameViewController* weakController = controller;
+    menu.readState = ^(void (^completion)(NSDictionary<NSString*, id>* state)) {
+      Armsx2InternalBridgePlugin* strongSelf = weakSelf;
+      Armsx2GameViewController* strongController = weakController;
+      if (!strongSelf || !strongController) { if (completion) completion(nil); return; }
+      [strongSelf readRetroAchievementsForController:strongController completion:completion];
+    };
+    menu.performCommand = ^(NSString* command, id value,
+                            void (^completion)(BOOL success, NSString* message)) {
+      Armsx2InternalBridgePlugin* strongSelf = weakSelf;
+      Armsx2GameViewController* strongController = weakController;
+      if (!strongSelf || !strongController) {
+        if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+        return;
+      }
+      [strongSelf performRetroAchievementsCommand:command value:value
+                                       controller:strongController completion:completion];
+    };
+    UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:menu];
+    navigation.modalPresentationStyle = UIModalPresentationFullScreen;
+    [controller presentViewController:navigation animated:YES completion:nil];
+  });
+}
+
 - (void)performGameCommand:(NSString*)command
                      value:(NSNumber*)value
                 controller:(Armsx2GameViewController*)controller {
+  if ([command isEqualToString:@"retroAchievements"]) {
+    [self presentRetroAchievementsForController:controller];
+    return;
+  }
   dispatch_async(_runtimeQueue, ^{
     if (!self.api || self.gameController != controller) return;
     char error[1024] = {};
@@ -609,22 +771,9 @@ static UIViewController* ARMSX2RootViewController(void) {
   }
 
   if ([call.method isEqualToString:@"stop"]) {
-    dispatch_async(_runtimeQueue, ^{
-      BOOL ok = YES;
-      NSString* message = @"";
-      if (self.api) {
-        char error[512] = {};
-        self.api->request_stop();
-        ok = self.api->shutdown(30000, error, sizeof(error)) != 0;
-        if (!ok && error[0]) message = [NSString stringWithUTF8String:error] ?: @"";
-      }
-      ARMSX2JitAbortTransaction();
-      self.operationBusy = NO;
-      dispatch_async(dispatch_get_main_queue(), ^{
-        [self dismissGameController];
-        result(@{@"success": @(ok), @"message": message});
-      });
-    });
+    [self stopActiveSessionWithCompletion:^(BOOL success, NSString* message) {
+      result(@{@"success": @(success), @"message": message ?: @""});
+    }];
     return;
   }
 
@@ -670,9 +819,9 @@ static UIViewController* ARMSX2RootViewController(void) {
       controller.api = self.api;
       __weak Armsx2InternalBridgePlugin* weakSelf = self;
       __weak Armsx2GameViewController* weakController = controller;
-      controller.closeHandler = ^{ [weakSelf handleMethodCall:
-          [FlutterMethodCall methodCallWithMethodName:@"stop" arguments:nil]
-          result:^(id _){}]; };
+      controller.closeHandler = ^{
+        [weakSelf stopActiveSessionWithCompletion:^(BOOL success, NSString* message) {}];
+      };
       controller.commandHandler = ^(NSString* command, NSNumber* value) {
         Armsx2InternalBridgePlugin* strongSelf = weakSelf;
         Armsx2GameViewController* strongController = weakController;
