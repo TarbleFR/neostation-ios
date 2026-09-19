@@ -33,6 +33,7 @@
 #include <condition_variable>
 #include <signal.h>
 #include <setjmp.h>
+#include <dispatch/dispatch.h>
 #include <sys/stat.h>
 
 #ifndef NEO_ARMSX2_SOURCE_REVISION
@@ -389,8 +390,95 @@ void sticks(float lx,float ly,float rx,float ry) {
     [ARMSX2Bridge setRightStickX:std::clamp(rx,-1.f,1.f) Y:std::clamp(ry,-1.f,1.f)];},false);
   s_vmCV.notify_all();
 }
+
+bool has_running_game() {
+  return s_vmThreadActive.load(std::memory_order_acquire) && VMManager::HasValidVM();
+}
+float get_upscale_multiplier() {
+  if(!has_running_game()) return 1.0f;
+  const float global=[ARMSX2Bridge getINIFloat:@"EmuCore/GS" key:@"upscale_multiplier" defaultValue:1.0f];
+  return [ARMSX2Bridge getPerGameINIFloat:@"EmuCore/GS" key:@"upscale_multiplier" defaultValue:global forISO:nil];
+}
+uint32_t aspect_index(NSString* value) {
+  if([value isEqualToString:@"4:3"]) return 1;
+  if([value isEqualToString:@"16:9"]) return 2;
+  if([value isEqualToString:@"10:7"]) return 3;
+  if([value isEqualToString:@"Stretch"]) return 4;
+  return 0;
+}
+uint32_t get_aspect_ratio() {
+  if(!has_running_game()) return 0;
+  NSString* global=[ARMSX2Bridge getINIString:@"EmuCore/GS" key:@"AspectRatio" defaultValue:@"Auto 4:3/3:2"];
+  NSString* value=[ARMSX2Bridge getPerGameINIString:@"EmuCore/GS" key:@"AspectRatio" defaultValue:global forISO:nil];
+  return aspect_index(value);
+}
+int get_cheats_enabled() {
+  if(!has_running_game()) return 0;
+  const BOOL global=[ARMSX2Bridge getINIBool:@"EmuCore" key:@"EnableCheats" defaultValue:NO];
+  return [ARMSX2Bridge getPerGameINIBool:@"EmuCore" key:@"EnableCheats" defaultValue:global forISO:nil] ? 1 : 0;
+}
+int set_upscale_multiplier(float value,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("ARMSX2 game settings require a running game.",error,capacity);
+  if(!std::isfinite(value) || value<1.0f || value>8.0f)
+    return error_out("ARMSX2 internal resolution must be between 1x and 8x.",error,capacity);
+  [ARMSX2Bridge setPerGameINIFloat:@"EmuCore/GS" key:@"upscale_multiplier" value:value forISO:nil];
+  [ARMSX2Bridge applyGraphicsSettingsNow];
+  return 1;
+}
+int set_aspect_ratio(uint32_t value,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("ARMSX2 game settings require a running game.",error,capacity);
+  static NSString* values[] = {@"Auto 4:3/3:2",@"4:3",@"16:9",@"10:7",@"Stretch"};
+  if(value>=5) return error_out("Unsupported ARMSX2 aspect ratio.",error,capacity);
+  [ARMSX2Bridge setPerGameINIString:@"EmuCore/GS" key:@"AspectRatio" value:values[value] forISO:nil];
+  [ARMSX2Bridge applyGraphicsSettingsNow];
+  return 1;
+}
+int set_cheats_enabled(int enabled,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("ARMSX2 cheats require a running game.",error,capacity);
+  [ARMSX2Bridge setPerGameINIBool:@"EmuCore" key:@"EnableCheats" value:enabled!=0 forISO:nil];
+  [ARMSX2Bridge reloadPatches];
+  return 1;
+}
+int reload_cheats(char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("ARMSX2 cheats require a running game.",error,capacity);
+  [ARMSX2Bridge reloadPatches];
+  return 1;
+}
+int has_save_state(uint32_t slot) {
+  if(!has_running_game() || slot<1 || slot>10) return 0;
+  for(ARMSX2SaveStateSlotInfo* info in [ARMSX2Bridge saveStateSlots])
+    if((uint32_t)info.slot==slot) return info.occupied ? 1 : 0;
+  return 0;
+}
+int state_operation(bool load,uint32_t slot,uint32_t timeout,char* error,size_t capacity) {
+  if(!has_running_game()) return error_out("ARMSX2 save states require a running game.",error,capacity);
+  if(slot<1 || slot>10) return error_out("ARMSX2 save-state slot must be between 1 and 10.",error,capacity);
+  __block BOOL success=NO;
+  dispatch_semaphore_t done=dispatch_semaphore_create(0);
+  ARMSX2SaveStateCompletion completion=^(BOOL ok){
+    success=ok;
+    dispatch_semaphore_signal(done);
+  };
+  if(load) [ARMSX2Bridge loadStateFromSlot:(NSInteger)slot completion:completion];
+  else [ARMSX2Bridge saveStateToSlot:(NSInteger)slot completion:completion];
+  const int64_t nanos=(int64_t)std::max<uint32_t>(timeout,1000u)*NSEC_PER_MSEC;
+  if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,nanos))!=0)
+    return error_out(load ? "ARMSX2 load state timed out." : "ARMSX2 save state timed out.",error,capacity);
+  if(!success)
+    return error_out(load ? "ARMSX2 could not load the selected state." : "ARMSX2 could not save the selected state.",error,capacity);
+  return 1;
+}
+int save_state(uint32_t slot,uint32_t timeout,char* error,size_t capacity) {
+  return state_operation(false,slot,timeout,error,capacity);
+}
+int load_state(uint32_t slot,uint32_t timeout,char* error,size_t capacity) {
+  return state_operation(true,slot,timeout,error,capacity);
+}
+
 const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_SOURCE_REVISION,
-  create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks};
+  create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks,
+  get_upscale_multiplier,get_aspect_ratio,get_cheats_enabled,set_upscale_multiplier,set_aspect_ratio,
+  set_cheats_enabled,reload_cheats,has_save_state,save_state,load_state};
 }
 extern "C" bool ARMSX2_IsIdleVMPrewarmResolved() { return false; } // No autonomous prewarm in NeoStation.
 extern "C" const NeoARMSX2API* NeoARMSX2_GetAPI(uint32_t version) {
