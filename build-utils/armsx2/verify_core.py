@@ -46,6 +46,16 @@ destination = output / framework.name
 if destination.exists(): shutil.rmtree(destination)
 subprocess.run(['ditto', str(framework), str(destination)], check=True)
 identity = json.loads((root / 'build-utils/armsx2/source.json').read_text())
+abi_header = (root / 'packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h').read_text()
+import re
+match = re.search(r'#define\s+NEO_ARMSX2_ABI_VERSION\s+(\d+)u', abi_header)
+if not match:
+    raise SystemExit('Cannot read NEO_ARMSX2_ABI_VERSION from ABI header')
+header_abi = int(match.group(1))
+if identity.get('abi_version') != header_abi:
+    raise SystemExit(
+        f"ARMSX2 ABI manifest/header mismatch: manifest={identity.get('abi_version')} header={header_abi}"
+    )
 identity.update(host_commit=os.environ.get('GITHUB_SHA', ''),
                 sha256=hashlib.sha256((destination/'ARMSX2Core').read_bytes()).hexdigest(),
                 architectures=['arm64'], signature='ad-hoc; sideloading must re-sign',
