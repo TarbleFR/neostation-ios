@@ -23,7 +23,10 @@ void main() {
       expect(hostJit, contains('com.neogamelab.neostation.rpcs3-jit-request'));
       expect(hostJit, contains('NeoStationRPCS3JITHelper'));
       expect(hostJit, isNot(contains('Dolphin')));
-      expect(helper, contains('script: .universal'));
+      expect(helper, contains('var script = StikJIT.Script.universal'));
+      expect(helper, contains('script = .custom(scriptURL)'));
+      expect(helper, contains('forceScript: requiresCoreHandshake'));
+      expect(helper, isNot(contains('script = .legacy')));
       expect(helper, isNot(contains('script: .legacy')));
       expect(helper, isNot(contains('com.xitrix.RPCS3')));
     });
