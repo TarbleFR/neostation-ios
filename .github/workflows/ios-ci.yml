@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 293 Embedded ARMSX2
-run-name: NeoStation iOS Build 293 • ${{ github.sha }}
+name: NeoStation iOS Build 294 Embedded ARMSX2
+run-name: NeoStation iOS Build 294 • ${{ github.sha }}
 
 on:
   push:
@@ -14,20 +14,20 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-293
+  group: neostation-ios-build-294
   cancel-in-progress: true
 
 jobs:
   build:
     # Core-only development commits validate ARMSX2 separately, not a mislabeled IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') }}
-    name: Build 293 Embedded ARMSX2 IPA
+    name: Build 294 Embedded ARMSX2 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '293'
-      IPA_NAME: 'NeoStation-iOS-Build-293-Embedded-ARMSX2'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-293-Embedded-ARMSX2'
+      BUILD_NUMBER: '294'
+      IPA_NAME: 'NeoStation-iOS-Build-294-Embedded-ARMSX2'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-294-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       ARMSX2_CORE_HOST_SHA: 2e0f42a4495da7a950969f58230a550da1281190
       ARMSX2_CORE_RUN_ID: '35498658790'
@@ -200,9 +200,16 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 \
             https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
             -o build/StikJIT-1.5.0.xcframework.zip
+          curl -fL --retry 3 --retry-delay 2 \
+            https://github.com/XITRIX/RPCS3-iOS-Releases/releases/download/v0.9/RPCS3.ipa \
+            -o build/RPCS3-v0.9.ipa
+          printf '%s  %s\n' \
+            '4cc11c8a0bc3be74685c2781741a7a2b559e94dac6b81df609ed43523e5cfec0' \
+            'build/RPCS3-v0.9.ipa' | shasum -a 256 -c -
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
-            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip \
+            --rpcs3-release-ipa build/RPCS3-v0.9.ipa
 
       - name: Download pinned embedded ARMSX2 Core
         uses: actions/download-artifact@v4
@@ -339,7 +346,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 293 IPA
+      - name: Package and validate Build 294 IPA
         shell: bash
         run: |
           set -euo pipefail
