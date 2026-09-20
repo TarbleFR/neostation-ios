@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 298 Cheats & Patches
-run-name: NeoStation iOS Build 298 • ${{ github.sha }}
+name: NeoStation iOS Build 299 RPCS3 Launch Stability
+run-name: NeoStation iOS Build 299 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-298
+  group: neostation-ios-build-299
   cancel-in-progress: true
 
 jobs:
@@ -22,21 +22,22 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 298 Cheats & Patches IPA
+    name: Build 299 RPCS3 Launch Stability IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '298'
-      IPA_NAME: 'NeoStation-iOS-Build-298-Cheats-Patches'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-298-Cheats-Patches'
+      BUILD_NUMBER: '299'
+      IPA_NAME: 'NeoStation-iOS-Build-299-RPCS3-Launch-Stability'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-299-RPCS3-Launch-Stability'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
       ARMSX2_CORE_HOST_SHA: 017c9c2f1e0628e43506707bd6943a76f44f8f44
       ARMSX2_CORE_RUN_ID: '35519677053'
-      RPCS3_CORE_HOST_SHA: a8cb83c99055123b928537661f3571dd816ff078
-      RPCS3_CORE_RUN_ID: '35506921302'
-      RPCS3_CORE_SHA256: bcfc9792888dd93496d4699adbfe8aea52718a866296e7b4a80379edb9b072cf
+      RPCS3_CORE_HOST_SHA: 453eeda703d42ee4b9854083f3a8d04071453fe7
+      RPCS3_CORE_RUN_ID: '35535109526'
+      RPCS3_CORE_SHA256: e3e6d48984616492322cd5ef88959b71be6d0915fae22223b271b42fe7ba5aa8
+      RPCS3_SOURCE_COMMIT: 22f1152783cef1f7e04af7b1c895173e28fd5b03
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -142,6 +143,8 @@ jobs:
           python3 -m py_compile \
             build-utils/configure_rpcs3_ios_v2.py \
             build-utils/embed_rpcs3_host_entitlements.py \
+            build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/validate_rpcs3_embedded_core.py \
             build-utils/validate_rpcs3_ipa.py \
             build-utils/validate_single_ipa_distribution.py \
             packages/dolphin_internal_bridge/ci/build_support.py \
@@ -162,6 +165,7 @@ jobs:
           set -euo pipefail
           python3 test/dolphin_account_267_test.py
           python3 test/dolphin_cheats_menu_test.py
+          python3 test/rpcs3_build295_fixed_reservation_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
@@ -209,13 +213,12 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 \
             https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
             -o build/StikJIT-1.5.0.xcframework.zip
-          # Keep the validated ABI-compatible RPCS3 Core from the Build 270
-          # donor. It already contains NeoStation's pinned v0.9-era JIT
-          # backports; only the host/debugger protocol changes in Build 297.
+          # Reuse the validated donor only to restore StikJIT, the host shells,
+          # RPCS3 resources and other immutable native packaging inputs. The
+          # newly validated RPCS3 Core is installed explicitly below.
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
-
 
       - name: Download rebuilt embedded Dolphin Core
         uses: actions/download-artifact@v4
@@ -295,7 +298,7 @@ jobs:
           shutil.copytree(source / "Sys", sys_destination)
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 298 diagnostics
+          # Rewrite the Dolphin fields so the final Build 299 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -342,7 +345,10 @@ jobs:
           git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             build-utils/build_rpcs3_embedded_core.sh \
             build-utils/patch_rpcs3_build266_v09_core.py \
+            build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/validate_rpcs3_embedded_core.py \
             build-utils/rpcs3 \
+            test/rpcs3_build295_fixed_reservation_test.py \
             .github/workflows/rpcs3-core.yml
 
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
@@ -357,10 +363,13 @@ jobs:
           identity = json.loads(Path("dist/rpcs3-native/identity.json").read_text())
           actual = hashlib.sha256(core.read_bytes()).hexdigest()
           assert identity["host_commit"] == os.environ["RPCS3_CORE_HOST_SHA"], identity
+          assert identity["source_commit"] == os.environ["RPCS3_SOURCE_COMMIT"], identity
           assert identity["abi_version"] == 30, identity
           assert identity["architectures"] == ["arm64"], identity
           assert identity["sha256"] == os.environ["RPCS3_CORE_SHA256"], identity
           assert actual == identity["sha256"], (actual, identity)
+          assert identity["reservation"] == "vm_allocate fixed, no VM_FLAGS_OVERWRITE", identity
+          assert identity["reservation_marker"] == "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1", identity
 
           destination = Path(
               "packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib"
@@ -373,6 +382,7 @@ jobs:
           )
           print(json.dumps(identity, indent=2))
           PY
+          grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
           file packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           nm -gU packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib \
             > build/rpcs3-native-exports.txt
@@ -515,7 +525,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 298 IPA
+      - name: Package and validate Build 299 IPA
         shell: bash
         run: |
           set -euo pipefail
