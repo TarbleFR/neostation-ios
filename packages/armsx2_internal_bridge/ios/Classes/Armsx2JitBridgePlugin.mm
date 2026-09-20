@@ -582,10 +582,12 @@ BOOL ARMSX2JitWaitForDetach(NSTimeInterval timeout, NSString** message) {
     return NO;
   }
   BOOL completed = [session waitUntilFinished:timeout];
-  BOOL success = completed && session.success && ARMSX2HostIsDebugged();
+  BOOL proofReady = !session.requiresCoreHandshake || session.coreLoadReady;
+  BOOL success = completed && session.success && proofReady && ARMSX2HostIsDebugged();
   if (message) {
     *message = success ? @"ARMSX2 helper detached and CS_DEBUGGED remains active." :
-        (session.finalMessage.length ? session.finalMessage : @"ARMSX2 helper did not confirm detach.");
+        (!proofReady ? @"ARMSX2 Core nonce handshake was not completed for this JIT transaction." :
+         (session.finalMessage.length ? session.finalMessage : @"ARMSX2 helper did not confirm detach."));
   }
   if (completed) {
     [session close];
@@ -650,13 +652,16 @@ void ARMSX2JitAbortTransaction(void) {
     ARMSX2Milestone(@"jit_completion_begin", @"Waiting for Universal detach confirmation");
     dispatch_async(_jitQueue, ^{
       BOOL completed = [session waitUntilFinished:kArmsx2CompletionTimeout];
-      BOOL success = completed && session.success && ARMSX2HostIsDebugged();
+      BOOL proofReady = !session.requiresCoreHandshake || session.coreLoadReady;
+      BOOL success = completed && session.success && proofReady && ARMSX2HostIsDebugged();
+      NSString* failureMessage = !proofReady
+          ? @"ARMSX2 Core nonce handshake was not completed for this JIT transaction."
+          : (session.finalMessage.length ? session.finalMessage :
+             @"ARMSX2 JIT helper did not confirm completion. Relaunch NeoStation before retrying.");
       NSDictionary* response = @{
         @"success": @(success),
         @"logs": session.logs,
-        @"message": success ? @"ARMSX2 JIT arena prepared and helper detached." :
-            (session.finalMessage.length ? session.finalMessage :
-             @"ARMSX2 JIT helper did not confirm completion. Relaunch NeoStation before retrying."),
+        @"message": success ? @"ARMSX2 JIT arena prepared and helper detached." : failureMessage,
       };
       ARMSX2Milestone(@"jit_completion_end", success ? @"detached" : @"failed or timed out");
       // A failed/incomplete handshake may still own a debugger. Keep the
