@@ -249,12 +249,11 @@ void vm_worker() {
       }
     } catch (const std::exception& e) { fail(e.what()); }
     catch (...) { fail("Unknown ARMSX2 native exception."); }
-    if (VMManager::HasValidVM()) {
-      const VMState current=VMManager::GetState();
-      if (current!=VMState::Stopping && current!=VMState::Shutdown)
-        VMManager::SetState(VMState::Stopping);
+    // HasValidVM deliberately excludes Stopping. A stopped execution loop
+    // still owns the VM devices until Shutdown closes them and stores Shutdown.
+    // CPUThreadShutdown only releases CPU resources; it cannot replace this.
+    if (VMManager::HasValidVM() || VMManager::GetState()==VMState::Stopping)
       VMManager::Shutdown(false);
-    }
     s_vmThreadActive.store(false,std::memory_order_release);
     DarwinMisc::WaitForJITValidation();
     if (cpu_initialized) VMManager::Internal::CPUThreadShutdown();
