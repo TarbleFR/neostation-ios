@@ -433,12 +433,27 @@ static UIViewController* ARMSX2RootViewController(void) {
 }
 
 - (BOOL)loadCore:(NSString**)error {
-  if (self.api != NULL) return YES;
+  const BOOL coreAlreadyLoaded = self.api != NULL;
+
+  // iOS 26+ requires a fresh nonce-bound debugger proof for EVERY JIT
+  // transaction, not only the first dlopen. ARMSX2Core intentionally remains
+  // process-lifetime; therefore the second and later launches enter here with
+  // self.api already populated. Returning before this handshake left the new
+  // StikJIT session attached but unproven and broke Core re-initialization.
   if (@available(iOS 26.0, *)) {
     if (!ARMSX2JitConfirmCoreLoadHandoff()) {
-      if (error) *error = @"ARMSX2 debugger nonce proof failed at the Core load boundary.";
+      if (error) {
+        *error = coreAlreadyLoaded
+            ? @"ARMSX2 debugger nonce proof failed at the Core reuse boundary."
+            : @"ARMSX2 debugger nonce proof failed at the Core load boundary.";
+      }
       return NO;
     }
+  }
+
+  if (coreAlreadyLoaded) {
+    NSLog(@"[ARMSX2] Reusing process-lifetime Core after fresh JIT nonce proof.");
+    return YES;
   }
   NSString* path = [self corePath];
   if (![NSFileManager.defaultManager isReadableFileAtPath:path]) {
