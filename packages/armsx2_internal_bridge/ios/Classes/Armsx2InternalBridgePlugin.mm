@@ -480,7 +480,8 @@ static UIViewController* ARMSX2RootViewController(void) {
       !api->save_state || !api->load_state ||
       !api->get_retroachievements_state_json ||
       !api->set_retroachievements_option ||
-      !api->login_retroachievements || !api->logout_retroachievements) {
+      !api->login_retroachievements || !api->logout_retroachievements ||
+      !api->get_graphics_hacks_json || !api->set_graphics_hack) {
     if (error) *error = @"Embedded ARMSX2 Core ABI is incompatible.";
     return NO;
   }
@@ -670,6 +671,45 @@ static UIViewController* ARMSX2RootViewController(void) {
   });
 }
 
+- (void)readGraphicsHacksForController:(Armsx2GameViewController*)controller
+                              completion:(void (^)(NSDictionary<NSString*, id>* state))completion {
+  dispatch_async(_runtimeQueue, ^{
+    NSDictionary* state=nil;
+    if (self.api && self.gameController==controller && !self.stopInProgress) {
+      char json[65536] = {};
+      if (self.api->get_graphics_hacks_json(json,sizeof(json))) {
+        NSData* data=[NSData dataWithBytes:json length:strlen(json)];
+        id decoded=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        if ([decoded isKindOfClass:NSDictionary.class]) state=decoded;
+      }
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(state); });
+  });
+}
+
+- (void)performGraphicsHack:(NSString*)key
+                      value:(NSInteger)value
+                 controller:(Armsx2GameViewController*)controller
+                 completion:(void (^)(BOOL success, NSString* message))completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (!self.api || self.gameController!=controller || self.stopInProgress) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (completion) completion(NO,@"ARMSX2 session is no longer active.");
+      });
+      return;
+    }
+    char error[1024] = {};
+    BOOL ok=self.api->set_graphics_hack(key.UTF8String,(int)value,error,sizeof(error))!=0;
+    NSString* message=ok
+        ? [controller en:@"Graphics hack updated for this game."
+                      fr:@"Hack graphique mis à jour pour ce jeu."]
+        : (error[0] ? [NSString stringWithUTF8String:error] : @"Graphics hack update failed.");
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (completion) completion(ok,message ?: @"");
+    });
+  });
+}
+
 - (void)readSessionSnapshotForController:(Armsx2GameViewController*)controller
                                    completion:(void (^)(NSDictionary<NSString*, id>* snapshot))completion {
   dispatch_async(_runtimeQueue, ^{
@@ -819,6 +859,22 @@ static UIViewController* ARMSX2RootViewController(void) {
         }
         [bridge performRetroAchievementsCommand:command value:value controller:owner completion:completion];
       };
+      menu.readGraphicsHacks = ^(void (^completion)(NSDictionary<NSString*, id>* state)) {
+        Armsx2InternalBridgePlugin* bridge=weakSelf;
+        Armsx2GameViewController* owner=weakController;
+        if (!bridge || !owner) { if (completion) completion(nil); return; }
+        [bridge readGraphicsHacksForController:owner completion:completion];
+      };
+      menu.performGraphicsHack = ^(NSString* key, NSInteger value,
+                                   void (^completion)(BOOL success, NSString* message)) {
+        Armsx2InternalBridgePlugin* bridge=weakSelf;
+        Armsx2GameViewController* owner=weakController;
+        if (!bridge || !owner) {
+          if (completion) completion(NO,@"ARMSX2 session is no longer active.");
+          return;
+        }
+        [bridge performGraphicsHack:key value:value controller:owner completion:completion];
+      };
       menu.resumeGame = ^{
         Armsx2InternalBridgePlugin* bridge = weakSelf;
         Armsx2GameViewController* owner = weakController;
@@ -900,16 +956,17 @@ static UIViewController* ARMSX2RootViewController(void) {
   NSDictionary* args = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
   NSNumber* transactionNumber = [args[@"transaction"] isKindOfClass:NSNumber.class] ? args[@"transaction"] : nil;
   NSString* gamePath = [args[@"gamePath"] isKindOfClass:NSString.class] ? args[@"gamePath"] : @"";
+  BOOL biosBoot = [args[@"bootBios"] boolValue];
   NSString* dataPath = [args[@"dataPath"] isKindOfClass:NSString.class] ? args[@"dataPath"] : @"";
   NSString* biosDirectory = [args[@"biosDirectory"] isKindOfClass:NSString.class] ? args[@"biosDirectory"] : @"";
   NSString* biosFilename = [args[@"biosFilename"] isKindOfClass:NSString.class] ? args[@"biosFilename"] : @"";
   if (!transactionNumber || transactionNumber.unsignedLongLongValue == 0 ||
-      ![gamePath hasPrefix:@"/"] || ![dataPath hasPrefix:@"/"] ||
-      ![biosDirectory hasPrefix:@"/"]) {
+      (!biosBoot && ![gamePath hasPrefix:@"/"]) || (biosBoot && gamePath.length != 0) ||
+      ![dataPath hasPrefix:@"/"] || ![biosDirectory hasPrefix:@"/"]) {
     result(@{@"success": @NO, @"message": @"Invalid ARMSX2 launch parameters."});
     return;
   }
-  if (![NSFileManager.defaultManager isReadableFileAtPath:gamePath]) {
+  if (!biosBoot && ![NSFileManager.defaultManager isReadableFileAtPath:gamePath]) {
     result(@{@"success": @NO, @"message": @"The selected PS2 game is not readable."});
     return;
   }
@@ -928,7 +985,8 @@ static UIViewController* ARMSX2RootViewController(void) {
       if (!root || root.view.window == nil) return;
       controller = [Armsx2GameViewController new];
       controller.api = self.api;
-      controller.title = gamePath.lastPathComponent.stringByDeletingPathExtension ?: @"ARMSX2";
+      controller.title = biosBoot ? [controller en:@"PS2 BIOS" fr:@"BIOS PS2"] :
+          (gamePath.lastPathComponent.stringByDeletingPathExtension ?: @"ARMSX2");
       __weak Armsx2InternalBridgePlugin* weakSelf = self;
       __weak Armsx2GameViewController* weakController = controller;
       controller.closeHandler = ^{
@@ -997,9 +1055,11 @@ static UIViewController* ARMSX2RootViewController(void) {
     }
 
     NSString* ext = gamePath.pathExtension.lowercaseString;
-    uint32_t kind = [ext isEqualToString:@"elf"] ? NEO_ARMSX2_BOOT_ELF : NEO_ARMSX2_BOOT_DISC;
+    uint32_t kind = biosBoot ? NEO_ARMSX2_BOOT_BIOS :
+        ([ext isEqualToString:@"elf"] ? NEO_ARMSX2_BOOT_ELF : NEO_ARMSX2_BOOT_DISC);
     memset(error, 0, sizeof(error));
-    if (!self.api->boot(gamePath.fileSystemRepresentation, kind, 120000, error, sizeof(error))) {
+    const char* bootPath = biosBoot ? "" : gamePath.fileSystemRepresentation;
+    if (!self.api->boot(bootPath, kind, 120000, error, sizeof(error))) {
       NSString* message = error[0] ? [NSString stringWithUTF8String:error] : @"ARMSX2 boot failed.";
       [self failTransaction:message result:result];
       return;
@@ -1014,7 +1074,8 @@ static UIViewController* ARMSX2RootViewController(void) {
       result(@{
         @"success": @YES,
         @"transaction": transactionNumber,
-        @"bootKind": kind == NEO_ARMSX2_BOOT_ELF ? @"elf" : @"disc",
+        @"bootKind": kind == NEO_ARMSX2_BOOT_BIOS ? @"bios" :
+            (kind == NEO_ARMSX2_BOOT_ELF ? @"elf" : @"disc"),
         @"sourceRevision": revision ?: @"",
         @"message": @"ARMSX2 entered Running.",
       });
