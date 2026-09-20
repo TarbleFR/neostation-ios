@@ -30,15 +30,19 @@ class StikJitArmsx2Service {
 
   static String? get lastError => _lastError;
 
-  static Future<bool> launch({required String gamePath}) =>
-      _launchTransaction(gamePath: gamePath, bootBios: false);
+  static Future<bool> launch({
+    required String gamePath,
+    String uiLocale = 'en',
+  }) =>
+      _launchTransaction(gamePath: gamePath, bootBios: false, uiLocale: uiLocale);
 
-  static Future<bool> launchBios() =>
-      _launchTransaction(gamePath: '', bootBios: true);
+  static Future<bool> launchBios({String uiLocale = 'en'}) =>
+      _launchTransaction(gamePath: '', bootBios: true, uiLocale: uiLocale);
 
   static Future<bool> _launchTransaction({
     required String gamePath,
     required bool bootBios,
+    required String uiLocale,
   }) async {
     if (!Platform.isIOS || _busy) {
       _lastError = _busy ? 'An ARMSX2 launch is already active.' : null;
@@ -134,6 +138,7 @@ class StikJitArmsx2Service {
         transaction: transaction,
         gamePath: normalized,
         bootBios: bootBios,
+        uiLocale: uiLocale,
         biosFilename: biosFilename,
         dataPath: dataPath,
         biosDirectory: biosDirectory,
