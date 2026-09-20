@@ -115,7 +115,7 @@ def patch(root: Path) -> None:
     text = path.read_text()
     if MARKER in text:
         reservation = text.split('u8* reserve_arena_layout(', 1)[1].split(
-            '\\nu8* reserve_code_data_layout(', 1
+            '\nu8* reserve_code_data_layout(', 1
         )[0]
         forbidden_overwrite_forms = (
             'VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE',
