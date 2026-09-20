@@ -113,7 +113,7 @@ NEW = r'''u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_
 	// NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1
 	// Reserve the complete candidate in one kernel transaction. Splitting the
 	// reservation into preparation-sized chunks left a launch-time race with
-	// unrelated startup mappings. Do NOT use VM_FLAGS_OVERWRITE.
+	// unrelated startup mappings. Do NOT use the overwrite flag.
 	if (!size || begin < arena_address_begin || end > arena_address_end || begin >= end || size > end - begin)
 	{
 		return nullptr;
