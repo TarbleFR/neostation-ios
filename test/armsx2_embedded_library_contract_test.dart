@@ -79,11 +79,15 @@ void main() {
       'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
     ).readAsStringSync();
 
-    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 4u'));
+    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 5u'));
     expect(abi, contains('NEO_ARMSX2_BOOT_BIOS'));
     expect(abi, contains('set_upscale_multiplier'));
     expect(abi, contains('set_aspect_ratio'));
     expect(abi, contains('set_cheats_enabled'));
+    expect(abi, contains('get_available_patches_json'));
+    expect(abi, contains('set_patch_state'));
+    expect(sessionMenu, contains('Available Patches'));
+    expect(sessionMenu, contains('Patches disponibles'));
     expect(abi, contains('save_state'));
     expect(abi, contains('load_state'));
     expect(abi, contains('get_retroachievements_state_json'));
