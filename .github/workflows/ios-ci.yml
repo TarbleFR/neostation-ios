@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 296 Embedded ARMSX2
-run-name: NeoStation iOS Build 296 • ${{ github.sha }}
+name: NeoStation iOS Build 297 Embedded ARMSX2
+run-name: NeoStation iOS Build 297 • ${{ github.sha }}
 
 on:
   push:
@@ -14,20 +14,20 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-296
+  group: neostation-ios-build-297
   cancel-in-progress: true
 
 jobs:
   build:
     # Core-only development commits validate ARMSX2 separately, not a mislabeled IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') }}
-    name: Build 296 Embedded ARMSX2 IPA
+    name: Build 297 Embedded ARMSX2 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '296'
-      IPA_NAME: 'NeoStation-iOS-Build-296-Embedded-ARMSX2'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-296-Embedded-ARMSX2'
+      BUILD_NUMBER: '297'
+      IPA_NAME: 'NeoStation-iOS-Build-297-Embedded-ARMSX2'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-297-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       ARMSX2_CORE_HOST_SHA: 2e0f42a4495da7a950969f58230a550da1281190
       ARMSX2_CORE_RUN_ID: '35498658790'
@@ -207,7 +207,7 @@ jobs:
             -o build/StikJIT-1.5.0.xcframework.zip
           # Keep the validated ABI-compatible RPCS3 Core from the Build 270
           # donor. It already contains NeoStation's pinned v0.9-era JIT
-          # backports; only the host/debugger protocol changes in Build 296.
+          # backports; only the host/debugger protocol changes in Build 297.
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
@@ -405,7 +405,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 296 IPA
+      - name: Package and validate Build 297 IPA
         shell: bash
         run: |
           set -euo pipefail
