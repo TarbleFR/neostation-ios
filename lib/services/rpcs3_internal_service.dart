@@ -85,7 +85,7 @@ class Rpcs3InternalException implements Exception {
 
 /// Owns the in-process PlayStation 3 engine embedded in NeoStation iOS.
 ///
-/// RPCS3 iOS 0.9 requires JIT before libRPCS3Core.dylib is dlopened. The
+/// The ABI-compatible RPCS3 iOS Core with v0.9-era JIT backports requires JIT before libRPCS3Core.dylib is dlopened. The
 /// Universal JIT is a two-phase transaction: attach, load/initialize the Core
 /// while the debugger prepares its arena, then confirm the helper detached.
 class Rpcs3InternalService {
