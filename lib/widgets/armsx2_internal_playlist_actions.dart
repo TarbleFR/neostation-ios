@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../services/armsx2_internal_service.dart';
+import 'armsx2_bios_picker.dart';
 import '../services/stikjit_armsx2_service.dart';
 
 class Armsx2InternalPlaylistActions extends StatefulWidget {
@@ -40,13 +41,14 @@ class _Armsx2InternalPlaylistActionsState
     if (_busy) return;
     setState(() => _busy = true);
     _interaction(true);
+    final fr = _fr;
     try {
       if (action == 'games') {
         final result = await Armsx2InternalService.importGames();
         if (result.imported > 0) {
           await widget.onLibraryChanged();
           _notice(
-            _fr
+            fr
                 ? '${result.imported} jeu(x) PS2 importé(s).'
                 : '${result.imported} PS2 game(s) imported.',
           );
@@ -55,31 +57,36 @@ class _Armsx2InternalPlaylistActionsState
           _notice(
             result.errors.isNotEmpty
                 ? result.errors.first
-                : (_fr ? 'Certains jeux ont été rejetés.' : 'Some games were rejected.'),
+                : (fr ? 'Certains jeux ont été rejetés.' : 'Some games were rejected.'),
           );
         }
+      } else if (action == 'choose_bios') {
+        await showArmsx2BiosPicker(context);
       } else if (action == 'boot_bios') {
+        final selected = await showArmsx2BiosPicker(context);
+        if (selected == null || !mounted) return;
         final launched = await StikJitArmsx2Service.launchBios();
         if (!launched) {
           _notice(
             StikJitArmsx2Service.lastError ??
-                (_fr ? 'Impossible de démarrer le BIOS PS2.' : 'Could not boot the PS2 BIOS.'),
+                (fr ? 'Impossible de démarrer le BIOS PS2.' : 'Could not boot the PS2 BIOS.'),
           );
         }
       } else if (action == 'bios') {
         final result = await Armsx2InternalService.importBios();
         if (result.imported > 0) {
           _notice(
-            _fr
-                ? 'BIOS importé dans Sur mon iPhone → NeoStation → ARMSX2 → BIOS.'
-                : 'BIOS imported to On My iPhone → NeoStation → ARMSX2 → BIOS.',
+            fr
+                ? '${result.imported} BIOS importé(s). Choisissez le BIOS à utiliser.'
+                : '${result.imported} BIOS file(s) imported. Choose the BIOS to use.',
           );
+          if (mounted) await showArmsx2BiosPicker(context);
         } else if (result.rejected > 0) {
           _notice(result.errors.isNotEmpty ? result.errors.first : 'BIOS import failed.');
         }
       }
     } catch (error) {
-      _notice(_fr ? 'Échec de l’import ARMSX2 : $error' : 'ARMSX2 import failed: $error');
+      _notice(fr ? 'Échec de l’import ARMSX2 : $error' : 'ARMSX2 import failed: $error');
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -121,7 +128,11 @@ class _Armsx2InternalPlaylistActionsState
           ),
           PopupMenuItem(
             value: 'bios',
-            child: Text(_fr ? 'Importer le BIOS' : 'Import BIOS'),
+            child: Text(_fr ? 'Importer un ou plusieurs BIOS' : 'Import one or more BIOS files'),
+          ),
+          PopupMenuItem(
+            value: 'choose_bios',
+            child: Text(_fr ? 'Choisir le BIOS PS2' : 'Choose PS2 BIOS'),
           ),
           PopupMenuItem(
             value: 'boot_bios',
