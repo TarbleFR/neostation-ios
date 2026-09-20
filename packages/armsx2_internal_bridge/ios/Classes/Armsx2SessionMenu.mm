@@ -8,6 +8,7 @@ typedef NS_ENUM(NSInteger, ARMSX2MenuPage) {
   ARMSX2MenuGraphics,
   ARMSX2MenuGraphicsHacks,
   ARMSX2MenuCheats,
+  ARMSX2MenuPatches,
   ARMSX2MenuControls,
   ARMSX2MenuSaveStates,
   ARMSX2MenuLoadStates,
@@ -51,8 +52,11 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 @property(nonatomic, copy) NSString* stateMessage;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* graphicsHacks;
 @property(nonatomic, assign) BOOL graphicsHacksLoading;
+@property(nonatomic, copy) NSDictionary<NSString*, id>* patches;
+@property(nonatomic, assign) BOOL patchesLoading;
 - (void)reloadSnapshot;
 - (void)reloadGraphicsHacks;
+- (void)reloadPatches;
 @end
 
 @implementation Armsx2SessionChoiceMenu
@@ -200,6 +204,21 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   });
 }
 
+- (void)reloadPatches {
+  if (self.patchesLoading || !self.readPatches) return;
+  self.patchesLoading=YES;
+  __weak Armsx2SessionMenu* weakSelf=self;
+  self.readPatches(^(NSDictionary<NSString*, id>* state){
+    ARMSX2MenuOnMain(^{
+      Armsx2SessionMenu* menu=weakSelf;
+      if (!menu) return;
+      menu.patchesLoading=NO;
+      menu.patches=[state isKindOfClass:NSDictionary.class] ? state : @{};
+      [menu.tableView reloadData];
+    });
+  });
+}
+
 - (Armsx2SessionMenu*)child:(ARMSX2MenuPage)page title:(NSString*)title {
   Armsx2SessionMenu* child = [Armsx2SessionMenu new];
   child.page = page;
@@ -214,6 +233,9 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   child.readGraphicsHacks = self.readGraphicsHacks;
   child.performGraphicsHack = self.performGraphicsHack;
   child.graphicsHacks = self.graphicsHacks;
+  child.readPatches = self.readPatches;
+  child.performPatchCommand = self.performPatchCommand;
+  child.patches = self.patches;
   child.resumeGame = self.resumeGame;
   child.quitGame = self.quitGame;
   return child;
@@ -230,7 +252,10 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     case ARMSX2MenuGraphicsHacks:
       return [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class]
           ? [self.graphicsHacks[@"items"] count] : 0;
-    case ARMSX2MenuCheats: return self.snapshot.count ? 2 : 0;
+    case ARMSX2MenuCheats: return self.snapshot.count ? 3 : 0;
+    case ARMSX2MenuPatches:
+      return [self.patches[@"items"] isKindOfClass:NSArray.class]
+          ? [self.patches[@"items"] count] : 0;
     case ARMSX2MenuControls: return self.snapshot.count ? 1 : 0;
     case ARMSX2MenuSaveStates:
     case ARMSX2MenuLoadStates: return self.snapshot.count ? 5 : 0;
@@ -245,8 +270,16 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     return ARMSX2MenuText(@"Automatic removes this game's override and returns control to ARMSX2/GameDB.",
                           @"Automatique supprime le réglage propre à ce jeu et rend le contrôle à ARMSX2/GameDB.");
   if (self.page == ARMSX2MenuCheats)
-    return ARMSX2MenuText(@"Hardcore RetroAchievements can disable cheats and save-state features.",
-                          @"Le mode Hardcore de RetroAchievements peut désactiver les cheats et certaines fonctions de save state.");
+    return ARMSX2MenuText(@"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.",
+                          @"ARMSX2 embarque déjà le catalogue de patches PCSX2. Les patches disponibles sont associés au numéro de série et au CRC du jeu courant ; aucun patch n’est deviné. Le mode Hardcore de RetroAchievements peut désactiver les cheats et certaines fonctions de save state.");
+  if (self.page == ARMSX2MenuPatches) {
+    NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : @[];
+    return items.count
+        ? ARMSX2MenuText(@"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.",
+                         @"Voici les patches trouvés par ARMSX2/PCSX2 pour cette révision exacte du jeu. Les changements sont enregistrés par jeu et appliqués par le chargeur de patches natif.")
+        : ARMSX2MenuText(@"No built-in patch is available for this exact game revision.",
+                         @"Aucun patch intégré n’est disponible pour cette révision exacte du jeu.");
+  }
   if (self.page == ARMSX2MenuControls)
     return ARMSX2MenuText(@"Choose whether NeoStation's PS2 touch overlay is visible.",
                           @"Choisissez si les commandes tactiles PS2 de NeoStation sont visibles.");
@@ -328,9 +361,29 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       cell.textLabel.text = ARMSX2MenuText(@"Enable Cheats", @"Activer les cheats");
       cell.detailTextLabel.text = ARMSX2MenuText([self.snapshot[@"cheats"] boolValue] ? @"On" : @"Off",
                                                 [self.snapshot[@"cheats"] boolValue] ? @"Activés" : @"Désactivés");
+    } else if (row == 1) {
+      cell.textLabel.text = ARMSX2MenuText(@"Available Patches", @"Patches disponibles");
+      NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : nil;
+      cell.detailTextLabel.text = items
+          ? [NSString stringWithFormat:@"%lu %@", (unsigned long)items.count,
+              ARMSX2MenuText(@"for this game revision", @"pour cette révision du jeu")]
+          : ARMSX2MenuText(@"Open to scan the built-in catalogue", @"Ouvrir pour analyser le catalogue intégré");
     } else {
       cell.textLabel.text = ARMSX2MenuText(@"Reload Cheats / Patches", @"Recharger cheats / patches");
       cell.accessoryType = UITableViewCellAccessoryNone;
+    }
+  } else if (self.page == ARMSX2MenuPatches) {
+    NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : @[];
+    if (row < (NSInteger)items.count) {
+      NSDictionary* item=items[row];
+      cell.textLabel.text=[item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
+      NSString* description=[item[@"description"] isKindOfClass:NSString.class] ? item[@"description"] : @"";
+      NSString* author=[item[@"author"] isKindOfClass:NSString.class] ? item[@"author"] : @"";
+      cell.detailTextLabel.text=description.length && author.length
+          ? [NSString stringWithFormat:@"%@ — %@",description,author]
+          : (description.length ? description : author);
+      NSInteger value=[item[@"value"] integerValue];
+      cell.accessoryType=value==1 ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryDisclosureIndicator;
     }
   } else if (self.page == ARMSX2MenuControls) {
     cell.textLabel.text = ARMSX2MenuText(@"Touch Controls", @"Commandes tactiles");
@@ -517,11 +570,53 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
                 command:@"cheats" values:@[@NO, @YES]
                  titles:@[ARMSX2MenuText(@"Off", @"Désactivé"), ARMSX2MenuText(@"On", @"Activé")]
           selectedIndex:enabled ? 1 : 0];
+    } else if (row == 1) {
+      Armsx2SessionMenu* patches=[self child:ARMSX2MenuPatches
+          title:ARMSX2MenuText(@"Available Patches", @"Patches disponibles")];
+      [self.navigationController pushViewController:patches animated:YES];
+      [patches reloadPatches];
     } else {
       [self perform:@"reloadCheats" value:@0
         successText:ARMSX2MenuText(@"Cheats and patches reloaded.",
                                    @"Cheats et patches rechargés.")];
     }
+  } else if (self.page == ARMSX2MenuPatches) {
+    NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : @[];
+    if (row >= (NSInteger)items.count || !self.performPatchCommand) return;
+    NSDictionary* item=items[row];
+    NSString* name=[item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
+    if (!name.length) return;
+    const BOOL automatic=[item[@"automatic"] boolValue];
+    UIAlertController* sheet=[UIAlertController alertControllerWithTitle:name
+        message:[item[@"description"] isKindOfClass:NSString.class] ? item[@"description"] : nil
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak Armsx2SessionMenu* weakSelf=self;
+    void (^apply)(NSInteger)=^(NSInteger value) {
+      weakSelf.patchesLoading=YES;
+      weakSelf.navigationController.view.userInteractionEnabled=NO;
+      weakSelf.performPatchCommand(name,value,^(BOOL success,NSString* message){
+        ARMSX2MenuOnMain(^{
+          weakSelf.patchesLoading=NO;
+          weakSelf.navigationController.view.userInteractionEnabled=YES;
+          weakSelf.stateMessage=message;
+          if (success) [weakSelf reloadPatches];
+        });
+      });
+    };
+    if (automatic)
+      [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"Automatic", @"Automatique")
+          style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){apply(-1);}]];
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"Off", @"Désactivé")
+        style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){apply(0);}]];
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"On", @"Activé")
+        style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){apply(1);}]];
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"Cancel", @"Annuler")
+        style:UIAlertActionStyleCancel handler:nil]];
+    if (sheet.popoverPresentationController) {
+      sheet.popoverPresentationController.sourceView=self.view;
+      sheet.popoverPresentationController.sourceRect=[tableView rectForRowAtIndexPath:indexPath];
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
   } else if (self.page == ARMSX2MenuControls) {
     const BOOL enabled = [self.snapshot[@"touch"] boolValue];
     [self pushChoice:ARMSX2MenuText(@"Touch Controls", @"Commandes tactiles")
