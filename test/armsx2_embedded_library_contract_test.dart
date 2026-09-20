@@ -258,7 +258,7 @@ void main() {
 
     expect(widget, contains("ValueKey('armsx2-internal-import-menu')"));
     expect(widget, contains("'Importer des jeux'"));
-    expect(widget, contains("'Importer le BIOS'"));
+    expect(widget, contains("'Importer un ou plusieurs BIOS'"));
     expect(widget, contains('Armsx2InternalService.importGames()'));
     expect(widget, contains('Armsx2InternalService.importBios()'));
   });
