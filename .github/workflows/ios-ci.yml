@@ -229,9 +229,8 @@ jobs:
           test -s "$CORE"
           test -s "$IDENTITY"
 
-          # Fail closed if any native Core build input changed after the
-          # artifact was produced. The packaging commit may change only the
-          # host workflow and other non-Core files.
+          # Refuse an artifact built from native inputs older than the current
+          # packaging checkout.
           git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             build-utils/build_rpcs3_embedded_core.sh \
             build-utils/patch_rpcs3_build266_v09_core.py \
@@ -240,33 +239,42 @@ jobs:
 
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
           python3 - <<'PY'
-          import hashlib, json, os, shutil
+          import hashlib
+          import json
+          import os
+          import shutil
           from pathlib import Path
 
-          core = Path('dist/rpcs3-native/libRPCS3Core.dylib')
-          identity = json.loads(Path('dist/rpcs3-native/identity.json').read_text())
+          core = Path("dist/rpcs3-native/libRPCS3Core.dylib")
+          identity = json.loads(
+              Path("dist/rpcs3-native/identity.json").read_text()
+          )
           actual = hashlib.sha256(core.read_bytes()).hexdigest()
-          assert identity['host_commit'] == os.environ['RPCS3_CORE_HOST_SHA'], identity
-          assert identity['abi_version'] == 30, identity
-          assert identity['architectures'] == ['arm64'], identity
-          assert identity['sha256'] == os.environ['RPCS3_CORE_SHA256'], identity
-          assert actual == identity['sha256'], (actual, identity)
+          assert identity["host_commit"] == os.environ["RPCS3_CORE_HOST_SHA"], identity
+          assert identity["abi_version"] == 30, identity
+          assert identity["architectures"] == ["arm64"], identity
+          assert identity["sha256"] == os.environ["RPCS3_CORE_SHA256"], identity
+          assert actual == identity["sha256"], (actual, identity)
 
           destination = Path(
-              'packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib'
+              "packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib"
           )
           destination.parent.mkdir(parents=True, exist_ok=True)
           shutil.copy2(core, destination)
           destination.chmod(0o755)
-          Path('build/fast-native/rpcs3-core-identity.json').write_text(
-              json.dumps(identity, indent=2) + '\n'
+          Path("build/fast-native/rpcs3-core-identity.json").write_text(
+              json.dumps(identity, indent=2) + "\n"
           )
           print(json.dumps(identity, indent=2))
           PY
           file packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           nm -gU packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib \
             > build/rpcs3-native-exports.txt
-          grep -q '_rpcs3_ios_initialize
+          grep -q '_rpcs3_ios_initialize' build/rpcs3-native-exports.txt
+          grep -q '_rpcs3_ios_boot_game' build/rpcs3-native-exports.txt
+          grep -q '_neostation_rpcs3_ios_save_state' build/rpcs3-native-exports.txt
+
+      - name: Download pinned embedded ARMSX2 Core
         uses: actions/download-artifact@v4
         with:
           name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
