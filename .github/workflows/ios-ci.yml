@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 295 Embedded ARMSX2
-run-name: NeoStation iOS Build 295 • ${{ github.sha }}
+name: NeoStation iOS Build 296 Embedded ARMSX2
+run-name: NeoStation iOS Build 296 • ${{ github.sha }}
 
 on:
   push:
@@ -14,23 +14,26 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-295
+  group: neostation-ios-build-296
   cancel-in-progress: true
 
 jobs:
   build:
     # Core-only development commits validate ARMSX2 separately, not a mislabeled IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') }}
-    name: Build 295 Embedded ARMSX2 IPA
+    name: Build 296 Embedded ARMSX2 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '295'
-      IPA_NAME: 'NeoStation-iOS-Build-295-Embedded-ARMSX2'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-295-Embedded-ARMSX2'
+      BUILD_NUMBER: '296'
+      IPA_NAME: 'NeoStation-iOS-Build-296-Embedded-ARMSX2'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-296-Embedded-ARMSX2'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       ARMSX2_CORE_HOST_SHA: 2e0f42a4495da7a950969f58230a550da1281190
       ARMSX2_CORE_RUN_ID: '35498658790'
+      RPCS3_CORE_HOST_SHA: a8cb83c99055123b928537661f3571dd816ff078
+      RPCS3_CORE_RUN_ID: '35506921302'
+      RPCS3_CORE_SHA256: bcfc9792888dd93496d4699adbfe8aea52718a866296e7b4a80379edb9b072cf
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -204,10 +207,621 @@ jobs:
             -o build/StikJIT-1.5.0.xcframework.zip
           # Keep the validated ABI-compatible RPCS3 Core from the Build 270
           # donor. It already contains NeoStation's pinned v0.9-era JIT
-          # backports; only the host/debugger protocol changes in Build 295.
+          # backports; only the host/debugger protocol changes in Build 296.
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+
+      - name: Download rebuilt embedded RPCS3 Core
+        uses: actions/download-artifact@v4
+        with:
+          name: RPCS3Core-${{ env.RPCS3_CORE_HOST_SHA }}
+          run-id: ${{ env.RPCS3_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/rpcs3-native
+
+      - name: Verify and install rebuilt RPCS3 Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE="dist/rpcs3-native/libRPCS3Core.dylib"
+          IDENTITY="dist/rpcs3-native/identity.json"
+          test -s "$CORE"
+          test -s "$IDENTITY"
+
+          # Fail closed if any native Core build input changed after the
+          # artifact was produced. The packaging commit may change only the
+          # host workflow and other non-Core files.
+          git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            build-utils/build_rpcs3_embedded_core.sh \
+            build-utils/patch_rpcs3_build266_v09_core.py \
+            build-utils/rpcs3 \
+            .github/workflows/rpcs3-core.yml
+
+          python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
+          python3 - <<'PY'
+          import hashlib, json, os, shutil
+          from pathlib import Path
+
+          core = Path('dist/rpcs3-native/libRPCS3Core.dylib')
+          identity = json.loads(Path('dist/rpcs3-native/identity.json').read_text())
+          actual = hashlib.sha256(core.read_bytes()).hexdigest()
+          assert identity['host_commit'] == os.environ['RPCS3_CORE_HOST_SHA'], identity
+          assert identity['abi_version'] == 30, identity
+          assert identity['architectures'] == ['arm64'], identity
+          assert identity['sha256'] == os.environ['RPCS3_CORE_SHA256'], identity
+          assert actual == identity['sha256'], (actual, identity)
+
+          destination = Path(
+              'packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib'
+          )
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copy2(core, destination)
+          destination.chmod(0o755)
+          Path('build/fast-native/rpcs3-core-identity.json').write_text(
+              json.dumps(identity, indent=2) + '\n'
+          )
+          print(json.dumps(identity, indent=2))
+          PY
+          file packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
+          nm -gU packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib \
+            > build/rpcs3-native-exports.txt
+          grep -q '_rpcs3_ios_initialize
+        uses: actions/download-artifact@v4
+        with:
+          name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
+          run-id: ${{ env.ARMSX2_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/armsx2
+
+      - name: Verify downloaded ARMSX2 Core identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
+          test -f dist/armsx2/identity.json
+          # Refuse a stale core even when both artifacts report the same ABI.
+          git diff --exit-code "$ARMSX2_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            packages/armsx2_internal_bridge/core \
+            packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h \
+            build-utils/armsx2
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          identity=json.loads(Path('dist/armsx2/identity.json').read_text())
+          source=json.loads(Path('build-utils/armsx2/source.json').read_text())
+          assert identity['revision'] == source['revision'], identity
+          assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
+          assert identity['architectures'] == ['arm64'], identity
+          assert identity['abi_version'] == source['abi_version'], identity
+          binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
+          assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
+          print(identity)
+          PY
+
+      - name: Prepare emulator build definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+          values={key:os.environ.get(key,'').strip() for key in required}
+          missing=[key for key,value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing build secrets: '+', '.join(missing))
+          values.update({
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+              'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+          })
+          Path('.dart-defines.json').write_text(json.dumps(values))
+          PY
+
+      - name: Configure release host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/patch_ios_video_player_audio_session.py
+          flutter build ios --release --no-codesign --config-only --no-pub \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define-from-file=.dart-defines.json
+          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_armsx2_ios.py
+          dart run flutter_launcher_icons
+          bash build-utils/force_ios_fork_icon.sh
+          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          entitlements = plistlib.loads(
+              Path('ios/Runner/Runner.entitlements').read_bytes()
+          )
+          retired = {
+              'com.apple.developer.networking.networkextension',
+              'com.apple.developer.networking.vpn.api',
+          }
+          remaining = retired.intersection(entitlements)
+          if remaining:
+              raise SystemExit(
+                  'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
+              )
+          generated = (
+              Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
+              Path('ios/Podfile').read_text(),
+          )
+          markers = (
+              'NeoStationLocalTunnel',
+              'NetworkExtension.framework',
+              'com.apple.NetworkExtensions.iOS',
+              'packet-tunnel-provider',
+          )
+          found = [marker for marker in markers if any(marker in text for text in generated)]
+          if found:
+              raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
+          if Path('ios/NeoStationLocalTunnel').exists():
+              raise SystemExit('Generated iOS host retains the internal VPN directory')
+          print('Generated iOS host is LocalDevVPN-only.')
+          PY
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Compile only NeoStation and extensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/DolphinDerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+            COMPILER_INDEX_STORE_ENABLE=NO build \
+            2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+
+      - name: Embed immutable RPCS3 core and signing metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/embed_rpcs3_core_lazy.py
+          python3 build-utils/embed_rpcs3_host_entitlements.py
+
+      - name: Embed lazy-loaded ARMSX2 Core framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          test -d "$APP"
+          mkdir -p "$APP/Frameworks"
+          rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+          ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+          test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
+          grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
+
+      - name: Package and validate Build 296 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/validate_rpcs3_ipa.py \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+          python3 build-utils/validate_single_ipa_distribution.py \
+            "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
+          python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
+          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" \
+            --source-revision "$ARMSX2_SOURCE_REVISION"
+          cp build/fast-native/identity.json dist/fast-native-identity.json
+          shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+          ls -lah dist
+
+      - name: Upload fast IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Collect fast diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build/fast-diagnostics
+          test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
+          cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
+          cp -f build/fast-native/rpcs3-core-identity.json build/fast-diagnostics/ 2>/dev/null || true
+          printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/fast-diagnostics/build.txt
+
+      - name: Upload fast diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-diagnostics
+          path: build/fast-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove temporary secrets
+        if: always()
+        shell: bash
+        run: rm -f .dart-defines.json
+ build/rpcs3-native-exports.txt
+          grep -q '_rpcs3_ios_boot_game
+        uses: actions/download-artifact@v4
+        with:
+          name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
+          run-id: ${{ env.ARMSX2_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/armsx2
+
+      - name: Verify downloaded ARMSX2 Core identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
+          test -f dist/armsx2/identity.json
+          # Refuse a stale core even when both artifacts report the same ABI.
+          git diff --exit-code "$ARMSX2_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            packages/armsx2_internal_bridge/core \
+            packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h \
+            build-utils/armsx2
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          identity=json.loads(Path('dist/armsx2/identity.json').read_text())
+          source=json.loads(Path('build-utils/armsx2/source.json').read_text())
+          assert identity['revision'] == source['revision'], identity
+          assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
+          assert identity['architectures'] == ['arm64'], identity
+          assert identity['abi_version'] == source['abi_version'], identity
+          binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
+          assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
+          print(identity)
+          PY
+
+      - name: Prepare emulator build definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+          values={key:os.environ.get(key,'').strip() for key in required}
+          missing=[key for key,value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing build secrets: '+', '.join(missing))
+          values.update({
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+              'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+          })
+          Path('.dart-defines.json').write_text(json.dumps(values))
+          PY
+
+      - name: Configure release host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/patch_ios_video_player_audio_session.py
+          flutter build ios --release --no-codesign --config-only --no-pub \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define-from-file=.dart-defines.json
+          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_armsx2_ios.py
+          dart run flutter_launcher_icons
+          bash build-utils/force_ios_fork_icon.sh
+          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          entitlements = plistlib.loads(
+              Path('ios/Runner/Runner.entitlements').read_bytes()
+          )
+          retired = {
+              'com.apple.developer.networking.networkextension',
+              'com.apple.developer.networking.vpn.api',
+          }
+          remaining = retired.intersection(entitlements)
+          if remaining:
+              raise SystemExit(
+                  'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
+              )
+          generated = (
+              Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
+              Path('ios/Podfile').read_text(),
+          )
+          markers = (
+              'NeoStationLocalTunnel',
+              'NetworkExtension.framework',
+              'com.apple.NetworkExtensions.iOS',
+              'packet-tunnel-provider',
+          )
+          found = [marker for marker in markers if any(marker in text for text in generated)]
+          if found:
+              raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
+          if Path('ios/NeoStationLocalTunnel').exists():
+              raise SystemExit('Generated iOS host retains the internal VPN directory')
+          print('Generated iOS host is LocalDevVPN-only.')
+          PY
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Compile only NeoStation and extensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/DolphinDerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+            COMPILER_INDEX_STORE_ENABLE=NO build \
+            2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+
+      - name: Embed immutable RPCS3 core and signing metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/embed_rpcs3_core_lazy.py
+          python3 build-utils/embed_rpcs3_host_entitlements.py
+
+      - name: Embed lazy-loaded ARMSX2 Core framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          test -d "$APP"
+          mkdir -p "$APP/Frameworks"
+          rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+          ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+          test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
+          grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
+
+      - name: Package and validate Build 296 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/validate_rpcs3_ipa.py \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+          python3 build-utils/validate_single_ipa_distribution.py \
+            "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
+          python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
+          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" \
+            --source-revision "$ARMSX2_SOURCE_REVISION"
+          cp build/fast-native/identity.json dist/fast-native-identity.json
+          shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+          ls -lah dist
+
+      - name: Upload fast IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Collect fast diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build/fast-diagnostics
+          test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
+          cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
+          printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/fast-diagnostics/build.txt
+
+      - name: Upload fast diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-diagnostics
+          path: build/fast-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove temporary secrets
+        if: always()
+        shell: bash
+        run: rm -f .dart-defines.json
+ build/rpcs3-native-exports.txt
+          grep -q '_neostation_rpcs3_ios_save_state
+        uses: actions/download-artifact@v4
+        with:
+          name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
+          run-id: ${{ env.ARMSX2_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/armsx2
+
+      - name: Verify downloaded ARMSX2 Core identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
+          test -f dist/armsx2/identity.json
+          # Refuse a stale core even when both artifacts report the same ABI.
+          git diff --exit-code "$ARMSX2_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            packages/armsx2_internal_bridge/core \
+            packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h \
+            build-utils/armsx2
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          identity=json.loads(Path('dist/armsx2/identity.json').read_text())
+          source=json.loads(Path('build-utils/armsx2/source.json').read_text())
+          assert identity['revision'] == source['revision'], identity
+          assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
+          assert identity['architectures'] == ['arm64'], identity
+          assert identity['abi_version'] == source['abi_version'], identity
+          binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
+          assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
+          print(identity)
+          PY
+
+      - name: Prepare emulator build definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+          values={key:os.environ.get(key,'').strip() for key in required}
+          missing=[key for key,value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing build secrets: '+', '.join(missing))
+          values.update({
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+              'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+          })
+          Path('.dart-defines.json').write_text(json.dumps(values))
+          PY
+
+      - name: Configure release host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/patch_ios_video_player_audio_session.py
+          flutter build ios --release --no-codesign --config-only --no-pub \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define-from-file=.dart-defines.json
+          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_armsx2_ios.py
+          dart run flutter_launcher_icons
+          bash build-utils/force_ios_fork_icon.sh
+          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          entitlements = plistlib.loads(
+              Path('ios/Runner/Runner.entitlements').read_bytes()
+          )
+          retired = {
+              'com.apple.developer.networking.networkextension',
+              'com.apple.developer.networking.vpn.api',
+          }
+          remaining = retired.intersection(entitlements)
+          if remaining:
+              raise SystemExit(
+                  'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
+              )
+          generated = (
+              Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
+              Path('ios/Podfile').read_text(),
+          )
+          markers = (
+              'NeoStationLocalTunnel',
+              'NetworkExtension.framework',
+              'com.apple.NetworkExtensions.iOS',
+              'packet-tunnel-provider',
+          )
+          found = [marker for marker in markers if any(marker in text for text in generated)]
+          if found:
+              raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
+          if Path('ios/NeoStationLocalTunnel').exists():
+              raise SystemExit('Generated iOS host retains the internal VPN directory')
+          print('Generated iOS host is LocalDevVPN-only.')
+          PY
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Compile only NeoStation and extensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/DolphinDerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+            COMPILER_INDEX_STORE_ENABLE=NO build \
+            2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+
+      - name: Embed immutable RPCS3 core and signing metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/embed_rpcs3_core_lazy.py
+          python3 build-utils/embed_rpcs3_host_entitlements.py
+
+      - name: Embed lazy-loaded ARMSX2 Core framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          test -d "$APP"
+          mkdir -p "$APP/Frameworks"
+          rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+          ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+          test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
+          grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
+
+      - name: Package and validate Build 296 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/validate_rpcs3_ipa.py \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+          python3 build-utils/validate_single_ipa_distribution.py \
+            "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
+          python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
+          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" \
+            --source-revision "$ARMSX2_SOURCE_REVISION"
+          cp build/fast-native/identity.json dist/fast-native-identity.json
+          shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+          ls -lah dist
+
+      - name: Upload fast IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Collect fast diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build/fast-diagnostics
+          test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
+          cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
+          printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/fast-diagnostics/build.txt
+
+      - name: Upload fast diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-diagnostics
+          path: build/fast-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove temporary secrets
+        if: always()
+        shell: bash
+        run: rm -f .dart-defines.json
+ build/rpcs3-native-exports.txt
 
       - name: Download pinned embedded ARMSX2 Core
         uses: actions/download-artifact@v4
@@ -344,7 +958,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 295 IPA
+      - name: Package and validate Build 296 IPA
         shell: bash
         run: |
           set -euo pipefail
