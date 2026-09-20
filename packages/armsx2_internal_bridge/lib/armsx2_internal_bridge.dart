@@ -55,6 +55,7 @@ class Armsx2InternalBridge {
     required String biosDirectory,
     String? biosFilename,
     bool bootBios = false,
+    String uiLocale = 'en',
   }) async {
     _ensureEventHandler();
     return Map<String, dynamic>.from(
