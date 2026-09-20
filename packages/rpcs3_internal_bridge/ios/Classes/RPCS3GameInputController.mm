@@ -154,6 +154,7 @@ typedef void (^RPCS3StickChanged)(float x, float y);
     memset(&_touchState, 0, sizeof(_touchState));
     _touchState.size = sizeof(_touchState);
     _touchState.connected = 1;
+    _touchControlsEnabled = YES;
     [self installTouchOverlay];
   }
   return self;
@@ -424,8 +425,14 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   [self sendState:&state];
 }
 
+- (void)setTouchControlsEnabled:(BOOL)touchControlsEnabled {
+  if (_touchControlsEnabled == touchControlsEnabled) return;
+  _touchControlsEnabled = touchControlsEnabled;
+  [self updateTouchVisibility];
+}
+
 - (void)updateTouchVisibility {
-  BOOL showTouch = self.started && self.physicalController == nil;
+  BOOL showTouch = self.started && self.physicalController == nil && self.touchControlsEnabled;
   self.touchOverlay.hidden = !showTouch;
   self.touchOverlay.userInteractionEnabled = showTouch;
   if (showTouch) [self sendTouchState];
