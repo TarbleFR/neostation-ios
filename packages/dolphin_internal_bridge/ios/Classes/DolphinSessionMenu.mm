@@ -2,7 +2,7 @@
 #import "DolphinRetroAchievementsAccount.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
-  DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
+  DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuCheats, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
 };
 
 static void DOLMenuOnMain(dispatch_block_t block) {
@@ -19,7 +19,9 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
 @property(nonatomic, copy) NSDictionary* recordingSnapshot;
+@property(nonatomic, copy) NSDictionary* cheatsSnapshot;
 - (UINavigationBarAppearance*)modernNavigationAppearance;
+- (void)reloadCheats;
 @end
 
 @implementation DolphinSessionMenu
@@ -31,7 +33,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 }
 
 - (NSArray<NSString*>*)rootKeys {
-  NSMutableArray* keys = [NSMutableArray arrayWithArray:@[@"graphics", @"hacks", @"controls", @"console", @"achievements"]];
+  NSMutableArray* keys = [NSMutableArray arrayWithArray:@[@"graphics", @"hacks", @"cheats", @"controls", @"console", @"achievements"]];
   if (self.stateActionsAvailable) [keys addObjectsFromArray:@[@"saveState", @"loadState"]];
   if (self.readRecording) [keys addObject:@"recording"];
   [keys addObjectsFromArray:@[@"resume", @"quit"]];
@@ -73,6 +75,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   [super viewWillAppear:animated];
   if (self.page == DOLMenuConsole || self.page == DOLMenuGraphics || self.page == DOLMenuHacks || self.page == DOLMenuAchievements || self.page == DOLMenuControls)
     [self reloadSettings];
+  if (self.page == DOLMenuCheats) [self reloadCheats];
   if (self.page == DOLMenuSaveStates || self.page == DOLMenuLoadStates) [self reloadStates];
   if (self.page == DOLMenuRecording) [self reloadRecording];
 }
@@ -161,6 +164,24 @@ static void DOLMenuOnMain(dispatch_block_t block) {
           [current finishRecordingOperation:data success:confirmed wasActive:wasActive];
         });
       });
+    });
+  });
+}
+
+- (void)reloadCheats {
+  if (self.loading || !self.readCheats) return;
+  self.loading = YES;
+  self.navigationItem.rightBarButtonItem.enabled = NO;
+  __weak DolphinSessionMenu* weakSelf = self;
+  self.readCheats(^(NSDictionary* data) {
+    DOLMenuOnMain(^{
+      DolphinSessionMenu* menu = weakSelf;
+      if (!menu) return;
+      menu.loading = NO;
+      menu.cheatsSnapshot = [data isKindOfClass:NSDictionary.class] ? data : @{};
+      menu.navigationItem.rightBarButtonItem.enabled = YES;
+      [menu.tableView reloadData];
+      if (!data) [menu showStateMessage:@"settingsFailed"];
     });
   });
 }
@@ -269,6 +290,9 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   child.applySettings = self.applySettings;
   child.readStates = self.readStates;
   child.performStateOperation = self.performStateOperation;
+  child.readCheats = self.readCheats;
+  child.performCheatCommand = self.performCheatCommand;
+  child.cheatsSnapshot = self.cheatsSnapshot;
   child.readRecording = self.readRecording;
   child.toggleRecording = self.toggleRecording;
   child.shareRecording = self.shareRecording;
@@ -293,6 +317,10 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
     case DOLMenuGraphics: return self.snapshot ? 4 : 0;
     case DOLMenuHacks: return self.snapshot ? 8 : 0;
+    case DOLMenuCheats:
+      return self.cheatsSnapshot ? 2 +
+          [self.cheatsSnapshot[@"gecko"] count] +
+          [self.cheatsSnapshot[@"actionReplay"] count] : 0;
     case DOLMenuAchievements: return self.snapshot ? 3 : 0;
     case DOLMenuControls:
       return section == 0 ? (self.wii ? 4 : 3) : [self.snapshot[@"controls"] count];
@@ -309,6 +337,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
   if (self.page == DOLMenuHacks) return [self text:@"hacksHelp"];
+  if (self.page == DOLMenuCheats) return [self text:@"cheatsHelp"];
   if (self.page == DOLMenuAchievements) return [self text:@"achievementsHelp"];
   if (self.page == DOLMenuRecording) {
     NSString* help = [self text:@"recordingHelp"];
@@ -350,6 +379,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     NSDictionary<NSString*, NSString*>* symbols = @{
       @"graphics": @"display",
       @"hacks": @"wrench.and.screwdriver",
+      @"cheats": @"bolt.shield",
       @"controls": @"gamecontroller",
       @"console": @"gearshape.2",
       @"achievements": @"trophy",
@@ -362,6 +392,47 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     cell.imageView.image = [UIImage systemImageNamed:symbols[key] ?: @"circle"];
     cell.imageView.tintColor = [key isEqual:@"quit"] ? UIColor.systemRedColor : UIColor.systemIndigoColor;
     if ([key isEqual:@"quit"]) cell.textLabel.textColor = UIColor.systemRedColor;
+  } else if (self.page == DOLMenuCheats) {
+    NSArray* gecko = [self.cheatsSnapshot[@"gecko"] isKindOfClass:NSArray.class]
+        ? self.cheatsSnapshot[@"gecko"] : @[];
+    NSArray* actionReplay = [self.cheatsSnapshot[@"actionReplay"] isKindOfClass:NSArray.class]
+        ? self.cheatsSnapshot[@"actionReplay"] : @[];
+    if (row == 0) {
+      cell.textLabel.text = [self text:@"enableCheats"];
+      cell.detailTextLabel.text = [self text:
+          [self.cheatsSnapshot[@"masterEnabled"] boolValue] ? @"on" : @"off"];
+    } else if (row == 1) {
+      cell.textLabel.text = [self text:@"downloadGecko"];
+      NSString* gameTdbId = [self.cheatsSnapshot[@"gameTdbId"] isKindOfClass:NSString.class]
+          ? self.cheatsSnapshot[@"gameTdbId"] : @"";
+      cell.detailTextLabel.text = gameTdbId.length ? gameTdbId : [self text:@"noCheats"];
+      cell.accessoryType = UITableViewCellAccessoryNone;
+      if (!gameTdbId.length) {
+        cell.textLabel.textColor = UIColor.secondaryLabelColor;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+      }
+    } else {
+      NSInteger offset = row - 2;
+      NSDictionary* item = nil;
+      NSString* typeLabel = nil;
+      if (offset < (NSInteger)gecko.count) {
+        item = gecko[offset];
+        typeLabel = [self text:@"geckoCodes"];
+      } else {
+        offset -= gecko.count;
+        if (offset < (NSInteger)actionReplay.count) {
+          item = actionReplay[offset];
+          typeLabel = [self text:@"actionReplayCodes"];
+        }
+      }
+      cell.textLabel.text = [item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
+      NSString* creator = [item[@"creator"] isKindOfClass:NSString.class] ? item[@"creator"] : @"";
+      cell.detailTextLabel.text = creator.length
+          ? [NSString stringWithFormat:@"%@ · %@", typeLabel ?: @"", creator]
+          : typeLabel;
+      cell.accessoryType = [item[@"enabled"] boolValue]
+          ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    }
   } else if (self.page == DOLMenuRecording) {
     BOOL busy = self.loading || [self.recordingSnapshot[@"busy"] boolValue];
     BOOL hasVideo = [self.recordingSnapshot[@"hasVideo"] boolValue];
@@ -518,6 +589,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     }
     DOLMenuPage page = [key isEqual:@"graphics"] ? DOLMenuGraphics :
         [key isEqual:@"hacks"] ? DOLMenuHacks :
+        [key isEqual:@"cheats"] ? DOLMenuCheats :
         [key isEqual:@"achievements"] ? DOLMenuAchievements :
         [key isEqual:@"controls"] ? DOLMenuControls :
         [key isEqual:@"console"] ? DOLMenuConsole :
@@ -525,6 +597,58 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         [key isEqual:@"loadState"] ? DOLMenuLoadStates : DOLMenuRecording;
     [self.navigationController pushViewController:[self child:page
         title:[self text:key]] animated:YES];
+  } else if (self.page == DOLMenuCheats) {
+    if (!self.performCheatCommand || !self.cheatsSnapshot) return;
+    NSArray* gecko = [self.cheatsSnapshot[@"gecko"] isKindOfClass:NSArray.class]
+        ? self.cheatsSnapshot[@"gecko"] : @[];
+    NSArray* actionReplay = [self.cheatsSnapshot[@"actionReplay"] isKindOfClass:NSArray.class]
+        ? self.cheatsSnapshot[@"actionReplay"] : @[];
+    NSMutableDictionary* request = [NSMutableDictionary dictionary];
+    if (row == 0) {
+      request[@"kind"] = @"master";
+      request[@"enabled"] = @(![self.cheatsSnapshot[@"masterEnabled"] boolValue]);
+    } else if (row == 1) {
+      NSString* gameTdbId = [self.cheatsSnapshot[@"gameTdbId"] isKindOfClass:NSString.class]
+          ? self.cheatsSnapshot[@"gameTdbId"] : @"";
+      if (!gameTdbId.length) return;
+      request[@"kind"] = @"download";
+    } else {
+      NSInteger offset = row - 2;
+      NSDictionary* item = nil;
+      if (offset < (NSInteger)gecko.count) item = gecko[offset];
+      else {
+        offset -= gecko.count;
+        if (offset < (NSInteger)actionReplay.count) item = actionReplay[offset];
+      }
+      if (!item) return;
+      request[@"kind"] = @"toggle";
+      request[@"type"] = item[@"type"] ?: @"";
+      request[@"index"] = item[@"index"] ?: @(-1);
+      request[@"enabled"] = @(![item[@"enabled"] boolValue]);
+    }
+    self.loading = YES;
+    self.navigationController.view.userInteractionEnabled = NO;
+    self.navigationItem.rightBarButtonItem.enabled = NO;
+    __weak DolphinSessionMenu* weakSelf = self;
+    self.performCheatCommand(request, ^(BOOL success, NSDictionary* result) {
+      DOLMenuOnMain(^{
+        DolphinSessionMenu* menu = weakSelf;
+        if (!menu) return;
+        menu.loading = NO;
+        menu.navigationController.view.userInteractionEnabled = YES;
+        menu.navigationItem.rightBarButtonItem.enabled = YES;
+        if ([request[@"kind"] isEqual:@"download"]) {
+          if (success) {
+            NSInteger added = [result[@"added"] integerValue];
+            menu.stateMessage = [[menu text:@"downloadedCodes"]
+                stringByReplacingOccurrencesOfString:@"{count}"
+                withString:[NSString stringWithFormat:@"%ld",(long)added]];
+          } else menu.stateMessage = [menu text:@"cheatDownloadFailed"];
+        } else menu.stateMessage = success ? [menu text:@"cheatUpdated"] : [menu text:@"settingsFailed"];
+        menu.navigationItem.prompt = menu.stateMessage;
+        [menu reloadCheats];
+      });
+    });
   } else if (self.page == DOLMenuRecording) {
     if ([self.recordingSnapshot[@"busy"] boolValue]) return;
     if (row == 0) [self operateRecording];
