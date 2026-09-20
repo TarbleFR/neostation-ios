@@ -23,8 +23,18 @@ extension _SecondaryDisplay on _SystemGamesListState {
   }
 
   /// Graceful termination of video resources with state synchronization.
-  void _stopVideoAndCleanup() {
+  ///
+  /// Launch callers await this barrier so AVPlayer cannot keep decoding or
+  /// owning the audio session underneath an in-process emulator.
+  Future<void> _stopVideoAndCleanup() async {
     _invalidateVideoPreview(updateDucking: true);
+    try {
+      await _videoTransition;
+    } catch (error) {
+      _SystemGamesListState._log.w(
+        'Video teardown barrier failed before gameplay: $error',
+      );
+    }
   }
 
   void _invalidateVideoPreview({required bool updateDucking}) {
