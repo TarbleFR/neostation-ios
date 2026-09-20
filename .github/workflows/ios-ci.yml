@@ -158,6 +158,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 test/dolphin_account_267_test.py
+          python3 test/dolphin_cheats_menu_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py

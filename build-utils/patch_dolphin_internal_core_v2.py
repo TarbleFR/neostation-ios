@@ -757,16 +757,26 @@ char* neostation_dolphin_cheats_snapshot(void)
       std::vector<Gecko::GeckoCode> gecko;
       std::vector<ActionReplay::ARCode> action_replay;
       DOLLoadCheatLists(&gecko, &action_replay);
+      bool hardcore = false;
+#ifdef USE_RETRO_ACHIEVEMENTS
+      hardcore = AchievementManager::GetInstance().IsHardcoreModeActive();
+#endif
       NSMutableArray* gecko_json = [NSMutableArray arrayWithCapacity:gecko.size()];
       for (size_t index = 0; index < gecko.size(); ++index)
       {
         const auto& code = gecko[index];
+        bool approved = true;
+#ifdef USE_RETRO_ACHIEVEMENTS
+        approved = AchievementManager::GetInstance().CheckApprovedGeckoCode(
+            code, g_game_id, g_game_revision);
+#endif
         [gecko_json addObject:@{
           @"type": @"gecko",
           @"index": @(index),
           @"name": DOLNSString(code.name),
           @"creator": DOLNSString(code.creator),
           @"enabled": @(code.enabled),
+          @"approved": @(approved),
           @"userDefined": @(code.user_defined),
         }];
       }
@@ -774,18 +784,25 @@ char* neostation_dolphin_cheats_snapshot(void)
       for (size_t index = 0; index < action_replay.size(); ++index)
       {
         const auto& code = action_replay[index];
+        bool approved = true;
+#ifdef USE_RETRO_ACHIEVEMENTS
+        approved = AchievementManager::GetInstance().CheckApprovedARCode(
+            code, g_game_id, g_game_revision);
+#endif
         [ar_json addObject:@{
           @"type": @"actionReplay",
           @"index": @(index),
           @"name": DOLNSString(code.name),
           @"creator": @"",
           @"enabled": @(code.enabled),
+          @"approved": @(approved),
           @"userDefined": @(code.user_defined),
         }];
       }
       NSDictionary* payload = @{
         @"available": @YES,
         @"masterEnabled": @(Config::Get(Config::MAIN_ENABLE_CHEATS)),
+        @"hardcore": @(hardcore),
         @"gameId": DOLNSString(g_game_id),
         @"gameTdbId": DOLNSString(g_gametdb_id),
         @"revision": @(g_game_revision),
@@ -811,12 +828,38 @@ extern "C" __attribute__((visibility("default")))
 int32_t neostation_dolphin_set_cheats_enabled(int32_t enabled)
 {
   if (!g_running || g_game_id.empty()) return 0;
+  const bool requested = enabled != 0;
   DOLHostQueueRunSync(^{
-    Config::SetBase(Config::MAIN_ENABLE_CHEATS, enabled != 0);
-    Config::SetCurrent(Config::MAIN_ENABLE_CHEATS, enabled != 0);
+    std::vector<Gecko::GeckoCode> gecko;
+    std::vector<ActionReplay::ARCode> action_replay;
+    DOLLoadCheatLists(&gecko, &action_replay);
+
+    // Action Replay returns early when cheats are disabled, so clear the live
+    // vectors while the old master state is still on. This prevents stale
+    // codes surviving a menu-side master-off transition.
+    if (!requested && Config::Get(Config::MAIN_ENABLE_CHEATS))
+    {
+      auto gecko_off = gecko;
+      for (auto& code : gecko_off) code.enabled = false;
+      auto ar_off = action_replay;
+      for (auto& code : ar_off) code.enabled = false;
+      Gecko::SetActiveCodes(gecko_off, g_game_id, g_game_revision);
+      ActionReplay::ApplyCodes(ar_off, g_game_id, g_game_revision);
+    }
+
+    Config::SetBase(Config::MAIN_ENABLE_CHEATS, requested);
+    Config::SetCurrent(Config::MAIN_ENABLE_CHEATS, requested);
     Config::Save();
+
+    // Rebuild the live vectors immediately when enabling the master switch.
+    // Both upstream entry points enforce RetroAchievements approval.
+    if (requested)
+    {
+      Gecko::SetActiveCodes(gecko, g_game_id, g_game_revision);
+      ActionReplay::ApplyCodes(action_replay, g_game_id, g_game_revision);
+    }
   });
-  Log("cheats.master", enabled ? "Cheats enabled." : "Cheats disabled.");
+  Log("cheats.master", requested ? "Cheats enabled." : "Cheats disabled.");
   return 1;
 }
 
@@ -825,6 +868,7 @@ int32_t neostation_dolphin_set_cheat_enabled(const char* type, int32_t index, in
 {
   if (!g_running || g_game_id.empty() || !type || index < 0) return 0;
   __block bool success = false;
+  const bool requested = enabled != 0;
   const std::string kind(type);
   DOLHostQueueRunSync(^{
     if (kind == "gecko")
@@ -832,7 +876,19 @@ int32_t neostation_dolphin_set_cheat_enabled(const char* type, int32_t index, in
       std::vector<Gecko::GeckoCode> codes;
       DOLLoadCheatLists(&codes, nullptr);
       if (static_cast<size_t>(index) >= codes.size()) return;
-      codes[index].enabled = enabled != 0;
+#ifdef USE_RETRO_ACHIEVEMENTS
+      if (requested && AchievementManager::GetInstance().IsHardcoreModeActive() &&
+          !AchievementManager::GetInstance().CheckApprovedGeckoCode(
+              codes[index], g_game_id, g_game_revision))
+        return;
+#endif
+      if (requested && !Config::Get(Config::MAIN_ENABLE_CHEATS))
+      {
+        Config::SetBase(Config::MAIN_ENABLE_CHEATS, true);
+        Config::SetCurrent(Config::MAIN_ENABLE_CHEATS, true);
+        Config::Save();
+      }
+      codes[index].enabled = requested;
       if (!DOLSaveGeckoCodes(codes)) return;
       Gecko::SetActiveCodes(codes, g_game_id, g_game_revision);
       success = true;
@@ -842,14 +898,24 @@ int32_t neostation_dolphin_set_cheat_enabled(const char* type, int32_t index, in
       std::vector<ActionReplay::ARCode> codes;
       DOLLoadCheatLists(nullptr, &codes);
       if (static_cast<size_t>(index) >= codes.size()) return;
-      codes[index].enabled = enabled != 0;
+#ifdef USE_RETRO_ACHIEVEMENTS
+      if (requested && AchievementManager::GetInstance().IsHardcoreModeActive() &&
+          !AchievementManager::GetInstance().CheckApprovedARCode(
+              codes[index], g_game_id, g_game_revision))
+        return;
+#endif
+      if (requested && !Config::Get(Config::MAIN_ENABLE_CHEATS))
+      {
+        Config::SetBase(Config::MAIN_ENABLE_CHEATS, true);
+        Config::SetCurrent(Config::MAIN_ENABLE_CHEATS, true);
+        Config::Save();
+      }
+      codes[index].enabled = requested;
       if (!DOLSaveActionReplayCodes(codes)) return;
       ActionReplay::ApplyCodes(codes, g_game_id, g_game_revision);
       success = true;
     }
   });
-  if (success && enabled)
-    neostation_dolphin_set_cheats_enabled(1);
   Log("cheats.toggle", success ? "Cheat state updated." : "Cheat state update failed.");
   return success ? 1 : 0;
 }

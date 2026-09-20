@@ -1670,6 +1670,7 @@ abstract final class DolphinImportLocale {
 };
 
   static const _modernMenuEn = <String, String>{
+    "hardcoreCheatBlocked": "Blocked in RetroAchievements Hardcore",
     "hacks": "Compatibility hacks",
     "hacksHelp": "These options can improve speed or fix graphics, but may break individual games. VBI Skip can cause freezes; leave uncertain options off.",
     "viSkip": "VBI Skip",
@@ -1692,6 +1693,7 @@ abstract final class DolphinImportLocale {
   };
 
   static const _modernMenuFr = <String, String>{
+    "hardcoreCheatBlocked": "Bloqué en mode Hardcore RetroAchievements",
     "hacks": "Hacks de compatibilité",
     "hacksHelp": "Ces options peuvent améliorer les performances ou corriger l’image, mais aussi perturber certains jeux. VBI Skip peut provoquer des gels ; laissez les options incertaines désactivées.",
     "viSkip": "Saut VBI",

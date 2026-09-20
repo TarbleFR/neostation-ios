@@ -427,11 +427,22 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       }
       cell.textLabel.text = [item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
       NSString* creator = [item[@"creator"] isKindOfClass:NSString.class] ? item[@"creator"] : @"";
-      cell.detailTextLabel.text = creator.length
+      const BOOL blocked = [self.cheatsSnapshot[@"hardcore"] boolValue] &&
+          ![item[@"approved"] boolValue] && ![item[@"enabled"] boolValue];
+      NSString* detail = creator.length
           ? [NSString stringWithFormat:@"%@ · %@", typeLabel ?: @"", creator]
           : typeLabel;
+      cell.detailTextLabel.text = blocked
+          ? [NSString stringWithFormat:@"%@ · %@", detail ?: @"", [self text:@"hardcoreCheatBlocked"]]
+          : detail;
       cell.accessoryType = [item[@"enabled"] boolValue]
           ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+      if (blocked) {
+        cell.textLabel.textColor = UIColor.secondaryLabelColor;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.userInteractionEnabled = NO;
+        cell.accessibilityTraits |= UIAccessibilityTraitNotEnabled;
+      }
     }
   } else if (self.page == DOLMenuRecording) {
     BOOL busy = self.loading || [self.recordingSnapshot[@"busy"] boolValue];
