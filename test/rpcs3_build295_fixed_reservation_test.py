@@ -15,7 +15,8 @@ assert "if (result == KERN_SUCCESS)" in text
 assert "::vm_deallocate(" in text
 assert "::vm_protect(" in text
 assert "mmap(address, ...) is only a hint on Darwin" in text
-assert "there is no host retry" in text.lower()
+assert "host retry" in text.lower()
+assert "delay" in text.lower()
 
 if len(sys.argv) > 1:
     source = Path(sys.argv[1])
