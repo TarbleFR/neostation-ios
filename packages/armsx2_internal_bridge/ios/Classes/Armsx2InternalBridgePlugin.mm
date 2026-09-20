@@ -474,7 +474,8 @@ static UIViewController* ARMSX2RootViewController(void) {
       !api->get_upscale_multiplier || !api->get_aspect_ratio ||
       !api->get_cheats_enabled || !api->set_upscale_multiplier ||
       !api->set_aspect_ratio || !api->set_cheats_enabled ||
-      !api->reload_cheats || !api->has_save_state ||
+      !api->reload_cheats || !api->get_available_patches_json ||
+      !api->set_patch_state || !api->has_save_state ||
       !api->save_state || !api->load_state ||
       !api->get_retroachievements_state_json ||
       !api->set_retroachievements_option ||
@@ -708,6 +709,45 @@ static UIViewController* ARMSX2RootViewController(void) {
   });
 }
 
+- (void)readAvailablePatchesForController:(Armsx2GameViewController*)controller
+                                  completion:(void (^)(NSDictionary<NSString*, id>* state))completion {
+  dispatch_async(_runtimeQueue, ^{
+    NSDictionary* state=nil;
+    if (self.api && self.gameController==controller && !self.stopInProgress) {
+      char json[262144] = {};
+      if (self.api->get_available_patches_json(json,sizeof(json))) {
+        NSData* data=[NSData dataWithBytes:json length:strlen(json)];
+        id decoded=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        if ([decoded isKindOfClass:NSDictionary.class]) state=decoded;
+      }
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(state); });
+  });
+}
+
+- (void)performPatchCommand:(NSString*)name
+                      value:(NSInteger)value
+                 controller:(Armsx2GameViewController*)controller
+                 completion:(void (^)(BOOL success, NSString* message))completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (!self.api || self.gameController!=controller || self.stopInProgress) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (completion) completion(NO,@"ARMSX2 session is no longer active.");
+      });
+      return;
+    }
+    char error[1024] = {};
+    BOOL ok=self.api->set_patch_state(name.UTF8String,(int)value,error,sizeof(error))!=0;
+    NSString* message=ok
+        ? [controller en:@"Patch setting updated for this game."
+                      fr:@"Réglage du patch mis à jour pour ce jeu."]
+        : (error[0] ? [NSString stringWithUTF8String:error] : @"Patch update failed.");
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (completion) completion(ok,message ?: @"");
+    });
+  });
+}
+
 - (void)readSessionSnapshotForController:(Armsx2GameViewController*)controller
                                    completion:(void (^)(NSDictionary<NSString*, id>* snapshot))completion {
   dispatch_async(_runtimeQueue, ^{
@@ -876,6 +916,22 @@ static UIViewController* ARMSX2RootViewController(void) {
           return;
         }
         [bridge performGraphicsHack:key value:value controller:owner completion:completion];
+      };
+      menu.readPatches = ^(void (^completion)(NSDictionary<NSString*, id>* state)) {
+        Armsx2InternalBridgePlugin* bridge=weakSelf;
+        Armsx2GameViewController* owner=weakController;
+        if (!bridge || !owner) { if (completion) completion(nil); return; }
+        [bridge readAvailablePatchesForController:owner completion:completion];
+      };
+      menu.performPatchCommand = ^(NSString* name, NSInteger value,
+                                   void (^completion)(BOOL success, NSString* message)) {
+        Armsx2InternalBridgePlugin* bridge=weakSelf;
+        Armsx2GameViewController* owner=weakController;
+        if (!bridge || !owner) {
+          if (completion) completion(NO,@"ARMSX2 session is no longer active.");
+          return;
+        }
+        [bridge performPatchCommand:name value:value controller:owner completion:completion];
       };
       menu.resumeGame = ^{
         Armsx2InternalBridgePlugin* bridge = weakSelf;
