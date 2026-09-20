@@ -24,6 +24,10 @@ BRIDGE = {
     '_neostation_dolphin_launch_wii_menu',
     '_neostation_dolphin_restart', '_neostation_dolphin_refresh_controllers',
     '_neostation_dolphin_touch_event', '_neostation_dolphin_release_touches',
+    '_neostation_dolphin_cheats_snapshot',
+    '_neostation_dolphin_set_cheats_enabled',
+    '_neostation_dolphin_set_cheat_enabled',
+    '_neostation_dolphin_download_gecko_codes',
 }
 EXPECTED_HELPERS = {
     'DolphinJITHelper.appex': {
