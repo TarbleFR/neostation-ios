@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Make the iOS JIT low-address reservation deterministic before dlopen.
 
-Build 294 device journals prove failed RPCS3 launches abort with SIGABRT after
-the debugger nonce round trip but before the Core issues its first command-1
-JIT preparation request. The v0.9-era NeoStation backport reaches that boundary
-through reserve_arena_layout(), whose mmap(address, ...) call is only a hint on
-Darwin. A hint may be relocated by the kernel; the old code then discards it
-and can exhaust every low-VA candidate during a dylib constructor.
+Build 298 device journals plus symbolication of the exact packaged Core show
+failed RPCS3 launches reaching the AsmJIT global-runtime constructor, where
+rpcs3::ios::jit::prepare_arena() returns false before the Core can issue its
+first command-1 JIT preparation request. That constructor converts the failure
+to raw_verify_error -> thread_ctrl::emergency_exit -> report_fatal_error -> abort.
+The v0.9-era NeoStation backport reaches that boundary through
+reserve_arena_layout(), whose mmap(address, ...) call is only a hint on Darwin.
+A hint may be relocated by the kernel; the old code then discards it and can
+exhaust every low-VA candidate depending on ASLR. Successful retries reach the
+command-1 preparation loop, isolating this pre-command reservation as the
+intermittent launch boundary.
 
 Reserve each candidate at the requested Mach address instead. VM_FLAGS_FIXED
 without VM_FLAGS_OVERWRITE fails on occupied mappings, so this does not replace

@@ -13,6 +13,7 @@ from patch_rpcs3_build266_v09_core import (
 
 MINIMUM_CORE_SIZE = 60_000_000
 REQUIRED_MARKERS = (
+    ('fixed low-VA JIT reservation', b'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1'),
     ('Build 266 JIT', JIT_MARKER.encode('ascii')),
     ('Build 264 ARM64/ThinLTO', b'NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1'),
     ('Build 265 RSX/SPU/video', b'NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1'),
