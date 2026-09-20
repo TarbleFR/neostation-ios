@@ -223,6 +223,30 @@ void main() {
     );
   });
 
+  test('ARMSX2 BIOS boot and graphics hacks are wired through the host UI', () {
+    final bridge = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+    ).readAsStringSync();
+    final menu = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
+    ).readAsStringSync();
+    final service = File(
+      'lib/services/stikjit_armsx2_service.dart',
+    ).readAsStringSync();
+    final actions = File(
+      'lib/widgets/armsx2_internal_playlist_actions.dart',
+    ).readAsStringSync();
+
+    expect(bridge, contains('NEO_ARMSX2_BOOT_BIOS'));
+    expect(bridge, contains('get_graphics_hacks_json'));
+    expect(bridge, contains('set_graphics_hack'));
+    expect(menu, contains('Hacks graphiques'));
+    expect(menu, contains('Automatique (ARMSX2/GameDB)'));
+    expect(service, contains('launchBios()'));
+    expect(actions, contains("'boot_bios'"));
+    expect(actions, contains('Démarrer le BIOS PS2'));
+  });
+
   test('ARMSX2 import menu exposes BIOS and games', () {
     final widget = File(
       'lib/widgets/armsx2_internal_playlist_actions.dart',
