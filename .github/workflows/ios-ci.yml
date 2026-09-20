@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 299 RPCS3 Launch Stability
-run-name: NeoStation iOS Build 299 • ${{ github.sha }}
+name: NeoStation iOS Build 300 RPCS3 Atomic Reservation
+run-name: NeoStation iOS Build 300 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-299
+  group: neostation-ios-build-300
   cancel-in-progress: true
 
 jobs:
@@ -22,21 +22,21 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 299 RPCS3 Launch Stability IPA
+    name: Build 300 RPCS3 Atomic Reservation IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '299'
-      IPA_NAME: 'NeoStation-iOS-Build-299-RPCS3-Launch-Stability'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-299-RPCS3-Launch-Stability'
+      BUILD_NUMBER: '300'
+      IPA_NAME: 'NeoStation-iOS-Build-300-RPCS3-Atomic-Reservation'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-300-RPCS3-Atomic-Reservation'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
       ARMSX2_CORE_HOST_SHA: 017c9c2f1e0628e43506707bd6943a76f44f8f44
       ARMSX2_CORE_RUN_ID: '35519677053'
-      RPCS3_CORE_HOST_SHA: 453eeda703d42ee4b9854083f3a8d04071453fe7
-      RPCS3_CORE_RUN_ID: '35535109526'
-      RPCS3_CORE_SHA256: e3e6d48984616492322cd5ef88959b71be6d0915fae22223b271b42fe7ba5aa8
+      RPCS3_CORE_HOST_SHA: 6bf58ff2fda11e7074ea76c572b0a68f1fb934b8
+      RPCS3_CORE_RUN_ID: '35539478606'
+      RPCS3_CORE_SHA256: fa1821520dba99ad5a58bb4b366d30cb46081caa7e84fdcaa9e29bb6ce833d03
       RPCS3_SOURCE_COMMIT: 22f1152783cef1f7e04af7b1c895173e28fd5b03
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -298,7 +298,7 @@ jobs:
           shutil.copytree(source / "Sys", sys_destination)
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 299 diagnostics
+          # Rewrite the Dolphin fields so the final Build 300 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -525,7 +525,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 299 IPA
+      - name: Package and validate Build 300 IPA
         shell: bash
         run: |
           set -euo pipefail
