@@ -7,6 +7,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
   dispatch_once(&once, ^{
     values = @{
       @"de": @{
+        @"Standard": @"Standard",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Grafikeinstellungen pro Spiel werden sofort angewendet. Erweiterte Hacks behalten die ARMSX2/GameDB-Automatik bei, sofern sie nicht ausdrücklich überschrieben wird.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automatisch entfernt die Spiel-Überschreibung und gibt die Kontrolle an ARMSX2/GameDB zurück.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"RetroAchievements-Hardcore kann Cheats und Speicherstände einschränken.",
@@ -58,6 +59,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Gerade Sprite-Position erzwingen"
       },
       @"es": @{
+        @"Standard": @"Estándar",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Los ajustes gráficos por juego se aplican al instante. Los ajustes avanzados mantienen el comportamiento automático de ARMSX2/GameDB salvo que se reemplacen explícitamente.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automático elimina la modificación de este juego y devuelve el control a ARMSX2/GameDB.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"El modo Hardcore de RetroAchievements puede restringir trucos y estados guardados.",
@@ -107,6 +109,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Forzar posición par de sprites"
       },
       @"pt": @{
+        @"Standard": @"Padrão",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"As definições gráficas por jogo são aplicadas imediatamente. Os ajustes avançados mantêm o comportamento automático do ARMSX2/GameDB salvo substituição explícita.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automático remove a substituição deste jogo e devolve o controlo ao ARMSX2/GameDB.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"O modo Hardcore do RetroAchievements pode limitar cheats e estados de gravação.",
@@ -154,6 +157,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Forçar posição par dos sprites"
       },
       @"ru": @{
+        @"Standard": @"Стандартный",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Графические настройки для игры применяются сразу. Расширенные хаки сохраняют автоматическое поведение ARMSX2/GameDB, пока не задано явное значение.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Автоматически удаляет переопределение для игры и возвращает управление ARMSX2/GameDB.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"Режим Hardcore RetroAchievements может ограничивать читы и сохранение состояний.",
@@ -201,6 +205,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Принудительно чётная позиция спрайта"
       },
       @"ja": @{
+        @"Standard": @"標準",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"ゲーム別のグラフィック設定は即時反映されます。高度なハックは明示的に変更しない限りARMSX2/GameDBの自動設定を維持します。",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"自動を選ぶとこのゲーム固有の上書きを削除し、ARMSX2/GameDBに制御を戻します。",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"RetroAchievementsのHardcoreモードではチートやステート保存機能が制限される場合があります。",
@@ -247,6 +252,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"スプライト位置を偶数に固定"
       },
       @"ko": @{
+        @"Standard": @"표준",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"게임별 그래픽 설정은 즉시 적용됩니다. 고급 해킹은 명시적으로 변경하지 않는 한 ARMSX2/GameDB 자동 동작을 유지합니다.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"자동은 이 게임의 재정의를 제거하고 ARMSX2/GameDB에 제어를 돌려줍니다.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"RetroAchievements Hardcore 모드는 치트와 상태 저장 기능을 제한할 수 있습니다.",
@@ -292,6 +298,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"스프라이트 위치를 짝수로 강제"
       },
       @"zh": @{
+        @"Standard": @"标准",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"每个游戏的图形设置会即时生效。除非明确覆盖，高级修正会继续使用 ARMSX2/GameDB 的自动行为。",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"自动会移除此游戏的覆盖设置，并将控制权交还给 ARMSX2/GameDB。",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"RetroAchievements 硬核模式可能限制金手指和即时存档功能。",
@@ -336,6 +343,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"对齐精灵", @"Merge sprites": @"合并精灵", @"Force even sprite position": @"强制精灵偶数位置"
       },
       @"zh_Hant": @{
+        @"Standard": @"標準",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"每個遊戲的圖形設定會即時套用。除非明確覆寫，進階修正會繼續使用 ARMSX2/GameDB 的自動行為。",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"自動會移除此遊戲的覆寫設定，並將控制權交還給 ARMSX2/GameDB。",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"RetroAchievements Hardcore 模式可能限制金手指與即時存檔功能。",
@@ -380,6 +388,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"對齊精靈", @"Merge sprites": @"合併精靈", @"Force even sprite position": @"強制精靈偶數位置"
       },
       @"it": @{
+        @"Standard": @"Standard",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Le impostazioni grafiche per gioco vengono applicate subito. Gli hack avanzati mantengono il comportamento automatico ARMSX2/GameDB salvo modifica esplicita.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automatico rimuove la modifica di questo gioco e restituisce il controllo ad ARMSX2/GameDB.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"La modalità Hardcore di RetroAchievements può limitare trucchi e salvataggi di stato.",
@@ -423,6 +432,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"Allinea sprite", @"Merge sprites": @"Unisci sprite", @"Force even sprite position": @"Forza posizione pari sprite"
       },
       @"id": @{
+        @"Standard": @"Standar",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Pengaturan grafis per game diterapkan langsung. Hack lanjutan tetap mengikuti perilaku otomatis ARMSX2/GameDB kecuali diubah secara eksplisit.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Otomatis menghapus pengaturan khusus game ini dan mengembalikan kontrol ke ARMSX2/GameDB.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"Mode Hardcore RetroAchievements dapat membatasi cheat dan fitur status simpan.",
@@ -466,6 +476,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"Sejajarkan sprite", @"Merge sprites": @"Gabungkan sprite", @"Force even sprite position": @"Paksa posisi sprite genap"
       },
       @"fr": @{
+        @"Standard": @"Standard",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Les réglages graphiques par jeu sont appliqués en direct. Les hacks avancés conservent le comportement automatique ARMSX2/GameDB sauf remplacement explicite.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automatique supprime le réglage propre à ce jeu et rend le contrôle à ARMSX2/GameDB.",
         @"Hardcore RetroAchievements can disable cheats and save-state features.": @"Le mode Hardcore de RetroAchievements peut désactiver les cheats et certaines fonctions de save state.",
