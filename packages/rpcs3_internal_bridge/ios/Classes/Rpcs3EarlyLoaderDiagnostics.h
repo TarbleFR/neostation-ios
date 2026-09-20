@@ -53,7 +53,9 @@ public:
     }
     close(output);
     if (saved_ >= 0) {
-      static const char marker[] = "NEOSTATION_EARLY_LOADER_270: entering RPCS3 dlopen\n";
+      static const char marker[] =
+          "NEOSTATION_EARLY_LOADER_293: entering RPCS3 dlopen after verified nonce; "
+          "next expected event is Core JIT region preparation or dlopen return\n";
       (void)write(STDERR_FILENO, marker, sizeof(marker) - 1);
       (void)fsync(STDERR_FILENO);
     }
