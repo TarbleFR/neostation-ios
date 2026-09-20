@@ -50,6 +50,8 @@ std::atomic<bool> g_initialized{false}, g_running{false}, g_cleanup_started{fals
 std::atomic<bool> g_jit_handshake{false}, g_executable_probe{false}, g_devices_changed{false};
 std::atomic<int> g_boot_language{-1};
 std::string g_user_directory, g_system_directory, g_log_path, g_validated_game, g_validated_system;
+std::string g_game_id, g_gametdb_id;
+uint16_t g_game_revision=0;
 bool g_validated_wii_menu=false;
 void* g_metal_surface=nullptr;
 double g_metal_scale=1;
@@ -118,6 +120,7 @@ int main() {
    assert(ui_init==1 && controllers_init==1);
    assert(!g_running && !g_jit_handshake && !g_executable_probe);
    assert(g_validated_game.empty() && g_validated_system.empty() && !g_validated_wii_menu);
+   assert(g_game_id.empty() && g_gametdb_id.empty() && g_game_revision==0);
    assert(g_metal_surface==nullptr && g_boot_language==-1);
    assert(neostation_dolphin_initialize("anotherUser","Sys","bad")==0);
    assert(g_log_path==logfile && g_user_directory=="User");
