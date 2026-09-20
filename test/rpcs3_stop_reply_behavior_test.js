@@ -6,13 +6,13 @@ const assert = require('node:assert/strict');
 const source = fs.readFileSync(process.argv[2] || 'packages/rpcs3_jit_helper/ios/Resources/rpcs3-universal.js', 'utf8');
 const hex = n => { const b = Buffer.alloc(8); b.writeBigUInt64LE(BigInt(n)); return b.toString('hex'); };
 function run({reordered=false, sparse=false, signal=false, terminal=false, ack='OK'}={}) {
-  let stage='probe', advanced=false, prepared=0, unhandledResumes=0, forwarded=0;
+  let stage='probe', advanced=false, prepared=0, unhandledResumes=0, forwarded=0, suppressed=0;
   const commands=[], logs=[];
   const pc=()=>stage==='signal'?0x3000:0x1000;
   const reg=k=>({20:hex(pc()), 10:hex(stage==='probe'?3:stage==='jit'?1:0),
     '00':hex(stage==='probe'?42:stage==='jit'?0x14c000000:0), '01':hex(stage==='jit'?16777216:0)})[k];
   const stop=()=> {
-    const sig=stage==='signal'?'1e':'05';
+    const sig=stage==='signal'?'06':'05';
     let fields=(stage==='jit'&&reordered)?'metype:6;mecount:2;thread:1;':'thread:1;';
     if (!(stage==='jit'&&sparse)) fields+=['20','10','00','01'].map(k=>`${k}:${reg(k)};`).join('');
     return `T${sig}${fields}`;
@@ -29,8 +29,16 @@ function run({reordered=false, sparse=false, signal=false, terminal=false, ack='
       if(command.startsWith('p')) return reg(command.split(';')[0].slice(1));
       if(command==='c') {
         if(first){first=false;return stop();}
-        if(advanced){advanced=false;stage=stage==='probe'?(signal?'signal':terminal?'exit':'jit'):'detach';}
-        else unhandledResumes++;
+        if(advanced){
+          advanced=false;
+          stage=stage==='probe'?(signal?'signal':terminal?'exit':'jit'):'detach';
+        } else if(stage==='signal') {
+          // Device Build 294 failure: T06 must be consumed without re-delivery.
+          suppressed++;
+          stage='jit';
+        } else {
+          unhandledResumes++;
+        }
         return stage==='exit'?'W09':stop();
       }
       if(command.startsWith('vCont;')) {
@@ -44,7 +52,7 @@ function run({reordered=false, sparse=false, signal=false, terminal=false, ack='
     }};
   let error;
   try{vm.runInNewContext(source,sandbox,{timeout:1000});}catch(e){error=e;}
-  return {error,prepared,unhandledResumes,forwarded,commands,logs};
+  return {error,prepared,unhandledResumes,forwarded,suppressed,commands,logs};
 }
 const failures=[];
 for(const [name,options] of Object.entries({normal:{},reordered:{reordered:true},sparse:{sparse:true},signal:{signal:true}})) {
@@ -52,7 +60,12 @@ for(const [name,options] of Object.entries({normal:{},reordered:{reordered:true}
   try {
     assert.equal(result.error,undefined); assert.equal(result.prepared,1);
     assert.equal(result.unhandledResumes,0,'a stop reply must be consumed before resuming');
-    if(options.signal) assert.ok(result.commands.includes('vCont;C1e:1;c'));
+    if(options.signal) {
+      assert.equal(result.suppressed,1,'T06 must be suppressed exactly once');
+      assert.equal(result.commands.some(c=>c.startsWith('vCont;C06')),false,
+        're-delivering signal 6 reproduces the device X06 termination');
+      assert.ok(result.logs.some(v=>v.includes('RPCS3_FOREIGN_STOP_SUPPRESSED')));
+    }
     if(!options.sparse) assert.equal(result.commands.filter(c=>c.startsWith('p')||c==='qC').length,0,'no extra register round trips on normal packets');
     console.log(`PASS: ${name}`);
   }catch(e){failures.push(`${name}: ${e.message}`);}
