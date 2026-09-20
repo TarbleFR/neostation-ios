@@ -9,16 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / 'build-utils/patch_rpcs3_build295_fixed_reservation.py'
 text = PATCH.read_text()
 compile(text, str(PATCH), 'exec')
+normalized = ' '.join(text.split())
 
 assert "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1" in text
-assert "Reserve the whole candidate in one fixed vm_allocate transaction" in text
+assert "Reserve the whole candidate in one fixed vm_allocate transaction" in normalized
 assert "reservation.count('::vm_allocate(') != 1" in text
 assert "'while (reserved < size)' in reservation" in text
 assert "'arena_prepare_chunk_size' in reservation" in text
 assert "VM_FLAGS_OVERWRITE" in text  # explicit prohibition is documented/tested
 assert "::vm_protect(" in text
 assert "::vm_deallocate(" in text
-assert "mmap(address, ...) was only a hint on Darwin" in text
+assert "mmap(address, ...) was only a hint on Darwin" in normalized
 assert "host retry" in text.lower()
 assert "delay" in text.lower()
 assert "cache deletion" in text.lower()
