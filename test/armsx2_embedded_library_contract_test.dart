@@ -227,6 +227,36 @@ void main() {
     );
   });
 
+  test('ARMSX2 in-game UI follows all 12 NeoStation locales', () {
+    final dartBridge = File(
+      'packages/armsx2_internal_bridge/lib/armsx2_internal_bridge.dart',
+    ).readAsStringSync();
+    final localization = File(
+      'packages/armsx2_internal_bridge/ios/Classes/ARMSX2InGameLocalization.mm',
+    ).readAsStringSync();
+    final launcher = File(
+      'lib/services/game/game_launch_service.dart',
+    ).readAsStringSync();
+
+    expect(dartBridge, contains("'uiLocale': uiLocale"));
+    expect(
+      launcher,
+      contains('uiLocale: Localizations.localeOf(context).toLanguageTag()'),
+    );
+    for (final locale in const [
+      'de', 'es', 'pt', 'ru', 'zh', 'zh_Hant',
+      'fr', 'it', 'id', 'ja', 'ko',
+    ]) {
+      expect(localization, contains('@"$locale": @{'), reason: locale);
+    }
+    expect(localization, contains('@"Graphics":'));
+    expect(localization, contains('@"Graphics Hacks":'));
+    expect(localization, contains('@"Touch Controls":'));
+    expect(localization, contains('@"Save State":'));
+    expect(localization, contains('@"Load State":'));
+    expect(localization, contains('@"RetroAchievements error":'));
+  });
+
   test('ARMSX2 BIOS boot and graphics hacks are wired through the host UI', () {
     final bridge = File(
       'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
