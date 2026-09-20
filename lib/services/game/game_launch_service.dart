@@ -278,7 +278,17 @@ class GameLaunchService {
             final launched = await Armsx2LibraryService.launchGameByRomPath(
               game.romPath!,
             );
-            if (launched) return GameLaunchResult.success();
+            if (launched) {
+              // Override the generic iOS handoff identity before
+              // GameLaunchManager starts monitoring. ARMSX2 is an in-process
+              // native session, not an external process to poll.
+              GameSessionManager.registerGameLaunch(
+                system,
+                game,
+                'ios_armsx2_internal',
+              );
+              return GameLaunchResult.success();
+            }
           } catch (e) {
             _log.e('ARMSX2 launch failed for ${game.romPath}: $e');
           }
