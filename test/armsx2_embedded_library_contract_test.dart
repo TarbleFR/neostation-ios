@@ -79,7 +79,8 @@ void main() {
       'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
     ).readAsStringSync();
 
-    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 3u'));
+    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 4u'));
+    expect(abi, contains('NEO_ARMSX2_BOOT_BIOS'));
     expect(abi, contains('set_upscale_multiplier'));
     expect(abi, contains('set_aspect_ratio'));
     expect(abi, contains('set_cheats_enabled'));
@@ -89,6 +90,8 @@ void main() {
     expect(abi, contains('set_retroachievements_option'));
     expect(abi, contains('login_retroachievements'));
     expect(abi, contains('logout_retroachievements'));
+    expect(abi, contains('get_graphics_hacks_json'));
+    expect(abi, contains('set_graphics_hack'));
 
     expect(plugin, contains('armsx2-touch-controls'));
     expect(plugin, contains('armsx2-game-menu'));
@@ -101,6 +104,7 @@ void main() {
     expect(sessionMenu, contains('Commandes tactiles'));
     expect(sessionMenu, contains('Résolution interne'));
     expect(sessionMenu, contains('Format d’écran'));
+    expect(sessionMenu, contains('Hacks graphiques'));
     expect(sessionMenu, contains('Recharger cheats / patches'));
     expect(sessionMenu, contains('Sauvegarder un état'));
     expect(sessionMenu, contains('Charger un état'));
