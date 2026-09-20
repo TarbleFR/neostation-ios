@@ -110,6 +110,10 @@ while (!detached) {
     let brkImmediate = extractBrkImmediate(instrU32);
     log(`BRK immediate: 0x${brkImmediate.toString(16)} (${brkImmediate})`);
     if (legacyCommands[brkImmediate] != undefined) {
+        // The loop guard tracks only consecutive foreign stops. A recognized
+        // NeoStation JIT breakpoint proves forward progress and resets it.
+        lastForeignStopKey = null;
+        repeatedForeignStops = 0;
         x16 = stoppedRegister(brkResponse, '10', tid);
         x0 = stoppedRegister(brkResponse, '00', tid);
         x1 = stoppedRegister(brkResponse, '01', tid);
