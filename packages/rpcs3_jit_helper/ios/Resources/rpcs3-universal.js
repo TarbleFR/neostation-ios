@@ -94,9 +94,16 @@ while (!detached) {
     // check if this is a brk
     if ((instrU32 & 0xFFE0001F)>>>0 != 0xD4200000) {
         log(`Skipping: instruction was not a brk (was 0x${instrU32.toString(16)})`);
-        // C continues with the original signal; S would single-step and
-        // introduce a second SIGTRAP. Resume the other threads normally too.
-        pendingStopReply = send_command(`vCont;C${signal}:${tid};c`);
+        // Build 294 device journals prove that dyld/Core bootstrap can stop
+        // debugserver with T06 and then continue successfully when the signal
+        // is suppressed. Re-injecting that same signal with vCont;C06 makes
+        // debugserver report X06 (terminated due to signal 6), killing
+        // NeoStation before the first JIT region request. While this helper
+        // owns the all-stop bootstrap transaction, foreign stops are observed
+        // but not delivered back into the target. A plain continue consumes
+        // the current stop and returns exactly the next stop.
+        log(`RPCS3_FOREIGN_STOP_SUPPRESSED pid=${pid} signal=${signal} thread=${tid}`);
+        pendingStopReply = send_command(`c`);
         continue;
     }
     
