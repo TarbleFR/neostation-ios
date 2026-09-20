@@ -117,7 +117,7 @@ jobs:
 
           nm -gU "$CORE" > build/dolphin-core-diagnostics/exports.txt
           for symbol in             _neostation_dolphin_initialize             _neostation_dolphin_launch             _neostation_dolphin_menu_snapshot             _neostation_dolphin_cheats_snapshot             _neostation_dolphin_set_cheats_enabled             _neostation_dolphin_set_cheat_enabled             _neostation_dolphin_download_gecko_codes; do
-            grep -qx "$symbol" build/dolphin-core-diagnostics/exports.txt
+            grep -q " $symbol$" build/dolphin-core-diagnostics/exports.txt
           done
 
           ditto "$FRAMEWORK" dist/dolphin/DolphinCore.framework
