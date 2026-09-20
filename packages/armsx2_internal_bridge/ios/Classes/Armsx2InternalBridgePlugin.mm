@@ -3,6 +3,7 @@
 #import "ARMSX2CoreABI.h"
 #import "Armsx2RetroAchievementsMenu.h"
 #import "Armsx2SessionMenu.h"
+#import "ARMSX2InGameLocalization.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -99,6 +100,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) BOOL cheatsEnabled;
 @property(nonatomic, assign) uint32_t saveStateMask;
 @property(nonatomic, assign) BOOL closing;
+@property(nonatomic, copy) NSString* uiLocale;
 - (void)updateRuntimeMenuWithUpscale:(float)upscale
                               aspect:(uint32_t)aspect
                               cheats:(BOOL)cheats
@@ -120,12 +122,8 @@ static UIViewController* ARMSX2RootViewController(void) {
   return self;
 }
 
-- (BOOL)isFrench {
-  NSString* language = NSLocale.preferredLanguages.firstObject.lowercaseString ?: @"";
-  return [language hasPrefix:@"fr"];
-}
 - (NSString*)en:(NSString*)english fr:(NSString*)french {
-  return self.isFrench ? french : english;
+  return ARMSX2LocalizedText(english, french, self.uiLocale);
 }
 
 - (UIButton*)padButton:(NSString*)title tag:(NSInteger)tag {
@@ -771,8 +769,9 @@ static UIViewController* ARMSX2RootViewController(void) {
 
     if ([command isEqualToString:@"upscale"]) {
       ok = self.api->set_upscale_multiplier([value floatValue], error, sizeof(error)) != 0;
-      success = [controller en:[NSString stringWithFormat:@"Internal resolution: %.0f×", [value floatValue]]
-                            fr:[NSString stringWithFormat:@"Résolution interne : %.0f×", [value floatValue]]];
+      NSString* format = [controller en:@"Internal resolution: %.0f×"
+                                      fr:@"Résolution interne : %.0f×"];
+      success = [NSString stringWithFormat:format, [value floatValue]];
     } else if ([command isEqualToString:@"aspect"]) {
       ok = self.api->set_aspect_ratio([value unsignedIntValue], error, sizeof(error)) != 0;
       success = [controller en:@"Screen format updated." fr:@"Format d’écran mis à jour."];
@@ -787,13 +786,15 @@ static UIViewController* ARMSX2RootViewController(void) {
     } else if ([command isEqualToString:@"saveState"]) {
       const uint32_t slot = [value unsignedIntValue];
       ok = self.api->save_state(slot, 60000, error, sizeof(error)) != 0;
-      success = [controller en:[NSString stringWithFormat:@"State saved in slot %u.", slot]
-                            fr:[NSString stringWithFormat:@"État sauvegardé dans le slot %u.", slot]];
+      NSString* format = [controller en:@"State saved in slot %u."
+                                      fr:@"État sauvegardé dans le slot %u."];
+      success = [NSString stringWithFormat:format, slot];
     } else if ([command isEqualToString:@"loadState"]) {
       const uint32_t slot = [value unsignedIntValue];
       ok = self.api->load_state(slot, 60000, error, sizeof(error)) != 0;
-      success = [controller en:[NSString stringWithFormat:@"State loaded from slot %u.", slot]
-                            fr:[NSString stringWithFormat:@"État chargé depuis le slot %u.", slot]];
+      NSString* format = [controller en:@"State loaded from slot %u."
+                                      fr:@"État chargé depuis le slot %u."];
+      success = [NSString stringWithFormat:format, slot];
     }
 
     NSString* message = ok ? success :
@@ -824,6 +825,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 
       Armsx2SessionMenu* menu = [Armsx2SessionMenu new];
       menu.gameTitle = controller.title.length ? controller.title : @"ARMSX2";
+      menu.localeIdentifier = controller.uiLocale;
       __weak Armsx2InternalBridgePlugin* weakSelf = self;
       __weak Armsx2GameViewController* weakController = controller;
 
@@ -960,6 +962,8 @@ static UIViewController* ARMSX2RootViewController(void) {
   NSString* dataPath = [args[@"dataPath"] isKindOfClass:NSString.class] ? args[@"dataPath"] : @"";
   NSString* biosDirectory = [args[@"biosDirectory"] isKindOfClass:NSString.class] ? args[@"biosDirectory"] : @"";
   NSString* biosFilename = [args[@"biosFilename"] isKindOfClass:NSString.class] ? args[@"biosFilename"] : @"";
+  NSString* uiLocale = [args[@"uiLocale"] isKindOfClass:NSString.class]
+      ? ARMSX2CanonicalLocale(args[@"uiLocale"]) : @"en";
   if (!transactionNumber || transactionNumber.unsignedLongLongValue == 0 ||
       (!biosBoot && ![gamePath hasPrefix:@"/"]) || (biosBoot && gamePath.length != 0) ||
       ![dataPath hasPrefix:@"/"] || ![biosDirectory hasPrefix:@"/"]) {
@@ -985,6 +989,7 @@ static UIViewController* ARMSX2RootViewController(void) {
       if (!root || root.view.window == nil) return;
       controller = [Armsx2GameViewController new];
       controller.api = self.api;
+      controller.uiLocale = uiLocale;
       controller.title = biosBoot ? [controller en:@"PS2 BIOS" fr:@"BIOS PS2"] :
           (gamePath.lastPathComponent.stringByDeletingPathExtension ?: @"ARMSX2");
       __weak Armsx2InternalBridgePlugin* weakSelf = self;
