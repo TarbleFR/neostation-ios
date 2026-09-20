@@ -46,7 +46,10 @@ class Armsx2LibraryService {
 
   /// Launches a PS2 game only when it belongs to the ARMSX2 bookmark, or when
   /// it is a legacy ARMSX2 virtual row awaiting cleanup.
-  static Future<bool> launchGameByRomPath(String romPath) async {
+  static Future<bool> launchGameByRomPath(
+    String romPath, {
+    String uiLocale = 'en',
+  }) async {
     if (romPath.trim().isEmpty) return false;
 
     if (isVirtualLibraryPath(romPath)) {
@@ -69,7 +72,7 @@ class Armsx2LibraryService {
       return false;
     }
 
-    return _launchLinkedPhysicalRom(romPath);
+    return _launchLinkedPhysicalRom(romPath, uiLocale: uiLocale);
   }
 
   /// Removes data belonging to the retired ARMSX2 exported-library mechanism.
@@ -138,8 +141,14 @@ class Armsx2LibraryService {
     }
   }
 
-  static Future<bool> _launchLinkedPhysicalRom(String romPath) async {
-    return StikJitArmsx2Service.launch(gamePath: path.normalize(romPath));
+  static Future<bool> _launchLinkedPhysicalRom(
+    String romPath, {
+    required String uiLocale,
+  }) async {
+    return StikJitArmsx2Service.launch(
+      gamePath: path.normalize(romPath),
+      uiLocale: uiLocale,
+    );
   }
 
   /// Device-readable diagnostics for sideloaded iOS builds where an Xcode
