@@ -12,6 +12,11 @@ typedef void (^Armsx2SessionRAReadState)(
 typedef void (^Armsx2SessionRACommand)(
     NSString* command, id _Nullable value,
     void (^completion)(BOOL success, NSString* message));
+typedef void (^Armsx2SessionReadGraphicsHacks)(
+    void (^completion)(NSDictionary<NSString*, id>* _Nullable state));
+typedef void (^Armsx2SessionGraphicsHackCommand)(
+    NSString* key, NSInteger value,
+    void (^completion)(BOOL success, NSString* message));
 
 /// Full-screen in-game settings architecture for embedded ARMSX2.
 ///
@@ -24,6 +29,8 @@ typedef void (^Armsx2SessionRACommand)(
 @property(nonatomic, copy) Armsx2SessionCommand performCommand;
 @property(nonatomic, copy) Armsx2SessionRAReadState readRetroAchievements;
 @property(nonatomic, copy) Armsx2SessionRACommand performRetroAchievementsCommand;
+@property(nonatomic, copy) Armsx2SessionReadGraphicsHacks readGraphicsHacks;
+@property(nonatomic, copy) Armsx2SessionGraphicsHackCommand performGraphicsHack;
 @property(nonatomic, copy) dispatch_block_t resumeGame;
 @property(nonatomic, copy) dispatch_block_t quitGame;
 @end
