@@ -296,8 +296,11 @@ class GameLaunchService {
           // An ARMSX2-owned path must never be reinterpreted as a RetroArch
           // game. This is the hard ownership boundary between both bookmarks.
           if (isArmsx2OwnedRom || isArmsx2VirtualRom) {
+            final nativeError = Armsx2LibraryService.lastLaunchError?.trim();
             return GameLaunchResult.failure(
-              'Could not launch this PS2 game in ARMSX2.',
+              nativeError != null && nativeError.isNotEmpty
+                  ? nativeError
+                  : 'Could not launch this PS2 game in ARMSX2.',
               game.romPath,
             );
           }
