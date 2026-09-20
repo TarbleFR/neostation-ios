@@ -28,13 +28,23 @@ class StikJitArmsx2Service {
 
   static String? get lastError => _lastError;
 
-  static Future<bool> launch({required String gamePath}) async {
+  static Future<bool> launch({required String gamePath}) =>
+      _launchTransaction(gamePath: gamePath, bootBios: false);
+
+  static Future<bool> launchBios() =>
+      _launchTransaction(gamePath: '', bootBios: true);
+
+  static Future<bool> _launchTransaction({
+    required String gamePath,
+    required bool bootBios,
+  }) async {
     if (!Platform.isIOS || _busy) {
       _lastError = _busy ? 'An ARMSX2 launch is already active.' : null;
       return false;
     }
-    final normalized = path.normalize(gamePath.trim());
-    if (!path.isAbsolute(normalized) || !await File(normalized).exists()) {
+    final normalized = bootBios ? '' : path.normalize(gamePath.trim());
+    if (!bootBios &&
+        (!path.isAbsolute(normalized) || !await File(normalized).exists())) {
       _lastError = 'The selected PS2 game is not readable.';
       return false;
     }
@@ -46,7 +56,8 @@ class StikJitArmsx2Service {
 
     try {
       await _writeDiagnostic(
-        'STATE: START\nTransaction: $transaction\nGame: $normalized\n',
+        'STATE: START\nTransaction: $transaction\n'
+        'Mode: ${bootBios ? 'bios' : 'game'}\nGame: $normalized\n',
       );
 
       final pairingFile = await _ensurePairingFile();
@@ -63,7 +74,8 @@ class StikJitArmsx2Service {
       final bios = await Armsx2InternalService.biosDirectory();
       ConfigService.linkedArmsx2FolderPath = root.path;
       ConfigService.linkedArmsx2GameFolderPath = games.path;
-      if (!Armsx2FolderService.ownsRomPath(normalized, games.path)) {
+      if (!bootBios &&
+          !Armsx2FolderService.ownsRomPath(normalized, games.path)) {
         _lastError = 'The selected PS2 game is outside NeoStation/ARMSX2/Games.';
         return false;
       }
@@ -99,6 +111,7 @@ class StikJitArmsx2Service {
       final launch = await Armsx2InternalBridge.launch(
         transaction: transaction,
         gamePath: normalized,
+        bootBios: bootBios,
         dataPath: dataPath,
         biosDirectory: biosDirectory,
       );
@@ -115,7 +128,7 @@ class StikJitArmsx2Service {
       );
       _log.i(
         'ARMSX2 embedded Core running transaction=$transaction '
-        'game=$normalized.',
+        'mode=${bootBios ? 'bios' : 'game'} game=$normalized.',
       );
       return true;
     } catch (error, stackTrace) {
