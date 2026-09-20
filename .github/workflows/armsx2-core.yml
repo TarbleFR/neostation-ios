@@ -8,6 +8,7 @@ on:
       - 'packages/armsx2_internal_bridge/**'
       - 'packages/armsx2_jit_helper/**'
       - 'build-utils/armsx2/**'
+      - 'test/armsx2_bios_hacks_test.py'
   workflow_dispatch:
 permissions:
   contents: read
