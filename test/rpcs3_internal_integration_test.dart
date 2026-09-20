@@ -52,6 +52,24 @@ void main() {
       expect(service, isNot(contains('Duration(seconds: 90)')));
     });
 
+    test('constructor crash diagnostics bracket RPCS3 JIT page preparation', () {
+      final early = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3EarlyLoaderDiagnostics.h',
+      ).readAsStringSync();
+      final script = File(
+        'packages/rpcs3_jit_helper/ios/Resources/rpcs3-universal.js',
+      ).readAsStringSync();
+
+      expect(early, contains('NEOSTATION_EARLY_LOADER_293'));
+      expect(
+        early,
+        contains('next expected event is Core JIT region preparation or dlopen return'),
+      );
+      expect(script, contains('NEOSTATION_RPCS3_PREPARE_BEGIN'));
+      expect(script, contains('NEOSTATION_RPCS3_PREPARE_END'));
+      expect(script, contains('prepare_memory_region(jitPageAddress, x1)'));
+    });
+
     test('JIT and arena policy are ready before RPCS3 Core dlopen', () {
       final service = File('lib/services/rpcs3_internal_service.dart')
           .readAsStringSync();
