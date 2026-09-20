@@ -48,6 +48,7 @@ jobs:
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
+          python3 -m py_compile build-utils/patch_rpcs3_build295_fixed_reservation.py
           python3 test/rpcs3_build295_fixed_reservation_test.py
           mkdir -p dist/rpcs3 build/rpcs3-core-diagnostics
 
