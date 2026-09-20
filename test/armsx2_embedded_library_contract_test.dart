@@ -94,6 +94,9 @@ void main() {
     expect(plugin, contains('armsx2-game-menu'));
     expect(plugin, contains('presentSessionMenuForController'));
     expect(plugin, contains('UIModalPresentationOverFullScreen'));
+    expect(plugin, contains('line.3.horizontal'));
+    expect(plugin, isNot(contains('[UIImage systemImageNamed:@"xmark"]')));
+    expect(plugin, isNot(contains('[UIImage systemImageNamed:@"slider.horizontal.3"]')));
     expect(sessionMenu, contains('UITableViewStyleInsetGrouped'));
     expect(sessionMenu, contains('Commandes tactiles'));
     expect(sessionMenu, contains('Résolution interne'));
