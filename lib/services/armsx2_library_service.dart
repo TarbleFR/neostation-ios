@@ -21,6 +21,8 @@ class Armsx2LibraryService {
 
   static final _log = LoggerService.instance;
 
+  static String? get lastLaunchError => StikJitArmsx2Service.lastError;
+
   static const String _virtualScheme = 'armsx2';
   static const String _legacyExportCacheKey = 'armsx2_library_cache_v1';
 
