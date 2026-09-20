@@ -8,6 +8,7 @@
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
+#import "Rpcs3SessionMenu.h"
 
 #import <AVFAudio/AVAudioSession.h>
 #import <Metal/Metal.h>
@@ -1034,41 +1035,227 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
   });
 }
 
+- (void)performSessionCommand:(NSString*)command
+                         value:(id)value
+                    completion:(void (^)(BOOL success, NSString* message))completion {
+  RPCS3GameViewController* controller = self.gameController;
+  NSString* titleId = [self.activeTitleId copy];
+  if (!controller || !titleId.length) {
+    if (completion) completion(NO, [self localized:@"settingsFailed"]);
+    return;
+  }
+
+  if ([command isEqual:@"performance"]) {
+    BOOL visible = [value boolValue];
+    controller.showingPerformance = visible;
+    [controller.performanceOverlay reset];
+    controller.performanceOverlay.hidden = !visible;
+    controller.performanceButton.tintColor = visible ? UIColor.systemGreenColor : UIColor.whiteColor;
+    controller.performanceButton.accessibilityValue =
+        RPCS3LocalizedString(visible ? @"enabled" : @"disabled", controller.uiLocale);
+    [self setPerformanceSamplingEnabled:visible];
+    if (completion) completion(YES, @"");
+    return;
+  }
+
+  if ([command isEqual:@"touchControls"]) {
+    controller.inputController.touchControlsEnabled = [value boolValue];
+    if (completion) completion(YES, @"");
+    return;
+  }
+
+  NSString* setting = nil;
+  NSString* settingValue = nil;
+  if ([command isEqual:@"resolution"] && [value isKindOfClass:NSString.class]) {
+    setting = @"gpu.resolution_scale";
+    settingValue = value;
+  } else if ([command isEqual:@"stretch"]) {
+    setting = @"gpu.stretch_to_display";
+    settingValue = [value boolValue] ? @"true" : @"false";
+  } else if ([command isEqual:@"language"] && [value isKindOfClass:NSString.class]) {
+    setting = @"system.language";
+    settingValue = value;
+  }
+  if (!setting.length || !settingValue.length) {
+    if (completion) completion(NO, [self localized:@"settingsFailed"]);
+    return;
+  }
+
+  dispatch_async(_runtimeQueue, ^{
+    if (self.operationBusy || !self->_api.stop_emulation ||
+        !self->_api.set_game_setting || !self->_api.boot_game) {
+      NSString* message = self.operationBusy ? [self localized:@"stateBusy"] : [self lastError];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (completion) completion(NO, message ?: [self localized:@"settingsFailed"]);
+      });
+      return;
+    }
+    self.operationBusy = YES;
+    rpcs3_ios_status status = self->_api.stop_emulation();
+    if (status == 0)
+      status = self->_api.set_game_setting(titleId.UTF8String, setting.UTF8String, settingValue.UTF8String);
+    if (status == 0)
+      status = self->_api.boot_game(titleId.UTF8String, NULL);
+    NSString* message = status == 0 ? @"" : [self lastError];
+    self.operationBusy = NO;
+    if (status == 0)
+      RPCS3Diagnostic(@"game_setting", [NSString stringWithFormat:@"%@ %@=%@", titleId, setting, settingValue]);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (completion) completion(status == 0, status == 0 ? @"" : (message ?: [self localized:@"settingsFailed"]));
+    });
+  });
+}
+
+- (void)readSessionStates:(void (^)(NSDictionary<NSString*, id>* state))completion {
+  NSString* titleId = [self.activeTitleId copy];
+  if (!titleId.length || !completion) { if (completion) completion(nil); return; }
+  dispatch_async(_runtimeQueue, ^{
+    NSMutableArray<NSDictionary*>* states = [NSMutableArray array];
+    rpcs3_ios_status status = self->_api.enumerate_savestates_live
+        ? self->_api.enumerate_savestates_live(
+              titleId.UTF8String, RPCS3CollectSavestate, (__bridge void*)states)
+        : -1;
+    if (status != 0) {
+      dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+      return;
+    }
+    NSDictionary<NSNumber*, NSDictionary*>* bySlot = [self statesBySlot:states titleId:titleId];
+    NSMutableArray* slots = [NSMutableArray arrayWithCapacity:10];
+    for (NSUInteger slot = 1; slot <= 10; ++slot) {
+      NSDictionary* existing = bySlot[@(slot)];
+      [slots addObject:@{
+        @"slot": @(slot),
+        @"exists": @(existing != nil),
+        @"compatible": @(!existing || [existing[@"compatible"] boolValue]),
+        @"modified": existing[@"modified"] ?: @0,
+        @"id": existing[@"id"] ?: @"",
+      }];
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(@{@"slots": slots}); });
+  });
+}
+
+- (void)waitForSessionSavestate:(NSUInteger)remaining
+                     completion:(void (^)(BOOL success, NSString* message))completion {
+  if (!completion) return;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                 _runtimeQueue, ^{
+    uint32_t phase = 0;
+    char reason[2048] = {};
+    rpcs3_ios_status status = self->_api.get_savestate_status
+        ? self->_api.get_savestate_status(&phase, reason, sizeof(reason)) : -1;
+    if (status == 0 && phase >= 1 && phase <= 3 && remaining > 0) {
+      [self waitForSessionSavestate:remaining - 1 completion:completion];
+      return;
+    }
+    NSString* raw = reason[0] ? ([NSString stringWithUTF8String:reason] ?: @"") : [self lastError];
+    BOOL success = status == 0 && phase == 4;
+    NSString* message = success ? @"" : [self localizedSavestateError:raw];
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(success, message); });
+  });
+}
+
+- (void)performSessionStateAtSlot:(NSInteger)slot
+                             load:(BOOL)load
+                       identifier:(NSString*)identifier
+                       completion:(void (^)(BOOL success, NSString* message))completion {
+  NSString* titleId = [self.activeTitleId copy];
+  if (!titleId.length || slot < 1 || slot > 10 || !completion) {
+    if (completion) completion(NO, [self localized:@"stateFailed"]);
+    return;
+  }
+  dispatch_async(_runtimeQueue, ^{
+    if (self.operationBusy) {
+      dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, [self localized:@"stateBusy"]); });
+      return;
+    }
+    self.operationBusy = YES;
+    if (!load) {
+      rpcs3_ios_status status = self->_api.save_state_slot
+          ? self->_api.save_state_slot((uint32_t)slot) : -1;
+      if (status != 0) {
+        NSString* message = [self localizedSavestateError:[self lastError]];
+        self.operationBusy = NO;
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, message); });
+        return;
+      }
+      [self waitForSessionSavestate:240 completion:^(BOOL success, NSString* message) {
+        self.operationBusy = NO;
+        completion(success, message);
+      }];
+      return;
+    }
+
+    if (!identifier.length || !self->_api.stop_emulation || !self->_api.boot_game) {
+      self.operationBusy = NO;
+      dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, [self localized:@"stateInvalid"]); });
+      return;
+    }
+    rpcs3_ios_status status = self->_api.stop_emulation();
+    if (status == 0) status = self->_api.boot_game(titleId.UTF8String, identifier.UTF8String);
+    NSString* message = @"";
+    if (status != 0) {
+      NSString* original = [self lastError];
+      if (self->_api.stop_emulation) self->_api.stop_emulation();
+      rpcs3_ios_status recovery = self->_api.boot_game(titleId.UTF8String, NULL);
+      message = [self localizedSavestateError:original];
+      if (recovery == 0)
+        message = [NSString stringWithFormat:@"%@\n%@", message, [self localized:@"stateFreshRestart"]];
+    }
+    self.operationBusy = NO;
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(status == 0, message); });
+  });
+}
+
 - (void)showGameMenu {
   RPCS3GameViewController* controller = self.gameController;
   if (!controller || controller.presentedViewController) return;
-  UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"RPCS3"
-                                                                 message:nil
-                                                          preferredStyle:UIAlertControllerStyleActionSheet];
+
+  Rpcs3SessionMenu* menu = [Rpcs3SessionMenu new];
+  menu.localeIdentifier = self.activeUiLocale ?: controller.uiLocale ?: @"en";
+  menu.gameTitle = self.activeTitleId.length ? self.activeTitleId : @"RPCS3";
+  menu.performanceVisible = controller.showingPerformance;
+  menu.touchControlsVisible = controller.inputController.isTouchControlsEnabled;
+  menu.languageChoices = [self languageChoices];
+
   __weak Rpcs3InternalBridgePlugin* weakSelf = self;
-  // UIAlertController is still the presented controller while its action
-  // handler runs. Defer secondary UI/actions until the dismissal animation has
-  // released presentedViewController, otherwise fast devices can drop the next
-  // menu or confirmation alert.
-  void (^afterMenuDismiss)(dispatch_block_t) = ^(dispatch_block_t block) {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), block);
+  __weak RPCS3GameViewController* weakController = controller;
+  menu.performCommand = ^(NSString* command, id value,
+                          void (^completion)(BOOL success, NSString* message)) {
+    Rpcs3InternalBridgePlugin* bridge = weakSelf;
+    if (!bridge) { if (completion) completion(NO, @""); return; }
+    [bridge performSessionCommand:command value:value completion:completion];
   };
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"language"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
-    afterMenuDismiss(^{ [weakSelf showLanguageMenu]; });
-  }]];
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"upscale"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
-    afterMenuDismiss(^{ [weakSelf showResolutionScaleMenu]; });
-  }]];
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"stretch"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
-    afterMenuDismiss(^{ [weakSelf showStretchMenu]; });
-  }]];
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"createState"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
-    afterMenuDismiss(^{ [weakSelf showSaveSavestateMenu]; });
-  }]];
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"loadState"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
-    afterMenuDismiss(^{ [weakSelf showLoadSavestateMenu]; });
-  }]];
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"quitGame"] style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action) {
-    [weakSelf stopAndDismiss:nil];
-  }]];
-  [alert addAction:[UIAlertAction actionWithTitle:[self localized:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
-  [self presentModernMenu:alert from:controller];
+  menu.readStates = ^(void (^completion)(NSDictionary<NSString*, id>* state)) {
+    Rpcs3InternalBridgePlugin* bridge = weakSelf;
+    if (!bridge) { if (completion) completion(nil); return; }
+    [bridge readSessionStates:completion];
+  };
+  menu.performStateOperation = ^(NSInteger slot, BOOL load, NSString* identifier,
+                                 void (^completion)(BOOL success, NSString* message)) {
+    Rpcs3InternalBridgePlugin* bridge = weakSelf;
+    if (!bridge) { if (completion) completion(NO, @""); return; }
+    [bridge performSessionStateAtSlot:slot load:load identifier:identifier completion:completion];
+  };
+  menu.resumeGame = ^{
+    RPCS3GameViewController* owner = weakController;
+    if (owner.presentedViewController)
+      [owner dismissViewControllerAnimated:YES completion:nil];
+  };
+  menu.quitGame = ^{
+    Rpcs3InternalBridgePlugin* bridge = weakSelf;
+    RPCS3GameViewController* owner = weakController;
+    if (!bridge || !owner) return;
+    [owner dismissViewControllerAnimated:YES completion:^{
+      [bridge stopAndDismiss:nil];
+    }];
+  };
+
+  UINavigationController* navigation =
+      [[UINavigationController alloc] initWithRootViewController:menu];
+  navigation.modalPresentationStyle = UIModalPresentationOverFullScreen;
+  navigation.modalInPresentation = YES;
+  [controller presentViewController:navigation animated:YES completion:nil];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
