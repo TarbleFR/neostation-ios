@@ -396,7 +396,7 @@ typedef NS_ENUM(NSInteger, Armsx2RARow) {
       break;
     case Armsx2RARowMode:
       cell.textLabel.text = ARMSX2RAText(@"Mode", @"Mode");
-      cell.detailTextLabel.text = [self.state[@"hardcorePreference"] boolValue] ? @"Hardcore" : @"Standard";
+      cell.detailTextLabel.text = [self.state[@"hardcorePreference"] boolValue] ? @"Hardcore" : ARMSX2RAText(@"Standard", @"Standard");
       if (![self.state[@"hardcoreSupported"] boolValue]) {
         cell.textLabel.textColor = UIColor.secondaryLabelColor;
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -467,7 +467,7 @@ typedef NS_ENUM(NSInteger, Armsx2RARow) {
       child.localeIdentifier = self.localeIdentifier;
       BOOL hardcore = [self.state[@"hardcorePreference"] boolValue];
       child.choices = @[
-        @{@"title": @"Standard", @"value": @NO, @"selected": @(!hardcore)},
+        @{@"title": ARMSX2RAText(@"Standard", @"Standard"), @"value": @NO, @"selected": @(!hardcore)},
         @{@"title": @"Hardcore", @"value": @YES, @"selected": @(hardcore)},
       ];
       [self.navigationController pushViewController:child animated:YES];
