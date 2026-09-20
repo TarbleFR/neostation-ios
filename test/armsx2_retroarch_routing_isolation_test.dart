@@ -30,7 +30,7 @@ void main() {
     ).readAsStringSync();
 
     expect(service, contains('ownsLinkedPhysicalRom'));
-    expect(service, contains('_launchLinkedPhysicalRom(romPath)'));
+    expect(service, contains('_launchLinkedPhysicalRom(romPath, uiLocale: uiLocale)'));
     expect(service, contains('StikJitArmsx2Service.launch'));
     expect(service, isNot(contains('requestLibrarySync()')));
     expect(service, isNot(contains('handleIncomingUri(Uri uri)')));
