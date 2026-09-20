@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define NEO_ARMSX2_ABI_VERSION 4u
+#define NEO_ARMSX2_ABI_VERSION 5u
 #define NEO_ARMSX2_BOOT_DISC 1u
 #define NEO_ARMSX2_BOOT_ELF 2u
 // No ROM: use the installed BIOS and the same owned VM lifecycle.
@@ -59,6 +59,16 @@ typedef struct NeoARMSX2API {
   int (*set_aspect_ratio)(uint32_t value, char* error, size_t capacity);
   int (*set_cheats_enabled)(int enabled, char* error, size_t capacity);
   int (*reload_cheats)(char* error, size_t capacity);
+
+  // Current-revision built-in PCSX2/ARMSX2 patch catalogue. The Core reads
+  // patches.zip through the upstream Patch subsystem; NeoStation never invents
+  // patch definitions or scrapes arbitrary web pages. State is persisted in
+  // the running game's own [Patches] Enable/Disable lists.
+  int (*get_available_patches_json)(char* output, size_t capacity);
+  // state: -1 automatic/default (only globally toggleable patches), 0 off,
+  // 1 on. Normal per-game patches use 0/1.
+  int (*set_patch_state)(const char* name, int state, char* error, size_t capacity);
+
   int (*has_save_state)(uint32_t slot);
   int (*save_state)(uint32_t slot, uint32_t timeout_ms, char* error, size_t capacity);
   int (*load_state)(uint32_t slot, uint32_t timeout_ms, char* error, size_t capacity);
