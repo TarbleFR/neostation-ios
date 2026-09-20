@@ -11,6 +11,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy) void (^applySettings)(NSDictionary* request, void (^completion)(BOOL));
 @property(nonatomic, copy) void (^readStates)(void (^completion)(NSDictionary* _Nullable));
 @property(nonatomic, copy) void (^performStateOperation)(NSInteger slot, BOOL load, void (^completion)(BOOL));
+@property(nonatomic, copy, nullable) void (^readCheats)(void (^completion)(NSDictionary* _Nullable));
+@property(nonatomic, copy, nullable) void (^performCheatCommand)(
+    NSDictionary* request,
+    void (^completion)(BOOL success, NSDictionary* _Nullable result));
 @property(nonatomic, copy, nullable) void (^readRecording)(void (^completion)(NSDictionary* _Nullable));
 @property(nonatomic, copy, nullable) void (^toggleRecording)(void (^completion)(BOOL));
 @property(nonatomic, copy, nullable) dispatch_block_t shareRecording;
