@@ -116,6 +116,10 @@ extension _LaunchFlow on _SystemGamesListState {
 
   /// Orchestrates the complex sequence for launching a game through an external emulator.
   Future<void> _selectCurrentGame() async {
+    // A native in-process emulator can dismiss on the same input edge that
+    // opened/closed its UI. Never let that edge start a second launch while
+    // the original frontend session is still active.
+    if (_isGameLaunching) return;
     if (_isRpcs3Library && !_rpcs3FirmwareReady) return;
     if (_selectedGame == null) return;
 
@@ -169,7 +173,7 @@ extension _LaunchFlow on _SystemGamesListState {
     }
 
     // Resource termination and UI synchronization prior to process handoff.
-    _stopVideoAndCleanup();
+    await _stopVideoAndCleanup();
     // NOTE: do NOT push a separate _updateSecondaryDisplay here. The game's
     // media is already in the shared state from browsing, and a separate launch
     // snapshot (carrying nowPlayingActive=false + isGameLaunching=true) can be
