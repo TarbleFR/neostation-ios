@@ -231,8 +231,10 @@ function JIT26PrepareRegion(brkResponse) {
         log(`Allocated JIT page at address: 0x${jitPageAddress.toString(16)}`);
     }
 
+    log(`NEOSTATION_RPCS3_PREPARE_BEGIN addr=0x${jitPageAddress.toString(16)} len=${x1.toString()}`);
     let prepareJITPageResponse = prepare_memory_region(jitPageAddress, x1);
     log(`prepareJITPageResponse = ${prepareJITPageResponse}`);
+    log(`NEOSTATION_RPCS3_PREPARE_END addr=0x${jitPageAddress.toString(16)} len=${x1.toString()} result=${prepareJITPageResponse}`);
     if (prepareJITPageResponse !== "OK") {
         log(`NEOSTATION_STIKJIT_UNIVERSAL_V1: debugserver page preparation failed; returning zero to the target`);
         let putFailureX0Response = send_command(`P0=${numberToLittleEndianHexString(0n)};thread:${tid};`);
