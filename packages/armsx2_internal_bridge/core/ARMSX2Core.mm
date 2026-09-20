@@ -14,6 +14,7 @@
 #include "pcsx2/Host.h"
 #include "pcsx2/Config.h"
 #include "pcsx2/Memory.h"
+#include "pcsx2/Patch.h"
 #include "pcsx2/VMManager.h"
 #include "pcsx2/CDVD/CDVDcommon.h"
 #include "pcsx2/ps2/BiosTools.h"
@@ -497,6 +498,126 @@ int reload_cheats(char* error,size_t capacity) {
   [ARMSX2Bridge reloadPatches];
   return 1;
 }
+
+int get_available_patches_json(char* output,size_t capacity) {
+  if(!output || capacity<2 || !has_running_game()) return 0;
+  __block NSData* encoded=nil;
+  Host::RunOnCPUThread([&]{
+    @autoreleasepool {
+      const std::string serial=VMManager::GetDiscSerial();
+      const u32 crc=VMManager::GetDiscCRC();
+      if(serial.empty() || crc==0) return;
+
+      u32 unlabelled=0;
+      const std::vector<Patch::PatchInfo> patches=
+          Patch::GetPatchInfo(serial,crc,false,false,&unlabelled);
+      NSString* section=[NSString stringWithUTF8String:Patch::PATCHES_CONFIG_SECTION];
+      NSString* enableKey=[NSString stringWithUTF8String:Patch::PATCH_ENABLE_CONFIG_KEY];
+      NSString* disableKey=[NSString stringWithUTF8String:Patch::PATCH_DISABLE_CONFIG_KEY];
+      NSSet<NSString*>* enabled=[NSSet setWithArray:
+          [ARMSX2Bridge patchEnableListForISO:nil section:section key:enableKey]];
+      NSSet<NSString*>* disabled=[NSSet setWithArray:
+          [ARMSX2Bridge patchEnableListForISO:nil section:section key:disableKey]];
+
+      NSMutableArray* items=[NSMutableArray arrayWithCapacity:patches.size()];
+      for(const Patch::PatchInfo& patch:patches) {
+        if(patch.name.empty()) continue;
+        NSString* name=[NSString stringWithUTF8String:patch.name.c_str()];
+        if(!name.length) continue;
+        const BOOL toggleable=Patch::IsGloballyToggleablePatch(patch);
+        NSInteger state=0;
+        if([enabled containsObject:name]) state=1;
+        else if(toggleable && ![disabled containsObject:name]) state=-1;
+        NSString* description=patch.description.empty() ? @"" :
+            [NSString stringWithUTF8String:patch.description.c_str()];
+        NSString* author=patch.author.empty() ? @"" :
+            [NSString stringWithUTF8String:patch.author.c_str()];
+        [items addObject:@{
+          @"name":name,
+          @"description":description ?: @"",
+          @"author":author ?: @"",
+          @"value":@(state),
+          @"automatic":@(toggleable),
+          @"place":@((int)(patch.place.has_value() ? patch.place.value() : Patch::PPT_END_MARKER)),
+        }];
+      }
+
+      NSString* serialString=[NSString stringWithUTF8String:serial.c_str()] ?: @"";
+      NSDictionary* payload=@{
+        @"available":@YES,
+        @"serial":serialString,
+        @"crc":[NSString stringWithFormat:@"%08X",(unsigned int)crc],
+        @"unlabelled":@(unlabelled),
+        @"items":items,
+      };
+      encoded=[[NSJSONSerialization dataWithJSONObject:payload options:0 error:nil] retain];
+    }
+  },true);
+  if(!encoded) return 0;
+  const BOOL fits=encoded.length+1<=capacity;
+  if(fits) { memcpy(output,encoded.bytes,encoded.length); output[encoded.length]=0; }
+  [encoded release];
+  return fits ? 1 : 0;
+}
+
+int set_patch_state(const char* patch_name,int state,char* error,size_t capacity) {
+  if(!patch_name || !patch_name[0] || (state < -1 || state > 1))
+    return error_out("Unsupported ARMSX2 patch or state.",error,capacity);
+  if(!has_running_game())
+    return error_out("ARMSX2 patches require a running game.",error,capacity);
+
+  const std::string wanted(patch_name);
+  __block BOOL success=NO;
+  __block BOOL unsupportedAutomatic=NO;
+  Host::RunOnCPUThread([&]{
+    @autoreleasepool {
+      const std::string serial=VMManager::GetDiscSerial();
+      const u32 crc=VMManager::GetDiscCRC();
+      if(serial.empty() || crc==0) return;
+
+      u32 ignored=0;
+      const std::vector<Patch::PatchInfo> patches=
+          Patch::GetPatchInfo(serial,crc,false,false,&ignored);
+      const auto found=std::find_if(patches.begin(),patches.end(),
+          [&](const Patch::PatchInfo& patch){return patch.name==wanted;});
+      if(found==patches.end()) return;
+
+      const BOOL toggleable=Patch::IsGloballyToggleablePatch(*found);
+      if(state==-1 && !toggleable) {
+        unsupportedAutomatic=YES;
+        return;
+      }
+
+      NSString* name=[NSString stringWithUTF8String:wanted.c_str()];
+      NSString* section=[NSString stringWithUTF8String:Patch::PATCHES_CONFIG_SECTION];
+      NSString* enableKey=[NSString stringWithUTF8String:Patch::PATCH_ENABLE_CONFIG_KEY];
+      NSString* disableKey=[NSString stringWithUTF8String:Patch::PATCH_DISABLE_CONFIG_KEY];
+      NSMutableArray<NSString*>* enabled=[[
+          ARMSX2Bridge patchEnableListForISO:nil section:section key:enableKey] mutableCopy];
+      NSMutableArray<NSString*>* disabled=[[
+          ARMSX2Bridge patchEnableListForISO:nil section:section key:disableKey] mutableCopy];
+      [enabled removeObject:name];
+      [disabled removeObject:name];
+      if(state==1) [enabled addObject:name];
+      else if(state==0 && toggleable) [disabled addObject:name];
+
+      [ARMSX2Bridge setPatchEnableList:enabled forISO:nil section:section key:enableKey];
+      [ARMSX2Bridge setPatchEnableList:disabled forISO:nil section:section key:disableKey];
+      [enabled release];
+      [disabled release];
+
+      // Reload the current revision through the same upstream subsystem which
+      // supplied the catalogue. There is no web scrape or guessed PNACH.
+      Patch::ReloadPatches(serial,crc,true,true,true,true);
+      Patch::UpdateActivePatches(true,true,true,true);
+      success=YES;
+    }
+  },true);
+  if(unsupportedAutomatic)
+    return error_out("Automatic is only available for globally toggleable ARMSX2 patches.",error,capacity);
+  return success ? 1 :
+      error_out("ARMSX2 could not update this game's patch.",error,capacity);
+}
 int has_save_state(uint32_t slot) {
   if(!has_running_game() || slot<1 || slot>10) return 0;
   for(ARMSX2SaveStateSlotInfo* info in [ARMSX2Bridge saveStateSlots])
@@ -670,7 +791,8 @@ int set_graphics_hack(const char* name,int value,char* error,size_t capacity) {
 const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_SOURCE_REVISION,
   create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks,
   get_upscale_multiplier,get_aspect_ratio,get_cheats_enabled,set_upscale_multiplier,set_aspect_ratio,
-  set_cheats_enabled,reload_cheats,has_save_state,save_state,load_state,
+  set_cheats_enabled,reload_cheats,get_available_patches_json,set_patch_state,
+  has_save_state,save_state,load_state,
   get_retroachievements_state_json,set_retroachievements_option,
   login_retroachievements,logout_retroachievements,
   get_graphics_hacks_json,set_graphics_hack};
