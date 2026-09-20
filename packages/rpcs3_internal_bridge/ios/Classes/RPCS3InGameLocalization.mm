@@ -402,6 +402,172 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Build256Translatio
   });
   return values;
 }
+
+NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Build297Translations() {
+  static NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* values;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    values = @{
+      @"en": @{
+        @"graphicsMenu": @"Graphics", @"systemMenu": @"System / Game",
+        @"controlsMenu": @"Controls", @"resumeGame": @"Resume Game",
+        @"back": @"Back", @"performanceOverlay": @"Performance Overlay",
+        @"touchControls": @"Touch Controls",
+        @"graphicsHelp": @"Per-game display settings. Resolution and screen format restart only the current title.",
+        @"systemHelp": @"System settings are stored for the current Game ID.",
+        @"controlsHelp": @"Touch controls are used only when no physical controller is active.",
+        @"perGameRestart": @"Per-game · restarts the current title",
+        @"quitConfirm": @"Return to NeoStation?",
+        @"settingsFailed": @"RPCS3 could not apply this setting.",
+        @"stateLoaded": @"Save state loaded.",
+      },
+      @"fr": @{
+        @"graphicsMenu": @"Graphismes", @"systemMenu": @"Système / Jeu",
+        @"controlsMenu": @"Commandes", @"resumeGame": @"Reprendre le jeu",
+        @"back": @"Retour", @"performanceOverlay": @"Overlay de performances",
+        @"touchControls": @"Commandes tactiles",
+        @"graphicsHelp": @"Réglages d’affichage par jeu. La résolution et le format d’écran redémarrent uniquement le titre actuel.",
+        @"systemHelp": @"Les réglages système sont enregistrés pour le Game ID actuel.",
+        @"controlsHelp": @"Les commandes tactiles sont utilisées uniquement lorsqu’aucune manette physique n’est active.",
+        @"perGameRestart": @"Par jeu · redémarre le titre actuel",
+        @"quitConfirm": @"Revenir à NeoStation ?",
+        @"settingsFailed": @"RPCS3 n’a pas pu appliquer ce réglage.",
+        @"stateLoaded": @"État de sauvegarde chargé.",
+      },
+      @"de": @{
+        @"graphicsMenu": @"Grafik", @"systemMenu": @"System / Spiel",
+        @"controlsMenu": @"Steuerung", @"resumeGame": @"Spiel fortsetzen",
+        @"back": @"Zurück", @"performanceOverlay": @"Leistungsanzeige",
+        @"touchControls": @"Touch-Steuerung",
+        @"graphicsHelp": @"Anzeigeeinstellungen pro Spiel. Auflösung und Bildformat starten nur den aktuellen Titel neu.",
+        @"systemHelp": @"Systemeinstellungen werden für die aktuelle Game-ID gespeichert.",
+        @"controlsHelp": @"Touch-Steuerung wird nur verwendet, wenn kein physischer Controller aktiv ist.",
+        @"perGameRestart": @"Pro Spiel · startet den aktuellen Titel neu",
+        @"quitConfirm": @"Zu NeoStation zurückkehren?",
+        @"settingsFailed": @"RPCS3 konnte diese Einstellung nicht anwenden.",
+        @"stateLoaded": @"Speicherstand geladen.",
+      },
+      @"es": @{
+        @"graphicsMenu": @"Gráficos", @"systemMenu": @"Sistema / Juego",
+        @"controlsMenu": @"Controles", @"resumeGame": @"Reanudar juego",
+        @"back": @"Atrás", @"performanceOverlay": @"Superposición de rendimiento",
+        @"touchControls": @"Controles táctiles",
+        @"graphicsHelp": @"Ajustes de pantalla por juego. La resolución y el formato reinician solo el título actual.",
+        @"systemHelp": @"Los ajustes del sistema se guardan para el Game ID actual.",
+        @"controlsHelp": @"Los controles táctiles solo se usan cuando no hay un mando físico activo.",
+        @"perGameRestart": @"Por juego · reinicia el título actual",
+        @"quitConfirm": @"¿Volver a NeoStation?",
+        @"settingsFailed": @"RPCS3 no pudo aplicar este ajuste.",
+        @"stateLoaded": @"Estado de guardado cargado.",
+      },
+      @"it": @{
+        @"graphicsMenu": @"Grafica", @"systemMenu": @"Sistema / Gioco",
+        @"controlsMenu": @"Controlli", @"resumeGame": @"Riprendi gioco",
+        @"back": @"Indietro", @"performanceOverlay": @"Overlay prestazioni",
+        @"touchControls": @"Controlli touch",
+        @"graphicsHelp": @"Impostazioni video per gioco. Risoluzione e formato riavviano solo il titolo corrente.",
+        @"systemHelp": @"Le impostazioni di sistema vengono salvate per il Game ID corrente.",
+        @"controlsHelp": @"I controlli touch vengono usati solo quando non è attivo un controller fisico.",
+        @"perGameRestart": @"Per gioco · riavvia il titolo corrente",
+        @"quitConfirm": @"Tornare a NeoStation?",
+        @"settingsFailed": @"RPCS3 non ha potuto applicare questa impostazione.",
+        @"stateLoaded": @"Stato di salvataggio caricato.",
+      },
+      @"pt": @{
+        @"graphicsMenu": @"Gráficos", @"systemMenu": @"Sistema / Jogo",
+        @"controlsMenu": @"Controlos", @"resumeGame": @"Retomar jogo",
+        @"back": @"Voltar", @"performanceOverlay": @"Sobreposição de desempenho",
+        @"touchControls": @"Controlos tácteis",
+        @"graphicsHelp": @"Definições de ecrã por jogo. A resolução e o formato reiniciam apenas o título atual.",
+        @"systemHelp": @"As definições do sistema são guardadas para o Game ID atual.",
+        @"controlsHelp": @"Os controlos tácteis são usados apenas quando não há um comando físico ativo.",
+        @"perGameRestart": @"Por jogo · reinicia o título atual",
+        @"quitConfirm": @"Voltar ao NeoStation?",
+        @"settingsFailed": @"O RPCS3 não conseguiu aplicar esta definição.",
+        @"stateLoaded": @"Estado de gravação carregado.",
+      },
+      @"id": @{
+        @"graphicsMenu": @"Grafis", @"systemMenu": @"Sistem / Game",
+        @"controlsMenu": @"Kontrol", @"resumeGame": @"Lanjutkan game",
+        @"back": @"Kembali", @"performanceOverlay": @"Overlay performa",
+        @"touchControls": @"Kontrol sentuh",
+        @"graphicsHelp": @"Pengaturan tampilan per game. Resolusi dan format layar hanya memulai ulang judul saat ini.",
+        @"systemHelp": @"Pengaturan sistem disimpan untuk Game ID saat ini.",
+        @"controlsHelp": @"Kontrol sentuh hanya digunakan saat tidak ada kontroler fisik aktif.",
+        @"perGameRestart": @"Per game · mulai ulang judul saat ini",
+        @"quitConfirm": @"Kembali ke NeoStation?",
+        @"settingsFailed": @"RPCS3 tidak dapat menerapkan pengaturan ini.",
+        @"stateLoaded": @"Status simpan dimuat.",
+      },
+      @"ru": @{
+        @"graphicsMenu": @"Графика", @"systemMenu": @"Система / Игра",
+        @"controlsMenu": @"Управление", @"resumeGame": @"Продолжить игру",
+        @"back": @"Назад", @"performanceOverlay": @"Панель производительности",
+        @"touchControls": @"Сенсорное управление",
+        @"graphicsHelp": @"Настройки экрана для игры. Разрешение и формат перезапускают только текущую игру.",
+        @"systemHelp": @"Системные настройки сохраняются для текущего Game ID.",
+        @"controlsHelp": @"Сенсорное управление используется только без активного физического контроллера.",
+        @"perGameRestart": @"Для игры · перезапускает текущий титул",
+        @"quitConfirm": @"Вернуться в NeoStation?",
+        @"settingsFailed": @"RPCS3 не удалось применить эту настройку.",
+        @"stateLoaded": @"Сохранение состояния загружено.",
+      },
+      @"ja": @{
+        @"graphicsMenu": @"グラフィック", @"systemMenu": @"システム / ゲーム",
+        @"controlsMenu": @"コントロール", @"resumeGame": @"ゲームを再開",
+        @"back": @"戻る", @"performanceOverlay": @"パフォーマンス表示",
+        @"touchControls": @"タッチ操作",
+        @"graphicsHelp": @"ゲーム別の表示設定です。解像度と画面形式は現在のタイトルだけを再起動します。",
+        @"systemHelp": @"システム設定は現在のゲームIDごとに保存されます。",
+        @"controlsHelp": @"タッチ操作は物理コントローラーが接続されていない場合のみ使用されます。",
+        @"perGameRestart": @"ゲーム別 · 現在のタイトルを再起動",
+        @"quitConfirm": @"NeoStationに戻りますか？",
+        @"settingsFailed": @"RPCS3はこの設定を適用できませんでした。",
+        @"stateLoaded": @"セーブステートを読み込みました。",
+      },
+      @"ko": @{
+        @"graphicsMenu": @"그래픽", @"systemMenu": @"시스템 / 게임",
+        @"controlsMenu": @"컨트롤", @"resumeGame": @"게임 계속",
+        @"back": @"뒤로", @"performanceOverlay": @"성능 오버레이",
+        @"touchControls": @"터치 컨트롤",
+        @"graphicsHelp": @"게임별 화면 설정입니다. 해상도와 화면 형식은 현재 타이틀만 다시 시작합니다.",
+        @"systemHelp": @"시스템 설정은 현재 게임 ID에 저장됩니다.",
+        @"controlsHelp": @"터치 컨트롤은 물리 컨트롤러가 활성화되지 않았을 때만 사용됩니다.",
+        @"perGameRestart": @"게임별 · 현재 타이틀 다시 시작",
+        @"quitConfirm": @"NeoStation으로 돌아갈까요?",
+        @"settingsFailed": @"RPCS3가 이 설정을 적용하지 못했습니다.",
+        @"stateLoaded": @"저장 상태를 불러왔습니다.",
+      },
+      @"zh": @{
+        @"graphicsMenu": @"图形", @"systemMenu": @"系统 / 游戏",
+        @"controlsMenu": @"控制", @"resumeGame": @"继续游戏",
+        @"back": @"返回", @"performanceOverlay": @"性能叠加层",
+        @"touchControls": @"触控操作",
+        @"graphicsHelp": @"按游戏保存的显示设置。分辨率和屏幕格式只会重启当前游戏。",
+        @"systemHelp": @"系统设置会保存到当前游戏 ID。",
+        @"controlsHelp": @"仅在没有物理控制器时使用触控操作。",
+        @"perGameRestart": @"按游戏 · 重启当前游戏",
+        @"quitConfirm": @"返回 NeoStation？",
+        @"settingsFailed": @"RPCS3 无法应用此设置。",
+        @"stateLoaded": @"即时存档已加载。",
+      },
+      @"zh_Hant": @{
+        @"graphicsMenu": @"圖形", @"systemMenu": @"系統 / 遊戲",
+        @"controlsMenu": @"控制", @"resumeGame": @"繼續遊戲",
+        @"back": @"返回", @"performanceOverlay": @"效能疊加層",
+        @"touchControls": @"觸控操作",
+        @"graphicsHelp": @"每遊戲顯示設定。解析度與螢幕格式只會重新啟動目前的遊戲。",
+        @"systemHelp": @"系統設定會儲存到目前的遊戲 ID。",
+        @"controlsHelp": @"只有在沒有實體控制器時才使用觸控操作。",
+        @"perGameRestart": @"每遊戲 · 重新啟動目前遊戲",
+        @"quitConfirm": @"返回 NeoStation？",
+        @"settingsFailed": @"RPCS3 無法套用此設定。",
+        @"stateLoaded": @"即時存檔已載入。",
+      },
+    };
+  });
+  return values;
+}
 }
 
 NSString* RPCS3CanonicalLocale(NSString* identifier) {
@@ -424,6 +590,9 @@ NSString* RPCS3CanonicalLocale(NSString* identifier) {
 NSString* RPCS3LocalizedString(NSString* key, NSString* localeIdentifier) {
   NSDictionary* all = Translations();
   NSDictionary* build256 = Build256Translations();
+  NSDictionary* build297 = Build297Translations();
   NSString* locale = RPCS3CanonicalLocale(localeIdentifier);
-  return build256[locale][key] ?: build256[@"en"][key] ?: all[locale][key] ?: all[@"en"][key] ?: key;
+  return build297[locale][key] ?: build297[@"en"][key] ?:
+      build256[locale][key] ?: build256[@"en"][key] ?:
+      all[locale][key] ?: all[@"en"][key] ?: key;
 }
