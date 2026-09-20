@@ -146,9 +146,12 @@ python3 "$PWD/build-utils/patch_rpcs3_build265_core.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build265_core.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build266_v09_core.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build266_v09_core.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build295_fixed_reservation.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build295_fixed_reservation.py" "$SRC"
+# Validate the immutable Build 266 postimage before the Build 295 reservation
+# intentionally changes Utilities/JITIOS.cpp. Running this hash-locked suite
+# after Build 295 would reject the expected final source as drift.
 python3 "$PWD/test/rpcs3_build266_v09_core_test.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_build295_fixed_reservation.py" "$SRC"
+python3 "$PWD/build-utils/patch_rpcs3_build295_fixed_reservation.py" "$SRC"
 python3 "$PWD/test/rpcs3_build295_fixed_reservation_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build265_core_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
