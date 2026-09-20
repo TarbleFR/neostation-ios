@@ -666,70 +666,87 @@ static UIViewController* ARMSX2RootViewController(void) {
   });
 }
 
-- (void)presentRetroAchievementsForController:(Armsx2GameViewController*)controller {
-  dispatch_async(dispatch_get_main_queue(), ^{
-    if (self.gameController != controller || controller.presentedViewController) return;
-    Armsx2RetroAchievementsMenu* menu = [Armsx2RetroAchievementsMenu new];
-    __weak Armsx2InternalBridgePlugin* weakSelf = self;
-    __weak Armsx2GameViewController* weakController = controller;
-    menu.readState = ^(void (^completion)(NSDictionary<NSString*, id>* state)) {
-      Armsx2InternalBridgePlugin* strongSelf = weakSelf;
-      Armsx2GameViewController* strongController = weakController;
-      if (!strongSelf || !strongController) { if (completion) completion(nil); return; }
-      [strongSelf readRetroAchievementsForController:strongController completion:completion];
-    };
-    menu.performCommand = ^(NSString* command, id value,
-                            void (^completion)(BOOL success, NSString* message)) {
-      Armsx2InternalBridgePlugin* strongSelf = weakSelf;
-      Armsx2GameViewController* strongController = weakController;
-      if (!strongSelf || !strongController) {
-        if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+- (void)readSessionSnapshotForController:(Armsx2GameViewController*)controller
+                                   completion:(void (^)(NSDictionary<NSString*, id>* snapshot))completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (!self.api || self.gameController != controller || self.stopInProgress) {
+      dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(nil); });
+      return;
+    }
+    const float upscale = self.api->get_upscale_multiplier();
+    const uint32_t aspect = self.api->get_aspect_ratio();
+    const BOOL cheats = self.api->get_cheats_enabled() != 0;
+    uint32_t mask = 0;
+    for (uint32_t slot = 1; slot <= 5; slot++)
+      if (self.api->has_save_state(slot)) mask |= (1u << (slot - 1));
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (self.gameController != controller || self.stopInProgress) {
+        if (completion) completion(nil);
         return;
       }
-      [strongSelf performRetroAchievementsCommand:command value:value
-                                       controller:strongController completion:completion];
-    };
-    UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:menu];
-    navigation.modalPresentationStyle = UIModalPresentationFullScreen;
-    [controller presentViewController:navigation animated:YES completion:nil];
+      if (completion) completion(@{
+        @"upscale": @(upscale),
+        @"aspect": @(aspect),
+        @"cheats": @(cheats),
+        @"saveStateMask": @(mask),
+        @"touch": @(controller.touchControlsVisible),
+      });
+    });
   });
 }
 
 - (void)performGameCommand:(NSString*)command
-                     value:(NSNumber*)value
-                controller:(Armsx2GameViewController*)controller {
-  if ([command isEqualToString:@"retroAchievements"]) {
-    [self presentRetroAchievementsForController:controller];
+                     value:(id)value
+                controller:(Armsx2GameViewController*)controller
+                completion:(void (^)(BOOL success, NSString* message))completion {
+  if ([command isEqualToString:@"touch"]) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (self.gameController != controller || self.stopInProgress) {
+        if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+        return;
+      }
+      controller.touchControlsVisible = [value boolValue];
+      if (!controller.touchControlsVisible) [controller resetInput];
+      controller.controlsView.hidden = !controller.touchControlsVisible;
+      if (completion) completion(YES,
+          [controller en:@"Touch controls updated." fr:@"Commandes tactiles mises à jour."]);
+    });
     return;
   }
+
   dispatch_async(_runtimeQueue, ^{
-    if (!self.api || self.gameController != controller) return;
+    if (!self.api || self.gameController != controller || self.stopInProgress) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+      });
+      return;
+    }
     char error[1024] = {};
     BOOL ok = NO;
     NSString* success = @"";
 
     if ([command isEqualToString:@"upscale"]) {
-      ok = self.api->set_upscale_multiplier(value.floatValue, error, sizeof(error)) != 0;
-      success = [controller en:[NSString stringWithFormat:@"Internal resolution: %.0f×", value.floatValue]
-                            fr:[NSString stringWithFormat:@"Résolution interne : %.0f×", value.floatValue]];
+      ok = self.api->set_upscale_multiplier([value floatValue], error, sizeof(error)) != 0;
+      success = [controller en:[NSString stringWithFormat:@"Internal resolution: %.0f×", [value floatValue]]
+                            fr:[NSString stringWithFormat:@"Résolution interne : %.0f×", [value floatValue]]];
     } else if ([command isEqualToString:@"aspect"]) {
-      ok = self.api->set_aspect_ratio(value.unsignedIntValue, error, sizeof(error)) != 0;
+      ok = self.api->set_aspect_ratio([value unsignedIntValue], error, sizeof(error)) != 0;
       success = [controller en:@"Screen format updated." fr:@"Format d’écran mis à jour."];
     } else if ([command isEqualToString:@"cheats"]) {
-      ok = self.api->set_cheats_enabled(value.boolValue ? 1 : 0, error, sizeof(error)) != 0;
-      success = value.boolValue
+      ok = self.api->set_cheats_enabled([value boolValue] ? 1 : 0, error, sizeof(error)) != 0;
+      success = [value boolValue]
           ? [controller en:@"Cheats enabled." fr:@"Cheats activés."]
           : [controller en:@"Cheats disabled." fr:@"Cheats désactivés."];
     } else if ([command isEqualToString:@"reloadCheats"]) {
       ok = self.api->reload_cheats(error, sizeof(error)) != 0;
       success = [controller en:@"Cheats and patches reloaded." fr:@"Cheats et patches rechargés."];
     } else if ([command isEqualToString:@"saveState"]) {
-      const uint32_t slot = value.unsignedIntValue;
+      const uint32_t slot = [value unsignedIntValue];
       ok = self.api->save_state(slot, 60000, error, sizeof(error)) != 0;
       success = [controller en:[NSString stringWithFormat:@"State saved in slot %u.", slot]
                             fr:[NSString stringWithFormat:@"État sauvegardé dans le slot %u.", slot]];
     } else if ([command isEqualToString:@"loadState"]) {
-      const uint32_t slot = value.unsignedIntValue;
+      const uint32_t slot = [value unsignedIntValue];
       ok = self.api->load_state(slot, 60000, error, sizeof(error)) != 0;
       success = [controller en:[NSString stringWithFormat:@"State loaded from slot %u.", slot]
                             fr:[NSString stringWithFormat:@"État chargé depuis le slot %u.", slot]];
@@ -738,7 +755,112 @@ static UIViewController* ARMSX2RootViewController(void) {
     NSString* message = ok ? success :
         (error[0] ? [NSString stringWithUTF8String:error] : @"ARMSX2 command failed.");
     [self publishMenuStateForController:controller message:message ?: @""];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (completion) completion(ok, message ?: @"");
+    });
   });
+}
+
+- (void)presentSessionMenuForController:(Armsx2GameViewController*)controller {
+  if (!controller || self.gameController != controller || self.stopInProgress ||
+      self.menuOpening || self.sessionMenu) return;
+  self.menuOpening = YES;
+  [controller resetInput];
+  controller.controlsView.userInteractionEnabled = NO;
+
+  dispatch_async(_runtimeQueue, ^{
+    if (self.api && self.gameController == controller && !self.stopInProgress)
+      self.api->set_paused(1);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (self.gameController != controller || self.stopInProgress) {
+        self.menuOpening = NO;
+        controller.controlsView.userInteractionEnabled = YES;
+        return;
+      }
+
+      Armsx2SessionMenu* menu = [Armsx2SessionMenu new];
+      menu.gameTitle = controller.title.length ? controller.title : @"ARMSX2";
+      __weak Armsx2InternalBridgePlugin* weakSelf = self;
+      __weak Armsx2GameViewController* weakController = controller;
+
+      menu.readSnapshot = ^(void (^completion)(NSDictionary<NSString*, id>* snapshot)) {
+        Armsx2InternalBridgePlugin* bridge = weakSelf;
+        Armsx2GameViewController* owner = weakController;
+        if (!bridge || !owner) { if (completion) completion(nil); return; }
+        [bridge readSessionSnapshotForController:owner completion:completion];
+      };
+      menu.performCommand = ^(NSString* command, id value,
+                              void (^completion)(BOOL success, NSString* message)) {
+        Armsx2InternalBridgePlugin* bridge = weakSelf;
+        Armsx2GameViewController* owner = weakController;
+        if (!bridge || !owner) {
+          if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+          return;
+        }
+        [bridge performGameCommand:command value:value controller:owner completion:completion];
+      };
+      menu.readRetroAchievements = ^(void (^completion)(NSDictionary<NSString*, id>* state)) {
+        Armsx2InternalBridgePlugin* bridge = weakSelf;
+        Armsx2GameViewController* owner = weakController;
+        if (!bridge || !owner) { if (completion) completion(nil); return; }
+        [bridge readRetroAchievementsForController:owner completion:completion];
+      };
+      menu.performRetroAchievementsCommand = ^(NSString* command, id value,
+                                                void (^completion)(BOOL success, NSString* message)) {
+        Armsx2InternalBridgePlugin* bridge = weakSelf;
+        Armsx2GameViewController* owner = weakController;
+        if (!bridge || !owner) {
+          if (completion) completion(NO, @"ARMSX2 session is no longer active.");
+          return;
+        }
+        [bridge performRetroAchievementsCommand:command value:value controller:owner completion:completion];
+      };
+      menu.resumeGame = ^{
+        Armsx2InternalBridgePlugin* bridge = weakSelf;
+        Armsx2GameViewController* owner = weakController;
+        if (!bridge || !owner || bridge.stopInProgress || bridge.menuOpening || !bridge.sessionMenu) return;
+        bridge.menuOpening = YES;
+        UINavigationController* navigation = bridge.sessionMenu;
+        [navigation dismissViewControllerAnimated:YES completion:^{
+          bridge.sessionMenu = nil;
+          bridge.menuOpening = NO;
+          if (bridge.gameController != owner || bridge.stopInProgress) return;
+          owner.controlsView.userInteractionEnabled = YES;
+          dispatch_async(bridge->_runtimeQueue, ^{
+            if (bridge.api && bridge.gameController == owner && !bridge.stopInProgress)
+              bridge.api->set_paused(0);
+          });
+        }];
+      };
+      menu.quitGame = ^{
+        Armsx2InternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.stopInProgress) return;
+        bridge.menuOpening = YES;
+        bridge.sessionMenu.view.userInteractionEnabled = NO;
+        [bridge stopActiveSessionWithCompletion:^(BOOL success, NSString* message) {
+          if (!success) {
+            bridge.menuOpening = NO;
+            bridge.sessionMenu.view.userInteractionEnabled = YES;
+          }
+        }];
+      };
+
+      UINavigationController* navigation = [[UINavigationController alloc] initWithRootViewController:menu];
+      navigation.modalPresentationStyle = UIModalPresentationOverFullScreen;
+      navigation.modalInPresentation = YES;
+      self.sessionMenu = navigation;
+      controller.title = controller.title.length ? controller.title : @"ARMSX2";
+      [controller presentViewController:navigation animated:YES completion:^{
+        self.menuOpening = NO;
+      }];
+    });
+  });
+}
+
+- (void)performGameCommand:(NSString*)command
+                     value:(NSNumber*)value
+                controller:(Armsx2GameViewController*)controller {
+  [self performGameCommand:command value:value controller:controller completion:nil];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
