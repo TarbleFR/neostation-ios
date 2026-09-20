@@ -87,7 +87,7 @@ void main() {
     final launch = File('lib/services/stikjit_armsx2_service.dart').readAsStringSync();
     expect(launch, contains('biosFilename: biosFilename'));
     expect(launch.indexOf('biosStore.resolve()'), lessThan(launch.indexOf('prepareJit(')));
-    expect(launch, contains('_launchTransaction(gamePath: gamePath, bootBios: false)'));
-    expect(launch, contains("_launchTransaction(gamePath: '', bootBios: true)"));
+    expect(launch, contains('_launchTransaction(gamePath: gamePath, bootBios: false, uiLocale: uiLocale)'));
+    expect(launch, contains("_launchTransaction(gamePath: '', bootBios: true, uiLocale: uiLocale)"));
   });
 }
