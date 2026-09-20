@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
 import 'package:flutter/widgets.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'game_service.dart';
@@ -50,6 +51,11 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   /// Periodic timer for monitoring the emulator process on desktop platforms.
   Timer? _monitoringTimer;
 
+  /// Embedded iOS runtimes live inside NeoStation's process. They must report
+  /// their own teardown rather than being mistaken for a missing external
+  /// executable by the desktop process poller.
+  StreamSubscription<Map<String, dynamic>>? _embeddedSessionSubscription;
+
   /// Flag for Android to detect if the app was resumed before monitoring started
   /// (indicating an immediate emulator failure).
   bool _resumedBeforeMonitoring = false;
@@ -71,6 +77,8 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     _phase = GameLaunchPhase.launching;
     _canDismiss = false;
     _isClosing = false;
+    unawaited(_embeddedSessionSubscription?.cancel());
+    _embeddedSessionSubscription = null;
     WidgetsBinding.instance.addObserver(this);
     _sfxWasEnabled = SfxService().isEnabled;
     SfxService().setEnabled(false);
@@ -144,6 +152,8 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     if (!isActive) return;
     _monitoringTimer?.cancel();
     _monitoringTimer = null;
+    unawaited(_embeddedSessionSubscription?.cancel());
+    _embeddedSessionSubscription = null;
     GameService.clearOnGameReturnedCallback();
     GameService.clearOnProcessExitCallback();
     WidgetsBinding.instance.removeObserver(this);
@@ -189,10 +199,29 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   void _startPlatformMonitoring(String? emulatorExe) {
     if (Platform.isAndroid) {
       GameService.setOnGameReturnedCallback((_) => _triggerClose());
-    } else {
-      GameService.setOnProcessExitCallback(_triggerClose);
-      _startDesktopPolling(emulatorExe);
+      return;
     }
+
+    if (Platform.isIOS && emulatorExe == 'ios_armsx2_internal') {
+      _embeddedSessionSubscription = Armsx2InternalBridge.sessionEvents.listen((
+        event,
+      ) {
+        if (_phase == GameLaunchPhase.playing && !_isClosing) {
+          _log.i(
+            '[GameLaunchManager] ARMSX2 native session ended: '
+            '${event['reason'] ?? 'unknown'}',
+          );
+          _triggerClose();
+        }
+      });
+      _log.i(
+        '[GameLaunchManager] ARMSX2 uses native session-end monitoring.',
+      );
+      return;
+    }
+
+    GameService.setOnProcessExitCallback(_triggerClose);
+    _startDesktopPolling(emulatorExe);
   }
 
   /// Periodically polls the OS process list on desktop platforms to detect emulator exit.
