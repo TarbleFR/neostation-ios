@@ -277,6 +277,7 @@ class GameLaunchService {
           try {
             final launched = await Armsx2LibraryService.launchGameByRomPath(
               game.romPath!,
+              uiLocale: Localizations.localeOf(context).toLanguageTag(),
             );
             if (launched) {
               // Override the generic iOS handoff identity before
