@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)start;
 - (void)stop;
+@property(nonatomic, assign, getter=isTouchControlsEnabled) BOOL touchControlsEnabled;
 - (void)layoutControlsInBounds:(CGRect)bounds safeAreaInsets:(UIEdgeInsets)insets;
 
 @end
