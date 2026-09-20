@@ -43,4 +43,50 @@ for (const options of [{pid: 999}, {attach: 'E01'}, {nonce: 41}, {pcReply: 'E02'
   assert.equal(failed.resumed, false, JSON.stringify(options));
 }
 assert.equal(run({pid: 999}).log.some(v => v.startsWith('NEOSTATION_DEBUGGER_ATTACHED')), false);
+
+// Regression for the intermittent Build 293 device crash. GDB remote resume
+// commands synchronously return the next stop. A foreign stop after the nonce
+// probe must be consumed exactly once; discarding vCont's return and issuing a
+// second resume loses the stop and can terminate the target during dlopen.
+function runForeignStop() {
+  const commands = [], log = [];
+  let cCount = 0;
+  const stop = (signal, pc, command) =>
+    `T${signal}thread:1;20:${hex(pc)};10:${hex(command)};00:${hex(42)};01:${hex(0)};`;
+  const sandbox = {
+    neostationProbeNonce: 42,
+    get_pid: () => 123,
+    log: value => log.push(value),
+    prepare_memory_region: () => 'OK',
+    send_command: command => {
+      commands.push(command);
+      if (command.startsWith('vAttach;')) return 'T11thread:1;';
+      if (command === 'qProcessInfo') return 'pid:7b;parent-pid:1;';
+      if (command === 'c') {
+        cCount++;
+        if (cCount === 1) return stop('05', 0x1000, 3); // nonce probe
+        if (cCount === 2) return stop('0b', 0x2000, 0); // non-JIT stop
+        if (cCount === 3) return stop('05', 0x1000, 0); // detach
+        throw Error('RPCS3 was resumed more than once from the same stop');
+      }
+      if (command === 'vCont;C0b:1;c') return stop('05', 0x1000, 1);
+      if (command === 'm1000,4') return 'a0013ed4';
+      if (command === 'm2000,4') return '1f2003d5'; // AArch64 NOP
+      if (command.startsWith('P20=')) return 'OK';
+      if (command.startsWith('P0=')) return 'OK';
+      if (command === 'D') return 'OK';
+      throw Error(`Unexpected command ${command}`);
+    },
+  };
+  let error;
+  try { vm.runInNewContext(script, sandbox, {timeout: 500}); } catch (e) { error = e; }
+  return {error, commands, log, cCount};
+}
+const foreign = runForeignStop();
+assert.equal(foreign.error, undefined);
+assert.ok(foreign.commands.includes('vCont;C0b:1;c'));
+assert.equal(foreign.commands.some(value => value.startsWith('vCont;S')), false);
+assert.equal(foreign.cCount, 3);
+assert.ok(foreign.log.some(value => value.includes('RPCS3_RSP_STOP')));
+console.log('PASS: RPCS3 consumes each debugger stop exactly once without single-step reinjection');
 console.log('PASS: real script attach/PID/nonce/PC/register acknowledgement/resume and five rejection paths');
