@@ -75,6 +75,9 @@ void main() {
     final core = File(
       'packages/armsx2_internal_bridge/core/ARMSX2Core.mm',
     ).readAsStringSync();
+    final sessionMenu = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
+    ).readAsStringSync();
 
     expect(abi, contains('NEO_ARMSX2_ABI_VERSION 3u'));
     expect(abi, contains('set_upscale_multiplier'));
@@ -89,12 +92,17 @@ void main() {
 
     expect(plugin, contains('armsx2-touch-controls'));
     expect(plugin, contains('armsx2-game-menu'));
-    expect(plugin, contains('Commandes tactiles'));
-    expect(plugin, contains('Résolution interne'));
-    expect(plugin, contains('Format d’écran'));
-    expect(plugin, contains('Recharger cheats / patches'));
-    expect(plugin, contains('Sauvegarder l’état'));
-    expect(plugin, contains('Charger l’état'));
+    expect(plugin, contains('presentSessionMenuForController'));
+    expect(plugin, contains('UIModalPresentationOverFullScreen'));
+    expect(sessionMenu, contains('UITableViewStyleInsetGrouped'));
+    expect(sessionMenu, contains('Commandes tactiles'));
+    expect(sessionMenu, contains('Résolution interne'));
+    expect(sessionMenu, contains('Format d’écran'));
+    expect(sessionMenu, contains('Recharger cheats / patches'));
+    expect(sessionMenu, contains('Sauvegarder un état'));
+    expect(sessionMenu, contains('Charger un état'));
+    expect(sessionMenu, contains('Reprendre le jeu'));
+    expect(sessionMenu, contains('Quitter le jeu'));
 
     expect(core, contains('setPerGameINIFloat:@"EmuCore/GS"'));
     expect(core, contains('setPerGameINIString:@"EmuCore/GS"'));
@@ -127,7 +135,9 @@ void main() {
     expect(plugin, contains('dismissGameControllerWithCompletion'));
     expect(plugin, contains('dismissViewControllerAnimated:NO completion:releaseView'));
     expect(plugin, contains('RetroAchievements'));
-    expect(plugin, contains('presentRetroAchievementsForController'));
+    expect(plugin, contains('presentSessionMenuForController'));
+    expect(plugin, contains('invokeMethod:@"sessionEnded"'));
+    expect(plugin, isNot(contains('showsMenuAsPrimaryAction = YES')));
 
     expect(raMenu, contains('UITableViewStyleInsetGrouped'));
     expect(raMenu, contains('UITableViewCellAccessoryCheckmark'));
@@ -135,6 +145,33 @@ void main() {
     expect(raMenu, contains('leaderboards'));
     expect(raMenu, contains('overlays'));
     expect(raMenu, contains('passwordField.text = @""'));
+  });
+
+  test('ARMSX2 launch teardown blocks duplicate play and AVPlayer audio leaks', () {
+    final launchFlow = File(
+      'lib/screens/game_screen/my_games_list/launch_flow.dart',
+    ).readAsStringSync();
+    final media = File(
+      'lib/screens/game_screen/my_games_list/secondary_display.dart',
+    ).readAsStringSync();
+    final manager = File(
+      'lib/services/game_launch_manager.dart',
+    ).readAsStringSync();
+    final launchService = File(
+      'lib/services/game/game_launch_service.dart',
+    ).readAsStringSync();
+    final dartBridge = File(
+      'packages/armsx2_internal_bridge/lib/armsx2_internal_bridge.dart',
+    ).readAsStringSync();
+
+    expect(launchFlow, contains('if (_isGameLaunching) return;'));
+    expect(launchFlow, contains('await _stopVideoAndCleanup();'));
+    expect(media, contains('Future<void> _stopVideoAndCleanup() async'));
+    expect(media, contains('await _videoTransition'));
+    expect(manager, contains("emulatorExe == 'ios_armsx2_internal'"));
+    expect(manager, contains('Armsx2InternalBridge.sessionEvents.listen'));
+    expect(launchService, contains("'ios_armsx2_internal'"));
+    expect(dartBridge, contains("call.method != 'sessionEnded'"));
   });
 
   test('ARMSX2 import menu exposes BIOS and games', () {
