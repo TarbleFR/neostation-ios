@@ -177,6 +177,52 @@ void main() {
     expect(dartBridge, contains("call.method != 'sessionEnded'"));
   });
 
+  test('ARMSX2 process-lifetime Core performs a fresh JIT handshake on relaunch', () {
+    final plugin = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+    ).readAsStringSync();
+    final jitBridge = File(
+      'packages/armsx2_internal_bridge/ios/Classes/Armsx2JitBridgePlugin.mm',
+    ).readAsStringSync();
+    final launchService = File(
+      'lib/services/game/game_launch_service.dart',
+    ).readAsStringSync();
+
+    final loadCore = plugin.indexOf('- (BOOL)loadCore:');
+    final freshProof = plugin.indexOf(
+      'ARMSX2JitConfirmCoreLoadHandoff()',
+      loadCore,
+    );
+    final reuseReturn = plugin.indexOf(
+      'if (coreAlreadyLoaded)',
+      loadCore,
+    );
+
+    expect(loadCore, greaterThanOrEqualTo(0));
+    expect(freshProof, greaterThan(loadCore));
+    expect(reuseReturn, greaterThan(freshProof));
+    expect(
+      plugin,
+      contains('Reusing process-lifetime Core after fresh JIT nonce proof.'),
+    );
+    expect(
+      jitBridge,
+      contains(
+        'proofReady = !session.requiresCoreHandshake || session.coreLoadReady',
+      ),
+    );
+    expect(
+      jitBridge,
+      contains(
+        'ARMSX2 Core nonce handshake was not completed for this JIT transaction.',
+      ),
+    );
+    expect(
+      launchService,
+      contains('Armsx2LibraryService.lastLaunchError?.trim()'),
+    );
+  });
+
   test('ARMSX2 import menu exposes BIOS and games', () {
     final widget = File(
       'lib/widgets/armsx2_internal_playlist_actions.dart',
