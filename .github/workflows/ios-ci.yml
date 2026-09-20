@@ -19,8 +19,9 @@ concurrency:
 
 jobs:
   build:
-    # Core-only development commits validate ARMSX2 separately, not a mislabeled IPA.
-    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') }}
+    # Core-only development commits validate their native engine separately,
+    # not a mislabeled full NeoStation IPA.
+    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
     name: Build 297 Embedded ARMSX2 IPA
     runs-on: macos-15
     timeout-minutes: 90
