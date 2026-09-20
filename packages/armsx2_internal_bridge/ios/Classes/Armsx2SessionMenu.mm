@@ -1,5 +1,6 @@
 #import "Armsx2SessionMenu.h"
 #import "Armsx2RetroAchievementsMenu.h"
+#import "ARMSX2InGameLocalization.h"
 #include <cmath>
 
 typedef NS_ENUM(NSInteger, ARMSX2MenuPage) {
@@ -12,14 +13,8 @@ typedef NS_ENUM(NSInteger, ARMSX2MenuPage) {
   ARMSX2MenuLoadStates,
 };
 
-static BOOL ARMSX2MenuFrench(void) {
-  NSString* language = NSLocale.preferredLanguages.firstObject.lowercaseString ?: @"";
-  return [language hasPrefix:@"fr"];
-}
-
-static NSString* ARMSX2MenuText(NSString* english, NSString* french) {
-  return ARMSX2MenuFrench() ? french : english;
-}
+#define ARMSX2MenuText(english, french) \
+  ARMSX2LocalizedText((english), (french), self.localeIdentifier)
 
 static void ARMSX2MenuOnMain(dispatch_block_t block) {
   if (NSThread.isMainThread) block();
@@ -44,6 +39,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 @property(nonatomic, copy) NSString* command;
 @property(nonatomic, copy) NSArray<NSDictionary*>* choices;
 @property(nonatomic, copy) Armsx2SessionCommand performCommand;
+@property(nonatomic, copy) NSString* localeIdentifier;
 @property(nonatomic, weak) Armsx2SessionMenu* owner;
 @property(nonatomic, assign) BOOL applying;
 @end
@@ -209,6 +205,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   child.page = page;
   child.title = title;
   child.gameTitle = self.gameTitle;
+  child.localeIdentifier = self.localeIdentifier;
   child.snapshot = self.snapshot;
   child.readSnapshot = self.readSnapshot;
   child.performCommand = self.performCommand;
@@ -318,7 +315,9 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     NSArray* items = [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class] ? self.graphicsHacks[@"items"] : @[];
     if (row < (NSInteger)items.count) {
       NSDictionary* item = items[row];
-      cell.textLabel.text = ARMSX2MenuFrench() ? item[@"french"] : item[@"english"];
+      NSString* english = [item[@"english"] isKindOfClass:NSString.class] ? item[@"english"] : @"";
+      NSString* french = [item[@"french"] isKindOfClass:NSString.class] ? item[@"french"] : english;
+      cell.textLabel.text = ARMSX2LocalizedText(english, french, self.localeIdentifier);
       const NSInteger value = [item[@"value"] integerValue];
       cell.detailTextLabel.text = value < 0
           ? ARMSX2MenuText(@"Automatic (ARMSX2/GameDB)", @"Automatique (ARMSX2/GameDB)")
@@ -370,6 +369,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   child.title = title;
   child.command = command;
   child.performCommand = self.performCommand;
+  child.localeIdentifier = self.localeIdentifier;
   child.owner = self;
   NSMutableArray* choices = [NSMutableArray arrayWithCapacity:values.count];
   for (NSUInteger i = 0; i < values.count; i++) {
@@ -437,6 +437,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       Armsx2RetroAchievementsMenu* ra = [Armsx2RetroAchievementsMenu new];
       ra.readState = self.readRetroAchievements;
       ra.performCommand = self.performRetroAchievementsCommand;
+      ra.localeIdentifier = self.localeIdentifier;
       [self.navigationController pushViewController:ra animated:YES];
     } else if ([key isEqual:@"save"]) {
       [self.navigationController pushViewController:[self child:ARMSX2MenuSaveStates
@@ -482,8 +483,10 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     NSDictionary* item=items[row];
     NSString* key=[item[@"key"] isKindOfClass:NSString.class] ? item[@"key"] : @"";
     if (!key.length) return;
+    NSString* english=[item[@"english"] isKindOfClass:NSString.class] ? item[@"english"] : @"";
+    NSString* french=[item[@"french"] isKindOfClass:NSString.class] ? item[@"french"] : english;
     UIAlertController* sheet=[UIAlertController alertControllerWithTitle:
-        (ARMSX2MenuFrench() ? item[@"french"] : item[@"english"])
+        ARMSX2LocalizedText(english, french, self.localeIdentifier)
         message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     __weak Armsx2SessionMenu* weakSelf=self;
     void (^apply)(NSInteger)=^(NSInteger value) {
