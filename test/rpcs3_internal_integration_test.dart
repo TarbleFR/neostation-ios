@@ -63,7 +63,7 @@ void main() {
         'packages/rpcs3_jit_helper/ios/Resources/rpcs3-universal.js',
       ).readAsStringSync();
 
-      expect(early, contains('NEOSTATION_EARLY_LOADER_294'));
+      expect(early, contains('NEOSTATION_EARLY_LOADER_295'));
       expect(
         early,
         contains('next expected event is Core JIT region preparation or dlopen return'),
