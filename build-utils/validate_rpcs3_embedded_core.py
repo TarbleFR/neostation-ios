@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reject stale embedded cores before packaging and inside the final IPA."""
 from pathlib import Path
+import hashlib
 import struct
 import sys
 
@@ -12,6 +13,14 @@ from patch_rpcs3_build266_v09_core import (
 )
 
 MINIMUM_CORE_SIZE = 60_000_000
+# Exact upstream Core extracted from XITRIX RPCS3 iOS v0.9 (release IPA
+# sha256 4cc11c8a...). Build 294 deliberately uses this binary because the
+# device failure occurs during the first JIT allocation inside dlopen and v0.9
+# explicitly fixes JIT-allocation crashes. Exact-hash identity replaces the
+# NeoStation backport markers; architecture/import/API checks remain mandatory.
+PINNED_UPSTREAM_V09_CORE_SHA256 = (
+    'd61621cc29705d87c1e3d96c1c4f99c474283af8a80464b414ae80206c00f15b'
+)
 REQUIRED_MARKERS = (
     ('Build 266 JIT', JIT_MARKER.encode('ascii')),
     ('Build 264 ARM64/ThinLTO', b'NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1'),
@@ -83,9 +92,16 @@ def validate_core(data: bytes) -> None:
         raise ValueError('Embedded RPCS3 Core must be a native arm64 Mach-O')
     if struct.unpack_from('<I', data, 12)[0] != 6:
         raise ValueError('Embedded RPCS3 Core must be a dynamic library')
-    for label, marker in REQUIRED_MARKERS:
-        if marker not in data:
-            raise ValueError(f'Embedded RPCS3 Core is missing {label} marker {marker!r}')
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != PINNED_UPSTREAM_V09_CORE_SHA256:
+        # Legacy locally patched cores are still accepted only when every
+        # backport identity marker is present. Never accept an unknown Core.
+        for label, marker in REQUIRED_MARKERS:
+            if marker not in data:
+                raise ValueError(
+                    f'Embedded RPCS3 Core is neither pinned upstream v0.9 '
+                    f'nor a validated legacy Core; missing {label} marker {marker!r}'
+                )
     forbidden = sorted(set(FORBIDDEN_UNDEFINED_SYMBOLS) & undefined_symbols(data))
     if forbidden:
         raise ValueError(
@@ -97,8 +113,16 @@ if __name__ == '__main__':
     if len(sys.argv) != 2:
         raise SystemExit('usage: validate_rpcs3_embedded_core.py <libRPCS3Core.dylib>')
     validate_core(Path(sys.argv[1]).read_bytes())
-    print(
-        f'Validated embedded RPCS3: {JIT_MARKER}, Build 264 ARM64/ThinLTO, '
-        f'{BUILD_MARKER}, {SHADER_CHECKPOINT_MARKER}, v0.9 revision {REVISION}, '
-        'SPU on-demand policy, LLVM self-test and guarded load-time imports'
-    )
+    data = Path(sys.argv[1]).read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    if digest == PINNED_UPSTREAM_V09_CORE_SHA256:
+        print(
+            'Validated embedded RPCS3: exact pinned upstream v0.9 Core, '
+            'arm64 dylib and guarded load-time imports'
+        )
+    else:
+        print(
+            f'Validated embedded RPCS3: {JIT_MARKER}, Build 264 ARM64/ThinLTO, '
+            f'{BUILD_MARKER}, {SHADER_CHECKPOINT_MARKER}, v0.9 revision {REVISION}, '
+            'SPU on-demand policy, LLVM self-test and guarded load-time imports'
+        )
