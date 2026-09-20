@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../services/armsx2_internal_service.dart';
+import '../services/stikjit_armsx2_service.dart';
 
 class Armsx2InternalPlaylistActions extends StatefulWidget {
   const Armsx2InternalPlaylistActions({
@@ -55,6 +56,14 @@ class _Armsx2InternalPlaylistActionsState
             result.errors.isNotEmpty
                 ? result.errors.first
                 : (_fr ? 'Certains jeux ont été rejetés.' : 'Some games were rejected.'),
+          );
+        }
+      } else if (action == 'boot_bios') {
+        final launched = await StikJitArmsx2Service.launchBios();
+        if (!launched) {
+          _notice(
+            StikJitArmsx2Service.lastError ??
+                (_fr ? 'Impossible de démarrer le BIOS PS2.' : 'Could not boot the PS2 BIOS.'),
           );
         }
       } else if (action == 'bios') {
@@ -113,6 +122,12 @@ class _Armsx2InternalPlaylistActionsState
           PopupMenuItem(
             value: 'bios',
             child: Text(_fr ? 'Importer le BIOS' : 'Import BIOS'),
+          ),
+          PopupMenuItem(
+            value: 'boot_bios',
+            child: Text(
+              _fr ? 'Démarrer le BIOS PS2' : 'Boot PS2 BIOS',
+            ),
           ),
         ],
       ),
