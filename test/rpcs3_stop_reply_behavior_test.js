@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const source = fs.readFileSync(process.argv[2] || 'packages/rpcs3_jit_helper/ios/Resources/rpcs3-universal.js', 'utf8');
 const hex = n => { const b = Buffer.alloc(8); b.writeBigUInt64LE(BigInt(n)); return b.toString('hex'); };
 function run({reordered=false, sparse=false, signal=false, terminal=false, ack='OK'}={}) {
-  let stage='probe', advanced=false, prepared=0, unhandledResumes=0, forwarded=0, suppressed=0;
+  let stage='probe', advanced=false, prepared=0, unhandledResumes=0, forwarded=0;
   const commands=[], logs=[];
   const pc=()=>stage==='signal'?0x3000:0x1000;
   const reg=k=>({20:hex(pc()), 10:hex(stage==='probe'?3:stage==='jit'?1:0),
@@ -33,16 +33,16 @@ function run({reordered=false, sparse=false, signal=false, terminal=false, ack='
           advanced=false;
           stage=stage==='probe'?(signal?'signal':terminal?'exit':'jit'):'detach';
         } else if(stage==='signal') {
-          // Device Build 294 failure: T06 must be consumed without re-delivery.
-          suppressed++;
-          stage='jit';
+          throw Error('SIGABRT must be forwarded with vCont, not plain-continued');
         } else {
           unhandledResumes++;
         }
         return stage==='exit'?'W09':stop();
       }
       if(command.startsWith('vCont;')) {
-        forwarded++; stage='jit'; advanced=false; return stop();
+        forwarded++;
+        if(stage==='signal') { stage='exit'; return 'X06'; }
+        stage='jit'; advanced=false; return stop();
       }
       if(command.startsWith('m')) return stage==='signal'?'1f2003d5':'a0013ed4';
       if(command.startsWith('P20=')){advanced=true;return 'OK';}
@@ -52,24 +52,28 @@ function run({reordered=false, sparse=false, signal=false, terminal=false, ack='
     }};
   let error;
   try{vm.runInNewContext(source,sandbox,{timeout:1000});}catch(e){error=e;}
-  return {error,prepared,unhandledResumes,forwarded,suppressed,commands,logs};
+  return {error,prepared,unhandledResumes,forwarded,commands,logs};
 }
 const failures=[];
-for(const [name,options] of Object.entries({normal:{},reordered:{reordered:true},sparse:{sparse:true},signal:{signal:true}})) {
+for(const [name,options] of Object.entries({normal:{},reordered:{reordered:true},sparse:{sparse:true}})) {
   const result=run(options);
   try {
     assert.equal(result.error,undefined); assert.equal(result.prepared,1);
     assert.equal(result.unhandledResumes,0,'a stop reply must be consumed before resuming');
-    if(options.signal) {
-      assert.equal(result.suppressed,1,'T06 must be suppressed exactly once');
-      assert.equal(result.commands.some(c=>c.startsWith('vCont;C06')),false,
-        're-delivering signal 6 reproduces the device X06 termination');
-      assert.ok(result.logs.some(v=>v.includes('RPCS3_FOREIGN_STOP_SUPPRESSED')));
-    }
     if(!options.sparse) assert.equal(result.commands.filter(c=>c.startsWith('p')||c==='qC').length,0,'no extra register round trips on normal packets');
     console.log(`PASS: ${name}`);
   }catch(e){failures.push(`${name}: ${e.message}`);}
 }
+const fatalSignal=run({signal:true});
+try {
+  assert.ok(fatalSignal.error,'SIGABRT terminal reply must fail the helper transaction');
+  assert.equal(fatalSignal.prepared,0,'fatal Core abort occurs before JIT preparation');
+  assert.equal(fatalSignal.forwarded,1,'SIGABRT must be delivered exactly once');
+  assert.equal(fatalSignal.commands.filter(c=>c.startsWith('vCont;C06')).length,1);
+  assert.ok(fatalSignal.logs.some(v=>v.includes('RPCS3_FOREIGN_STOP_FORWARDED')));
+  assert.ok(fatalSignal.commands.length<20,'fatal signal must not become an infinite BRK loop');
+  console.log('PASS: fatal SIGABRT forwarded once and bounded');
+}catch(e){failures.push(`signal: ${e.message}`);}
 const terminal=run({terminal:true});
 if(!terminal.error||terminal.commands.length>20) failures.push('terminal exit was not reported immediately');
 const refused=run({ack:'E03'});

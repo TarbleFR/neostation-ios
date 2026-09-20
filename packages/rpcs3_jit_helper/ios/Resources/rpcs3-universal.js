@@ -52,6 +52,8 @@ function log_verbose(msg) {
 let tid, x0, x1, x16, pc;
 let detached = false;
 let pendingStopReply = null;
+let lastForeignStopKey = null;
+let repeatedForeignStops = 0;
 let pid = get_pid();
 let attachResponse = send_command(`vAttach;${pid.toString(16)}`);
 
@@ -94,16 +96,14 @@ while (!detached) {
     // check if this is a brk
     if ((instrU32 & 0xFFE0001F)>>>0 != 0xD4200000) {
         log(`Skipping: instruction was not a brk (was 0x${instrU32.toString(16)})`);
-        // Build 294 device journals prove that dyld/Core bootstrap can stop
-        // debugserver with T06 and then continue successfully when the signal
-        // is suppressed. Re-injecting that same signal with vCont;C06 makes
-        // debugserver report X06 (terminated due to signal 6), killing
-        // NeoStation before the first JIT region request. While this helper
-        // owns the all-stop bootstrap transaction, foreign stops are observed
-        // but not delivered back into the target. A plain continue consumes
-        // the current stop and returns exactly the next stop.
-        log(`RPCS3_FOREIGN_STOP_SUPPRESSED pid=${pid} signal=${signal} thread=${tid}`);
-        pendingStopReply = send_command(`c`);
+        // Build 298 device evidence shows T06 is a real Core SIGABRT when the
+        // low-VA arena reservation fails before the first command-1 request.
+        // Suppressing that signal only drives libc's abort path into a repeated
+        // BRK stop. Preserve real target signals and consume the returned stop
+        // exactly once; the fixed Core should no longer generate this abort.
+        guardForeignStop(signal, tid, pc, instrU32);
+        log(`RPCS3_FOREIGN_STOP_FORWARDED pid=${pid} signal=${signal} thread=${tid}`);
+        pendingStopReply = send_command(`vCont;C${signal}:${tid};c`);
         continue;
     }
     
@@ -129,7 +129,11 @@ while (!detached) {
         const command = legacyCommands[brkImmediate];
         command(brkResponse);
     } else {
-        // A foreign breakpoint is not a JIT call. Preserve its signal and PC.
+        // A foreign breakpoint is not a JIT call. Preserve its signal and PC,
+        // but refuse to spin forever if an abort/trap path returns to the same
+        // instruction repeatedly (Build 298 observed >4,000 identical BRK #1 stops).
+        guardForeignStop(signal, tid, pc, instrU32);
+        log(`RPCS3_FOREIGN_BRK_FORWARDED pid=${pid} signal=${signal} thread=${tid} immediate=0x${brkImmediate.toString(16)}`);
         pendingStopReply = send_command(`vCont;C${signal}:${tid};c`);
         continue;
     }
@@ -364,6 +368,19 @@ function stoppedRegister(reply, index, thread) {
         throw new Error(`Cannot read RPCS3 register ${index}`);
     return littleEndianHexStringToNumber(value);
 }
+function guardForeignStop(signal, thread, address, instruction) {
+    const key = `${signal}:${thread}:${address.toString(16)}:${instruction.toString(16)}`;
+    if (key === lastForeignStopKey) repeatedForeignStops++;
+    else {
+        lastForeignStopKey = key;
+        repeatedForeignStops = 1;
+    }
+    if (repeatedForeignStops <= 8) return;
+    const detachResponse = send_command('D');
+    log(`RPCS3_FOREIGN_STOP_LOOP_GUARD pid=${pid} repeats=${repeatedForeignStops} detach=${String(detachResponse)}`);
+    throw new Error(`RPCS3 repeated the same foreign debugger stop ${repeatedForeignStops} times; refusing an infinite bootstrap loop`);
+}
+
 function requireOK(reply, operation) {
     if (reply !== 'OK') throw new Error(`RPCS3 ${operation} rejected: ${String(reply).slice(0, 128)}`);
 }
