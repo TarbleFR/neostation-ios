@@ -9,10 +9,8 @@ on:
     paths:
       - '.github/workflows/rpcs3-core.yml'
       - 'build-utils/build_rpcs3_embedded_core.sh'
-      - 'build-utils/patch_rpcs3_build295_fixed_reservation.py'
       - 'build-utils/patch_rpcs3_build266_v09_core.py'
       - 'build-utils/rpcs3/**'
-      - 'test/rpcs3_build295_fixed_reservation_test.py'
   workflow_dispatch:
 
 permissions:
@@ -48,8 +46,6 @@ jobs:
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
-          python3 -m py_compile build-utils/patch_rpcs3_build295_fixed_reservation.py
-          python3 test/rpcs3_build295_fixed_reservation_test.py
           mkdir -p dist/rpcs3 build/rpcs3-core-diagnostics
 
       - name: Build patched RPCS3 Core
@@ -75,7 +71,6 @@ jobs:
           grep -q '_rpcs3_ios_initialize$' build/rpcs3-core-diagnostics/exports.txt
           grep -q '_rpcs3_ios_boot_game$' build/rpcs3-core-diagnostics/exports.txt
           grep -q '_neostation_rpcs3_ios_save_state$' build/rpcs3-core-diagnostics/exports.txt
-          strings "$CORE" | grep -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1'
           python3 - <<'PY'
           import hashlib, json, os
           from pathlib import Path
@@ -88,8 +83,8 @@ jobs:
             'abi_version':int(Path('dist/rpcs3/RPCS3_IOS_ABI.txt').read_text().strip()),
             'sha256':hashlib.sha256(core.read_bytes()).hexdigest(),
             'architectures':['arm64'],
-            'reservation':'mach_vm_allocate fixed, no VM_FLAGS_OVERWRITE',
-            'marker':'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1',
+            'jit_policy':'NeoStation Build 266 v0.9-era low-VA backport',
+            'marker':'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
             'device_runtime_tested':False,
           }
           Path('dist/rpcs3/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
