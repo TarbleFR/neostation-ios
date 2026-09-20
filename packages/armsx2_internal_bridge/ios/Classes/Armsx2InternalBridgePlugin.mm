@@ -924,10 +924,17 @@ static UIViewController* ARMSX2RootViewController(void) {
       if (!root || root.view.window == nil) return;
       controller = [Armsx2GameViewController new];
       controller.api = self.api;
+      controller.title = gamePath.lastPathComponent.stringByDeletingPathExtension ?: @"ARMSX2";
       __weak Armsx2InternalBridgePlugin* weakSelf = self;
       __weak Armsx2GameViewController* weakController = controller;
       controller.closeHandler = ^{
         [weakSelf stopActiveSessionWithCompletion:^(BOOL success, NSString* message) {}];
+      };
+      controller.menuHandler = ^{
+        Armsx2InternalBridgePlugin* strongSelf = weakSelf;
+        Armsx2GameViewController* strongController = weakController;
+        if (!strongSelf || !strongController) return;
+        [strongSelf presentSessionMenuForController:strongController];
       };
       controller.commandHandler = ^(NSString* command, NSNumber* value) {
         Armsx2InternalBridgePlugin* strongSelf = weakSelf;
