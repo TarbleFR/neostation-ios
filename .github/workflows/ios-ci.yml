@@ -202,16 +202,12 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 \
             https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
             -o build/StikJIT-1.5.0.xcframework.zip
-          curl -fL --retry 3 --retry-delay 2 \
-            https://github.com/XITRIX/RPCS3-iOS-Releases/releases/download/v0.9/RPCS3.ipa \
-            -o build/RPCS3-v0.9.ipa
-          printf '%s  %s\n' \
-            '4cc11c8a0bc3be74685c2781741a7a2b559e94dac6b81df609ed43523e5cfec0' \
-            'build/RPCS3-v0.9.ipa' | shasum -a 256 -c -
+          # Keep the validated ABI-compatible RPCS3 Core from the Build 270
+          # donor. It already contains NeoStation's pinned v0.9-era JIT
+          # backports; only the host/debugger protocol changes in Build 294.
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
-            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip \
-            --rpcs3-release-ipa build/RPCS3-v0.9.ipa
+            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
 
       - name: Download pinned embedded ARMSX2 Core
         uses: actions/download-artifact@v4
