@@ -501,7 +501,7 @@ int reload_cheats(char* error,size_t capacity) {
 
 int get_available_patches_json(char* output,size_t capacity) {
   if(!output || capacity<2 || !has_running_game()) return 0;
-  __block NSData* encoded=nil;
+  NSData* encoded=nil;
   Host::RunOnCPUThread([&]{
     @autoreleasepool {
       const std::string serial=VMManager::GetDiscSerial();
@@ -567,8 +567,8 @@ int set_patch_state(const char* patch_name,int state,char* error,size_t capacity
     return error_out("ARMSX2 patches require a running game.",error,capacity);
 
   const std::string wanted(patch_name);
-  __block BOOL success=NO;
-  __block BOOL unsupportedAutomatic=NO;
+  BOOL success=NO;
+  BOOL unsupportedAutomatic=NO;
   Host::RunOnCPUThread([&]{
     @autoreleasepool {
       const std::string serial=VMManager::GetDiscSerial();
