@@ -4,6 +4,8 @@ import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
 import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
+import 'package:neostation/services/armsx2_bios_service.dart';
+import 'package:neostation/widgets/armsx2_bios_picker.dart';
 import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/armsx2_internal_service.dart';
 import 'package:neostation/services/config_service.dart';
@@ -54,11 +56,31 @@ class StikJitArmsx2Service {
     final transaction =
         (DateTime.now().microsecondsSinceEpoch << 8) | ((_transactionSeed++) & 0xff);
 
+    var nativeTransactionStarted = false;
     try {
       await _writeDiagnostic(
         'STATE: START\nTransaction: $transaction\n'
         'Mode: ${bootBios ? 'bios' : 'game'}\nGame: $normalized\n',
       );
+
+      await Armsx2InternalService.ensureLayout();
+      final biosStore = await Armsx2BiosStore.open();
+      var biosFilename = await biosStore.resolve();
+      if (biosFilename == null) {
+        final context = rootNavigatorKey.currentContext;
+        if (context == null || !context.mounted) {
+          _lastError = 'Choose a PS2 BIOS from the PS2 library first.';
+          return false;
+        }
+        biosFilename = await showArmsx2BiosPicker(context);
+        if (biosFilename == null) {
+          _lastError = 'PS2 BIOS selection was cancelled.';
+          return false;
+        }
+      }
+      // Do not attach the debugger until the explicit selected file is readable.
+      await biosStore.validate(biosFilename);
+      await _appendDiagnostic('BIOS: $biosFilename\n');
 
       final pairingFile = await _ensurePairingFile();
       if (pairingFile == null) {
@@ -68,7 +90,6 @@ class StikJitArmsx2Service {
 
       // Embedded ARMSX2 owns a Files-visible NeoStation/Documents root.
       // Games, BIOS and live saves all remain inside this canonical layout.
-      await Armsx2InternalService.ensureLayout();
       final root = await Armsx2InternalService.rootDirectory();
       final games = await Armsx2InternalService.gamesDirectory();
       final bios = await Armsx2InternalService.biosDirectory();
@@ -91,6 +112,7 @@ class StikJitArmsx2Service {
         'ElapsedMs: ${route.elapsedMs}\n',
       );
 
+      nativeTransactionStarted = true;
       final jit = await Armsx2InternalBridge.prepareJit(
         pairingFilePath: pairingFile.path,
       );
@@ -112,6 +134,7 @@ class StikJitArmsx2Service {
         transaction: transaction,
         gamePath: normalized,
         bootBios: bootBios,
+        biosFilename: biosFilename,
         dataPath: dataPath,
         biosDirectory: biosDirectory,
       );
@@ -138,9 +161,11 @@ class StikJitArmsx2Service {
         error: error,
         stackTrace: stackTrace,
       );
-      try {
-        await Armsx2InternalBridge.stop();
-      } catch (_) {}
+      if (nativeTransactionStarted) {
+        try {
+          await Armsx2InternalBridge.stop();
+        } catch (_) {}
+      }
       await _appendDiagnostic(
         'STATE: ERROR\nError: $error\nStack: $stackTrace\n',
       );
