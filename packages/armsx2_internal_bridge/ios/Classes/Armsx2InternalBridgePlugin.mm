@@ -2,6 +2,7 @@
 #import "Armsx2JitBridgePlugin.h"
 #import "ARMSX2CoreABI.h"
 #import "Armsx2RetroAchievementsMenu.h"
+#import "Armsx2SessionMenu.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -82,6 +83,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) const NeoARMSX2API* api;
 @property(nonatomic, assign) UIView* coreView;
 @property(nonatomic, copy) dispatch_block_t closeHandler;
+@property(nonatomic, copy) dispatch_block_t menuHandler;
 @property(nonatomic, copy) void (^commandHandler)(NSString* command, NSNumber* value);
 @property(nonatomic, strong) UIView* controlsView;
 @property(nonatomic, strong) UIButton* menuButton;
@@ -244,7 +246,8 @@ static UIViewController* ARMSX2RootViewController(void) {
   self.menuButton.accessibilityLabel = [self en:@"ARMSX2 game menu" fr:@"Menu du jeu ARMSX2"];
   self.menuButton.accessibilityIdentifier = @"armsx2-game-menu";
   [self.menuButton setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
-  self.menuButton.showsMenuAsPrimaryAction = YES;
+  self.menuButton.showsMenuAsPrimaryAction = NO;
+  [self.menuButton addTarget:self action:@selector(menuPressed) forControlEvents:UIControlEventTouchUpInside];
   [root addSubview:self.menuButton];
 
   self.statusLabel = [UILabel new];
@@ -336,6 +339,11 @@ static UIViewController* ARMSX2RootViewController(void) {
   [self resetInput];
   if (self.closeHandler) self.closeHandler();
 }
+- (void)menuPressed {
+  if (self.closing || !self.menuReady) return;
+  [self resetInput];
+  if (self.menuHandler) self.menuHandler();
+}
 
 - (UIAction*)commandAction:(NSString*)title
                    command:(NSString*)command
@@ -360,56 +368,10 @@ static UIViewController* ARMSX2RootViewController(void) {
 }
 
 - (void)refreshMenu {
-  const BOOL ready=self.menuReady;
-  NSMutableArray<UIMenuElement*>* resolution=[NSMutableArray array];
-  for(NSNumber* value in @[@1.0f,@2.0f,@3.0f,@4.0f,@6.0f,@8.0f]) {
-    NSString* title=[NSString stringWithFormat:@"%@×",value];
-    [resolution addObject:[self commandAction:title command:@"upscale" value:value
-      selected:fabsf(self.upscaleMultiplier-value.floatValue)<0.05f enabled:ready]];
-  }
-  NSArray<NSString*>* aspectTitles=@[
-    [self en:@"Auto" fr:@"Auto"], @"4:3", @"16:9", @"10:7",
-    [self en:@"Stretch" fr:@"Étendre"]
-  ];
-  NSMutableArray<UIMenuElement*>* aspects=[NSMutableArray array];
-  for(NSUInteger i=0;i<aspectTitles.count;i++)
-    [aspects addObject:[self commandAction:aspectTitles[i] command:@"aspect" value:@(i)
-      selected:self.aspectRatio==i enabled:ready]];
-
-  UIAction* touch=[self commandAction:[self en:@"Touch controls" fr:@"Commandes tactiles"]
-    command:@"toggleTouch" value:@0 selected:self.touchControlsVisible enabled:YES];
-  UIAction* cheats=[self commandAction:[self en:@"Enable cheats" fr:@"Activer les cheats"]
-    command:@"cheats" value:@(!self.cheatsEnabled) selected:self.cheatsEnabled enabled:ready];
-  UIAction* reload=[self commandAction:[self en:@"Reload cheats / patches" fr:@"Recharger cheats / patches"]
-    command:@"reloadCheats" value:@0 selected:NO enabled:ready];
-  UIAction* achievements=[self commandAction:@"RetroAchievements"
-    command:@"retroAchievements" value:@0 selected:NO enabled:ready];
-
-  NSMutableArray<UIMenuElement*>* saves=[NSMutableArray array];
-  NSMutableArray<UIMenuElement*>* loads=[NSMutableArray array];
-  for(uint32_t slot=1;slot<=5;slot++) {
-    NSString* title=[NSString stringWithFormat:@"%@ %u",[self en:@"Slot" fr:@"Slot"],slot];
-    [saves addObject:[self commandAction:title command:@"saveState" value:@(slot)
-      selected:NO enabled:ready]];
-    const BOOL occupied=(self.saveStateMask & (1u<<(slot-1)))!=0;
-    [loads addObject:[self commandAction:title command:@"loadState" value:@(slot)
-      selected:NO enabled:ready && occupied]];
-  }
-
-  UIMenu* graphics=[UIMenu menuWithTitle:[self en:@"Graphics" fr:@"Graphismes"]
-    children:@[
-      [UIMenu menuWithTitle:[self en:@"Internal resolution" fr:@"Résolution interne"] children:resolution],
-      [UIMenu menuWithTitle:[self en:@"Screen format" fr:@"Format d’écran"] children:aspects],
-    ]];
-  UIMenu* cheatMenu=[UIMenu menuWithTitle:@"Cheats" children:@[cheats,reload]];
-  UIMenu* states=[UIMenu menuWithTitle:[self en:@"Save states" fr:@"Save states"]
-    children:@[
-      [UIMenu menuWithTitle:[self en:@"Save state" fr:@"Sauvegarder l’état"] children:saves],
-      [UIMenu menuWithTitle:[self en:@"Load state" fr:@"Charger l’état"] children:loads],
-    ]];
-  self.menuButton.menu=[UIMenu menuWithTitle:@"ARMSX2" children:@[touch,graphics,cheatMenu,states,achievements]];
+  // The old contextual UIMenu is intentionally retired. The slider button
+  // opens Armsx2SessionMenu, matching Dolphin's full navigation architecture.
+  self.menuButton.menu = nil;
 }
-
 - (void)updateRuntimeMenuWithUpscale:(float)upscale
                               aspect:(uint32_t)aspect
                               cheats:(BOOL)cheats
@@ -442,6 +404,8 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) const NeoARMSX2API* api;
 @property(nonatomic, assign) BOOL operationBusy;
 @property(nonatomic, assign) BOOL stopInProgress;
+@property(nonatomic, strong) UINavigationController* sessionMenu;
+@property(nonatomic, assign) BOOL menuOpening;
 @end
 
 @implementation Armsx2InternalBridgePlugin {
@@ -525,7 +489,12 @@ static UIViewController* ARMSX2RootViewController(void) {
   NSAssert(NSThread.isMainThread, @"ARMSX2 UIKit teardown must run on main");
   Armsx2GameViewController* controller = self.gameController;
   self.gameController = nil;
-  if (controller) [controller resetInput];
+  self.sessionMenu = nil;
+  self.menuOpening = NO;
+  if (controller) {
+    controller.menuHandler = nil;
+    [controller resetInput];
+  }
 
   __weak Armsx2InternalBridgePlugin* weakSelf = self;
   void (^releaseView)(void) = ^{
