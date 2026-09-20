@@ -13,6 +13,7 @@ typedef void (^Armsx2RetroAchievementsCommand)(
 /// while all account/settings operations remain implemented by ARMSX2 upstream.
 @interface Armsx2RetroAchievementsMenu : UITableViewController
 @property(nonatomic, copy, nullable) NSString* gameTitle;
+@property(nonatomic, copy) NSString* localeIdentifier;
 @property(nonatomic, copy) Armsx2RetroAchievementsReadState readState;
 @property(nonatomic, copy) Armsx2RetroAchievementsCommand performCommand;
 @end
