@@ -13,8 +13,9 @@ exhaust every low-VA candidate depending on ASLR. Successful retries reach the
 command-1 preparation loop, isolating this pre-command reservation as the
 intermittent launch boundary.
 
-Reserve each candidate at the requested Mach address instead. VM_FLAGS_FIXED
-without VM_FLAGS_OVERWRITE fails on occupied mappings, so this does not replace
+Reserve each candidate at the requested Mach address with the iPhoneOS-supported
+vm_allocate API. VM_FLAGS_FIXED without VM_FLAGS_OVERWRITE fails on occupied
+mappings, so this does not replace
 another image, stack, or allocation. This is a Core source correction: there is
 no host retry, delay, cache deletion, or second dlopen.
 """
@@ -73,11 +74,11 @@ NEW = r'''u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_
 		while (reserved < size)
 		{
 			const usz length = std::min(size - reserved, rpcs3::ios::jit::arena_prepare_chunk_size);
-			mach_vm_address_t address = static_cast<mach_vm_address_t>(candidate + reserved);
-			const kern_return_t result = ::mach_vm_allocate(
+			vm_address_t address = candidate + reserved;
+			const kern_return_t result = ::vm_allocate(
 				mach_task_self(),
 				&address,
-				static_cast<mach_vm_size_t>(length),
+				static_cast<vm_size_t>(length),
 				VM_FLAGS_FIXED | jit_vm_tag);
 			if (result != KERN_SUCCESS || address != candidate + reserved)
 			{
@@ -105,7 +106,6 @@ NEW = r'''u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_
 			::vm_deallocate(mach_task_self(), candidate, static_cast<vm_size_t>(reserved));
 		}
 	}
-	set_error("NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1: no exact low-VA arena range is available");
 	return nullptr;
 }'''
 
@@ -121,9 +121,10 @@ def patch(root: Path) -> None:
             'VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE',
             'VM_FLAGS_OVERWRITE | VM_FLAGS_FIXED',
         )
-        if ('::mach_vm_allocate(' not in reservation or
+        if ('::vm_allocate(' not in reservation or
                 'VM_FLAGS_FIXED | jit_vm_tag' not in reservation or
-                any(form in reservation for form in forbidden_overwrite_forms)):
+                any(form in reservation for form in forbidden_overwrite_forms) or
+                f'set_error("{MARKER}: Unable to reserve the JIT arena layout' not in text):
             raise RuntimeError('Build 295 reservation marker exists without its exact-allocation contract')
         print('Build 295 fixed JIT reservation already applied and verified')
         return
@@ -132,11 +133,13 @@ def patch(root: Path) -> None:
     if text.count(OLD) != 1:
         raise RuntimeError(f'Build 295 reservation preimage drift: {text.count(OLD)} matches')
     text = text.replace(OLD, NEW, 1)
-    if '#include <mach/mach_vm.h>' not in text:
-        anchor = '#include <mach/mach.h>\n'
-        if text.count(anchor) != 1:
-            raise RuntimeError('Build 295 could not locate the Mach include boundary')
-        text = text.replace(anchor, anchor + '#include <mach/mach_vm.h>\n', 1)
+    error_old = 'set_error("Unable to reserve the JIT arena layout in low virtual address space (code=" +'
+    error_new = f'set_error("{MARKER}: Unable to reserve the JIT arena layout in low virtual address space (code=" +'
+    if text.count(error_old) != 1:
+        raise RuntimeError(f'Build 295 arena failure-message drift: {text.count(error_old)} matches')
+    text = text.replace(error_old, error_new, 1)
+    if '#include <mach/mach_vm.h>' in text or '::mach_vm_allocate(' in text:
+        raise RuntimeError('Build 295 must use the iPhoneOS-supported vm_allocate API')
     forbidden_overwrite_forms = (
         'VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE',
         'VM_FLAGS_OVERWRITE | VM_FLAGS_FIXED',

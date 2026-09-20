@@ -9,7 +9,7 @@ text = PATCH.read_text()
 compile(text, str(PATCH), 'exec')
 
 assert "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1" in text
-assert "::mach_vm_allocate(" in text
+assert "::vm_allocate(" in text
 assert "VM_FLAGS_FIXED | jit_vm_tag" in text
 assert "VM_FLAGS_OVERWRITE" in text  # explicit prohibition is documented/tested
 assert "if (result == KERN_SUCCESS)" in text
@@ -23,14 +23,16 @@ if len(sys.argv) > 1:
     source = Path(sys.argv[1])
     jit = (source / 'Utilities/JITIOS.cpp').read_text()
     assert "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1" in jit
-    assert "#include <mach/mach_vm.h>" in jit
+    assert "#include <mach/mach_vm.h>" not in jit
     reservation = jit.split("u8* reserve_arena_layout(", 1)[1].split(
         "\nu8* reserve_code_data_layout(", 1
     )[0]
-    assert "::mach_vm_allocate(" in reservation
+    assert "::vm_allocate(" in reservation
     assert "VM_FLAGS_FIXED | jit_vm_tag" in reservation
     assert "VM_FLAGS_OVERWRITE" not in reservation
     assert "::mmap(" not in reservation
+    assert "::mach_vm_allocate(" not in reservation
+    assert 'set_error("NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1: Unable to reserve the JIT arena layout' in jit
     # Final RX/RW replacement remains separate and may still use MAP_FIXED only
     # after the Core owns the complete reservation.
     assert "MAP_FIXED | MAP_PRIVATE | MAP_ANON" in jit

@@ -50,6 +50,18 @@ jobs:
           done
           python3 -m py_compile build-utils/patch_rpcs3_build295_fixed_reservation.py
           python3 test/rpcs3_build295_fixed_reservation_test.py
+          cat > "$RUNNER_TEMP/rpcs3-vm-fixed-probe.cpp" <<'CPP'
+          #include <mach/mach.h>
+          #include <mach/vm_statistics.h>
+          kern_return_t probe_fixed_reservation() {
+            vm_address_t address = 0x100000000ull;
+            return vm_allocate(
+              mach_task_self(), &address, static_cast<vm_size_t>(16384),
+              VM_FLAGS_FIXED | VM_MAKE_TAG(VM_MEMORY_APPLICATION_SPECIFIC_1));
+          }
+          CPP
+          xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.3 -std=c++20 \
+            -fsyntax-only "$RUNNER_TEMP/rpcs3-vm-fixed-probe.cpp"
           mkdir -p dist/rpcs3 build/rpcs3-core-diagnostics
 
       - name: Build patched RPCS3 Core
@@ -90,7 +102,7 @@ jobs:
             'architectures':['arm64'],
             'jit_policy':'NeoStation Build 266 v0.9-era low-VA backport',
             'marker':'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
-            'reservation':'mach_vm_allocate fixed, no VM_FLAGS_OVERWRITE',
+            'reservation':'vm_allocate fixed, no VM_FLAGS_OVERWRITE',
             'reservation_marker':'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1',
             'device_runtime_tested':False,
           }
