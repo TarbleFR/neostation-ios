@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / 'build-utils/patch_rpcs3_build295_fixed_reservation.py'
 text = PATCH.read_text()
+compile(text, str(PATCH), 'exec')
 
 assert "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1" in text
 assert "::mach_vm_allocate(" in text
