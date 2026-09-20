@@ -65,7 +65,9 @@ class _Armsx2InternalPlaylistActionsState
       } else if (action == 'boot_bios') {
         final selected = await showArmsx2BiosPicker(context);
         if (selected == null || !mounted) return;
-        final launched = await StikJitArmsx2Service.launchBios();
+        final launched = await StikJitArmsx2Service.launchBios(
+          uiLocale: Localizations.localeOf(context).toLanguageTag(),
+        );
         if (!launched) {
           _notice(
             StikJitArmsx2Service.lastError ??
