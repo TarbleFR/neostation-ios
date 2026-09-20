@@ -228,16 +228,9 @@ static UIViewController* ARMSX2RootViewController(void) {
     strongSelf.rightX=x; strongSelf.rightY=y; [strongSelf sendSticks];
   };
 
-  UIButton* close = [UIButton buttonWithType:UIButtonTypeSystem];
-  close.translatesAutoresizingMaskIntoConstraints = NO;
-  close.tintColor = UIColor.whiteColor;
-  close.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
-  close.layer.cornerRadius = 18;
-  close.accessibilityLabel = @"Close ARMSX2";
-  [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
-  [close addTarget:self action:@selector(closePressed) forControlEvents:UIControlEventTouchUpInside];
-  [root addSubview:close];
-
+  // Match Dolphin's entry point: one hamburger opens the full session
+  // navigator. There is deliberately no direct-close X and no contextual
+  // settings button; Quit lives inside the session menu.
   self.menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
   self.menuButton.translatesAutoresizingMaskIntoConstraints = NO;
   self.menuButton.tintColor = UIColor.whiteColor;
@@ -245,7 +238,7 @@ static UIViewController* ARMSX2RootViewController(void) {
   self.menuButton.layer.cornerRadius = 18;
   self.menuButton.accessibilityLabel = [self en:@"ARMSX2 game menu" fr:@"Menu du jeu ARMSX2"];
   self.menuButton.accessibilityIdentifier = @"armsx2-game-menu";
-  [self.menuButton setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
+  [self.menuButton setImage:[UIImage systemImageNamed:@"line.3.horizontal"] forState:UIControlStateNormal];
   self.menuButton.showsMenuAsPrimaryAction = NO;
   [self.menuButton addTarget:self action:@selector(menuPressed) forControlEvents:UIControlEventTouchUpInside];
   [root addSubview:self.menuButton];
@@ -263,11 +256,7 @@ static UIViewController* ARMSX2RootViewController(void) {
   [root addSubview:self.statusLabel];
 
   [NSLayoutConstraint activateConstraints:@[
-    [close.leadingAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.leadingAnchor constant:12],
-    [close.topAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.topAnchor constant:12],
-    [close.widthAnchor constraintEqualToConstant:44],
-    [close.heightAnchor constraintEqualToConstant:44],
-    [self.menuButton.trailingAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.trailingAnchor constant:-12],
+    [self.menuButton.leadingAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.leadingAnchor constant:12],
     [self.menuButton.topAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.topAnchor constant:12],
     [self.menuButton.widthAnchor constraintEqualToConstant:44],
     [self.menuButton.heightAnchor constraintEqualToConstant:44],
