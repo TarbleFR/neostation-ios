@@ -123,7 +123,8 @@ def patch(root: Path) -> None:
         if text.count(anchor) != 1:
             raise RuntimeError('Build 295 could not locate the Mach include boundary')
         text = text.replace(anchor, anchor + '#include <mach/mach_vm.h>\n', 1)
-    if 'VM_FLAGS_OVERWRITE' in NEW:
+    if 'VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE' in NEW or
+            'VM_FLAGS_OVERWRITE | VM_FLAGS_FIXED' in NEW:
         raise RuntimeError('Build 295 must never overwrite an occupied VM mapping')
     path.write_text(text)
     print('Build 295: deterministic fixed low-VA JIT reservation applied')
