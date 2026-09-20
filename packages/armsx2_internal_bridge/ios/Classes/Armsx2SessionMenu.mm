@@ -1,5 +1,6 @@
 #import "Armsx2SessionMenu.h"
 #import "Armsx2RetroAchievementsMenu.h"
+#include <cmath>
 
 typedef NS_ENUM(NSInteger, ARMSX2MenuPage) {
   ARMSX2MenuRoot,
@@ -51,6 +52,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 @property(nonatomic, copy) NSDictionary<NSString*, id>* snapshot;
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
+- (void)reloadSnapshot;
 @end
 
 @implementation Armsx2SessionChoiceMenu
