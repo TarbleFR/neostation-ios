@@ -59,7 +59,7 @@ NEW = r'''u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_
 	// NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1
 	// mmap(address, ...) is only a hint on Darwin and was the last nondeterministic
 	// operation before the first Universal JIT BRK. Reserve the requested low-VA
-	// range with Mach fixed allocation instead. Do NOT use VM_FLAGS_OVERWRITE:
+	// range with Mach fixed allocation instead. Do NOT use the overwrite flag:
 	// an occupied candidate must fail rather than replace another mapping.
 	if (!size || begin < arena_address_begin || end > arena_address_end || begin >= end || size > end - begin)
 	{
