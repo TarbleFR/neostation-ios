@@ -25,6 +25,7 @@ typedef void (^Armsx2SessionGraphicsHackCommand)(
 /// explicit Resume/Quit actions while the game view remains attached below.
 @interface Armsx2SessionMenu : UITableViewController
 @property(nonatomic, copy) NSString* gameTitle;
+@property(nonatomic, copy) NSString* localeIdentifier;
 @property(nonatomic, copy) Armsx2SessionReadSnapshot readSnapshot;
 @property(nonatomic, copy) Armsx2SessionCommand performCommand;
 @property(nonatomic, copy) Armsx2SessionRAReadState readRetroAchievements;
