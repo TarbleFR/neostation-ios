@@ -51,13 +51,13 @@ function log_verbose(msg) {
 // To avoid having to re-parse these in each function, we save some registers here
 let tid, x0, x1, x16, pc;
 let detached = false;
-let continuesWithSignal = true;
+let pendingStopReply = null;
 let pid = get_pid();
 let attachResponse = send_command(`vAttach;${pid.toString(16)}`);
 
 // A stop reply and a process-info reply are independent checks. Never publish
 // attachment from a diagnostic string or from the persistent CS_DEBUGGED bit.
-if (!/^T[0-9a-fA-F]{2}(?:thread:|;)/.test(attachResponse)) {
+if (!/^[TS][0-9a-fA-F]{2}/.test(attachResponse)) {
     throw new Error(`vAttach did not return a stop reply: ${attachResponse}`);
 }
 const processInfo = send_command("qProcessInfo");
@@ -69,27 +69,24 @@ if (!processMatch || parseInt(processMatch[1], 16) !== pid) {
 log(`NEOSTATION_DEBUGGER_ATTACHED_V1 pid=${pid} nonce=${neostationProbeNonce}`);
     
 let totalBreakpoints = 0;
+try {
 while (!detached) {
     totalBreakpoints++;
     log(`Handling signal ${totalBreakpoints}`);
     
-    let brkResponse = send_command(`c`);
-    log_verbose(`brkResponse = ${brkResponse}`);
+    // A resume command returns the NEXT stop, not an acknowledgement. Consume
+    // it once before issuing any other resume (including signal delivery).
+    const brkResponse = pendingStopReply === null ? send_command(`c`) : pendingStopReply;
+    pendingStopReply = null;
+    log(`RPCS3_RSP_STOP pid=${pid} sequence=${totalBreakpoints} reply=${String(brkResponse).slice(0, 1536)}`);
+    if (typeof brkResponse !== 'string' || !/^[TS][0-9a-fA-F]{2}/.test(brkResponse))
+        throw new Error(`RPCS3 target exited or returned an invalid stop: ${String(brkResponse).slice(0, 256)}`);
     
-    // extract tid, pc, x16
-    let tmpMatch = /T[0-9a-f]+thread:(?<tid>[0-9a-f]+);/.exec(brkResponse);
-    tid = tmpMatch ? tmpMatch.groups['tid'] : null;
-    tmpMatch = /20:(?<reg>[0-9a-f]{16});/.exec(brkResponse);
-    pc = tmpMatch ? tmpMatch.groups['reg'] : null;
-    tmpMatch = /10:(?<reg>[0-9a-f]{16});/.exec(brkResponse);
-    x16 = tmpMatch ? tmpMatch.groups['reg'] : null;
-    if (!tid || !pc || !x16) {
-        log(`Failed to extract registers: tid=${tid}, pc=${pc}, x16=${x16}`);
-        continue;
-    }
-    pc = littleEndianHexStringToNumber(pc);
-    x16 = littleEndianHexStringToNumber(x16);
-    
+    // Expedited register fields are optional; their ordering is not fixed.
+    tid = stoppedThread(brkResponse);
+    pc = stoppedRegister(brkResponse, '20', tid);
+    const signal = brkResponse.slice(1, 3);
+
     let instructionResponse = send_command(`m${pc.toString(16)},4`);
     log(`instruction at pc: ${instructionResponse}`);
     let instrU32 = littleEndianHexToU32(instructionResponse);
@@ -97,34 +94,21 @@ while (!detached) {
     // check if this is a brk
     if ((instrU32 & 0xFFE0001F)>>>0 != 0xD4200000) {
         log(`Skipping: instruction was not a brk (was 0x${instrU32.toString(16)})`);
-        if (continuesWithSignal) {
-            let signum = /^T(?<sig>[a-z0-9;]{2})/.exec(brkResponse);
-            signum = signum ? signum.groups['sig'] : null;
-            if (!signum) {
-                log(`Failed to extract signal number: ${signum}`);
-                continue;
-            }
-            log(`Continuing with signal 0x${signum}`);
-            send_command(`vCont;S${signum}:${tid}`);
-        }
+        // C continues with the original signal; S would single-step and
+        // introduce a second SIGTRAP. Resume the other threads normally too.
+        pendingStopReply = send_command(`vCont;C${signal}:${tid};c`);
         continue;
     }
     
     let brkImmediate = extractBrkImmediate(instrU32);
     log(`BRK immediate: 0x${brkImmediate.toString(16)} (${brkImmediate})`);
     if (legacyCommands[brkImmediate] != undefined) {
-        // when we find a valid brk immediate command, parse x0 and x1
-        tmpMatch = /00:(?<reg>[0-9a-f]{16});/.exec(brkResponse);
-        x0 = tmpMatch ? tmpMatch.groups['reg'] : null;
-        tmpMatch = /01:(?<reg>[0-9a-f]{16});/.exec(brkResponse);
-        x1 = tmpMatch ? tmpMatch.groups['reg'] : null;
-        if (!x0 || !x1) {
-            log(`Failed to extract registers: x0=${x0}, x1=${x1}`);
-            continue;
-        }
-        x0 = littleEndianHexStringToNumber(x0);
-        x1 = littleEndianHexStringToNumber(x1);
-        
+        x16 = stoppedRegister(brkResponse, '10', tid);
+        x0 = stoppedRegister(brkResponse, '00', tid);
+        x1 = stoppedRegister(brkResponse, '01', tid);
+        if (brkImmediate === 0xf00d && commands[x16] === undefined)
+            throw new Error(`Unknown RPCS3 JIT command ${x16.toString(16)}`);
+
         // jump over brk
         let pcPlus4 = numberToLittleEndianHexString(pc + 4n);
         let pcPlus4Response = send_command(`P20=${pcPlus4};thread:${tid};`);
@@ -138,9 +122,14 @@ while (!detached) {
         const command = legacyCommands[brkImmediate];
         command(brkResponse);
     } else {
-        log(`Skipping breakpoint: brk immediate 0x${brkImmediate.toString(16)} was not handled by this script. You could add it by evaluating legacyCommands[0x${brkImmediate.toString(16)}] = yourFunction;`);
+        // A foreign breakpoint is not a JIT call. Preserve its signal and PC.
+        pendingStopReply = send_command(`vCont;C${signal}:${tid};c`);
         continue;
     }
+}
+} catch (error) {
+    log(`RPCS3_PROTOCOL_ERROR pid=${pid}: ${String(error)}`);
+    throw error;
 }
 
 // A host-owned BRK #0xf00d / command 3 makes a real round trip through
@@ -161,6 +150,7 @@ function NeoStationDebuggerProbe() {
 
 function JIT26Detach() {
     let detachResponse = send_command(`D`);
+    requireOK(detachResponse, 'detach');
     log_verbose(`detachResponse = ${detachResponse}`);
     detached = true;
 }
@@ -238,11 +228,13 @@ function JIT26PrepareRegion(brkResponse) {
     if (prepareJITPageResponse !== "OK") {
         log(`NEOSTATION_STIKJIT_UNIVERSAL_V1: debugserver page preparation failed; returning zero to the target`);
         let putFailureX0Response = send_command(`P0=${numberToLittleEndianHexString(0n)};thread:${tid};`);
+        requireOK(putFailureX0Response, 'preparation failure return');
         log(`putFailureX0Response = ${putFailureX0Response}`);
         return;
     }
 
     let putX0Response = send_command(`P0=${numberToLittleEndianHexString(jitPageAddress)};thread:${tid};`);
+    requireOK(putX0Response, 'prepared address return');
     log(`putX0Response = ${putX0Response}`);
 }
 
@@ -272,6 +264,8 @@ function numberToLittleEndianHexString(num) {
 }
 
 function littleEndianHexToU32(hexStr) {
+    if (typeof hexStr !== 'string' || !/^[0-9a-fA-F]{8}$/.test(hexStr))
+        throw new Error(`Cannot read RPCS3 stopped instruction: ${String(hexStr)}`);
     return parseInt(hexStr.match(/../g).reverse().join(''), 16);
 }
 
@@ -334,3 +328,35 @@ function wowBreakPoint(brekpoint) {
     log(`putX0Response = ${putX0Response}`);
 }
 */
+
+// GDB remote all-stop packet fields may appear in any order. Reading a missing
+// register does not resume the target. The common full-reply path needs no
+// additional network command.
+function stoppedThread(reply) {
+    const fields = reply.slice(3).split(';');
+    const field = fields.find(value => value.startsWith('thread:'));
+    let thread = field ? field.slice(7) : null;
+    if (thread === null) {
+        const current = /^QC(.+)$/.exec(String(send_command('qC')));
+        if (!current) throw new Error('Cannot query RPCS3 stopped thread');
+        thread = current[1];
+    }
+    if (!/^(?:[0-9a-fA-F]+|p[0-9a-fA-F]+\.[0-9a-fA-F]+)$/.test(thread))
+        throw new Error('Cannot identify RPCS3 stopped thread');
+    return thread;
+}
+function stoppedRegister(reply, index, thread) {
+    const wanted = parseInt(index, 16);
+    const field = reply.slice(3).split(';').find(value => {
+        const key = value.split(':', 1)[0];
+        return /^[0-9a-fA-F]+$/.test(key) && parseInt(key, 16) === wanted;
+    });
+    const value = field ? field.slice(field.indexOf(':') + 1) :
+        send_command(`p${index};thread:${thread};`);
+    if (typeof value !== 'string' || !/^[0-9a-fA-F]{16}$/.test(value))
+        throw new Error(`Cannot read RPCS3 register ${index}`);
+    return littleEndianHexStringToNumber(value);
+}
+function requireOK(reply, operation) {
+    if (reply !== 'OK') throw new Error(`RPCS3 ${operation} rejected: ${String(reply).slice(0, 128)}`);
+}
