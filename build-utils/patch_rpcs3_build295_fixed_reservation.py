@@ -100,6 +100,7 @@ NEW = r'''u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_
 			::vm_deallocate(mach_task_self(), candidate, static_cast<vm_size_t>(reserved));
 		}
 	}
+	set_error("NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1: no exact low-VA arena range is available");
 	return nullptr;
 }'''
 
