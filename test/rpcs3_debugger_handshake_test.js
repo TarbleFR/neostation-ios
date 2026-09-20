@@ -44,10 +44,10 @@ for (const options of [{pid: 999}, {attach: 'E01'}, {nonce: 41}, {pcReply: 'E02'
 }
 assert.equal(run({pid: 999}).log.some(v => v.startsWith('NEOSTATION_DEBUGGER_ATTACHED')), false);
 
-// Regression for the intermittent Build 293 device crash. GDB remote resume
-// commands synchronously return the next stop. A foreign stop after the nonce
-// probe must be consumed exactly once; discarding vCont's return and issuing a
-// second resume loses the stop and can terminate the target during dlopen.
+// Regression for the Build 294 device journals. GDB remote continue returns
+// the next stop synchronously. A foreign stop after the nonce probe must be
+// consumed exactly once and suppressed while the helper owns Core bootstrap;
+// re-delivering signal 6 terminated NeoStation before Core JIT preparation.
 function runForeignStop() {
   const commands = [], log = [];
   let cCount = 0;
@@ -69,7 +69,6 @@ function runForeignStop() {
         if (cCount === 3) return stop('05', 0x1000, 0); // detach
         throw Error('RPCS3 was resumed more than once from the same stop');
       }
-      if (command === 'c' && cCount === 3) return stop('05', 0x1000, 1);
       if (command === 'm1000,4') return 'a0013ed4';
       if (command === 'm2000,4') return '1f2003d5'; // AArch64 NOP
       if (command.startsWith('P20=')) return 'OK';
