@@ -87,7 +87,10 @@ jobs:
           grep -q '_rpcs3_ios_initialize$' build/rpcs3-core-diagnostics/exports.txt
           grep -q '_rpcs3_ios_boot_game$' build/rpcs3-core-diagnostics/exports.txt
           grep -q '_neostation_rpcs3_ios_save_state$' build/rpcs3-core-diagnostics/exports.txt
-          strings "$CORE" | grep -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1'
+          # validate_rpcs3_embedded_core.py already requires this marker. Keep
+          # the shell assertion too, but scan the binary directly: strings | grep -q
+          # makes grep close the pipe early and Apple strings exits on SIGPIPE.
+          grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
           python3 - <<'PY'
           import hashlib, json, os
           from pathlib import Path
