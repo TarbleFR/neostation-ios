@@ -54,12 +54,14 @@ class Armsx2InternalBridge {
     required String dataPath,
     required String biosDirectory,
     String? biosFilename,
+    bool bootBios = false,
   }) async {
     _ensureEventHandler();
     return Map<String, dynamic>.from(
       await _channel.invokeMapMethod<String, dynamic>('launch', {
             'transaction': transaction,
             'gamePath': gamePath,
+            'bootBios': bootBios,
             'dataPath': dataPath,
             'biosDirectory': biosDirectory,
             if (biosFilename != null) 'biosFilename': biosFilename,
