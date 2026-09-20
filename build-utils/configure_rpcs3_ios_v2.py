@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Configure NeoStation for the lazy RPCS3 runtime and its required entitlements.
 
-RPCS3 iOS 0.8.1 is still lazy-loaded, so it cannot crash NeoStation before a
+RPCS3 iOS 0.9 is still lazy-loaded, so it cannot crash NeoStation before a
 PS3 action is requested. Once requested, however, the Core requires the same
 host capabilities as the standalone RPCS3 IPA: get-task-allow, extended virtual
 addressing and the increased memory limits. These are emitted into
