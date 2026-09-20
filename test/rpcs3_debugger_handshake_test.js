@@ -69,7 +69,7 @@ function runForeignStop() {
         if (cCount === 3) return stop('05', 0x1000, 0); // detach
         throw Error('RPCS3 was resumed more than once from the same stop');
       }
-      if (command === 'vCont;C0b:1;c') return stop('05', 0x1000, 1);
+      if (command === 'c' && cCount === 3) return stop('05', 0x1000, 1);
       if (command === 'm1000,4') return 'a0013ed4';
       if (command === 'm2000,4') return '1f2003d5'; // AArch64 NOP
       if (command.startsWith('P20=')) return 'OK';
@@ -84,8 +84,9 @@ function runForeignStop() {
 }
 const foreign = runForeignStop();
 assert.equal(foreign.error, undefined);
-assert.ok(foreign.commands.includes('vCont;C0b:1;c'));
+assert.equal(foreign.commands.some(value => value.startsWith('vCont;C')), false);
 assert.equal(foreign.commands.some(value => value.startsWith('vCont;S')), false);
+assert.ok(foreign.log.some(value => value.includes('RPCS3_FOREIGN_STOP_SUPPRESSED')));
 assert.equal(foreign.cCount, 3);
 assert.ok(foreign.log.some(value => value.includes('RPCS3_RSP_STOP')));
 console.log('PASS: RPCS3 consumes each debugger stop exactly once without single-step reinjection');
