@@ -6,9 +6,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define NEO_ARMSX2_ABI_VERSION 3u
+#define NEO_ARMSX2_ABI_VERSION 4u
 #define NEO_ARMSX2_BOOT_DISC 1u
 #define NEO_ARMSX2_BOOT_ELF 2u
+// No ROM: use the installed BIOS and the same owned VM lifecycle.
+#define NEO_ARMSX2_BOOT_BIOS 3u
 #define NEO_ARMSX2_RA_ENABLED 1u
 #define NEO_ARMSX2_RA_HARDCORE 2u
 #define NEO_ARMSX2_RA_NOTIFICATIONS 3u
@@ -69,6 +71,11 @@ typedef struct NeoARMSX2API {
   int (*login_retroachievements)(const char* username, const char* password,
                                  uint32_t timeout_ms, char* error, size_t capacity);
   int (*logout_retroachievements)(uint32_t timeout_ms, char* error, size_t capacity);
+
+  // Whitelisted per-game GS hacks. -1 removes this game's explicit override;
+  // 0/1 select off/on. Effective state comes from the upstream GS/GameDB path.
+  int (*get_graphics_hacks_json)(char* output, size_t capacity);
+  int (*set_graphics_hack)(const char* key, int value, char* error, size_t capacity);
 } NeoARMSX2API;
 
 typedef const NeoARMSX2API* (*NeoARMSX2GetAPI)(uint32_t version);

@@ -7,6 +7,7 @@ BUILD="$ROOT/build/armsx2-core"
 REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$ROOT/build-utils/armsx2/source.json")"
 mkdir -p "$BUILD" "$ROOT/dist/armsx2"
 python3 "$ROOT/test/armsx2_vm_shutdown_test.py" --upstream "$SOURCE"
+python3 "$ROOT/test/armsx2_bios_hacks_test.py" --upstream "$SOURCE"
 python3 "$ROOT/build-utils/armsx2/prepare_source.py" "$SOURCE"
 
 # Make the native artifact independent from GitHub runner/workspace paths.

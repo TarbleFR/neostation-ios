@@ -3,6 +3,7 @@
 // URL, shortcut, VPN, interpreter fallback or detached VM worker is used.
 #define SDL_MAIN_HANDLED
 #include "ARMSX2CoreABI.h"
+#include "ARMSX2GraphicsHacks.h"
 #include "IOS/IOSRuntime.h"
 #import "IOS/ARMSX2GameView.h"
 #import "ARMSX2Bridge.h"
@@ -202,11 +203,15 @@ void vm_worker() {
       s_vmThreadActive.store(true,std::memory_order_release);
       DarwinMisc::WaitForJITValidation();
       VMBootParameters parameters;
-      parameters.fast_boot=true;
+      parameters.fast_boot=(r.kind!=NEO_ARMSX2_BOOT_BIOS);
       // Normal game launches must honor the persisted RA mode. This flag is
       // only for one-off boot flows which intentionally suspend Hardcore.
       parameters.disable_achievements_hardcore_mode=false;
-      if (r.kind==NEO_ARMSX2_BOOT_ELF) {
+      if (r.kind==NEO_ARMSX2_BOOT_BIOS) {
+        // The real PS2 browser/system configuration, with no disc inserted.
+        // Shutdown(false) persists the BIOS NVRAM through the upstream path.
+        parameters.source_type=CDVD_SourceType::NoDisc;
+      } else if (r.kind==NEO_ARMSX2_BOOT_ELF) {
         parameters.elf_override=r.game;
         parameters.source_type=CDVD_SourceType::NoDisc;
       } else {
@@ -384,9 +389,14 @@ int validate_jit(char* error,size_t capacity) {
   return 1;
 }
 int boot(const char* path,uint32_t kind,uint32_t timeout,char* error,size_t capacity) {
-  if(!path || path[0]!='/' || !FileSystem::FileExists(path) ||
-     (kind!=NEO_ARMSX2_BOOT_DISC && kind!=NEO_ARMSX2_BOOT_ELF))
+  const bool bios_only=(kind==NEO_ARMSX2_BOOT_BIOS);
+  if (bios_only) {
+    if (!path || path[0]!=0)
+      return error_out("ARMSX2 BIOS boot must not include a game path.",error,capacity);
+  } else if(!path || path[0]!='/' || !FileSystem::FileExists(path) ||
+      (kind!=NEO_ARMSX2_BOOT_DISC && kind!=NEO_ARMSX2_BOOT_ELF)) {
     return error_out("ARMSX2 requires an existing absolute ISO/CHD/disc or ELF path.",error,capacity);
+  }
   auto& r=runtime(); std::unique_lock lock(r.mutex);
   if(r.phase!=Phase::Prepared || r.stop || r.boot_requested) return error_out("ARMSX2 is not ready for exactly one boot.",error,capacity);
   r.game=path; r.kind=kind; r.boot_requested=true; r.changed.notify_all();
@@ -589,12 +599,81 @@ int logout_retroachievements(uint32_t timeout,char* error,size_t capacity) {
   return error_out("RetroAchievements logout did not settle before timeout.",error,capacity);
 }
 
+// All GS-setting operations use the existing upstream INI and apply paths.
+// Never write BIOS bytes, arbitrary INI keys or a global performance preset.
+int get_graphics_hacks_json(char* output,size_t capacity) {
+  if (!output || capacity<2 || !has_running_game()) return 0;
+  NSData* encoded=nil;
+  Host::RunOnCPUThread([&]{
+    @autoreleasepool {
+      const BOOL available=VMManager::HasValidVM() &&
+          [ARMSX2Bridge perGameIdentityKeyForCurrentGame].length>0;
+      NSMutableArray* entries=[NSMutableArray array];
+      if (available) {
+        NSDictionary* effective=[ARMSX2Bridge graphicsHackState];
+        for (const auto& hack : kNeoARMSX2GraphicsHacks) {
+          NSString* key=[NSString stringWithUTF8String:hack.key];
+          const BOOL overridden=[ARMSX2Bridge hasPerGameINIValue:@"EmuCore/GS" key:key forISO:nil];
+          const int configured=overridden ?
+              ([ARMSX2Bridge getPerGameINIBool:@"EmuCore/GS" key:key defaultValue:NO forISO:nil] ? 1 : 0) : -1;
+          NSMutableDictionary* entry=[@{
+            @"key":key, @"english":[NSString stringWithUTF8String:hack.english],
+            @"french":[NSString stringWithUTF8String:hack.french], @"value":@(configured),
+          } mutableCopy];
+          NSDictionary* state=effective[key];
+          if ([state isKindOfClass:NSDictionary.class]) entry[@"runtime"]=state;
+          if ([key isEqualToString:@"UserHacks"])
+            entry[@"runtime"]=@{@"effective":@(EmuConfig.GS.ManualUserHacks ? 1 : 0), @"reason":@0};
+          [entries addObject:entry];
+          [entry release];
+        }
+      }
+      // The core is MRC; retain bytes across the CPU thread's autorelease pool.
+      encoded=[[NSJSONSerialization dataWithJSONObject:@{
+        @"available":@(available), @"items":entries
+      } options:0 error:nil] retain];
+    }
+  },true);
+  if (!encoded) return 0;
+  const BOOL fits=encoded.length+1<=capacity;
+  if (fits) { memcpy(output,encoded.bytes,encoded.length); output[encoded.length]=0; }
+  [encoded release];
+  return fits ? 1 : 0;
+}
+int set_graphics_hack(const char* name,int value,char* error,size_t capacity) {
+  if (!name || !NeoARMSX2ValidGraphicsHack(name,value))
+    return error_out("Unsupported ARMSX2 graphics hack or value.",error,capacity);
+  if (!has_running_game())
+    return error_out("Graphics hacks require a running game.",error,capacity);
+  BOOL success=NO;
+  Host::RunOnCPUThread([&]{
+    @autoreleasepool {
+      if (!VMManager::HasValidVM() || ![ARMSX2Bridge perGameIdentityKeyForCurrentGame].length) return;
+      NSString* key=[NSString stringWithUTF8String:name];
+      if (value==-1) {
+        [ARMSX2Bridge deletePerGameINIValue:@"EmuCore/GS" key:key forISO:nil];
+      } else {
+        [ARMSX2Bridge setPerGameINIBool:@"EmuCore/GS" key:key value:value!=0 forISO:nil];
+      }
+      // The upstream per-game writer derives UserHackOverrides from keys
+      // present in this game's INI. Its global pin setter is intentionally NOT
+      // used here: changing one game must not alter every other game's hacks.
+      // The writer also coalesces and queues the native per-game reload.
+      const BOOL present=[ARMSX2Bridge hasPerGameINIValue:@"EmuCore/GS" key:key forISO:nil];
+      success=value==-1 ? !present : present &&
+          [ARMSX2Bridge getPerGameINIBool:@"EmuCore/GS" key:key defaultValue:NO forISO:nil]==(value!=0);
+    }
+  },true);
+  return success ? 1 : error_out("ARMSX2 could not persist this game's graphics hack.",error,capacity);
+}
+
 const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_SOURCE_REVISION,
   create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks,
   get_upscale_multiplier,get_aspect_ratio,get_cheats_enabled,set_upscale_multiplier,set_aspect_ratio,
   set_cheats_enabled,reload_cheats,has_save_state,save_state,load_state,
   get_retroachievements_state_json,set_retroachievements_option,
-  login_retroachievements,logout_retroachievements};
+  login_retroachievements,logout_retroachievements,
+  get_graphics_hacks_json,set_graphics_hack};
 }
 extern "C" bool ARMSX2_IsIdleVMPrewarmResolved() { return false; } // No autonomous prewarm in NeoStation.
 extern "C" const NeoARMSX2API* NeoARMSX2_GetAPI(uint32_t version) {
