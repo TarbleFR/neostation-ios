@@ -114,9 +114,18 @@ def patch(root: Path) -> None:
     path = root / 'Utilities/JITIOS.cpp'
     text = path.read_text()
     if MARKER in text:
-        if 'mach_vm_allocate' not in text or 'VM_FLAGS_OVERWRITE' in NEW:
+        reservation = text.split('u8* reserve_arena_layout(', 1)[1].split(
+            '\\nu8* reserve_code_data_layout(', 1
+        )[0]
+        forbidden_overwrite_forms = (
+            'VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE',
+            'VM_FLAGS_OVERWRITE | VM_FLAGS_FIXED',
+        )
+        if ('::mach_vm_allocate(' not in reservation or
+                'VM_FLAGS_FIXED | jit_vm_tag' not in reservation or
+                any(form in reservation for form in forbidden_overwrite_forms)):
             raise RuntimeError('Build 295 reservation marker exists without its exact-allocation contract')
-        print('Build 295 fixed JIT reservation already applied')
+        print('Build 295 fixed JIT reservation already applied and verified')
         return
     if 'NEOSTATION_DYNAMIC_JIT_V5' not in text:
         raise RuntimeError('Build 295 requires the validated Build 266 v0.9-era JIT backport')
