@@ -5,6 +5,7 @@
 typedef NS_ENUM(NSInteger, ARMSX2MenuPage) {
   ARMSX2MenuRoot,
   ARMSX2MenuGraphics,
+  ARMSX2MenuGraphicsHacks,
   ARMSX2MenuCheats,
   ARMSX2MenuControls,
   ARMSX2MenuSaveStates,
@@ -52,7 +53,10 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 @property(nonatomic, copy) NSDictionary<NSString*, id>* snapshot;
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
+@property(nonatomic, copy) NSDictionary<NSString*, id>* graphicsHacks;
+@property(nonatomic, assign) BOOL graphicsHacksLoading;
 - (void)reloadSnapshot;
+- (void)reloadGraphicsHacks;
 @end
 
 @implementation Armsx2SessionChoiceMenu
@@ -185,6 +189,21 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   });
 }
 
+- (void)reloadGraphicsHacks {
+  if (self.graphicsHacksLoading || !self.readGraphicsHacks) return;
+  self.graphicsHacksLoading=YES;
+  __weak Armsx2SessionMenu* weakSelf=self;
+  self.readGraphicsHacks(^(NSDictionary<NSString*, id>* state){
+    ARMSX2MenuOnMain(^{
+      Armsx2SessionMenu* menu=weakSelf;
+      if (!menu) return;
+      menu.graphicsHacksLoading=NO;
+      menu.graphicsHacks=[state isKindOfClass:NSDictionary.class] ? state : @{};
+      [menu.tableView reloadData];
+    });
+  });
+}
+
 - (Armsx2SessionMenu*)child:(ARMSX2MenuPage)page title:(NSString*)title {
   Armsx2SessionMenu* child = [Armsx2SessionMenu new];
   child.page = page;
@@ -195,6 +214,9 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   child.performCommand = self.performCommand;
   child.readRetroAchievements = self.readRetroAchievements;
   child.performRetroAchievementsCommand = self.performRetroAchievementsCommand;
+  child.readGraphicsHacks = self.readGraphicsHacks;
+  child.performGraphicsHack = self.performGraphicsHack;
+  child.graphicsHacks = self.graphicsHacks;
   child.resumeGame = self.resumeGame;
   child.quitGame = self.quitGame;
   return child;
@@ -207,7 +229,10 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
   switch (self.page) {
     case ARMSX2MenuRoot: return self.rootKeys.count;
-    case ARMSX2MenuGraphics: return self.snapshot.count ? 2 : 0;
+    case ARMSX2MenuGraphics: return self.snapshot.count ? 3 : 0;
+    case ARMSX2MenuGraphicsHacks:
+      return [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class]
+          ? [self.graphicsHacks[@"items"] count] : 0;
     case ARMSX2MenuCheats: return self.snapshot.count ? 2 : 0;
     case ARMSX2MenuControls: return self.snapshot.count ? 1 : 0;
     case ARMSX2MenuSaveStates:
@@ -217,8 +242,11 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == ARMSX2MenuGraphics)
-    return ARMSX2MenuText(@"Per-game graphics settings are applied live.",
-                          @"Les réglages graphiques par jeu sont appliqués en direct.");
+    return ARMSX2MenuText(@"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.",
+                          @"Les réglages graphiques par jeu sont appliqués en direct. Les hacks avancés conservent le comportement automatique ARMSX2/GameDB sauf remplacement explicite.");
+  if (self.page == ARMSX2MenuGraphicsHacks)
+    return ARMSX2MenuText(@"Automatic removes this game's override and returns control to ARMSX2/GameDB.",
+                          @"Automatique supprime le réglage propre à ce jeu et rend le contrôle à ARMSX2/GameDB.");
   if (self.page == ARMSX2MenuCheats)
     return ARMSX2MenuText(@"Hardcore RetroAchievements can disable cheats and save-state features.",
                           @"Le mode Hardcore de RetroAchievements peut désactiver les cheats et certaines fonctions de save state.");
@@ -279,9 +307,22 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     if (row == 0) {
       cell.textLabel.text = ARMSX2MenuText(@"Internal Resolution", @"Résolution interne");
       cell.detailTextLabel.text = [NSString stringWithFormat:@"%.0f×", [self.snapshot[@"upscale"] floatValue]];
-    } else {
+    } else if (row == 1) {
       cell.textLabel.text = ARMSX2MenuText(@"Screen Format", @"Format d’écran");
       cell.detailTextLabel.text = [self aspectTitle:[self.snapshot[@"aspect"] integerValue]];
+    } else {
+      cell.textLabel.text = ARMSX2MenuText(@"Graphics Hacks", @"Hacks graphiques");
+      cell.detailTextLabel.text = ARMSX2MenuText(@"Per-game advanced GS options", @"Options GS avancées par jeu");
+    }
+  } else if (self.page == ARMSX2MenuGraphicsHacks) {
+    NSArray* items = [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class] ? self.graphicsHacks[@"items"] : @[];
+    if (row < (NSInteger)items.count) {
+      NSDictionary* item = items[row];
+      cell.textLabel.text = ARMSX2MenuFrench() ? item[@"french"] : item[@"english"];
+      const NSInteger value = [item[@"value"] integerValue];
+      cell.detailTextLabel.text = value < 0
+          ? ARMSX2MenuText(@"Automatic (ARMSX2/GameDB)", @"Automatique (ARMSX2/GameDB)")
+          : (value ? ARMSX2MenuText(@"On", @"Activé") : ARMSX2MenuText(@"Off", @"Désactivé"));
     }
   } else if (self.page == ARMSX2MenuCheats) {
     if (row == 0) {
@@ -422,14 +463,50 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
                 command:@"upscale" values:values
                  titles:@[@"1×", @"2×", @"3×", @"4×", @"6×", @"8×"]
           selectedIndex:selected];
-    } else {
+    } else if (row == 1) {
       NSInteger selected = [self.snapshot[@"aspect"] integerValue];
       [self pushChoice:ARMSX2MenuText(@"Screen Format", @"Format d’écran")
                 command:@"aspect" values:@[@0, @1, @2, @3, @4]
                  titles:@[ARMSX2MenuText(@"Auto", @"Auto"), @"4:3", @"16:9", @"10:7",
                           ARMSX2MenuText(@"Stretch", @"Étendre")]
           selectedIndex:selected];
+    } else {
+      Armsx2SessionMenu* hacks=[self child:ARMSX2MenuGraphicsHacks
+          title:ARMSX2MenuText(@"Graphics Hacks", @"Hacks graphiques")];
+      [self.navigationController pushViewController:hacks animated:YES];
+      [hacks reloadGraphicsHacks];
     }
+  } else if (self.page == ARMSX2MenuGraphicsHacks) {
+    NSArray* items = [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class] ? self.graphicsHacks[@"items"] : @[];
+    if (row >= (NSInteger)items.count || !self.performGraphicsHack) return;
+    NSDictionary* item=items[row];
+    NSString* key=[item[@"key"] isKindOfClass:NSString.class] ? item[@"key"] : @"";
+    if (!key.length) return;
+    UIAlertController* sheet=[UIAlertController alertControllerWithTitle:
+        (ARMSX2MenuFrench() ? item[@"french"] : item[@"english"])
+        message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak Armsx2SessionMenu* weakSelf=self;
+    void (^apply)(NSInteger)=^(NSInteger value) {
+      weakSelf.graphicsHacksLoading=YES;
+      weakSelf.navigationController.view.userInteractionEnabled=NO;
+      weakSelf.performGraphicsHack(key,value,^(BOOL success,NSString* message){
+        ARMSX2MenuOnMain(^{
+          weakSelf.graphicsHacksLoading=NO;
+          weakSelf.navigationController.view.userInteractionEnabled=YES;
+          weakSelf.stateMessage=message;
+          if (success) [weakSelf reloadGraphicsHacks];
+        });
+      });
+    };
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"Automatic", @"Automatique") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){apply(-1);}]];
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"Off", @"Désactivé") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){apply(0);}]];
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"On", @"Activé") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){apply(1);}]];
+    [sheet addAction:[UIAlertAction actionWithTitle:ARMSX2MenuText(@"Cancel", @"Annuler") style:UIAlertActionStyleCancel handler:nil]];
+    if (sheet.popoverPresentationController) {
+      sheet.popoverPresentationController.sourceView=self.view;
+      sheet.popoverPresentationController.sourceRect=[tableView rectForRowAtIndexPath:indexPath];
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
   } else if (self.page == ARMSX2MenuCheats) {
     if (row == 0) {
       const BOOL enabled = [self.snapshot[@"cheats"] boolValue];
