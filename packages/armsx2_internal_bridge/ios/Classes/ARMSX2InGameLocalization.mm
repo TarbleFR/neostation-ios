@@ -7,6 +7,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
   dispatch_once(&once, ^{
     values = @{
       @"de": @{
+        @"Auto": @"Automatisch", @"Stretch": @"Strecken",
         @"Back": @"Zurück", @"Resume Game": @"Spiel fortsetzen", @"Graphics": @"Grafik",
         @"Compatibility / Cheats": @"Kompatibilität / Cheats", @"Controls": @"Steuerung",
         @"Save State": @"Spielstand speichern", @"Load State": @"Spielstand laden",
@@ -46,6 +47,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Gerade Sprite-Position erzwingen"
       },
       @"es": @{
+        @"Auto": @"Auto", @"Stretch": @"Estirar",
         @"Back": @"Atrás", @"Resume Game": @"Reanudar juego", @"Graphics": @"Gráficos",
         @"Compatibility / Cheats": @"Compatibilidad / Trucos", @"Controls": @"Controles",
         @"Save State": @"Guardar estado", @"Load State": @"Cargar estado", @"Quit Game": @"Salir del juego",
@@ -83,6 +85,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Forzar posición par de sprites"
       },
       @"pt": @{
+        @"Auto": @"Auto", @"Stretch": @"Esticar",
         @"Back": @"Voltar", @"Resume Game": @"Retomar jogo", @"Graphics": @"Gráficos",
         @"Compatibility / Cheats": @"Compatibilidade / Cheats", @"Controls": @"Controlos",
         @"Save State": @"Guardar estado", @"Load State": @"Carregar estado", @"Quit Game": @"Sair do jogo",
@@ -118,6 +121,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Forçar posição par dos sprites"
       },
       @"ru": @{
+        @"Auto": @"Авто", @"Stretch": @"Растянуть",
         @"Back": @"Назад", @"Resume Game": @"Продолжить игру", @"Graphics": @"Графика",
         @"Compatibility / Cheats": @"Совместимость / Читы", @"Controls": @"Управление",
         @"Save State": @"Сохранить состояние", @"Load State": @"Загрузить состояние", @"Quit Game": @"Выйти из игры",
@@ -153,6 +157,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Принудительно чётная позиция спрайта"
       },
       @"ja": @{
+        @"Auto": @"自動", @"Stretch": @"引き伸ばす",
         @"Back": @"戻る", @"Resume Game": @"ゲームを再開", @"Graphics": @"グラフィック",
         @"Compatibility / Cheats": @"互換性 / チート", @"Controls": @"操作",
         @"Save State": @"ステートを保存", @"Load State": @"ステートを読み込む", @"Quit Game": @"ゲームを終了",
@@ -187,6 +192,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"スプライト位置を偶数に固定"
       },
       @"ko": @{
+        @"Auto": @"자동", @"Stretch": @"늘이기",
         @"Back": @"뒤로", @"Resume Game": @"게임 계속", @"Graphics": @"그래픽",
         @"Compatibility / Cheats": @"호환성 / 치트", @"Controls": @"컨트롤",
         @"Save State": @"상태 저장", @"Load State": @"상태 불러오기", @"Quit Game": @"게임 종료",
@@ -220,6 +226,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"스프라이트 위치를 짝수로 강제"
       },
       @"zh": @{
+        @"Auto": @"自动", @"Stretch": @"拉伸",
         @"Back": @"返回", @"Resume Game": @"继续游戏", @"Graphics": @"图形",
         @"Compatibility / Cheats": @"兼容性 / 金手指", @"Controls": @"控制",
         @"Save State": @"保存即时存档", @"Load State": @"加载即时存档", @"Quit Game": @"退出游戏",
@@ -252,6 +259,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"对齐精灵", @"Merge sprites": @"合并精灵", @"Force even sprite position": @"强制精灵偶数位置"
       },
       @"zh_Hant": @{
+        @"Auto": @"自動", @"Stretch": @"拉伸",
         @"Back": @"返回", @"Resume Game": @"繼續遊戲", @"Graphics": @"圖形",
         @"Compatibility / Cheats": @"相容性 / 金手指", @"Controls": @"控制",
         @"Save State": @"儲存即時存檔", @"Load State": @"載入即時存檔", @"Quit Game": @"離開遊戲",
@@ -284,6 +292,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"對齊精靈", @"Merge sprites": @"合併精靈", @"Force even sprite position": @"強制精靈偶數位置"
       },
       @"it": @{
+        @"Auto": @"Auto", @"Stretch": @"Estendi",
         @"Back": @"Indietro", @"Resume Game": @"Riprendi gioco", @"Graphics": @"Grafica",
         @"Compatibility / Cheats": @"Compatibilità / Trucchi", @"Controls": @"Controlli",
         @"Save State": @"Salva stato", @"Load State": @"Carica stato", @"Quit Game": @"Esci dal gioco",
@@ -315,6 +324,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"Allinea sprite", @"Merge sprites": @"Unisci sprite", @"Force even sprite position": @"Forza posizione pari sprite"
       },
       @"id": @{
+        @"Auto": @"Otomatis", @"Stretch": @"Regangkan",
         @"Back": @"Kembali", @"Resume Game": @"Lanjutkan game", @"Graphics": @"Grafis",
         @"Compatibility / Cheats": @"Kompatibilitas / Cheat", @"Controls": @"Kontrol",
         @"Save State": @"Simpan status", @"Load State": @"Muat status", @"Quit Game": @"Keluar dari game",
@@ -346,6 +356,7 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"Sejajarkan sprite", @"Merge sprites": @"Gabungkan sprite", @"Force even sprite position": @"Paksa posisi sprite genap"
       },
       @"fr": @{
+        @"Auto": @"Auto", @"Stretch": @"Étendre",
         @"Back": @"Retour", @"Resume Game": @"Reprendre le jeu", @"Graphics": @"Graphismes",
         @"Compatibility / Cheats": @"Hacks / Cheats", @"Controls": @"Commandes",
         @"Save State": @"Sauvegarder un état", @"Load State": @"Charger un état", @"Quit Game": @"Quitter le jeu",
