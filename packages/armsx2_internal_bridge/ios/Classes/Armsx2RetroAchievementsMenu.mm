@@ -42,8 +42,8 @@ static UINavigationBarAppearance* ARMSX2RAModernNavigationAppearance(void) {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
-  self.tableView.backgroundColor = UIColor.clearColor;
+  self.view.backgroundColor = UIColor.clearColor;
+  self.tableView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.58];
   self.tableView.separatorColor = [UIColor.separatorColor colorWithAlphaComponent:0.35];
   self.navigationController.navigationBar.tintColor = UIColor.systemIndigoColor;
   self.navigationController.navigationBar.standardAppearance = ARMSX2RAModernNavigationAppearance();
@@ -324,7 +324,11 @@ typedef NS_ENUM(NSInteger, Armsx2RARow) {
 }
 
 - (void)donePressed {
-  [self dismissViewControllerAnimated:YES completion:nil];
+  if (self.navigationController.viewControllers.firstObject != self) {
+    [self.navigationController popViewControllerAnimated:YES];
+  } else {
+    [self dismissViewControllerAnimated:YES completion:nil];
+  }
 }
 
 - (void)reloadState {
