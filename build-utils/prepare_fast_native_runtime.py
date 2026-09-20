@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Install immutable native binaries from the validated Build 270 donor IPA.
 
-Fast experimental builds do not rebuild RPCS3Core, DolphinCore or StikJIT.
-The official StikJIT 1.5.0 XCFramework supplies compile-time Swift interfaces;
-the runtime binary and scripts are replaced with the hash-verified donor bytes.
+Fast experimental builds do not rebuild DolphinCore or StikJIT. RPCS3Core is
+materialized from the pinned upstream RPCS3 iOS release asset because Build
+293 device logs prove the older 0.8.1 core can terminate during dlopen before
+its first JIT region-preparation breakpoint. The official StikJIT 1.5.0
+XCFramework supplies compile-time Swift interfaces; its runtime binary and
+scripts are replaced with the hash-verified donor bytes.
 """
 from pathlib import Path
 import argparse
@@ -16,7 +19,8 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 DOLPHIN_SHA='60012e203c927d468cb6d82d21aa8f8e14299fedbf0b2f80ce0ea982d4e173ee'
-RPCS3_SHA='dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'
+RPCS3_RELEASE='v0.9'
+RPCS3_RELEASE_IPA_SHA='4cc11c8a0bc3be74685c2781741a7a2b559e94dac6b81df609ed43523e5cfec0'
 UNIVERSAL_SHA='22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1'
 LEGACY_SHA='787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'
 OFFICIAL_STIK_ZIP_SHA='444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85'
@@ -103,14 +107,21 @@ def main() -> None:
     parser.add_argument('artifact', type=Path)
     parser.add_argument('--build-number', required=True)
     parser.add_argument('--stik-xcframework-zip', type=Path, required=True)
+    parser.add_argument('--rpcs3-release-ipa', type=Path, required=True)
     args=parser.parse_args()
 
     donor=args.artifact.resolve()
     official_stik=args.stik_xcframework_zip.resolve()
+    rpcs3_release_ipa=args.rpcs3_release_ipa.resolve()
     demand(official_stik.is_file(), 'Official StikJIT XCFramework ZIP is missing')
     demand(
         sha(official_stik)==OFFICIAL_STIK_ZIP_SHA,
         'Official StikJIT 1.5.0 archive hash mismatch',
+    )
+    demand(rpcs3_release_ipa.is_file(), 'Pinned RPCS3 release IPA is missing')
+    demand(
+        sha(rpcs3_release_ipa)==RPCS3_RELEASE_IPA_SHA,
+        f'RPCS3 {RPCS3_RELEASE} release IPA hash mismatch',
     )
 
     with tempfile.TemporaryDirectory(prefix='neostation-fast-native-') as temp:
@@ -143,16 +154,40 @@ def main() -> None:
         app=work/'ipa'/'Payload'/apps[0]
         stik=app/'Frameworks/StikJIT.framework'
         dolphin=app/'Frameworks/DolphinCore.framework'
-        rpcs3=app/'Frameworks/libRPCS3Core.dylib'
+        donor_rpcs3=app/'Frameworks/libRPCS3Core.dylib'
         dolphin_bridge=app/'Frameworks/dolphin_internal_bridge.framework'
 
-        for required in (stik/'StikJIT', dolphin/'DolphinCore', rpcs3):
+        for required in (stik/'StikJIT', dolphin/'DolphinCore', donor_rpcs3):
             demand(required.is_file(), f'Missing donor runtime: {required}')
 
         demand(sha(dolphin/'DolphinCore')==DOLPHIN_SHA, 'DolphinCore donor hash mismatch')
-        demand(sha(rpcs3)==RPCS3_SHA, 'RPCS3Core donor hash mismatch')
         demand(sha(stik/'universal.js')==UNIVERSAL_SHA, 'StikJIT universal.js donor hash mismatch')
         demand(sha(stik/'legacy.js')==LEGACY_SHA, 'StikJIT legacy.js donor hash mismatch')
+
+        # The upstream v0.9 release explicitly includes a fix for JIT-allocation
+        # crashes. Device Build 293 logs show failed launches die after the
+        # nonce proof and dlopen entry but before the first command-1 JIT
+        # preparation, while successful launches reach those commands. Use the
+        # pinned upstream release asset instead of the older 0.8.1 donor core.
+        rpcs3_root=work/'rpcs3-release'
+        with zipfile.ZipFile(rpcs3_release_ipa) as archive:
+            demand(archive.testzip() is None, 'RPCS3 release IPA is corrupt')
+            core_members=[
+                item for item in archive.namelist()
+                if item.endswith('/Frameworks/libRPCS3Core.dylib')
+            ]
+            demand(
+                len(core_members)==1,
+                f'Expected one RPCS3 Core in {RPCS3_RELEASE}, found {core_members}',
+            )
+            member=core_members[0]
+            archive.extract(member, rpcs3_root)
+            rpcs3=rpcs3_root/member
+        demand(
+            rpcs3.is_file() and rpcs3.stat().st_size >= 60_000_000,
+            f'RPCS3 {RPCS3_RELEASE} Core is missing or unexpectedly small',
+        )
+        rpcs3_core_sha=sha(rpcs3)
 
         official_root=work/'official-stik'
         with zipfile.ZipFile(official_stik) as archive:
@@ -258,7 +293,9 @@ def main() -> None:
             'universalJsSha256':sha(stik/'universal.js'),
             'legacyJsSha256':sha(stik/'legacy.js'),
             'dolphinCoreSha256':sha(dolphin/'DolphinCore'),
-            'rpcs3CoreSha256':sha(rpcs3),
+            'rpcs3Release':RPCS3_RELEASE,
+            'rpcs3ReleaseIpaSha256':RPCS3_RELEASE_IPA_SHA,
+            'rpcs3CoreSha256':rpcs3_core_sha,
             'touchResourcesCopied':copied,
         }, indent=2)+'\n')
         print(identity.read_text())
