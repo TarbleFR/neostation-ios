@@ -183,6 +183,56 @@ void main() {
       expect(host, contains('cancelExtensionRequestWithIdentifier:'));
     });
 
+    test('RPCS3 in-game menu mirrors Dolphin navigation and follows 12 locales', () {
+      final menu = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3SessionMenu.mm',
+      ).readAsStringSync();
+      final plugin = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+      ).readAsStringSync();
+      final localization = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm',
+      ).readAsStringSync();
+      final input = File(
+        'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm',
+      ).readAsStringSync();
+
+      expect(menu, contains('UITableViewStyleInsetGrouped'));
+      expect(menu, contains('UINavigationBarAppearance'));
+      expect(menu, contains('RPCS3MenuGraphics'));
+      expect(menu, contains('RPCS3MenuSystem'));
+      expect(menu, contains('RPCS3MenuControls'));
+      expect(menu, contains('RPCS3MenuSaveStates'));
+      expect(menu, contains('RPCS3MenuLoadStates'));
+      expect(menu, contains('systemImageNamed'));
+      expect(plugin, contains('Rpcs3SessionMenu* menu'));
+      expect(
+        plugin,
+        contains('UIModalPresentationOverFullScreen'),
+      );
+      expect(plugin, contains('performSessionCommand'));
+      expect(plugin, contains('readSessionStates'));
+      expect(plugin, contains('performSessionStateAtSlot'));
+      expect(input, contains('self.touchControlsEnabled'));
+
+      for (final locale in const [
+        'en', 'es', 'pt', 'ru', 'zh', 'zh_Hant',
+        'fr', 'de', 'it', 'id', 'ja', 'ko',
+      ]) {
+        expect(localization, contains('@"$locale": @{'), reason: locale);
+      }
+      for (final key in const [
+        'graphicsMenu',
+        'systemMenu',
+        'controlsMenu',
+        'resumeGame',
+        'performanceOverlay',
+        'touchControls',
+      ]) {
+        expect(localization, contains('@"$key"'), reason: key);
+      }
+    });
+
     test('firmware picker is shown before RPCS3 runtime initialization', () {
       final service = File('lib/services/rpcs3_internal_service.dart')
           .readAsStringSync();
