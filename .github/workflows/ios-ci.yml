@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 297 Embedded ARMSX2
-run-name: NeoStation iOS Build 297 • ${{ github.sha }}
+name: NeoStation iOS Build 298 Cheats & Patches
+run-name: NeoStation iOS Build 298 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-297
+  group: neostation-ios-build-298
   cancel-in-progress: true
 
 jobs:
@@ -22,16 +22,18 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 297 Embedded ARMSX2 IPA
+    name: Build 298 Cheats & Patches IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '297'
-      IPA_NAME: 'NeoStation-iOS-Build-297-Embedded-ARMSX2'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-297-Embedded-ARMSX2'
+      BUILD_NUMBER: '298'
+      IPA_NAME: 'NeoStation-iOS-Build-298-Cheats-Patches'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-298-Cheats-Patches'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
-      ARMSX2_CORE_HOST_SHA: 2e0f42a4495da7a950969f58230a550da1281190
-      ARMSX2_CORE_RUN_ID: '35498658790'
+      DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
+      DOLPHIN_CORE_RUN_ID: '35519943003'
+      ARMSX2_CORE_HOST_SHA: 017c9c2f1e0628e43506707bd6943a76f44f8f44
+      ARMSX2_CORE_RUN_ID: '35519677053'
       RPCS3_CORE_HOST_SHA: a8cb83c99055123b928537661f3571dd816ff078
       RPCS3_CORE_RUN_ID: '35506921302'
       RPCS3_CORE_SHA256: bcfc9792888dd93496d4699adbfe8aea52718a866296e7b4a80379edb9b072cf
@@ -213,6 +215,112 @@ jobs:
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+
+
+      - name: Download rebuilt embedded Dolphin Core
+        uses: actions/download-artifact@v4
+        with:
+          name: DolphinCore-${{ env.DOLPHIN_CORE_HOST_SHA }}
+          run-id: ${{ env.DOLPHIN_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/dolphin-native
+
+      - name: Verify and install rebuilt Dolphin Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          FRAMEWORK="dist/dolphin-native/DolphinCore.framework"
+          CORE="$FRAMEWORK/DolphinCore"
+          IDENTITY="dist/dolphin-native/identity.json"
+          test -s "$CORE"
+          test -s "$IDENTITY"
+          test -d dist/dolphin-native/Sys
+
+          # The full IPA may only reuse this native artifact when every source
+          # that defines the embedded Dolphin ABI still matches the validated
+          # core build.
+          git diff --exit-code "$DOLPHIN_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            build-utils/patch_dolphin_internal_core_v2.py \
+            packages/dolphin_internal_bridge/core \
+            packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h \
+            packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.mm \
+            packages/dolphin_internal_bridge/ios/Classes/DolphinInternalBridgePlugin.mm \
+            test/dolphin_cheat_manager_test.py \
+            test/dolphin_cheats_menu_test.py \
+            .github/workflows/dolphin-core.yml
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import plistlib
+          import shutil
+          from pathlib import Path
+
+          source = Path("dist/dolphin-native")
+          framework = source / "DolphinCore.framework"
+          core = framework / "DolphinCore"
+          identity = json.loads((source / "identity.json").read_text())
+          actual = hashlib.sha256(core.read_bytes()).hexdigest()
+
+          assert identity["host_commit"] == os.environ["DOLPHIN_CORE_HOST_SHA"], identity
+          assert identity["source_revision"] == os.environ["DOLPHIN_SHA"], identity
+          assert identity["architectures"] == ["arm64"], identity
+          assert identity["sha256"] == actual, (actual, identity)
+          assert "cheat manager" in identity.get("abi", "").lower(), identity
+          assert set(identity.get("cheat_catalogues", [])) == {
+              "Gecko/WiiRD", "Action Replay/local INI"
+          }, identity
+
+          destination = Path(
+              "packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework"
+          )
+          if destination.exists():
+              shutil.rmtree(destination)
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copytree(framework, destination)
+          (destination / "DolphinCore").chmod(0o755)
+
+          info_path = destination / "Info.plist"
+          if info_path.is_file():
+              info = plistlib.loads(info_path.read_bytes())
+              info["CFBundleVersion"] = os.environ["BUILD_NUMBER"]
+              info_path.write_bytes(
+                  plistlib.dumps(info, fmt=plistlib.FMT_XML, sort_keys=False)
+              )
+
+          sys_destination = Path("ios/Runner/Sys")
+          if sys_destination.exists():
+              shutil.rmtree(sys_destination)
+          shutil.copytree(source / "Sys", sys_destination)
+
+          # The fast-runtime report initially describes the Build 270 donor.
+          # Rewrite the Dolphin fields so the final Build 298 diagnostics
+          # describe the binary that is actually packaged.
+          fast_path = Path("build/fast-native/identity.json")
+          fast = json.loads(fast_path.read_text())
+          fast["dolphinCoreSha256"] = actual
+          fast["dolphinCoreHostCommit"] = identity["host_commit"]
+          fast["dolphinCoreRunId"] = int(os.environ["DOLPHIN_CORE_RUN_ID"])
+          fast["dolphinSourceRevision"] = identity["source_revision"]
+          fast["dolphinCheatCatalogues"] = identity["cheat_catalogues"]
+          fast_path.write_text(json.dumps(fast, indent=2) + "\n")
+          print(json.dumps(identity, indent=2))
+          PY
+
+          file packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore
+          nm -gU packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore \
+            > build/dolphin-native-exports.txt
+          for symbol in \
+            _neostation_dolphin_initialize \
+            _neostation_dolphin_launch \
+            _neostation_dolphin_menu_snapshot \
+            _neostation_dolphin_cheats_snapshot \
+            _neostation_dolphin_set_cheats_enabled \
+            _neostation_dolphin_set_cheat_enabled \
+            _neostation_dolphin_download_gecko_codes; do
+            grep -q " $symbol$" build/dolphin-native-exports.txt
+          done
 
       - name: Download rebuilt embedded RPCS3 Core
         uses: actions/download-artifact@v4
@@ -407,7 +515,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 297 IPA
+      - name: Package and validate Build 298 IPA
         shell: bash
         run: |
           set -euo pipefail
