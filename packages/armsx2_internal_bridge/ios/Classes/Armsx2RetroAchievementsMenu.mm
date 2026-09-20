@@ -1,18 +1,13 @@
 #import "Armsx2RetroAchievementsMenu.h"
+#import "ARMSX2InGameLocalization.h"
 
 static void ARMSX2RAOnMain(dispatch_block_t block) {
   if (NSThread.isMainThread) block();
   else dispatch_async(dispatch_get_main_queue(), block);
 }
 
-static BOOL ARMSX2RAIsFrench(void) {
-  NSString* language = NSLocale.preferredLanguages.firstObject.lowercaseString ?: @"";
-  return [language hasPrefix:@"fr"];
-}
-
-static NSString* ARMSX2RAText(NSString* english, NSString* french) {
-  return ARMSX2RAIsFrench() ? french : english;
-}
+#define ARMSX2RAText(english, french) \
+  ARMSX2LocalizedText((english), (french), self.localeIdentifier)
 
 static UINavigationBarAppearance* ARMSX2RAModernNavigationAppearance(void) {
   UINavigationBarAppearance* appearance = [UINavigationBarAppearance new];
@@ -30,6 +25,7 @@ static UINavigationBarAppearance* ARMSX2RAModernNavigationAppearance(void) {
 @property(nonatomic, copy) NSString* command;
 @property(nonatomic, copy) NSArray<NSDictionary*>* choices;
 @property(nonatomic, copy) Armsx2RetroAchievementsCommand performCommand;
+@property(nonatomic, copy) NSString* localeIdentifier;
 @property(nonatomic, assign) BOOL applying;
 @end
 
@@ -106,6 +102,7 @@ static UINavigationBarAppearance* ARMSX2RAModernNavigationAppearance(void) {
 @interface Armsx2RetroAchievementsAccountController : UIViewController
 @property(nonatomic, copy) Armsx2RetroAchievementsReadState readState;
 @property(nonatomic, copy) Armsx2RetroAchievementsCommand performCommand;
+@property(nonatomic, copy) NSString* localeIdentifier;
 @property(nonatomic, strong) UITextField* usernameField;
 @property(nonatomic, strong) UITextField* passwordField;
 @property(nonatomic, strong) UILabel* statusLabel;
@@ -437,6 +434,7 @@ typedef NS_ENUM(NSInteger, Armsx2RARow) {
   child.title = title;
   child.command = command;
   child.performCommand = self.performCommand;
+  child.localeIdentifier = self.localeIdentifier;
   child.choices = @[
     @{@"title": ARMSX2RAText(@"Off", @"Désactivé"), @"value": @NO, @"selected": @(!current)},
     @{@"title": ARMSX2RAText(@"On", @"Activé"), @"value": @YES, @"selected": @(current)},
@@ -453,6 +451,7 @@ typedef NS_ENUM(NSInteger, Armsx2RARow) {
       Armsx2RetroAchievementsAccountController* account = [Armsx2RetroAchievementsAccountController new];
       account.readState = self.readState;
       account.performCommand = self.performCommand;
+      account.localeIdentifier = self.localeIdentifier;
       [self.navigationController pushViewController:account animated:YES];
       break;
     }
@@ -465,6 +464,7 @@ typedef NS_ENUM(NSInteger, Armsx2RARow) {
       child.title = ARMSX2RAText(@"Mode", @"Mode");
       child.command = @"hardcore";
       child.performCommand = self.performCommand;
+      child.localeIdentifier = self.localeIdentifier;
       BOOL hardcore = [self.state[@"hardcorePreference"] boolValue];
       child.choices = @[
         @{@"title": @"Standard", @"value": @NO, @"selected": @(!hardcore)},
