@@ -48,6 +48,10 @@ int32_t neostation_dolphin_set_paused(int32_t paused);
 int32_t neostation_dolphin_stop(const char* log_path);
 char* neostation_dolphin_menu_snapshot(int32_t wii, int32_t slot);
 int32_t neostation_dolphin_menu_apply(const char* request_json);
+char* neostation_dolphin_cheats_snapshot(void);
+int32_t neostation_dolphin_set_cheats_enabled(int32_t enabled);
+int32_t neostation_dolphin_set_cheat_enabled(const char* type, int32_t index, int32_t enabled);
+char* neostation_dolphin_download_gecko_codes(void);
 char* neostation_dolphin_state_snapshot(void);
 int32_t neostation_dolphin_state_operation(int32_t slot, int32_t load);
 int32_t neostation_dolphin_restart(void);
@@ -1204,6 +1208,70 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           });
         });
       };
+      menu.readCheats = ^(void (^completion)(NSDictionary*)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.stopInProgress || bridge.dolphinController != owner) {
+          completion(nil);
+          return;
+        }
+        dispatch_async(bridge->_runtimeQueue, ^{
+          @autoreleasepool {
+            char* text = neostation_dolphin_cheats_snapshot();
+            NSDictionary* snapshot = nil;
+            if (text) {
+              NSData* data = [NSData dataWithBytes:text length:strlen(text)];
+              free(text);
+              id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+              if ([decoded isKindOfClass:NSDictionary.class]) snapshot = decoded;
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (!bridge.stopInProgress && bridge.dolphinController == owner)
+                completion(snapshot);
+            });
+          }
+        });
+      };
+      menu.performCheatCommand = ^(NSDictionary* request,
+                                   void (^completion)(BOOL success, NSDictionary* result)) {
+        DolphinInternalBridgePlugin* bridge = weakSelf;
+        if (!bridge || bridge.stopInProgress || bridge.dolphinController != owner) {
+          completion(NO, nil);
+          return;
+        }
+        dispatch_async(bridge->_runtimeQueue, ^{
+          @autoreleasepool {
+            NSString* kind = [request[@"kind"] isKindOfClass:NSString.class] ? request[@"kind"] : @"";
+            BOOL success = NO;
+            NSDictionary* payload = @{};
+            if ([kind isEqual:@"master"]) {
+              success = neostation_dolphin_set_cheats_enabled([request[@"enabled"] boolValue] ? 1 : 0) != 0;
+            } else if ([kind isEqual:@"toggle"]) {
+              NSString* type = [request[@"type"] isKindOfClass:NSString.class] ? request[@"type"] : @"";
+              NSInteger index = [request[@"index"] integerValue];
+              success = type.length && index >= 0 &&
+                  neostation_dolphin_set_cheat_enabled(type.UTF8String,(int32_t)index,
+                      [request[@"enabled"] boolValue] ? 1 : 0) != 0;
+            } else if ([kind isEqual:@"download"]) {
+              char* text = neostation_dolphin_download_gecko_codes();
+              if (text) {
+                NSData* data = [NSData dataWithBytes:text length:strlen(text)];
+                free(text);
+                id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                if ([decoded isKindOfClass:NSDictionary.class]) payload = decoded;
+              }
+              success = [payload[@"success"] boolValue];
+            }
+            DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"cheats.operation",
+                success ? @"Dolphin cheat operation completed." : @"Dolphin cheat operation failed.",
+                @{@"kind":kind,@"success":@(success)});
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (!bridge.stopInProgress && bridge.dolphinController == owner)
+                completion(success,payload);
+            });
+          }
+        });
+      };
+
       menu.readStates = ^(void (^completion)(NSDictionary*)) {
         DolphinInternalBridgePlugin* bridge = weakSelf;
         if (!bridge || bridge.stopInProgress || bridge.dolphinController != owner) { completion(nil); return; }
