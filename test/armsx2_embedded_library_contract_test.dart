@@ -276,7 +276,7 @@ void main() {
     expect(bridge, contains('set_graphics_hack'));
     expect(menu, contains('Hacks graphiques'));
     expect(menu, contains('Automatique (ARMSX2/GameDB)'));
-    expect(service, contains('launchBios()'));
+    expect(service, contains('launchBios({String uiLocale = \'en\'})'));
     expect(actions, contains("'boot_bios'"));
     expect(actions, contains('Démarrer le BIOS PS2'));
   });
