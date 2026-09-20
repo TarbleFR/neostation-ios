@@ -7,6 +7,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
   dispatch_once(&once, ^{
     values = @{
       @"de": @{
+        @"Available Patches": @"Verfügbare Patches",
+        @"for this game revision": @"für diese Spielversion",
+        @"Open to scan the built-in catalogue": @"Öffnen, um den integrierten Katalog zu durchsuchen",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 enthält bereits den PCSX2-Patchkatalog. Verfügbare Patches werden anhand von Seriennummer und CRC des aktuellen Spiels zugeordnet; es wird kein Patch geraten. RetroAchievements-Hardcore kann Cheats und Speicherstände einschränken.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Dies sind die Patches, die ARMSX2/PCSX2 für genau diese Spielversion gefunden hat. Änderungen werden pro Spiel gespeichert und über den nativen Patch-Loader angewendet.",
+        @"No built-in patch is available for this exact game revision.": @"Für genau diese Spielversion ist kein integrierter Patch verfügbar.",
+        @"Patch setting updated for this game.": @"Patch-Einstellung für dieses Spiel aktualisiert.",
         @"Standard": @"Standard",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Grafikeinstellungen pro Spiel werden sofort angewendet. Erweiterte Hacks behalten die ARMSX2/GameDB-Automatik bei, sofern sie nicht ausdrücklich überschrieben wird.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automatisch entfernt die Spiel-Überschreibung und gibt die Kontrolle an ARMSX2/GameDB zurück.",
@@ -59,6 +66,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Gerade Sprite-Position erzwingen"
       },
       @"es": @{
+        @"Available Patches": @"Parches disponibles",
+        @"for this game revision": @"para esta revisión del juego",
+        @"Open to scan the built-in catalogue": @"Abrir para analizar el catálogo integrado",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 ya incluye el catálogo de parches de PCSX2. Los parches disponibles se corresponden con el número de serie y el CRC del juego actual; no se aplica ningún parche por suposición. El modo Hardcore de RetroAchievements puede restringir trucos y estados guardados.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Estos son los parches que ARMSX2/PCSX2 encontró para esta revisión exacta del juego. Los cambios se guardan por juego y se aplican mediante el cargador de parches nativo.",
+        @"No built-in patch is available for this exact game revision.": @"No hay ningún parche integrado disponible para esta revisión exacta del juego.",
+        @"Patch setting updated for this game.": @"Ajuste del parche actualizado para este juego.",
         @"Standard": @"Estándar",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Los ajustes gráficos por juego se aplican al instante. Los ajustes avanzados mantienen el comportamiento automático de ARMSX2/GameDB salvo que se reemplacen explícitamente.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automático elimina la modificación de este juego y devuelve el control a ARMSX2/GameDB.",
@@ -109,6 +123,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Forzar posición par de sprites"
       },
       @"pt": @{
+        @"Available Patches": @"Patches disponíveis",
+        @"for this game revision": @"para esta revisão do jogo",
+        @"Open to scan the built-in catalogue": @"Abrir para analisar o catálogo integrado",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"O ARMSX2 já inclui o catálogo de patches do PCSX2. Os patches disponíveis são associados ao número de série e CRC do jogo atual; nenhum patch é aplicado por suposição. O modo Hardcore do RetroAchievements pode limitar cheats e estados de gravação.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Estes são os patches encontrados pelo ARMSX2/PCSX2 para esta revisão exata do jogo. As alterações são guardadas por jogo e aplicadas pelo carregador nativo de patches.",
+        @"No built-in patch is available for this exact game revision.": @"Não existe nenhum patch integrado para esta revisão exata do jogo.",
+        @"Patch setting updated for this game.": @"Definição do patch atualizada para este jogo.",
         @"Standard": @"Padrão",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"As definições gráficas por jogo são aplicadas imediatamente. Os ajustes avançados mantêm o comportamento automático do ARMSX2/GameDB salvo substituição explícita.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automático remove a substituição deste jogo e devolve o controlo ao ARMSX2/GameDB.",
@@ -157,6 +178,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Forçar posição par dos sprites"
       },
       @"ru": @{
+        @"Available Patches": @"Доступные патчи",
+        @"for this game revision": @"для этой версии игры",
+        @"Open to scan the built-in catalogue": @"Открыть встроенный каталог",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 уже содержит каталог патчей PCSX2. Доступные патчи подбираются по серийному номеру и CRC текущей игры; патчи не выбираются наугад. Режим Hardcore RetroAchievements может ограничивать читы и сохранение состояний.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Это патчи, найденные ARMSX2/PCSX2 для этой точной версии игры. Изменения сохраняются для каждой игры и применяются встроенным загрузчиком патчей.",
+        @"No built-in patch is available for this exact game revision.": @"Для этой точной версии игры встроенные патчи недоступны.",
+        @"Patch setting updated for this game.": @"Настройка патча для этой игры обновлена.",
         @"Standard": @"Стандартный",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Графические настройки для игры применяются сразу. Расширенные хаки сохраняют автоматическое поведение ARMSX2/GameDB, пока не задано явное значение.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Автоматически удаляет переопределение для игры и возвращает управление ARMSX2/GameDB.",
@@ -205,6 +233,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"Принудительно чётная позиция спрайта"
       },
       @"ja": @{
+        @"Available Patches": @"利用可能なパッチ",
+        @"for this game revision": @"このゲームリビジョン向け",
+        @"Open to scan the built-in catalogue": @"内蔵カタログを検索するために開く",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 には PCSX2 のパッチカタログが組み込まれています。利用可能なパッチは現在のゲームのシリアル番号と CRC に正確に照合され、推測で適用されることはありません。RetroAchievements の Hardcore モードではチートやステートセーブ機能が制限される場合があります。",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"これは ARMSX2/PCSX2 がこの正確なゲームリビジョン向けに検出したパッチです。変更はゲームごとに保存され、ネイティブのパッチローダーで適用されます。",
+        @"No built-in patch is available for this exact game revision.": @"この正確なゲームリビジョン向けの内蔵パッチはありません。",
+        @"Patch setting updated for this game.": @"このゲームのパッチ設定を更新しました。",
         @"Standard": @"標準",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"ゲーム別のグラフィック設定は即時反映されます。高度なハックは明示的に変更しない限りARMSX2/GameDBの自動設定を維持します。",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"自動を選ぶとこのゲーム固有の上書きを削除し、ARMSX2/GameDBに制御を戻します。",
@@ -252,6 +287,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"スプライト位置を偶数に固定"
       },
       @"ko": @{
+        @"Available Patches": @"사용 가능한 패치",
+        @"for this game revision": @"이 게임 리비전용",
+        @"Open to scan the built-in catalogue": @"내장 카탈로그를 검색하려면 열기",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2에는 PCSX2 패치 카탈로그가 이미 포함되어 있습니다. 사용 가능한 패치는 현재 게임의 시리얼과 CRC에 정확히 맞춰지며 추측으로 적용되지 않습니다. RetroAchievements Hardcore 모드는 치트와 세이브 스테이트 기능을 제한할 수 있습니다.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"ARMSX2/PCSX2가 이 정확한 게임 리비전에 대해 찾은 패치입니다. 변경 사항은 게임별로 저장되고 네이티브 패치 로더를 통해 적용됩니다.",
+        @"No built-in patch is available for this exact game revision.": @"이 정확한 게임 리비전에 사용할 수 있는 내장 패치가 없습니다.",
+        @"Patch setting updated for this game.": @"이 게임의 패치 설정을 업데이트했습니다.",
         @"Standard": @"표준",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"게임별 그래픽 설정은 즉시 적용됩니다. 고급 해킹은 명시적으로 변경하지 않는 한 ARMSX2/GameDB 자동 동작을 유지합니다.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"자동은 이 게임의 재정의를 제거하고 ARMSX2/GameDB에 제어를 돌려줍니다.",
@@ -298,6 +340,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Force even sprite position": @"스프라이트 위치를 짝수로 강제"
       },
       @"zh": @{
+        @"Available Patches": @"可用补丁",
+        @"for this game revision": @"适用于此游戏版本",
+        @"Open to scan the built-in catalogue": @"打开以扫描内置目录",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 已内置 PCSX2 补丁目录。可用补丁会根据当前游戏的序列号和 CRC 精确匹配，不会猜测并应用补丁。RetroAchievements 硬核模式可能会限制作弊和即时存档功能。",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"这些是 ARMSX2/PCSX2 为当前精确游戏版本找到的补丁。更改会按游戏保存，并通过原生补丁加载器应用。",
+        @"No built-in patch is available for this exact game revision.": @"此精确游戏版本没有可用的内置补丁。",
+        @"Patch setting updated for this game.": @"已更新此游戏的补丁设置。",
         @"Standard": @"标准",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"每个游戏的图形设置会即时生效。除非明确覆盖，高级修正会继续使用 ARMSX2/GameDB 的自动行为。",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"自动会移除此游戏的覆盖设置，并将控制权交还给 ARMSX2/GameDB。",
@@ -343,6 +392,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"对齐精灵", @"Merge sprites": @"合并精灵", @"Force even sprite position": @"强制精灵偶数位置"
       },
       @"zh_Hant": @{
+        @"Available Patches": @"可用修補程式",
+        @"for this game revision": @"適用於此遊戲版本",
+        @"Open to scan the built-in catalogue": @"開啟以掃描內建目錄",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 已內建 PCSX2 修補程式目錄。可用修補程式會依目前遊戲的序號與 CRC 精確比對，不會猜測套用修補程式。RetroAchievements Hardcore 模式可能限制金手指與即時存檔功能。",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"這些是 ARMSX2/PCSX2 為目前精確遊戲版本找到的修補程式。變更會依遊戲儲存，並透過原生修補程式載入器套用。",
+        @"No built-in patch is available for this exact game revision.": @"此精確遊戲版本沒有可用的內建修補程式。",
+        @"Patch setting updated for this game.": @"已更新此遊戲的修補程式設定。",
         @"Standard": @"標準",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"每個遊戲的圖形設定會即時套用。除非明確覆寫，進階修正會繼續使用 ARMSX2/GameDB 的自動行為。",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"自動會移除此遊戲的覆寫設定，並將控制權交還給 ARMSX2/GameDB。",
@@ -388,6 +444,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"對齊精靈", @"Merge sprites": @"合併精靈", @"Force even sprite position": @"強制精靈偶數位置"
       },
       @"it": @{
+        @"Available Patches": @"Patch disponibili",
+        @"for this game revision": @"per questa revisione del gioco",
+        @"Open to scan the built-in catalogue": @"Apri per analizzare il catalogo integrato",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 include già il catalogo patch di PCSX2. Le patch disponibili vengono abbinate al numero di serie e al CRC del gioco corrente; non viene applicata alcuna patch per supposizione. La modalità Hardcore di RetroAchievements può limitare trucchi e salvataggi di stato.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Queste sono le patch trovate da ARMSX2/PCSX2 per questa esatta revisione del gioco. Le modifiche vengono salvate per gioco e applicate tramite il caricatore patch nativo.",
+        @"No built-in patch is available for this exact game revision.": @"Nessuna patch integrata è disponibile per questa esatta revisione del gioco.",
+        @"Patch setting updated for this game.": @"Impostazione della patch aggiornata per questo gioco.",
         @"Standard": @"Standard",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Le impostazioni grafiche per gioco vengono applicate subito. Gli hack avanzati mantengono il comportamento automatico ARMSX2/GameDB salvo modifica esplicita.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automatico rimuove la modifica di questo gioco e restituisce il controllo ad ARMSX2/GameDB.",
@@ -432,6 +495,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"Allinea sprite", @"Merge sprites": @"Unisci sprite", @"Force even sprite position": @"Forza posizione pari sprite"
       },
       @"id": @{
+        @"Available Patches": @"Patch yang tersedia",
+        @"for this game revision": @"untuk revisi game ini",
+        @"Open to scan the built-in catalogue": @"Buka untuk memindai katalog bawaan",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 sudah menyertakan katalog patch PCSX2. Patch yang tersedia dicocokkan dengan nomor seri dan CRC game saat ini; tidak ada patch yang diterapkan berdasarkan tebakan. Mode Hardcore RetroAchievements dapat membatasi cheat dan fitur status simpan.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Ini adalah patch yang ditemukan ARMSX2/PCSX2 untuk revisi game yang tepat ini. Perubahan disimpan per game dan diterapkan melalui pemuat patch native.",
+        @"No built-in patch is available for this exact game revision.": @"Tidak ada patch bawaan untuk revisi game yang tepat ini.",
+        @"Patch setting updated for this game.": @"Pengaturan patch untuk game ini diperbarui.",
         @"Standard": @"Standar",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Pengaturan grafis per game diterapkan langsung. Hack lanjutan tetap mengikuti perilaku otomatis ARMSX2/GameDB kecuali diubah secara eksplisit.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Otomatis menghapus pengaturan khusus game ini dan mengembalikan kontrol ke ARMSX2/GameDB.",
@@ -476,6 +546,13 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
         @"Align sprites": @"Sejajarkan sprite", @"Merge sprites": @"Gabungkan sprite", @"Force even sprite position": @"Paksa posisi sprite genap"
       },
       @"fr": @{
+        @"Available Patches": @"Patches disponibles",
+        @"for this game revision": @"pour cette révision du jeu",
+        @"Open to scan the built-in catalogue": @"Ouvrir pour analyser le catalogue intégré",
+        @"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.": @"ARMSX2 embarque déjà le catalogue de patches PCSX2. Les patches disponibles sont associés au numéro de série et au CRC du jeu courant ; aucun patch n’est deviné. Le mode Hardcore de RetroAchievements peut désactiver les cheats et certaines fonctions de save state.",
+        @"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.": @"Voici les patches trouvés par ARMSX2/PCSX2 pour cette révision exacte du jeu. Les changements sont enregistrés par jeu et appliqués par le chargeur de patches natif.",
+        @"No built-in patch is available for this exact game revision.": @"Aucun patch intégré n’est disponible pour cette révision exacte du jeu.",
+        @"Patch setting updated for this game.": @"Réglage du patch mis à jour pour ce jeu.",
         @"Standard": @"Standard",
         @"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.": @"Les réglages graphiques par jeu sont appliqués en direct. Les hacks avancés conservent le comportement automatique ARMSX2/GameDB sauf remplacement explicite.",
         @"Automatic removes this game's override and returns control to ARMSX2/GameDB.": @"Automatique supprime le réglage propre à ce jeu et rend le contrôle à ARMSX2/GameDB.",
