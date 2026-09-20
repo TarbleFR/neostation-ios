@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 abstract final class DolphinImportLocale {
   static const values = <String, Map<String, String>>{
     "en": {
-      "cheats": "Cheats",
+        "cheats": "Cheats",
       "enableCheats": "Enable cheats",
       "downloadGecko": "Download Gecko codes",
       "geckoCodes": "Gecko codes",
@@ -116,7 +116,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accepted: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Existing system files are backed up before replacement.",
     },
     "fr": {
-      "cheats": "Cheats",
+        "cheats": "Cheats",
       "enableCheats": "Activer les cheats",
       "downloadGecko": "Télécharger les codes Gecko",
       "geckoCodes": "Codes Gecko",
@@ -232,6 +232,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Acceptés : keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Une copie de secours précède le remplacement des fichiers système existants.",
     },
     "de": {
+      "hardcoreCheatBlocked": "Im RetroAchievements-Hardcore-Modus blockiert",
       "cheats": "Cheats",
       "enableCheats": "Cheats aktivieren",
       "downloadGecko": "Gecko-Codes herunterladen",
@@ -347,6 +348,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Erlaubt: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Bestehende Systemdateien werden vor dem Ersetzen gesichert.",
     },
     "es": {
+      "hardcoreCheatBlocked": "Bloqueado en el modo Hardcore de RetroAchievements",
       "cheats": "Trucos",
       "enableCheats": "Activar trucos",
       "downloadGecko": "Descargar códigos Gecko",
@@ -462,6 +464,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Se aceptan: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Los archivos existentes se respaldan antes de reemplazarlos.",
     },
     "it": {
+      "hardcoreCheatBlocked": "Bloccato in modalità Hardcore RetroAchievements",
       "cheats": "Trucchi",
       "enableCheats": "Abilita trucchi",
       "downloadGecko": "Scarica codici Gecko",
@@ -577,6 +580,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accettati: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. I file esistenti vengono salvati prima della sostituzione.",
     },
     "pt": {
+      "hardcoreCheatBlocked": "Bloqueado no modo Hardcore do RetroAchievements",
       "cheats": "Cheats",
       "enableCheats": "Ativar cheats",
       "downloadGecko": "Transferir códigos Gecko",
@@ -692,6 +696,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Aceitos: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Os arquivos existentes são copiados antes da substituição.",
     },
     "ru": {
+      "hardcoreCheatBlocked": "Заблокировано в режиме Hardcore RetroAchievements",
       "cheats": "Читы",
       "enableCheats": "Включить читы",
       "downloadGecko": "Скачать коды Gecko",
@@ -808,6 +813,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Допустимы: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Перед заменой существующие файлы копируются.",
     },
     "id": {
+      "hardcoreCheatBlocked": "Diblokir dalam mode Hardcore RetroAchievements",
       "cheats": "Cheat",
       "enableCheats": "Aktifkan cheat",
       "downloadGecko": "Unduh kode Gecko",
@@ -921,6 +927,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Diterima: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Berkas lama dicadangkan sebelum diganti.",
     },
     "ja": {
+      "hardcoreCheatBlocked": "RetroAchievements Hardcore モードでは使用できません",
       "cheats": "チート",
       "enableCheats": "チートを有効化",
       "downloadGecko": "Gecko コードをダウンロード",
@@ -1036,6 +1043,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "対応：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。既存ファイルは置き換え前にバックアップされます。",
     },
     "ko": {
+      "hardcoreCheatBlocked": "RetroAchievements Hardcore 모드에서 차단됨",
       "cheats": "치트",
       "enableCheats": "치트 활성화",
       "downloadGecko": "Gecko 코드 다운로드",
@@ -1150,6 +1158,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "지원: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. 기존 파일은 교체 전에 백업됩니다.",
     },
     "zh": {
+      "hardcoreCheatBlocked": "在 RetroAchievements 硬核模式下被阻止",
       "cheats": "作弊",
       "enableCheats": "启用作弊",
       "downloadGecko": "下载 Gecko 代码",
@@ -1264,6 +1273,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "支持：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。现有文件将在替换前备份。",
     },
     "zh_Hant": {
+      "hardcoreCheatBlocked": "在 RetroAchievements Hardcore 模式下遭封鎖",
       "cheats": "作弊碼",
       "enableCheats": "啟用作弊碼",
       "downloadGecko": "下載 Gecko 代碼",
