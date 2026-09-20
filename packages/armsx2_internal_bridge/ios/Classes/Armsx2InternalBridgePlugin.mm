@@ -563,6 +563,7 @@ static UIViewController* ARMSX2RootViewController(void) {
     }
     self.stopInProgress = YES;
     self.operationBusy = YES;
+    const BOOL hadPresentedSession = self.gameController != nil;
     BOOL ok = YES;
     NSString* message = @"";
     if (self.api) {
@@ -585,6 +586,12 @@ static UIViewController* ARMSX2RootViewController(void) {
       [self dismissGameControllerWithCompletion:^{
         self.operationBusy = NO;
         self.stopInProgress = NO;
+        if (hadPresentedSession) {
+          [self.channel invokeMethod:@"sessionEnded" arguments:@{
+            @"reason": @"user_exit",
+            @"success": @YES,
+          }];
+        }
         if (completion) completion(YES, message);
       }];
     });
