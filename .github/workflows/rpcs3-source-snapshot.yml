@@ -1,48 +1,104 @@
-name: RPCS3 targeted repair source snapshot
+name: RPCS3 targeted startup preflight
 on:
   push:
     branches: [experimental]
     paths: ['.github/workflows/rpcs3-source-snapshot.yml']
 permissions:
-  contents: read
+  contents: write
+  actions: read
+concurrency:
+  group: neostation-rpcs3-source-consolidation
+  cancel-in-progress: false
 jobs:
-  snapshot:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  preflight:
+    runs-on: macos-15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          persist-credentials: false
-      - name: Export exact host and patched native sources
+          persist-credentials: true
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - uses: actions/download-artifact@v4
+        with:
+          name: RPCS3-repair-source-37d226ae9e8f222f91631fff5e49015922d71e1d
+          run-id: 35636317891
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/source-snapshot
+      - name: Materialize reviewed source and single canonical Core delta
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/snapshot"
-          git archive --format=tar.gz HEAD > "$RUNNER_TEMP/snapshot/host.tar.gz"
-          git bundle create "$RUNNER_TEMP/snapshot/host.bundle" --all
-          git rev-parse HEAD > "$RUNNER_TEMP/snapshot/HOST_SHA.txt"
-          SRC="$RUNNER_TEMP/rpcs3"
-          git init -q "$SRC"
-          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
-          git -C "$SRC" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
-          git -C "$SRC" checkout -q --detach FETCH_HEAD
-          export SRC
-          python3 - <<'PY'
-          import os, re, subprocess
-          from pathlib import Path
-          build = Path('build-utils/build_rpcs3_embedded_core.sh').read_text()
-          section = build.split('log "Apply NeoStation embedded boot fixes', 1)[1].split('log "Configure RPCS3Core', 1)[0]
-          for script in re.findall(r'python3 "\$PWD/(build-utils/patch_rpcs3_[^\"]+\.py)" "\$SRC"', section):
-              subprocess.run(['python3', script, os.environ['SRC']], check=True)
-          subprocess.run(['python3', 'test/rpcs3_build301_passive_dlopen_test.py', os.environ['SRC']], check=True)
-          PY
-          git -C "$SRC" diff --binary > "$RUNNER_TEMP/snapshot/core-postimage.patch"
-          tar --exclude=.git -czf "$RUNNER_TEMP/snapshot/core.tar.gz" -C "$SRC" .
-      - uses: actions/upload-artifact@v4
+          python3 build-utils/migrations/build302_apply.py
+          git diff --check
+      - uses: subosito/flutter-action@v2
         with:
-          name: RPCS3-repair-source-${{ github.sha }}
-          path: ${{ runner.temp }}/snapshot/
-          retention-days: 3
-          if-no-files-found: error
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Format and analyze exact modified host
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart format lib/services/rpcs3_internal_service.dart lib/services/rpcs3_startup_transaction.dart packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart test/rpcs3_startup_transaction_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_bridge_memory_mode_test.dart
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+      - name: Behavioral startup and protected regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/rpcs3_memory_preflight_test.py
+          python3 test/rpcs3_reserved_startup_core_test.py "$RUNNER_TEMP/build302-core-source"
+          python3 test/rpcs3_startup_abort_native_test.py
+          python3 test/rpcs3_jit_handshake_test.py
+          python3 test/rpcs3_loader_stability_280_test.py
+          python3 test/rpcs3_build283_boot_stability_test.py
+          python3 test/rpcs3_build285_core_handoff_test.py
+          python3 test/rpcs3_diagnostics_native_test.py
+          python3 test/rpcs3_host_entitlements_test.py
+          python3 test/rpcs3_ipa_validation_test.py
+          python3 test/local_dev_vpn_route_contract_test.py
+          python3 test/rpcs3_helper_journal_test.py
+          python3 test/rpcs3_reporter_send_order_test.py
+          node test/rpcs3_debugger_handshake_test.js
+          node test/rpcs3_stop_reply_behavior_test.js
+          flutter test test/rpcs3_startup_transaction_test.dart test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
+      - name: Compile actual host startup translation units against iPhoneOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter precache --ios
+          FLUTTER_FRAMEWORK="$(find "$FLUTTER_ROOT/bin/cache/artifacts/engine" -type d -path '*/ios-arm64/Flutter.framework' -print -quit)"
+          test -n "$FLUTTER_FRAMEWORK"
+          CLASSES=packages/rpcs3_internal_bridge/ios/Classes
+          for file in Rpcs3JitBridgePlugin.mm Rpcs3InternalBridgePlugin.mm Rpcs3Diagnostics.mm; do
+            xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.3 -std=c++20 \
+              -fobjc-arc -fblocks -fsyntax-only -F "$(dirname "$FLUTTER_FRAMEWORK")" \
+              -I "$CLASSES" "$CLASSES/$file"
+          done
+      - name: Commit tested canonical sources only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git rm -r build-utils/migrations/build302 build-utils/migrations/build302_apply.py
+          git add .gitattributes build-utils docs/RPCS3-build302-startup.md lib/services/rpcs3_internal_service.dart lib/services/rpcs3_startup_transaction.dart packages/rpcs3_internal_bridge packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift test
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- .github/workflows)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(rpcs3): reserve 448+576 MiB before Core and complete startup transactions [rpcs3-core-only]'
+          git push origin HEAD:experimental
+          git rev-parse HEAD | tee "$RUNNER_TEMP/build302-review/HOST_SHA.txt"
+          git bundle create "$RUNNER_TEMP/build302-review/host.bundle" --all
+      - name: Export source review and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RPCS3-Build302-source-preflight-${{ github.sha }}
+          path: ${{ runner.temp }}/build302-review/
+          retention-days: 7
+          if-no-files-found: warn
