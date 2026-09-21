@@ -1,0 +1,48 @@
+name: RPCS3 targeted repair source snapshot
+on:
+  push:
+    branches: [experimental]
+    paths: ['.github/workflows/rpcs3-source-snapshot.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export exact host and patched native sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/snapshot"
+          git archive --format=tar.gz HEAD > "$RUNNER_TEMP/snapshot/host.tar.gz"
+          git bundle create "$RUNNER_TEMP/snapshot/host.bundle" --all
+          git rev-parse HEAD > "$RUNNER_TEMP/snapshot/HOST_SHA.txt"
+          SRC="$RUNNER_TEMP/rpcs3"
+          git init -q "$SRC"
+          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
+          git -C "$SRC" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
+          git -C "$SRC" checkout -q --detach FETCH_HEAD
+          export SRC
+          python3 - <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+          build = Path('build-utils/build_rpcs3_embedded_core.sh').read_text()
+          section = build.split('log "Apply NeoStation embedded boot fixes', 1)[1].split('log "Configure RPCS3Core', 1)[0]
+          for script in re.findall(r'python3 "\$PWD/(build-utils/patch_rpcs3_[^\"]+\.py)" "\$SRC"', section):
+              subprocess.run(['python3', script, os.environ['SRC']], check=True)
+          subprocess.run(['python3', 'test/rpcs3_build301_passive_dlopen_test.py', os.environ['SRC']], check=True)
+          PY
+          git -C "$SRC" diff --binary > "$RUNNER_TEMP/snapshot/core-postimage.patch"
+          tar --exclude=.git -czf "$RUNNER_TEMP/snapshot/core.tar.gz" -C "$SRC" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RPCS3-repair-source-${{ github.sha }}
+          path: ${{ runner.temp }}/snapshot/
+          retention-days: 3
+          if-no-files-found: error
