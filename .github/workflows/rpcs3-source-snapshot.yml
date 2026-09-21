@@ -39,7 +39,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 test/rpcs3_startup_abort_native_test.py 2>&1 | tee "$RUNNER_TEMP/build302-review/native-abort.txt"
+          for attempt in $(seq 1 10); do
+            echo "Native abort repetition $attempt/10"
+            python3 test/rpcs3_startup_abort_native_test.py 2>&1 | tee -a "$RUNNER_TEMP/build302-review/native-abort.txt"
+          done
           python3 test/rpcs3_memory_preflight_test.py
           python3 test/rpcs3_reserved_startup_core_test.py "$RUNNER_TEMP/build302-core-source"
       - uses: subosito/flutter-action@v2
