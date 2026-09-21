@@ -91,13 +91,32 @@ def demand(condition: bool, message: str) -> None:
 def png_dimensions(path: Path) -> tuple[int, int]:
     data = path.read_bytes()
     demand(
-        len(data) >= 24 and data[:8] == b'\x89PNG\r\n\x1a\n' and data[12:16] == b'IHDR',
+        len(data) >= 24 and data[:8] == b'\x89PNG\r\n\x1a\n',
         f'Icon fallback is not a PNG: {path.name}',
     )
-    return (
-        int.from_bytes(data[16:20], 'big'),
-        int.from_bytes(data[20:24], 'big'),
-    )
+
+    # Xcode's CopyPNGFile/copypng may insert the Apple CgBI chunk before IHDR.
+    # Parse PNG chunks instead of assuming IHDR is the first chunk so the
+    # validator checks the file that is actually installed on iOS.
+    offset = 8
+    while offset + 8 <= len(data):
+        length = int.from_bytes(data[offset:offset + 4], 'big')
+        chunk_type = data[offset + 4:offset + 8]
+        payload = offset + 8
+        end = payload + length
+        demand(
+            end + 4 <= len(data),
+            f'Icon fallback has a truncated PNG chunk: {path.name}',
+        )
+        if chunk_type == b'IHDR':
+            demand(length >= 8, f'Icon fallback has an invalid IHDR: {path.name}')
+            return (
+                int.from_bytes(data[payload:payload + 4], 'big'),
+                int.from_bytes(data[payload + 4:payload + 8], 'big'),
+            )
+        offset = end + 4
+
+    raise ValidationError(f'Icon fallback has no IHDR chunk: {path.name}')
 
 
 def validate_springboard_icons(app: Path, info: dict) -> dict:
