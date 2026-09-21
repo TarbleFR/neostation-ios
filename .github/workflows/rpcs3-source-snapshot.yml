@@ -2,7 +2,7 @@ name: RPCS3 targeted startup preflight
 on:
   push:
     branches: [experimental]
-    paths: ['.github/workflows/rpcs3-source-snapshot.yml', 'build-utils/migrations/build302_review.py']
+    paths: ['.github/workflows/rpcs3-source-snapshot.yml', 'build-utils/migrations/build302_review.py', 'build-utils/migrations/build302_apply.py']
 permissions:
   contents: write
   actions: read
@@ -85,10 +85,11 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix(rpcs3): reserve 448+576 MiB before Core and complete startup transactions [rpcs3-core-only]'
-          git push origin HEAD:experimental
           git rev-parse HEAD | tee "$RUNNER_TEMP/build302-review/HOST_SHA.txt"
           git archive --format=tar.gz HEAD > "$RUNNER_TEMP/build302-review/host.tar.gz"
+          git branch build302-reviewed HEAD
           git bundle create "$RUNNER_TEMP/build302-review/host.bundle" --all
+          git push origin HEAD:experimental
       - name: Export source review and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
