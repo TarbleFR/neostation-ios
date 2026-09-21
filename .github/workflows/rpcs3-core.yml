@@ -11,8 +11,11 @@ on:
       - 'build-utils/build_rpcs3_embedded_core.sh'
       - 'build-utils/patch_rpcs3_build266_v09_core.py'
       - 'build-utils/patch_rpcs3_build295_fixed_reservation.py'
+      - 'build-utils/patch_rpcs3_build301_passive_dlopen.py'
+      - 'build-utils/validate_rpcs3_passive_dlopen.py'
       - 'build-utils/rpcs3/**'
       - 'test/rpcs3_build295_fixed_reservation_test.py'
+      - 'test/rpcs3_build301_passive_dlopen_test.py'
   workflow_dispatch:
 
 permissions:
@@ -48,8 +51,12 @@ jobs:
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
-          python3 -m py_compile build-utils/patch_rpcs3_build295_fixed_reservation.py
+          python3 -m py_compile \
+            build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py
           python3 test/rpcs3_build295_fixed_reservation_test.py
+          python3 test/rpcs3_build301_passive_dlopen_test.py
           cat > "$RUNNER_TEMP/rpcs3-vm-fixed-probe.cpp" <<'CPP'
           #include <mach/mach.h>
           #include <mach/vm_statistics.h>
@@ -81,16 +88,16 @@ jobs:
           CORE="dist/rpcs3/libRPCS3Core.dylib"
           test -s "$CORE"
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
+          python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" \
+            | tee build/rpcs3-core-diagnostics/passive-dlopen.txt
           file "$CORE" | tee build/rpcs3-core-diagnostics/file.txt
           lipo -archs "$CORE" | tee build/rpcs3-core-diagnostics/archs.txt
           nm -gU "$CORE" > build/rpcs3-core-diagnostics/exports.txt
           grep -q '_rpcs3_ios_initialize$' build/rpcs3-core-diagnostics/exports.txt
           grep -q '_rpcs3_ios_boot_game$' build/rpcs3-core-diagnostics/exports.txt
           grep -q '_neostation_rpcs3_ios_save_state$' build/rpcs3-core-diagnostics/exports.txt
-          # validate_rpcs3_embedded_core.py already requires this marker. Keep
-          # the shell assertion too, but scan the binary directly: strings | grep -q
-          # makes grep close the pipe early and Apple strings exits on SIGPIPE.
           grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
+          grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
           python3 - <<'PY'
           import hashlib, json, os
           from pathlib import Path
@@ -107,6 +114,8 @@ jobs:
             'marker':'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
             'reservation':'vm_allocate fixed, no VM_FLAGS_OVERWRITE',
             'reservation_marker':'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1',
+            'lifecycle':'passive dlopen; explicit single JIT initialization',
+            'lifecycle_marker':'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
             'device_runtime_tested':False,
           }
           Path('dist/rpcs3/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
