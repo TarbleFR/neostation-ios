@@ -77,6 +77,16 @@ def validate_source(source: Path) -> None:
     assert 'return global_runtime_instance();' in global_runtime
     assert 'bool asmjit::initialize_global_runtime() noexcept' in jit_asm
 
+    for signature in (
+        'bool ppu_function_manager::initialize_ghc_trampolines(std::string& error) noexcept',
+        'bool ppu_initialize_static_trampolines(std::string& error) noexcept',
+        'bool spu_runtime::initialize_static_trampolines(std::string& error) noexcept',
+    ):
+        owner = ppu_functions if 'ppu_function_manager' in signature else (ppu if signature.startswith('bool ppu_') else spu)
+        body = function_body(owner, signature)
+        assert '\\n\\ttry\\n' not in body
+        assert 'catch (' not in body
+
     # Normal iOS allocation failures propagate as nullptr/status, never ensure/abort.
     add = function_body(jit_asm, 'void* jit_runtime_base::_add(')
     assert 'auto* p = this->_alloc' in add
