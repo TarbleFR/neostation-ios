@@ -932,7 +932,7 @@ static ppu_fallback_trampoline_t ppu_recompiler_fallback_ghc = nullptr;
     fallback_arm_fn = function_from_rhs(
         "ppu_fallback_trampoline_t", "build_ppu_recompiler_fallback", fallback_arm_rhs,
         "ppu_trampoline_t escape"
-    )
+    ).replace("[](native_asm& c, auto& args)", "[escape](native_asm& c, auto& args)", 1)
 
     # Replace from the end to preserve indexes.
     text = text[:fs2] + fallback_arm_fn + text[fe2:]
