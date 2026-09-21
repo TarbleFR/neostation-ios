@@ -1046,9 +1046,14 @@ def patch_spu(root: Path) -> None:
     rhs["g_dispatcher"] = rhs["g_dispatcher"].replace("x.raw() = tr_dispatch;", "x.raw() = dispatch;")
     rhs["g_dispatcher"] = rhs["g_dispatcher"].replace(
         "const auto ptr = reinterpret_cast<std::remove_const_t<decltype(spu_runtime::g_dispatcher)>>(jit_runtime::alloc(sizeof(*g_dispatcher), 64, false));",
-        "const auto ptr = reinterpret_cast<decltype(spu_runtime::g_dispatcher)>(jit_runtime::alloc(sizeof(*spu_runtime::g_dispatcher), 64, false));\n\tif (!ptr) return nullptr;",
+        "const auto ptr = reinterpret_cast<decltype(spu_runtime::g_dispatcher)>(jit_runtime::alloc(sizeof(*spu_runtime::g_dispatcher), 64, false));\n\tif (!ptr) return static_cast<decltype(spu_runtime::g_dispatcher)>(nullptr);",
     )
     rhs["tr_all"] = rhs["tr_all"].replace("[]", "[dispatcher]", 1).replace("g_dispatcher", "dispatcher")
+    rhs["tr_all"] = rhs["tr_all"].replace(
+        "[](native_asm& c, auto& args)",
+        "[dispatcher](native_asm& c, auto& args)",
+        1,
+    )
     rhs["g_gateway"] = rhs["g_gateway"].replace("[]", "[dispatch_all]", 1).replace("spu_runtime::tr_all", "dispatch_all")
 
     definitions = f'''// {MARKER}
