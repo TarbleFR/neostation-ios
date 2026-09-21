@@ -84,10 +84,14 @@ jobs:
           python3 build-utils/patch_rpcs3_build301_passive_dlopen.py "$SRC"
           python3 test/rpcs3_build301_passive_dlopen_test.py "$SRC"
 
-      - name: Commit Core refactor and remove temporary transport
+      - name: Commit verified non-workflow sources
         shell: bash
         run: |
           set -euo pipefail
+          # GitHub Actions tokens cannot update workflow files. Restore the
+          # reviewed workflow copy; it is published separately through GitHub's
+          # workflow-authorized contents API after this source commit succeeds.
+          git restore .github/workflows/rpcs3-core.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
@@ -95,11 +99,8 @@ jobs:
             build-utils/validate_rpcs3_passive_dlopen.py \
             test/rpcs3_build301_passive_dlopen_test.py \
             build-utils/build_rpcs3_embedded_core.sh \
-            build-utils/validate_rpcs3_embedded_core.py \
-            .github/workflows/rpcs3-core.yml
+            build-utils/validate_rpcs3_embedded_core.py
           git rm -r .github/build301-payload
-          git rm .github/workflows/source-export.yml
-          git rm .github/workflows/rpcs3-patched-source-export.yml
           git diff --cached --check
           git commit -m 'fix(rpcs3): make Core dlopen passive [rpcs3-core-only]'
           git push origin HEAD:experimental
