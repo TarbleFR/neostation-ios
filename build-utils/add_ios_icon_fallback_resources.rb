@@ -8,7 +8,8 @@ project = Xcodeproj::Project.open(project_path)
 target = project.targets.find { |candidate| candidate.name == 'Runner' }
 abort('Runner target not found') unless target
 
-group = project.main_group.find_subpath('Runner/IconFallback', true)
+group = project.main_group.find_subpath('Runner', false)
+abort('Runner group not found') unless group
 fallbacks = %w[
   NeoStationIcon60@2x.png
   NeoStationIcon60@3x.png
