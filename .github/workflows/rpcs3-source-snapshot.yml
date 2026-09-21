@@ -35,6 +35,13 @@ jobs:
           python3 build-utils/migrations/build302_apply.py
           python3 build-utils/migrations/build302_review.py
           git diff --check
+      - name: Test actual native abort socket and reservation ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/rpcs3_startup_abort_native_test.py 2>&1 | tee "$RUNNER_TEMP/build302-review/native-abort.txt"
+          python3 test/rpcs3_memory_preflight_test.py
+          python3 test/rpcs3_reserved_startup_core_test.py "$RUNNER_TEMP/build302-core-source"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.2'
@@ -51,9 +58,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 test/rpcs3_memory_preflight_test.py
-          python3 test/rpcs3_reserved_startup_core_test.py "$RUNNER_TEMP/build302-core-source"
-          python3 test/rpcs3_startup_abort_native_test.py
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
