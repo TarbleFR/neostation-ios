@@ -2,6 +2,7 @@
 
 #import <Foundation/Foundation.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 static const unsigned long long kRPCS3DiagnosticLimit = 2 * 1024 * 1024;
 static const unsigned long long kRPCS3MilestoneLimit = 512 * 1024;
@@ -114,6 +115,8 @@ static const unsigned long long kRPCS3MilestoneLimit = 512 * 1024;
                 message:(nullable NSString*)message
               timestamp:(NSTimeInterval)timestamp {
   NSDictionary* entry = @{
+    @"pid": @(getpid()),
+    @"build": [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"unknown",
     @"timestamp": @(timestamp),
     @"stage": stage ?: @"",
     @"message": message ?: @"",

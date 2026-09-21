@@ -4,7 +4,8 @@
 The validator parses Mach-O load commands, S_INIT_FUNC_OFFSETS and
 S_MOD_INIT_FUNC_POINTERS, then follows direct ARM64 B/BL edges through internal
 text symbols. It is intentionally independent from source tests: the produced
-binary itself must prove that dlopen is passive.
+binary is checked for the named forbidden direct-call paths. This is NOT
+a proof of available address space or successful JIT execution on a device.
 """
 from __future__ import annotations
 
@@ -266,6 +267,8 @@ def validate(data: bytes) -> dict:
         'initializerSymbols': len(set(initializer_symbols)),
         'marker': MARKER.decode('ascii'),
         'forbiddenReachability': False,
+        'scope': 'named forbidden functions via direct ARM64 B/BL edges, maximum depth 16',
+        'deviceRuntimeTested': False,
     }
 
 

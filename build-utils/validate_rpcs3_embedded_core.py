@@ -4,17 +4,16 @@ from pathlib import Path
 import struct
 import sys
 
-from patch_rpcs3_build266_v09_core import (
-    BUILD_MARKER,
-    JIT_MARKER,
-    REVISION,
-    SHADER_CHECKPOINT_MARKER,
-)
+# Identities are data, not imports of historical mutation scripts.
+BUILD_MARKER = 'NEOSTATION_BUILD266_JIT_V09_SHADER_V1'
+JIT_MARKER = 'NEOSTATION_DYNAMIC_JIT_V5'
+REVISION = '505a85e5a8f2cdff1cd63168bd2c56b0f92282bf'
+SHADER_CHECKPOINT_MARKER = 'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1'
 
 MINIMUM_CORE_SIZE = 60_000_000
 REQUIRED_MARKERS = (
     ('passive dlopen JIT lifecycle', b'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1'),
-    ('fixed low-VA JIT reservation', b'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1'),
+    ('host-owned 448+576 MiB reservation', b'NEOSTATION_BUILD302_RESERVED_STARTUP_V1'),
     ('Build 266 JIT', JIT_MARKER.encode('ascii')),
     ('Build 264 ARM64/ThinLTO', b'NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1'),
     ('Build 265 RSX/SPU/video', b'NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1'),
@@ -100,7 +99,7 @@ if __name__ == '__main__':
         raise SystemExit('usage: validate_rpcs3_embedded_core.py <libRPCS3Core.dylib>')
     validate_core(Path(sys.argv[1]).read_bytes())
     print(
-        f'Validated embedded RPCS3: NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1, {JIT_MARKER}, Build 264 ARM64/ThinLTO, '
+        f'Validated embedded RPCS3: NEOSTATION_BUILD302_RESERVED_STARTUP_V1, NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1, {JIT_MARKER}, Build 264 ARM64/ThinLTO, '
         f'{BUILD_MARKER}, {SHADER_CHECKPOINT_MARKER}, v0.9 revision {REVISION}, '
         'SPU on-demand policy, LLVM self-test and guarded load-time imports'
     )

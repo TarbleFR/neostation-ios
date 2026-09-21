@@ -8,3 +8,6 @@ BOOL RPCS3JitConfirmCoreLoadHandoff(void);
 
 @interface Rpcs3JitBridgePlugin : NSObject <FlutterPlugin>
 @end
+
+FOUNDATION_EXPORT BOOL RPCS3JitTransactionIsClosed(void);
+FOUNDATION_EXPORT void RPCS3JitAbortStartup(void (^completion)(NSDictionary* report));

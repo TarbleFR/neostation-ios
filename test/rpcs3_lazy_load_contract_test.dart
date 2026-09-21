@@ -33,7 +33,10 @@ void main() {
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
       expect(plugin, contains('SecTaskCreateFromSelf'));
-      expect(plugin, contains('RPCS3ProbeExecutableMemory'));
+      expect(plugin, isNot(contains('RPCS3ProbeExecutableMemory')));
+      expect(plugin, contains('_reservation.verify_owned()'));
+      expect(plugin, contains('verifyJitExecution'));
+      expect(plugin, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));
       expect(
         plugin,
         isNot(

@@ -48,16 +48,6 @@ IOS_COMPILER_RT="$APPLE_CLANG_RESOURCE_DIR/lib/darwin/libclang_rt.ios.a"
 mkdir -p "$WORK_ROOT" "$DEPS" "$OUTPUT_DIR"
 ccache --max-size=3G >/dev/null
 
-# Keep the bundle/artifact version aligned with this release's workflow.
-# These values are consumed by all subsequent workflow steps.
-if [[ -n "${GITHUB_ENV:-}" ]]; then
-  {
-    echo "BUILD_NUMBER=266"
-    echo "IPA_NAME=NeoStation-iOS-Build-266-JIT-v09"
-    echo "ARTIFACT_NAME=NeoStation-iOS-Build-266-JIT-v09"
-  } >> "$GITHUB_ENV"
-fi
-
 log "Provision pinned MoltenVK $MOLTENVK_VERSION for iOS"
 MOLTENVK_LIB="$(find "$MOLTENVK_EXTRACT" -type f -path '*/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a' -print -quit 2>/dev/null || true)"
 if [[ -z "$MOLTENVK_LIB" ]]; then
@@ -114,8 +104,6 @@ git -C "$SRC" remote add origin "$RPCS3_REPOSITORY"
 git -C "$SRC" fetch --depth 1 origin "$RPCS3_COMMIT"
 git -C "$SRC" checkout -q --detach FETCH_HEAD
 test "$(git -C "$SRC" rev-parse HEAD)" = "$RPCS3_COMMIT" || die "RPCS3 commit mismatch"
-python3 "$PWD/test/rpcs3_embedded_boot_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_jit_memory_test.py" "$SRC"
 git -C "$SRC" submodule sync --recursive
 git -C "$SRC" -c submodule.fetchJobs=8 submodule update --init --recursive --depth 1
 
@@ -123,48 +111,9 @@ UPSTREAM_ABI="$(sed -nE 's/^#define[[:space:]]+RPCS3_IOS_ABI_VERSION[[:space:]]+
 [[ "$UPSTREAM_ABI" = "$RPCS3_IOS_ABI" ]] || die "upstream iOS ABI is $UPSTREAM_ABI, expected $RPCS3_IOS_ABI"
 grep -q 'add_library(RPCS3Core SHARED' "$SRC/rpcs3/CMakeLists.txt" || die "ios-port no longer defines RPCS3Core as a shared target"
 
-log "Apply NeoStation embedded boot fixes (LLVM/ARM64 remains enabled)"
-python3 "$PWD/build-utils/patch_rpcs3_embedded_boot.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_jit_memory.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_neostation_session.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_serial_profiles.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_serial_profiles.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_iso_integrity.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_savestate_stability.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_savestate_stability.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build256_savestates.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build256_savestates.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_armsx3_performance.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_armsx3_performance.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build258_core_architecture.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build258_core_architecture.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build258_runtime_resilience.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build258_runtime_resilience.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build264_gow3_core.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build264_gow3_core.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build265_core.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build265_core.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build266_v09_core.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build266_v09_core.py" "$SRC"
-# Validate the immutable Build 266 postimage before the Build 295 reservation
-# intentionally changes Utilities/JITIOS.cpp. Running this hash-locked suite
-# after Build 295 would reject the expected final source as drift.
-python3 "$PWD/test/rpcs3_build266_v09_core_test.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build295_fixed_reservation.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build295_fixed_reservation.py" "$SRC"
-python3 "$PWD/test/rpcs3_build295_fixed_reservation_test.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build301_passive_dlopen.py" "$SRC"
-python3 "$PWD/build-utils/patch_rpcs3_build301_passive_dlopen.py" "$SRC"
-python3 "$PWD/test/rpcs3_build301_passive_dlopen_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_build265_core_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_neostation_session_patch_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_serial_profile_patch_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_iso_integrity_patch_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_savestate_native_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_build256_core_patch_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_build258_core_architecture_test.py" "$SRC"
-python3 "$PWD/test/rpcs3_build258_runtime_resilience_test.py" "$SRC"
+log "Apply the single reviewed NeoStation Core source delta"
+python3 "$PWD/build-utils/materialize_rpcs3_core.py" "$SRC"
+python3 "$PWD/test/rpcs3_reserved_startup_core_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
@@ -197,6 +146,12 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
   -DWITH_DISCORD_RPC=OFF -DWITH_FAUDIO=OFF
 
 python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC" "$BUILD"
+
+log "Syntax-check all modified startup units with the actual iOS toolchain"
+# CMake's generated LLVM headers must exist before the syntax gate. These are
+# bounded TableGen targets, not a full RPCS3 rebuild.
+cmake --build "$BUILD" --target intrinsics_gen --parallel "$BUILD_JOBS"
+python3 "$PWD/build-utils/rpcs3_core_syntax_gate.py" "$BUILD/compile_commands.json"
 
 log "Compile RPCS3Core only"
 cmake --build "$BUILD" --target RPCS3Core --parallel "$BUILD_JOBS"

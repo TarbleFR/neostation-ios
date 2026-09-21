@@ -75,9 +75,11 @@ class Rpcs3InternalBridge {
             const <String, dynamic>{},
       );
 
-  static Future<Map<String, dynamic>> preflight() async =>
+  static Future<Map<String, dynamic>> reserveAddressSpace() async =>
       Map<String, dynamic>.from(
-        await _channel.invokeMapMethod<String, dynamic>('preflight') ??
+        await _channel.invokeMapMethod<String, dynamic>(
+              'reserveAddressSpace',
+            ) ??
             const <String, dynamic>{},
       );
 
@@ -107,6 +109,18 @@ class Rpcs3InternalBridge {
   static Future<Map<String, dynamic>> completeJit() async =>
       Map<String, dynamic>.from(
         await _jitChannel.invokeMapMethod<String, dynamic>('completeJit') ??
+            const <String, dynamic>{},
+      );
+
+  static Future<Map<String, dynamic>> abortStartup() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMapMethod<String, dynamic>('abortStartup') ??
+            const <String, dynamic>{},
+      );
+
+  static Future<Map<String, dynamic>> verifyJitExecution() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMapMethod<String, dynamic>('verifyJitExecution') ??
             const <String, dynamic>{},
       );
 

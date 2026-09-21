@@ -4,7 +4,7 @@
 #import "Rpcs3CoreABI.h"
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3EarlyLoaderDiagnostics.h"
-#import "Rpcs3MemoryPreflight.h"
+#import "Rpcs3ArenaReservation.h"
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
@@ -55,48 +55,6 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
   if (value != NULL) CFRelease(value);
   CFRelease(task);
   return enabled;
-}
-
-// Only the legacy Core backend uses an ordinary RW -> RX transition. On
-// iOS 26 the Core itself prepares RX pages through the attached Universal
-// debugger; this legacy probe cannot test those prepared mappings.
-static BOOL RPCS3ProbeExecutableMemory(NSString** error) {
-  if (@available(iOS 26.0, *)) {
-    if (RPCS3JitHasActiveCoreHandshake()) return YES;
-    if (error) *error = @"RPCS3 requires a fresh Universal JIT attachment before loading its Core.";
-    return NO;
-  }
-  size_t pageSize = (size_t)getpagesize();
-  void* page = mmap(NULL,
-                    pageSize,
-                    PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANON,
-                    -1,
-                    0);
-  if (page == MAP_FAILED) {
-    if (error) {
-      *error = [NSString stringWithFormat:
-          @"RPCS3 JIT readiness allocation failed (errno %d).", errno];
-    }
-    return NO;
-  }
-
-  ((volatile unsigned char*)page)[0] = 0;
-  if (mprotect(page, pageSize, PROT_READ | PROT_EXEC) != 0) {
-    int savedErrno = errno;
-    munmap(page, pageSize);
-    if (error) {
-      *error = [NSString stringWithFormat:
-          @"JIT is attached, but iOS rejected RPCS3 executable memory (errno %d).",
-          savedErrno];
-    }
-    return NO;
-  }
-
-  // Restore writable permissions before releasing the test page.
-  mprotect(page, pageSize, PROT_READ | PROT_WRITE);
-  munmap(page, pageSize);
-  return YES;
 }
 
 static UIViewController* RPCS3RootViewController(void) {
@@ -263,6 +221,8 @@ static UIViewController* RPCS3RootViewController(void) {
   uint64_t _diagnosticMinimumAvailableMemory;
   NSInteger _diagnosticWorstThermalState;
   rpcs3_ios_api _api;
+  neostation::rpcs3::arena::Reservation _reservation;
+  BOOL _startupEntered;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -371,21 +331,11 @@ static void RPCS3Progress(void* context,
     return YES;
   }
 
-  // The original RPCS3 iOS loader requires JIT to be active before dlopen.
-  if (!RPCS3HostIsDebugged()) {
-    if (error) *error = @"JIT must be ready before loading RPCS3 Core.";
-    return NO;
-  }
-
   // libRPCS3Core.dylib is loaded into NeoStation itself, not a child process.
-  // The Core therefore executes with the entitlements of the signed NeoStation
-  // host process. Do not gate dlopen on a second SecTask entitlement lookup:
-  // some sideload signing paths can make that diagnostic lookup report a false
-  // negative even though the kernel has already granted the host capabilities.
-  // The executable-memory probe below remains the runtime source of truth.
-  NSString* readinessError = nil;
-  if (!RPCS3ProbeExecutableMemory(&readinessError)) {
-    if (error) *error = readinessError;
+  // This is debugger authorization only, never proof of usable JIT memory.
+  // The final nonce below proves live ownership before this single dlopen.
+  if (!RPCS3HostIsDebugged()) {
+    if (error) *error = @"RPCS3_DEBUGGER_AUTHORIZATION_MISSING: stage=core_load; kernel CS_DEBUGGED is absent.";
     return NO;
   }
 
@@ -453,6 +403,8 @@ static void RPCS3Progress(void* context,
   LOAD("rpcs3_ios_abi_version", abi_version);
   LOAD("rpcs3_ios_build_info", build_info);
   LOAD("rpcs3_ios_initialize", initialize);
+  LOAD("neostation_rpcs3_adopt_jit_layout", adopt_jit_layout);
+  LOAD("neostation_rpcs3_reset_failed_startup", reset_failed_startup);
   LOAD("rpcs3_ios_firmware_version", firmware_version);
   LOAD("rpcs3_ios_install_firmware", install_firmware);
   LOAD("rpcs3_ios_install_package", install_package);
@@ -484,8 +436,14 @@ static void RPCS3Progress(void* context,
 }
 
 - (NSDictionary*)statusPayload:(rpcs3_ios_status)status {
-  BOOL ok = status == 0;
-  return ok ? @{@"success": @YES} : @{@"success": @NO, @"message": [self lastError], @"status": @(status)};
+  NSString* message = status == 0 ? @"" : [self lastError];
+  NSString* code = status == 0 ? @"RPCS3_OK" : [NSString stringWithFormat:@"RPCS3_CORE_STATUS_%d", status];
+  if ([message hasPrefix:@"RPCS3_"]) {
+    code = [message componentsSeparatedByCharactersInSet:
+        [NSCharacterSet characterSetWithCharactersInString:@" :\n"]].firstObject ?: code;
+  }
+  return @{@"success": @(status == 0), @"status": @(status), @"code": code,
+    @"message": message ?: @"", @"stage": @"core"};
 }
 
 - (BOOL)activateRPCS3AudioSession:(NSString**)fatalError {
@@ -1261,16 +1219,80 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-  if ([call.method isEqualToString:@"preflight"]) {
+  if ([call.method isEqualToString:@"reserveAddressSpace"]) {
     dispatch_async(_runtimeQueue, ^{
-      RPCS3Diagnostic(@"memory_preflight_begin", @"Checking RPCS3 virtual address space before JIT attachment");
-      BOOL available = self.initialized || neostation::rpcs3::probe_virtual_layout();
-      NSString* message = available ? @"RPCS3 virtual memory layout available." :
-          @"iOS refuse l’espace mémoire requis par RPCS3. Réinstallez l’IPA en conservant le droit extended-virtual-addressing lors de la signature. Journal : RPCS3-diagnostic.log.";
-      RPCS3Diagnostic(@"memory_preflight_end", message);
+      RPCS3Milestone(@"va_reserve_begin", @"Reserving 448 MiB code + 576 MiB data before dlopen; JIT is not yet prepared");
+      BOOL available = NO;
+      try { available = self->_reservation.acquire(); }
+      catch (const std::exception& exception) {
+        self->_reservation.code = "RPCS3_VA_QUERY_EXCEPTION";
+        self->_reservation.detail = exception.what();
+      }
+      NSString* message = [NSString stringWithUTF8String:self->_reservation.detail.c_str()] ?: @"";
+      NSString* code = [NSString stringWithUTF8String:self->_reservation.code.c_str()] ?: @"RPCS3_VA_UNKNOWN_ERROR";
+      RPCS3Milestone(available ? @"va_reserve_end" : @"va_reserve_failed", message);
       dispatch_async(dispatch_get_main_queue(), ^{
-        result(@{@"success": @(available), @"message": message});
+        result(@{@"success": @(available), @"code": code, @"stage": @"va_reservation",
+          @"message": message, @"addressSpaceReserved": @(available), @"jitReady": @NO,
+          @"codeBytes": @(neostation::rpcs3::arena::code_bytes),
+          @"dataBytes": @(neostation::rpcs3::arena::data_bytes),
+          @"budgetBytes": @(neostation::rpcs3::arena::budget_bytes)});
       });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"abortStartup"]) {
+    // Queue behind initialize: never detach or unmap while the Core is still
+    // preparing pages. A timeout of this operation remains a precise failure.
+    dispatch_async(_runtimeQueue, ^{
+      RPCS3JitAbortStartup(^(NSDictionary* closure) {
+        dispatch_async(self->_runtimeQueue, ^{
+          NSMutableDictionary* report = [closure mutableCopy];
+          if ([closure[@"success"] boolValue]) {
+            rpcs3_ios_status resetStatus = 0;
+            if (self->_startupEntered && self->_api.reset_failed_startup)
+              resetStatus = self->_api.reset_failed_startup();
+            const int releaseStatus = self->_reservation.discard();
+            BOOL reset = resetStatus == 0 && releaseStatus == 0 && !self->_reservation.poisoned;
+            report[@"success"] = @(reset);
+            report[@"retryable"] = @(reset);
+            report[@"transactionClosed"] = @YES;
+            report[@"code"] = reset ? @"RPCS3_STARTUP_ABORTED" :
+                (releaseStatus ? @"RPCS3_VA_ROLLBACK_FAILED" : @"RPCS3_CORE_RESET_RESTART_REQUIRED");
+            report[@"message"] = reset ? @"JIT transaction closed; uncommitted startup resources released." :
+                [NSString stringWithFormat:@"Core reset status=%d; release kernel=%d; %@", resetStatus, releaseStatus, [self lastError]];
+            if (reset) {
+              self->_startupEntered = NO;
+              self.initialized = NO;
+              self.llvmSelfTestPassed = NO;
+            }
+          }
+          RPCS3Milestone(@"startup_abort_end", report[@"message"] ?: @"");
+          dispatch_async(dispatch_get_main_queue(), ^{ result(report); });
+        });
+      });
+    });
+    return;
+  }
+
+  if ([call.method isEqualToString:@"verifyJitExecution"]) {
+    dispatch_async(_runtimeQueue, ^{
+      using SelfTest = rpcs3_ios_status (*)(uint64_t, uint64_t*);
+      auto test = self->_api.handle ? reinterpret_cast<SelfTest>(dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test")) : nullptr;
+      uint64_t output = 0;
+      rpcs3_ios_status status = -1;
+      if (self.initialized && test && RPCS3JitTransactionIsClosed()) {
+        RPCS3Milestone(@"llvm_self_test_begin", @"Executing generated ARM64 code after confirmed debugger closure");
+        status = test(11, &output);
+      }
+      self.llvmSelfTestPassed = status == 0 && output == 40;
+      NSString* message = [NSString stringWithFormat:@"status=%d input=11 output=%llu expected=40; %@", status, (unsigned long long)output, self.llvmSelfTestPassed ? @"passed" : [self lastError]];
+      RPCS3Milestone(@"llvm_self_test_end", message);
+      NSDictionary* report = @{@"success": @(self.llvmSelfTestPassed),
+        @"code": self.llvmSelfTestPassed ? @"RPCS3_JIT_EXECUTION_VERIFIED" : @"RPCS3_LLVM_EXECUTION_FAILED",
+        @"stage": @"llvm_execution", @"message": message, @"status": @(status), @"output": @(output)};
+      dispatch_async(dispatch_get_main_queue(), ^{ result(report); });
     });
     return;
   }
@@ -1294,7 +1316,8 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       @"initialized": @(self.initialized),
       @"llvmSelfTestPassed": @(self.llvmSelfTestPassed),
       @"expandedJitRegion": @(self.initializedWithExpandedJit),
-      @"jitReady": @(RPCS3HostIsDebugged()),
+      @"jitReady": @(self.llvmSelfTestPassed && RPCS3JitTransactionIsClosed()),
+      @"debuggerFlag": @(RPCS3HostIsDebugged()),
       @"extendedVirtualAddressing": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing"))),
       @"increasedMemoryLimit": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))),
       @"message": @"",
@@ -1312,9 +1335,21 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
+      if (!self.initialized && !self->_reservation.layout) {
+        dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"code": @"RPCS3_VA_NOT_RESERVED", @"message": @"RPCS3_VA_NOT_RESERVED: reserve address space before attaching or loading Core."}); });
+        return;
+      }
+      if (self->_api.handle && !self.initialized) {
+        if (@available(iOS 26.0, *)) {
+          if (!RPCS3JitConfirmCoreLoadHandoff()) {
+            dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"code": @"RPCS3_JIT_NONCE_FAILED", @"message": @"RPCS3_JIT_NONCE_FAILED: current retry did not acknowledge the debugger nonce."}); });
+            return;
+          }
+        }
+      }
       if (![self loadCoreWithExpandedJit:expanded error:&error]) {
         dispatch_async(dispatch_get_main_queue(), ^{
-          result(@{@"success": @NO, @"message": error ?: @"Core unavailable"});
+          result(@{@"success": @NO, @"code": @"RPCS3_CORE_LOAD_FAILED", @"stage": @"core_load", @"message": error ?: @"Core unavailable"});
         });
         return;
       }
@@ -1326,6 +1361,22 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         }
         return;
       }
+      if (!self->_reservation.verify_owned()) {
+        NSString* detail = [NSString stringWithUTF8String:self->_reservation.detail.c_str()] ?: @"";
+        dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO,
+          @"code": @"RPCS3_VA_OWNERSHIP_CHANGED", @"stage": @"va_adoption", @"message": detail}); });
+        return;
+      }
+      const auto layout = self->_reservation.layout;
+      rpcs3_ios_status adoption = self->_api.adopt_jit_layout(layout.code, layout.data,
+          neostation::rpcs3::arena::code_bytes, neostation::rpcs3::arena::data_bytes);
+      if (adoption != 0) {
+        NSDictionary* report = [self statusPayload:adoption];
+        dispatch_async(dispatch_get_main_queue(), ^{ result(report); });
+        return;
+      }
+      self->_reservation.layout = {}; // Core owns the reservation, no double free
+      self->_startupEntered = YES;
       rpcs3_ios_init_options options = {};
       options.abi_version = kExpectedAbi;
       options.size = sizeof(options);
@@ -1470,22 +1521,13 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     CGFloat scale = screen.scale;
     float refreshRate = (float)screen.maximumFramesPerSecond;
     dispatch_async(_runtimeQueue, ^{
-      if (!self.llvmSelfTestPassed) {
-        typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
-        auto selfTest = reinterpret_cast<SelfTest>(dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test"));
-        uint64_t output = 0;
-        RPCS3Milestone(@"llvm_self_test_begin", @"Testing generated ARM64 code before game boot");
-        rpcs3_ios_status testStatus = selfTest ? selfTest(11, &output) : -1;
-        self.llvmSelfTestPassed = testStatus == 0 && output == 40;
-        RPCS3Milestone(@"llvm_self_test_end", [NSString stringWithFormat:@"status=%d output=%llu passed=%d", testStatus, (unsigned long long)output, self.llvmSelfTestPassed]);
-        if (!self.llvmSelfTestPassed) {
-          NSString* detail = selfTest ? [self lastError] : @"LLVM self-test export is missing.";
-          [self stopAndDismiss:nil];
-          dispatch_async(dispatch_get_main_queue(), ^{
-            result(@{@"success": @NO, @"message": [@"RPCS3 LLVM JIT self-test failed: " stringByAppendingString:detail]});
-          });
-          return;
-        }
+      if (!self.llvmSelfTestPassed || !RPCS3JitTransactionIsClosed()) {
+        [self stopAndDismiss:nil];
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{@"success": @NO, @"code": @"RPCS3_STARTUP_NOT_VERIFIED",
+            @"stage": @"game_boot", @"message": @"RPCS3_STARTUP_NOT_VERIFIED: complete startup and execution verification before boot."});
+        });
+        return;
       }
       NSString* audioError = nil;
       if (![self activateRPCS3AudioSession:&audioError]) {

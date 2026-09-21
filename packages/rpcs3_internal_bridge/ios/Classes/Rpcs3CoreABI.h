@@ -106,6 +106,8 @@ typedef struct rpcs3_ios_performance_metrics {
 } rpcs3_ios_performance_metrics;
 
 typedef struct rpcs3_ios_api {
+  rpcs3_ios_status (*adopt_jit_layout)(uint64_t, uint64_t, uint64_t, uint64_t);
+  rpcs3_ios_status (*reset_failed_startup)(void);
   void* handle;
   uint32_t (*abi_version)(void);
   const char* (*build_info)(void);

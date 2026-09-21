@@ -5,8 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('RPCS3 internal engine contracts', () {
     test('RPCS3 JIT path is isolated from Dolphin and standalone RPCS3', () {
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
       final hostJit = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
       ).readAsStringSync();
@@ -15,9 +16,9 @@ void main() {
       ).readAsStringSync();
 
       expect(service, contains('Rpcs3InternalBridge.prepareJit'));
-      expect(service, contains('_actionableJitFailure(rawMessage)'));
-      expect(service, contains("normalized.contains('connectionreset')"));
-      expect(service, contains('saved RPPairing entry for this iPhone'));
+      expect(service, contains("jit['code']?.toString()"));
+      expect(service, isNot(contains('_actionableJitFailure')));
+      expect(service, isNot(contains('saved RPPairing entry for this iPhone')));
       expect(service, isNot(contains('dolphin_internal_bridge')));
       expect(service, isNot(contains('DolphinInternalBridge')));
       expect(hostJit, contains('com.neogamelab.neostation.rpcs3-jit-request'));
@@ -32,8 +33,9 @@ void main() {
     });
 
     test('only legacy JIT may reuse the persistent debugged flag', () {
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
 
       final statusIndex = service.indexOf(
         'final current = await _jitStatus();',
@@ -48,7 +50,10 @@ void main() {
       expect(debuggedIndex, greaterThan(statusIndex));
       expect(pairingIndex, greaterThan(debuggedIndex));
       expect(prepareIndex, greaterThan(pairingIndex));
-      expect(service, contains('static Future<void>? _jitPreparation'));
+      expect(
+        service,
+        contains('static final _startup = Rpcs3StartupTransaction()'),
+      );
       expect(service, contains("'jitTimeout'"));
       expect(service, contains("current['requiresCoreHandshake'] != true"));
       expect(service, contains('Duration(minutes: 11)'));
@@ -66,92 +71,110 @@ void main() {
       expect(early, contains('NEOSTATION_EARLY_LOADER_295'));
       expect(
         early,
-        contains('next expected event is Core JIT region preparation or dlopen return'),
+        contains(
+          'next expected event is Core JIT region preparation or dlopen return',
+        ),
       );
       expect(script, contains('NEOSTATION_RPCS3_PREPARE_BEGIN'));
       expect(script, contains('NEOSTATION_RPCS3_PREPARE_END'));
       expect(script, contains('prepare_memory_region(jitPageAddress, x1)'));
     });
 
-    test('JIT handoff precedes passive dlopen and arena policy stays explicit', () {
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
-      final bridge = File(
-        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
-      ).readAsStringSync();
-      final dartBridge = File(
-        'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
-      ).readAsStringSync();
+    test(
+      'JIT handoff precedes passive dlopen and arena policy stays explicit',
+      () {
+        final service = File(
+          'lib/services/rpcs3_internal_service.dart',
+        ).readAsStringSync();
+        final bridge = File(
+          'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+        ).readAsStringSync();
+        final dartBridge = File(
+          'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
+        ).readAsStringSync();
 
-      final serviceJit = service.indexOf('await _attachJitForCore();');
-      final serviceInitialize = service.indexOf(
-        'Rpcs3InternalBridge.initialize',
-      );
-      final serviceComplete = service.indexOf(
-        'Rpcs3InternalBridge.completeJit',
-      );
-      expect(serviceJit, greaterThanOrEqualTo(0));
-      expect(serviceInitialize, greaterThan(serviceJit));
-      expect(serviceComplete, greaterThan(serviceInitialize));
-      expect(
-        service.indexOf('_initialized = true;'),
-        greaterThan(serviceComplete),
-      );
+        final serviceJit = service.indexOf('attach: () async');
+        final serviceInitialize = service.indexOf(
+          'Rpcs3InternalBridge.initialize',
+        );
+        final serviceComplete = service.indexOf(
+          'Rpcs3InternalBridge.completeJit',
+        );
+        expect(serviceJit, greaterThanOrEqualTo(0));
+        expect(serviceInitialize, greaterThan(serviceJit));
+        expect(serviceComplete, greaterThan(serviceInitialize));
+        expect(
+          service.indexOf('_initialized = ready;'),
+          greaterThan(serviceComplete),
+        );
 
-      expect(bridge, contains('RPCS3HostIsDebugged'));
-      expect(bridge, contains('RPCS3ProbeExecutableMemory'));
-      expect(bridge, contains('RPCS3JitHasActiveCoreHandshake()'));
-      expect(bridge, contains('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1'));
-      expect(bridge, isNot(contains('RPCS3_IOS_EXPANDED_JIT_ARENA')));
-      expect('dlopen('.allMatches(bridge).length, 1);
-      final dlopenIndex = bridge.indexOf(
-        'dlopen(path.fileSystemRepresentation',
-      );
-      final arenaPolicyIndex = bridge.indexOf(
-        'options.expanded_jit_region = expanded ? 1 : 0;',
-      );
-      final initializeCallIndex = bridge.indexOf(
-        'self->_api.initialize(&options)',
-      );
-      expect(dlopenIndex, greaterThanOrEqualTo(0));
-      expect(arenaPolicyIndex, greaterThan(dlopenIndex));
-      expect(initializeCallIndex, greaterThan(arenaPolicyIndex));
-      expect(bridge, contains('@"rpcs3_initialize_begin"'));
-      expect(bridge, contains('@"rpcs3_initialize_end"'));
-      expect(bridge, contains('@"rpcs3_initialize_failed"'));
+        expect(bridge, contains('RPCS3HostIsDebugged'));
+        expect(bridge, isNot(contains('RPCS3ProbeExecutableMemory')));
+        expect(bridge, contains('_reservation.verify_owned()'));
+        expect(bridge, contains('verifyJitExecution'));
+        expect(bridge, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));
+        expect(bridge, isNot(contains('RPCS3JitHasActiveCoreHandshake()')));
+        expect(
+          bridge.indexOf('if (!RPCS3JitConfirmCoreLoadHandoff())'),
+          allOf(
+            greaterThanOrEqualTo(0),
+            lessThan(bridge.indexOf('handle = dlopen(')),
+          ),
+        );
+        expect(bridge, contains('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1'));
+        expect(bridge, isNot(contains('RPCS3_IOS_EXPANDED_JIT_ARENA')));
+        expect('dlopen('.allMatches(bridge).length, 1);
+        final dlopenIndex = bridge.indexOf(
+          'dlopen(path.fileSystemRepresentation',
+        );
+        final arenaPolicyIndex = bridge.indexOf(
+          'options.expanded_jit_region = expanded ? 1 : 0;',
+        );
+        final initializeCallIndex = bridge.indexOf(
+          'self->_api.initialize(&options)',
+        );
+        expect(dlopenIndex, greaterThanOrEqualTo(0));
+        expect(arenaPolicyIndex, greaterThan(dlopenIndex));
+        expect(initializeCallIndex, greaterThan(arenaPolicyIndex));
+        expect(bridge, contains('@"rpcs3_initialize_begin"'));
+        expect(bridge, contains('@"rpcs3_initialize_end"'));
+        expect(bridge, contains('@"rpcs3_initialize_failed"'));
 
-      // Build 234 crashed after successfully preparing the optional 512 MiB
-      // arena: generated ARM64 execution jumped to 0x7000000000. Keep every
-      // embedded entry point on the stable standard Universal arena.
-      expect(service, contains('expandedJitRegion: false'));
-      expect(service, isNot(contains('expandedJitRegion: true')));
-      expect(dartBridge, contains('bool expandedJitRegion = false'));
-      expect(bridge, contains('BOOL expanded = NO;'));
-      expect(
-        bridge,
-        isNot(
-          contains('BOOL expanded = [args[@"expandedJitRegion"] boolValue];'),
-        ),
-      );
+        // Build 234 crashed after successfully preparing the optional 512 MiB
+        // arena: generated ARM64 execution jumped to 0x7000000000. Keep every
+        // embedded entry point on the stable standard Universal arena.
+        expect(service, contains('expandedJitRegion: false'));
+        expect(service, isNot(contains('expandedJitRegion: true')));
+        expect(dartBridge, contains('bool expandedJitRegion = false'));
+        expect(bridge, contains('BOOL expanded = NO;'));
+        expect(
+          bridge,
+          isNot(
+            contains('BOOL expanded = [args[@"expandedJitRegion"] boolValue];'),
+          ),
+        );
 
-      final diagnosticsStart = bridge.indexOf(
-        'if ([call.method isEqualToString:@"diagnostics"])',
-      );
-      final initializeStart = bridge.indexOf(
-        'if ([call.method isEqualToString:@"initialize"])',
-      );
-      final diagnosticsBlock = bridge.substring(
-        diagnosticsStart,
-        initializeStart,
-      );
-      expect(diagnosticsBlock, isNot(contains('loadCoreWithExpandedJit')));
-    });
+        final diagnosticsStart = bridge.indexOf(
+          'if ([call.method isEqualToString:@"diagnostics"])',
+        );
+        final initializeStart = bridge.indexOf(
+          'if ([call.method isEqualToString:@"initialize"])',
+        );
+        final diagnosticsBlock = bridge.substring(
+          diagnosticsStart,
+          initializeStart,
+        );
+        expect(diagnosticsBlock, isNot(contains('loadCoreWithExpandedJit')));
+      },
+    );
 
     test('manager inspection does not leave a Universal helper waiting', () {
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
-      final manager = File('lib/screens/rpcs3_manager_screen.dart')
-          .readAsStringSync();
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
+      final manager = File(
+        'lib/screens/rpcs3_manager_screen.dart',
+      ).readAsStringSync();
 
       final start = service.indexOf('static Future<void> prepareManager()');
       final end = service.indexOf(
@@ -173,24 +196,27 @@ void main() {
       expect(manager, contains('Réessayer'));
     });
 
-    test('Universal attach returns before completion and forces the matching script', () {
-      final host = File(
-        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
-      ).readAsStringSync();
-      final helper = File(
-        'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift',
-      ).readAsStringSync();
-      final prepare = host.substring(
-        host.indexOf('if (![call.method isEqualToString:@"prepareJit"])'),
-      );
-      expect(prepare, contains('waitUntilAttached:kRpcs3AttachTimeout'));
-      expect(prepare, isNot(contains('waitUntilFinished:')));
-      expect(prepare, contains('response[@"requiresCompletion"] = @YES'));
-      expect(host, contains('isEqualToString:@"completeJit"'));
-      expect(host, contains('waitUntilFinished:kRpcs3CompletionTimeout'));
-      expect(helper, contains('forceScript: requiresCoreHandshake'));
-      expect(host, contains('cancelExtensionRequestWithIdentifier:'));
-    });
+    test(
+      'Universal attach returns before completion and forces the matching script',
+      () {
+        final host = File(
+          'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
+        ).readAsStringSync();
+        final helper = File(
+          'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift',
+        ).readAsStringSync();
+        final prepare = host.substring(
+          host.indexOf('if (![call.method isEqualToString:@"prepareJit"])'),
+        );
+        expect(prepare, contains('waitUntilAttached:kRpcs3AttachTimeout'));
+        expect(prepare, isNot(contains('waitUntilFinished:')));
+        expect(prepare, contains('response[@"requiresCompletion"] = @YES'));
+        expect(host, contains('isEqualToString:@"completeJit"'));
+        expect(host, contains('waitUntilFinished:kRpcs3CompletionTimeout'));
+        expect(helper, contains('forceScript: requiresCoreHandshake'));
+        expect(host, contains('cancelExtensionRequestWithIdentifier:'));
+      },
+    );
 
     test('RPCS3 in-game menu mirrors Dolphin navigation and follows 12 locales', () {
       final menu = File(
@@ -215,18 +241,25 @@ void main() {
       expect(menu, contains('RPCS3MenuLoadStates'));
       expect(menu, contains('systemImageNamed'));
       expect(plugin, contains('Rpcs3SessionMenu* menu'));
-      expect(
-        plugin,
-        contains('UIModalPresentationOverFullScreen'),
-      );
+      expect(plugin, contains('UIModalPresentationOverFullScreen'));
       expect(plugin, contains('performSessionCommand'));
       expect(plugin, contains('readSessionStates'));
       expect(plugin, contains('performSessionStateAtSlot'));
       expect(input, contains('self.touchControlsEnabled'));
 
       for (final locale in const [
-        'en', 'es', 'pt', 'ru', 'zh', 'zh_Hant',
-        'fr', 'de', 'it', 'id', 'ja', 'ko',
+        'en',
+        'es',
+        'pt',
+        'ru',
+        'zh',
+        'zh_Hant',
+        'fr',
+        'de',
+        'it',
+        'id',
+        'ja',
+        'ko',
       ]) {
         expect(localization, contains('@"$locale": @{'), reason: locale);
       }
@@ -243,8 +276,9 @@ void main() {
     });
 
     test('firmware picker is shown before RPCS3 runtime initialization', () {
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
       final methodStart = service.indexOf(
         'static Future<bool> importFirmware()',
       );
@@ -263,8 +297,9 @@ void main() {
     });
 
     test('RPCS3 signing capabilities match the original iOS runtime needs', () {
-      final config = File('build-utils/configure_rpcs3_ios_v2.py')
-          .readAsStringSync();
+      final config = File(
+        'build-utils/configure_rpcs3_ios_v2.py',
+      ).readAsStringSync();
 
       expect(config, contains("'get-task-allow': True"));
       expect(
@@ -289,10 +324,12 @@ void main() {
       final plugin = File(
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
-      final launcher = File('lib/services/rpcs3_launch_service.dart')
-          .readAsStringSync();
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
+      final launcher = File(
+        'lib/services/rpcs3_launch_service.dart',
+      ).readAsStringSync();
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
 
       expect(plugin, contains('rpcs3_ios_boot_game'));
       expect(plugin, contains('self->_api.boot_game'));
@@ -309,8 +346,9 @@ void main() {
     });
 
     test('firmware remains mandatory before direct boot', () {
-      final service = File('lib/services/rpcs3_internal_service.dart')
-          .readAsStringSync();
+      final service = File(
+        'lib/services/rpcs3_internal_service.dart',
+      ).readAsStringSync();
       final gameplayInit = service.indexOf(
         'await ensureGameplayInitialized();',
       );
@@ -323,10 +361,12 @@ void main() {
     });
 
     test('PS3 library exposes emulator manager and all import actions', () {
-      final widget = File('lib/widgets/rpcs3_internal_playlist_actions.dart')
-          .readAsStringSync();
-      final manager = File('lib/screens/rpcs3_manager_screen.dart')
-          .readAsStringSync();
+      final widget = File(
+        'lib/widgets/rpcs3_internal_playlist_actions.dart',
+      ).readAsStringSync();
+      final manager = File(
+        'lib/screens/rpcs3_manager_screen.dart',
+      ).readAsStringSync();
 
       expect(widget, contains("value: 'open'"));
       expect(widget, contains('Ouvrir RPCS3'));

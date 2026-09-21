@@ -142,11 +142,8 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         create: true
       )
       let journalRoot = library.appendingPathComponent("NeoStationRPCS3HelperReports", isDirectory: true)
-      // Recovered evidence is diagnostic only. It never publishes pid_attached
-      // or completes the current transaction, which still needs its own nonce.
-      for previous in Rpcs3HelperJournal.previous(in: journalRoot) {
-        try? reporter?.send(event: "previous_session_diagnostic", message: previous)
-      }
+      // Previous journals stay archived. Do not replay their signals into a
+      // new startup transaction or confuse an old failure with current proof.
       journal = try? Rpcs3HelperJournal(directory: journalRoot, targetPID: targetPID)
 
       let stikRoot = library.appendingPathComponent(
