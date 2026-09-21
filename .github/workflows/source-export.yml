@@ -1,0 +1,39 @@
+name: Temporary exact source export
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/source-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export exact repository source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Archive source without Git metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf "$RUNNER_TEMP/neostation-source.tar.gz" .
+          test -s "$RUNNER_TEMP/neostation-source.tar.gz"
+
+      - name: Upload exact source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: neostation-source-${{ github.sha }}
+          path: ${{ runner.temp }}/neostation-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
