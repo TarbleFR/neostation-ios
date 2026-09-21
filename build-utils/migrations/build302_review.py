@@ -53,10 +53,10 @@ replace('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3ArenaReservation.h',
     if (error) cleanup_error = error;
     return error;''')
 replace('test/rpcs3_startup_abort_native_test.py',
-    '  auto report=run(bridge);',
-    '''  auto report=run(bridge);
-  fprintf(stderr, "ABORT_RESULT=%s connected=%d attached=%d finished=%d closed=%d live=%d\\n",
-      report.description.UTF8String, session.connected, session.attached, session.finished, session.closed, live);''')
+    ' auto report=run(bridge);',
+    ''' auto report=run(bridge);
+ fprintf(stderr, "ABORT_RESULT=%s connected=%d attached=%d finished=%d closed=%d live=%d\\n",
+     report.description.UTF8String, session.connected, session.attached, session.finished, session.closed, live);''')
 replace('test/rpcs3_startup_abort_native_test.py',
     'static uint64_t RPCS3DebuggerProbe(uint64_t nonce) { return live == 1 ? nonce + 1 : 0; }',
     '''static uint64_t RPCS3DebuggerProbe(uint64_t nonce) {
