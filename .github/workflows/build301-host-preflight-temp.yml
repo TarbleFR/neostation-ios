@@ -1,0 +1,61 @@
+name: Temporary Build 301 host preflight
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/build301-host-preflight-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: Build 301 host contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Validate host source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            build-utils/prepare_ios_icon_fallback.py \
+            build-utils/validate_rpcs3_ipa.py \
+            test/rpcs3_build285_core_handoff_test.py \
+            test/rpcs3_ipa_validation_test.py
+          python3 test/rpcs3_build285_core_handoff_test.py
+          python3 test/rpcs3_ipa_validation_test.py
+          python3 test/local_dev_vpn_route_contract_test.py
+
+      - name: Resolve Flutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+
+      - name: Run focused host tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test \
+            test/rpcs3_internal_integration_test.dart \
+            test/rpcs3_lazy_load_contract_test.dart \
+            test/local_jit_route_proof_test.dart \
+            test/rpcs3_boot_watchdog_test.dart
