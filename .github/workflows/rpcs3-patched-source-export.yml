@@ -77,7 +77,6 @@ jobs:
           git diff --binary > "$OUT/neostation-rpcs3-postimage.patch"
           printf '%s\n' "22f1152783cef1f7e04af7b1c895173e28fd5b03" > "$OUT/RPCS3_SOURCE_COMMIT.txt"
           for path in \
-            Utilities/JIT.cpp \
             Utilities/JIT.h \
             Utilities/JITASM.cpp \
             Utilities/JITLLVM.cpp \
