@@ -11,14 +11,18 @@ permissions:
   contents: write
   actions: read
 
+concurrency:
+  group: build301-core-promoter
+  cancel-in-progress: true
+
 jobs:
   promote:
     name: Validate Core 26 and promote Build 301
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
-      CORE_SHA: 773f0ac506704f2222c8681a52fbf38c16c85234
-      CORE_RUN_ID: '35603039000'
+      CORE_SHA: a41795e9b9894ef6d69ac5c910542d9a401317e5
+      CORE_RUN_ID: '35608448338'
       SOURCE_SHA: 22f1152783cef1f7e04af7b1c895173e28fd5b03
     steps:
       - name: Checkout experimental
