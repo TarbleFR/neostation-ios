@@ -51,6 +51,8 @@ jobs:
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
+          # The source contract also proves the diagnostic emitter is declared
+          # before reserve_arena_layout can call it.
           python3 -m py_compile \
             build-utils/patch_rpcs3_build295_fixed_reservation.py \
             build-utils/patch_rpcs3_build301_passive_dlopen.py \
