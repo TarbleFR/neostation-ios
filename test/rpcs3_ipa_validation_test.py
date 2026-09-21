@@ -85,6 +85,15 @@ class RPCS3IPAValidationTests(unittest.TestCase):
             self.assertIn(symbol, validator.REQUIRED_CORE_SYMBOLS)
 
 
+    def test_icon_fallback_generation_and_xcode_paths_share_runner_root(self):
+        prepare = (BUILD_UTILS / 'prepare_ios_icon_fallback.py').read_text()
+        resources = (BUILD_UTILS / 'add_ios_icon_fallback_resources.rb').read_text()
+        self.assertIn('FALLBACK_DIR = RUNNER', prepare)
+        self.assertNotIn('RUNNER / "IconFallback"', prepare)
+        self.assertIn("find_subpath('Runner', false)", resources)
+        self.assertNotIn("Runner/IconFallback", resources)
+
+
     def test_accepts_complete_springboard_icon_contract(self):
         with tempfile.TemporaryDirectory() as temp:
             app = Path(temp) / 'NeoStation.app'
