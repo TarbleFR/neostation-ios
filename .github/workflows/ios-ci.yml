@@ -360,6 +360,7 @@ jobs:
             .github/workflows/rpcs3-core.yml
 
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
+          mkdir -p build/rpcs3-ci
           python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" \
             | tee build/rpcs3-ci/passive-dlopen.txt
           python3 - <<'PY'
