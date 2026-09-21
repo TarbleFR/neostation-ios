@@ -52,4 +52,18 @@ replace('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3ArenaReservation.h',
         static_cast<vm_size_t>(bytes));
     if (error) cleanup_error = error;
     return error;''')
-print('PASS: library mutation lock uses single startup owner; obsolete readiness probe removed; rollback kernel code retained')
+replace('test/rpcs3_startup_abort_native_test.py',
+    '  auto report=run(bridge);',
+    '''  auto report=run(bridge);
+  fprintf(stderr, "ABORT_RESULT=%s connected=%d attached=%d finished=%d closed=%d live=%d\\n",
+      report.description.UTF8String, session.connected, session.attached, session.finished, session.closed, live);''')
+replace('test/rpcs3_startup_abort_native_test.py',
+    'static uint64_t RPCS3DebuggerProbe(uint64_t nonce) { return live == 1 ? nonce + 1 : 0; }',
+    '''static uint64_t RPCS3DebuggerProbe(uint64_t nonce) {
+  fprintf(stderr,"ABORT_NONCE=%llu live=%d\\n",(unsigned long long)nonce,live);
+  return live == 1 ? nonce + 1 : 0;
+}''')
+replace('test/rpcs3_startup_abort_native_test.py',
+    'static uint64_t RPCS3DebuggerDetach() { detached(); return 0; }',
+    'static uint64_t RPCS3DebuggerDetach() { fprintf(stderr,"ABORT_DETACH_REQUEST\\n"); detached(); return 0; }')
+print('PASS: startup owner reconciled, obsolete readiness probe removed; native abort outcome will be asserted, not assumed')
