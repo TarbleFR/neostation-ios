@@ -389,62 +389,64 @@ static void RPCS3Progress(void* context,
     return NO;
   }
 
-  // RPCS3 reads this policy while the dylib is being loaded, before
-  // rpcs3_ios_initialize is ever called. Setting it afterwards is too late.
-  if (setenv("RPCS3_IOS_EXPANDED_JIT_ARENA", expanded ? "1" : "0", 1) != 0) {
-    if (error) {
-      *error = [NSString stringWithFormat:
-          @"Unable to configure the RPCS3 JIT arena before loading (errno %d).",
-          errno];
+  // NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1
+  // The Core is now passive during dyld loading. Arena capacity belongs only
+  // to rpcs3_ios_initialize(), so do not communicate JIT policy through the
+  // environment and never retry dlopen under a second path.
+  NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
+  NSString* path =
+      [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"];
+  if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
+    NSString* fallback = [NSBundle.mainBundle.bundlePath
+        stringByAppendingPathComponent:@"Frameworks/libRPCS3Core.dylib"];
+    if ([NSFileManager.defaultManager fileExistsAtPath:fallback]) {
+      path = fallback;
     }
+  }
+  if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
+    if (error) *error = @"libRPCS3Core.dylib is missing from NeoStation Frameworks.";
     return NO;
   }
 
-  NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
-  NSArray<NSString*>* candidates = @[
-    [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"],
-    [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks/libRPCS3Core.dylib"],
-  ];
+  if (@available(iOS 26.0, *)) {
+    RPCS3Milestone(@"core_handoff_begin",
+                    @"Final debugger nonce proof immediately before dlopen");
+    if (!RPCS3JitConfirmCoreLoadHandoff()) {
+      RPCS3Milestone(@"core_handoff_end", @"rejected; dlopen blocked");
+      if (error) {
+        *error = @"The Universal debugger did not acknowledge the final Core-load nonce; dlopen was blocked.";
+      }
+      return NO;
+    }
+    RPCS3Milestone(@"core_handoff_end", @"verified; entering dlopen");
+  }
+
+  RPCS3Milestone(@"core_load_begin",
+                  expanded ? @"expanded arena" : @"standard arena");
   void* handle = NULL;
   NSString* lastLoadError = @"unknown";
   dlerror();
-  for (NSString* path in candidates) {
-    if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
-      if (@available(iOS 26.0, *)) {
-        RPCS3Milestone(@"core_handoff_begin", @"Final debugger nonce proof immediately before dlopen");
-        if (!RPCS3JitConfirmCoreLoadHandoff()) {
-          RPCS3Milestone(@"core_handoff_end", @"rejected; dlopen blocked");
-          if (error) {
-            *error = @"The Universal debugger did not acknowledge the final Core-load nonce; dlopen was blocked.";
-          }
-          return NO;
-        }
-        RPCS3Milestone(@"core_handoff_end", @"verified; entering dlopen");
-      }
-      RPCS3Milestone(@"core_load_begin", expanded ? @"expanded arena" : @"standard arena");
-      {
-        // Keep stderr capture completely local to dlopen. If dyld or a static
-        // initializer terminates the process, the next NeoStation launch can
-        // recover the last constructor diagnostics from Documents.
-        RPCS3EarlyLoaderCapture earlyLoaderCapture;
-        handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
-      }
-      if (handle) {
-        RPCS3Milestone(@"core_load_end", @"loaded");
-      } else {
-        const char* loadError = dlerror();
-        if (loadError) lastLoadError = [NSString stringWithUTF8String:loadError] ?: @"unknown";
-        RPCS3Milestone(@"core_load_end",
-                        [NSString stringWithFormat:@"dlopen failed: %@", lastLoadError]);
-      }
-      if (handle) break;
-    }
+  {
+    // stderr capture is scoped to this single deterministic dlopen. A passive
+    // Core must return from this boundary before explicit JIT initialization.
+    RPCS3EarlyLoaderCapture earlyLoaderCapture;
+    handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
   }
   if (!handle) {
-    if (error) *error = [NSString stringWithFormat:
-        @"libRPCS3Core.dylib is missing or could not load: %@", lastLoadError];
+    const char* loadError = dlerror();
+    if (loadError) {
+      lastLoadError = [NSString stringWithUTF8String:loadError] ?: @"unknown";
+    }
+    RPCS3Milestone(@"core_load_end",
+                    [NSString stringWithFormat:@"dlopen failed: %@", lastLoadError]);
+    if (error) {
+      *error = [NSString stringWithFormat:
+          @"libRPCS3Core.dylib could not load: %@", lastLoadError];
+    }
     return NO;
   }
+  RPCS3Milestone(@"core_load_end", @"loaded; no Core JIT initialized during dlopen");
+
 #define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"Missing RPCS3 symbol %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); self.coreLoadedWithExpandedJit = NO; return NO; } } while (0)
   _api.handle = handle;
   self.coreLoadedWithExpandedJit = expanded;
