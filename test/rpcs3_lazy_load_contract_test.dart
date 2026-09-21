@@ -20,8 +20,12 @@ void main() {
         'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
       ).readAsStringSync();
       expect(plugin, contains('dlopen('));
+      expect('dlopen('.allMatches(plugin).length, 1);
       expect(plugin, contains('libRPCS3Core.dylib'));
       expect(plugin, contains('RTLD_NOW | RTLD_LOCAL'));
+      expect(plugin, contains('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1'));
+      expect(plugin, isNot(contains('for (NSString* path in candidates)')));
+      expect(plugin, isNot(contains('RPCS3_IOS_EXPANDED_JIT_ARENA')));
     });
 
     test('embedded RPCS3 relies on NeoStation host process capabilities', () {
