@@ -1,36 +1,30 @@
 name: RPCS3 native core
-
-run-name: RPCS3 native core • ${{ github.sha }}
-
+run-name: RPCS3 native core Build 302 • ${{ github.sha }}
 on:
   push:
-    branches:
-      - experimental
+    branches: [experimental]
     paths:
       - '.github/workflows/rpcs3-core.yml'
       - 'build-utils/build_rpcs3_embedded_core.sh'
-      - 'build-utils/patch_rpcs3_build266_v09_core.py'
-      - 'build-utils/patch_rpcs3_build295_fixed_reservation.py'
-      - 'build-utils/patch_rpcs3_build301_passive_dlopen.py'
+      - 'build-utils/materialize_rpcs3_core.py'
+      - 'build-utils/rpcs3_core_syntax_gate.py'
       - 'build-utils/validate_rpcs3_passive_dlopen.py'
+      - 'build-utils/validate_rpcs3_embedded_core.py'
       - 'build-utils/rpcs3/**'
-      - 'test/rpcs3_build295_fixed_reservation_test.py'
-      - 'test/rpcs3_build301_passive_dlopen_test.py'
+      - 'test/rpcs3_reserved_startup_core_test.py'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: neostation-rpcs3-core-experimental
   cancel-in-progress: true
-
 jobs:
   build:
     name: Build RPCS3 Core arm64
     runs-on: macos-15
     timeout-minutes: 180
-
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
@@ -38,93 +32,69 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-
-      - name: Prepare pinned native toolchain
+      - name: Check startup contracts and native toolchain
         shell: bash
         run: |
           set -euo pipefail
+          git diff --check
+          bash -n build-utils/build_rpcs3_embedded_core.sh
+          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/rpcs3_core_syntax_gate.py build-utils/validate_rpcs3_embedded_core.py build-utils/validate_rpcs3_passive_dlopen.py
+          python3 test/rpcs3_memory_preflight_test.py
+          python3 test/rpcs3_startup_abort_native_test.py
+          python3 test/rpcs3_jit_handshake_test.py
+          node test/rpcs3_debugger_handshake_test.js
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
-          # The source contract also proves the diagnostic emitter is declared
-          # before reserve_arena_layout can call it.
-          python3 -m py_compile \
-            build-utils/patch_rpcs3_build295_fixed_reservation.py \
-            build-utils/patch_rpcs3_build301_passive_dlopen.py \
-            build-utils/validate_rpcs3_passive_dlopen.py
-          python3 test/rpcs3_build295_fixed_reservation_test.py
-          python3 test/rpcs3_build301_passive_dlopen_test.py
-          cat > "$RUNNER_TEMP/rpcs3-vm-fixed-probe.cpp" <<'CPP'
-          #include <mach/mach.h>
-          #include <mach/vm_statistics.h>
-          kern_return_t probe_fixed_reservation() {
-            vm_address_t address = 0x100000000ull;
-            return vm_allocate(
-              mach_task_self(), &address, static_cast<vm_size_t>(16384),
-              VM_FLAGS_FIXED | VM_MAKE_TAG(VM_MEMORY_APPLICATION_SPECIFIC_1));
-          }
-          CPP
-          xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.3 -std=c++20 \
-            -fsyntax-only "$RUNNER_TEMP/rpcs3-vm-fixed-probe.cpp"
           mkdir -p dist/rpcs3 build/rpcs3-core-diagnostics
-
-      - name: Build patched RPCS3 Core
+      - name: Build canonical RPCS3 Core after exact iOS syntax gates
         shell: bash
         run: |
           set -euo pipefail
-          env -u GITHUB_ENV \
-            OUTPUT_DIR="$PWD/dist/rpcs3" \
-            BUILD_JOBS=3 \
-            bash build-utils/build_rpcs3_embedded_core.sh \
-            2>&1 | tee build/rpcs3-core-diagnostics/build.log
-
+          env -u GITHUB_ENV OUTPUT_DIR="$PWD/dist/rpcs3" BUILD_JOBS=3 \
+            bash build-utils/build_rpcs3_embedded_core.sh 2>&1 | tee build/rpcs3-core-diagnostics/build.log
       - name: Validate Core identity and exports
         shell: bash
         run: |
           set -euo pipefail
-          CORE="dist/rpcs3/libRPCS3Core.dylib"
+          CORE=dist/rpcs3/libRPCS3Core.dylib
           test -s "$CORE"
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
-          python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" \
-            | tee build/rpcs3-core-diagnostics/passive-dlopen.txt
+          python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" | tee build/rpcs3-core-diagnostics/passive-dlopen.txt
           file "$CORE" | tee build/rpcs3-core-diagnostics/file.txt
           lipo -archs "$CORE" | tee build/rpcs3-core-diagnostics/archs.txt
           nm -gU "$CORE" > build/rpcs3-core-diagnostics/exports.txt
-          grep -q '_rpcs3_ios_initialize$' build/rpcs3-core-diagnostics/exports.txt
-          grep -q '_rpcs3_ios_boot_game$' build/rpcs3-core-diagnostics/exports.txt
-          grep -q '_neostation_rpcs3_ios_save_state$' build/rpcs3-core-diagnostics/exports.txt
-          grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
-          grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
+          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_adopt_jit_layout _neostation_rpcs3_reset_failed_startup _rpcs3_ios_run_llvm_self_test; do
+            grep -q " $symbol$" build/rpcs3-core-diagnostics/exports.txt
+          done
           python3 - <<'PY'
-          import hashlib, json, os
+          import hashlib,json,os
           from pathlib import Path
           core=Path('dist/rpcs3/libRPCS3Core.dylib')
+          canonical=json.loads(Path('build-utils/rpcs3/canonical-source.json').read_text())
           identity={
-            'schema_version':1,
-            'repository':'https://github.com/TarbleFR/neostation-ios',
+            'schema_version':1,'repository':'https://github.com/TarbleFR/neostation-ios',
             'host_commit':os.environ['GITHUB_SHA'],
             'source_commit':Path('dist/rpcs3/RPCS3_SOURCE_COMMIT.txt').read_text().strip(),
             'abi_version':int(Path('dist/rpcs3/RPCS3_IOS_ABI.txt').read_text().strip()),
-            'sha256':hashlib.sha256(core.read_bytes()).hexdigest(),
-            'architectures':['arm64'],
-            'jit_policy':'NeoStation Build 266 v0.9-era low-VA backport',
-            'marker':'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
+            'sha256':hashlib.sha256(core.read_bytes()).hexdigest(),'architectures':['arm64'],
+            'jit_policy':'448 MiB code + 576 MiB data; host reservation before Core load',
+            'memory_policy':canonical['memory_policy'],'canonical_patch_sha256':canonical['patch_sha256'],
             'reservation':'vm_allocate fixed, no VM_FLAGS_OVERWRITE',
-            'reservation_marker':'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1',
+            'reservation_marker':'NEOSTATION_BUILD302_RESERVED_STARTUP_V1',
             'lifecycle':'passive dlopen; explicit single JIT initialization',
             'lifecycle_marker':'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
             'device_runtime_tested':False,
           }
+          assert identity['memory_policy']=={'code_bytes':469762048,'data_bytes':603979776,'budget_bytes':1073741824}
           Path('dist/rpcs3/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           print(json.dumps(identity,indent=2))
           PY
           cp dist/rpcs3/identity.json build/rpcs3-core-diagnostics/identity.json
-
       - name: Upload RPCS3 Core
         uses: actions/upload-artifact@v4
         with:
@@ -132,7 +102,6 @@ jobs:
           path: dist/rpcs3/
           if-no-files-found: error
           retention-days: 14
-
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
