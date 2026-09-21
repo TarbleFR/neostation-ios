@@ -48,7 +48,7 @@ def _minimal_png(width: int, height: int) -> bytes:
     # validate_rpcs3_ipa only needs the PNG signature/IHDR dimensions. The
     # production build uses sips to create complete PNG files.
     return (
-        b'\\x89PNG\\r\\n\\x1a\\n'
+        b'\x89PNG\r\n\x1a\n'
         + (13).to_bytes(4, 'big')
         + b'IHDR'
         + width.to_bytes(4, 'big')
