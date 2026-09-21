@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 300 RPCS3 Atomic Reservation
-run-name: NeoStation iOS Build 300 • ${{ github.sha }}
+name: NeoStation iOS Build 301 RPCS3 Passive Dlopen
+run-name: NeoStation iOS Build 301 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-300
+  group: neostation-ios-build-301
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 300 RPCS3 Atomic Reservation IPA
+    name: Build 301 RPCS3 Passive Dlopen IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '300'
-      IPA_NAME: 'NeoStation-iOS-Build-300-RPCS3-Atomic-Reservation'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-300-RPCS3-Atomic-Reservation'
+      BUILD_NUMBER: '301'
+      IPA_NAME: 'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
@@ -303,7 +303,7 @@ jobs:
           shutil.copytree(source / "Sys", sys_destination)
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 300 diagnostics
+          # Rewrite the Dolphin fields so the final Build 301 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -540,7 +540,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 300 IPA
+      - name: Package and validate Build 301 IPA
         shell: bash
         run: |
           set -euo pipefail
