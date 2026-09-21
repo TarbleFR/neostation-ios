@@ -73,7 +73,7 @@ void main() {
       expect(script, contains('prepare_memory_region(jitPageAddress, x1)'));
     });
 
-    test('JIT and arena policy are ready before RPCS3 Core dlopen', () {
+    test('JIT handoff precedes passive dlopen and arena policy stays explicit', () {
       final service = File('lib/services/rpcs3_internal_service.dart')
           .readAsStringSync();
       final bridge = File(
@@ -101,15 +101,21 @@ void main() {
       expect(bridge, contains('RPCS3HostIsDebugged'));
       expect(bridge, contains('RPCS3ProbeExecutableMemory'));
       expect(bridge, contains('RPCS3JitHasActiveCoreHandshake()'));
-      expect(bridge, contains('RPCS3_IOS_EXPANDED_JIT_ARENA'));
-      final setenvIndex = bridge.indexOf(
-        'setenv("RPCS3_IOS_EXPANDED_JIT_ARENA"',
-      );
+      expect(bridge, contains('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1'));
+      expect(bridge, isNot(contains('RPCS3_IOS_EXPANDED_JIT_ARENA')));
+      expect('dlopen('.allMatches(bridge).length, 1);
       final dlopenIndex = bridge.indexOf(
         'dlopen(path.fileSystemRepresentation',
       );
-      expect(setenvIndex, greaterThanOrEqualTo(0));
-      expect(dlopenIndex, greaterThan(setenvIndex));
+      final arenaPolicyIndex = bridge.indexOf(
+        'options.expanded_jit_region = expanded ? 1 : 0;',
+      );
+      final initializeCallIndex = bridge.indexOf(
+        'self->_api.initialize(&options)',
+      );
+      expect(dlopenIndex, greaterThanOrEqualTo(0));
+      expect(arenaPolicyIndex, greaterThan(dlopenIndex));
+      expect(initializeCallIndex, greaterThan(arenaPolicyIndex));
 
       // Build 234 crashed after successfully preparing the optional 512 MiB
       // arena: generated ARM64 execution jumped to 0x7000000000. Keep every
