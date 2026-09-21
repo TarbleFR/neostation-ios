@@ -469,6 +469,7 @@ jobs:
           python3 build-utils/configure_armsx2_ios.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
+          # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
           python3 build-utils/prepare_ios_icon_fallback.py
           bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb
           env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
