@@ -1,4 +1,4 @@
-name: Temporary patched RPCS3 source export
+name: Temporary apply RPCS3 Build 301
 
 on:
   push:
@@ -9,37 +9,52 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
-    name: Materialize patched RPCS3 source
+  apply:
+    name: Apply passive dlopen refactor
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout exact NeoStation commit
+      - name: Checkout experimental
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          persist-credentials: false
+          ref: experimental
+          fetch-depth: 0
+          persist-credentials: true
 
-      - name: Fetch pinned RPCS3 source
+      - name: Materialize reviewed payload
         shell: bash
         run: |
           set -euo pipefail
+          cat .github/build301-payload/part-* | base64 --decode > "$RUNNER_TEMP/build301-payload.tar.gz"
+          printf '%s  %s\n' \
+            '128761603930758164df93c60e9d6d45e8c1bf38ae731b49be5d30923f9006fa' \
+            "$RUNNER_TEMP/build301-payload.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/build301-payload.tar.gz" -C .
+          chmod +x \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            test/rpcs3_build301_passive_dlopen_test.py
+          git diff --check
+
+      - name: Validate exact source transformation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            test/rpcs3_build301_passive_dlopen_test.py
+          python3 test/rpcs3_build301_passive_dlopen_test.py
+
           SRC="$RUNNER_TEMP/rpcs3"
           git init -q "$SRC"
           git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
           git -C "$SRC" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
           git -C "$SRC" checkout -q --detach FETCH_HEAD
-          test "$(git -C "$SRC" rev-parse HEAD)" = 22f1152783cef1f7e04af7b1c895173e28fd5b03
-          echo "SRC=$SRC" >> "$GITHUB_ENV"
 
-      - name: Apply exact NeoStation patch chain
-        shell: bash
-        run: |
-          set -euo pipefail
           python3 build-utils/patch_rpcs3_embedded_boot.py "$SRC"
           python3 build-utils/patch_rpcs3_jit_memory.py "$SRC"
           python3 build-utils/patch_rpcs3_neostation_session.py "$SRC"
@@ -65,25 +80,26 @@ jobs:
           python3 test/rpcs3_build266_v09_core_test.py "$SRC"
           python3 build-utils/patch_rpcs3_build295_fixed_reservation.py "$SRC"
           python3 build-utils/patch_rpcs3_build295_fixed_reservation.py "$SRC"
-          python3 test/rpcs3_build295_fixed_reservation_test.py "$SRC"
+          python3 build-utils/patch_rpcs3_build301_passive_dlopen.py "$SRC"
+          python3 build-utils/patch_rpcs3_build301_passive_dlopen.py "$SRC"
+          python3 test/rpcs3_build301_passive_dlopen_test.py "$SRC"
 
-      - name: Export complete patched tree and audit
+      - name: Commit Core refactor and remove temporary transport
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$SRC/NEOSTATION_AUDIT"
-          git -C "$SRC" diff --binary > "$SRC/NEOSTATION_AUDIT/neostation-rpcs3-postimage.patch"
-          printf '%s\n' "22f1152783cef1f7e04af7b1c895173e28fd5b03" > "$SRC/NEOSTATION_AUDIT/RPCS3_SOURCE_COMMIT.txt"
-          grep -RInE 'build_function_asm|jit_runtime::alloc|asmjit::get_global_runtime|prepare_arena|runtime_memory' \
-            "$SRC/Utilities" "$SRC/rpcs3/Emu/Cell" "$SRC/rpcs3/ios" \
-            > "$SRC/NEOSTATION_AUDIT/jit-global-audit.txt" || true
-          tar --exclude=.git -czf "$RUNNER_TEMP/patched-rpcs3-source.tar.gz" -C "$SRC" .
-          test -s "$RUNNER_TEMP/patched-rpcs3-source.tar.gz"
-
-      - name: Upload patched source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: patched-rpcs3-source-${{ github.sha }}
-          path: ${{ runner.temp }}/patched-rpcs3-source.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            test/rpcs3_build301_passive_dlopen_test.py \
+            build-utils/build_rpcs3_embedded_core.sh \
+            build-utils/validate_rpcs3_embedded_core.py \
+            .github/workflows/rpcs3-core.yml
+          git rm -r .github/build301-payload
+          git rm .github/workflows/source-export.yml
+          git rm .github/workflows/rpcs3-patched-source-export.yml
+          git diff --cached --check
+          git commit -m 'fix(rpcs3): make Core dlopen passive [rpcs3-core-only]'
+          git push origin HEAD:experimental
