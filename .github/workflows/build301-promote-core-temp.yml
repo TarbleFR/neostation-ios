@@ -40,13 +40,9 @@ jobs:
               -H "Authorization: Bearer $GH_TOKEN" \
               -H 'X-GitHub-Api-Version: 2022-11-28' \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${CORE_RUN_ID}")"
-            read -r status conclusion head_sha < <(
-              PAYLOAD="$payload" python3 - <<'PY'
-import json, os
-data=json.loads(os.environ['PAYLOAD'])
-print(data.get('status') or '', data.get('conclusion') or '-', data.get('head_sha') or '')
-PY
-            )
+            status="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("status") or "")' <<<"$payload")"
+            conclusion="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("conclusion") or "-")' <<<"$payload")"
+            head_sha="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("head_sha") or "")' <<<"$payload")"
             echo "Core run status=$status conclusion=$conclusion head=$head_sha"
             test "$head_sha" = "$CORE_SHA" || {
               echo "Core run SHA mismatch" >&2
@@ -100,47 +96,50 @@ PY
           test -s "$IDENTITY"
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
           python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE"
-          python3 - <<'PY'
-import hashlib, json, os
-from pathlib import Path
+          cat > "$RUNNER_TEMP/promote.py" <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
 
-core=Path('dist/rpcs3-native/libRPCS3Core.dylib')
-identity=json.loads(Path('dist/rpcs3-native/identity.json').read_text())
-actual=hashlib.sha256(core.read_bytes()).hexdigest()
-assert identity['host_commit'] == os.environ['CORE_SHA'], identity
-assert identity['source_commit'] == os.environ['SOURCE_SHA'], identity
-assert identity['abi_version'] == 30, identity
-assert identity['architectures'] == ['arm64'], identity
-assert identity['sha256'] == actual, (actual, identity)
-assert identity['lifecycle'] == 'passive dlopen; explicit single JIT initialization', identity
-assert identity['lifecycle_marker'] == 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1', identity
+          core = Path('dist/rpcs3-native/libRPCS3Core.dylib')
+          identity = json.loads(Path('dist/rpcs3-native/identity.json').read_text())
+          actual = hashlib.sha256(core.read_bytes()).hexdigest()
+          assert identity['host_commit'] == os.environ['CORE_SHA'], identity
+          assert identity['source_commit'] == os.environ['SOURCE_SHA'], identity
+          assert identity['abi_version'] == 30, identity
+          assert identity['architectures'] == ['arm64'], identity
+          assert identity['sha256'] == actual, (actual, identity)
+          assert identity['lifecycle'] == 'passive dlopen; explicit single JIT initialization', identity
+          assert identity['lifecycle_marker'] == 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1', identity
 
-path=Path('.github/workflows/ios-ci.yml')
-text=path.read_text()
-old_host='RPCS3_CORE_HOST_SHA: 6bf58ff2fda11e7074ea76c572b0a68f1fb934b8'
-old_run="RPCS3_CORE_RUN_ID: '35539478606'"
-old_sha='RPCS3_CORE_SHA256: fa1821520dba99ad5a58bb4b366d30cb46081caa7e84fdcaa9e29bb6ce833d03'
-for old in (old_host, old_run, old_sha):
-    if text.count(old) != 1:
-        raise SystemExit(f'Expected exactly one stale Core pin: {old!r}')
-text=text.replace(old_host, f"RPCS3_CORE_HOST_SHA: {os.environ['CORE_SHA']}", 1)
-text=text.replace(old_run, f"RPCS3_CORE_RUN_ID: '{os.environ['CORE_RUN_ID']}'", 1)
-text=text.replace(old_sha, f'RPCS3_CORE_SHA256: {actual}', 1)
-required=(
-    "BUILD_NUMBER: '301'",
-    'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen',
-    'build-utils/patch_rpcs3_build301_passive_dlopen.py',
-    'build-utils/validate_rpcs3_passive_dlopen.py',
-    'python3 build-utils/prepare_ios_icon_fallback.py',
-    'bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb',
-    'python3 build-utils/validate_rpcs3_ipa.py',
-)
-missing=[item for item in required if item not in text]
-if missing:
-    raise SystemExit('Build 301 promotion invariant missing: '+repr(missing))
-path.write_text(text)
-print('Promoting Core SHA256', actual)
-PY
+          path = Path('.github/workflows/ios-ci.yml')
+          text = path.read_text()
+          old_host = 'RPCS3_CORE_HOST_SHA: 6bf58ff2fda11e7074ea76c572b0a68f1fb934b8'
+          old_run = "RPCS3_CORE_RUN_ID: '35539478606'"
+          old_sha = 'RPCS3_CORE_SHA256: fa1821520dba99ad5a58bb4b366d30cb46081caa7e84fdcaa9e29bb6ce833d03'
+          for old in (old_host, old_run, old_sha):
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected exactly one stale Core pin: {old!r}')
+          text = text.replace(old_host, f"RPCS3_CORE_HOST_SHA: {os.environ['CORE_SHA']}", 1)
+          text = text.replace(old_run, f"RPCS3_CORE_RUN_ID: '{os.environ['CORE_RUN_ID']}'", 1)
+          text = text.replace(old_sha, f'RPCS3_CORE_SHA256: {actual}', 1)
+          required = (
+              "BUILD_NUMBER: '301'",
+              'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen',
+              'build-utils/patch_rpcs3_build301_passive_dlopen.py',
+              'build-utils/validate_rpcs3_passive_dlopen.py',
+              'python3 build-utils/prepare_ios_icon_fallback.py',
+              'bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb',
+              'python3 build-utils/validate_rpcs3_ipa.py',
+          )
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit('Build 301 promotion invariant missing: ' + repr(missing))
+          path.write_text(text)
+          print('Promoting Core SHA256', actual)
+          PY
+          python3 "$RUNNER_TEMP/promote.py"
           git diff --check
           git diff -- .github/workflows/ios-ci.yml
 
