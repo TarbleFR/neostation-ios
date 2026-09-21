@@ -1,0 +1,47 @@
+name: Temporary Build 301 preflight
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/build301-preflight-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Build 301 source and packaging contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate Python and Ruby helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            build-utils/prepare_ios_icon_fallback.py \
+            build-utils/validate_rpcs3_ipa.py \
+            test/rpcs3_build301_passive_dlopen_test.py \
+            test/rpcs3_ipa_validation_test.py
+          ruby -c build-utils/add_ios_icon_fallback_resources.rb
+
+      - name: Run Build 301 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/rpcs3_build301_passive_dlopen_test.py
+          python3 -m unittest test/rpcs3_ipa_validation_test.py
+          grep -q 'python3 build-utils/prepare_ios_icon_fallback.py' .github/workflows/ios-ci.yml
+          grep -q 'bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb' .github/workflows/ios-ci.yml
+          grep -q 'SPRINGBOARD_ICON_FILES' build-utils/validate_rpcs3_ipa.py
