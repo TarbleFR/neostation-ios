@@ -1336,12 +1336,18 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       options.context = (__bridge void*)self;
       options.expanded_jit_region = expanded ? 1 : 0;
       options.reserved = 0;
+      RPCS3Milestone(@"rpcs3_initialize_begin", @"Calling explicit rpcs3_ios_initialize");
       RPCS3Milestone(@"core_initialize_begin", @"Calling rpcs3_ios_initialize");
       rpcs3_ios_status status = self->_api.initialize(&options);
       RPCS3Milestone(@"core_initialize_end", [NSString stringWithFormat:@"status=%d", status]);
       if (status == 0) {
+        RPCS3Milestone(@"rpcs3_initialize_end", @"status=0");
         self.initialized = YES;
         self.initializedWithExpandedJit = expanded;
+      } else {
+        RPCS3Milestone(@"rpcs3_initialize_failed",
+                       [NSString stringWithFormat:@"status=%d error=%@",
+                                                  status, [self lastError]]);
       }
       NSMutableDictionary* payload = [[self statusPayload:status] mutableCopy];
       payload[@"expandedJitRegion"] = @(expanded);
