@@ -1,0 +1,156 @@
+name: Temporary Build 301 Core promoter
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/build301-promote-core-temp.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    name: Validate Core 26 and promote Build 301
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      CORE_SHA: 773f0ac506704f2222c8681a52fbf38c16c85234
+      CORE_RUN_ID: '35603039000'
+      SOURCE_SHA: 22f1152783cef1f7e04af7b1c895173e28fd5b03
+    steps:
+      - name: Checkout experimental
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Wait for exact Core run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 140); do
+            payload="$(curl -fsSL \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${CORE_RUN_ID}")"
+            read -r status conclusion head_sha < <(
+              PAYLOAD="$payload" python3 - <<'PY'
+import json, os
+data=json.loads(os.environ['PAYLOAD'])
+print(data.get('status') or '', data.get('conclusion') or '-', data.get('head_sha') or '')
+PY
+            )
+            echo "Core run status=$status conclusion=$conclusion head=$head_sha"
+            test "$head_sha" = "$CORE_SHA" || {
+              echo "Core run SHA mismatch" >&2
+              exit 1
+            }
+            if [ "$status" = completed ]; then
+              test "$conclusion" = success || {
+                echo "Core run did not succeed: $conclusion" >&2
+                exit 1
+              }
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Timed out waiting for exact RPCS3 Core run" >&2
+          exit 1
+
+      - name: Refresh exact branch state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin experimental
+          git checkout -B experimental origin/experimental
+          git diff --exit-code "$CORE_SHA" HEAD -- \
+            build-utils/build_rpcs3_embedded_core.sh \
+            build-utils/patch_rpcs3_build266_v09_core.py \
+            build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            build-utils/validate_rpcs3_embedded_core.py \
+            build-utils/rpcs3 \
+            test/rpcs3_build295_fixed_reservation_test.py \
+            test/rpcs3_build301_passive_dlopen_test.py \
+            .github/workflows/rpcs3-core.yml
+
+      - name: Download exact validated Core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: RPCS3Core-${{ env.CORE_SHA }}
+          run-id: ${{ env.CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/rpcs3-native
+
+      - name: Validate downloaded Core and promote pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE=dist/rpcs3-native/libRPCS3Core.dylib
+          IDENTITY=dist/rpcs3-native/identity.json
+          test -s "$CORE"
+          test -s "$IDENTITY"
+          python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
+          python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE"
+          python3 - <<'PY'
+import hashlib, json, os
+from pathlib import Path
+
+core=Path('dist/rpcs3-native/libRPCS3Core.dylib')
+identity=json.loads(Path('dist/rpcs3-native/identity.json').read_text())
+actual=hashlib.sha256(core.read_bytes()).hexdigest()
+assert identity['host_commit'] == os.environ['CORE_SHA'], identity
+assert identity['source_commit'] == os.environ['SOURCE_SHA'], identity
+assert identity['abi_version'] == 30, identity
+assert identity['architectures'] == ['arm64'], identity
+assert identity['sha256'] == actual, (actual, identity)
+assert identity['lifecycle'] == 'passive dlopen; explicit single JIT initialization', identity
+assert identity['lifecycle_marker'] == 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1', identity
+
+path=Path('.github/workflows/ios-ci.yml')
+text=path.read_text()
+old_host='RPCS3_CORE_HOST_SHA: 6bf58ff2fda11e7074ea76c572b0a68f1fb934b8'
+old_run="RPCS3_CORE_RUN_ID: '35539478606'"
+old_sha='RPCS3_CORE_SHA256: fa1821520dba99ad5a58bb4b366d30cb46081caa7e84fdcaa9e29bb6ce833d03'
+for old in (old_host, old_run, old_sha):
+    if text.count(old) != 1:
+        raise SystemExit(f'Expected exactly one stale Core pin: {old!r}')
+text=text.replace(old_host, f"RPCS3_CORE_HOST_SHA: {os.environ['CORE_SHA']}", 1)
+text=text.replace(old_run, f"RPCS3_CORE_RUN_ID: '{os.environ['CORE_RUN_ID']}'", 1)
+text=text.replace(old_sha, f'RPCS3_CORE_SHA256: {actual}', 1)
+required=(
+    "BUILD_NUMBER: '301'",
+    'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen',
+    'build-utils/patch_rpcs3_build301_passive_dlopen.py',
+    'build-utils/validate_rpcs3_passive_dlopen.py',
+    'python3 build-utils/prepare_ios_icon_fallback.py',
+    'bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb',
+    'python3 build-utils/validate_rpcs3_ipa.py',
+)
+missing=[item for item in required if item not in text]
+if missing:
+    raise SystemExit('Build 301 promotion invariant missing: '+repr(missing))
+path.write_text(text)
+print('Promoting Core SHA256', actual)
+PY
+          git diff --check
+          git diff -- .github/workflows/ios-ci.yml
+
+      - name: Commit promotion and trigger full Build 301
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/ios-ci.yml
+          git diff --cached --check
+          git commit -m 'build(ios): promote passive RPCS3 Core to Build 301'
+          git push origin HEAD:experimental
