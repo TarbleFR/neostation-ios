@@ -36,12 +36,22 @@ jobs:
             test/rpcs3_ipa_validation_test.py
           ruby -c build-utils/add_ios_icon_fallback_resources.rb
 
-      - name: Run Build 301 contracts
+      - name: Validate passive-dlopen source contract
         shell: bash
         run: |
           set -euo pipefail
           python3 test/rpcs3_build301_passive_dlopen_test.py
-          python3 -m unittest test/rpcs3_ipa_validation_test.py
+
+      - name: Validate final IPA icon contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v test/rpcs3_ipa_validation_test.py
+
+      - name: Validate workflow wiring
+        shell: bash
+        run: |
+          set -euo pipefail
           grep -q 'python3 build-utils/prepare_ios_icon_fallback.py' .github/workflows/ios-ci.yml
           grep -q 'bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb' .github/workflows/ios-ci.yml
           grep -q 'SPRINGBOARD_ICON_FILES' build-utils/validate_rpcs3_ipa.py
