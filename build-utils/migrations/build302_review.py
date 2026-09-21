@@ -32,7 +32,10 @@ text = text[:a] + '''  // libRPCS3Core.dylib is loaded into NeoStation itself, n
 path.write_text(text)
 replace('test/rpcs3_lazy_load_contract_test.dart',
     "      expect(plugin, contains('RPCS3ProbeExecutableMemory'));",
-    "      expect(plugin, isNot(contains('RPCS3ProbeExecutableMemory')));\n      expect(plugin, contains('_startupReservation.verify_owned()'));\n      expect(plugin, contains('verifyJitExecution'));\n      expect(plugin, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));")
+    "      expect(plugin, isNot(contains('RPCS3ProbeExecutableMemory')));\n      expect(plugin, contains('_reservation.verify_owned()'));\n      expect(plugin, contains('verifyJitExecution'));\n      expect(plugin, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));")
+replace('test/rpcs3_internal_integration_test.dart',
+    "      expect(bridge, contains('RPCS3ProbeExecutableMemory'));",
+    "      expect(bridge, isNot(contains('RPCS3ProbeExecutableMemory')));\n      expect(bridge, contains('_reservation.verify_owned()'));\n      expect(bridge, contains('verifyJitExecution'));\n      expect(bridge, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));")
 replace('test/rpcs3_startup_transaction_test.dart',
     "import '../lib/services/rpcs3_startup_transaction.dart';",
     "import 'package:neostation/services/rpcs3_startup_transaction.dart';")
@@ -42,4 +45,11 @@ replace('test/rpcs3_startup_transaction_test.dart',
 replace('test/rpcs3_startup_transaction_test.dart',
     "    await Future.wait([one,two]); expect(h.calls.where((c)=>c=='attach').length,1);",
     "    await Future.wait([one,two]); expect(h.calls.where((c)=>c=='attach').length,1);\n    expect(tx.inProgress, false);")
-print('PASS: library mutation lock uses single startup owner; obsolete readiness probe removed')
+replace('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3ArenaReservation.h',
+    '''    return ::vm_deallocate(mach_task_self(), static_cast<vm_address_t>(address),
+        static_cast<vm_size_t>(bytes));''',
+    '''    const int error = ::vm_deallocate(mach_task_self(), static_cast<vm_address_t>(address),
+        static_cast<vm_size_t>(bytes));
+    if (error) cleanup_error = error;
+    return error;''')
+print('PASS: library mutation lock uses single startup owner; obsolete readiness probe removed; rollback kernel code retained')
