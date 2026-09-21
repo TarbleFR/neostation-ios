@@ -45,8 +45,8 @@ jobs:
       - name: Validate final IPA icon contract tests
         shell: bash
         run: |
-          set -euo pipefail
-          python3 -m unittest -v test/rpcs3_ipa_validation_test.py
+          set -o pipefail
+          python3 -m unittest -v test/rpcs3_ipa_validation_test.py 2>&1 | tee /tmp/build301-preflight.log
 
       - name: Validate workflow wiring
         shell: bash
@@ -55,3 +55,12 @@ jobs:
           grep -q 'python3 build-utils/prepare_ios_icon_fallback.py' .github/workflows/ios-ci.yml
           grep -q 'bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb' .github/workflows/ios-ci.yml
           grep -q 'SPRINGBOARD_ICON_FILES' build-utils/validate_rpcs3_ipa.py
+
+      - name: Upload preflight traceback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build301-preflight-traceback-${{ github.sha }}
+          path: /tmp/build301-preflight.log
+          if-no-files-found: warn
+          retention-days: 1
