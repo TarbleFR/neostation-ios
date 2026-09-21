@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets/images/fork-icon-valid.jpg"
 RUNNER = ROOT / "ios/Runner"
 INFO = RUNNER / "Info.plist"
-FALLBACK_DIR = RUNNER / "IconFallback"
+FALLBACK_DIR = RUNNER
 
 FALLBACKS = {
     "NeoStationIcon60@2x.png": 120,
