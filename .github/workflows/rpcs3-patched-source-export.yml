@@ -67,35 +67,17 @@ jobs:
           python3 build-utils/patch_rpcs3_build295_fixed_reservation.py "$SRC"
           python3 test/rpcs3_build295_fixed_reservation_test.py "$SRC"
 
-      - name: Export relevant post-image and diff
+      - name: Export complete patched tree and audit
         shell: bash
         run: |
           set -euo pipefail
-          OUT="$RUNNER_TEMP/patched-rpcs3"
-          mkdir -p "$OUT"
-          cd "$SRC"
-          git diff --binary > "$OUT/neostation-rpcs3-postimage.patch"
-          printf '%s\n' "22f1152783cef1f7e04af7b1c895173e28fd5b03" > "$OUT/RPCS3_SOURCE_COMMIT.txt"
-          for path in \
-            Utilities/JIT.h \
-            Utilities/JITASM.cpp \
-            Utilities/JITLLVM.cpp \
-            Utilities/JITIOS.cpp \
-            Utilities/JITIOS.h \
-            Utilities/JITIOSLayoutPolicy.h \
-            rpcs3/Emu/Cell/PPUThread.cpp \
-            rpcs3/Emu/Cell/PPUThread.h \
-            rpcs3/Emu/Cell/SPUCommonRecompiler.cpp \
-            rpcs3/Emu/Cell/SPURecompiler.h \
-            rpcs3/Emu/Cell/SPUThread.h \
-            rpcs3/ios/RPCS3IOS.cpp \
-            rpcs3/ios/RPCS3IOS.h; do
-            mkdir -p "$OUT/$(dirname "$path")"
-            cp "$path" "$OUT/$path"
-          done
+          mkdir -p "$SRC/NEOSTATION_AUDIT"
+          git -C "$SRC" diff --binary > "$SRC/NEOSTATION_AUDIT/neostation-rpcs3-postimage.patch"
+          printf '%s\n' "22f1152783cef1f7e04af7b1c895173e28fd5b03" > "$SRC/NEOSTATION_AUDIT/RPCS3_SOURCE_COMMIT.txt"
           grep -RInE 'build_function_asm|jit_runtime::alloc|asmjit::get_global_runtime|prepare_arena|runtime_memory' \
-            Utilities rpcs3/Emu/Cell rpcs3/ios > "$OUT/jit-global-audit.txt" || true
-          tar -czf "$RUNNER_TEMP/patched-rpcs3-source.tar.gz" -C "$OUT" .
+            "$SRC/Utilities" "$SRC/rpcs3/Emu/Cell" "$SRC/rpcs3/ios" \
+            > "$SRC/NEOSTATION_AUDIT/jit-global-audit.txt" || true
+          tar --exclude=.git -czf "$RUNNER_TEMP/patched-rpcs3-source.tar.gz" -C "$SRC" .
           test -s "$RUNNER_TEMP/patched-rpcs3-source.tar.gz"
 
       - name: Upload patched source snapshot
