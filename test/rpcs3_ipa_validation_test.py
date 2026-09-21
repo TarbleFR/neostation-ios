@@ -44,16 +44,31 @@ def _base_info(version: str) -> dict:
     }
 
 
-def _minimal_png(width: int, height: int) -> bytes:
-    # validate_rpcs3_ipa only needs the PNG signature/IHDR dimensions. The
-    # production build uses sips to create complete PNG files.
+def _png_chunk(kind: bytes, payload: bytes) -> bytes:
     return (
-        b'\x89PNG\r\n\x1a\n'
-        + (13).to_bytes(4, 'big')
-        + b'IHDR'
-        + width.to_bytes(4, 'big')
-        + height.to_bytes(4, 'big')
+        len(payload).to_bytes(4, 'big')
+        + kind
+        + payload
+        + b'\x00\x00\x00\x00'
     )
+
+
+def _minimal_png(
+    width: int,
+    height: int,
+    *,
+    xcode_optimized: bool = False,
+) -> bytes:
+    data = b'\x89PNG\r\n\x1a\n'
+    if xcode_optimized:
+        # Xcode/copypng places Apple's CgBI chunk before IHDR.
+        data += _png_chunk(b'CgBI', b'')
+    ihdr = (
+        width.to_bytes(4, 'big')
+        + height.to_bytes(4, 'big')
+        + b'\x08\x06\x00\x00\x00'
+    )
+    return data + _png_chunk(b'IHDR', ihdr)
 
 
 def _write_icon_contract(archive: zipfile.ZipFile) -> None:
@@ -92,6 +107,15 @@ class RPCS3IPAValidationTests(unittest.TestCase):
         self.assertNotIn('RUNNER / "IconFallback"', prepare)
         self.assertIn("find_subpath('Runner', false)", resources)
         self.assertNotIn("Runner/IconFallback", resources)
+
+
+    def test_png_dimensions_accepts_xcode_cgbi_before_ihdr(self):
+        with tempfile.TemporaryDirectory() as temp:
+            icon = Path(temp) / 'optimized.png'
+            icon.write_bytes(
+                _minimal_png(180, 180, xcode_optimized=True)
+            )
+            self.assertEqual(validator.png_dimensions(icon), (180, 180))
 
 
     def test_accepts_complete_springboard_icon_contract(self):
