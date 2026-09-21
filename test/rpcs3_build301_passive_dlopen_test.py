@@ -71,6 +71,8 @@ def validate_source(source: Path) -> None:
         assert f'DECLARE(spu_runtime::{name}) = nullptr' in spu
         assert f'DECLARE(spu_runtime::{name}) = build_function_asm' not in spu
         assert f'DECLARE(spu_runtime::{name}) = []' not in spu
+    assert 'return static_cast<decltype(spu_runtime::g_dispatcher)>(nullptr);' in spu
+    assert '[dispatcher](native_asm& c, auto& args)' in spu
 
     global_runtime = function_body(jit_asm, 'jit_runtime_base& asmjit::get_global_runtime()')
     assert 'allocate(' not in global_runtime
