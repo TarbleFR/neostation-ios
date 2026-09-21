@@ -1,0 +1,108 @@
+name: Temporary patched RPCS3 source export
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/rpcs3-patched-source-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Materialize patched RPCS3 source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact NeoStation commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Fetch pinned RPCS3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/rpcs3"
+          git init -q "$SRC"
+          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
+          git -C "$SRC" fetch --depth 1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
+          git -C "$SRC" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$SRC" rev-parse HEAD)" = 22f1152783cef1f7e04af7b1c895173e28fd5b03
+          echo "SRC=$SRC" >> "$GITHUB_ENV"
+
+      - name: Apply exact NeoStation patch chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/patch_rpcs3_embedded_boot.py "$SRC"
+          python3 build-utils/patch_rpcs3_jit_memory.py "$SRC"
+          python3 build-utils/patch_rpcs3_neostation_session.py "$SRC"
+          python3 build-utils/patch_rpcs3_serial_profiles.py "$SRC"
+          python3 build-utils/patch_rpcs3_serial_profiles.py "$SRC"
+          python3 build-utils/patch_rpcs3_iso_integrity.py "$SRC"
+          python3 build-utils/patch_rpcs3_savestate_stability.py "$SRC"
+          python3 build-utils/patch_rpcs3_savestate_stability.py "$SRC"
+          python3 build-utils/patch_rpcs3_build256_savestates.py "$SRC"
+          python3 build-utils/patch_rpcs3_build256_savestates.py "$SRC"
+          python3 build-utils/patch_rpcs3_armsx3_performance.py "$SRC"
+          python3 build-utils/patch_rpcs3_armsx3_performance.py "$SRC"
+          python3 build-utils/patch_rpcs3_build258_core_architecture.py "$SRC"
+          python3 build-utils/patch_rpcs3_build258_core_architecture.py "$SRC"
+          python3 build-utils/patch_rpcs3_build258_runtime_resilience.py "$SRC"
+          python3 build-utils/patch_rpcs3_build258_runtime_resilience.py "$SRC"
+          python3 build-utils/patch_rpcs3_build264_gow3_core.py "$SRC"
+          python3 build-utils/patch_rpcs3_build264_gow3_core.py "$SRC"
+          python3 build-utils/patch_rpcs3_build265_core.py "$SRC"
+          python3 build-utils/patch_rpcs3_build265_core.py "$SRC"
+          python3 build-utils/patch_rpcs3_build266_v09_core.py "$SRC"
+          python3 build-utils/patch_rpcs3_build266_v09_core.py "$SRC"
+          python3 test/rpcs3_build266_v09_core_test.py "$SRC"
+          python3 build-utils/patch_rpcs3_build295_fixed_reservation.py "$SRC"
+          python3 build-utils/patch_rpcs3_build295_fixed_reservation.py "$SRC"
+          python3 test/rpcs3_build295_fixed_reservation_test.py "$SRC"
+
+      - name: Export relevant post-image and diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/patched-rpcs3"
+          mkdir -p "$OUT"
+          cd "$SRC"
+          git diff --binary > "$OUT/neostation-rpcs3-postimage.patch"
+          printf '%s\n' "22f1152783cef1f7e04af7b1c895173e28fd5b03" > "$OUT/RPCS3_SOURCE_COMMIT.txt"
+          for path in \
+            Utilities/JIT.cpp \
+            Utilities/JIT.h \
+            Utilities/JITASM.cpp \
+            Utilities/JITLLVM.cpp \
+            Utilities/JITIOS.cpp \
+            Utilities/JITIOS.h \
+            Utilities/JITIOSLayoutPolicy.h \
+            rpcs3/Emu/Cell/PPUThread.cpp \
+            rpcs3/Emu/Cell/PPUThread.h \
+            rpcs3/Emu/Cell/SPUCommonRecompiler.cpp \
+            rpcs3/Emu/Cell/SPURecompiler.h \
+            rpcs3/Emu/Cell/SPUThread.h \
+            rpcs3/ios/RPCS3IOS.cpp \
+            rpcs3/ios/RPCS3IOS.h; do
+            mkdir -p "$OUT/$(dirname "$path")"
+            cp "$path" "$OUT/$path"
+          done
+          grep -RInE 'build_function_asm|jit_runtime::alloc|asmjit::get_global_runtime|prepare_arena|runtime_memory' \
+            Utilities rpcs3/Emu/Cell rpcs3/ios > "$OUT/jit-global-audit.txt" || true
+          tar -czf "$RUNNER_TEMP/patched-rpcs3-source.tar.gz" -C "$OUT" .
+          test -s "$RUNNER_TEMP/patched-rpcs3-source.tar.gz"
+
+      - name: Upload patched source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-rpcs3-source-${{ github.sha }}
+          path: ${{ runner.temp }}/patched-rpcs3-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
