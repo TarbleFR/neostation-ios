@@ -144,6 +144,8 @@ jobs:
             build-utils/configure_rpcs3_ios_v2.py \
             build-utils/embed_rpcs3_host_entitlements.py \
             build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
             build-utils/prepare_ios_icon_fallback.py \
             build-utils/validate_rpcs3_embedded_core.py \
             build-utils/validate_rpcs3_ipa.py \
@@ -151,6 +153,7 @@ jobs:
             packages/dolphin_internal_bridge/ci/build_support.py \
             packages/dolphin_internal_bridge/ci/verify_ipa.py
           python3 test/dolphin_account_267_test.py
+          ruby -c build-utils/add_ios_icon_fallback_resources.rb
 
       - name: Resolve Flutter and analyze
         shell: bash
@@ -167,6 +170,7 @@ jobs:
           python3 test/dolphin_account_267_test.py
           python3 test/dolphin_cheats_menu_test.py
           python3 test/rpcs3_build295_fixed_reservation_test.py
+          python3 test/rpcs3_build301_passive_dlopen_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
@@ -347,12 +351,17 @@ jobs:
             build-utils/build_rpcs3_embedded_core.sh \
             build-utils/patch_rpcs3_build266_v09_core.py \
             build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
             build-utils/validate_rpcs3_embedded_core.py \
             build-utils/rpcs3 \
             test/rpcs3_build295_fixed_reservation_test.py \
+            test/rpcs3_build301_passive_dlopen_test.py \
             .github/workflows/rpcs3-core.yml
 
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
+          python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" \
+            | tee build/rpcs3-ci/passive-dlopen.txt
           python3 - <<'PY'
           import hashlib
           import json
@@ -371,6 +380,8 @@ jobs:
           assert actual == identity["sha256"], (actual, identity)
           assert identity["reservation"] == "vm_allocate fixed, no VM_FLAGS_OVERWRITE", identity
           assert identity["reservation_marker"] == "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1", identity
+          assert identity["lifecycle"] == "passive dlopen; explicit single JIT initialization", identity
+          assert identity["lifecycle_marker"] == "NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1", identity
 
           destination = Path(
               "packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib"
@@ -384,6 +395,7 @@ jobs:
           print(json.dumps(identity, indent=2))
           PY
           grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
+          grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
           file packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           nm -gU packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib \
             > build/rpcs3-native-exports.txt
