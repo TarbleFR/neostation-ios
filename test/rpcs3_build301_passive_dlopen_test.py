@@ -92,6 +92,10 @@ def validate_source(source: Path) -> None:
 
     # There is exactly one explicit preparation owner and no accessor prepares implicitly.
     assert 'bool prepare_arena() noexcept' not in jit_ios
+    declaration = 'void emit_diagnostic(std::string message) noexcept;'
+    assert declaration in jit_ios
+    assert jit_ios.index(declaration) < jit_ios.index('u8* reserve_arena_layout(')
+    assert jit_ios.index(declaration) < jit_ios.index('void emit_diagnostic(std::string message) noexcept\n{')
     assert api.count('jit::prepare_arena(') == 1
     for signature in ('void* runtime_memory(', 'usz arena_capacity(',
                       'bool claim_runtime(', 'void* allocate('):

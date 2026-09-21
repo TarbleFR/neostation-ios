@@ -349,6 +349,7 @@ std::string g_last_error;
 arena_state g_arena;
 std::string g_last_error;
 std::atomic<rpcs3::ios::jit::diagnostic_callback> g_diagnostic_callback{{nullptr}};
+void emit_diagnostic(std::string message) noexcept;
 // {MARKER}
 """,
         "JIT diagnostics state",
@@ -1463,6 +1464,14 @@ def validate(root: Path) -> None:
             raise RuntimeError(f"SPU global initializer remains for {name}")
 
     jit_ios = (root / "Utilities/JITIOS.cpp").read_text()
+    diagnostic_declaration = "void emit_diagnostic(std::string message) noexcept;"
+    diagnostic_definition = "void emit_diagnostic(std::string message) noexcept\n{"
+    if diagnostic_declaration not in jit_ios:
+        raise RuntimeError("JIT diagnostic emitter has no forward declaration")
+    if jit_ios.index(diagnostic_declaration) > jit_ios.index("u8* reserve_arena_layout("):
+        raise RuntimeError("JIT diagnostic emitter is declared after its first use")
+    if jit_ios.index(diagnostic_declaration) > jit_ios.index(diagnostic_definition):
+        raise RuntimeError("JIT diagnostic emitter declaration follows its definition")
     for function in ("runtime_memory", "arena_capacity", "claim_runtime", "allocate"):
         begin = jit_ios.index(function + "(")
         body = jit_ios[begin : jit_ios.index("\n}", begin) + 2]
