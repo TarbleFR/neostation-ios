@@ -2,7 +2,7 @@ name: RPCS3 targeted startup preflight
 on:
   push:
     branches: [experimental]
-    paths: ['.github/workflows/rpcs3-source-snapshot.yml']
+    paths: ['.github/workflows/rpcs3-source-snapshot.yml', 'build-utils/migrations/build302_review.py']
 permissions:
   contents: write
   actions: read
@@ -28,15 +28,13 @@ jobs:
           run-id: 35636317891
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/source-snapshot
-      - name: Materialize reviewed source and single canonical Core delta
-        shell: bash
+      - name: Materialize checked source and single canonical Core delta
         run: |
           set -euo pipefail
           python3 build-utils/migrations/build302_apply.py
           python3 build-utils/migrations/build302_review.py
           git diff --check
-      - name: Test actual native abort socket and reservation ownership
-        shell: bash
+      - name: Native abort and real reservation gates
         run: |
           set -euo pipefail
           for attempt in $(seq 1 10); do
@@ -50,32 +48,23 @@ jobs:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
-      - name: Format and analyze exact modified host
-        shell: bash
+      - name: Format and analyze exact host sources
         run: |
           set -euo pipefail
           flutter pub get --enforce-lockfile
           dart format lib/services/rpcs3_internal_service.dart lib/services/rpcs3_startup_transaction.dart packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart test/rpcs3_startup_transaction_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_bridge_memory_mode_test.dart test/rpcs3_lazy_load_contract_test.dart
-          flutter analyze --no-fatal-infos
-      - name: Behavioral startup and protected regression tests
-        shell: bash
+          flutter analyze --no-fatal-infos 2>&1 | tee "$RUNNER_TEMP/build302-review/analyze.txt"
+      - name: Behavioral startup and protected regressions
         run: |
           set -euo pipefail
-          python3 test/rpcs3_jit_handshake_test.py
-          python3 test/rpcs3_loader_stability_280_test.py
-          python3 test/rpcs3_build283_boot_stability_test.py
-          python3 test/rpcs3_build285_core_handoff_test.py
-          python3 test/rpcs3_diagnostics_native_test.py
-          python3 test/rpcs3_host_entitlements_test.py
-          python3 test/rpcs3_ipa_validation_test.py
-          python3 test/local_dev_vpn_route_contract_test.py
-          python3 test/rpcs3_helper_journal_test.py
-          python3 test/rpcs3_reporter_send_order_test.py
+          for test in rpcs3_jit_handshake rpcs3_loader_stability_280 rpcs3_build283_boot_stability rpcs3_build285_core_handoff rpcs3_diagnostics_native rpcs3_host_entitlements rpcs3_ipa_validation local_dev_vpn_route_contract rpcs3_helper_journal rpcs3_reporter_send_order; do
+            python3 "test/${test}_test.py"
+          done
           node test/rpcs3_debugger_handshake_test.js
           node test/rpcs3_stop_reply_behavior_test.js
-          flutter test test/rpcs3_startup_transaction_test.dart test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
-      - name: Compile actual host startup translation units against iPhoneOS SDK
-        shell: bash
+          flutter test --reporter expanded test/rpcs3_startup_transaction_test.dart test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart > "$RUNNER_TEMP/build302-review/flutter-tests.txt" 2>&1 || { tail -100 "$RUNNER_TEMP/build302-review/flutter-tests.txt"; exit 1; }
+          tail -5 "$RUNNER_TEMP/build302-review/flutter-tests.txt"
+      - name: Compile host startup units against iPhoneOS SDK
         run: |
           set -euo pipefail
           flutter precache --ios
@@ -83,12 +72,9 @@ jobs:
           test -n "$FLUTTER_FRAMEWORK"
           CLASSES=packages/rpcs3_internal_bridge/ios/Classes
           for file in Rpcs3JitBridgePlugin.mm Rpcs3InternalBridgePlugin.mm Rpcs3Diagnostics.mm; do
-            xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.3 -std=c++20 \
-              -fobjc-arc -fblocks -fsyntax-only -F "$(dirname "$FLUTTER_FRAMEWORK")" \
-              -I "$CLASSES" "$CLASSES/$file"
+            xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.3 -std=c++20 -fobjc-arc -fblocks -fsyntax-only -F "$(dirname "$FLUTTER_FRAMEWORK")" -I "$CLASSES" "$CLASSES/$file"
           done
       - name: Commit tested canonical sources only
-        shell: bash
         run: |
           set -euo pipefail
           git diff --check
@@ -101,6 +87,7 @@ jobs:
           git commit -m 'fix(rpcs3): reserve 448+576 MiB before Core and complete startup transactions [rpcs3-core-only]'
           git push origin HEAD:experimental
           git rev-parse HEAD | tee "$RUNNER_TEMP/build302-review/HOST_SHA.txt"
+          git archive --format=tar.gz HEAD > "$RUNNER_TEMP/build302-review/host.tar.gz"
           git bundle create "$RUNNER_TEMP/build302-review/host.bundle" --all
       - name: Export source review and diagnostics
         if: always()
