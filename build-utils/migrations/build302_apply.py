@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""One-time Build302 consolidation. Not part of any runtime/build pipeline.
-
-The reviewed host/Core deltas are losslessly packed for connector transfer.
-Verify both the transfer SHA and each git preimage before applying them. CI
-exports the decoded diffs for review and deletes this migration after commit.
-"""
+"""One-time Build302 consolidation; removed after gated source commit."""
 import base64
 import hashlib
 import json
@@ -25,7 +20,6 @@ out = Path(os.environ['RUNNER_TEMP']) / 'build302-review'
 out.mkdir(parents=True, exist_ok=True)
 for name, content in payload.items():
     (out / f'{name}.patch').write_text(content)
-
 source = Path(os.environ['RUNNER_TEMP']) / 'build302-core-source'
 upstream = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
 def run(*args, cwd=root):
@@ -35,7 +29,6 @@ run('git', 'remote', 'add', 'origin', 'https://github.com/XITRIX/rpcs3.git', cwd
 run('git', 'fetch', '--depth', '1', 'origin', upstream, cwd=source)
 run('git', 'checkout', '-q', '--detach', 'FETCH_HEAD', cwd=source)
 assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip() == upstream
-# Exact Build301 postimage produced by successful snapshot run35636317891.
 snapshot = root / 'build/source-snapshot'
 assert (snapshot / 'HOST_SHA.txt').read_text().strip() == '37d226ae9e8f222f91631fff5e49015922d71e1d'
 with tarfile.open(snapshot / 'core.tar.gz', 'r:gz') as archive:
@@ -44,12 +37,30 @@ run('git', 'apply', '--check', str(out / 'core.patch'), cwd=source)
 run('git', 'apply', str(out / 'core.patch'), cwd=source)
 run('git', 'apply', '--check', str(out / 'host.patch'))
 run('git', 'apply', str(out / 'host.patch'))
+# New ABI entry points must survive the explicit Mach-O exported-symbol list.
+exports = source / 'rpcs3/ios/RPCS3IOS.exports'
+text = exports.read_text()
+for symbol in ('neostation_rpcs3_adopt_jit_layout', 'neostation_rpcs3_reset_failed_startup'):
+    assert f'RPCS3_IOS_EXPORT rpcs3_ios_status {symbol}(' in (source / 'rpcs3/ios/RPCS3IOS.h').read_text()
+    assert '_' + symbol not in text.splitlines()
+    text += '_' + symbol + '\n'
+exports.write_text(text)
+# This gate checks the link contract, separately from runtime execution tests.
+export_gate = '''
+import re
+host=(ROOT/'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
+needed={'_'+name for name in re.findall(r'LOAD\\("([^"]+)"', host)}
+needed.add('_rpcs3_ios_run_llvm_self_test')
+exports=set((source/'rpcs3/ios/RPCS3IOS.exports').read_text().splitlines())
+assert needed <= exports, 'Core link exports missing: '+str(sorted(needed-exports))
+print('PASS static link contract: all host-loaded Core functions are exported')
+'''
+materializer = root / 'build-utils/materialize_rpcs3_core.py'
+materializer.write_text(materializer.read_text() + export_gate)
 
-# Include historically untracked added files, not only the tracked git diff.
 run('git', 'add', '-A', cwd=source)
 canonical = subprocess.check_output(['git', 'diff', '--cached', '--binary', upstream], cwd=source)
-path = root / 'build-utils/rpcs3/embedded-core.patch'
-path.write_bytes(canonical)
+(root / 'build-utils/rpcs3/embedded-core.patch').write_bytes(canonical)
 names = subprocess.check_output(['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMRT', upstream], cwd=source, text=True).splitlines()
 manifest = {
     'schema_version': 1,
@@ -65,10 +76,9 @@ manifest = {
 (out / 'canonical-source.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
 print('Canonical source delta:', len(canonical), 'bytes;', len(names), 'changed/added files')
 run('python3', 'test/rpcs3_reserved_startup_core_test.py', str(source))
-# Prove the new single-delta materializer reproduces the same source hashes.
 run('git', 'reset', '--hard', upstream, cwd=source)
 run('git', 'clean', '-fd', cwd=source)
 run('python3', 'build-utils/materialize_rpcs3_core.py', str(source))
 run('python3', 'test/rpcs3_reserved_startup_core_test.py', str(source))
 run('git', 'diff', '--check')
-print('PASS: exact transfer, checked preimages, canonical reconstruction and actual lifecycle behavior')
+print('PASS: checked preimages, canonical reconstruction, link exports and lifecycle behavior')
