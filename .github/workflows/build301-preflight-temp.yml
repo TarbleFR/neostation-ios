@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 -m unittest -v test/rpcs3_ipa_validation_test.py 2>&1 | tee /tmp/build301-preflight.log
+          python3 test/rpcs3_ipa_validation_test.py -v 2>&1 | tee /tmp/build301-preflight.log
 
       - name: Validate workflow wiring
         shell: bash
