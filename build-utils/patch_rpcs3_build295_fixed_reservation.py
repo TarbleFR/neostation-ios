@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
-"""Make the iOS JIT low-address reservation exact and atomic before dlopen.
+"""Keep one exact low-VA arena reservation, then install deferred RPCS3 JIT init.
 
-Build 298 showed that mmap(address, ...) was only a hint on Darwin, so the first
-version of this patch switched to fixed vm_allocate calls. Build 299 device
-journals now isolate the remaining race: failed launches complete the debugger
-nonce and abort before the first command-1 JIT request, while successful launches
-immediately prepare 28 x 16 MiB chunks for a 448 MiB code arena.
-
-The Build 299 implementation still reserved one candidate through many separate
-16 MiB vm_allocate calls. During a fast NeoStation startup, another thread can
-map inside a partially reserved candidate between those calls. Reserve the whole
-candidate in one fixed vm_allocate transaction instead, then protect the already
-owned range with VM_PROT_NONE until the final RX/RW mappings replace it.
-
-VM_FLAGS_FIXED is used without VM_FLAGS_OVERWRITE, so an occupied candidate is
-never replaced. There is no host retry, artificial delay, cache deletion, signal
-suppression, or second dlopen.
+Build 298 proved that mmap(address, ...) was only a hint on Darwin. Build 299
+still owned a candidate through several chunk allocations. The reservation below
+uses one fixed vm_allocate transaction without overwrite. It has no host retry,
+artificial delay or cache deletion. The companion patch then makes dlopen passive;
+the arena is not touched until rpcs3_ios_initialize().
 """
+from __future__ import annotations
+
 from pathlib import Path
+import importlib.util
 import sys
 
 MARKER = 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1'
@@ -183,6 +176,7 @@ def validate_atomic(text: str) -> None:
 
 
 def patch(root: Path) -> None:
+    """Patch only the reservation. Kept separate for the focused unit fixture."""
     path = root / 'Utilities/JITIOS.cpp'
     text = path.read_text()
 
@@ -217,7 +211,23 @@ def patch(root: Path) -> None:
     print('Build 295: atomic exact low-VA JIT reservation applied')
 
 
+def _load_deferred_module():
+    script = Path(__file__).resolve().parent / 'rpcs3' / 'deferred_jit_init.py'
+    spec = importlib.util.spec_from_file_location('neostation_deferred_jit_init', script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f'Unable to load deferred JIT patch: {script}')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def patch_complete(root: Path) -> None:
+    patch(root)
+    _load_deferred_module().patch(root)
+
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         raise SystemExit('usage: patch_rpcs3_build295_fixed_reservation.py <pinned-rpcs3-source>')
-    patch(Path(sys.argv[1]).resolve())
+    patch_complete(Path(sys.argv[1]).resolve())
