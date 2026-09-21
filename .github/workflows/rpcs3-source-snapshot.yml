@@ -33,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 build-utils/migrations/build302_apply.py
+          python3 build-utils/migrations/build302_review.py
           git diff --check
       - uses: subosito/flutter-action@v2
         with:
@@ -43,8 +44,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dart format lib/services/rpcs3_internal_service.dart lib/services/rpcs3_startup_transaction.dart packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart test/rpcs3_startup_transaction_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_bridge_memory_mode_test.dart
           flutter pub get --enforce-lockfile
+          dart format lib/services/rpcs3_internal_service.dart lib/services/rpcs3_startup_transaction.dart packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart test/rpcs3_startup_transaction_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_bridge_memory_mode_test.dart test/rpcs3_lazy_load_contract_test.dart
           flutter analyze --no-fatal-infos
       - name: Behavioral startup and protected regression tests
         shell: bash
@@ -84,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          git rm -r build-utils/migrations/build302 build-utils/migrations/build302_apply.py
+          git rm -r build-utils/migrations/build302 build-utils/migrations/build302_apply.py build-utils/migrations/build302_review.py
           git add .gitattributes build-utils docs/RPCS3-build302-startup.md lib/services/rpcs3_internal_service.dart lib/services/rpcs3_startup_transaction.dart packages/rpcs3_internal_bridge packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift test
           git diff --cached --check
           test -z "$(git diff --cached --name-only -- .github/workflows)"
