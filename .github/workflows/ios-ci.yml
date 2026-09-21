@@ -144,6 +144,7 @@ jobs:
             build-utils/configure_rpcs3_ios_v2.py \
             build-utils/embed_rpcs3_host_entitlements.py \
             build-utils/patch_rpcs3_build295_fixed_reservation.py \
+            build-utils/prepare_ios_icon_fallback.py \
             build-utils/validate_rpcs3_embedded_core.py \
             build-utils/validate_rpcs3_ipa.py \
             build-utils/validate_single_ipa_distribution.py \
@@ -455,6 +456,8 @@ jobs:
           python3 build-utils/configure_armsx2_ios.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
+          python3 build-utils/prepare_ios_icon_fallback.py
+          bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb
           env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
           python3 - <<'PY'
           import plistlib
