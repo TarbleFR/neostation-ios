@@ -64,6 +64,20 @@ REQUIRED_CORE_SYMBOLS = (
 )
 
 
+SPRINGBOARD_ICON_FILES = {
+    'NeoStationIcon60@2x.png': (120, 120),
+    'NeoStationIcon60@3x.png': (180, 180),
+    'NeoStationIcon76@2x~ipad.png': (152, 152),
+    'NeoStationIcon83.5@2x~ipad.png': (167, 167),
+    'NeoStationIcon1024.png': (1024, 1024),
+}
+SPRINGBOARD_ICON_BASES = (
+    'NeoStationIcon60',
+    'NeoStationIcon76',
+    'NeoStationIcon83.5',
+)
+
+
 class ValidationError(RuntimeError):
     pass
 
@@ -71,6 +85,85 @@ class ValidationError(RuntimeError):
 def demand(condition: bool, message: str) -> None:
     if not condition:
         raise ValidationError(message)
+
+
+def png_dimensions(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    demand(
+        len(data) >= 24 and data[:8] == b'\x89PNG\r\n\x1a\n' and data[12:16] == b'IHDR',
+        f'Icon fallback is not a PNG: {path.name}',
+    )
+    return (
+        int.from_bytes(data[16:20], 'big'),
+        int.from_bytes(data[20:24], 'big'),
+    )
+
+
+def validate_springboard_icons(app: Path, info: dict) -> dict:
+    demand(app.name == 'NeoStation.app',
+           f'Packaged main app must be NeoStation.app, got {app.name}')
+    demand(info.get('CFBundleExecutable') == 'Runner',
+           f'Unexpected CFBundleExecutable: {info.get("CFBundleExecutable")!r}')
+    demand(str(info.get('CFBundleName', '')).lower() == 'neostation',
+           f'Unexpected CFBundleName: {info.get("CFBundleName")!r}')
+    demand(info.get('CFBundleDisplayName') == 'NeoStation iOS',
+           f'Unexpected CFBundleDisplayName: {info.get("CFBundleDisplayName")!r}')
+    demand(info.get('CFBundleIconName') == 'AppIcon',
+           f'CFBundleIconName must explicitly select AppIcon, got {info.get("CFBundleIconName")!r}')
+
+    legacy = info.get('CFBundleIconFiles')
+    demand(isinstance(legacy, list), 'CFBundleIconFiles is missing from the final app')
+    missing_legacy = [name for name in SPRINGBOARD_ICON_BASES if name not in legacy]
+    demand(not missing_legacy,
+           'Final CFBundleIconFiles is missing fallbacks: ' + ', '.join(missing_legacy))
+
+    for key in ('CFBundleIcons', 'CFBundleIcons~ipad'):
+        icons = info.get(key)
+        demand(isinstance(icons, dict), f'{key} is missing from the final app')
+        primary = icons.get('CFBundlePrimaryIcon')
+        demand(isinstance(primary, dict), f'{key}.CFBundlePrimaryIcon is missing')
+        demand(primary.get('CFBundleIconName') == 'AppIcon',
+               f'{key} does not retain AppIcon as the modern asset catalog')
+        files = primary.get('CFBundleIconFiles')
+        demand(isinstance(files, list) and files,
+               f'{key}.CFBundlePrimaryIcon.CFBundleIconFiles is empty')
+
+    assets = app / 'Assets.car'
+    demand(assets.is_file() and assets.stat().st_size > 0,
+           'Final app is missing Assets.car')
+
+    dimensions = {}
+    for name, expected in SPRINGBOARD_ICON_FILES.items():
+        path = app / name
+        demand(path.is_file(), f'Final app is missing SpringBoard fallback {name}')
+        actual = png_dimensions(path)
+        demand(actual == expected,
+               f'Wrong icon dimensions for {name}: expected {expected}, got {actual}')
+        dimensions[name] = list(actual)
+
+    resources_path = app / '_CodeSignature' / 'CodeResources'
+    demand(resources_path.is_file(),
+           'Final app has no CodeResources resource seal')
+    resources = plistlib.loads(resources_path.read_bytes())
+    sealed = set()
+    for key in ('files', 'files2'):
+        entries = resources.get(key)
+        if isinstance(entries, dict):
+            sealed.update(entries)
+    missing_seal = [
+        name for name in ('Assets.car', *SPRINGBOARD_ICON_FILES)
+        if name not in sealed
+    ]
+    demand(not missing_seal,
+           'CodeResources does not seal icon resources: ' + ', '.join(missing_seal))
+
+    return {
+        'assetCatalog': 'Assets.car',
+        'iconName': info.get('CFBundleIconName'),
+        'legacyIconFiles': list(legacy),
+        'fallbackDimensions': dimensions,
+        'codeResourcesValidated': True,
+    }
 
 
 def safe_members(archive: zipfile.ZipFile) -> None:
@@ -122,6 +215,7 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
         info_path = app / 'Info.plist'
         demand(info_path.is_file(), 'Packaged app has no Info.plist')
         info = plistlib.loads(info_path.read_bytes())
+        icon_report = validate_springboard_icons(app, info)
         actual_build = str(info.get('CFBundleVersion', ''))
         demand(actual_build == str(build_number),
                f'Wrong CFBundleVersion: expected {build_number}, got {actual_build or "<missing>"}')
@@ -246,6 +340,7 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'embeddedPacketTunnelPresent': False,
             'networkExtensionEntitlementPresent': False,
             'lazyLoadValidated': True,
+            'springBoardIcons': icon_report,
         }
 
 
