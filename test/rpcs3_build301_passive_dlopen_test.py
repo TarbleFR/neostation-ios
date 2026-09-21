@@ -65,6 +65,7 @@ def validate_source(source: Path) -> None:
     assert 'const extern auto ppu_escape = build_function_asm' not in ppu
     assert 'static ppu_trampoline_t ppu_gateway = nullptr' in ppu
     assert 'ppu_trampoline_t ppu_escape = nullptr' in ppu
+    assert '[escape](native_asm& c, auto& args)' in ppu
     for name in ('tr_dispatch', 'tr_branch', 'tr_interpreter', 'g_dispatcher',
                  'tr_all', 'g_gateway', 'g_escape', 'g_tail_escape'):
         assert f'DECLARE(spu_runtime::{name}) = nullptr' in spu
