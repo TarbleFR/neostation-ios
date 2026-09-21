@@ -851,8 +851,6 @@ bool ppu_function_manager::initialize_ghc_trampolines(std::string& error) noexce
 	}}
 	state = 1;
 
-	try
-	{{
 		const auto& raw = access();
 		std::vector<ppu_intrp_func_t> compiled;
 		compiled.reserve(raw.size());
@@ -872,16 +870,6 @@ bool ppu_function_manager::initialize_ghc_trampolines(std::string& error) noexce
 		access(true) = std::move(compiled);
 		state = 2;
 		return true;
-	}}
-	catch (const std::exception& exception)
-	{{
-		error = std::string{{"PPU HLE trampoline initialization failed: "}} + exception.what();
-	}}
-	catch (...)
-	{{
-		error = "PPU HLE trampoline initialization failed with an unknown exception";
-	}}
-	return false;
 }}
 '''
     text = replace_once(text, old_access, new_access, "PPU HLE deferred trampoline registry")
@@ -974,8 +962,6 @@ bool ppu_initialize_static_trampolines(std::string& error) noexcept
 	}
 	state = 1;
 
-	try
-	{
 		const auto gateway = build_ppu_gateway();
 		if (!gateway)
 		{
@@ -1000,16 +986,6 @@ bool ppu_initialize_static_trampolines(std::string& error) noexcept
 		ppu_recompiler_fallback_ghc = fallback;
 		state = 2;
 		return true;
-	}
-	catch (const std::exception& exception)
-	{
-		error = std::string{"PPU trampoline initialization failed: "} + exception.what();
-	}
-	catch (...)
-	{
-		error = "PPU trampoline initialization failed with an unknown exception";
-	}
-	return false;
 }
 '''
     text = text[:endif] + initializer + text[endif:]
@@ -1122,8 +1098,6 @@ bool spu_runtime::initialize_static_trampolines(std::string& error) noexcept
 	}
 	state = 1;
 
-	try
-	{
 		const auto dispatch = build_spu_tr_dispatch();
 		if (!dispatch) { error = "SPU dispatch trampoline allocation failed"; return false; }
 		const auto branch = build_spu_tr_branch();
@@ -1151,16 +1125,6 @@ bool spu_runtime::initialize_static_trampolines(std::string& error) noexcept
 		g_tail_escape = tail_escape;
 		state = 2;
 		return true;
-	}
-	catch (const std::exception& exception)
-	{
-		error = std::string{"SPU trampoline initialization failed: "} + exception.what();
-	}
-	catch (...)
-	{
-		error = "SPU trampoline initialization failed with an unknown exception";
-	}
-	return false;
 }
 '''
     section_start = statements[names[0]][0]
