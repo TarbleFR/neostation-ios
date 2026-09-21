@@ -116,6 +116,9 @@ void main() {
       expect(dlopenIndex, greaterThanOrEqualTo(0));
       expect(arenaPolicyIndex, greaterThan(dlopenIndex));
       expect(initializeCallIndex, greaterThan(arenaPolicyIndex));
+      expect(bridge, contains('@"rpcs3_initialize_begin"'));
+      expect(bridge, contains('@"rpcs3_initialize_end"'));
+      expect(bridge, contains('@"rpcs3_initialize_failed"'));
 
       // Build 234 crashed after successfully preparing the optional 512 MiB
       // arena: generated ARM64 execution jumped to 0x7000000000. Keep every
