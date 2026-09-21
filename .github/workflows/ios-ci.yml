@@ -185,7 +185,7 @@ jobs:
           python3 test/rpcs3_helper_journal_test.py
           node test/rpcs3_debugger_handshake_test.js
           node test/rpcs3_stop_reply_behavior_test.js
-          flutter test test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
+          flutter test test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
