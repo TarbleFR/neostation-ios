@@ -1380,6 +1380,11 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       }
       NSMutableDictionary* payload = [[self statusPayload:status] mutableCopy];
       payload[@"expandedJitRegion"] = @(expanded);
+      payload[@"stage"] = @"core_initialize";
+      payload[@"nativeStatus"] = @(status);
+      if (status != 0 && [payload[@"code"] hasPrefix:@"RPCS3_CORE_STATUS_"]) {
+        payload[@"code"] = @"RPCS3_CORE_INITIALIZE_FAILED";
+      }
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });
     });
     return;
