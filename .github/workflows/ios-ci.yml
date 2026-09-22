@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 301 RPCS3 Passive Dlopen
-run-name: NeoStation iOS Build 301 • ${{ github.sha }}
+name: NeoStation iOS Build 302 RPCS3 Reserved Startup
+run-name: NeoStation iOS Build 302 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-301
+  group: neostation-ios-build-302
   cancel-in-progress: true
 
 jobs:
@@ -22,21 +22,21 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 301 RPCS3 Passive Dlopen IPA
+    name: Build 302 RPCS3 Reserved Startup IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '301'
-      IPA_NAME: 'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-301-RPCS3-Passive-Dlopen'
+      BUILD_NUMBER: '302'
+      IPA_NAME: 'NeoStation-iOS-Build-302-RPCS3-Reserved-Startup'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-302-RPCS3-Reserved-Startup'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
       ARMSX2_CORE_HOST_SHA: 017c9c2f1e0628e43506707bd6943a76f44f8f44
       ARMSX2_CORE_RUN_ID: '35519677053'
-      RPCS3_CORE_HOST_SHA: a41795e9b9894ef6d69ac5c910542d9a401317e5
-      RPCS3_CORE_RUN_ID: '35608448338'
-      RPCS3_CORE_SHA256: ee8ee2349c2af578eac2839693781b10e00d95f64d44a11885a40f627bb4e3c1
+      RPCS3_CORE_HOST_SHA: 370fc319a70c5fc3445b45d7436e8c153aa2571b
+      RPCS3_CORE_RUN_ID: '35647866000'
+      RPCS3_CORE_SHA256: f321982d12033428b7ac9cedebdcede53a4447af5051a1cf211e2d46834be2e4
       RPCS3_SOURCE_COMMIT: 22f1152783cef1f7e04af7b1c895173e28fd5b03
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -143,8 +143,8 @@ jobs:
           python3 -m py_compile \
             build-utils/configure_rpcs3_ios_v2.py \
             build-utils/embed_rpcs3_host_entitlements.py \
-            build-utils/patch_rpcs3_build295_fixed_reservation.py \
-            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/materialize_rpcs3_core.py \
+            build-utils/rpcs3_core_syntax_gate.py \
             build-utils/validate_rpcs3_passive_dlopen.py \
             build-utils/prepare_ios_icon_fallback.py \
             build-utils/validate_rpcs3_embedded_core.py \
@@ -176,6 +176,8 @@ jobs:
           python3 test/rpcs3_build285_core_handoff_test.py
           python3 test/rpcs3_diagnostics_native_test.py
           python3 test/rpcs3_jit_handshake_test.py
+          python3 test/rpcs3_memory_preflight_test.py
+          python3 test/rpcs3_startup_abort_native_test.py
           python3 test/rpcs3_reporter_send_order_test.py
           python3 test/rpcs3_host_entitlements_test.py
           python3 test/rpcs3_ipa_validation_test.py
@@ -185,7 +187,7 @@ jobs:
           python3 test/rpcs3_helper_journal_test.py
           node test/rpcs3_debugger_handshake_test.js
           node test/rpcs3_stop_reply_behavior_test.js
-          flutter test test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
+          flutter test test/rpcs3_startup_transaction_test.dart test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -303,7 +305,7 @@ jobs:
           shutil.copytree(source / "Sys", sys_destination)
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 301 diagnostics
+          # Rewrite the Dolphin fields so the final Build 302 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -349,14 +351,12 @@ jobs:
 
           git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             build-utils/build_rpcs3_embedded_core.sh \
-            build-utils/patch_rpcs3_build266_v09_core.py \
-            build-utils/patch_rpcs3_build295_fixed_reservation.py \
-            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            build-utils/materialize_rpcs3_core.py \
+            build-utils/rpcs3_core_syntax_gate.py \
             build-utils/validate_rpcs3_passive_dlopen.py \
             build-utils/validate_rpcs3_embedded_core.py \
             build-utils/rpcs3 \
-            test/rpcs3_build295_fixed_reservation_test.py \
-            test/rpcs3_build301_passive_dlopen_test.py \
+            test/rpcs3_reserved_startup_core_test.py \
             .github/workflows/rpcs3-core.yml
 
           python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
@@ -380,7 +380,13 @@ jobs:
           assert identity["sha256"] == os.environ["RPCS3_CORE_SHA256"], identity
           assert actual == identity["sha256"], (actual, identity)
           assert identity["reservation"] == "vm_allocate fixed, no VM_FLAGS_OVERWRITE", identity
-          assert identity["reservation_marker"] == "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1", identity
+          assert identity["reservation_marker"] == "NEOSTATION_BUILD302_RESERVED_STARTUP_V1", identity
+          assert identity["memory_policy"] == {
+              "code_bytes": 469762048,
+              "data_bytes": 603979776,
+              "budget_bytes": 1073741824,
+          }, identity
+          assert identity["jit_policy"] == "448 MiB code + 576 MiB data; host reservation before Core load", identity
           assert identity["lifecycle"] == "passive dlopen; explicit single JIT initialization", identity
           assert identity["lifecycle_marker"] == "NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1", identity
 
@@ -395,7 +401,7 @@ jobs:
           )
           print(json.dumps(identity, indent=2))
           PY
-          grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
+          grep -a -q 'NEOSTATION_BUILD302_RESERVED_STARTUP_V1' "$CORE"
           grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
           file packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
           nm -gU packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib \
@@ -542,7 +548,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 301 IPA
+      - name: Package and validate Build 302 IPA
         shell: bash
         run: |
           set -euo pipefail
