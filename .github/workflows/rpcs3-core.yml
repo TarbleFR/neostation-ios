@@ -7,8 +7,10 @@ on:
       - '.github/workflows/rpcs3-core.yml'
       - 'build-utils/build_rpcs3_recovery_core.sh'
       - 'build-utils/patch_rpcs3_build301_passive_dlopen.py'
+      - 'build-utils/patch_rpcs3_build303_restartable_lifecycle.py'
       - 'build-utils/validate_rpcs3_recovery_core.py'
       - 'test/rpcs3_recovery_core_contract_test.py'
+      - 'test/rpcs3_build303_restartable_lifecycle_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,9 +41,10 @@ jobs:
           set -euo pipefail
           git diff --check
           bash -n build-utils/build_rpcs3_recovery_core.sh
-          python3 -m py_compile build-utils/patch_rpcs3_build301_passive_dlopen.py build-utils/validate_rpcs3_recovery_core.py
+          python3 -m py_compile build-utils/patch_rpcs3_build301_passive_dlopen.py build-utils/patch_rpcs3_build303_restartable_lifecycle.py build-utils/validate_rpcs3_recovery_core.py
           python3 test/rpcs3_recovery_core_contract_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
+          python3 test/rpcs3_build303_restartable_lifecycle_test.py
           python3 test/rpcs3_jit_handshake_test.py
           node test/rpcs3_debugger_handshake_test.js
           for formula in ccache ninja cmake llvm@22; do
@@ -85,6 +88,7 @@ jobs:
             'jit_policy':'Build266 adaptive Core-owned arena + Build301 passive dlopen',
             'reservation':'Core-owned mmap exact-hint search; no Build295/302 fixed host reservation',
             'lifecycle_marker':'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
+            'restartable_lifecycle_marker':'NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1',
             'allocator_marker':'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
             'device_runtime_tested':False,
           }
