@@ -54,7 +54,7 @@ void main() {
         service,
         contains('static final _startup = Rpcs3StartupTransaction()'),
       );
-      expect(service, contains("'jitTimeout'"));
+      expect(service, contains("'RPCS3_JIT_PREPARATION_TIMEOUT'"));
       expect(service, contains("current['requiresCoreHandshake'] != true"));
       expect(service, contains('Duration(minutes: 11)'));
       expect(service, isNot(contains('Duration(seconds: 90)')));
