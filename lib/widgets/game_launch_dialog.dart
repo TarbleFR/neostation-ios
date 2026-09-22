@@ -74,16 +74,10 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
     GameLaunchManager().removeListener(_onManagerChanged);
     GamepadNavigationManager.popLayer('game_launch_dialog');
     _dialogGamepadNav.dispose();
-    // Always finalize manager: idempotent, ensures music/SFX restore even if
-    // the dialog was dismissed externally (barrier tap) or timer hadn't fired yet.
+    // Route disposal owns final cleanup, including launch failure.
+    GameService.clearLaunchPending();
     GameLaunchManager().onDialogDisposed();
     if (!_onGameClosedFired) {
-      // onGameClosed was not yet fired — covers two cases:
-      // 1. Normal emergency: dialog disposed before close sequence started.
-      // 2. Race: _closeDialog() set _closeCalled=true (timer started) but
-      //    barrier tap dismissed the dialog before the 1s timer fired.
-      //    The timer will see mounted=false and skip onGameClosed, so we
-      //    must call it here to restore the UI.
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => widget.onGameClosed(),
       );
@@ -145,11 +139,13 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
 
   void _closeDialog() {
     if (_closeCalled || !mounted) return;
+    final route = ModalRoute.of(context);
+    if (route == null) return;
     _closeCalled = true;
     Timer(const Duration(seconds: 1), () {
-      if (mounted) {
+      if (mounted && route.isActive) {
         _onGameClosedFired = true;
-        Navigator.of(context).pop();
+        route.navigator?.removeRoute(route);
         widget.onGameClosed();
       }
     });

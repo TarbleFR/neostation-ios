@@ -41,41 +41,68 @@ Future<void> launchGameWithDialog({
     return;
   }
 
-  // Display the launch overlay.
-  showDialog(
+  // Keep ownership of this route across every asynchronous launch step.
+  // Touch/back requests go through the manager, which ignores them while
+  // launching; they must not dispose the session behind a pending native call.
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final dialogRoute = DialogRoute<void>(
     context: context,
-    barrierDismissible: true,
-    builder: (_) => GameLaunchDialog(
-      game: game,
-      system: system,
-      fileProvider: fileProvider,
-      onGameClosed: onGameClosed,
+    barrierDismissible: false,
+    builder: (_) => PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) GameLaunchManager().userDismiss();
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => GameLaunchManager().userDismiss(),
+        child: SizedBox.expand(
+          child: GameLaunchDialog(
+            game: game,
+            system: system,
+            fileProvider: fileProvider,
+            onGameClosed: onGameClosed,
+          ),
+        ),
+      ),
     ),
   );
+  navigator.push<void>(dialogRoute);
 
-  // Artificial delay for UX consistency and asset loading.
-  await Future.delayed(const Duration(seconds: 2));
-  if (!context.mounted) {
-    GameService.clearLaunchPending();
-    return;
+  void closeLaunchDialog() {
+    if (dialogRoute.isActive) {
+      dialogRoute.navigator?.removeRoute(dialogRoute);
+    }
   }
 
-  final result = await GameService.launchGame(context, system, game);
-
-  if (result.success) {
-    // Notify manager to begin background process monitoring. On success
-    // _registerGameLaunch has already closed the launch-pending window
-    // (isGameLaunched now covers it).
-    GameLaunchManager().onGameStarted(
-      emulatorExe: GameService.launchedEmulatorExe,
-    );
-  } else {
-    // Clean up session and close dialog on failure.
-    GameService.clearLaunchPending();
-    GameLaunchManager().onDialogDisposed();
-    if (context.mounted) Navigator.of(context).pop();
-    if (onLaunchFailed != null && context.mounted) {
-      await onLaunchFailed(context, result);
+  try {
+    // Preserve the existing presentation delay; readiness is determined by
+    // the native launch result, never by this delay.
+    await Future.delayed(const Duration(seconds: 2));
+    if (!context.mounted || !dialogRoute.isActive) {
+      GameService.clearLaunchPending();
+      closeLaunchDialog();
+      return;
     }
+
+    final result = await GameService.launchGame(context, system, game);
+    // A late result cannot close another route or update a replacement session.
+    if (!dialogRoute.isActive) return;
+
+    if (result.success) {
+      GameLaunchManager().onGameStarted(
+        emulatorExe: GameService.launchedEmulatorExe,
+      );
+    } else {
+      GameService.clearLaunchPending();
+      closeLaunchDialog();
+      if (onLaunchFailed != null && context.mounted) {
+        await onLaunchFailed(context, result);
+      }
+    }
+  } catch (_) {
+    GameService.clearLaunchPending();
+    closeLaunchDialog();
+    rethrow;
   }
 }

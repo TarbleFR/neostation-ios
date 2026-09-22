@@ -1,0 +1,27 @@
+name: Game launch route regression
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/launch-ui-checks.yml'
+      - 'lib/utils/game_launch_utils.dart'
+      - 'lib/widgets/game_launch_dialog.dart'
+      - 'test/game_launch_route_test.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Exercise production launch routes with Flutter Navigator
+        run: python3 test/game_launch_route_test.py
