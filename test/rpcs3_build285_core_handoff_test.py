@@ -38,7 +38,7 @@ assert 'RPCS3HostHasLiveDebugger' in jit
 assert 'RPCS3JitConfirmCoreLoadHandoff' in jit
 assert 'RPCS3JitConfirmCoreLoadHandoff()' in host
 assert 'NEOSTATION_RPCS3_SINGLE_DLOPEN_V1' in host
-load_boundary = host.split('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1', 1)[1].split('#define LOAD', 1)[0]
+load_boundary = host.split('NEOSTATION_RPCS3_SINGLE_DLOPEN_V1', 1)[1].split('#define LOAD', 1)[0]
 assert load_boundary.index('RPCS3JitConfirmCoreLoadHandoff()') < load_boundary.index('dlopen(')
 assert load_boundary.count('dlopen(') == 1
 assert 'for (NSString* path in candidates)' not in host
