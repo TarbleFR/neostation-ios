@@ -23,7 +23,7 @@ void main() {
       expect('dlopen('.allMatches(plugin).length, 1);
       expect(plugin, contains('libRPCS3Core.dylib'));
       expect(plugin, contains('RTLD_NOW | RTLD_LOCAL'));
-      expect(plugin, contains('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1'));
+      expect(plugin, contains('NEOSTATION_RPCS3_SINGLE_DLOPEN_V1'));
       expect(plugin, isNot(contains('for (NSString* path in candidates)')));
       expect(plugin, isNot(contains('RPCS3_IOS_EXPANDED_JIT_ARENA')));
     });
@@ -37,7 +37,9 @@ void main() {
       expect(plugin, isNot(contains('_reservation')));
       expect(plugin, isNot(contains('reset_failed_startup')));
       expect(plugin, isNot(contains('Rpcs3ArenaReservation')));
-      expect(plugin, contains('verifyJitExecution'));
+      expect(plugin, contains('rpcs3_ios_run_llvm_self_test'));
+      expect(plugin, isNot(contains('verifyJitExecution')));
+      expect(plugin, isNot(contains('abortStartup')));
       expect(plugin, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));
       expect(
         plugin,
