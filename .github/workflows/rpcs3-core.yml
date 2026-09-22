@@ -11,6 +11,7 @@ on:
       - 'build-utils/rpcs3/canonical-source.json'
       - 'build-utils/validate_rpcs3_embedded_core.py'
       - 'test/rpcs3_atomic_startup_test.py'
+      - 'test/rpcs3_failed_startup_test.py'
       - 'test/rpcs3_embedded_core_validator_test.py'
   workflow_dispatch:
 permissions:
@@ -49,6 +50,7 @@ jobs:
           python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
           python3 test/rpcs3_atomic_startup_test.py
+          python3 test/rpcs3_failed_startup_test.py
           python3 test/rpcs3_jit_handshake_test.py
           node test/rpcs3_debugger_handshake_test.js
           for formula in ccache ninja cmake llvm@22; do
@@ -90,9 +92,9 @@ jobs:
             'sha256':hashlib.sha256(core.read_bytes()).hexdigest(),
             'architectures':['arm64'],
             'jit_policy':'Build266 adaptive Core-owned arena + passive dlopen',
-            'reservation':'Atomic exact non-overwriting vm_allocate per Core candidate',
+            'reservation':'Page-aligned VM gaps, atomic non-overwriting vm_allocate, available-VA standard capacity',
             'lifecycle_marker':'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
-            'allocator_marker':'NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1',
+            'allocator_marker':'NEOSTATION_PAGE_ALIGNED_JIT_GAPS_V1',
             'source_patch_sha256':json.loads(Path('build-utils/rpcs3/canonical-source.json').read_text())['patch_sha256'],
             'device_runtime_tested':False,
           }

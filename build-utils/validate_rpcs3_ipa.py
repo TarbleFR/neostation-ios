@@ -83,7 +83,7 @@ FORBIDDEN_CORE_SYMBOLS = (
 )
 
 CORE_LIFECYCLE_MARKER = 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1'
-CORE_ALLOCATOR_MARKER = 'NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1'
+CORE_ALLOCATOR_MARKER = 'NEOSTATION_PAGE_ALIGNED_JIT_GAPS_V1'
 CORE_MANIFEST = ROOT / 'build-utils/rpcs3/canonical-source.json'
 CORE_PATCH = ROOT / 'build-utils/rpcs3/embedded-core.patch'
 CORE_HOST_ABI = ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'

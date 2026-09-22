@@ -115,6 +115,7 @@ log "Apply the single reviewed NeoStation Core source delta"
 python3 "$PWD/build-utils/materialize_rpcs3_core.py" "$SRC"
 python3 "$PWD/test/rpcs3_build301_passive_dlopen_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_atomic_startup_test.py" "$SRC"
+python3 "$PWD/test/rpcs3_failed_startup_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"

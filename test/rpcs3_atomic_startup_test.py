@@ -82,6 +82,15 @@ using vm_size_t = std::size_t;
 using kern_return_t = int;
 
 constexpr kern_return_t KERN_SUCCESS = 0;
+constexpr kern_return_t KERN_INVALID_ADDRESS = 1;
+using mach_port_t = int;
+using mach_msg_type_number_t = unsigned;
+using vm_region_info_t = int*;
+struct vm_region_basic_info_data_64_t { int unused; };
+constexpr int MACH_PORT_NULL = 0;
+constexpr int VM_REGION_BASIC_INFO_COUNT_64 = 9;
+constexpr int VM_REGION_BASIC_INFO_64 = 9;
+int getpagesize() { return 16384; }
 constexpr kern_return_t KERN_NO_SPACE = 3;
 constexpr kern_return_t KERN_PROTECTION_FAILURE = 4;
 constexpr kern_return_t KERN_RESOURCE_SHORTAGE = 5;
@@ -105,6 +114,9 @@ std::vector<std::string> diagnostics;
 bool fail_allocation = false;
 bool fail_protection = false;
 bool relocate_success = false;
+bool collide_on_allocate = false;
+int region_queries = 0;
+int ports_released = 0;
 
 int mach_task_self() { return 42; }
 
@@ -118,6 +130,32 @@ void reset_mock()
     fail_allocation = false;
     fail_protection = false;
     relocate_success = false;
+    collide_on_allocate = false;
+    region_queries = ports_released = 0;
+}
+
+kern_return_t vm_region_64(int task, vm_address_t* address, vm_size_t* size,
+                           int flavor, vm_region_info_t, mach_msg_type_number_t*, mach_port_t* object)
+{
+    assert(task == 42 && flavor == VM_REGION_BASIC_INFO_64);
+    ++region_queries;
+    for (const auto& [base, length] : live)
+    {
+        if (base + length > *address)
+        {
+            *address = base;
+            *size = length;
+            *object = 7;
+            return KERN_SUCCESS;
+        }
+    }
+    return KERN_INVALID_ADDRESS;
+}
+int mach_port_deallocate(int task, mach_port_t object)
+{
+    assert(task == 42 && object == 7);
+    ++ports_released;
+    return 0;
 }
 
 kern_return_t vm_allocate(int task, vm_address_t* address, vm_size_t size, int flags)
@@ -126,6 +164,11 @@ kern_return_t vm_allocate(int task, vm_address_t* address, vm_size_t size, int f
     assert(address != nullptr);
     const vm_address_t requested = *address;
     allocations.push_back({requested, size, flags});
+    if (collide_on_allocate)
+    {
+        collide_on_allocate = false;
+        live.emplace(requested, getpagesize());
+    }
     if (fail_allocation)
     {
         return KERN_RESOURCE_SHORTAGE;
@@ -182,10 +225,10 @@ void check_exact_next_candidate_preserves_occupied_range()
     live.emplace(arena_address_begin, size); // Another mapping owns the first slot.
     u8* result = reserve_arena_layout(size, arena_address_begin,
                                       arena_address_begin + arena_address_step + size);
-    assert(result == reinterpret_cast<u8*>(arena_address_begin + arena_address_step));
-    assert(allocations.size() == 2);
-    assert(allocations[0].address == arena_address_begin);
-    assert(allocations[1].address == arena_address_begin + arena_address_step);
+    assert(result == reinterpret_cast<u8*>(arena_address_begin + size));
+    assert(allocations.size() == 1);
+    assert(allocations[0].address == arena_address_begin + size);
+    assert(region_queries == 2 && ports_released == 1);
     for (const allocation_call& call : allocations)
     {
         assert(call.size == size); // One whole candidate per Mach transaction.
@@ -193,9 +236,9 @@ void check_exact_next_candidate_preserves_occupied_range()
         assert(!(call.flags & (VM_FLAGS_ANYWHERE | VM_FLAGS_OVERWRITE)));
     }
     assert(live.size() == 2 && live.at(arena_address_begin) == size);
-    assert(live.at(arena_address_begin + arena_address_step) == size);
+    assert(live.at(arena_address_begin + size) == size);
     assert(protections.size() == 1);
-    assert(protections[0].address == arena_address_begin + arena_address_step);
+    assert(protections[0].address == arena_address_begin + size);
     assert(protections[0].size == size && protections[0].protection == VM_PROT_NONE);
     assert(releases.empty());
 }
@@ -311,6 +354,77 @@ void check_no_compatible_data_window_releases_code()
     }
 }
 
+void check_page_aligned_window_lost_by_old_64mib_rounding()
+{
+    using namespace rpcs3::ios::jit;
+    reset_mock();
+    const vm_address_t start = arena_address_begin + getpagesize();
+    const vm_address_t tail = start + 704 * mib;
+    live.emplace(arena_address_begin, getpagesize());
+    live.emplace(tail, arena_address_end - tail);
+    u8* data = nullptr;
+    usz data_capacity = 0;
+    u8* code = reserve_code_data_layout(448 * mib, data, data_capacity);
+    assert(code == reinterpret_cast<u8*>(start));
+    assert(data == code + 448 * mib && data_capacity == 256 * mib);
+    // Both slots are exactly owned; the surrounding mappings are untouched.
+    assert(live.size() == 4);
+    assert(live.at(start) == 448 * mib);
+    assert(live.at(start + 448 * mib) == 256 * mib);
+}
+
+void check_standard_capacity_uses_available_virtual_space()
+{
+    using namespace rpcs3::ios::jit;
+    reset_mock();
+    const vm_address_t start = arena_address_begin + getpagesize();
+    const vm_address_t obstacle = start + 384 * mib;
+    const vm_address_t data_start = obstacle + getpagesize();
+    const vm_address_t tail = data_start + 256 * mib;
+    live.emplace(arena_address_begin, getpagesize());
+    live.emplace(obstacle, getpagesize());
+    live.emplace(tail, arena_address_end - tail);
+    u8* data = nullptr;
+    usz data_capacity = 0;
+    usz capacity = 448 * mib;
+    assert(reserve_capacity_layout(capacity, false, data, data_capacity)
+           == reinterpret_cast<u8*>(start));
+    assert(capacity == 384 * mib && data_capacity == 256 * mib);
+    assert(data == reinterpret_cast<u8*>(data_start));
+    assert(live.size() == 5);
+    vm_deallocate(42, start, capacity);
+    vm_deallocate(42, data_start, data_capacity);
+    capacity = 512 * mib;
+    assert(reserve_capacity_layout(capacity, true, data, data_capacity) == nullptr);
+    assert(capacity == 512 * mib && data == nullptr && data_capacity == 0);
+    assert(live.size() == 3); // Explicit expanded policy was not silently reduced.
+}
+
+void check_minimum_failure_and_concurrent_mapping_preserve_ownership()
+{
+    using namespace rpcs3::ios::jit;
+    reset_mock();
+    const vm_address_t tail = arena_address_begin + 256 * mib;
+    live.emplace(tail, arena_address_end - tail);
+    const auto original = live;
+    u8* data = nullptr;
+    usz data_capacity = 0;
+    usz capacity = 448 * mib;
+    assert(reserve_capacity_layout(capacity, false, data, data_capacity) == nullptr);
+    assert(capacity == arena_min_capacity && data == nullptr && data_capacity == 0);
+    assert(live == original); // The temporary code reservation was returned.
+    assert(allocations.size() < 10 && region_queries < 100);
+
+    reset_mock();
+    collide_on_allocate = true;
+    assert(reserve_arena_layout(16 * mib, arena_address_begin,
+                               arena_address_begin + 16 * mib) == nullptr);
+    assert(live.size() == 1 && live.at(arena_address_begin) == 16384);
+    assert(protections.empty() && releases.empty());
+    for (const auto& call : allocations)
+        assert(!(call.flags & (VM_FLAGS_ANYWHERE | VM_FLAGS_OVERWRITE)));
+}
+
 int main()
 {
     check_exact_next_candidate_preserves_occupied_range();
@@ -319,6 +433,9 @@ int main()
     check_unexpected_kernel_relocation_is_released();
     check_fragmented_low_va_falls_back_to_nearby_data();
     check_no_compatible_data_window_releases_code();
+    check_page_aligned_window_lost_by_old_64mib_rounding();
+    check_standard_capacity_uses_available_virtual_space();
+    check_minimum_failure_and_concurrent_mapping_preserve_ownership();
     std::puts("PASS: atomic exact Mach JIT reservation, fragmented low VA and cleanup");
 }
 '''
@@ -344,7 +461,8 @@ class AtomicJitReservationTest(unittest.TestCase):
         policy_constants = "namespace rpcs3::ios::jit {\n" + policy_constants + "\n}"
         functions = "\n\n".join(
             extract_function(source, name)
-            for name in ("u8* reserve_arena_layout(", "u8* reserve_code_data_layout(")
+            for name in ("u8* reserve_arena_layout(", "u8* reserve_code_data_layout(",
+                         "u8* reserve_capacity_layout(")
         )
         with tempfile.TemporaryDirectory(prefix="neostation-atomic-jit-") as directory:
             path = Path(directory)
