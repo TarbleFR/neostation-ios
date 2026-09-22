@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 2caa77d..daac444 100644
+index 2caa77deb..daac44424 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -63,6 +63,7 @@ option(USE_SYSTEM_ZLIB "Prefer system ZLIB instead of the builtin one" ON)
@@ -11,7 +11,7 @@ index 2caa77d..daac444 100644
  option(RUN_RPCS3_TESTS "Run RPCS3 unit tests. Requires BUILD_RPCS3_TESTS" OFF)
  option(USE_GAMEMODE "Choose whether to enable GameMode features or not." ON)
 diff --git a/Utilities/JIT.h b/Utilities/JIT.h
-index 6e17c58..09ff972 100644
+index 6e17c582c..09ff972c3 100644
 --- a/Utilities/JIT.h
 +++ b/Utilities/JIT.h
 @@ -123,8 +123,11 @@ struct jit_runtime final : jit_runtime_base
@@ -39,7 +39,7 @@ index 6e17c58..09ff972 100644
  	return reinterpret_cast<FT>(uptr(result));
  }
 diff --git a/Utilities/JITASM.cpp b/Utilities/JITASM.cpp
-index f58f045..abf76ff 100644
+index f58f04522..abf76ff80 100644
 --- a/Utilities/JITASM.cpp
 +++ b/Utilities/JITASM.cpp
 @@ -152,11 +152,19 @@ static bool s_snapshot_initialized = false;
@@ -229,17 +229,10 @@ index f58f045..abf76ff 100644
  
  asmjit::inline_runtime::inline_runtime(uchar* data, usz size)
 diff --git a/Utilities/JITIOS.cpp b/Utilities/JITIOS.cpp
-index 96fcc13..e940948 100644
+index 96fcc1369..7335533c4 100644
 --- a/Utilities/JITIOS.cpp
 +++ b/Utilities/JITIOS.cpp
-@@ -1,12 +1,14 @@
- #include "JITIOS.h"
- #include "JITArenaAllocator.h"
- #include "JITIOSLayoutPolicy.h"
-+#include "NeoStationArenaLayout.h"
- 
- #if !defined(RPCS3_IOS)
- #error "JITIOS.cpp is only available in the Apple mobile frontend"
+@@ -7,6 +7,7 @@
  #endif
  
  #include <algorithm>
@@ -247,7 +240,7 @@ index 96fcc13..e940948 100644
  #include <cerrno>
  #include <csignal>
  #include <cstdlib>
-@@ -40,6 +42,7 @@ struct arena_state
+@@ -40,6 +41,7 @@ struct arena_state
  	u8* writable_code = nullptr;
  	u8* data = nullptr;
  	usz capacity = 0;
@@ -255,7 +248,7 @@ index 96fcc13..e940948 100644
  	u32 preparation_chunks = 0;
  	rpcs3::ios::jit::arena_allocator code_allocator;
  	rpcs3::ios::jit::arena_allocator data_allocator;
-@@ -60,21 +63,46 @@ std::mutex g_arena_mutex;
+@@ -60,21 +62,142 @@ std::mutex g_arena_mutex;
  std::mutex g_error_mutex;
  arena_state g_arena;
  std::string g_last_error;
@@ -268,17 +261,113 @@ index 96fcc13..e940948 100644
  // reserves tags 240-255 for application-specific mappings.
  constexpr int jit_vm_tag = VM_MAKE_TAG(VM_MEMORY_APPLICATION_SPECIFIC_1);
 -constexpr char expanded_jit_arena_environment[] = "RPCS3_IOS_EXPANDED_JIT_ARENA";
++constexpr vm_address_t arena_address_begin = 0x1'0000'0000;
++constexpr vm_address_t arena_address_end = 0x10'0000'0000;
++constexpr vm_size_t arena_address_step = 64 * 1024 * 1024;
  
 -bool process_expanded_jit_arena_requested() noexcept
-+// NEOSTATION_BUILD302_RESERVED_STARTUP_V1
-+// Host is the single reservation owner. No implicit low-VA search in the Core.
-+neostation::rpcs3::arena::Layout g_host_layout;
-+bool g_layout_cleanup_failed = false;
-+
-+bool map_arena_region(u8* address, usz size, int protection) noexcept
++u8* reserve_arena_layout(usz size, vm_address_t begin = arena_address_begin,
++	vm_address_t end = arena_address_end) noexcept
  {
 -	const char* const value = std::getenv(expanded_jit_arena_environment);
 -	return value && value[0] == '1' && value[1] == '\0';
++	// NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1
++	// Keep the Build 266 adaptive code/data layout, but reserve each candidate
++	// in one fixed Mach transaction. mmap(address) is only a hint on Darwin;
++	// if it relocates a candidate, an otherwise usable low-VA gap is missed.
++	// Never overwrite a mapping owned by another startup thread.
++	if (!size || begin < arena_address_begin || end > arena_address_end || begin >= end || size > end - begin)
++	{
++		return nullptr;
++	}
++
++	begin = (begin + arena_address_step - 1) & ~(arena_address_step - 1);
++	vm_address_t last_candidate = 0;
++	kern_return_t last_result = KERN_SUCCESS;
++	for (vm_address_t candidate = begin; candidate <= end - size; candidate += arena_address_step)
++	{
++		last_candidate = candidate;
++		vm_address_t address = candidate;
++		const kern_return_t reserve_result = ::vm_allocate(mach_task_self(), &address,
++			static_cast<vm_size_t>(size), VM_FLAGS_FIXED | jit_vm_tag);
++		if (reserve_result != KERN_SUCCESS || address != candidate)
++		{
++			last_result = reserve_result;
++			if (reserve_result == KERN_SUCCESS)
++			{
++				::vm_deallocate(mach_task_self(), address, static_cast<vm_size_t>(size));
++			}
++			continue;
++		}
++		const kern_return_t protect_result = ::vm_protect(mach_task_self(), address,
++			static_cast<vm_size_t>(size), false, VM_PROT_NONE);
++		if (protect_result == KERN_SUCCESS)
++		{
++			emit_diagnostic("reservation_result candidate=" + std::to_string(candidate) +
++				" size=" + std::to_string(size) + " kernel=0 mode=vm_allocate_exact_atomic");
++			return reinterpret_cast<u8*>(candidate);
++		}
++		last_result = protect_result;
++		::vm_deallocate(mach_task_self(), address, static_cast<vm_size_t>(size));
++	}
++	emit_diagnostic("reservation_result candidate=" + std::to_string(last_candidate) +
++		" size=" + std::to_string(size) + " kernel=" + std::to_string(last_result) +
++		" mode=vm_allocate_exact_atomic");
++	return nullptr;
++}
++
++u8* reserve_code_data_layout(usz code_capacity, u8*& data, usz& data_capacity) noexcept
++{
++	using namespace rpcs3::ios::jit;
++	data_capacity = 0;
++	data = nullptr;
++	if (code_capacity < arena_min_capacity || code_capacity > arena_max_capacity)
++	{
++		return nullptr;
++	}
++
++	// Prefer the original adjacent, equal-capacity layout when space permits.
++	if (u8* code = reserve_arena_layout(code_capacity * 2))
++	{
++		data = code + code_capacity;
++		data_capacity = code_capacity;
++		return code;
++	}
++
++	// Shared libraries/stacks can split the remaining low address space. Keep
++	// the requested code capacity and search separate nearby gaps for data.
++	// The combined span must fit within 4 GiB so every code/data page pair is
++	// in signed ADRP reach. Never place data in the distant writable-alias range.
++	constexpr vm_size_t reach = 0x1'0000'0000;
++	vm_address_t next_code = arena_address_begin;
++	while (u8* code = reserve_arena_layout(code_capacity, next_code))
++	{
++		const auto code_address = reinterpret_cast<vm_address_t>(code);
++		const vm_address_t data_begin = std::max(arena_address_begin, code_address + code_capacity - reach);
++		const vm_address_t data_end = std::min(arena_address_end, code_address + reach);
++		data_capacity = code_capacity;
++		for (;;)
++		{
++			if ((data = reserve_arena_layout(data_capacity, data_begin, data_end)))
++			{
++				return code;
++			}
++			if (data_capacity == arena_min_capacity)
++			{
++				break;
++			}
++			data_capacity = std::max(arena_min_capacity,
++				(data_capacity / 2) & ~(arena_capacity_step - 1));
++		}
++		::vm_deallocate(mach_task_self(), code_address, static_cast<vm_size_t>(code_capacity));
++		next_code = code_address + arena_address_step;
++	}
++	data_capacity = 0;
++	return nullptr;
++}
++
++bool map_arena_region(u8* address, usz size, int protection) noexcept
++{
 +	for (usz offset = 0; offset < size;)
 +	{
 +		const usz length = std::min(size - offset, rpcs3::ios::jit::arena_prepare_chunk_size);
@@ -306,7 +395,7 @@ index 96fcc13..e940948 100644
  	std::lock_guard lock(g_error_mutex);
  	g_last_error = std::move(message);
  }
-@@ -89,6 +117,12 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
+@@ -89,6 +212,12 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
  	const usz runtime = executable ? g_arena.runtime_code_bytes : g_arena.runtime_data_bytes;
  	const usz peak = executable ? g_arena.peak_code_bytes : g_arena.peak_data_bytes;
  	std::string message = "JIT_ARENA_EXHAUSTED: ";
@@ -319,7 +408,7 @@ index 96fcc13..e940948 100644
  	message += executable ? "code" : "data";
  	message += " arena could not satisfy ";
  	message += allocation_kind;
-@@ -103,7 +137,7 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
+@@ -103,7 +232,7 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
  	message += " bytes, live=" + std::to_string(live);
  	message += " bytes, runtime=" + std::to_string(runtime);
  	message += " bytes, peak=" + std::to_string(peak);
@@ -328,88 +417,42 @@ index 96fcc13..e940948 100644
  	set_error(std::move(message));
  }
  
-@@ -220,22 +254,21 @@ bool contains(const u8* base, usz capacity, const void* address, usz size, usz&
- 	return true;
+@@ -227,15 +356,19 @@ u64 physical_memory_size() noexcept
+ 	return ::sysctlbyname("hw.memsize", &value, &size, nullptr, 0) == 0 ? value : 0;
  }
- 
--u64 physical_memory_size() noexcept
--{
--	u64 value = 0;
--	size_t size = sizeof(value);
--	return ::sysctlbyname("hw.memsize", &value, &size, nullptr, 0) == 0 ? value : 0;
--}
  
 -void discard_layout(u8* layout, usz total_size, vm_address_t writable_alias, usz capacity) noexcept
 +void discard_layout(u8* code, usz capacity, u8* data, usz data_capacity, vm_address_t writable_alias) noexcept
  {
-+	kern_return_t alias_result = KERN_SUCCESS;
  	if (writable_alias)
-+		alias_result = ::vm_deallocate(mach_task_self(), writable_alias, static_cast<vm_size_t>(capacity));
-+	const int code_result = code ? ::munmap(code, capacity) : 0;
-+	const int code_errno = code_result ? errno : 0;
-+	const int data_result = data ? ::munmap(data, data_capacity) : 0;
-+	const int data_errno = data_result ? errno : 0;
-+	if (alias_result || code_result || data_result)
  	{
--		::vm_deallocate(mach_task_self(), writable_alias, static_cast<vm_size_t>(capacity));
--	}
+ 		::vm_deallocate(mach_task_self(), writable_alias, static_cast<vm_size_t>(capacity));
+ 	}
 -	if (layout)
--	{
++	if (code)
+ 	{
 -		::munmap(layout, total_size);
-+		g_layout_cleanup_failed = true;
-+		emit_diagnostic("RPCS3_VA_ROLLBACK_FAILED aliasKernel=" + std::to_string(alias_result) +
-+			" codeErrno=" + std::to_string(code_errno) + " dataErrno=" + std::to_string(data_errno));
++		::munmap(code, capacity);
++	}
++	if (data)
++	{
++		::munmap(data, data_capacity);
  	}
  }
  
-@@ -275,123 +308,137 @@ bool legacy_debugger_is_ready() noexcept
+@@ -275,6 +408,11 @@ bool legacy_debugger_is_ready() noexcept
  
  namespace rpcs3::ios::jit
  {
--bool is_ready() noexcept
 +void set_diagnostic_callback(diagnostic_callback callback) noexcept
- {
--	{
--		std::lock_guard lock(g_arena_mutex);
--		if (g_arena.prepared)
--		{
--			return true;
--		}
--	}
--
--	if (current_backend() == arena_backend::legacy_debugger)
--	{
--		return legacy_debugger_is_ready();
--	}
--
--	const usz length = page_size();
--	void* const probe = ::mmap(nullptr, length, PROT_READ | PROT_EXEC, MAP_PRIVATE | MAP_ANON, jit_vm_tag, 0);
--	if (probe == MAP_FAILED)
--	{
--		set_error("Unable to reserve the Universal JIT readiness page: " + std::string{std::strerror(errno)});
--		return false;
--	}
++{
 +	g_diagnostic_callback.store(callback);
 +}
- 
--	const uptr expected = reinterpret_cast<uptr>(probe);
--	const u64 response = protocol_call(command_prepare_region, probe, length);
--	::munmap(probe, length);
--	if (response != expected)
-+bool accept_host_layout(u64 code, u64 data, u64 code_size, u64 data_size) noexcept
-+{
-+	std::lock_guard lock(g_arena_mutex);
-+	using namespace neostation::rpcs3::arena;
-+	const Layout supplied{code, data, data == code + code_bytes};
-+	if (g_host_layout || g_arena.prepared || g_layout_cleanup_failed ||
-+		code_size != code_bytes || data_size != data_bytes || !valid(supplied, page_size()))
++
+ bool is_ready() noexcept
+ {
  	{
--		set_error("StikDebug's Universal JIT script is not attached or did not prepare the readiness page");
-+		set_error("RPCS3_VA_ADOPTION_REJECTED: invalid addresses, capacity or ownership state");
- 		return false;
- 	}
--
-+	g_host_layout = supplied;
+@@ -310,17 +448,21 @@ bool is_ready() noexcept
  	return true;
  }
  
@@ -419,79 +462,53 @@ index 96fcc13..e940948 100644
 -}
 -
 -bool prepare_arena(bool expanded) noexcept
-+// Only called after the host confirms debugger termination and before any
-+// AsmJIT/PPU/SPU pointer was published. Safe pre-runtime failures are retryable.
-+bool reset_failed_layout() noexcept
++bool prepare_arena(u32 expanded_capacity_mib) noexcept
  {
++	emit_diagnostic("jit_initialize_begin requested_expanded_capacity_mib=" +
++		std::to_string(expanded_capacity_mib));
  	std::lock_guard lock(g_arena_mutex);
--	if (g_arena.prepared)
-+	if (g_layout_cleanup_failed)
++	if (!valid_expanded_arena_capacity(expanded_capacity_mib))
++	{
++		set_error("Invalid JIT arena capacity; expected 0, 1, or 512–1024 MiB");
++		return false;
++	}
++	const bool expanded = expanded_capacity_mib != 0;
+ 	if (g_arena.prepared)
  	{
 -		if (g_arena.expanded != expanded)
--		{
--			set_error("JIT arena capacity policy changed after the arena was prepared; relaunch is required");
--			return false;
--		}
--		return true;
-+		set_error("RPCS3_VA_ROLLBACK_FAILED: unmapping was not confirmed; restart required");
-+		return false;
++		if (g_arena.expanded != expanded ||
++			(expanded && g_arena.capacity != choose_arena_capacity(0, expanded_capacity_mib)))
+ 		{
+ 			set_error("JIT arena capacity policy changed after the arena was prepared; relaunch is required");
+ 			return false;
+@@ -334,64 +476,74 @@ bool prepare_arena(bool expanded) noexcept
+ 		return false;
  	}
--
--	const arena_backend backend = current_backend();
--	if (backend == arena_backend::legacy_debugger && !legacy_debugger_is_ready())
-+	if (g_host_layout)
- 	{
--		return false;
-+		discard_layout(reinterpret_cast<u8*>(g_host_layout.code), neostation::rpcs3::arena::code_bytes,
-+			reinterpret_cast<u8*>(g_host_layout.data), neostation::rpcs3::arena::data_bytes, 0);
-+		g_host_layout = {};
-+	}
-+	if (g_arena.prepared)
-+	{
-+		discard_layout(g_arena.code, g_arena.capacity, g_arena.data, g_arena.data_capacity,
-+			reinterpret_cast<vm_address_t>(g_arena.writable_code));
-+		g_arena = {};
- 	}
-+	return !g_layout_cleanup_failed;
-+}
  
 -	const usz capacity = choose_arena_capacity(physical_memory_size(), expanded);
 -	if (!capacity || capacity > std::numeric_limits<usz>::max() / 2)
-+bool prepare_arena(u32 expanded_capacity_mib) noexcept
-+{
-+	emit_diagnostic("jit_initialize_begin requested_expanded_capacity_mib=" +
-+		std::to_string(expanded_capacity_mib));
-+	std::lock_guard lock(g_arena_mutex);
-+	if (expanded_capacity_mib != 0)
- 	{
+-	{
 -		set_error("Invalid JIT arena capacity");
-+		set_error("RPCS3_VA_POLICY_MISMATCH: embedded startup requires 448 MiB code and 576 MiB data");
- 		return false;
- 	}
+-		return false;
+-	}
 -
 -	const usz total_size = capacity * 2;
 -	auto* const layout = static_cast<u8*>(::mmap(nullptr, total_size, PROT_NONE,
 -		MAP_PRIVATE | MAP_ANON, jit_vm_tag, 0));
 -	if (layout == MAP_FAILED)
-+	const bool expanded = false;
-+	if (g_arena.prepared) return true;
-+	const arena_backend backend = current_backend();
-+	if (backend == arena_backend::legacy_debugger && !legacy_debugger_is_ready()) return false;
-+	const usz capacity = neostation::rpcs3::arena::code_bytes;
-+	const usz data_capacity = neostation::rpcs3::arena::data_bytes;
-+	if (!g_host_layout)
++	const usz capacity = choose_arena_capacity(physical_memory_size(), expanded_capacity_mib);
++	emit_diagnostic("requested_code_capacity=" + std::to_string(capacity) +
++		" requested_data_capacity=" + std::to_string(capacity));
++	usz data_capacity = 0;
++	u8* data = nullptr;
++	u8* const layout = reserve_code_data_layout(capacity, data, data_capacity);
++	if (!layout)
  	{
 -		set_error("Unable to reserve the JIT arena layout: " + std::string{std::strerror(errno)});
-+		set_error("RPCS3_VA_NOT_RESERVED: host must reserve the complete 1 GiB layout before loading Core");
++		set_error("NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1: Unable to reserve the JIT arena layout in low virtual address space (code=" +
++			std::to_string(capacity) + ", minimum data=" + std::to_string(arena_min_capacity) + " bytes)");
  		return false;
  	}
-+	u8* const layout = reinterpret_cast<u8*>(g_host_layout.code);
-+	u8* const data = reinterpret_cast<u8*>(g_host_layout.data);
-+	g_host_layout = {}; // ownership moves into this preparation transaction
-+	emit_diagnostic("RPCS3_VA_ADOPTED codeAddress=" + std::to_string(reinterpret_cast<uptr>(layout)) +
-+		" dataAddress=" + std::to_string(reinterpret_cast<uptr>(data)) +
-+		" requested_code_capacity=" + std::to_string(capacity) +
-+		" requested_data_capacity=" + std::to_string(data_capacity) + " reserved_budget=1073741824");
  
  	const int initial_code_protection = backend == arena_backend::universal_mirrored
  		? PROT_READ | PROT_EXEC
@@ -499,18 +516,14 @@ index 96fcc13..e940948 100644
 -	void* const code = ::mmap(layout, capacity, initial_code_protection,
 -		MAP_FIXED | MAP_PRIVATE | MAP_ANON, jit_vm_tag, 0);
 -	if (code != layout)
--	{
--		const std::string detail = std::strerror(errno);
--		discard_layout(layout, total_size, 0, capacity);
--		set_error("Unable to map the JIT code arena: " + detail);
 +	emit_diagnostic("map_code_begin address=" +
 +		std::to_string(reinterpret_cast<uptr>(layout)) + " size=" + std::to_string(capacity));
 +	if (!map_arena_region(layout, capacity, initial_code_protection))
-+	{
-+		const int map_errno = errno;
-+		const std::string detail = std::strerror(map_errno);
+ 	{
+ 		const std::string detail = std::strerror(errno);
+-		discard_layout(layout, total_size, 0, capacity);
 +		discard_layout(layout, capacity, data, data_capacity, 0);
-+		set_error("RPCS3_JIT_CODE_MAP_FAILED errno=" + std::to_string(map_errno) + " detail=" + detail);
+ 		set_error("Unable to map the JIT code arena: " + detail);
  		return false;
  	}
  
@@ -522,13 +535,10 @@ index 96fcc13..e940948 100644
 +		std::to_string(reinterpret_cast<uptr>(data)) + " size=" + std::to_string(data_capacity));
 +	if (!map_arena_region(data, data_capacity, PROT_READ | PROT_WRITE))
  	{
--		const std::string detail = std::strerror(errno);
+ 		const std::string detail = std::strerror(errno);
 -		discard_layout(layout, total_size, 0, capacity);
--		set_error("Unable to map the JIT data arena: " + detail);
-+		const int map_errno = errno;
-+		const std::string detail = std::strerror(map_errno);
 +		discard_layout(layout, capacity, data, data_capacity, 0);
-+		set_error("RPCS3_JIT_DATA_MAP_FAILED errno=" + std::to_string(map_errno) + " detail=" + detail);
+ 		set_error("Unable to map the JIT data arena: " + detail);
  		return false;
  	}
  
@@ -551,10 +561,9 @@ index 96fcc13..e940948 100644
 +			if (!chunk_length || response != reinterpret_cast<uptr>(chunk))
  			{
 -				discard_layout(layout, total_size, 0, capacity);
--				set_error("The debugger did not prepare Universal JIT arena chunk " +
--					std::to_string(chunk_index + 1) + " of " + std::to_string(preparation_chunks));
 +				discard_layout(layout, capacity, data, data_capacity, 0);
-+				set_error("RPCS3_JIT_PREPARE_REJECTED chunk=" +
+ 				set_error("The debugger did not prepare Universal JIT arena chunk " +
+-					std::to_string(chunk_index + 1) + " of " + std::to_string(preparation_chunks));
 +					std::to_string(chunk_index + 1) + " of " + std::to_string(preparation_chunks) +
 +					" (address=" + std::to_string(reinterpret_cast<uptr>(chunk)) +
 +					", length=" + std::to_string(chunk_length) + ", response=" + std::to_string(response) + ")");
@@ -570,7 +579,7 @@ index 96fcc13..e940948 100644
  	vm_address_t alias = 0;
  	vm_prot_t current_protection = VM_PROT_NONE;
  	vm_prot_t maximum_protection = VM_PROT_NONE;
-@@ -407,18 +454,21 @@ bool prepare_arena(bool expanded) noexcept
+@@ -407,9 +559,11 @@ bool prepare_arena(bool expanded) noexcept
  		&current_protection,
  		&maximum_protection,
  		VM_INHERIT_SHARE);
@@ -579,26 +588,20 @@ index 96fcc13..e940948 100644
  	if (remap_result != KERN_SUCCESS)
  	{
 -		discard_layout(layout, total_size, 0, capacity);
--		set_error("mach_vm_remap failed while creating the arena's writable alias");
 +		discard_layout(layout, capacity, data, data_capacity, 0);
-+		set_error("RPCS3_JIT_ALIAS_REMAP_FAILED kernel=" + std::to_string(remap_result));
+ 		set_error("mach_vm_remap failed while creating the arena's writable alias");
  		return false;
  	}
- 
--	if (::vm_protect(mach_task_self(), alias, static_cast<vm_size_t>(capacity), false,
--		VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
-+	const kern_return_t alias_protect_result = ::vm_protect(mach_task_self(), alias,
-+		static_cast<vm_size_t>(capacity), false, VM_PROT_READ | VM_PROT_WRITE);
-+	if (alias_protect_result != KERN_SUCCESS)
+@@ -417,7 +571,7 @@ bool prepare_arena(bool expanded) noexcept
+ 	if (::vm_protect(mach_task_self(), alias, static_cast<vm_size_t>(capacity), false,
+ 		VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
  	{
 -		discard_layout(layout, total_size, alias, capacity);
--		set_error("mach_vm_protect failed for the arena's writable alias");
 +		discard_layout(layout, capacity, data, data_capacity, alias);
-+		set_error("RPCS3_JIT_ALIAS_PROTECT_FAILED kernel=" + std::to_string(alias_protect_result));
+ 		set_error("mach_vm_protect failed for the arena's writable alias");
  		return false;
  	}
- 
-@@ -429,35 +479,67 @@ bool prepare_arena(bool expanded) noexcept
+@@ -429,35 +583,67 @@ bool prepare_arena(bool expanded) noexcept
  		::mprotect(layout, capacity, PROT_READ | PROT_EXEC) != 0)
  	{
  		const std::string detail = std::strerror(errno);
@@ -631,7 +634,7 @@ index 96fcc13..e940948 100644
 +		if (!coherent)
 +		{
 +			discard_layout(layout, capacity, data, data_capacity, alias);
-+			set_error("RPCS3_JIT_ALIAS_INCOHERENT: write/execute views do not share instruction bytes");
++			set_error("JIT write/execute views do not share instruction bytes");
 +			return false;
 +		}
 +	}
@@ -674,7 +677,7 @@ index 96fcc13..e940948 100644
  		if (g_arena.sealed)
  		{
  			return true;
-@@ -486,24 +568,24 @@ bool seal_arena() noexcept
+@@ -486,24 +672,24 @@ bool seal_arena() noexcept
  
  void* runtime_memory(bool executable) noexcept
  {
@@ -707,7 +710,7 @@ index 96fcc13..e940948 100644
  }
  
  bool claim_runtime(bool executable, usz offset, usz size) noexcept
-@@ -512,12 +594,12 @@ bool claim_runtime(bool executable, usz offset, usz size) noexcept
+@@ -512,12 +698,12 @@ bool claim_runtime(bool executable, usz offset, usz size) noexcept
  	{
  		return true;
  	}
@@ -723,7 +726,7 @@ index 96fcc13..e940948 100644
  	arena_allocator& allocator = executable ? g_arena.code_allocator : g_arena.data_allocator;
  	arena_range allocation;
  	if (!allocator.allocate_lowest(size, 1, allocation) || allocation.offset != offset)
-@@ -563,12 +645,12 @@ void reset_runtime() noexcept
+@@ -563,12 +749,12 @@ void reset_runtime() noexcept
  
  void* allocate(bool executable, usz size, usz alignment) noexcept
  {
@@ -739,7 +742,7 @@ index 96fcc13..e940948 100644
  	arena_allocator& allocator = executable ? g_arena.code_allocator : g_arena.data_allocator;
  	arena_range allocation;
  	if (!allocator.allocate_highest(size, alignment, allocation))
-@@ -594,7 +676,7 @@ void release_allocation(bool executable, void* address, usz size) noexcept
+@@ -594,7 +780,7 @@ void release_allocation(bool executable, void* address, usz size) noexcept
  	std::lock_guard lock(g_arena_mutex);
  	usz offset = 0;
  	u8* const base = executable ? g_arena.code : g_arena.data;
@@ -748,7 +751,7 @@ index 96fcc13..e940948 100644
  	{
  		set_error("Attempted to release an address outside the JIT arena");
  		return;
-@@ -637,6 +719,7 @@ arena_statistics get_statistics() noexcept
+@@ -637,6 +823,7 @@ arena_statistics get_statistics() noexcept
  	std::lock_guard lock(g_arena_mutex);
  	arena_statistics result;
  	result.capacity = g_arena.capacity;
@@ -757,7 +760,7 @@ index 96fcc13..e940948 100644
  	result.runtime_code_bytes = g_arena.runtime_code_bytes;
  	result.runtime_data_bytes = g_arena.runtime_data_bytes;
 diff --git a/Utilities/JITIOS.h b/Utilities/JITIOS.h
-index 95b9656..ad3cfab 100644
+index 95b965623..434cb82fa 100644
 --- a/Utilities/JITIOS.h
 +++ b/Utilities/JITIOS.h
 @@ -30,6 +30,7 @@ constexpr arena_backend backend_for_ios_major(u32 major_version) noexcept
@@ -768,18 +771,16 @@ index 95b9656..ad3cfab 100644
  	u32 preparation_chunks = 0;
  	usz runtime_code_bytes = 0;
  	usz runtime_data_bytes = 0;
-@@ -46,12 +47,15 @@ struct arena_statistics
+@@ -46,12 +47,14 @@ struct arena_statistics
  	bool sealed = false;
  };
  
--bool is_ready() noexcept;
--bool prepare_arena() noexcept;
--bool prepare_arena(bool expanded) noexcept;
 +// NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1: only the explicit iOS API may prepare the arena.
 +using diagnostic_callback = void(*)(const char* message) noexcept;
 +void set_diagnostic_callback(diagnostic_callback callback) noexcept;
-+bool accept_host_layout(u64 code, u64 data, u64 code_size, u64 data_size) noexcept;
-+bool reset_failed_layout() noexcept;
+ bool is_ready() noexcept;
+-bool prepare_arena() noexcept;
+-bool prepare_arena(bool expanded) noexcept;
 +bool prepare_arena(u32 expanded_capacity_mib) noexcept;
  bool seal_arena() noexcept;
  void* runtime_memory(bool executable) noexcept;
@@ -789,7 +790,7 @@ index 95b9656..ad3cfab 100644
  void reset_runtime() noexcept;
  void* allocate(bool executable, usz size, usz alignment) noexcept;
 diff --git a/Utilities/JITIOSLayoutPolicy.h b/Utilities/JITIOSLayoutPolicy.h
-index 0d19acc..4717823 100644
+index 0d19acc22..471782373 100644
 --- a/Utilities/JITIOSLayoutPolicy.h
 +++ b/Utilities/JITIOSLayoutPolicy.h
 @@ -2,27 +2,49 @@
@@ -872,7 +873,7 @@ index 0d19acc..4717823 100644
  static_assert(arena_prepare_chunk_length(17 * mib, 0) == 16 * mib);
  static_assert(arena_prepare_chunk_length(17 * mib, 1) == 1 * mib);
 diff --git a/Utilities/JITLLVM.cpp b/Utilities/JITLLVM.cpp
-index 863624e..144920e 100644
+index 863624e0a..144920e53 100644
 --- a/Utilities/JITLLVM.cpp
 +++ b/Utilities/JITLLVM.cpp
 @@ -72,6 +72,7 @@ namespace
@@ -901,134 +902,8 @@ index 863624e..144920e 100644
  		}
  	}
  #endif
-diff --git a/Utilities/NeoStationArenaLayout.h b/Utilities/NeoStationArenaLayout.h
-new file mode 100644
-index 0000000..22cbebf
---- /dev/null
-+++ b/Utilities/NeoStationArenaLayout.h
-@@ -0,0 +1,120 @@
-+#pragma once
-+// One memory policy shared by host reservation, Core adoption and behavior tests.
-+#include <algorithm>
-+#include <cstdint>
-+#include <vector>
-+
-+namespace neostation::rpcs3::arena {
-+inline constexpr uint64_t mib = 1024ull * 1024;
-+inline constexpr uint64_t code_bytes = 448 * mib;
-+inline constexpr uint64_t data_bytes = 576 * mib;
-+inline constexpr uint64_t budget_bytes = 1024 * mib;
-+inline constexpr uint64_t low = 0x100000000ull;
-+inline constexpr uint64_t high = 0x1000000000ull;
-+inline constexpr uint64_t reach = 0x100000000ull;
-+inline constexpr const char* marker = "NEOSTATION_RPCS3_HOST_RESERVATION_V1";
-+struct Range { uint64_t begin = 0, end = 0; };
-+struct Layout {
-+  uint64_t code = 0, data = 0;
-+  bool contiguous = false;
-+  explicit operator bool() const { return code != 0 && data != 0; }
-+};
-+inline uint64_t align_up(uint64_t value, uint64_t alignment) {
-+  return (value + alignment - 1) & ~(alignment - 1);
-+}
-+inline bool valid(Layout layout, uint64_t page) {
-+  if (!page || (page & (page - 1)) || !layout) return false;
-+  if (layout.code < low || layout.data < low ||
-+      layout.code > high - code_bytes || layout.data > high - data_bytes ||
-+      layout.code % page || layout.data % page) return false;
-+  const uint64_t code_end = layout.code + code_bytes;
-+  const uint64_t data_end = layout.data + data_bytes;
-+  if (!(code_end <= layout.data || data_end <= layout.code)) return false;
-+  return std::max(code_end, data_end) - std::min(layout.code, layout.data) <= reach;
-+}
-+// Enumerate *real* VM gaps. No 64 MiB stepping that skips small but adequate
-+// holes, no MAP_FIXED overwrite of unowned memory, no change of capacity.
-+inline std::vector<Layout> candidates(const std::vector<Range>& gaps, uint64_t page) {
-+  std::vector<Layout> result;
-+  if (!page || (page & (page - 1))) return result;
-+  for (auto gap : gaps) {
-+    const uint64_t begin = align_up(std::max(low, gap.begin), page);
-+    const uint64_t end = std::min(high, gap.end);
-+    if (begin < end && budget_bytes <= end - begin)
-+      result.push_back({begin, begin + code_bytes, true});
-+  }
-+  // Split layout is the same fixed 1 GiB policy, not a second JIT mode. Only
-+  // differing gaps are considered; a common gap was handled above.
-+  for (size_t i = 0; i < gaps.size(); ++i) {
-+    const uint64_t cb = align_up(std::max(low, gaps[i].begin), page);
-+    const uint64_t ce = std::min(high, gaps[i].end);
-+    if (cb >= ce || code_bytes > ce - cb) continue;
-+    for (size_t j = 0; j < gaps.size(); ++j) {
-+      if (i == j) continue;
-+      const uint64_t db = align_up(std::max(low, gaps[j].begin), page);
-+      const uint64_t de = std::min(high, gaps[j].end);
-+      if (db >= de || data_bytes > de - db) continue;
-+      // Place the lower range at its upper edge when needed for ADRP reach.
-+      uint64_t c = cb, d = db;
-+      if (cb < db) c = (ce - code_bytes) & ~(page - 1);
-+      else d = (de - data_bytes) & ~(page - 1);
-+      Layout candidate{c, d, false};
-+      if (valid(candidate, page)) result.push_back(candidate);
-+    }
-+  }
-+  return result;
-+}
-+struct ReservationResult {
-+  Layout layout;
-+  int kernel = 0;
-+  bool cleanup_ok = true;
-+  uint64_t attempted_address = 0, attempted_bytes = 0;
-+  size_t attempts = 0;
-+};
-+// Backend::reserve must reserve exactly without overwriting. Both reserve and
-+// release return the actual kernel status (0 is success). Test backends inject
-+// map races, protection failures, and rollback failures into this production code.
-+template<class Backend>
-+ReservationResult reserve(const std::vector<Range>& gaps, uint64_t page, Backend& backend) {
-+  ReservationResult result;
-+  for (Layout plan : candidates(gaps, page)) {
-+    ++result.attempts;
-+    result.attempted_address = plan.code;
-+    result.attempted_bytes = plan.contiguous ? budget_bytes : code_bytes;
-+    result.kernel = backend.reserve(plan.code, result.attempted_bytes);
-+    if (result.kernel) {
-+      if (backend.cleanup_failed()) { result.cleanup_ok = false; return result; }
-+      continue;
-+    }
-+    if (plan.contiguous) { result.layout = plan; return result; }
-+    result.attempted_address = plan.data;
-+    result.attempted_bytes = data_bytes;
-+    result.kernel = backend.reserve(plan.data, data_bytes);
-+    if (!result.kernel) { result.layout = plan; return result; }
-+    if (backend.cleanup_failed()) { result.cleanup_ok = false; return result; }
-+    const int released = backend.release(plan.code, code_bytes);
-+    if (released) { result.cleanup_ok = false; return result; }
-+  }
-+  return result;
-+}
-+template<class Backend>
-+int release(Layout& layout, Backend& backend) {
-+  if (layout.contiguous && layout.code) {
-+    const int error = backend.release(layout.code, budget_bytes);
-+    if (!error) layout = {};
-+    return error;
-+  }
-+  int error = 0;
-+  if (layout.code) {
-+    error = backend.release(layout.code, code_bytes);
-+    if (!error) layout.code = 0;
-+  }
-+  if (layout.data) {
-+    const int data_error = backend.release(layout.data, data_bytes);
-+    if (!data_error) layout.data = 0;
-+    if (!error) error = data_error;
-+  }
-+  return error;
-+}
-+static_assert(code_bytes + data_bytes == budget_bytes);
-+} // namespace neostation::rpcs3::arena
 diff --git a/rpcs3/CMakeLists.txt b/rpcs3/CMakeLists.txt
-index 4010442..23b8a54 100644
+index 40104425e..23b8a54f8 100644
 --- a/rpcs3/CMakeLists.txt
 +++ b/rpcs3/CMakeLists.txt
 @@ -225,6 +225,15 @@ if(RPCS3_FRONTEND STREQUAL "IOS")
@@ -1048,7 +923,7 @@ index 4010442..23b8a54 100644
  
      set_target_properties(RPCS3Core PROPERTIES
 diff --git a/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp b/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp
-index 322dcff..88bc7d8 100644
+index 322dcffdc..88bc7d8a4 100644
 --- a/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp
 +++ b/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp
 @@ -345,9 +345,12 @@ OSStatus IOSAudioBackend::render_callback(
@@ -1067,7 +942,7 @@ index 322dcff..88bc7d8 100644
  	return noErr;
  }
 diff --git a/rpcs3/Emu/CMakeLists.txt b/rpcs3/Emu/CMakeLists.txt
-index 9bb3ea1..505ef60 100644
+index 9bb3ea11d..505ef60fe 100644
 --- a/rpcs3/Emu/CMakeLists.txt
 +++ b/rpcs3/Emu/CMakeLists.txt
 @@ -25,6 +25,13 @@ if(USE_LTO)
@@ -1085,7 +960,7 @@ index 9bb3ea1..505ef60 100644
      set_source_files_properties(../../Utilities/Thread.cpp PROPERTIES COMPILE_DEFINITIONS USE_ASAN)
  endif()
 diff --git a/rpcs3/Emu/Cell/Modules/cellVdec.cpp b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-index 1847c8c..0c0a006 100644
+index 1847c8cfe..0c0a0060c 100644
 --- a/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 +++ b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 @@ -197,6 +197,14 @@ struct vdec_context final
@@ -1226,7 +1101,7 @@ index 1847c8c..0c0a006 100644
  
  	return CELL_OK;
 diff --git a/rpcs3/Emu/Cell/PPUFunction.cpp b/rpcs3/Emu/Cell/PPUFunction.cpp
-index 1cc1544..253f83f 100644
+index 1cc15440c..253f83f14 100644
 --- a/rpcs3/Emu/Cell/PPUFunction.cpp
 +++ b/rpcs3/Emu/Cell/PPUFunction.cpp
 @@ -6,6 +6,8 @@
@@ -1304,7 +1179,7 @@ index 1cc1544..253f83f 100644
 +		return true;
  }
 diff --git a/rpcs3/Emu/Cell/PPUFunction.h b/rpcs3/Emu/Cell/PPUFunction.h
-index a42ae12..de2bea5 100644
+index a42ae12d6..de2bea568 100644
 --- a/rpcs3/Emu/Cell/PPUFunction.h
 +++ b/rpcs3/Emu/Cell/PPUFunction.h
 @@ -4,6 +4,7 @@
@@ -1327,7 +1202,7 @@ index a42ae12..de2bea5 100644
  	static inline const auto& get(bool llvm = false)
  	{
 diff --git a/rpcs3/Emu/Cell/PPUModule.cpp b/rpcs3/Emu/Cell/PPUModule.cpp
-index dc78ddc..a68f46f 100644
+index dc78ddcb8..a68f46fa9 100644
 --- a/rpcs3/Emu/Cell/PPUModule.cpp
 +++ b/rpcs3/Emu/Cell/PPUModule.cpp
 @@ -1311,7 +1311,11 @@ static void ppu_check_patch_spu_images(const ppu_module<lv2_obj>& mod, const ppu
@@ -1344,7 +1219,7 @@ index dc78ddc..a68f46f 100644
  						const u32 inst1 = read_from_ptr<be_t<u32>>(ls_segment, it);
  						const u32 inst2 = read_from_ptr<be_t<u32>>(ls_segment, it + 4);
 diff --git a/rpcs3/Emu/Cell/PPUThread.cpp b/rpcs3/Emu/Cell/PPUThread.cpp
-index b1f1a74..9b149ae 100644
+index b1f1a749b..9b149ae5c 100644
 --- a/rpcs3/Emu/Cell/PPUThread.cpp
 +++ b/rpcs3/Emu/Cell/PPUThread.cpp
 @@ -62,6 +62,7 @@
@@ -1527,7 +1402,7 @@ index b1f1a74..9b149ae 100644
  	}
  
 diff --git a/rpcs3/Emu/Cell/PPUThread.h b/rpcs3/Emu/Cell/PPUThread.h
-index 9a135c0..618b1e5 100644
+index 9a135c00c..618b1e592 100644
 --- a/rpcs3/Emu/Cell/PPUThread.h
 +++ b/rpcs3/Emu/Cell/PPUThread.h
 @@ -8,6 +8,7 @@
@@ -1550,7 +1425,7 @@ index 9a135c0..618b1e5 100644
  {
  	vm::addr_t stack_addr;
 diff --git a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
-index d451a94..3049a29 100644
+index d451a943a..3049a29e9 100644
 --- a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 @@ -40,6 +40,19 @@ const extern spu_decoder<spu_itype> g_spu_itype;
@@ -2030,7 +1905,7 @@ index d451a94..3049a29 100644
  				if (type == spu_itype::BI && target == pos + 4 && op.d)
  				{
 diff --git a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
-index 9a1e4c7..91cfeba 100644
+index 9a1e4c790..91cfebaad 100644
 --- a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 @@ -1,4 +1,6 @@
@@ -2491,7 +2366,7 @@ index 9a1e4c7..91cfeba 100644
  			r.value = m_ir->CreateFPToUI(a.value, get_type<s32[4]>());
  			set_vr(op.rt, select(bitcast<s32[4]>(a) > splat<s32[4]>(((32 + 127) << 23) - 1), splat<s32[4]>(-1), r & ~(bitcast<s32[4]>(a) >> 31)));
 diff --git a/rpcs3/Emu/Cell/SPURecompiler.h b/rpcs3/Emu/Cell/SPURecompiler.h
-index faf4082..384b531 100644
+index faf4082dc..384b531bb 100644
 --- a/rpcs3/Emu/Cell/SPURecompiler.h
 +++ b/rpcs3/Emu/Cell/SPURecompiler.h
 @@ -8,6 +8,7 @@
@@ -2557,7 +2432,7 @@ index faf4082..384b531 100644
  	// Interpreter table (spu_itype -> ptr)
  	static std::array<u64, 256> g_interpreter_table;
 diff --git a/rpcs3/Emu/Cell/SPUThread.cpp b/rpcs3/Emu/Cell/SPUThread.cpp
-index bc9ec5e..3a986b8 100644
+index bc9ec5e5b..3a986b8df 100644
 --- a/rpcs3/Emu/Cell/SPUThread.cpp
 +++ b/rpcs3/Emu/Cell/SPUThread.cpp
 @@ -25,6 +25,10 @@
@@ -2648,7 +2523,7 @@ index bc9ec5e..3a986b8 100644
  }
  
 diff --git a/rpcs3/Emu/Memory/vm.cpp b/rpcs3/Emu/Memory/vm.cpp
-index e7f55d7..93b7653 100644
+index e7f55d727..93b76530a 100644
 --- a/rpcs3/Emu/Memory/vm.cpp
 +++ b/rpcs3/Emu/Memory/vm.cpp
 @@ -13,6 +13,8 @@
@@ -2686,7 +2561,7 @@ index e7f55d7..93b7653 100644
  				if (cpu_flag::wait - cpu.state)
  				{
 diff --git a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
-index 3eaebb1..5ddada0 100644
+index 3eaebb152..5ddada03f 100644
 --- a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
 +++ b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
 @@ -1,139 +1,203 @@
@@ -3023,7 +2898,7 @@ index 3eaebb1..5ddada0 100644
 +	}
 +}
 diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.cpp b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
-index 63cab28..aa9f76d 100644
+index 63cab28e9..aa9f76dfe 100644
 --- a/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 @@ -20,6 +20,9 @@
@@ -3110,7 +2985,7 @@ index 63cab28..aa9f76d 100644
  			// Notify the user with HUD notification
  			if (g_cfg.misc.show_shader_compilation_hint)
 diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.h b/rpcs3/Emu/RSX/VK/VKGSRender.h
-index e3817d8..1c07ddc 100644
+index e3817d8e6..1c07ddcfa 100644
 --- a/rpcs3/Emu/RSX/VK/VKGSRender.h
 +++ b/rpcs3/Emu/RSX/VK/VKGSRender.h
 @@ -190,6 +190,12 @@ private:
@@ -3127,7 +3002,7 @@ index e3817d8..1c07ddc 100644
  	// Offloader thread deadlock recovery
  	rsx::atomic_bitmask_t<flush_queue_state> m_queue_status;
 diff --git a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
-index 85e981c..e5024e7 100644
+index 85e981c4f..e5024e7b2 100644
 --- a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
 @@ -1,164 +1,179 @@
@@ -3762,7 +3637,7 @@ index 85e981c..e5024e7 100644
 +	}
 +}
 diff --git a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h
-index 712505e..8f61bf9 100644
+index 712505ee2..8f61bf937 100644
 --- a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h
 +++ b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h
 @@ -3,6 +3,7 @@
@@ -3805,7 +3680,7 @@ index 712505e..8f61bf9 100644
  		std::unique_ptr<glsl::program> int_compile_compute_pipe(
  			const VkComputePipelineCreateInfo& create_info,
 diff --git a/rpcs3/Emu/RSX/VK/VKPresent.cpp b/rpcs3/Emu/RSX/VK/VKPresent.cpp
-index a604696..b409761 100644
+index a604696f1..b4097610a 100644
 --- a/rpcs3/Emu/RSX/VK/VKPresent.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKPresent.cpp
 @@ -191,10 +191,11 @@ void VKGSRender::advance_queued_frames()
@@ -3824,7 +3699,7 @@ index a604696..b409761 100644
  	// Texture cache is also double buffered to prevent use-after-free
  	m_texture_cache.on_frame_end();
 diff --git a/rpcs3/Emu/RSX/VK/VKResourceManager.cpp b/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
-index 95b81bf..c0713aa 100644
+index 95b81bf94..c0713aa86 100644
 --- a/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
 @@ -47,6 +47,10 @@ namespace vk
@@ -3917,7 +3792,7 @@ index 95b81bf..c0713aa 100644
  
  	void vmm_notify_object_allocated(vmm_allocation_pool pool)
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/device.h b/rpcs3/Emu/RSX/VK/vkutils/device.h
-index ffafbae..f798914 100644
+index ffafbae16..f7989148e 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/device.h
 +++ b/rpcs3/Emu/RSX/VK/vkutils/device.h
 @@ -171,6 +171,10 @@ namespace vk
@@ -3932,7 +3807,7 @@ index ffafbae..f798914 100644
  		const VkFormatProperties get_format_properties(VkFormat format) const;
  
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/memory.h b/rpcs3/Emu/RSX/VK/vkutils/memory.h
-index 352aaba..ded7457 100644
+index 352aaba0b..ded74578b 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/memory.h
 +++ b/rpcs3/Emu/RSX/VK/vkutils/memory.h
 @@ -208,7 +208,7 @@ namespace vk
@@ -3945,7 +3820,7 @@ index 352aaba..ded7457 100644
  	u64  vmm_get_application_pool_usage(vmm_allocation_pool pool);
  	bool vmm_handle_memory_pressure(rsx::problem_severity severity);
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/sync.cpp b/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
-index 6d36283..9bf28b9 100644
+index 6d36283ca..9bf28b9bc 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
 +++ b/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
 @@ -8,6 +8,12 @@
@@ -4009,7 +3884,7 @@ index 6d36283..9bf28b9 100644
  
  	VkResult wait_for_event(event* pEvent, u64 timeout)
 diff --git a/rpcs3/Emu/RSX/rsx_cache.h b/rpcs3/Emu/RSX/rsx_cache.h
-index 625311f..11c8109 100644
+index 625311fc1..11c810976 100644
 --- a/rpcs3/Emu/RSX/rsx_cache.h
 +++ b/rpcs3/Emu/RSX/rsx_cache.h
 @@ -74,6 +74,20 @@ namespace rsx
@@ -4177,7 +4052,7 @@ index 625311f..11c8109 100644
  		}
  
 diff --git a/rpcs3/Emu/System.cpp b/rpcs3/Emu/System.cpp
-index 1f53c64..e1bef56 100644
+index 1f53c64b0..e1bef5615 100644
 --- a/rpcs3/Emu/System.cpp
 +++ b/rpcs3/Emu/System.cpp
 @@ -10,6 +10,8 @@
@@ -4431,7 +4306,7 @@ index 1f53c64..e1bef56 100644
  
  		if (g_tty && sys_log.notice)
 diff --git a/rpcs3/Emu/savestate_utils.cpp b/rpcs3/Emu/savestate_utils.cpp
-index f43643d..68d46f8 100644
+index f43643d22..68d46f828 100644
 --- a/rpcs3/Emu/savestate_utils.cpp
 +++ b/rpcs3/Emu/savestate_utils.cpp
 @@ -579,6 +579,33 @@ void clean_savestates(std::string_view title_id, std::string_view boot_path, usz
@@ -4469,7 +4344,7 @@ index f43643d..68d46f8 100644
  {
  	u8 bytes[4096];
 diff --git a/rpcs3/Emu/savestate_utils.hpp b/rpcs3/Emu/savestate_utils.hpp
-index 130f54b..4c096c9 100644
+index 130f54b02..4c096c903 100644
 --- a/rpcs3/Emu/savestate_utils.hpp
 +++ b/rpcs3/Emu/savestate_utils.hpp
 @@ -53,3 +53,4 @@ std::vector<savestate_file_entry> get_savestate_files(std::string_view title_id,
@@ -4478,7 +4353,7 @@ index 130f54b..4c096c9 100644
  void clean_savestates(std::string_view title_id, std::string_view boot_path, usz max_files, usz max_files_size);
 +void clean_orphaned_savestate_temps();
 diff --git a/rpcs3/Emu/system_config.h b/rpcs3/Emu/system_config.h
-index 7072922..271162a 100644
+index 7072922d2..271162a5d 100644
 --- a/rpcs3/Emu/system_config.h
 +++ b/rpcs3/Emu/system_config.h
 @@ -107,8 +107,16 @@ struct cfg_root : cfg::node
@@ -4499,7 +4374,7 @@ index 7072922..271162a 100644
  
  	} vfs{ this };
 diff --git a/rpcs3/Emu/system_progress.cpp b/rpcs3/Emu/system_progress.cpp
-index 52e4951..580947d 100644
+index 52e49516f..580947dc0 100644
 --- a/rpcs3/Emu/system_progress.cpp
 +++ b/rpcs3/Emu/system_progress.cpp
 @@ -196,6 +196,21 @@ void progress_dialog_server::operator()()
@@ -4539,7 +4414,7 @@ index 52e4951..580947d 100644
  			wait_no_update_count++;
  		}
 diff --git a/rpcs3/ios/GameLibrary.cpp b/rpcs3/ios/GameLibrary.cpp
-index f9a5950..ef2bf6a 100644
+index f9a5950e1..ef2bf6a15 100644
 --- a/rpcs3/ios/GameLibrary.cpp
 +++ b/rpcs3/ios/GameLibrary.cpp
 @@ -847,8 +847,14 @@ bool copy_file_with_progress(
@@ -4710,7 +4585,7 @@ index f9a5950..ef2bf6a 100644
  	if (progress)
  	{
 diff --git a/rpcs3/ios/GameLibrary.h b/rpcs3/ios/GameLibrary.h
-index de1b709..fd07001 100644
+index de1b709f1..fd07001d1 100644
 --- a/rpcs3/ios/GameLibrary.h
 +++ b/rpcs3/ios/GameLibrary.h
 @@ -189,6 +189,7 @@ game_delete_result delete_installed_game(std::string_view title_id);
@@ -4723,7 +4598,7 @@ index de1b709..fd07001 100644
  std::vector<installed_game_patch> installed_game_patches(std::string_view title_id);
 diff --git a/rpcs3/ios/NeoStationSavestateIO.h b/rpcs3/ios/NeoStationSavestateIO.h
 new file mode 100644
-index 0000000..d6f54a1
+index 000000000..d6f54a1ed
 --- /dev/null
 +++ b/rpcs3/ios/NeoStationSavestateIO.h
 @@ -0,0 +1,41 @@
@@ -4770,7 +4645,7 @@ index 0000000..d6f54a1
 +}
 diff --git a/rpcs3/ios/NeoStationSavestateStatus.h b/rpcs3/ios/NeoStationSavestateStatus.h
 new file mode 100644
-index 0000000..006640b
+index 000000000..006640b01
 --- /dev/null
 +++ b/rpcs3/ios/NeoStationSavestateStatus.h
 @@ -0,0 +1,72 @@
@@ -4847,7 +4722,7 @@ index 0000000..006640b
 +inline operation current;
 +}
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc7..65ee5c8 100644
+index 74a6dc731..58d12807b 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
 @@ -20,10 +20,15 @@
@@ -4866,17 +4741,16 @@ index 74a6dc7..65ee5c8 100644
  #include "Emu/IdManager.h"
  #include "Emu/Audio/IOS/IOSAudioBackend.h"
  #include "Emu/Audio/Null/null_enumerator.h"
-@@ -110,6 +115,9 @@ std::string g_application_support_path;
+@@ -110,6 +115,8 @@ std::string g_application_support_path;
  std::string g_cache_path;
  std::string g_preferred_language = "en";
  bool g_emu_started = false;
 +bool g_initialization_attempted = false;
-+bool g_runtime_pointers_published = false;
 +// NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1
  std::atomic_bool g_accept_display_surfaces = false;
  std::atomic_bool g_accept_pad_state = false;
  rpcs3::ios::display_surface_registry g_display_surface;
-@@ -312,7 +320,8 @@ boot_progress_snapshot capture_boot_progress()
+@@ -312,7 +319,8 @@ boot_progress_snapshot capture_boot_progress()
  	};
  
  	boot_progress_snapshot snapshot = read();
@@ -4886,7 +4760,7 @@ index 74a6dc7..65ee5c8 100644
  	{
  		boot_progress_snapshot next = read();
  		if (next == snapshot)
-@@ -321,6 +330,7 @@ boot_progress_snapshot capture_boot_progress()
+@@ -321,6 +329,7 @@ boot_progress_snapshot capture_boot_progress()
  		}
  		snapshot = std::move(next);
  	}
@@ -4894,7 +4768,7 @@ index 74a6dc7..65ee5c8 100644
  }
  
  rpcs3_ios_emulation_state current_emulation_state() noexcept
-@@ -378,6 +388,11 @@ void emit_log(int32_t level, std::string_view message)
+@@ -378,6 +387,11 @@ void emit_log(int32_t level, std::string_view message)
  	g_config.log_callback(g_config.user_context, level, terminated.c_str());
  }
  
@@ -4906,7 +4780,7 @@ index 74a6dc7..65ee5c8 100644
  void emit_jit_arena_statistics(std::string_view phase)
  {
  	constexpr usz mib = 1024 * 1024;
-@@ -385,7 +400,7 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -385,7 +399,7 @@ void emit_jit_arena_statistics(std::string_view phase)
  	emit_log(4, fmt::format(
  		"iOS JIT arena %s: code live=%u MiB, free=%u MiB (%llu bytes), largest_free=%u MiB (%llu bytes), "
  		"runtime=%u MiB, peak=%u MiB; data live=%u MiB, free=%u MiB (%llu bytes), "
@@ -4915,7 +4789,7 @@ index 74a6dc7..65ee5c8 100644
  		phase,
  		stats.live_code_bytes / mib,
  		stats.free_code_bytes / mib,
-@@ -401,7 +416,8 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -401,7 +415,8 @@ void emit_jit_arena_statistics(std::string_view phase)
  		static_cast<u64>(stats.largest_free_data_bytes),
  		stats.runtime_data_bytes / mib,
  		stats.peak_data_bytes / mib,
@@ -4925,7 +4799,7 @@ index 74a6dc7..65ee5c8 100644
  }
  
  class callback_log_listener final : public logs::listener
-@@ -448,16 +464,32 @@ private:
+@@ -448,16 +463,32 @@ private:
  	std::string m_name;
  };
  
@@ -4962,51 +4836,12 @@ index 74a6dc7..65ee5c8 100644
  }
  
  bool apply_database_settings_for_api(std::string_view title_id)
-@@ -1267,15 +1299,54 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
+@@ -1267,15 +1298,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
  
  extern "C" const char* rpcs3_ios_build_info(void) noexcept
  {
 -	return "{\"abi\":30,\"frontend\":\"ios\",\"upstream\":\"fdcfded8dfd3060af66bda0a3ac4635458980038\",\"llvm\":\"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\"jit\":\"sealed-arena\",\"renderer\":\"vulkan-moltenvk\",\"moltenvk\":\"1.4.2\",\"ffmpeg\":\"8.1.1\",\"audio\":\"remoteio\",\"input\":\"gamecontroller-multiplayer-rumble\",\"games\":\"pkg-rap-iso-zip-folder-updates-runtime-patches-library-delete-cache-management-trophies-big-picture-savestate-management-selected-boot\",\"settings\":\"global-and-per-game-cfg-root-catalog-title-database-recommendations-presets\",\"rpcn\":\"servers-account-social-online\",\"performance\":\"fps-cpu-rsx-memory\",\"lifecycle\":\"pause-resume-stop-big-picture\",\"media_codecs\":true}";
-+	return "{\"abi\":30,\"frontend\":\"ios\",\"upstream\":\"fdcfded8dfd3060af66bda0a3ac4635458980038\",\"llvm\":\"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\"jit\":\"sealed-arena\",\"neostation_jit\":\"NEOSTATION_DYNAMIC_JIT_V5\",\"renderer\":\"vulkan-moltenvk\",\"moltenvk\":\"1.4.2\",\"ffmpeg\":\"8.1.1\",\"audio\":\"remoteio\",\"input\":\"gamecontroller-multiplayer-rumble\",\"games\":\"pkg-rap-iso-zip-folder-updates-runtime-patches-library-delete-cache-management-trophies-big-picture-savestate-management-selected-boot\",\"settings\":\"global-and-per-game-cfg-root-catalog-title-database-recommendations-presets\",\"rpcn\":\"servers-account-social-online\",\"build264\":\"NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1\",\"build265\":\"NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1\",\"build266\":\"NEOSTATION_BUILD266_JIT_V09_SHADER_V1\",\"build301\":\"NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1\",\"build302\":\"NEOSTATION_BUILD302_RESERVED_STARTUP_V1\",\"jit_backport\":\"505a85e5a8f2cdff1cd63168bd2c56b0f92282bf\",\"lto\":\"thin-rpcs3-core-only\",\"performance\":\"fps-cpu-rsx-memory\",\"lifecycle\":\"pause-resume-stop-big-picture\",\"media_codecs\":true}";
-+}
-+
-+extern "C" rpcs3_ios_status neostation_rpcs3_adopt_jit_layout(u64 code, u64 data, u64 code_size, u64 data_size) noexcept
-+{
-+	std::lock_guard lock(g_api_mutex);
-+	if (g_initialization_attempted || g_runtime_pointers_published)
-+	{
-+		set_error("RPCS3_VA_ADOPTION_INVALID_STATE: Core startup is already active");
-+		return RPCS3_IOS_INVALID_STATE;
-+	}
-+	if (!rpcs3::ios::jit::accept_host_layout(code, data, code_size, data_size))
-+	{
-+		set_error(rpcs3::ios::jit::last_error());
-+		return RPCS3_IOS_JIT_MAPPING_FAILED;
-+	}
-+	return RPCS3_IOS_OK;
-+}
-+
-+extern "C" rpcs3_ios_status neostation_rpcs3_reset_failed_startup(void) noexcept
-+{
-+	std::lock_guard lock(g_api_mutex);
-+	// Reclaiming published trampolines is unsafe. The transaction can still be
-+	// closed, but this precise state requires restarting the process.
-+	if (g_runtime_pointers_published || g_emu_started)
-+	{
-+		set_error("RPCS3_CORE_PUBLISHED_STATE_RESTART_REQUIRED: preserve the original startup failure");
-+		return RPCS3_IOS_INVALID_STATE;
-+	}
-+	if (!rpcs3::ios::jit::reset_failed_layout())
-+	{
-+		set_error(rpcs3::ios::jit::last_error());
-+		return RPCS3_IOS_JIT_MAPPING_FAILED;
-+	}
-+	g_lifecycle = rpcs3::ios::lifecycle{};
-+	g_initialization_attempted = false;
-+	// Reuse the one registered listener, never append another on retry.
-+	rpcs3::ios::jit::set_diagnostic_callback(nullptr);
-+	g_config = {};
-+	return RPCS3_IOS_OK;
++	return "{\"abi\":30,\"frontend\":\"ios\",\"upstream\":\"fdcfded8dfd3060af66bda0a3ac4635458980038\",\"llvm\":\"ca7933e47d3a3451d81e72ac174dcb5aa28b59d1\",\"jit\":\"sealed-arena\",\"neostation_jit\":\"NEOSTATION_DYNAMIC_JIT_V5\",\"renderer\":\"vulkan-moltenvk\",\"moltenvk\":\"1.4.2\",\"ffmpeg\":\"8.1.1\",\"audio\":\"remoteio\",\"input\":\"gamecontroller-multiplayer-rumble\",\"games\":\"pkg-rap-iso-zip-folder-updates-runtime-patches-library-delete-cache-management-trophies-big-picture-savestate-management-selected-boot\",\"settings\":\"global-and-per-game-cfg-root-catalog-title-database-recommendations-presets\",\"rpcn\":\"servers-account-social-online\",\"build264\":\"NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1\",\"build265\":\"NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1\",\"build266\":\"NEOSTATION_BUILD266_JIT_V09_SHADER_V1\",\"build301\":\"NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1\",\"jit_backport\":\"505a85e5a8f2cdff1cd63168bd2c56b0f92282bf\",\"lto\":\"thin-rpcs3-core-only\",\"performance\":\"fps-cpu-rsx-memory\",\"lifecycle\":\"pause-resume-stop-big-picture\",\"media_codecs\":true}";
  }
  
  extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config) noexcept
@@ -5020,20 +4855,20 @@ index 74a6dc7..65ee5c8 100644
  		return RPCS3_IOS_INVALID_STATE;
  	}
  
-@@ -1288,41 +1359,95 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1288,41 +1319,94 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		set_error("RPCS3Core initialization state transition failed");
  		return result;
  	}
 +	g_initialization_attempted = true;
-+
+ 
+-	if (!rpcs3::ios::jit::is_ready())
 +	g_application_support_path = config->application_support_path;
 +	g_cache_path = config->cache_path;
 +	g_config = *config;
 +	g_config.application_support_path = g_application_support_path.c_str();
 +	g_config.cache_path = g_cache_path.c_str();
 +	rpcs3::ios::jit::set_diagnostic_callback(&emit_jit_diagnostic);
- 
--	if (!rpcs3::ios::jit::is_ready())
++
 +	auto fail_initialize = [&](rpcs3_ios_status status, std::string_view stage, std::string detail)
  	{
 -		set_error(rpcs3::ios::jit::last_error());
@@ -5056,27 +4891,26 @@ index 74a6dc7..65ee5c8 100644
 -	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
 -		!rpcs3::ios::jit::seal_arena())
 +
-+	if (!g_log_listener)
++	g_log_listener = std::make_unique<callback_log_listener>();
++	logs::listener::add(g_log_listener.get());
++	emit_log(2, "jit_initialize_begin");
++
++	if (!rpcs3::ios::jit::is_ready())
  	{
 -		set_error(rpcs3::ios::jit::last_error());
 -		g_lifecycle.finish_initialize(false);
 -		return RPCS3_IOS_JIT_MAPPING_FAILED;
-+		g_log_listener = std::make_unique<callback_log_listener>();
-+		logs::listener::add(g_log_listener.get());
++		return fail_initialize(RPCS3_IOS_JIT_UNAVAILABLE, "debugger_readiness",
++			rpcs3::ios::jit::last_error());
 +	}
-+	emit_log(2, "jit_initialize_begin");
-+
-+	// Fresh PID/nonce ownership is proved by the host. The first Universal
-+	// command prepares the actual arena, not a disposable readiness page.
 +
 +	emit_log(2, fmt::format("requested_code_capacity policy=%u", config->expanded_jit_arena));
 +	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena))
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_prepare",
 +			rpcs3::ios::jit::last_error());
- 	}
- 
-+	g_runtime_pointers_published = true;
++	}
++
 +	emit_log(2, "asmjit_global_runtime_begin");
 +	if (!asmjit::initialize_global_runtime())
 +	{
@@ -5097,7 +4931,7 @@ index 74a6dc7..65ee5c8 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "ppu_hle_trampolines",
 +			trampoline_error + "; " + rpcs3::ios::jit::last_error());
-+	}
+ 	}
 +	emit_log(2, "ppu_trampoline_init_end");
 +
 +	trampoline_error.clear();
@@ -5115,7 +4949,7 @@ index 74a6dc7..65ee5c8 100644
 +			rpcs3::ios::jit::last_error());
 +	}
 +	emit_log(2, "jit_initialize_success");
-+
+ 
  	try
  	{
 -		g_application_support_path = config->application_support_path;
@@ -5139,7 +4973,7 @@ index 74a6dc7..65ee5c8 100644
  		// A developer can request one bounded SPU profile through the injected
  		// cache root. Consume the request so subsequent launches stay unchanged.
  		const std::string profile_request = fs::get_cache_dir() + "jit-profile.once";
-@@ -1385,8 +1510,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1385,8 +1469,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		Emu.SetCallbacks(make_callbacks());
  		Emu.SetSupportedRenderers({video_renderer::vulkan});
  		Emu.SetDefaultRenderer(video_renderer::vulkan);
@@ -5148,7 +4982,7 @@ index 74a6dc7..65ee5c8 100644
  		Emu.SetDefaultGraphicsAdapter("iOS Metal GPU");
  		Emu.SetHasGui(false);
  		Emu.SetHeadless(false);
-@@ -1397,6 +1520,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1397,6 +1479,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		g_accept_display_surfaces = true;
  		g_accept_pad_state = true;
  		emit_log(4, "RPCS3 Emu.Init completed with the iOS Vulkan/MoltenVK and RemoteIO frontend");
@@ -5156,7 +4990,7 @@ index 74a6dc7..65ee5c8 100644
  		emit_jit_arena_statistics("after core initialization");
  		return RPCS3_IOS_OK;
  	}
-@@ -1519,6 +1643,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
+@@ -1519,6 +1602,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
  
  		using test_function = uint64_t (*)(uint64_t);
  		const auto function_address = compiler.get("rpcs3_ios_test_function");
@@ -5164,7 +4998,7 @@ index 74a6dc7..65ee5c8 100644
  		if (!function_address)
  		{
  			set_error("LLVM did not publish the self-test function");
-@@ -3161,7 +3286,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
+@@ -3161,7 +3245,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
  		}
  		bool custom_config = false;
  		const bool loaded = load_settings_for_api(title_id, custom_config);
@@ -5173,7 +5007,7 @@ index 74a6dc7..65ee5c8 100644
  		if (!loaded)
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3233,12 +3358,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
+@@ -3233,12 +3317,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
  		{
  			return result;
  		}
@@ -5192,7 +5026,7 @@ index 74a6dc7..65ee5c8 100644
  		return RPCS3_IOS_OK;
  	}
  	catch (const std::exception& error)
-@@ -3310,7 +3438,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
+@@ -3310,7 +3397,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
  
  	try
  	{
@@ -5202,7 +5036,7 @@ index 74a6dc7..65ee5c8 100644
  		{
  			set_error(fmt::format("Unable to remove the custom configuration for %s", title_id));
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3388,10 +3517,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
+@@ -3388,10 +3476,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
  		}
@@ -5213,7 +5047,7 @@ index 74a6dc7..65ee5c8 100644
  		normalize_current_game_resolution(game.resolution);
  		const auto result = finish_game_settings_preset_result(
  			rpcs3::ios::save_current_game_settings_preset(title_id, name));
-@@ -4444,6 +4569,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4444,6 +4528,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  	const char* savestate_id) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -5226,7 +5060,7 @@ index 74a6dc7..65ee5c8 100644
  	if (!title_id || !title_id[0])
  	{
  		set_error("An installed title ID is required");
-@@ -4486,7 +4617,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4486,7 +4576,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  			return RPCS3_IOS_GAME_NOT_FOUND;
  		}
  
@@ -5265,7 +5099,7 @@ index 74a6dc7..65ee5c8 100644
  		if (!requested_savestate_id.empty())
  		{
  			const auto savestates = enumerate_title_savestates(game->title_id, game->path);
-@@ -4503,21 +4664,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4503,21 +4623,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  				return RPCS3_IOS_BOOT_FAILED;
  			}
  			boot_path = selected->path;
@@ -5287,7 +5121,7 @@ index 74a6dc7..65ee5c8 100644
  		}
  
  		if (requested_savestate_id.empty())
-@@ -4730,9 +4876,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
+@@ -4730,9 +4835,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
  	return RPCS3_IOS_INTERNAL_ERROR;
  }
  
@@ -5467,7 +5301,7 @@ index 74a6dc7..65ee5c8 100644
  	if (g_lifecycle.state() != RPCS3_IOS_STATE_READY)
  	{
  		set_error("RPCS3Core must be ready before stopping emulation");
-@@ -4784,6 +5100,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
+@@ -4784,6 +5059,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
  extern "C" rpcs3_ios_status rpcs3_ios_shutdown(void) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -5481,10 +5315,10 @@ index 74a6dc7..65ee5c8 100644
  	if (const auto result = g_lifecycle.begin_shutdown(should_run); result != RPCS3_IOS_OK)
  	{
 diff --git a/rpcs3/ios/RPCS3IOS.exports b/rpcs3/ios/RPCS3IOS.exports
-index d7529ab..2452f28 100644
+index d7529ab6a..0c88612c9 100644
 --- a/rpcs3/ios/RPCS3IOS.exports
 +++ b/rpcs3/ios/RPCS3IOS.exports
-@@ -72,3 +72,9 @@ _rpcs3_ios_stop_emulation
+@@ -72,3 +72,7 @@ _rpcs3_ios_stop_emulation
  _rpcs3_ios_get_state
  _rpcs3_ios_shutdown
  _rpcs3_ios_last_error
@@ -5492,10 +5326,8 @@ index d7529ab..2452f28 100644
 +_neostation_rpcs3_ios_enumerate_savestates_live
 +_neostation_rpcs3_ios_get_savestate_status
 +_neostation_rpcs3_ios_save_state_slot
-+_neostation_rpcs3_adopt_jit_layout
-+_neostation_rpcs3_reset_failed_startup
 diff --git a/rpcs3/ios/RPCS3IOS.h b/rpcs3/ios/RPCS3IOS.h
-index 20526d0..a24a00d 100644
+index 20526d090..5be3a76bb 100644
 --- a/rpcs3/ios/RPCS3IOS.h
 +++ b/rpcs3/ios/RPCS3IOS.h
 @@ -139,6 +139,7 @@ typedef struct rpcs3_ios_config
@@ -5506,17 +5338,8 @@ index 20526d0..a24a00d 100644
      uint32_t expanded_jit_arena;
      uint32_t reserved;
  } rpcs3_ios_config;
-@@ -501,6 +502,8 @@ typedef struct rpcs3_ios_performance_metrics
- RPCS3_IOS_EXPORT uint32_t rpcs3_ios_abi_version(void) RPCS3_IOS_NOEXCEPT;
- RPCS3_IOS_EXPORT const char* rpcs3_ios_build_info(void) RPCS3_IOS_NOEXCEPT;
- RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config) RPCS3_IOS_NOEXCEPT;
-+RPCS3_IOS_EXPORT rpcs3_ios_status neostation_rpcs3_adopt_jit_layout(uint64_t code, uint64_t data, uint64_t code_size, uint64_t data_size) RPCS3_IOS_NOEXCEPT;
-+RPCS3_IOS_EXPORT rpcs3_ios_status neostation_rpcs3_reset_failed_startup(void) RPCS3_IOS_NOEXCEPT;
- // Validates an opaque response from RPCS3's official configuration endpoint,
- // atomically caches it, and publishes title lookups used by Emulator::Load.
- RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_update_config_database(
 diff --git a/rpcs3/ios/RPCS3IOSContract.h b/rpcs3/ios/RPCS3IOSContract.h
-index b4602fe..43989da 100644
+index b4602fea9..43989da41 100644
 --- a/rpcs3/ios/RPCS3IOSContract.h
 +++ b/rpcs3/ios/RPCS3IOSContract.h
 @@ -34,7 +34,9 @@ inline rpcs3_ios_status validate_config_contract(const rpcs3_ios_config* config)
@@ -5531,7 +5354,7 @@ index b4602fe..43989da 100644
  		return RPCS3_IOS_INVALID_ARGUMENT;
  	}
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.cpp b/rpcs3/ios/RPCS3IOSPerformance.cpp
-index d800542..8e15f0d 100644
+index d8005424b..8e15f0d56 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.cpp
 +++ b/rpcs3/ios/RPCS3IOSPerformance.cpp
 @@ -2,12 +2,24 @@
@@ -6208,7 +6031,7 @@ index d800542..8e15f0d 100644
  {
  #ifdef RPCS3_IOS
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.h b/rpcs3/ios/RPCS3IOSPerformance.h
-index 88392e0..568d036 100644
+index 88392e05f..568d03679 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.h
 +++ b/rpcs3/ios/RPCS3IOSPerformance.h
 @@ -15,6 +15,25 @@ void reset_performance_metrics();
@@ -6238,7 +6061,7 @@ index 88392e0..568d036 100644
  // limit. The query is intentionally cheap enough for frame-boundary sampling.
  u64 available_process_memory_headroom() noexcept;
 diff --git a/rpcs3/ios/RPCS3IOSSettings.cpp b/rpcs3/ios/RPCS3IOSSettings.cpp
-index b7b0474..0d698bc 100644
+index b7b047471..0d698bcc8 100644
 --- a/rpcs3/ios/RPCS3IOSSettings.cpp
 +++ b/rpcs3/ios/RPCS3IOSSettings.cpp
 @@ -1,5 +1,8 @@
@@ -6425,7 +6248,7 @@ index b7b0474..0d698bc 100644
  {
  	switch (error)
 diff --git a/rpcs3/ios/RPCS3IOSSettings.h b/rpcs3/ios/RPCS3IOSSettings.h
-index 74abaa0..b00e894 100644
+index 74abaa0cb..b00e89473 100644
 --- a/rpcs3/ios/RPCS3IOSSettings.h
 +++ b/rpcs3/ios/RPCS3IOSSettings.h
 @@ -75,6 +75,10 @@ bool save_global_settings() noexcept;
@@ -6440,7 +6263,7 @@ index 74abaa0..b00e894 100644
  std::string_view settings_load_error_detail(settings_load_error error) noexcept;
  game_settings_preset_result enumerate_game_settings_presets(
 diff --git a/rpcs3/ios/tests/JITArenaAllocatorTests.cpp b/rpcs3/ios/tests/JITArenaAllocatorTests.cpp
-index 22e57cf..397cd0e 100644
+index 22e57cfff..397cd0e4e 100644
 --- a/rpcs3/ios/tests/JITArenaAllocatorTests.cpp
 +++ b/rpcs3/ios/tests/JITArenaAllocatorTests.cpp
 @@ -15,6 +15,46 @@ int main()
@@ -6492,7 +6315,7 @@ index 22e57cf..397cd0e 100644
  	arena_range low;
 diff --git a/rpcs3/ios/tests/NativeProgressCompletionTests.cpp b/rpcs3/ios/tests/NativeProgressCompletionTests.cpp
 new file mode 100644
-index 0000000..cc8d484
+index 000000000..cc8d484f3
 --- /dev/null
 +++ b/rpcs3/ios/tests/NativeProgressCompletionTests.cpp
 @@ -0,0 +1,58 @@
@@ -6555,7 +6378,7 @@ index 0000000..cc8d484
 +		{"", 0, 0, 0, 0, 9, 9}}, true, 2);
 +}
 diff --git a/rpcs3/util/serialization_ext.cpp b/rpcs3/util/serialization_ext.cpp
-index cd3dfab..e6901e4 100644
+index cd3dfab08..e6901e4f6 100644
 --- a/rpcs3/util/serialization_ext.cpp
 +++ b/rpcs3/util/serialization_ext.cpp
 @@ -14,6 +14,7 @@

@@ -1,16 +1,17 @@
-name: RPCS3 recovery core
-run-name: RPCS3 recovery core Build 303 • ${{ github.sha }}
+name: RPCS3 passive startup core
+run-name: RPCS3 passive startup Core • ${{ github.sha }}
 on:
   push:
     branches: [experimental]
     paths:
       - '.github/workflows/rpcs3-core.yml'
-      - 'build-utils/build_rpcs3_recovery_core.sh'
-      - 'build-utils/patch_rpcs3_build301_passive_dlopen.py'
-      - 'build-utils/patch_rpcs3_build303_restartable_lifecycle.py'
-      - 'build-utils/validate_rpcs3_recovery_core.py'
-      - 'test/rpcs3_recovery_core_contract_test.py'
-      - 'test/rpcs3_build303_restartable_lifecycle_test.py'
+      - 'build-utils/build_rpcs3_embedded_core.sh'
+      - 'build-utils/materialize_rpcs3_core.py'
+      - 'build-utils/rpcs3/embedded-core.patch'
+      - 'build-utils/rpcs3/canonical-source.json'
+      - 'build-utils/validate_rpcs3_embedded_core.py'
+      - 'test/rpcs3_atomic_startup_test.py'
+      - 'test/rpcs3_embedded_core_validator_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    name: Build recovery RPCS3 Core arm64
+    name: Build passive RPCS3 Core arm64
     runs-on: macos-15
     timeout-minutes: 180
     env:
@@ -35,35 +36,35 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-      - name: Validate recovery contracts before compiling
+      - name: Validate startup contracts before compiling
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          bash -n build-utils/build_rpcs3_recovery_core.sh
-          python3 -m py_compile build-utils/patch_rpcs3_build301_passive_dlopen.py build-utils/patch_rpcs3_build303_restartable_lifecycle.py build-utils/validate_rpcs3_recovery_core.py
-          python3 test/rpcs3_recovery_core_contract_test.py
+          bash -n build-utils/build_rpcs3_embedded_core.sh
+          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py
+          python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
-          python3 test/rpcs3_build303_restartable_lifecycle_test.py
+          python3 test/rpcs3_atomic_startup_test.py
           python3 test/rpcs3_jit_handshake_test.py
           node test/rpcs3_debugger_handshake_test.js
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
           mkdir -p dist/rpcs3 build/rpcs3-core-diagnostics
-      - name: Build Build266 allocator plus Build301 passive dlopen
+      - name: Build Core from the single reviewed source delta
         shell: bash
         run: |
           set -euo pipefail
           env -u GITHUB_ENV OUTPUT_DIR="$PWD/dist/rpcs3" BUILD_JOBS=3 \
-            bash build-utils/build_rpcs3_recovery_core.sh 2>&1 | tee build/rpcs3-core-diagnostics/build.log
-      - name: Validate recovery Core identity and exports
+            bash build-utils/build_rpcs3_embedded_core.sh 2>&1 | tee build/rpcs3-core-diagnostics/build.log
+      - name: Validate passive Core identity and exports
         shell: bash
         run: |
           set -euo pipefail
           CORE=dist/rpcs3/libRPCS3Core.dylib
           test -s "$CORE"
-          python3 build-utils/validate_rpcs3_recovery_core.py "$CORE"
+          python3 build-utils/validate_rpcs3_embedded_core.py "$CORE"
           python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" | tee build/rpcs3-core-diagnostics/passive-dlopen.txt
           file "$CORE" | tee build/rpcs3-core-diagnostics/file.txt
           lipo -archs "$CORE" | tee build/rpcs3-core-diagnostics/archs.txt
@@ -85,11 +86,11 @@ jobs:
             'abi_version':int(Path('dist/rpcs3/RPCS3_IOS_ABI.txt').read_text().strip()),
             'sha256':hashlib.sha256(core.read_bytes()).hexdigest(),
             'architectures':['arm64'],
-            'jit_policy':'Build266 adaptive Core-owned arena + Build301 passive dlopen',
-            'reservation':'Core-owned mmap exact-hint search; no Build295/302 fixed host reservation',
+            'jit_policy':'Build266 adaptive Core-owned arena + passive dlopen',
+            'reservation':'Atomic exact non-overwriting vm_allocate per Core candidate',
             'lifecycle_marker':'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
-            'restartable_lifecycle_marker':'NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1',
-            'allocator_marker':'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
+            'allocator_marker':'NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1',
+            'source_patch_sha256':json.loads(Path('build-utils/rpcs3/canonical-source.json').read_text())['patch_sha256'],
             'device_runtime_tested':False,
           }
           Path('dist/rpcs3/identity.json').write_text(json.dumps(identity,indent=2)+'\n')

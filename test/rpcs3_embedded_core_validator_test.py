@@ -46,8 +46,8 @@ class EmbeddedCoreValidatorTests(unittest.TestCase):
                                      string_offset, len(strings)))
             image.extend(struct.pack('<IBBHQ', 1, 0x01, 0, 0, 0))
             image.extend(strings)
-        markers = [marker for _, marker in validator.REQUIRED_MARKERS]
-        markers[0] = jit_marker
+        markers = [jit_marker if label == 'Build 266 JIT' else marker
+                   for label, marker in validator.REQUIRED_MARKERS]
         return bytes(image) + b'\0'.join(markers)
 
     def test_accepts_final_build266_v5_contract(self) -> None:
@@ -56,6 +56,10 @@ class EmbeddedCoreValidatorTests(unittest.TestCase):
     def test_rejects_stale_v4_jit_marker_with_explicit_reason(self) -> None:
         with self.assertRaisesRegex(ValueError, 'Build 266 JIT.*NEOSTATION_DYNAMIC_JIT_V5'):
             validator.validate_core(self.core(jit_marker=b'NEOSTATION_DYNAMIC_JIT_V4'))
+
+    def test_rejects_reintroduced_host_memory_reservation(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'retired startup marker'):
+            validator.validate_core(self.core() + b'NEOSTATION_BUILD302_RESERVED_STARTUP_V1')
 
     def test_rejects_load_time_vm_map_import(self) -> None:
         with self.assertRaisesRegex(ValueError, 'forbidden load-time imports: _vm_map'):
