@@ -178,6 +178,7 @@ jobs:
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_memory_preflight_test.py
           python3 test/rpcs3_startup_abort_native_test.py
+          python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_reporter_send_order_test.py
           python3 test/rpcs3_host_entitlements_test.py
           python3 test/rpcs3_ipa_validation_test.py
