@@ -47,4 +47,25 @@ void main() {
     ).readAsStringSync();
     expect(source, isNot(contains('reserveAddressSpace')));
   });
+  test('native bridge has no Build 302 host reservation layer', () {
+    final bridge = File(
+      'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+    ).readAsStringSync();
+    final abi = File(
+      'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h',
+    ).readAsStringSync();
+
+    for (final retired in [
+      'Rpcs3ArenaReservation',
+      'reserveAddressSpace',
+      'adopt_jit_layout',
+      'reset_failed_startup',
+      'RPCS3_VA_NOT_RESERVED',
+      'RPCS3_VA_OWNERSHIP_CHANGED',
+    ]) {
+      expect(bridge, isNot(contains(retired)));
+      expect(abi, isNot(contains(retired)));
+    }
+  });
+
 }
