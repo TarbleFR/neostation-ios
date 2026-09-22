@@ -25,19 +25,19 @@ assert 'RPCS3JitHasActiveCoreHandshake' in jit
 
 
 
-# An incomplete boot is evidence of a crash, not proof of a corrupt PPU cache.
-assert '_consumePreviousIncompleteBootMarker(normalized)' in service
+# The minimal launch path never deletes caches or starts recovery polling.
+assert '_consumePreviousIncompleteBootMarker' not in service
+assert '_clearBootCrashMarkerWhenRunning' not in service
 assert 'Rpcs3InternalBridge.clearPpuCache(titleId)' not in service
-assert 'preserving the title PPU cache for the retry.' in service
 
-print('PASS: Core gate uses debugger probe; PPU cache preserved')
+print('PASS: Core gate uses debugger probe; launch path stays cache-neutral')
 
 assert 'confirmCoreLoadReady' in jit
 assert 'RPCS3DebuggerProbe(_probeNonce)' in jit
 assert 'RPCS3HostHasLiveDebugger' in jit
 assert 'RPCS3JitConfirmCoreLoadHandoff' in jit
 assert 'RPCS3JitConfirmCoreLoadHandoff()' in host
-assert 'NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1' in host
+assert 'NEOSTATION_RPCS3_SINGLE_DLOPEN_V1' in host
 load_boundary = host.split('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1', 1)[1].split('#define LOAD', 1)[0]
 assert load_boundary.index('RPCS3JitConfirmCoreLoadHandoff()') < load_boundary.index('dlopen(')
 assert load_boundary.count('dlopen(') == 1
@@ -45,7 +45,7 @@ assert 'for (NSString* path in candidates)' not in host
 assert 'RPCS3_IOS_EXPANDED_JIT_ARENA' not in host
 assert 'core_handoff_begin' in load_boundary
 assert 'core_handoff_end' in load_boundary
-assert 'loaded; no Core JIT initialized during dlopen' in load_boundary
+assert 'loaded through the single debugger-attached Build266 path' in load_boundary
 prepare_boundary = jit.split('if (![call.method isEqualToString:@"prepareJit"])', 1)[1]
 assert '[session confirmCoreLoadReady]' not in prepare_boundary
 assert 'final nonce validation is reserved for the Core load boundary' in prepare_boundary
