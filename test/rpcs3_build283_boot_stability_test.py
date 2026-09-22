@@ -23,13 +23,10 @@ assert 'RPCS3SharedDiagnosticsWriter' in diag
 assert 'NSFileHandle* _diagnosticFile;' in diag
 assert '[file synchronizeFile];' in diag
 
-assert 'incomplete-boot-title.txt' in service
-assert '_consumePreviousIncompleteBootMarker(normalized)' in service
+assert 'incomplete-boot-title.txt' not in service
+assert '_consumePreviousIncompleteBootMarker' not in service
+assert '_armBootCrashMarker' not in service
+assert '_clearBootCrashMarkerWhenRunning' not in service
 assert 'Rpcs3InternalBridge.clearPpuCache(titleId)' not in service
-assert 'preserving the title PPU cache for the retry.' in service
-assert '_armBootCrashMarker(normalized)' in service
-assert '_clearBootCrashMarkerWhenRunning(bootMarker)' in service
-assert 'state == 5 || state == 6' in service
-assert "await marker.writeAsString(titleId, flush: true)" in service
 
-print('PASS: bounded centralized diagnostics, durable milestones, non-destructive incomplete-boot recovery')
+print('PASS: bounded centralized diagnostics, durable milestones, no launch-time cache deletion or boot polling')
