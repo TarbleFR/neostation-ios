@@ -920,7 +920,7 @@ class Rpcs3InternalService {
         if (await bootMarker.exists()) await bootMarker.delete();
       } catch (_) {}
       throw Rpcs3InternalException(
-        'bootFailed',
+        report['code']?.toString() ?? 'RPCS3_GAME_BOOT_FAILED',
         report['message']?.toString() ?? 'RPCS3 could not boot this game.',
       );
     }
