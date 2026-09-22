@@ -44,34 +44,25 @@ void main() {
 
       expect(pairingIndex, greaterThanOrEqualTo(0));
       expect(prepareIndex, greaterThan(pairingIndex));
-      expect(
-        service,
-        contains('static final _startup = Rpcs3StartupTransaction()'),
-      );
+      expect(service, contains('static Future<void>? _runtimePreparation;'));
+      expect(service, isNot(contains('Rpcs3StartupTransaction')));
       expect(service, contains("'RPCS3_JIT_PREPARATION_TIMEOUT'"));
       expect(service, isNot(contains("current['debugged'] == true")));
       expect(service, contains('Duration(minutes: 11)'));
       expect(service, isNot(contains('Duration(seconds: 90)')));
     });
 
-    test('constructor crash diagnostics bracket RPCS3 JIT page preparation', () {
-      final early = File(
-        'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3EarlyLoaderDiagnostics.h',
-      ).readAsStringSync();
+    test('proven Universal helper prepares the requested JIT region directly', () {
       final script = File(
         'packages/rpcs3_jit_helper/ios/Resources/rpcs3-universal.js',
       ).readAsStringSync();
 
-      expect(early, contains('NEOSTATION_EARLY_LOADER_295'));
-      expect(
-        early,
-        contains(
-          'next expected event is Core JIT region preparation or dlopen return',
-        ),
-      );
-      expect(script, contains('NEOSTATION_RPCS3_PREPARE_BEGIN'));
-      expect(script, contains('NEOSTATION_RPCS3_PREPARE_END'));
+      expect(script, contains('const CMD_PREPARE_REGION = 1;'));
+      expect(script, contains('function JIT26PrepareRegion(brkResponse)'));
       expect(script, contains('prepare_memory_region(jitPageAddress, x1)'));
+      expect(script, contains('prepareJITPageResponse !== "OK"'));
+      expect(script, isNot(contains('NEOSTATION_RPCS3_PREPARE_BEGIN')));
+      expect(script, isNot(contains('NEOSTATION_RPCS3_PREPARE_END')));
     });
 
     test(
@@ -303,24 +294,37 @@ void main() {
       expect(launcher, contains('Rpcs3InternalService.launchTitle'));
       expect(launcher, isNot(contains('openJitRequest')));
       expect(launcher, isNot(contains('com.xitrix.RPCS3')));
-      expect(service, contains('await ensureGameplayInitialized();'));
+      expect(
+        launcher,
+        contains('await Rpcs3InternalService.ensureGameplayInitialized();'),
+      );
+      expect(service, isNot(contains('await ensureGameplayInitialized();')));
       expect(plugin, isNot(contains('setTitle:@"Start"')));
       expect(plugin, isNot(contains('setTitle:@"Commencer"')));
       expect(service, isNot(contains('com.xitrix.RPCS3')));
     });
 
     test('firmware remains mandatory before direct boot', () {
+      final launcher = File(
+        'lib/services/rpcs3_launch_service.dart',
+      ).readAsStringSync();
       final service = File(
         'lib/services/rpcs3_internal_service.dart',
       ).readAsStringSync();
-      final gameplayInit = service.indexOf(
-        'await ensureGameplayInitialized();',
+
+      final gameplayInit = launcher.indexOf(
+        'await Rpcs3InternalService.ensureGameplayInitialized();',
+      );
+      final serviceLaunch = launcher.indexOf(
+        'Rpcs3InternalService.launchTitle',
+        gameplayInit,
       );
       final firmwareCheck = service.indexOf("'firmwareRequired'");
       final launchCall = service.indexOf('Rpcs3InternalBridge.launchGame');
 
       expect(gameplayInit, greaterThanOrEqualTo(0));
-      expect(firmwareCheck, greaterThan(gameplayInit));
+      expect(serviceLaunch, greaterThan(gameplayInit));
+      expect(firmwareCheck, greaterThanOrEqualTo(0));
       expect(launchCall, greaterThan(firmwareCheck));
     });
 
