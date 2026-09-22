@@ -75,7 +75,7 @@ void main() {
     });
 
     test(
-      'JIT handoff precedes passive dlopen and arena policy stays explicit',
+      'RPCS3 launch is one linear transaction with the proven Core',
       () {
         final service = File(
           'lib/services/rpcs3_internal_service.dart',
@@ -83,84 +83,48 @@ void main() {
         final bridge = File(
           'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
         ).readAsStringSync();
-        final dartBridge = File(
-          'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
-        ).readAsStringSync();
 
-        final serviceJit = service.indexOf('attach: () async');
-        final serviceInitialize = service.indexOf(
-          'Rpcs3InternalBridge.initialize',
-        );
-        final serviceComplete = service.indexOf(
-          'Rpcs3InternalBridge.completeJit',
-        );
-        expect(serviceJit, greaterThanOrEqualTo(0));
-        expect(serviceInitialize, greaterThan(serviceJit));
-        expect(serviceComplete, greaterThan(serviceInitialize));
-        expect(
-          service.indexOf('_initialized = ready;'),
-          greaterThan(serviceComplete),
-        );
+        final route = service.indexOf('LocalDevVpnRouteService.ensureReachable');
+        final pairing = service.indexOf('PairingFileService.hasStoredPairingFile');
+        final attach = service.indexOf('Rpcs3InternalBridge.prepareJit');
+        final initialize = service.indexOf('Rpcs3InternalBridge.initialize');
+        final complete = service.indexOf('Rpcs3InternalBridge.completeJit');
+        expect(route, greaterThanOrEqualTo(0));
+        expect(pairing, greaterThan(route));
+        expect(attach, greaterThan(pairing));
+        expect(initialize, greaterThan(attach));
+        expect(complete, greaterThan(initialize));
+
+        expect(service, isNot(contains('Rpcs3StartupTransaction')));
+        expect(service, isNot(contains('abortStartup')));
+        expect(service, isNot(contains('verifyJitExecution')));
+        expect(service, isNot(contains('reserveAddressSpace')));
+        expect(service, isNot(contains('_bootCrashMarker')));
+        expect(service, isNot(contains('bootProgress')));
+        expect(service, contains('expandedJitRegion: false'));
 
         expect(bridge, contains('RPCS3HostIsDebugged'));
-        expect(bridge, isNot(contains('RPCS3ProbeExecutableMemory')));
-        expect(bridge, isNot(contains('_reservation')));
-        expect(bridge, isNot(contains('reset_failed_startup')));
+        expect(bridge, contains('RPCS3JitConfirmCoreLoadHandoff'));
+        expect(bridge, contains('NEOSTATION_RPCS3_SINGLE_DLOPEN_V1'));
+        expect(bridge, contains('rpcs3_ios_run_llvm_self_test'));
+        expect(bridge, isNot(contains('_startupEntered')));
+        expect(bridge, isNot(contains('abortStartup')));
+        expect(bridge, isNot(contains('verifyJitExecution')));
+        expect(bridge, isNot(contains('RPCS3JitTransactionIsClosed')));
         expect(bridge, isNot(contains('Rpcs3ArenaReservation')));
-        expect(bridge, contains('verifyJitExecution'));
-        expect(bridge, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));
-        expect(bridge, isNot(contains('RPCS3JitHasActiveCoreHandshake()')));
-        expect(
-          bridge.indexOf('if (!RPCS3JitConfirmCoreLoadHandoff())'),
-          allOf(
-            greaterThanOrEqualTo(0),
-            lessThan(bridge.indexOf('handle = dlopen(')),
-          ),
-        );
-        expect(bridge, contains('NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1'));
-        expect(bridge, isNot(contains('RPCS3_IOS_EXPANDED_JIT_ARENA')));
+        expect(bridge, isNot(contains('reset_failed_startup')));
         expect('dlopen('.allMatches(bridge).length, 1);
-        final dlopenIndex = bridge.indexOf(
-          'dlopen(path.fileSystemRepresentation',
-        );
-        final arenaPolicyIndex = bridge.indexOf(
-          'options.expanded_jit_region = expanded ? 1 : 0;',
-        );
-        final initializeCallIndex = bridge.indexOf(
-          'self->_api.initialize(&options)',
-        );
-        expect(dlopenIndex, greaterThanOrEqualTo(0));
-        expect(arenaPolicyIndex, greaterThan(dlopenIndex));
-        expect(initializeCallIndex, greaterThan(arenaPolicyIndex));
-        expect(bridge, contains('@"rpcs3_initialize_begin"'));
-        expect(bridge, contains('@"rpcs3_initialize_end"'));
-        expect(bridge, contains('@"rpcs3_initialize_failed"'));
 
-        // Build 234 crashed after successfully preparing the optional 512 MiB
-        // arena: generated ARM64 execution jumped to 0x7000000000. Keep every
-        // embedded entry point on the stable standard Universal arena.
-        expect(service, contains('expandedJitRegion: false'));
-        expect(service, isNot(contains('expandedJitRegion: true')));
-        expect(dartBridge, contains('bool expandedJitRegion = false'));
-        expect(bridge, contains('BOOL expanded = NO;'));
-        expect(
-          bridge,
-          isNot(
-            contains('BOOL expanded = [args[@"expandedJitRegion"] boolValue];'),
-          ),
-        );
-
-        final diagnosticsStart = bridge.indexOf(
-          'if ([call.method isEqualToString:@"diagnostics"])',
-        );
-        final initializeStart = bridge.indexOf(
-          'if ([call.method isEqualToString:@"initialize"])',
-        );
-        final diagnosticsBlock = bridge.substring(
-          diagnosticsStart,
-          initializeStart,
-        );
-        expect(diagnosticsBlock, isNot(contains('loadCoreWithExpandedJit')));
+        final handoff = bridge.indexOf('if (!RPCS3JitConfirmCoreLoadHandoff())');
+        final dlopen = bridge.indexOf('handle = dlopen(');
+        final initializeCall = bridge.indexOf('self->_api.initialize(&options)');
+        final selfTest = bridge.indexOf('rpcs3_ios_run_llvm_self_test');
+        final boot = bridge.indexOf('self->_api.boot_game');
+        expect(handoff, greaterThanOrEqualTo(0));
+        expect(dlopen, greaterThan(handoff));
+        expect(initializeCall, greaterThan(dlopen));
+        expect(selfTest, greaterThan(initializeCall));
+        expect(boot, greaterThan(selfTest));
       },
     );
 
