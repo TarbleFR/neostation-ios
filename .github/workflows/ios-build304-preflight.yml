@@ -22,6 +22,8 @@ on:
       - 'test/rpcs3_debugger_handshake_test.js'
       - 'test/rpcs3_stop_reply_behavior_test.js'
       - 'test/rpcs3_jit_handshake_test.py'
+      - 'test/rpcs3_build283_boot_stability_test.py'
+      - 'test/rpcs3_build285_core_handoff_test.py'
       - 'test/rpcs3_internal_integration_test.dart'
       - 'test/rpcs3_lazy_load_contract_test.dart'
       - '.github/workflows/ios-ci.yml'
