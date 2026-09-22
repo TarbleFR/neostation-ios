@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
@@ -39,8 +41,10 @@ void main() {
     },
   );
 
-  test('address reservation does not call initialization or JIT', () async {
-    expect(await Rpcs3InternalBridge.reserveAddressSpace(), {'success': true});
-    expect(calls.map((call) => call.method), ['reserveAddressSpace']);
+  test('host bridge exposes no fixed VA reservation call', () {
+    final source = File(
+      'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart',
+    ).readAsStringSync();
+    expect(source, isNot(contains('reserveAddressSpace')));
   });
 }
