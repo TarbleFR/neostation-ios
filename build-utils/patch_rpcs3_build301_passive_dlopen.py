@@ -379,7 +379,11 @@ void set_error(std::string message) noexcept
 """,
         "JIT diagnostic emitter",
     )
-    # Reservation summary without flooding every rejected candidate.
+    # Build 303 recovery baseline starts from Build 266's non-overwrite mmap-hint
+    # reservation. Keep it Core-owned; instrument the exact result without
+    # converting it to Build 295's VM_FLAGS_FIXED policy.
+    if "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1" in text:
+        raise RuntimeError("Build 301 passive-dlopen recovery must be applied before/without Build 295")
     text = replace_once(
         text,
         """\tbegin = (begin + arena_address_step - 1) & ~(arena_address_step - 1);
@@ -388,51 +392,44 @@ void set_error(std::string message) noexcept
 """,
         """\tbegin = (begin + arena_address_step - 1) & ~(arena_address_step - 1);
 \tvm_address_t last_candidate = 0;
-\tkern_return_t last_result = KERN_INVALID_ADDRESS;
+\tint last_errno = 0;
 \tfor (vm_address_t candidate = begin; candidate <= end - size; candidate += arena_address_step)
 \t{
 \t\tlast_candidate = candidate;
 """,
-        "reservation trace variables",
+        "Build 266 reservation trace variables",
     )
     text = replace_once(
         text,
-        """\t\tconst kern_return_t result = ::vm_allocate(
-""",
-        """\t\tconst kern_return_t result = ::vm_allocate(
-""",
-        "reservation call anchor",
-    )
-    text = replace_once(
-        text,
-        """\t\t\tVM_FLAGS_FIXED | jit_vm_tag);
-\t\tif (result != KERN_SUCCESS || address != candidate)
-""",
-        """\t\t\tVM_FLAGS_FIXED | jit_vm_tag);
-\t\tlast_result = result;
-\t\tif (result != KERN_SUCCESS || address != candidate)
-""",
-        "reservation result capture",
-    )
-    text = replace_once(
-        text,
-        """\t\tif (::vm_protect(mach_task_self(), candidate, static_cast<vm_size_t>(size),
-\t\t\tfalse, VM_PROT_NONE) == KERN_SUCCESS)
+        """\t\tvoid* const mapping = ::mmap(reinterpret_cast<void*>(candidate), size, PROT_NONE,
+\t\t\tMAP_PRIVATE | MAP_ANON, jit_vm_tag, 0);
+\t\tif (mapping == MAP_FAILED)
 \t\t{
-\t\t\treturn reinterpret_cast<u8*>(candidate);
+\t\t\tcontinue;
 \t\t}
+\t\tif (mapping == reinterpret_cast<void*>(candidate))
+\t\t{
+\t\t\treturn static_cast<u8*>(mapping);
+\t\t}
+\t\t::munmap(mapping, size);
 """,
-        """\t\tconst kern_return_t protect_result = ::vm_protect(
-\t\t\tmach_task_self(), candidate, static_cast<vm_size_t>(size), false, VM_PROT_NONE);
-\t\tif (protect_result == KERN_SUCCESS)
+        """\t\terrno = 0;
+\t\tvoid* const mapping = ::mmap(reinterpret_cast<void*>(candidate), size, PROT_NONE,
+\t\t\tMAP_PRIVATE | MAP_ANON, jit_vm_tag, 0);
+\t\tif (mapping == MAP_FAILED)
+\t\t{
+\t\t\tlast_errno = errno;
+\t\t\tcontinue;
+\t\t}
+\t\tif (mapping == reinterpret_cast<void*>(candidate))
 \t\t{
 \t\t\temit_diagnostic("reservation_result candidate=" + std::to_string(candidate) +
-\t\t\t\t" size=" + std::to_string(size) + " kern_return_t=0");
-\t\t\treturn reinterpret_cast<u8*>(candidate);
+\t\t\t\t" size=" + std::to_string(size) + " errno=0 mode=mmap_hint_exact");
+\t\t\treturn static_cast<u8*>(mapping);
 \t\t}
-\t\tlast_result = protect_result;
+\t\t::munmap(mapping, size);
 """,
-        "reservation success trace",
+        "Build 266 mmap reservation diagnostics",
     )
     text = replace_once(
         text,
@@ -443,12 +440,13 @@ void set_error(std::string message) noexcept
 u8* reserve_code_data_layout""",
         """\t}
 \temit_diagnostic("reservation_result candidate=" + std::to_string(last_candidate) +
-\t\t" size=" + std::to_string(size) + " kern_return_t=" + std::to_string(last_result));
+\t\t" size=" + std::to_string(size) + " errno=" + std::to_string(last_errno) +
+\t\t" mode=mmap_hint_exact");
 \treturn nullptr;
 }
 
 u8* reserve_code_data_layout""",
-        "reservation failure trace",
+        "Build 266 reservation failure diagnostics",
     )
     text = text.replace(
         """bool prepare_arena() noexcept
