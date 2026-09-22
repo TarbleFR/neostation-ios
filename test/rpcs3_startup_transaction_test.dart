@@ -28,11 +28,6 @@ class Harness {
 
   Rpcs3StartupOperations get operations => Rpcs3StartupOperations(
     route: () => step('route', {'success': true}),
-    reserve: () => step('reserve', {
-      'success': true,
-      'code': 'RPCS3_VA_RESERVED',
-      'stage': 'va_reservation',
-    }),
     attach: () => step('attach', {'success': true, 'requiresCompletion': true}),
     initialize: () => step('initialize', {'success': true}),
     complete: () => step(
@@ -59,14 +54,13 @@ class Harness {
 
 void main() {
   test(
-    'ready only after actual reservation, initialize, detach and generated execution',
+    'ready only after route, attach, initialize, detach and generated execution',
     () async {
       final tx = Rpcs3StartupTransaction();
       final h = Harness();
       await tx.ensure(h.operations);
       expect(h.calls, [
         'route',
-        'reserve',
         'attach',
         'initialize',
         'complete',
@@ -74,7 +68,7 @@ void main() {
       ]);
       expect(tx.ready, true);
       await tx.ensure(h.operations); // no double initialization
-      expect(h.calls.length, 6);
+      expect(h.calls.length, 5);
     },
   );
   test(
@@ -87,7 +81,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(tx.ready, false);
       expect(tx.inProgress, true);
-      expect(h.calls, ['route', 'reserve', 'attach']);
+      expect(h.calls, ['route', 'attach']);
       h.attachGate!.complete();
       await Future.wait([one, two]);
       expect(h.calls.where((c) => c == 'attach').length, 1);
@@ -95,7 +89,7 @@ void main() {
     },
   );
   test(
-    'route failure does not reserve memory or touch helper; manual retry works',
+    'route failure does not touch helper or Core; manual retry works',
     () async {
       final tx = Rpcs3StartupTransaction();
       final h = Harness()..fail = 'route';
@@ -111,7 +105,6 @@ void main() {
     },
   );
   for (final phase in [
-    'reserve',
     'attach',
     'initialize',
     'complete',
@@ -178,14 +171,6 @@ void main() {
       throwsA(isA<Rpcs3StartupFailure>()),
     );
     expect(tx.phase, Rpcs3StartupPhase.blocked);
-  });
-  test('native reservation success is authoritative', () async {
-    final tx = Rpcs3StartupTransaction();
-    final h = Harness();
-    await tx.ensure(h.operations);
-    expect(tx.ready, true);
-    expect(h.calls.first, 'route');
-    expect(h.calls[1], 'reserve');
   });
   test(
     'missing detach proof and wrong execution output cannot publish ready',
