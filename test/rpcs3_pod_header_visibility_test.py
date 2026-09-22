@@ -31,13 +31,17 @@ class Rpcs3PodHeaderVisibilityTests(unittest.TestCase):
         }
         self.assertTrue(public.isdisjoint(forbidden))
 
-    def test_arena_header_remains_cpp_only_implementation_detail(self):
-        arena = (
-            ROOT
-            / "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3ArenaLayout.h"
-        ).read_text()
-        self.assertIn("#include <algorithm>", arena)
-        self.assertIn("namespace neostation::rpcs3::arena", arena)
+    def test_retired_build302_arena_headers_are_absent(self):
+        classes = ROOT / "packages/rpcs3_internal_bridge/ios/Classes"
+        retired = (
+            classes / "Rpcs3ArenaLayout.h",
+            classes / "Rpcs3ArenaReservation.h",
+        )
+        for path in retired:
+            self.assertFalse(
+                path.exists(),
+                f"retired Build 302 fixed-reservation header returned: {path.name}",
+            )
 
 if __name__ == "__main__":
     unittest.main()
