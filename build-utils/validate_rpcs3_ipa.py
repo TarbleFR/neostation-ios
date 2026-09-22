@@ -64,6 +64,11 @@ REQUIRED_CORE_SYMBOLS = (
     '_rpcs3_ios_shutdown',
 )
 
+FORBIDDEN_CORE_SYMBOLS = (
+    '_neostation_rpcs3_adopt_jit_layout',
+    '_neostation_rpcs3_reset_failed_startup',
+)
+
 
 SPRINGBOARD_ICON_FILES = {
     'NeoStationIcon60@2x.png': (120, 120),
@@ -258,6 +263,9 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
         missing_symbols = [symbol for symbol in REQUIRED_CORE_SYMBOLS if f' {symbol}' not in symbols]
         demand(not missing_symbols,
                'Packaged RPCS3 core is missing exports: ' + ', '.join(missing_symbols))
+        forbidden_symbols = [symbol for symbol in FORBIDDEN_CORE_SYMBOLS if f' {symbol}' in symbols]
+        demand(not forbidden_symbols,
+               'Packaged RPCS3 core still exports retired host-reservation ABI: ' + ', '.join(forbidden_symbols))
 
         # The core must stay dormant until the bridge explicitly dlopens it.
         # A normal Mach-O dependency would make app startup load the huge core
