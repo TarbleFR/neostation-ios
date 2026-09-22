@@ -1245,7 +1245,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
 
-    // Build 303 recovery Core owns its adaptive JIT arena. The host only
+    // The proven Build266 Core owns its adaptive JIT arena. The host only
     // controls startup ordering and never reserves or adopts fixed VA ranges.
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
@@ -1378,6 +1378,13 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     if (NSThread.isMainThread) present();
     else dispatch_sync(dispatch_get_main_queue(), present);
     if (!controller || !controller.metalLayer.device) {
+      // No game was submitted to the Core. Release the just-presented view
+      // directly so a later user launch is not rejected as already running.
+      [controller.inputController stop];
+      [controller dismissViewControllerAnimated:NO completion:nil];
+      self.gameController = nil;
+      self.activeTitleId = nil;
+      self.activeUiLocale = nil;
       result(@{@"success": @NO, @"code": @"RPCS3_DISPLAY_SURFACE_FAILED",
         @"stage": @"game_boot", @"message": @"Metal surface could not be created."});
       return;
