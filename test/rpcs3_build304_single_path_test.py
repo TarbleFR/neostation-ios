@@ -40,9 +40,10 @@ for retired in (
 handoff = bridge.index('if (!RPCS3JitConfirmCoreLoadHandoff())')
 dlopen = bridge.index('handle = dlopen(')
 initialize = bridge.index('self->_api.initialize(&options)')
-self_test = bridge.index('rpcs3_ios_run_llvm_self_test')
-boot = bridge.index('self->_api.boot_game')
-assert handoff < dlopen < initialize < self_test < boot
+launch = bridge.index('if ([call.method isEqualToString:@"launchGame"])')
+self_test = bridge.index('rpcs3_ios_run_llvm_self_test', launch)
+boot = bridge.index('self->_api.boot_game', launch)
+assert handoff < dlopen < initialize < launch < self_test < boot
 
 stop_start = bridge.index('- (void)stopAndDismiss:')
 stop_body = bridge[stop_start:]
