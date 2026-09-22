@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 302 RPCS3 Reserved Startup
-run-name: NeoStation iOS Build 302 • ${{ github.sha }}
+name: NeoStation iOS Build 303 RPCS3 Minimal Launch
+run-name: NeoStation iOS Build 303 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-302
+  group: neostation-ios-build-303
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 302 RPCS3 Reserved Startup IPA
+    name: Build 303 RPCS3 Minimal Launch IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '302'
-      IPA_NAME: 'NeoStation-iOS-Build-302-RPCS3-Reserved-Startup'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-302-RPCS3-Reserved-Startup'
+      BUILD_NUMBER: '303'
+      IPA_NAME: 'NeoStation-iOS-Build-303-RPCS3-Minimal-Launch'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-303-RPCS3-Minimal-Launch'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
@@ -549,7 +549,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 302 IPA
+      - name: Package and validate Build 303 IPA
         shell: bash
         run: |
           set -euo pipefail
