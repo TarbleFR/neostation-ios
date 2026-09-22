@@ -103,20 +103,10 @@ class Rpcs3StartupTransaction {
     try {
       await step(Rpcs3StartupPhase.route, operations.route);
       resourcesMayExist = true;
-      final reservation = await step(
-        Rpcs3StartupPhase.reserving,
-        operations.reserve,
-      );
-      if (reservation['addressSpaceReserved'] != true ||
-          reservation['codeBytes'] != 469762048 ||
-          reservation['dataBytes'] != 603979776 ||
-          reservation['budgetBytes'] != 1073741824) {
-        throw const Rpcs3StartupFailure(
-          'RPCS3_VA_PROOF_MISSING',
-          'Native reservation did not confirm the fixed 448+576 MiB layout.',
-          'reserving',
-        );
-      }
+      // The native reservation result is authoritative. Do not duplicate its
+      // memory-policy constants or replace its exact kern_return_t-derived code
+      // with a Dart-side generic proof error.
+      await step(Rpcs3StartupPhase.reserving, operations.reserve);
       final attach = await step(Rpcs3StartupPhase.attaching, operations.attach);
       await step(Rpcs3StartupPhase.initializing, operations.initialize);
       if (attach['requiresCompletion'] != false) {
@@ -167,10 +157,8 @@ class Rpcs3StartupTransaction {
           'message': cleanupError.toString(),
         };
       }
-      final retryable =
-          cleanup['success'] == true &&
-          cleanup['retryable'] == true &&
-          cleanup['transactionClosed'] == true;
+      final cleanupClosed =
+          cleanup['success'] == true && cleanup['transactionClosed'] == true;
       final failure = Rpcs3StartupFailure(
         original.code,
         original.detail,
@@ -180,11 +168,13 @@ class Rpcs3StartupTransaction {
         cleanupDetail:
             cleanup['message']?.toString() ?? 'No cleanup confirmation.',
       );
-      if (retryable) {
+      // Never retry automatically. A fully closed cleanup merely permits a
+      // later user-initiated launch. If cleanup cannot prove detach/rollback,
+      // preserve the first failure and block unsafe reuse of the same process.
+      if (cleanupClosed) {
         setPhase(Rpcs3StartupPhase.idle);
       } else {
-        _blockedFailure =
-            failure; // Preserve exact first cause, not "transaction incomplete".
+        _blockedFailure = failure;
         setPhase(Rpcs3StartupPhase.blocked);
       }
       throw failure;
