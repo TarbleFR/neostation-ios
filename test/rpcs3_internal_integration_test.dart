@@ -32,30 +32,24 @@ void main() {
       expect(helper, isNot(contains('com.xitrix.RPCS3')));
     });
 
-    test('only legacy JIT may reuse the persistent debugged flag', () {
+    test('every RPCS3 startup performs one explicit StikJIT attach', () {
       final service = File(
         'lib/services/rpcs3_internal_service.dart',
       ).readAsStringSync();
 
-      final statusIndex = service.indexOf(
-        'final current = await _jitStatus();',
-      );
-      final debuggedIndex = service.indexOf("current['debugged'] == true");
       final pairingIndex = service.indexOf(
         'PairingFileService.hasStoredPairingFile',
       );
       final prepareIndex = service.indexOf('Rpcs3InternalBridge.prepareJit');
 
-      expect(statusIndex, greaterThanOrEqualTo(0));
-      expect(debuggedIndex, greaterThan(statusIndex));
-      expect(pairingIndex, greaterThan(debuggedIndex));
+      expect(pairingIndex, greaterThanOrEqualTo(0));
       expect(prepareIndex, greaterThan(pairingIndex));
       expect(
         service,
         contains('static final _startup = Rpcs3StartupTransaction()'),
       );
       expect(service, contains("'RPCS3_JIT_PREPARATION_TIMEOUT'"));
-      expect(service, contains("current['requiresCoreHandshake'] != true"));
+      expect(service, isNot(contains("current['debugged'] == true")));
       expect(service, contains('Duration(minutes: 11)'));
       expect(service, isNot(contains('Duration(seconds: 90)')));
     });
