@@ -15,10 +15,8 @@
 #import <Security/Security.h>
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
-#import <errno.h>
 #import <os/lock.h>
 #import <os/proc.h>
-#import <sys/mman.h>
 #import <unistd.h>
 
 static NSString* const kRpcs3Channel = @"neostation/rpcs3_internal";
