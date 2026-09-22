@@ -80,6 +80,7 @@ jobs:
               Path('lib'),
               Path('native'),
               Path('packages/stikjit_bridge'),
+              Path('packages/rpcs3_internal_bridge'),
               Path('packages/armsx2_internal_bridge'),
               Path('packages/armsx2_jit_helper'),
           )
