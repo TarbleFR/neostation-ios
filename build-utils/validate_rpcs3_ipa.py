@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
 import plistlib
 import subprocess
 import tempfile
@@ -21,14 +22,19 @@ from embed_rpcs3_host_entitlements import (
     embedded_entitlements,
     require_runtime_entitlements,
 )
-from validate_rpcs3_recovery_core import (
-    FORBIDDEN_UNDEFINED as FORBIDDEN_UNDEFINED_SYMBOLS,
-    validate as validate_core,
-)
-from validate_rpcs3_passive_dlopen import validate as validate_passive_dlopen
+FORBIDDEN_UNDEFINED_SYMBOLS = {
+    '_vm_map', '__os_log_default', '__os_log_error_impl', '_os_log_type_enabled'
+}
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_NAME = 'libRPCS3Core.dylib'
+PROVEN_BUILD266_SHA256 = 'dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'
+PROVEN_BUILD266_MARKERS = (
+    b'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
+    b'NEOSTATION_DYNAMIC_JIT_V5',
+    b'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1',
+    b'505a85e5a8f2cdff1cd63168bd2c56b0f92282bf',
+)
 EXPECTED_HELPERS = {
     'DolphinJITHelper.appex': {
         'bundleSuffix': '.dolphinjithelper',
@@ -256,8 +262,21 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
         demand(core.stat().st_size >= 60_000_000,
                f'Packaged RPCS3 core is unexpectedly small: {core.stat().st_size} bytes')
         core_data = core.read_bytes()
-        validate_core(core_data)
-        passive_dlopen_report = validate_passive_dlopen(core_data)
+        actual_core_sha = hashlib.sha256(core_data).hexdigest()
+        demand(
+            actual_core_sha == PROVEN_BUILD266_SHA256,
+            'Packaged RPCS3 Core is not the proven Build266 binary: '
+            f'{actual_core_sha}',
+        )
+        for marker in PROVEN_BUILD266_MARKERS:
+            demand(marker in core_data, f'Proven Build266 marker missing: {marker!r}')
+        for retired in (
+            b'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
+            b'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1',
+            b'NEOSTATION_BUILD302_RESERVED_STARTUP_V1',
+            b'NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1',
+        ):
+            demand(retired not in core_data, f'Retired RPCS3 Core layer present: {retired!r}')
 
         symbols = command_output('nm', '-g', str(core))
         missing_symbols = [symbol for symbol in REQUIRED_CORE_SYMBOLS if f' {symbol}' not in symbols]
@@ -369,7 +388,8 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'rpcS3RequiredSymbols': list(REQUIRED_CORE_SYMBOLS),
             'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),
             'rpcS3LoadTimeImportsValidated': True,
-            'rpcS3PassiveDlopen': passive_dlopen_report,
+            'rpcS3CoreSha256': actual_core_sha,
+            'rpcS3CoreBaseline': 'Build266 proven donor',
             'runtimeEntitlements': {
                 key: entitlements.get(key) for key in REQUIRED_RUNTIME_ENTITLEMENTS
             },
