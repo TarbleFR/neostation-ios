@@ -11,6 +11,8 @@ permissions:
   contents: read
   actions: read
 
+# Build 303 validation retry: precise timeout-code contract.
+
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
