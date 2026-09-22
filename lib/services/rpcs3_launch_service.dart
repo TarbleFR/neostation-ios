@@ -26,22 +26,6 @@ abstract final class Rpcs3LaunchService {
     await Rpcs3InternalService.rootDirectory();
   }
 
-  /// Publishes the serial-keyed, partial profile before boot.
-  ///
-  /// No global RPCS3 setting is mutated here. The Core layers only this game's
-  /// managed keys over the global configuration selected by the user.
-  static Future<void> _applyMobileBootProfile(String titleId) async {
-    await Rpcs3InternalService.ensureGameplayInitialized();
-    final report = await Rpcs3GameProfileService.applyForLaunch(titleId);
-    if (report['success'] != true) {
-      throw Rpcs3InternalException(
-        'gameProfileFailed',
-        report['message']?.toString() ??
-            'RPCS3 could not load the serial-specific compatibility profile.',
-      );
-    }
-  }
-
   static Future<bool> launchTitle(
     String? rawTitleId, {
     required String uiLocale,
@@ -63,10 +47,9 @@ abstract final class Rpcs3LaunchService {
     );
 
     try {
-      await _applyMobileBootProfile(titleId);
-      // The native boot result is authoritative. Do not poll progress, abort a
-      // long compilation, stop emulation, clear caches, or start a second boot
-      // from the Dart launch path.
+      // One entry point owns the whole startup. Do not pre-initialize RPCS3,
+      // apply a launch-time profile, retry, poll, or start a second boot.
+      await Rpcs3InternalService.ensureGameplayInitialized();
       return await Rpcs3InternalService.launchTitle(
         titleId,
         uiLocale: uiLocale,
