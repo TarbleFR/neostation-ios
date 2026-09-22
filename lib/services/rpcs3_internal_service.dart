@@ -3,7 +3,6 @@ import 'dart:io';
 
 import '../data/datasources/sqlite_service.dart';
 import 'rpcs3_game_deletion.dart';
-import 'rpcs3_startup_transaction.dart';
 import 'game_launch_manager.dart';
 
 import 'package:file_picker/file_picker.dart';
@@ -104,7 +103,7 @@ class Rpcs3InternalService {
   static const _firmwareInstallTimeout = Duration(minutes: 10);
   static const _contentInstallTimeout = Duration(minutes: 30);
 
-  static final _startup = Rpcs3StartupTransaction();
+  static Future<void>? _runtimePreparation;
   static bool _initialized = false;
   static bool _libraryMutationInProgress = false;
   static bool _jitPrepared = false;
@@ -190,76 +189,12 @@ class Rpcs3InternalService {
     };
   }
 
-  static Future<Map<String, dynamic>> _prepareJitInternal() async {
-    final transactionTimer = Stopwatch()..start();
-    _emit(
-      Rpcs3RuntimePhase.checkingJit,
-      'Vérification du JIT RPCS3…',
-      coreReady: _initialized,
-    );
-
-    // CS_DEBUGGED is diagnostic information only. It never authorizes a new
-    // RPCS3 startup by itself: every launch transaction performs one explicit
-    // StikJIT prepare/attach and later proves generated-code execution.
-    _jitPrepared = false;
-    if (!await PairingFileService.hasStoredPairingFile()) {
-      throw const Rpcs3InternalException(
-        'RPCS3_PAIRING_FILE_INVALID',
-        'Import the NeoStation Pairing File before starting RPCS3 JIT.',
-      );
-    }
-
-    _emit(
-      Rpcs3RuntimePhase.enablingJit,
-      'Activation du JIT RPCS3 avec StikJIT…',
-      jitReady: false,
-      coreReady: _initialized,
-    );
-
-    final pairing = await PairingFileService.storedFile();
-    // Do not poll JIT state while StikJIT owns the startup transaction. The
-    // prepareJit result is authoritative for connect/attach readiness.
-    late final Map<String, dynamic> jit;
-    final attachTimer = Stopwatch()..start();
-    jit = await _bounded(
-      Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
-      _jitTimeout,
-      'RPCS3_JIT_PREPARATION_TIMEOUT',
-      'La préparation StikJIT/DDI ne répond plus.',
-    );
-    if (jit['success'] != true) {
-      final rawMessage =
-          jit['message']?.toString() ??
-          'StikJIT could not enable JIT for NeoStation.';
-      throw Rpcs3InternalException(
-        jit['code']?.toString() ?? 'RPCS3_JIT_ATTACH_FAILED',
-        rawMessage,
-      );
-    }
-
-    _log.i(
-      'RPCS3 startup timing: stage=debugger_attach; '
-      'elapsedMs=${attachTimer.elapsedMilliseconds}; '
-      'helperConnectedMs=${jit['helperConnectedMs'] ?? 'unknown'}; '
-      'debuggerAttachedMs=${jit['debuggerAttachedMs'] ?? 'unknown'}; '
-      'transactionMs=${transactionTimer.elapsedMilliseconds}.',
-    );
-
-    // Attached is not ready: Core initialization must still prepare and seal
-    // the arena before completeJit can confirm success.
-    _emit(
-      Rpcs3RuntimePhase.initializingCore,
-      'Helper JIT attaché. Initialisation du Core RPCS3…',
-      jitReady: false,
-      coreReady: _initialized,
-    );
-    _log.i(
-      'RPCS3 debugger attached to NeoStation pid=${jit['pid'] ?? 'unknown'}; '
-      'final Core-load nonce proof pending.',
-    );
-    return jit;
-  }
-
+  /// Single RPCS3 startup owner.
+  ///
+  /// The launch path is deliberately linear:
+  /// LocalDevVPN route -> pairing -> StikJIT attach -> Core load/initialize
+  /// -> helper completion -> ready. There is no automatic retry, Core shutdown,
+  /// JIT status polling, memory preflight, watchdog, fallback, or second attach.
   static Future<void> _ensureRuntime() {
     if (_libraryMutationInProgress) {
       throw const Rpcs3InternalException(
@@ -267,7 +202,18 @@ class Rpcs3InternalService {
         'A game deletion is still running.',
       );
     }
-    return _initializeRuntime();
+    if (_initialized) return Future<void>.value();
+
+    final pending = _runtimePreparation;
+    if (pending != null) return pending;
+
+    final future = _initializeRuntime();
+    _runtimePreparation = future;
+    return future.whenComplete(() {
+      if (identical(_runtimePreparation, future)) {
+        _runtimePreparation = null;
+      }
+    });
   }
 
   static Future<void> _initializeRuntime() async {
@@ -277,117 +223,117 @@ class Rpcs3InternalService {
         'RPCS3 internal is available on iOS only.',
       );
     }
-    late Directory data;
-    late Directory cache;
-    Future<Map<String, dynamic>> native(
-      Future<Map<String, dynamic>> operation,
-      Duration timeout,
-      String code,
-      String message,
-    ) async {
+    if (_initialized) return;
+
+    var completionPending = false;
+    try {
+      _emit(
+        Rpcs3RuntimePhase.checkingJit,
+        'Vérification de la route LocalDevVPN…',
+        jitReady: false,
+        coreReady: false,
+      );
       try {
-        return await _bounded(operation, timeout, code, message);
-      } on Rpcs3InternalException catch (error) {
-        throw Rpcs3StartupFailure(
-          error.code,
-          error.message,
-          _startup.phase.name,
+        await LocalDevVpnRouteService.ensureReachable();
+      } on LocalDevVpnRouteException catch (error) {
+        throw Rpcs3InternalException(
+          'RPCS3_ROUTE_UNAVAILABLE',
+          '${error.message} (nativeRouteCode=${error.code})',
         );
       }
-    }
 
-    try {
-      await _startup.ensure(
-        Rpcs3StartupOperations(
-          route: () async {
-            try {
-              await LocalDevVpnRouteService.ensureReachable();
-            } on LocalDevVpnRouteException catch (error) {
-              throw Rpcs3StartupFailure(
-                'RPCS3_ROUTE_UNAVAILABLE',
-                '${error.message} (nativeRouteCode=${error.code})',
-                'route',
-              );
-            }
-            return {'success': true};
-          },
-          attach: () async {
-            try {
-              return await _prepareJitInternal();
-            } on Rpcs3InternalException catch (error) {
-              throw Rpcs3StartupFailure(error.code, error.message, 'attach');
-            }
-          },
-          initialize: () async {
-            data = await dataDirectory();
-            cache = await cacheDirectory();
-            return native(
-              Rpcs3InternalBridge.initialize(
-                supportPath: data.path,
-                cachePath: cache.path,
-                expandedJitRegion: false,
-              ),
-              _coreTimeout,
-              'RPCS3_CORE_INITIALIZE_TIMEOUT',
-              'Le Core ne répond pas à initialize.',
-            );
-          },
-          complete: () => native(
-            Rpcs3InternalBridge.completeJit(),
-            _jitCompletionTimeout,
-            'RPCS3_JIT_DETACH_TIMEOUT',
-            'La fermeture de la transaction JIT n’est pas confirmée.',
-          ),
-          verify: () => native(
-            Rpcs3InternalBridge.verifyJitExecution(),
-            const Duration(seconds: 30),
-            'RPCS3_JIT_EXECUTION_TEST_TIMEOUT',
-            'Le test d’exécution JIT ne répond pas.',
-          ),
-          abort: () => native(
-            Rpcs3InternalBridge.abortStartup(),
-            _jitCompletionTimeout,
-            'RPCS3_STARTUP_ABORT_TIMEOUT',
-            'L’annulation n’est pas confirmée. L’erreur initiale est conservée.',
-          ),
-          onPhase: (phase) {
-            final ready = phase == Rpcs3StartupPhase.ready;
-            _jitPrepared = ready;
-            _initialized = ready;
-            if (ready) {
-              _emit(
-                Rpcs3RuntimePhase.ready,
-                'RPCS3 prêt : JIT, Core, détachement et exécution vérifiés.',
-                jitReady: true,
-                coreReady: true,
-              );
-            } else if (phase != Rpcs3StartupPhase.blocked &&
-                phase != Rpcs3StartupPhase.idle) {
-              _emit(
-                Rpcs3RuntimePhase.initializingCore,
-                switch (phase) {
-                  Rpcs3StartupPhase.route =>
-                    'Vérification de la route LocalDevVPN…',
-                  Rpcs3StartupPhase.attaching =>
-                    'Attachement StikJIT au processus NeoStation…',
-                  Rpcs3StartupPhase.initializing =>
-                    'Préparation du Core et de la mémoire JIT…',
-                  Rpcs3StartupPhase.completing =>
-                    'Confirmation de fermeture du helper JIT…',
-                  Rpcs3StartupPhase.verifying =>
-                    'Test d’exécution du code JIT…',
-                  Rpcs3StartupPhase.aborting =>
-                    'Annulation de la transaction et libération des ressources…',
-                  _ => phase.name,
-                },
-                jitReady: false,
-                coreReady: false,
-              );
-            }
-          },
-        ),
+      if (!await PairingFileService.hasStoredPairingFile()) {
+        throw const Rpcs3InternalException(
+          'RPCS3_PAIRING_FILE_INVALID',
+          'Import the NeoStation Pairing File before starting RPCS3 JIT.',
+        );
+      }
+
+      final data = await dataDirectory();
+      final cache = await cacheDirectory();
+      final pairing = await PairingFileService.storedFile();
+
+      _emit(
+        Rpcs3RuntimePhase.enablingJit,
+        'Activation du JIT RPCS3 avec StikJIT…',
+        jitReady: false,
+        coreReady: false,
       );
-    } on Rpcs3StartupFailure catch (error) {
+      final jit = await _bounded(
+        Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
+        _jitTimeout,
+        'RPCS3_JIT_PREPARATION_TIMEOUT',
+        'La préparation StikJIT/DDI ne répond plus.',
+      );
+      if (jit['success'] != true) {
+        throw Rpcs3InternalException(
+          jit['code']?.toString() ?? 'RPCS3_JIT_ATTACH_FAILED',
+          jit['message']?.toString() ??
+              'StikJIT could not attach NeoStation.',
+        );
+      }
+      completionPending = jit['requiresCompletion'] == true;
+
+      _emit(
+        Rpcs3RuntimePhase.initializingCore,
+        'Initialisation du Core RPCS3…',
+        jitReady: false,
+        coreReady: false,
+      );
+      final core = await _bounded(
+        Rpcs3InternalBridge.initialize(
+          supportPath: data.path,
+          cachePath: cache.path,
+          expandedJitRegion: false,
+        ),
+        _coreTimeout,
+        'RPCS3_CORE_INITIALIZE_TIMEOUT',
+        'Le Core RPCS3 ne répond pas à initialize.',
+      );
+      if (core['success'] != true) {
+        throw Rpcs3InternalException(
+          core['code']?.toString() ?? 'RPCS3_CORE_INITIALIZE_FAILED',
+          core['message']?.toString() ?? 'RPCS3 Core could not initialize.',
+        );
+      }
+
+      if (completionPending) {
+        final completion = await _bounded(
+          Rpcs3InternalBridge.completeJit(),
+          _jitCompletionTimeout,
+          'RPCS3_JIT_DETACH_TIMEOUT',
+          'La fermeture de la transaction JIT n’est pas confirmée.',
+        );
+        if (completion['success'] != true) {
+          throw Rpcs3InternalException(
+            completion['code']?.toString() ?? 'RPCS3_JIT_DETACH_FAILED',
+            completion['message']?.toString() ??
+                'RPCS3 JIT helper did not detach cleanly.',
+          );
+        }
+        completionPending = false;
+      }
+
+      _jitPrepared = true;
+      _initialized = true;
+      _emit(
+        Rpcs3RuntimePhase.ready,
+        'RPCS3 prêt.',
+        jitReady: true,
+        coreReady: true,
+      );
+      _log.i('RPCS3 minimal startup complete.');
+    } on Rpcs3InternalException catch (error) {
+      // Cleanup only the helper transaction. Never shutdown or reinitialize the
+      // Core automatically: a failed startup remains the original failure.
+      if (completionPending) {
+        try {
+          await Rpcs3InternalBridge.completeJit().timeout(
+            _jitCompletionTimeout,
+          );
+        } catch (_) {}
+      }
+      _jitPrepared = false;
       _emit(
         Rpcs3RuntimePhase.error,
         error.message,
@@ -395,7 +341,7 @@ class Rpcs3InternalService {
         coreReady: false,
         error: error.message,
       );
-      throw Rpcs3InternalException(error.code, error.message);
+      rethrow;
     }
   }
 
@@ -412,7 +358,7 @@ class Rpcs3InternalService {
   /// Management of files must remain usable when VPN/JIT/Core startup fails.
   static Future<void> deleteInstalledGame(String titleId) async {
     if (_libraryMutationInProgress ||
-        _startup.inProgress ||
+        _runtimePreparation != null ||
         GameLaunchManager().isActive ||
         _state.phase == Rpcs3RuntimePhase.importingContent) {
       throw const Rpcs3InternalException(
@@ -807,65 +753,6 @@ class Rpcs3InternalService {
     return true;
   }
 
-  static Future<File> _bootCrashMarker() async {
-    final cache = await cacheDirectory();
-    return File(path.join(cache.path, 'incomplete-boot-title.txt'));
-  }
-
-  static Future<void> _consumePreviousIncompleteBootMarker(
-    String titleId,
-  ) async {
-    final marker = await _bootCrashMarker();
-    if (!await marker.exists()) return;
-
-    String previous = '';
-    try {
-      previous = (await marker.readAsString()).trim().toUpperCase();
-    } catch (_) {}
-    try {
-      await marker.delete();
-    } catch (_) {}
-
-    if (previous != titleId) return;
-
-    // A process crash does not prove that RPCS3's compiled PPU cache is
-    // corrupt. Build 283 deleted it automatically, forcing expensive
-    // recompilation/linking on the next attempt. Preserve the cache and let
-    // RPCS3 validate/reuse it normally.
-    _log.w(
-      'RPCS3 previous boot for $titleId ended before RUNNING; '
-      'preserving the title PPU cache for the retry.',
-    );
-  }
-
-  static Future<File> _armBootCrashMarker(String titleId) async {
-    final marker = await _bootCrashMarker();
-    await marker.writeAsString(titleId, flush: true);
-    return marker;
-  }
-
-  static Future<void> _clearBootCrashMarkerWhenRunning(File marker) async {
-    final deadline = DateTime.now().add(const Duration(minutes: 2));
-    while (DateTime.now().isBefore(deadline)) {
-      try {
-        final state = await Rpcs3InternalBridge.emulationState().timeout(
-          const Duration(seconds: 2),
-        );
-        // ABI 30: 5=running, 6=paused.
-        if (state == 5 || state == 6) {
-          if (await marker.exists()) await marker.delete();
-          return;
-        }
-        if (state == 1) {
-          // A clean stop is not a process crash and must not poison next boot.
-          if (await marker.exists()) await marker.delete();
-          return;
-        }
-      } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-  }
-
   static Future<bool> launchTitle(
     String titleId, {
     required String uiLocale,
@@ -874,12 +761,13 @@ class Rpcs3InternalService {
     final normalized = titleId.trim().toUpperCase();
     if (normalized.isEmpty) return false;
 
+    if (!_initialized) {
+      throw const Rpcs3InternalException(
+        'RPCS3_RUNTIME_NOT_READY',
+        'RPCS3 runtime was not initialized before boot.',
+      );
+    }
     final launchTimer = Stopwatch()..start();
-    await ensureGameplayInitialized();
-    _log.i(
-      'RPCS3 launch timing $normalized: stage=runtime_ready; '
-      'elapsedMs=${launchTimer.elapsedMilliseconds}.',
-    );
     final firmware = (await _bounded(
       Rpcs3InternalBridge.firmwareVersion(),
       _statusTimeout,
@@ -893,8 +781,6 @@ class Rpcs3InternalService {
       );
     }
 
-    await _consumePreviousIncompleteBootMarker(normalized);
-
     _emit(
       Rpcs3RuntimePhase.launching,
       'Lancement du jeu PS3…',
@@ -902,7 +788,6 @@ class Rpcs3InternalService {
       coreReady: true,
     );
 
-    final bootMarker = await _armBootCrashMarker(normalized);
     final bootTimer = Stopwatch()..start();
     final report = await Rpcs3InternalBridge.launchGame(
       titleId: normalized,
@@ -910,9 +795,6 @@ class Rpcs3InternalService {
       savestateId: savestateId,
     );
     if (report['success'] != true) {
-      try {
-        if (await bootMarker.exists()) await bootMarker.delete();
-      } catch (_) {}
       throw Rpcs3InternalException(
         report['code']?.toString() ?? 'RPCS3_GAME_BOOT_FAILED',
         report['message']?.toString() ?? 'RPCS3 could not boot this game.',
@@ -923,11 +805,6 @@ class Rpcs3InternalService {
       'bootMs=${bootTimer.elapsedMilliseconds}; '
       'totalMs=${launchTimer.elapsedMilliseconds}.',
     );
-
-    // boot_game may return before PPU linking reaches RUNNING. Keep the marker
-    // until the Core actually publishes RUNNING/PAUSED so an abrupt process
-    // death during PPU linking can be recovered on the next launch.
-    unawaited(_clearBootCrashMarkerWhenRunning(bootMarker));
 
     _emit(
       Rpcs3RuntimePhase.ready,
