@@ -210,7 +210,7 @@ class Rpcs3InternalService {
     _jitPrepared = false;
     if (!await PairingFileService.hasStoredPairingFile()) {
       throw const Rpcs3InternalException(
-        'pairingRequired',
+        'RPCS3_PAIRING_FILE_INVALID',
         'Import the NeoStation Pairing File before starting RPCS3 JIT.',
       );
     }
@@ -223,36 +223,16 @@ class Rpcs3InternalService {
     );
 
     final pairing = await PairingFileService.storedFile();
-    var readingProgress = false;
-    final progress = Timer.periodic(const Duration(seconds: 1), (_) async {
-      if (readingProgress) return;
-      readingProgress = true;
-      try {
-        final status = await _jitStatus();
-        final message = status['message']?.toString() ?? '';
-        if (_state.phase == Rpcs3RuntimePhase.enablingJit &&
-            message.isNotEmpty &&
-            message != _state.message) {
-          _emit(Rpcs3RuntimePhase.enablingJit, message, jitReady: false);
-        }
-      } catch (_) {
-        // Progress is optional; the transaction reports the authoritative error.
-      } finally {
-        readingProgress = false;
-      }
-    });
+    // Do not poll JIT state while StikJIT owns the startup transaction. The
+    // prepareJit result is authoritative for connect/attach readiness.
     late final Map<String, dynamic> jit;
     final attachTimer = Stopwatch()..start();
-    try {
-      jit = await _bounded(
-        Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
-        _jitTimeout,
-        'jitTimeout',
-        'La préparation StikJIT/DDI ne répond plus. Relancez NeoStation avant de réessayer.',
-      );
-    } finally {
-      progress.cancel();
-    }
+    jit = await _bounded(
+      Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
+      _jitTimeout,
+      'RPCS3_JIT_PREPARATION_TIMEOUT',
+      'La préparation StikJIT/DDI ne répond plus.',
+    );
     if (jit['success'] != true) {
       final rawMessage =
           jit['message']?.toString() ??
@@ -330,8 +310,8 @@ class Rpcs3InternalService {
               await LocalDevVpnRouteService.ensureReachable();
             } on LocalDevVpnRouteException catch (error) {
               throw Rpcs3StartupFailure(
-                'localdevvpn.${error.code}',
-                error.message,
+                'RPCS3_ROUTE_UNAVAILABLE',
+                '${error.message} (nativeRouteCode=${error.code})',
                 'route',
               );
             }
@@ -367,13 +347,13 @@ class Rpcs3InternalService {
           complete: () => native(
             Rpcs3InternalBridge.completeJit(),
             _jitCompletionTimeout,
-            'RPCS3_JIT_COMPLETION_TIMEOUT',
+            'RPCS3_JIT_DETACH_TIMEOUT',
             'La fermeture de la transaction JIT n’est pas confirmée.',
           ),
           verify: () => native(
             Rpcs3InternalBridge.verifyJitExecution(),
             const Duration(seconds: 30),
-            'RPCS3_LLVM_EXECUTION_TIMEOUT',
+            'RPCS3_JIT_EXECUTION_TEST_TIMEOUT',
             'Le test d’exécution JIT ne répond pas.',
           ),
           abort: () => native(
