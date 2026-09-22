@@ -33,7 +33,7 @@ assert 'NEOSTATION_RPCS3_SINGLE_DLOPEN_V1' in bridge
 for retired in (
     '_startupEntered', 'abortStartup', 'verifyJitExecution',
     'RPCS3JitTransactionIsClosed', 'Rpcs3ArenaReservation',
-    'reset_failed_startup',
+    'reset_failed_startup', 'isEqualToString:@"shutdown"',
 ):
     assert retired not in bridge, retired
 
