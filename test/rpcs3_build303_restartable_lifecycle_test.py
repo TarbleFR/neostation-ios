@@ -2,6 +2,7 @@
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 import tempfile
+import sys
 
 ROOT=Path(__file__).resolve().parents[1]
 PATCH=ROOT/'build-utils/patch_rpcs3_build303_restartable_lifecycle.py'
@@ -41,4 +42,9 @@ with tempfile.TemporaryDirectory() as temp:
     assert module.MARKER in once
     assert 'm_state != RPCS3_IOS_STATE_STOPPED' in once
     assert 'm_state != RPCS3_IOS_STATE_UNINITIALIZED &&' in once
+if len(sys.argv) > 1:
+    actual = (Path(sys.argv[1])/'rpcs3/ios/RPCS3IOSContract.h').read_text()
+    assert module.MARKER in actual
+    assert 'm_state != RPCS3_IOS_STATE_UNINITIALIZED &&' in actual
+    assert 'm_state != RPCS3_IOS_STATE_STOPPED' in actual
 print('PASS: Build303 lifecycle permits reinitialize only after a clean STOPPED boundary')
