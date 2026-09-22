@@ -6,7 +6,6 @@
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <poll.h>
-#include <cerrno>
 #import <stdio.h>
 #import <arpa/inet.h>
 #import <netinet/in.h>
@@ -14,9 +13,6 @@
 #import <sys/types.h>
 #import <sys/sysctl.h>
 #import <unistd.h>
-#include <csignal>
-#include <mutex>
-#include <sys/ucontext.h>
 
 static NSString* const kRpcs3JitChannel = @"neostation/rpcs3_jit";
 static NSString* const kRpcs3JitRequestType = @"com.neogamelab.neostation.rpcs3-jit-request";
@@ -61,71 +57,28 @@ static BOOL RPCS3HostIsDebugged(void) {
   return (flags & CS_DEBUGGED) != 0;
 }
 
-// A failed sysctl is UNKNOWN, never evidence that detach succeeded.
-static int RPCS3LiveDebuggerState(void) {
+static BOOL RPCS3HostHasLiveDebugger(void) {
   int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
   struct kinfo_proc info = {};
   size_t size = sizeof(info);
-  if (sysctl(mib, 4, &info, &size, NULL, 0) != 0 || size != sizeof(info)) return -1;
-  return (info.kp_proc.p_flag & P_TRACED) != 0 ? 1 : 0;
+  return sysctl(mib, 4, &info, &size, NULL, 0) == 0 &&
+      size == sizeof(info) && (info.kp_proc.p_flag & P_TRACED) != 0;
 }
-static BOOL RPCS3HostHasLiveDebugger(void) { return RPCS3LiveDebuggerState() == 1; }
-
-#if defined(__arm64__)
-__attribute__((naked, noinline)) static uint64_t RPCS3HostCommandRaw(uint64_t command, uint64_t value) {
-  __asm__("mov x16, x0\n" "mov x0, x1\n" "brk #0xf00d\n" "ret");
-}
-static std::mutex gHostCommandMutex;
-static struct sigaction gPreviousHostTrap;
-static void RPCS3HostCommandTrap(int signal, siginfo_t* info, void* raw) {
-  auto* context = static_cast<ucontext_t*>(raw);
-  if (context && context->uc_mcontext) {
-    auto& state = context->uc_mcontext->__ss;
-    const uintptr_t pc = __darwin_arm_thread_state64_get_pc(state);
-    const uintptr_t expected = reinterpret_cast<uintptr_t>(&RPCS3HostCommandRaw) + 8;
-    if (pc == expected && (state.__x[16] == 0 || state.__x[16] == 3)) {
-      // Only our exact protocol instruction is recoverable without debugger.
-      // Every foreign signal is delivered to its original handler below.
-      state.__x[0] = 0;
-      __darwin_arm_thread_state64_set_pc_fptr(state, reinterpret_cast<void*>(pc + 4));
-      return;
-    }
-  }
-  if ((gPreviousHostTrap.sa_flags & SA_SIGINFO) && gPreviousHostTrap.sa_sigaction) {
-    gPreviousHostTrap.sa_sigaction(signal, info, raw);
-  } else if (gPreviousHostTrap.sa_handler == SIG_IGN) {
-    return;
-  } else if (gPreviousHostTrap.sa_handler && gPreviousHostTrap.sa_handler != SIG_DFL) {
-    gPreviousHostTrap.sa_handler(signal);
-  } else {
-    sigaction(SIGTRAP, &gPreviousHostTrap, nullptr);
-    raise(signal);
-  }
-}
-static uint64_t RPCS3HostCommand(uint64_t command, uint64_t value) {
-  std::lock_guard lock(gHostCommandMutex);
-  struct sigaction action = {};
-  sigemptyset(&action.sa_mask);
-  action.sa_sigaction = RPCS3HostCommandTrap;
-  action.sa_flags = SA_SIGINFO;
-  if (sigaction(SIGTRAP, &action, &gPreviousHostTrap) != 0) return 0;
-  uint64_t result = RPCS3HostCommandRaw(command, value);
-  sigaction(SIGTRAP, &gPreviousHostTrap, nullptr);
-  return result;
-}
-#else
-static uint64_t RPCS3HostCommand(uint64_t, uint64_t) { return 0; }
-#endif
-static uint64_t RPCS3DebuggerDetach(void) { return RPCS3HostCommand(0, 0); }
 
 static BOOL RPCS3RequiresCoreHandshake(void) {
   if (@available(iOS 26.0, *)) return YES;
   return NO;
 }
 
-// No allocation or Core code in this nonce exchange. A missing debugger
-// returns zero through the exact-instruction fallback, never a fake success.
-static uint64_t RPCS3DebuggerProbe(uint64_t nonce) { return RPCS3HostCommand(3, nonce); }
+// No allocation, Core code or executable-memory preparation occurs in this
+// probe. The script must advance PC, set x0 and continue this exact host thread.
+#if defined(__arm64__)
+__attribute__((naked, noinline)) static uint64_t RPCS3DebuggerProbe(uint64_t nonce) {
+  __asm__("mov x16, #3\n" "brk #0xf00d\n" "ret");
+}
+#else
+static uint64_t RPCS3DebuggerProbe(uint64_t nonce) { return 0; }
+#endif
 
 @interface RPCS3JitSession : NSObject
 @property(nonatomic, readonly) uint16_t port;
@@ -594,10 +547,8 @@ static BOOL RPCS3LaunchJitHelper(
 @interface Rpcs3JitBridgePlugin ()
 @property(nonatomic, strong) FlutterMethodChannel* channel;
 @property(atomic, strong, nullable) RPCS3JitSession* activeSession;
-@property(atomic, assign) BOOL operationInProgress;
-@property(atomic, assign) BOOL completionInProgress;
-@property(atomic, assign) BOOL transactionClosed;
-- (void)abortStartup:(void (^)(NSDictionary*))completion;
+@property(nonatomic, assign) BOOL operationInProgress;
+@property(nonatomic, assign) BOOL completionInProgress;
 @end
 
 static __weak Rpcs3JitBridgePlugin* gRpcs3JitBridge;
@@ -616,18 +567,6 @@ BOOL RPCS3JitConfirmCoreLoadHandoff(void) {
     return NO;
   }
   return [session confirmCoreLoadReady];
-}
-
-BOOL RPCS3JitTransactionIsClosed(void) {
-  return (gRpcs3JitBridge.transactionClosed || (!RPCS3RequiresCoreHandshake() && !gRpcs3JitBridge.activeSession)) && (RPCS3LiveDebuggerState() == 0);
-}
-void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
-  Rpcs3JitBridgePlugin* bridge = gRpcs3JitBridge;
-  if (!bridge) {
-    completion(@{@"success": @NO, @"code": @"RPCS3_JIT_BRIDGE_MISSING", @"message": @"RPCS3 JIT bridge is unavailable."});
-    return;
-  }
-  [bridge abortStartup:completion];
 }
 
 @implementation Rpcs3JitBridgePlugin {
@@ -654,43 +593,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
   return self;
 }
 
-- (void)abortStartup:(void (^)(NSDictionary*))completion {
-  dispatch_async(_jitQueue, ^{
-    RPCS3Milestone(@"jit_abort_begin", @"Closing failed startup transaction; this is not JIT success");
-    RPCS3JitSession* session = self.activeSession;
-    if (!session) {
-      BOOL closed = (RPCS3LiveDebuggerState() == 0);
-      self.transactionClosed = closed;
-      completion(@{@"success": @(closed), @"transactionClosed": @(closed),
-        @"code": closed ? @"RPCS3_JIT_NOT_ACTIVE" : @"RPCS3_JIT_UNOWNED_DEBUGGER",
-        @"message": closed ? @"No active debugger transaction." : @"A live debugger has no owned RPCS3 session; no resources were released."});
-      return;
-    }
-    if (session.requiresCoreHandshake && !session.finished && session.attached && !session.closed) {
-      if (![session confirmCoreLoadReady]) {
-        completion(@{@"success": @NO, @"transactionClosed": @NO,
-          @"code": @"RPCS3_JIT_ABORT_NONCE_FAILED", @"message": @"Failed-startup detach could not prove current debugger ownership."});
-        return;
-      }
-      RPCS3DebuggerDetach();
-    }
-    const BOOL finished = [session waitUntilFinished:kRpcs3CompletionTimeout];
-    const BOOL closed = finished && session.finished && (RPCS3LiveDebuggerState() == 0);
-    self.transactionClosed = closed;
-    if (closed) {
-      [session close];
-      self.activeSession = nil;
-      self.operationInProgress = NO;
-    }
-    self.completionInProgress = NO;
-    NSString* message = closed ? @"RPCS3 failed-startup transaction terminated and debugger detached." :
-      [NSString stringWithFormat:@"RPCS3_JIT_ABORT_UNCONFIRMED finished=%d debuggerState=%d; %@", finished, RPCS3LiveDebuggerState(), session.finalMessage];
-    RPCS3Milestone(@"jit_abort_end", message);
-    completion(@{@"success": @(closed), @"transactionClosed": @(closed),
-      @"code": closed ? @"RPCS3_JIT_ABORTED" : @"RPCS3_JIT_ABORT_UNCONFIRMED", @"message": message});
-  });
-}
-
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([call.method isEqualToString:@"status"]) {
     result(@{
@@ -706,36 +608,25 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
   if ([call.method isEqualToString:@"completeJit"]) {
     RPCS3JitSession* session = self.activeSession;
     if (session == nil || self.completionInProgress) {
-      result(@{@"success": @NO, @"code": session ? @"RPCS3_JIT_COMPLETION_BUSY" : @"RPCS3_JIT_SESSION_MISSING", @"stage": @"jit_completion", @"message": @"No RPCS3 JIT transaction is ready to complete."});
+      result(@{@"success": @NO, @"message": @"No RPCS3 JIT transaction is ready to complete."});
       return;
     }
     self.completionInProgress = YES;
     RPCS3Milestone(@"jit_completion_begin", @"Waiting for Universal detach confirmation");
     dispatch_async(_jitQueue, ^{
-      const BOOL completed = [session waitUntilFinished:kRpcs3CompletionTimeout];
-      const BOOL finished = session.finished;
-      const BOOL helperSuccess = session.success;
-      const BOOL debugged = RPCS3HostIsDebugged();
-      const int debuggerState = RPCS3LiveDebuggerState();
-      const int queryErrno = debuggerState < 0 ? errno : 0;
-      const BOOL success = completed && finished && helperSuccess && debugged && debuggerState == 0;
-      NSString* code = !completed || !finished ? @"RPCS3_JIT_COMPLETION_TIMEOUT" :
-          !helperSuccess ? @"RPCS3_JIT_HELPER_FAILED" :
-          debuggerState < 0 ? @"RPCS3_JIT_DETACH_STATE_UNKNOWN" :
-          debuggerState != 0 ? @"RPCS3_JIT_STILL_ATTACHED" :
-          !debugged ? @"RPCS3_JIT_DEBUG_FLAG_MISSING" : @"RPCS3_JIT_DETACHED";
-      self.transactionClosed = success;
-      NSString* message = success ? @"RPCS3 JIT arena prepared and helper detached." :
-          [NSString stringWithFormat:@"%@: completed=%d finished=%d helperSuccess=%d debugged=%d debuggerState=%d queryErrno=%d; helperMessage=%@",
-              code, completed, finished, helperSuccess, debugged, debuggerState, queryErrno, session.finalMessage ?: @""];
+      BOOL completed = [session waitUntilFinished:kRpcs3CompletionTimeout];
+      BOOL success = completed && session.success && RPCS3HostIsDebugged();
       NSDictionary* response = @{
-        @"success": @(success), @"code": code, @"stage": @"jit_completion",
-        @"transactionClosed": @(success), @"logs": session.logs, @"message": message,
+        @"success": @(success),
+        @"logs": session.logs,
+        @"message": success ? @"RPCS3 JIT arena prepared and helper detached." :
+            (session.finalMessage.length ? session.finalMessage :
+             @"RPCS3 JIT helper did not confirm completion. Relaunch NeoStation before retrying."),
       };
-      RPCS3Milestone(@"jit_completion_end", message);
+      RPCS3Milestone(@"jit_completion_end", success ? @"detached" : @"failed or timed out");
       // A failed/incomplete handshake may still own a debugger. Keep the
       // transaction locked in that case instead of starting another attach.
-      if (completed && finished && debuggerState == 0) {
+      if (completed) {
         [session close];
         self.activeSession = nil;
         self.operationInProgress = NO;
@@ -762,7 +653,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
   } else {
     result(@{
       @"success" : @NO,
-      @"code" : @"RPCS3_IOS_VERSION_UNSUPPORTED",
       @"message" : @"Embedded RPCS3 requires iOS 17.4 or newer.",
     });
     return;
@@ -770,7 +660,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
   if (!RPCS3HostHasGetTaskAllow()) {
     result(@{
       @"success" : @NO,
-      @"code" : @"RPCS3_GET_TASK_ALLOW_MISSING",
       @"message" : @"This NeoStation installation does not preserve get-task-allow.",
     });
     return;
@@ -779,7 +668,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
       ![NSFileManager.defaultManager isReadableFileAtPath:pairingPath]) {
     result(@{
       @"success" : @NO,
-      @"code" : @"RPCS3_PAIRING_FILE_UNREADABLE",
       @"message" : @"Import a readable pairing file before enabling RPCS3 JIT.",
     });
     return;
@@ -789,13 +677,11 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
     if (self.operationInProgress || self.activeSession != nil) {
       result(@{
         @"success" : @NO,
-        @"code" : @"RPCS3_JIT_TRANSACTION_BUSY",
-      @"message" : @"An RPCS3 JIT operation is already running.",
+        @"message" : @"An RPCS3 JIT operation is already running.",
       });
       return;
     }
     self.operationInProgress = YES;
-    self.transactionClosed = NO;
   }
 
   dispatch_async(_jitQueue, ^{
@@ -812,13 +698,11 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
     } mutableCopy];
 
     void (^finish)(void) = ^{
-      RPCS3Milestone(@"jit_prepare_failed", response[@"message"] ?: @"RPCS3_JIT_ATTACH_FAILED");
+      RPCS3Milestone(@"jit_prepare_failed", response[@"message"] ?: @"unknown failure");
       @synchronized(self) {
-        if ((RPCS3LiveDebuggerState() == 0) && (self.activeSession.finished || !self.activeSession)) {
-          [self.activeSession close];
-          self.activeSession = nil;
-          self.operationInProgress = NO;
-        }
+        [self.activeSession close];
+        self.activeSession = nil;
+        self.operationInProgress = NO;
       }
       dispatch_async(dispatch_get_main_queue(), ^{
         result(response);
@@ -830,7 +714,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
                        options:NSDataReadingMappedIfSafe
                          error:nil];
     if (pairingData.length == 0) {
-      response[@"code"] = @"RPCS3_PAIRING_FILE_READ_FAILED";
       response[@"message"] = @"The stored pairing file could not be read.";
       finish();
       return;
@@ -840,7 +723,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
     RPCS3JitSession* session = [[RPCS3JitSession alloc]
         initWithError:&sessionError];
     if (session == nil) {
-      response[@"code"] = @"RPCS3_JIT_CONTROL_SOCKET_FAILED";
       response[@"message"] = sessionError.localizedDescription ?: @"Could not prepare the RPCS3 JIT helper.";
       finish();
       return;
@@ -851,13 +733,11 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
 
     NSError* launchError = nil;
     if (!RPCS3LaunchJitHelper(session, pairingData, &launchError)) {
-      response[@"code"] = @"RPCS3_JIT_HELPER_LAUNCH_FAILED";
       response[@"message"] = launchError.localizedDescription ?: @"Could not launch the RPCS3 JIT helper.";
       finish();
       return;
     }
     if (![session waitUntilConnected:kRpcs3HelperConnectTimeout]) {
-      response[@"code"] = @"RPCS3_JIT_HELPER_CONNECT_FAILED";
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
           : @"RPCS3 JIT helper did not connect.";
@@ -876,7 +756,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
             helperConnectedMs]);
 
     if (![session waitUntilAttached:kRpcs3AttachTimeout]) {
-      response[@"code"] = @"RPCS3_JIT_ATTACH_NOT_CONFIRMED";
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
           : @"StikJIT did not attach universal.js to NeoStation.";
@@ -901,7 +780,6 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
     response[@"coreLoadReady"] = @(!session.requiresCoreHandshake);
 
     if (session.finished && !session.success) {
-      response[@"code"] = @"RPCS3_JIT_HELPER_FAILED";
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
           : @"The RPCS3 JIT transaction did not complete successfully.";
@@ -914,13 +792,13 @@ void RPCS3JitAbortStartup(void (^completion)(NSDictionary*)) {
     response[@"debugged"] = @(debugged);
     response[@"logs"] = session.logs;
     if (!debugged) {
-      response[@"code"] = @"RPCS3_JIT_DEBUG_FLAG_MISSING";
       response[@"message"] = @"StikJIT detached without leaving NeoStation JIT-enabled.";
       finish();
       return;
     }
 
-    // Do NOT wait for universal.js to finish here. Core initialize prepares the RX arena and issue BRK #0xf00d / command 0.
+    // Do NOT wait for universal.js to finish here. Core constructors and
+    // initialize prepare the RX arena and issue BRK #0xf00d / command 0.
     // Waiting before dlopen deadlocks host and helper (the old 90s failure).
     response[@"success"] = @YES;
     response[@"requiresCompletion"] = @YES;
