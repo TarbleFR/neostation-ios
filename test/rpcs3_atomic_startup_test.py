@@ -83,7 +83,7 @@ using kern_return_t = int;
 
 constexpr kern_return_t KERN_SUCCESS = 0;
 constexpr kern_return_t KERN_INVALID_ADDRESS = 1;
-using mach_port_t = int;
+using mach_port_t = unsigned int;
 using mach_msg_type_number_t = unsigned;
 using vm_region_info_t = int*;
 struct vm_region_basic_info_data_64_t { int unused; };
