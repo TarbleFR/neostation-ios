@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 303 RPCS3 Minimal Launch
-run-name: NeoStation iOS Build 303 • ${{ github.sha }}
+name: NeoStation iOS Build 304 RPCS3 Single Path
+run-name: NeoStation iOS Build 304 • ${{ github.sha }}
 
 on:
   push:
@@ -11,12 +11,10 @@ permissions:
   contents: read
   actions: read
 
-# Build 303 validation retry: precise timeout-code contract.
-
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-303
+  group: neostation-ios-build-304
   cancel-in-progress: true
 
 jobs:
@@ -24,22 +22,19 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 303 RPCS3 Minimal Launch IPA
+    name: Build 304 RPCS3 Single Path IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '303'
-      IPA_NAME: 'NeoStation-iOS-Build-303-RPCS3-Minimal-Launch'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-303-RPCS3-Minimal-Launch'
+      BUILD_NUMBER: '304'
+      IPA_NAME: 'NeoStation-iOS-Build-304-RPCS3-Single-Path'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-304-RPCS3-Single-Path'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
       ARMSX2_CORE_HOST_SHA: 017c9c2f1e0628e43506707bd6943a76f44f8f44
       ARMSX2_CORE_RUN_ID: '35519677053'
-      RPCS3_CORE_HOST_SHA: 7a3f9a1adaabde3d9d4441457ef8981f09665513
-      RPCS3_CORE_RUN_ID: '35756574023'
-      RPCS3_CORE_SHA256: b6a9bdccd5078e27336b3767df0632b901383edf3d3d498a52f6ad9a2ac681d5
-      RPCS3_SOURCE_COMMIT: 22f1152783cef1f7e04af7b1c895173e28fd5b03
+      RPCS3_CORE_SHA256: dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -146,11 +141,7 @@ jobs:
           python3 -m py_compile \
             build-utils/configure_rpcs3_ios_v2.py \
             build-utils/embed_rpcs3_host_entitlements.py \
-            build-utils/materialize_rpcs3_core.py \
-            build-utils/rpcs3_core_syntax_gate.py \
-            build-utils/validate_rpcs3_passive_dlopen.py \
             build-utils/prepare_ios_icon_fallback.py \
-            build-utils/validate_rpcs3_recovery_core.py \
             build-utils/validate_rpcs3_ipa.py \
             build-utils/validate_single_ipa_distribution.py \
             packages/dolphin_internal_bridge/ci/build_support.py \
@@ -172,15 +163,11 @@ jobs:
           set -euo pipefail
           python3 test/dolphin_account_267_test.py
           python3 test/dolphin_cheats_menu_test.py
-          python3 test/rpcs3_recovery_core_contract_test.py
-          python3 test/rpcs3_build303_restartable_lifecycle_test.py
-          python3 test/rpcs3_build301_passive_dlopen_test.py
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
           python3 test/rpcs3_diagnostics_native_test.py
           python3 test/rpcs3_jit_handshake_test.py
-          python3 test/rpcs3_startup_abort_native_test.py
           python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_reporter_send_order_test.py
           python3 test/rpcs3_host_entitlements_test.py
@@ -188,10 +175,10 @@ jobs:
           python3 test/dolphin_ipa_validator_test.py
           python3 test/local_dev_vpn_route_contract_test.py
           python3 test/armsx2_vm_shutdown_test.py
-          python3 test/rpcs3_helper_journal_test.py
           node test/rpcs3_debugger_handshake_test.js
           node test/rpcs3_stop_reply_behavior_test.js
-          flutter test test/rpcs3_startup_transaction_test.dart test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
+          python3 test/rpcs3_build304_single_path_test.py
+          flutter test test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart
 
       - name: Prepare lightweight build tools
         shell: bash
@@ -224,12 +211,31 @@ jobs:
           curl -fL --retry 3 --retry-delay 2 \
             https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
             -o build/StikJIT-1.5.0.xcframework.zip
-          # Reuse the validated donor only to restore StikJIT, the host shells,
-          # RPCS3 resources and other immutable native packaging inputs. The
-          # newly validated RPCS3 Core is installed explicitly below.
+          # Reuse the validated Build270 donor bytes directly. Its RPCS3 Core
+          # is the proven Build266 binary and is not rebuilt or overwritten.
           python3 build-utils/prepare_fast_native_runtime.py \
             build/native-donor --build-number "$BUILD_NUMBER" \
             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+
+      - name: Verify proven Build266 RPCS3 Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
+          test -s "$CORE"
+          printf '%s  %s\n' "$RPCS3_CORE_SHA256" "$CORE" | shasum -a 256 -c -
+          grep -a -q 'NEOSTATION_BUILD266_JIT_V09_SHADER_V1' "$CORE"
+          grep -a -q 'NEOSTATION_DYNAMIC_JIT_V5' "$CORE"
+          grep -a -q 'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD302_RESERVED_STARTUP_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1' "$CORE"
+          nm -gU "$CORE" > build/rpcs3-proven-exports.txt
+          grep -q ' _rpcs3_ios_initialize$' build/rpcs3-proven-exports.txt
+          grep -q ' _rpcs3_ios_boot_game$' build/rpcs3-proven-exports.txt
+          grep -q ' _rpcs3_ios_run_llvm_self_test$' build/rpcs3-proven-exports.txt
+          grep -q ' _rpcs3_ios_shutdown$' build/rpcs3-proven-exports.txt
 
       - name: Download rebuilt embedded Dolphin Core
         uses: actions/download-artifact@v4
@@ -335,83 +341,6 @@ jobs:
             _neostation_dolphin_download_gecko_codes; do
             grep -q " $symbol$" build/dolphin-native-exports.txt
           done
-
-      - name: Download rebuilt embedded RPCS3 Core
-        uses: actions/download-artifact@v4
-        with:
-          name: RPCS3Core-${{ env.RPCS3_CORE_HOST_SHA }}
-          run-id: ${{ env.RPCS3_CORE_RUN_ID }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: dist/rpcs3-native
-
-      - name: Verify and install rebuilt RPCS3 Core
-        shell: bash
-        run: |
-          set -euo pipefail
-          CORE="dist/rpcs3-native/libRPCS3Core.dylib"
-          IDENTITY="dist/rpcs3-native/identity.json"
-          test -s "$CORE"
-          test -s "$IDENTITY"
-
-          git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
-            build-utils/build_rpcs3_recovery_core.sh \
-            build-utils/patch_rpcs3_build301_passive_dlopen.py \
-            build-utils/patch_rpcs3_build303_restartable_lifecycle.py \
-            build-utils/validate_rpcs3_recovery_core.py \
-            build-utils/validate_rpcs3_passive_dlopen.py \
-            test/rpcs3_recovery_core_contract_test.py \
-            test/rpcs3_build303_restartable_lifecycle_test.py \
-            .github/workflows/rpcs3-core.yml
-
-          python3 build-utils/validate_rpcs3_recovery_core.py "$CORE"
-          mkdir -p build/rpcs3-ci
-          python3 build-utils/validate_rpcs3_passive_dlopen.py "$CORE" \
-            | tee build/rpcs3-ci/passive-dlopen.txt
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          import shutil
-          from pathlib import Path
-
-          core = Path("dist/rpcs3-native/libRPCS3Core.dylib")
-          identity = json.loads(Path("dist/rpcs3-native/identity.json").read_text())
-          actual = hashlib.sha256(core.read_bytes()).hexdigest()
-          assert identity["host_commit"] == os.environ["RPCS3_CORE_HOST_SHA"], identity
-          assert identity["source_commit"] == os.environ["RPCS3_SOURCE_COMMIT"], identity
-          assert identity["abi_version"] == 30, identity
-          assert identity["architectures"] == ["arm64"], identity
-          assert identity["sha256"] == os.environ["RPCS3_CORE_SHA256"], identity
-          assert actual == identity["sha256"], (actual, identity)
-          assert identity["reservation"] == "Core-owned mmap exact-hint search; no Build295/302 fixed host reservation", identity
-          assert identity["jit_policy"] == "Build266 adaptive Core-owned arena + Build301 passive dlopen", identity
-          assert identity["lifecycle_marker"] == "NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1", identity
-          assert identity["restartable_lifecycle_marker"] == "NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1", identity
-          assert identity["allocator_marker"] == "NEOSTATION_BUILD266_JIT_V09_SHADER_V1", identity
-
-          destination = Path(
-              "packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib"
-          )
-          destination.parent.mkdir(parents=True, exist_ok=True)
-          shutil.copy2(core, destination)
-          destination.chmod(0o755)
-          Path("build/fast-native/rpcs3-core-identity.json").write_text(
-              json.dumps(identity, indent=2) + "\n"
-          )
-          print(json.dumps(identity, indent=2))
-          PY
-          grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
-          grep -a -q 'NEOSTATION_BUILD266_JIT_V09_SHADER_V1' "$CORE"
-          ! grep -a -q 'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1' "$CORE"
-          ! grep -a -q 'NEOSTATION_BUILD302_RESERVED_STARTUP_V1' "$CORE"
-          file packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
-          nm -gU packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib \
-            > build/rpcs3-native-exports.txt
-          grep -q '_rpcs3_ios_initialize' build/rpcs3-native-exports.txt
-          grep -q '_rpcs3_ios_boot_game' build/rpcs3-native-exports.txt
-          grep -q '_neostation_rpcs3_ios_save_state' build/rpcs3-native-exports.txt
-          ! grep -q ' _neostation_rpcs3_adopt_jit_layout$' build/rpcs3-native-exports.txt
-          ! grep -q ' _neostation_rpcs3_reset_failed_startup$' build/rpcs3-native-exports.txt
 
       - name: Download pinned embedded ARMSX2 Core
         uses: actions/download-artifact@v4
