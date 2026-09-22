@@ -198,15 +198,9 @@ class Rpcs3InternalService {
       coreReady: _initialized,
     );
 
-    // CS_DEBUGGED persists after detach. It is enough for the legacy backend,
-    // but never proves that an iOS 26 Universal script is currently attached.
-    final current = await _jitStatus();
-    if (current['debugged'] == true &&
-        current['requiresCoreHandshake'] != true) {
-      // Legacy CS_DEBUGGED permits the transition; execution is still verified below.
-      return {'success': true, 'requiresCompletion': false};
-    }
-
+    // CS_DEBUGGED is diagnostic information only. It never authorizes a new
+    // RPCS3 startup by itself: every launch transaction performs one explicit
+    // StikJIT prepare/attach and later proves generated-code execution.
     _jitPrepared = false;
     if (!await PairingFileService.hasStoredPairingFile()) {
       throw const Rpcs3InternalException(
