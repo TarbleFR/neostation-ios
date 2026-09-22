@@ -1,0 +1,189 @@
+name: NeoStation Build 304 RPCS3 single-path preflight
+
+run-name: Build 304 RPCS3 preflight • ${{ github.sha }}
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/ios-build304-preflight.yml'
+      - 'lib/services/rpcs3_internal_service.dart'
+      - 'lib/services/rpcs3_launch_service.dart'
+      - 'lib/services/local_dev_vpn_route_service.dart'
+      - 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
+      - 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.h'
+      - 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm'
+      - 'packages/rpcs3_internal_bridge/lib/rpcs3_internal_bridge.dart'
+      - 'packages/rpcs3_jit_helper/ios/Classes/Rpcs3JITRequestHandlerBase.swift'
+      - 'packages/rpcs3_jit_helper/ios/Resources/rpcs3-universal.js'
+      - 'build-utils/prepare_fast_native_runtime.py'
+      - 'build-utils/validate_rpcs3_ipa.py'
+      - 'test/rpcs3_build304_single_path_test.py'
+      - 'test/rpcs3_internal_integration_test.dart'
+      - 'test/rpcs3_lazy_load_contract_test.dart'
+      - '.github/workflows/ios-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: neostation-build-304-rpcs3-preflight
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Validate RPCS3 single path before IPA
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      PROVEN_RPCS3_SHA256: dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Validate single-path source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 test/rpcs3_build304_single_path_test.py
+          python3 -m py_compile             build-utils/prepare_fast_native_runtime.py             build-utils/validate_rpcs3_ipa.py             test/rpcs3_build304_single_path_test.py             test/rpcs3_loader_stability_280_test.py             test/rpcs3_build283_boot_stability_test.py             test/rpcs3_build285_core_handoff_test.py             test/rpcs3_diagnostics_native_test.py             test/rpcs3_jit_handshake_test.py             test/rpcs3_pod_header_visibility_test.py             test/rpcs3_reporter_send_order_test.py             test/rpcs3_host_entitlements_test.py             test/rpcs3_ipa_validation_test.py             test/local_dev_vpn_route_contract_test.py
+          python3 - <<'PY'
+          from pathlib import Path
+          production = (
+              Path('lib/services/rpcs3_internal_service.dart').read_text()
+              + Path('lib/services/rpcs3_launch_service.dart').read_text()
+              + Path('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
+              + Path('packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm').read_text()
+          )
+          for retired in (
+              'Rpcs3StartupTransaction',
+              'abortStartup',
+              'verifyJitExecution',
+              'Rpcs3ArenaReservation',
+              'reset_failed_startup',
+              'reserveAddressSpace',
+              'NeoStationLocalTunnel',
+              'NETunnelProviderManager',
+              'NEPacketTunnelProvider',
+          ):
+              if retired in production:
+                  raise SystemExit('Retired launch layer remains: ' + retired)
+          print('Production RPCS3 launch path contains no retired startup layer.')
+          PY
+
+      - name: Syntax-check Objective-C++ bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          STUB="$RUNNER_TEMP/flutter-stub"
+          mkdir -p "$STUB/Flutter"
+          cat > "$STUB/Flutter/Flutter.h" <<'EOF'
+          #import <Foundation/Foundation.h>
+          typedef void (^FlutterResult)(id _Nullable result);
+          FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
+          @protocol FlutterBinaryMessenger <NSObject>
+          @end
+          @class FlutterMethodCall;
+          @class FlutterMethodChannel;
+          @protocol FlutterPluginRegistrar <NSObject>
+          @property(nonatomic, readonly) NSObject<FlutterBinaryMessenger>* messenger;
+          - (void)addMethodCallDelegate:(id)delegate channel:(FlutterMethodChannel*)channel;
+          @end
+          @protocol FlutterPlugin <NSObject>
+          + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar;
+          @end
+          @interface FlutterMethodCall : NSObject
+          @property(nonatomic, readonly) NSString* method;
+          @property(nonatomic, readonly) id arguments;
+          @end
+          @interface FlutterMethodChannel : NSObject
+          + (instancetype)methodChannelWithName:(NSString*)name
+                            binaryMessenger:(NSObject<FlutterBinaryMessenger>*)messenger;
+          - (void)invokeMethod:(NSString*)method arguments:(id)arguments;
+          @end
+          EOF
+          COMMON=(
+            -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++
+            -isysroot "$SDK" -miphoneos-version-min=17.4
+            -I"$STUB"
+            -Ipackages/rpcs3_internal_bridge/ios/Classes
+          )
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}"             packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}"             packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm
+
+      - name: Resolve Flutter and analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter clean
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+
+      - name: Run launch regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/rpcs3_build304_single_path_test.py
+          python3 test/rpcs3_loader_stability_280_test.py
+          python3 test/rpcs3_build283_boot_stability_test.py
+          python3 test/rpcs3_build285_core_handoff_test.py
+          python3 test/rpcs3_diagnostics_native_test.py
+          python3 test/rpcs3_jit_handshake_test.py
+          python3 test/rpcs3_pod_header_visibility_test.py
+          python3 test/rpcs3_reporter_send_order_test.py
+          python3 test/rpcs3_host_entitlements_test.py
+          python3 test/rpcs3_ipa_validation_test.py
+          python3 test/local_dev_vpn_route_contract_test.py
+          node test/rpcs3_debugger_handshake_test.js
+          node test/rpcs3_stop_reply_behavior_test.js
+          flutter test             test/rpcs3_bridge_memory_mode_test.dart             test/local_jit_route_proof_test.dart             test/rpcs3_boot_watchdog_test.dart             test/rpcs3_internal_integration_test.dart             test/rpcs3_lazy_load_contract_test.dart             test/game_deletion_regression_test.dart             test/rpcs3_library_service_test.dart
+
+      - name: Download proven Build270 donor
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-270-RPCS3-JIT-Transport
+          run-id: 35321768668
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/native-donor
+
+      - name: Materialize and verify exact Build266 Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2             https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip             -o build/StikJIT-1.5.0.xcframework.zip
+          python3 build-utils/prepare_fast_native_runtime.py             build/native-donor --build-number 304             --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+          CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
+          printf '%s  %s\n' "$PROVEN_RPCS3_SHA256" "$CORE" | shasum -a 256 -c -
+          grep -a -q 'NEOSTATION_BUILD266_JIT_V09_SHADER_V1' "$CORE"
+          grep -a -q 'NEOSTATION_DYNAMIC_JIT_V5' "$CORE"
+          grep -a -q 'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD302_RESERVED_STARTUP_V1' "$CORE"
+          ! grep -a -q 'NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1' "$CORE"
+          nm -gU "$CORE" > /tmp/rpcs3-build304-exports.txt
+          for symbol in             _rpcs3_ios_initialize             _rpcs3_ios_run_llvm_self_test             _rpcs3_ios_boot_game             _rpcs3_ios_stop_emulation             _rpcs3_ios_shutdown; do
+            grep -q " $symbol$" /tmp/rpcs3-build304-exports.txt
+          done
+          echo "Build304 preflight accepted exact proven Build266 Core."
