@@ -74,7 +74,6 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
     var reporter: Rpcs3HelperReporter?
     var temporaryPairingURL: URL?
     var temporaryScriptURL: URL?
-    var journal: Rpcs3HelperJournal?
 
     do {
       guard
@@ -141,11 +140,6 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         appropriateFor: nil,
         create: true
       )
-      let journalRoot = library.appendingPathComponent("NeoStationRPCS3HelperReports", isDirectory: true)
-      // Previous journals stay archived. Do not replay their signals into a
-      // new startup transaction or confuse an old failure with current proof.
-      journal = try? Rpcs3HelperJournal(directory: journalRoot, targetPID: targetPID)
-
       let stikRoot = library.appendingPathComponent(
         "NeoStationRPCS3StikJIT",
         isDirectory: true
@@ -194,7 +188,6 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
           )
         },
         progress: { message in
-          journal?.append(message)
           try? reporter?.send(event: "log", message: message)
           let attached = "NEOSTATION_DEBUGGER_ATTACHED_V1 pid=\(targetPID) nonce=\(probeNonce.uint64Value)"
           if requiresCoreHandshake && message == attached {
@@ -212,7 +205,6 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
         message: "StikJIT completed the RPCS3 universal transaction and detached.",
         success: true
       )
-      journal?.finishSuccessfully()
       if let temporaryScriptURL { try? FileManager.default.removeItem(at: temporaryScriptURL) }
       if let temporaryPairingURL {
         try? FileManager.default.removeItem(at: temporaryPairingURL)
@@ -220,7 +212,6 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
       reporter?.close()
       context.completeRequest(returningItems: nil)
     } catch {
-      journal?.append("RPCS3_HELPER_ERROR \(error.localizedDescription)")
       try? reporter?.send(
         event: "complete",
         message: error.localizedDescription,
