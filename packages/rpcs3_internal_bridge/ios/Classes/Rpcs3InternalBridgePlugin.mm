@@ -218,7 +218,6 @@ static UIViewController* RPCS3RootViewController(void) {
   uint64_t _diagnosticMinimumAvailableMemory;
   NSInteger _diagnosticWorstThermalState;
   rpcs3_ios_api _api;
-  BOOL _startupEntered;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -335,10 +334,10 @@ static void RPCS3Progress(void* context,
     return NO;
   }
 
-  // NEOSTATION_RPCS3_BUILD301_SINGLE_DLOPEN_V1
-  // The Core is now passive during dyld loading. Arena capacity belongs only
-  // to rpcs3_ios_initialize(), so do not communicate JIT policy through the
-  // environment and never retry dlopen under a second path.
+  // NEOSTATION_RPCS3_SINGLE_DLOPEN_V1
+  // The proven Build266 Core may prepare JIT pages during this one dlopen.
+  // StikJIT is already attached and owns that transaction. Never retry dlopen
+  // through a second path.
   NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
   NSString* path =
       [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"];
@@ -391,7 +390,7 @@ static void RPCS3Progress(void* context,
     }
     return NO;
   }
-  RPCS3Milestone(@"core_load_end", @"loaded; no Core JIT initialized during dlopen");
+  RPCS3Milestone(@"core_load_end", @"loaded through the single debugger-attached Build266 path");
 
 #define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"RPCS3_CORE_SYMBOL_MISSING: %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); self.coreLoadedWithExpandedJit = NO; return NO; } } while (0)
   _api.handle = handle;
@@ -1213,60 +1212,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-  if ([call.method isEqualToString:@"abortStartup"]) {
-    // Close only resources owned by this startup attempt. There is no host VA
-    // reservation in Build 303: the recovery Core owns its adaptive arena.
-    dispatch_async(_runtimeQueue, ^{
-      RPCS3JitAbortStartup(^(NSDictionary* closure) {
-        dispatch_async(self->_runtimeQueue, ^{
-          NSMutableDictionary* report = [closure mutableCopy];
-          if ([closure[@"success"] boolValue]) {
-            rpcs3_ios_status shutdownStatus = 0;
-            if (self->_startupEntered && self->_api.shutdown) {
-              shutdownStatus = self->_api.shutdown();
-            }
-            const BOOL closed = shutdownStatus == 0;
-            report[@"success"] = @(closed);
-            report[@"transactionClosed"] = @YES;
-            report[@"code"] = closed ? @"RPCS3_STARTUP_ABORTED" : @"RPCS3_CORE_SHUTDOWN_FAILED";
-            report[@"message"] = closed
-                ? @"JIT transaction closed and failed Core startup shut down."
-                : [NSString stringWithFormat:@"Core shutdown status=%d; %@", shutdownStatus, [self lastError]];
-            if (closed) {
-              self->_startupEntered = NO;
-              self.initialized = NO;
-              self.llvmSelfTestPassed = NO;
-            }
-          }
-          RPCS3Milestone(@"startup_abort_end", report[@"message"] ?: @"");
-          dispatch_async(dispatch_get_main_queue(), ^{ result(report); });
-        });
-      });
-    });
-    return;
-  }
-
-  if ([call.method isEqualToString:@"verifyJitExecution"]) {
-    dispatch_async(_runtimeQueue, ^{
-      using SelfTest = rpcs3_ios_status (*)(uint64_t, uint64_t*);
-      auto test = self->_api.handle ? reinterpret_cast<SelfTest>(dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test")) : nullptr;
-      uint64_t output = 0;
-      rpcs3_ios_status status = -1;
-      if (self.initialized && test && RPCS3JitTransactionIsClosed()) {
-        RPCS3Milestone(@"llvm_self_test_begin", @"Executing generated ARM64 code after confirmed debugger closure");
-        status = test(11, &output);
-      }
-      self.llvmSelfTestPassed = status == 0 && output == 40;
-      NSString* message = [NSString stringWithFormat:@"status=%d input=11 output=%llu expected=40; %@", status, (unsigned long long)output, self.llvmSelfTestPassed ? @"passed" : [self lastError]];
-      RPCS3Milestone(@"llvm_self_test_end", message);
-      NSDictionary* report = @{@"success": @(self.llvmSelfTestPassed),
-        @"code": self.llvmSelfTestPassed ? @"RPCS3_JIT_EXECUTION_VERIFIED" : @"RPCS3_LLVM_EXECUTION_FAILED",
-        @"stage": @"llvm_execution", @"message": message, @"status": @(status), @"output": @(output)};
-      dispatch_async(dispatch_get_main_queue(), ^{ result(report); });
-    });
-    return;
-  }
-
   if ([call.method isEqualToString:@"diagnostics"]) {
     NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath ?: @"";
     NSString* corePath = [frameworks stringByAppendingPathComponent:@"libRPCS3Core.dylib"];
@@ -1286,7 +1231,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       @"initialized": @(self.initialized),
       @"llvmSelfTestPassed": @(self.llvmSelfTestPassed),
       @"expandedJitRegion": @(self.initializedWithExpandedJit),
-      @"jitReady": @(self.llvmSelfTestPassed && RPCS3JitTransactionIsClosed()),
+      @"jitReady": @(self.llvmSelfTestPassed),
       @"debuggerFlag": @(RPCS3HostIsDebugged()),
       @"extendedVirtualAddressing": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing"))),
       @"increasedMemoryLimit": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))),
@@ -1305,14 +1250,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
-      if (self->_api.handle && !self.initialized) {
-        if (@available(iOS 26.0, *)) {
-          if (!RPCS3JitConfirmCoreLoadHandoff()) {
-            dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"code": @"RPCS3_JIT_NONCE_FAILED", @"message": @"RPCS3_JIT_NONCE_FAILED: current retry did not acknowledge the debugger nonce."}); });
-            return;
-          }
-        }
-      }
       if (![self loadCoreWithExpandedJit:expanded error:&error]) {
         NSString* message = error ?: @"RPCS3_CORE_LOAD_FAILED: Core unavailable";
         NSString* code = @"RPCS3_CORE_LOAD_FAILED";
@@ -1333,7 +1270,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         }
         return;
       }
-      self->_startupEntered = YES;
       rpcs3_ios_init_options options = {};
       options.abi_version = kExpectedAbi;
       options.size = sizeof(options);
@@ -1392,7 +1328,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         self.initialized = NO;
         self.llvmSelfTestPassed = NO;
         self.initializedWithExpandedJit = NO;
-        self->_startupEntered = NO;
       }
       NSDictionary* payload = [self statusPayload:status];
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -1488,13 +1423,36 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     CGFloat scale = screen.scale;
     float refreshRate = (float)screen.maximumFramesPerSecond;
     dispatch_async(_runtimeQueue, ^{
-      if (!self.llvmSelfTestPassed || !RPCS3JitTransactionIsClosed()) {
-        [self stopAndDismiss:nil];
-        dispatch_async(dispatch_get_main_queue(), ^{
-          result(@{@"success": @NO, @"code": @"RPCS3_STARTUP_NOT_VERIFIED",
-            @"stage": @"game_boot", @"message": @"RPCS3_STARTUP_NOT_VERIFIED: complete startup and execution verification before boot."});
-        });
-        return;
+      if (!self.llvmSelfTestPassed) {
+        typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
+        auto selfTest = reinterpret_cast<SelfTest>(
+            dlsym(self->_api.handle, "rpcs3_ios_run_llvm_self_test"));
+        uint64_t output = 0;
+        RPCS3Milestone(@"llvm_self_test_begin",
+                        @"Testing generated ARM64 code before game boot");
+        rpcs3_ios_status testStatus = selfTest ? selfTest(11, &output) : -1;
+        self.llvmSelfTestPassed = testStatus == 0 && output == 40;
+        RPCS3Milestone(
+            @"llvm_self_test_end",
+            [NSString stringWithFormat:@"status=%d output=%llu passed=%d",
+                                       testStatus,
+                                       (unsigned long long)output,
+                                       self.llvmSelfTestPassed]);
+        if (!self.llvmSelfTestPassed) {
+          NSString* detail =
+              selfTest ? [self lastError] : @"LLVM self-test export is missing.";
+          [self stopAndDismiss:nil];
+          dispatch_async(dispatch_get_main_queue(), ^{
+            result(@{
+              @"success": @NO,
+              @"code": @"RPCS3_JIT_EXECUTION_TEST_FAILED",
+              @"stage": @"game_boot",
+              @"message": [@"RPCS3 LLVM JIT self-test failed: "
+                  stringByAppendingString:detail ?: @""],
+            });
+          });
+          return;
+        }
       }
       NSString* audioError = nil;
       if (![self activateRPCS3AudioSession:&audioError]) {
