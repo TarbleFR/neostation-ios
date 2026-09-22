@@ -13,6 +13,15 @@ The standalone RPCS3 SwiftUI application is not embedded.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
+  # Only Flutter-facing Objective-C headers are public. The arena/Core headers
+  # contain C++ and must not be pulled into GeneratedPluginRegistrant.m.
+  s.public_header_files = [
+    'Classes/Rpcs3CompositeBridgePlugin.h',
+    'Classes/Rpcs3InternalBridgePlugin.h',
+    'Classes/Rpcs3JitBridgePlugin.h',
+    'Classes/Rpcs3DocumentPickerPlugin.h',
+    'Classes/Rpcs3RuntimeTuningPlugin.h',
+  ]
   # Deliberately do NOT use vendored_libraries here. CocoaPods would link the
   # dylib into Runner/rpcs3_internal_bridge and dyld would load RPCS3 before
   # NeoStation reaches its menus. Build 216 copies this file after Xcode builds
