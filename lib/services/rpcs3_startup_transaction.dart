@@ -4,7 +4,6 @@ import 'dart:async';
 enum Rpcs3StartupPhase {
   idle,
   route,
-  reserving,
   attaching,
   initializing,
   completing,
@@ -39,7 +38,6 @@ class Rpcs3StartupFailure implements Exception {
 class Rpcs3StartupOperations {
   const Rpcs3StartupOperations({
     required this.route,
-    required this.reserve,
     required this.attach,
     required this.initialize,
     required this.complete,
@@ -48,7 +46,6 @@ class Rpcs3StartupOperations {
     required this.onPhase,
   });
   final Rpcs3StartupOperation route,
-      reserve,
       attach,
       initialize,
       complete,
@@ -102,12 +99,8 @@ class Rpcs3StartupTransaction {
 
     try {
       await step(Rpcs3StartupPhase.route, operations.route);
-      resourcesMayExist = true;
-      // The native reservation result is authoritative. Do not duplicate its
-      // memory-policy constants or replace its exact kern_return_t-derived code
-      // with a Dart-side generic proof error.
-      await step(Rpcs3StartupPhase.reserving, operations.reserve);
       final attach = await step(Rpcs3StartupPhase.attaching, operations.attach);
+      resourcesMayExist = true;
       await step(Rpcs3StartupPhase.initializing, operations.initialize);
       if (attach['requiresCompletion'] != false) {
         final completion = await step(
