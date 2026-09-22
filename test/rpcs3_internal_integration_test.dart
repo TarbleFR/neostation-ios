@@ -104,7 +104,9 @@ void main() {
 
         expect(bridge, contains('RPCS3HostIsDebugged'));
         expect(bridge, isNot(contains('RPCS3ProbeExecutableMemory')));
-        expect(bridge, contains('_reservation.verify_owned()'));
+        expect(bridge, isNot(contains('_reservation')));
+        expect(bridge, isNot(contains('reset_failed_startup')));
+        expect(bridge, isNot(contains('Rpcs3ArenaReservation')));
         expect(bridge, contains('verifyJitExecution'));
         expect(bridge, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));
         expect(bridge, isNot(contains('RPCS3JitHasActiveCoreHandshake()')));

@@ -34,7 +34,9 @@ void main() {
       ).readAsStringSync();
       expect(plugin, contains('SecTaskCreateFromSelf'));
       expect(plugin, isNot(contains('RPCS3ProbeExecutableMemory')));
-      expect(plugin, contains('_reservation.verify_owned()'));
+      expect(plugin, isNot(contains('_reservation')));
+      expect(plugin, isNot(contains('reset_failed_startup')));
+      expect(plugin, isNot(contains('Rpcs3ArenaReservation')));
       expect(plugin, contains('verifyJitExecution'));
       expect(plugin, contains('RPCS3_DEBUGGER_AUTHORIZATION_MISSING'));
       expect(

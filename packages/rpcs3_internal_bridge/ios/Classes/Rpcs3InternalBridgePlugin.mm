@@ -1214,25 +1214,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([call.method isEqualToString:@"abortStartup"]) {
-    // Queue behind initialize: never detach or unmap while the Core is still
-    // preparing pages. A timeout of this operation remains a precise failure.
-    dispatch_async(_runtimeQueue, ^{
-      RPCS3JitAbortStartup(^(NSDictionary* closure) {
-        dispatch_async(self->_runtimeQueue, ^{
-          NSMutableDictionary* report = [closure mutableCopy];
-          if ([closure[@"success"] boolValue]) {
-            rpcs3_ios_status resetStatus = 0;
-            if (self->_startupEntered && self->_api.reset_failed_startup)
-              resetStatus = self->_api.reset_failed_startup();
-            const int releaseStatus = self->_reservation.discard();
-            BOOL reset = resetStatus == 0 && releaseStatus == 0 && !self->_reservation.poisoned;
-            report[@"success"] = @(reset);
-            report[@"retryable"] = @(reset);
-            report[@"transactionClosed"] = @YES;
-            report[@"code"] = reset ? @"RPCS3_STARTUP_ABORTED" :
-                (releaseStatus ? @"RPCS3_VA_ROLLBACK_FAILED" : @"RPCS3_CORE_RESET_RESTART_REQUIRED");
-            report[@"message"] = reset ? @"JIT transaction closed; uncommitted startup resources released." :
-                [N  if ([call.method isEqualToString:@"abortStartup"]) {
     // Close only resources owned by this startup attempt. There is no host VA
     // reservation in Build 303: the recovery Core owns its adaptive arena.
     dispatch_async(_runtimeQueue, ^{
