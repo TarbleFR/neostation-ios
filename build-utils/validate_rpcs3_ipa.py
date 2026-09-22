@@ -21,9 +21,9 @@ from embed_rpcs3_host_entitlements import (
     embedded_entitlements,
     require_runtime_entitlements,
 )
-from validate_rpcs3_embedded_core import (
-    FORBIDDEN_UNDEFINED_SYMBOLS,
-    validate_core,
+from validate_rpcs3_recovery_core import (
+    FORBIDDEN_UNDEFINED as FORBIDDEN_UNDEFINED_SYMBOLS,
+    validate as validate_core,
 )
 from validate_rpcs3_passive_dlopen import validate as validate_passive_dlopen
 
@@ -50,8 +50,6 @@ PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
 REQUIRED_CORE_SYMBOLS = (
     '_rpcs3_ios_initialize',
-    '_neostation_rpcs3_adopt_jit_layout',
-    '_neostation_rpcs3_reset_failed_startup',
     '_rpcs3_ios_run_llvm_self_test',
     '_rpcs3_ios_set_display_surface',
     '_rpcs3_ios_set_pad_state',
@@ -354,7 +352,11 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'commit': commit,
             'bundleIdentifier': str(info.get('CFBundleIdentifier', '')),
             'rpcS3CoreBytes': core.stat().st_size,
-            'rpcS3MemoryPolicy': {'codeBytes': 469762048, 'dataBytes': 603979776, 'virtualBudgetBytes': 1073741824, 'reservationOwner': 'host before dlopen'},
+            'rpcS3MemoryPolicy': {
+                'allocator': 'Build266 adaptive Core-owned arena',
+                'reservationOwner': 'RPCS3 Core',
+                'fixedHostReservation': False,
+            },
             'deviceRuntimeTested': False,
             'rpcS3RequiredSymbols': list(REQUIRED_CORE_SYMBOLS),
             'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),
