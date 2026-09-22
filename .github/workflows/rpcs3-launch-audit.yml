@@ -1,0 +1,62 @@
+name: RPCS3 launch source audit
+run-name: RPCS3 launch audit • ${{ github.sha }}
+on:
+  push:
+    branches: [experimental]
+    paths: ['.github/workflows/rpcs3-launch-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rpcs3-launch-source-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export reviewed host and baseline sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          git archive --format=tar.gz --output=audit/host-source.tar.gz HEAD
+          git archive --format=tar.gz --output=audit/baseline289-source.tar.gz 52acfe7d5e1bee8716da8f36eecc5efcc386f667
+          git log --format='%H %s' 52acfe7d5e1bee8716da8f36eecc5efcc386f667..HEAD > audit/history.txt
+          git diff 52acfe7d5e1bee8716da8f36eecc5efcc386f667 ee3b37771dc188f22b55c5081889a0e2259a830f -- lib/services/rpcs3* packages/rpcs3* build-utils/patch_rpcs3* > audit/launch-evolution.diff
+      - name: Materialize exact shipped Core postimage (no compilation)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SRC="$RUNNER_TEMP/rpcs3-launch-audit"
+          git init -q "$SRC"
+          git -C "$SRC" remote add origin https://github.com/XITRIX/rpcs3.git
+          git -C "$SRC" fetch --depth=1 origin 22f1152783cef1f7e04af7b1c895173e28fd5b03
+          git -C "$SRC" checkout -q --detach FETCH_HEAD
+          python3 - <<'PY'
+          import os,re,subprocess
+          from pathlib import Path
+          script=Path('build-utils/build_rpcs3_recovery_core.sh').read_text()
+          patches=re.findall(r'python3 "\$PWD/(build-utils/patch_rpcs3_[^"\n]+\.py)" "\$SRC"',script)
+          assert len(patches)==15, patches
+          for patch in patches:
+              print('APPLY',patch,flush=True)
+              subprocess.run(['python3',patch,os.environ['SRC']],check=True)
+          Path('audit/applied-patches.txt').write_text('\n'.join(patches)+'\n')
+          PY
+          git -C "$SRC" diff --stat > audit/core-changes.txt
+          tar -czf "$GITHUB_WORKSPACE/audit/shipped-core-source.tar.gz" -C "$SRC" Utilities rpcs3/ios rpcs3/Emu/Cell rpcs3/Emu/System.cpp rpcs3/Emu/System.h
+          grep -n 'g_initialization_attempted\|single-instance\|rpcs3_ios_shutdown\|g_lifecycle' "$SRC/rpcs3/ios/RPCS3IOS.cpp" | tee audit/core-lifecycle-locations.txt
+          shasum -a 256 audit/*.tar.gz > audit/source-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: RPCS3-launch-source-audit-${{ github.sha }}
+          path: audit/
+          if-no-files-found: error
+          retention-days: 7
