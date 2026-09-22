@@ -118,12 +118,16 @@ void main() {
         final handoff = bridge.indexOf('if (!RPCS3JitConfirmCoreLoadHandoff())');
         final dlopen = bridge.indexOf('handle = dlopen(');
         final initializeCall = bridge.indexOf('self->_api.initialize(&options)');
-        final selfTest = bridge.indexOf('rpcs3_ios_run_llvm_self_test');
-        final boot = bridge.indexOf('self->_api.boot_game');
+        final launch = bridge.indexOf(
+          'if ([call.method isEqualToString:@"launchGame"])',
+        );
+        final selfTest = bridge.indexOf('rpcs3_ios_run_llvm_self_test', launch);
+        final boot = bridge.indexOf('self->_api.boot_game', launch);
         expect(handoff, greaterThanOrEqualTo(0));
         expect(dlopen, greaterThan(handoff));
         expect(initializeCall, greaterThan(dlopen));
-        expect(selfTest, greaterThan(initializeCall));
+        expect(launch, greaterThan(initializeCall));
+        expect(selfTest, greaterThan(launch));
         expect(boot, greaterThan(selfTest));
       },
     );
