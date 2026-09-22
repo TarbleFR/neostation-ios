@@ -4,7 +4,6 @@
 #import "Rpcs3CoreABI.h"
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3EarlyLoaderDiagnostics.h"
-#import "Rpcs3ArenaReservation.h"
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
@@ -221,7 +220,6 @@ static UIViewController* RPCS3RootViewController(void) {
   uint64_t _diagnosticMinimumAvailableMemory;
   NSInteger _diagnosticWorstThermalState;
   rpcs3_ios_api _api;
-  neostation::rpcs3::arena::Reservation _reservation;
   BOOL _startupEntered;
 }
 
@@ -403,8 +401,6 @@ static void RPCS3Progress(void* context,
   LOAD("rpcs3_ios_abi_version", abi_version);
   LOAD("rpcs3_ios_build_info", build_info);
   LOAD("rpcs3_ios_initialize", initialize);
-  LOAD("neostation_rpcs3_adopt_jit_layout", adopt_jit_layout);
-  LOAD("neostation_rpcs3_reset_failed_startup", reset_failed_startup);
   LOAD("rpcs3_ios_firmware_version", firmware_version);
   LOAD("rpcs3_ios_install_firmware", install_firmware);
   LOAD("rpcs3_ios_install_package", install_package);
@@ -1219,29 +1215,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-  if ([call.method isEqualToString:@"reserveAddressSpace"]) {
-    dispatch_async(_runtimeQueue, ^{
-      RPCS3Milestone(@"va_reserve_begin", @"Reserving 448 MiB code + 576 MiB data before dlopen; JIT is not yet prepared");
-      BOOL available = NO;
-      try { available = self->_reservation.acquire(); }
-      catch (const std::exception& exception) {
-        self->_reservation.code = "RPCS3_VA_QUERY_EXCEPTION";
-        self->_reservation.detail = exception.what();
-      }
-      NSString* message = [NSString stringWithUTF8String:self->_reservation.detail.c_str()] ?: @"";
-      NSString* code = [NSString stringWithUTF8String:self->_reservation.code.c_str()] ?: @"RPCS3_VA_UNKNOWN_ERROR";
-      RPCS3Milestone(available ? @"va_reserve_end" : @"va_reserve_failed", message);
-      dispatch_async(dispatch_get_main_queue(), ^{
-        result(@{@"success": @(available), @"code": code, @"stage": @"va_reservation",
-          @"message": message, @"addressSpaceReserved": @(available), @"jitReady": @NO,
-          @"codeBytes": @(neostation::rpcs3::arena::code_bytes),
-          @"dataBytes": @(neostation::rpcs3::arena::data_bytes),
-          @"budgetBytes": @(neostation::rpcs3::arena::budget_bytes)});
-      });
-    });
-    return;
-  }
-
   if ([call.method isEqualToString:@"abortStartup"]) {
     // Queue behind initialize: never detach or unmap while the Core is still
     // preparing pages. A timeout of this operation remains a precise failure.
@@ -1261,8 +1234,26 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
             report[@"code"] = reset ? @"RPCS3_STARTUP_ABORTED" :
                 (releaseStatus ? @"RPCS3_VA_ROLLBACK_FAILED" : @"RPCS3_CORE_RESET_RESTART_REQUIRED");
             report[@"message"] = reset ? @"JIT transaction closed; uncommitted startup resources released." :
-                [NSString stringWithFormat:@"Core reset status=%d; release kernel=%d; %@", resetStatus, releaseStatus, [self lastError]];
-            if (reset) {
+                [N  if ([call.method isEqualToString:@"abortStartup"]) {
+    // Close only resources owned by this startup attempt. There is no host VA
+    // reservation in Build 303: the recovery Core owns its adaptive arena.
+    dispatch_async(_runtimeQueue, ^{
+      RPCS3JitAbortStartup(^(NSDictionary* closure) {
+        dispatch_async(self->_runtimeQueue, ^{
+          NSMutableDictionary* report = [closure mutableCopy];
+          if ([closure[@"success"] boolValue]) {
+            rpcs3_ios_status shutdownStatus = 0;
+            if (self->_startupEntered && self->_api.shutdown) {
+              shutdownStatus = self->_api.shutdown();
+            }
+            const BOOL closed = shutdownStatus == 0;
+            report[@"success"] = @(closed);
+            report[@"transactionClosed"] = @YES;
+            report[@"code"] = closed ? @"RPCS3_STARTUP_ABORTED" : @"RPCS3_CORE_SHUTDOWN_FAILED";
+            report[@"message"] = closed
+                ? @"JIT transaction closed and failed Core startup shut down."
+                : [NSString stringWithFormat:@"Core shutdown status=%d; %@", shutdownStatus, [self lastError]];
+            if (closed) {
               self->_startupEntered = NO;
               self.initialized = NO;
               self.llvmSelfTestPassed = NO;
@@ -1330,15 +1321,11 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
 
-    // Preserve the existing embedded Core capacity policy. The allocator owns
-    // dynamic JIT addresses and thread write/execute transitions.
+    // Build 303 recovery Core owns its adaptive JIT arena. The host only
+    // controls startup ordering and never reserves or adopts fixed VA ranges.
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
-      if (!self.initialized && !self->_reservation.layout) {
-        dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO, @"code": @"RPCS3_VA_NOT_RESERVED", @"message": @"RPCS3_VA_NOT_RESERVED: reserve address space before attaching or loading Core."}); });
-        return;
-      }
       if (self->_api.handle && !self.initialized) {
         if (@available(iOS 26.0, *)) {
           if (!RPCS3JitConfirmCoreLoadHandoff()) {
@@ -1361,21 +1348,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         }
         return;
       }
-      if (!self->_reservation.verify_owned()) {
-        NSString* detail = [NSString stringWithUTF8String:self->_reservation.detail.c_str()] ?: @"";
-        dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @NO,
-          @"code": @"RPCS3_VA_OWNERSHIP_CHANGED", @"stage": @"va_adoption", @"message": detail}); });
-        return;
-      }
-      const auto layout = self->_reservation.layout;
-      rpcs3_ios_status adoption = self->_api.adopt_jit_layout(layout.code, layout.data,
-          neostation::rpcs3::arena::code_bytes, neostation::rpcs3::arena::data_bytes);
-      if (adoption != 0) {
-        NSDictionary* report = [self statusPayload:adoption];
-        dispatch_async(dispatch_get_main_queue(), ^{ result(report); });
-        return;
-      }
-      self->_reservation.layout = {}; // Core owns the reservation, no double free
       self->_startupEntered = YES;
       rpcs3_ios_init_options options = {};
       options.abi_version = kExpectedAbi;
