@@ -7,6 +7,7 @@ patch=(root/'build-utils/patch_rpcs3_build301_passive_dlopen.py').read_text()
 
 assert build.count('patch_rpcs3_build266_v09_core.py') == 1
 assert build.count('patch_rpcs3_build301_passive_dlopen.py') == 1
+assert build.count('patch_rpcs3_build303_restartable_lifecycle.py') == 1
 assert 'patch_rpcs3_build295_fixed_reservation.py' not in build
 
 # Build 302's marker is intentionally mentioned only by the negative guard
@@ -18,4 +19,4 @@ assert 'mode=mmap_hint_exact' in patch
 assert 'must be applied before/without Build 295' in patch
 assert 'VM_FLAGS_FIXED | jit_vm_tag' not in patch
 
-print('PASS: recovery Core is Build266 allocator + Build301 passive dlopen, with Build295/302 excluded')
+print('PASS: recovery Core is Build266 allocator + Build301 passive dlopen + restartable lifecycle, with Build295/302 excluded')
