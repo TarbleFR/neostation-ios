@@ -322,7 +322,7 @@ static void RPCS3Progress(void* context,
   if (_api.handle) {
     if (self.coreLoadedWithExpandedJit != expanded) {
       if (error) {
-        *error = @"RPCS3 JIT arena policy cannot change after the Core is loaded; relaunch NeoStation.";
+        *error = @"RPCS3_CORE_MODE_MISMATCH: JIT arena policy cannot change after the Core is loaded; relaunch NeoStation.";
       }
       return NO;
     }
@@ -352,7 +352,7 @@ static void RPCS3Progress(void* context,
     }
   }
   if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
-    if (error) *error = @"libRPCS3Core.dylib is missing from NeoStation Frameworks.";
+    if (error) *error = @"RPCS3_CORE_MISSING: libRPCS3Core.dylib is missing from NeoStation Frameworks.";
     return NO;
   }
 
@@ -362,7 +362,7 @@ static void RPCS3Progress(void* context,
     if (!RPCS3JitConfirmCoreLoadHandoff()) {
       RPCS3Milestone(@"core_handoff_end", @"rejected; dlopen blocked");
       if (error) {
-        *error = @"The Universal debugger did not acknowledge the final Core-load nonce; dlopen was blocked.";
+        *error = @"RPCS3_JIT_HANDOFF_FAILED: Universal debugger did not acknowledge the final Core-load nonce; dlopen was blocked.";
       }
       return NO;
     }
@@ -389,13 +389,13 @@ static void RPCS3Progress(void* context,
                     [NSString stringWithFormat:@"dlopen failed: %@", lastLoadError]);
     if (error) {
       *error = [NSString stringWithFormat:
-          @"libRPCS3Core.dylib could not load: %@", lastLoadError];
+          @"RPCS3_CORE_DLOPEN_FAILED: %@", lastLoadError];
     }
     return NO;
   }
   RPCS3Milestone(@"core_load_end", @"loaded; no Core JIT initialized during dlopen");
 
-#define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"Missing RPCS3 symbol %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); self.coreLoadedWithExpandedJit = NO; return NO; } } while (0)
+#define LOAD(name, field) do { _api.field = (__typeof__(_api.field))dlsym(handle, name); if (!_api.field) { if (error) *error = [NSString stringWithFormat:@"RPCS3_CORE_SYMBOL_MISSING: %s", name]; dlclose(handle); memset(&_api, 0, sizeof(_api)); self.coreLoadedWithExpandedJit = NO; return NO; } } while (0)
   _api.handle = handle;
   self.coreLoadedWithExpandedJit = expanded;
   LOAD("rpcs3_ios_abi_version", abi_version);
@@ -422,7 +422,7 @@ static void RPCS3Progress(void* context,
   LOAD("rpcs3_ios_last_error", last_error);
 #undef LOAD
   if (_api.abi_version() != kExpectedAbi) {
-    if (error) *error = [NSString stringWithFormat:@"Unsupported RPCS3 iOS ABI %u (expected %u).", _api.abi_version(), kExpectedAbi];
+    if (error) *error = [NSString stringWithFormat:@"RPCS3_CORE_ABI_MISMATCH: got %u expected %u.", _api.abi_version(), kExpectedAbi];
     dlclose(handle);
     memset(&_api, 0, sizeof(_api));
     self.coreLoadedWithExpandedJit = NO;
@@ -1335,8 +1335,14 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         }
       }
       if (![self loadCoreWithExpandedJit:expanded error:&error]) {
+        NSString* message = error ?: @"RPCS3_CORE_LOAD_FAILED: Core unavailable";
+        NSString* code = @"RPCS3_CORE_LOAD_FAILED";
+        if ([message hasPrefix:@"RPCS3_"]) {
+          code = [message componentsSeparatedByCharactersInSet:
+              [NSCharacterSet characterSetWithCharactersInString:@" :\n"]].firstObject ?: code;
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
-          result(@{@"success": @NO, @"code": @"RPCS3_CORE_LOAD_FAILED", @"stage": @"core_load", @"message": error ?: @"Core unavailable"});
+          result(@{@"success": @NO, @"code": code, @"stage": @"core_load", @"message": message});
         });
         return;
       }
@@ -1402,6 +1408,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         self.initialized = NO;
         self.llvmSelfTestPassed = NO;
         self.initializedWithExpandedJit = NO;
+        self->_startupEntered = NO;
       }
       NSDictionary* payload = [self statusPayload:status];
       dispatch_async(dispatch_get_main_queue(), ^{
