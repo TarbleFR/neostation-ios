@@ -1497,7 +1497,11 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     };
     if (NSThread.isMainThread) present();
     else dispatch_sync(dispatch_get_main_queue(), present);
-    if (!controller || !controller.metalLayer.device) { result(@{@"success": @NO, @"message": @"Metal surface could not be created."}); return; }
+    if (!controller || !controller.metalLayer.device) {
+      result(@{@"success": @NO, @"code": @"RPCS3_DISPLAY_SURFACE_FAILED",
+        @"stage": @"game_boot", @"message": @"Metal surface could not be created."});
+      return;
+    }
     CGSize size = controller.view.bounds.size;
     UIScreen* screen = controller.view.window.screen ?: UIScreen.mainScreen;
     CGFloat scale = screen.scale;
@@ -1515,7 +1519,8 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       if (![self activateRPCS3AudioSession:&audioError]) {
         [self stopAndDismiss:nil];
         dispatch_async(dispatch_get_main_queue(), ^{
-          result(@{@"success": @NO, @"message": audioError ?: @"RPCS3 audio session could not start."});
+          result(@{@"success": @NO, @"code": @"RPCS3_AUDIO_SESSION_FAILED",
+            @"stage": @"game_boot", @"message": audioError ?: @"RPCS3 audio session could not start."});
         });
         return;
       }
@@ -1531,7 +1536,14 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
           ? self->_api.boot_game(titleId.UTF8String, savestateId.length ? savestateId.UTF8String : NULL)
           : surfaceStatus;
       RPCS3Milestone(@"game_boot_return", [NSString stringWithFormat:@"%@ status=%d", titleId, bootStatus]);
-      NSDictionary* payload = [self statusPayload:bootStatus];
+      NSMutableDictionary* payload = [[self statusPayload:bootStatus] mutableCopy];
+      payload[@"stage"] = @"game_boot";
+      payload[@"nativeStatus"] = @(bootStatus);
+      if (bootStatus != 0 && [payload[@"code"] hasPrefix:@"RPCS3_CORE_STATUS_"]) {
+        payload[@"code"] = surfaceStatus == 0
+            ? @"RPCS3_GAME_BOOT_FAILED"
+            : @"RPCS3_DISPLAY_SURFACE_FAILED";
+      }
       if (bootStatus == 0) [self startDiagnosticPerformanceSampling];
       else [self stopAndDismiss:nil];
       dispatch_async(dispatch_get_main_queue(), ^{ result(payload); });
