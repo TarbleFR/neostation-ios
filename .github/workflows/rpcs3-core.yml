@@ -20,6 +20,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    # The host integration reuses the already built, provenance-checked Core;
+    # ios-ci validates its unchanged source, recipe, ABI, and binary identity.
+    if: ${{ !contains(github.event.head_commit.message, '[rpcs3-host-integration]') }}
     name: Build passive RPCS3 Core arm64
     runs-on: macos-15
     timeout-minutes: 180

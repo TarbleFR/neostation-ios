@@ -11,6 +11,7 @@ import argparse
 import json
 import hashlib
 import plistlib
+import re
 import subprocess
 import tempfile
 import zipfile
@@ -22,14 +23,20 @@ from embed_rpcs3_host_entitlements import (
     embedded_entitlements,
     require_runtime_entitlements,
 )
+from validate_rpcs3_embedded_core import validate_core
+from validate_rpcs3_passive_dlopen import (
+    ValidationError as PassiveValidationError,
+    validate as validate_passive_dlopen,
+)
 FORBIDDEN_UNDEFINED_SYMBOLS = {
     '_vm_map', '__os_log_default', '__os_log_error_impl', '_os_log_type_enabled'
 }
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_NAME = 'libRPCS3Core.dylib'
-PROVEN_BUILD266_SHA256 = 'dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'
-PROVEN_BUILD266_MARKERS = (
+CORE_MARKERS = (
+    b'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
+    b'NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1',
     b'NEOSTATION_BUILD266_JIT_V09_SHADER_V1',
     b'NEOSTATION_DYNAMIC_JIT_V5',
     b'NEOSTATION_BUILD266_SHADER_CHECKPOINT_V1',
@@ -74,6 +81,12 @@ FORBIDDEN_CORE_SYMBOLS = (
     '_neostation_rpcs3_adopt_jit_layout',
     '_neostation_rpcs3_reset_failed_startup',
 )
+
+CORE_LIFECYCLE_MARKER = 'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1'
+CORE_ALLOCATOR_MARKER = 'NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1'
+CORE_MANIFEST = ROOT / 'build-utils/rpcs3/canonical-source.json'
+CORE_PATCH = ROOT / 'build-utils/rpcs3/embedded-core.patch'
+CORE_HOST_ABI = ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
 
 
 SPRINGBOARD_ICON_FILES = {
@@ -226,7 +239,45 @@ def find_ipa() -> Path:
     return candidates[0]
 
 
-def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
+def validate_core_identity(
+    core_data: bytes, identity_path: Path, expected_host_commit: str,
+) -> dict:
+    demand(identity_path.is_file(), f'RPCS3 Core artifact identity missing: {identity_path}')
+    identity = json.loads(identity_path.read_text())
+    demand(isinstance(identity, dict), 'RPCS3 Core identity must be a JSON object')
+    manifest = json.loads(CORE_MANIFEST.read_text())
+    patch_sha = hashlib.sha256(CORE_PATCH.read_bytes()).hexdigest()
+    demand(patch_sha == manifest['patch_sha256'], 'RPCS3 canonical source patch changed')
+    host_source = CORE_HOST_ABI.read_text()
+    match = re.search(r'\bkExpectedAbi\s*=\s*(\d+)\s*;', host_source)
+    demand(match is not None, 'Cannot identify RPCS3 host ABI version')
+    expected_abi = int(match.group(1))
+    actual_sha = hashlib.sha256(core_data).hexdigest()
+    expected = {
+        'schema_version': 1,
+        'repository': 'https://github.com/TarbleFR/neostation-ios',
+        'host_commit': expected_host_commit,
+        'source_commit': manifest['upstream_commit'],
+        'source_patch_sha256': patch_sha,
+        'abi_version': expected_abi,
+        'architectures': ['arm64'],
+        'sha256': actual_sha,
+        'lifecycle_marker': CORE_LIFECYCLE_MARKER,
+        'allocator_marker': CORE_ALLOCATOR_MARKER,
+        'device_runtime_tested': False,
+    }
+    for key, value in expected.items():
+        demand(type(identity.get(key)) is type(value) and identity.get(key) == value,
+               f'RPCS3 Core identity mismatch for {key}: expected {value!r}, '
+               f'got {identity.get(key)!r}')
+    return identity
+
+
+def validate_ipa(
+    ipa: Path, build_number: str, commit: str,
+    core_identity: Path | None = None, core_host_commit: str | None = None,
+    core_run_id: str | None = None,
+) -> dict:
     demand(ipa.is_file() and ipa.stat().st_size > 0, f'IPA missing or empty: {ipa}')
     demand(zipfile.is_zipfile(ipa), f'IPA is not a ZIP archive: {ipa}')
 
@@ -263,20 +314,28 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
                f'Packaged RPCS3 core is unexpectedly small: {core.stat().st_size} bytes')
         core_data = core.read_bytes()
         actual_core_sha = hashlib.sha256(core_data).hexdigest()
-        demand(
-            actual_core_sha == PROVEN_BUILD266_SHA256,
-            'Packaged RPCS3 Core is not the proven Build266 binary: '
-            f'{actual_core_sha}',
-        )
-        for marker in PROVEN_BUILD266_MARKERS:
-            demand(marker in core_data, f'Proven Build266 marker missing: {marker!r}')
+        demand(core_identity is not None and core_host_commit is not None and core_run_id is not None,
+               'RPCS3 Core provenance arguments are required for the packaged IPA')
+        identity = validate_core_identity(core_data, core_identity, core_host_commit)
+        demand(core_run_id.isdecimal() and int(core_run_id) > 0,
+               'RPCS3 Core artifact run ID must be a positive decimal integer')
+        for marker in CORE_MARKERS:
+            demand(marker in core_data, f'RPCS3 Core marker missing: {marker!r}')
         for retired in (
-            b'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
             b'NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1',
             b'NEOSTATION_BUILD302_RESERVED_STARTUP_V1',
             b'NEOSTATION_BUILD303_RESTARTABLE_LIFECYCLE_V1',
         ):
             demand(retired not in core_data, f'Retired RPCS3 Core layer present: {retired!r}')
+        try:
+            validate_core(core_data)
+            passive_report = validate_passive_dlopen(core_data)
+        except (ValueError, PassiveValidationError) as exc:
+            raise ValidationError(f'RPCS3 Core Mach-O validation failed: {exc}') from exc
+        # The passive validator has its own exception type: never allow a
+        # report without a successful initializer audit to enter the IPA.
+        demand(passive_report['forbiddenReachability'] is False,
+               'RPCS3 Core dyld initializer can reach JIT setup')
 
         symbols = command_output('nm', '-g', str(core))
         missing_symbols = [symbol for symbol in REQUIRED_CORE_SYMBOLS if f' {symbol}' not in symbols]
@@ -380,7 +439,7 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'bundleIdentifier': str(info.get('CFBundleIdentifier', '')),
             'rpcS3CoreBytes': core.stat().st_size,
             'rpcS3MemoryPolicy': {
-                'allocator': 'Build266 adaptive Core-owned arena',
+                'allocator': 'Core-owned atomic non-overwriting reservation',
                 'reservationOwner': 'RPCS3 Core',
                 'fixedHostReservation': False,
             },
@@ -389,7 +448,10 @@ def validate_ipa(ipa: Path, build_number: str, commit: str) -> dict:
             'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),
             'rpcS3LoadTimeImportsValidated': True,
             'rpcS3CoreSha256': actual_core_sha,
-            'rpcS3CoreBaseline': 'Build266 proven donor',
+            'rpcS3CoreBaseline': 'Build266-compatible passive Core artifact',
+            'rpcS3CoreIdentity': identity,
+            'rpcS3CoreRunId': int(core_run_id),
+            'rpcS3PassiveDlopen': passive_report,
             'runtimeEntitlements': {
                 key: entitlements.get(key) for key in REQUIRED_RUNTIME_ENTITLEMENTS
             },
@@ -406,11 +468,17 @@ def main() -> None:
     parser.add_argument('--build-number', required=True)
     parser.add_argument('--commit', required=True)
     parser.add_argument('--ipa', type=Path)
+    parser.add_argument('--core-identity', type=Path, required=True)
+    parser.add_argument('--core-host-commit', required=True)
+    parser.add_argument('--core-run-id', required=True)
     args = parser.parse_args()
 
     ipa = args.ipa or find_ipa()
     try:
-        report = validate_ipa(ipa, args.build_number, args.commit)
+        report = validate_ipa(
+            ipa, args.build_number, args.commit,
+            args.core_identity, args.core_host_commit, args.core_run_id,
+        )
     except (ValidationError, ValueError, plistlib.InvalidFileException) as exc:
         raise SystemExit(f'RPCS3 IPA validation failed: {exc}') from exc
 

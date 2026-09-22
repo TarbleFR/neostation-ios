@@ -22,13 +22,13 @@ SOURCE = (Path(sys.argv.pop(1)).resolve() / "Utilities/JITIOS.cpp"
           if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else None)
 
 
-def canonical_patch_postimage() -> str:
+def canonical_patch_postimage(relative: str) -> str:
     patch = ROOT / "build-utils/rpcs3/embedded-core.patch"
     manifest = json.loads((ROOT / "build-utils/rpcs3/canonical-source.json").read_text())
     payload = patch.read_bytes()
     if hashlib.sha256(payload).hexdigest() != manifest["patch_sha256"]:
         raise ValueError("canonical RPCS3 patch checksum mismatch")
-    section_header = "diff --git a/Utilities/JITIOS.cpp b/Utilities/JITIOS.cpp\n"
+    section_header = f"diff --git a/{relative} b/{relative}\n"
     section = payload.decode().split(section_header, 1)[1].split("\ndiff --git ", 1)[0]
     # Reassemble the resulting lines of the file's unified-diff hunks.
     # Every line of reserve_arena_layout is a patch addition; its constants
@@ -57,7 +57,7 @@ def extract_function(source: str, signature: str) -> str:
 
 
 def extract_constant(source: str, name: str) -> str:
-    pattern = rf"^constexpr\s+[^;\n]+\s+{name}\s*=\s*[^;]+;"
+    pattern = rf"^(?:inline\s+)?constexpr\s+[^;\n]+\s+{name}\s*=\s*[^;]+;"
     match = re.search(pattern, source, re.MULTILINE)
     if match is None:
         raise ValueError(f"missing arena layout constant {name}")
@@ -65,6 +65,7 @@ def extract_constant(source: str, name: str) -> str:
 
 
 CPP_PREAMBLE = r'''
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -245,32 +246,112 @@ void check_unexpected_kernel_relocation_is_released()
     assert(releases[0].size == size && live.empty());
 }
 
+void check_fragmented_low_va_falls_back_to_nearby_data()
+{
+    using namespace rpcs3::ios::jit;
+    reset_mock();
+    constexpr vm_size_t code_size = 448 * mib;
+    constexpr vm_size_t data_size = 256 * mib;
+    const vm_address_t code_address = arena_address_begin;
+    const vm_address_t obstacle = code_address + code_size;
+    const vm_address_t data_address = obstacle + arena_address_step;
+    const vm_address_t tail = data_address + data_size;
+    // No 896 MiB contiguous window remains, but two nearby slots are free.
+    live.emplace(obstacle, arena_address_step);
+    live.emplace(tail, arena_address_end - tail);
+    u8* data = nullptr;
+    usz data_capacity = 0;
+    u8* code = reserve_code_data_layout(code_size, data, data_capacity);
+    assert(code == reinterpret_cast<u8*>(code_address));
+    assert(data == reinterpret_cast<u8*>(data_address));
+    assert(data_capacity == data_size);
+    assert(reinterpret_cast<vm_address_t>(data) - reinterpret_cast<vm_address_t>(code)
+           < 0x1'0000'0000);
+    assert(live.size() == 4);
+    assert(live.at(obstacle) == arena_address_step);
+    assert(live.at(tail) == arena_address_end - tail);
+    assert(live.at(code_address) == code_size && live.at(data_address) == data_size);
+    assert(protections.size() == 2);
+    assert(protections[0].address == code_address && protections[0].size == code_size);
+    assert(protections[1].address == data_address && protections[1].size == data_size);
+    assert(releases.empty());
+    for (const allocation_call& call : allocations)
+    {
+        assert(call.flags == (VM_FLAGS_FIXED | jit_vm_tag));
+        assert(!(call.flags & (VM_FLAGS_ANYWHERE | VM_FLAGS_OVERWRITE)));
+    }
+}
+
+void check_no_compatible_data_window_releases_code()
+{
+    using namespace rpcs3::ios::jit;
+    reset_mock();
+    constexpr vm_size_t code_size = 448 * mib;
+    constexpr vm_size_t far_data_size = 256 * mib;
+    const vm_address_t code_address = arena_address_begin;
+    const vm_address_t obstacle = code_address + code_size;
+    const vm_address_t far_data = code_address + 5 * 1024 * mib;
+    const vm_address_t tail = far_data + far_data_size;
+    live.emplace(obstacle, far_data - obstacle);
+    live.emplace(tail, arena_address_end - tail);
+    u8* data = reinterpret_cast<u8*>(1);
+    usz data_capacity = 123;
+    u8* code = reserve_code_data_layout(code_size, data, data_capacity);
+    assert(code == nullptr && data == nullptr && data_capacity == 0);
+    assert(protections.size() == 1 && protections[0].address == code_address);
+    assert(releases.size() == 1);
+    assert(releases[0].address == code_address && releases[0].size == code_size);
+    assert(live.size() == 2);
+    assert(live.at(obstacle) == far_data - obstacle);
+    assert(live.at(tail) == arena_address_end - tail);
+    for (const allocation_call& call : allocations)
+    {
+        assert(call.flags == (VM_FLAGS_FIXED | jit_vm_tag));
+        assert(!(call.flags & (VM_FLAGS_ANYWHERE | VM_FLAGS_OVERWRITE)));
+    }
+}
+
 int main()
 {
     check_exact_next_candidate_preserves_occupied_range();
     check_kernel_error_leaves_no_reservation();
     check_protection_error_releases_range_and_allows_retry();
     check_unexpected_kernel_relocation_is_released();
-    std::puts("PASS: atomic exact Mach JIT reservation, occupied range, VM errors and cleanup");
+    check_fragmented_low_va_falls_back_to_nearby_data();
+    check_no_compatible_data_window_releases_code();
+    std::puts("PASS: atomic exact Mach JIT reservation, fragmented low VA and cleanup");
 }
 '''
 
 
 class AtomicJitReservationTest(unittest.TestCase):
     def test_real_reservation_function_against_mach_vm_mock(self) -> None:
-        source = SOURCE.read_text() if SOURCE else canonical_patch_postimage()
+        source = (SOURCE.read_text() if SOURCE
+                  else canonical_patch_postimage("Utilities/JITIOS.cpp"))
+        policy = ((SOURCE.parent / "JITIOSLayoutPolicy.h").read_text() if SOURCE
+                  else canonical_patch_postimage("Utilities/JITIOSLayoutPolicy.h"))
         constants = "\n".join(
             extract_constant(source, name)
             for name in (
                 "jit_vm_tag", "arena_address_begin", "arena_address_end", "arena_address_step"
             )
         )
-        function = extract_function(source, "u8* reserve_arena_layout(")
+        policy_constants = "\n".join(
+            extract_constant(policy, name)
+            for name in ("mib", "arena_min_capacity", "arena_max_capacity",
+                         "arena_capacity_step")
+        )
+        policy_constants = "namespace rpcs3::ios::jit {\n" + policy_constants + "\n}"
+        functions = "\n\n".join(
+            extract_function(source, name)
+            for name in ("u8* reserve_arena_layout(", "u8* reserve_code_data_layout(")
+        )
         with tempfile.TemporaryDirectory(prefix="neostation-atomic-jit-") as directory:
             path = Path(directory)
             cpp = path / "atomic_jit_test.cpp"
             executable = path / "atomic_jit_test"
-            cpp.write_text("\n\n".join((CPP_PREAMBLE, constants, function, CPP_SCENARIOS)))
+            cpp.write_text("\n\n".join((CPP_PREAMBLE, constants, policy_constants,
+                                        functions, CPP_SCENARIOS)))
             subprocess.run(
                 ["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", "-pedantic",
                  str(cpp), "-o", str(executable)],
