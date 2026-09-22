@@ -136,7 +136,7 @@ python3 "$PWD/test/rpcs3_build266_v09_core_test.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build301_passive_dlopen.py" "$SRC"
 python3 "$PWD/test/rpcs3_build301_passive_dlopen_test.py" "$SRC"
 python3 "$PWD/build-utils/patch_rpcs3_build303_restartable_lifecycle.py" "$SRC"
-python3 "$PWD/test/rpcs3_build303_restartable_lifecycle_test.py"
+python3 "$PWD/test/rpcs3_build303_restartable_lifecycle_test.py" "$SRC"
 grep -q "NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1" "$SRC/rpcs3/ios/RPCS3IOS.cpp"
 if grep -R -q "NEOSTATION_BUILD295_FIXED_JIT_RESERVATION_V1\|NEOSTATION_BUILD302_RESERVED_STARTUP_V1" "$SRC/Utilities" "$SRC/rpcs3/ios"; then
   die "Recovery Core unexpectedly contains fixed-reservation markers"
