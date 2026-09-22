@@ -49,7 +49,33 @@ jobs:
               subprocess.run(['python3',patch,os.environ['SRC']],check=True)
           Path('audit/applied-patches.txt').write_text('\n'.join(patches)+'\n')
           PY
+          git -C "$SRC" add -N .
           git -C "$SRC" diff --stat > audit/core-changes.txt
+          git -C "$SRC" diff --binary > audit/canonical303.patch
+          python3 - <<'PYCODE'
+          import hashlib,json,os,subprocess,tarfile
+          from pathlib import Path
+          source=Path(os.environ['SRC'])
+          changes=subprocess.check_output(['git','-C',str(source),'diff','--name-only'],text=True).splitlines()
+          hashes={}
+          for rel in changes:
+              after=source/rel
+              if not after.is_file():
+                  raise RuntimeError('unexpected source deletion '+rel)
+              dst=Path('audit/postimage')/rel
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              dst.write_bytes(after.read_bytes())
+              hashes[rel]=hashlib.sha256(after.read_bytes()).hexdigest()
+              old=subprocess.run(['git','-C',str(source),'show','HEAD:'+rel],capture_output=True)
+              if old.returncode==0:
+                  dst=Path('audit/preimage')/rel
+                  dst.parent.mkdir(parents=True,exist_ok=True)
+                  dst.write_bytes(old.stdout)
+          with tarfile.open('audit/canonical303-sources.tar.gz','w:gz') as archive:
+              archive.add('audit/preimage',arcname='preimage')
+              archive.add('audit/postimage',arcname='postimage')
+          Path('audit/postimage-sha256.json').write_text(json.dumps(hashes,indent=2)+'\n')
+          PYCODE
           tar -czf "$GITHUB_WORKSPACE/audit/shipped-core-source.tar.gz" -C "$SRC" Utilities rpcs3/ios rpcs3/Emu/Cell rpcs3/Emu/System.cpp rpcs3/Emu/System.h
           grep -n 'g_initialization_attempted\|single-instance\|rpcs3_ios_shutdown\|g_lifecycle' "$SRC/rpcs3/ios/RPCS3IOS.cpp" | tee audit/core-lifecycle-locations.txt
           shasum -a 256 audit/*.tar.gz > audit/source-sha256.txt
