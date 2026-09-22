@@ -255,7 +255,7 @@ class Rpcs3InternalService {
     // the arena before completeJit can confirm success.
     _emit(
       Rpcs3RuntimePhase.initializingCore,
-      'Helper JIT attaché. Préparation de la mémoire RPCS3…',
+      'Helper JIT attaché. Initialisation du Core RPCS3…',
       jitReady: false,
       coreReady: _initialized,
     );
@@ -317,16 +317,6 @@ class Rpcs3InternalService {
             }
             return {'success': true};
           },
-          reserve: () async {
-            data = await dataDirectory();
-            cache = await cacheDirectory();
-            return native(
-              Rpcs3InternalBridge.reserveAddressSpace(),
-              const Duration(seconds: 15),
-              'RPCS3_VA_RESERVATION_TIMEOUT',
-              'La réservation mémoire ne répond pas.',
-            );
-          },
           attach: () async {
             try {
               return await _prepareJitInternal();
@@ -334,16 +324,20 @@ class Rpcs3InternalService {
               throw Rpcs3StartupFailure(error.code, error.message, 'attach');
             }
           },
-          initialize: () => native(
-            Rpcs3InternalBridge.initialize(
-              supportPath: data.path,
-              cachePath: cache.path,
-              expandedJitRegion: false,
-            ),
-            _coreTimeout,
-            'RPCS3_CORE_INITIALIZE_TIMEOUT',
-            'Le Core ne répond pas à initialize.',
-          ),
+          initialize: () async {
+            data = await dataDirectory();
+            cache = await cacheDirectory();
+            return native(
+              Rpcs3InternalBridge.initialize(
+                supportPath: data.path,
+                cachePath: cache.path,
+                expandedJitRegion: false,
+              ),
+              _coreTimeout,
+              'RPCS3_CORE_INITIALIZE_TIMEOUT',
+              'Le Core ne répond pas à initialize.',
+            );
+          },
           complete: () => native(
             Rpcs3InternalBridge.completeJit(),
             _jitCompletionTimeout,
@@ -369,7 +363,7 @@ class Rpcs3InternalService {
             if (ready) {
               _emit(
                 Rpcs3RuntimePhase.ready,
-                'RPCS3 prêt : mémoire, JIT, détachement et exécution vérifiés.',
+                'RPCS3 prêt : JIT, Core, détachement et exécution vérifiés.',
                 jitReady: true,
                 coreReady: true,
               );
@@ -380,8 +374,6 @@ class Rpcs3InternalService {
                 switch (phase) {
                   Rpcs3StartupPhase.route =>
                     'Vérification de la route LocalDevVPN…',
-                  Rpcs3StartupPhase.reserving =>
-                    'Réservation de 448 Mio de code + 576 Mio de données…',
                   Rpcs3StartupPhase.attaching =>
                     'Attachement StikJIT au processus NeoStation…',
                   Rpcs3StartupPhase.initializing =>
