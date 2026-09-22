@@ -99,8 +99,10 @@ class Rpcs3StartupTransaction {
 
     try {
       await step(Rpcs3StartupPhase.route, operations.route);
-      final attach = await step(Rpcs3StartupPhase.attaching, operations.attach);
+      // An attach attempt can fail after opening helper/debugger resources, so
+      // every error from this point gets deterministic cleanup.
       resourcesMayExist = true;
+      final attach = await step(Rpcs3StartupPhase.attaching, operations.attach);
       await step(Rpcs3StartupPhase.initializing, operations.initialize);
       if (attach['requiresCompletion'] != false) {
         final completion = await step(
