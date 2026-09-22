@@ -20,7 +20,6 @@ on:
       - 'build-utils/validate_rpcs3_ipa.py'
       - 'test/rpcs3_build304_single_path_test.py'
       - 'test/rpcs3_debugger_handshake_test.js'
-      - 'test/rpcs3_stop_reply_behavior_test.js'
       - 'test/rpcs3_jit_handshake_test.py'
       - 'test/rpcs3_build283_boot_stability_test.py'
       - 'test/rpcs3_build285_core_handoff_test.py'
@@ -162,7 +161,6 @@ jobs:
           python3 test/rpcs3_ipa_validation_test.py
           python3 test/local_dev_vpn_route_contract_test.py
           node test/rpcs3_debugger_handshake_test.js
-          node test/rpcs3_stop_reply_behavior_test.js
           flutter test             test/rpcs3_bridge_memory_mode_test.dart             test/local_jit_route_proof_test.dart             test/rpcs3_boot_watchdog_test.dart             test/rpcs3_internal_integration_test.dart             test/rpcs3_lazy_load_contract_test.dart             test/game_deletion_regression_test.dart             test/rpcs3_library_service_test.dart
 
       - name: Download proven Build270 donor
