@@ -7,7 +7,6 @@ class Harness {
   final phases = <Rpcs3StartupPhase>[];
   String? fail;
   Map<String, dynamic>? cleanupOverride;
-  Map<String, dynamic>? reserveOverride;
   Map<String, dynamic>? completionOverride;
   Map<String, dynamic>? executionOverride;
   Completer<void>? attachGate;
@@ -29,17 +28,11 @@ class Harness {
 
   Rpcs3StartupOperations get operations => Rpcs3StartupOperations(
     route: () => step('route', {'success': true}),
-    reserve: () => step(
-      'reserve',
-      reserveOverride ??
-          {
-            'success': true,
-            'addressSpaceReserved': true,
-            'codeBytes': 469762048,
-            'dataBytes': 603979776,
-            'budgetBytes': 1073741824,
-          },
-    ),
+    reserve: () => step('reserve', {
+      'success': true,
+      'code': 'RPCS3_VA_RESERVED',
+      'stage': 'va_reservation',
+    }),
     attach: () => step('attach', {'success': true, 'requiresCompletion': true}),
     initialize: () => step('initialize', {'success': true}),
     complete: () => step(
@@ -56,7 +49,6 @@ class Harness {
           {
             'success': true,
             'transactionClosed': true,
-            'retryable': true,
             'code': 'RPCS3_STARTUP_ABORTED',
             'message': 'all resources released',
           },
@@ -187,20 +179,13 @@ void main() {
     );
     expect(tx.phase, Rpcs3StartupPhase.blocked);
   });
-  test('a success stub without actual VA reservation is rejected', () async {
+  test('native reservation success is authoritative', () async {
     final tx = Rpcs3StartupTransaction();
-    final h = Harness()..reserveOverride = {'success': true};
-    await expectLater(
-      tx.ensure(h.operations),
-      throwsA(
-        isA<Rpcs3StartupFailure>().having(
-          (e) => e.code,
-          'code',
-          'RPCS3_VA_PROOF_MISSING',
-        ),
-      ),
-    );
-    expect(h.calls, ['route', 'reserve', 'abort']);
+    final h = Harness();
+    await tx.ensure(h.operations);
+    expect(tx.ready, true);
+    expect(h.calls.first, 'route');
+    expect(h.calls[1], 'reserve');
   });
   test(
     'missing detach proof and wrong execution output cannot publish ready',
