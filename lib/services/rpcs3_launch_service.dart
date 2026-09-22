@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/rpcs3_game_profile_service.dart';
 import 'package:neostation/services/rpcs3_internal_service.dart';
-import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
 
 /// Direct launcher for the in-process RPCS3 engine.
 ///
