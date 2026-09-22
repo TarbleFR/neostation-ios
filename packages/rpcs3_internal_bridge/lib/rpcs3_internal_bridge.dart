@@ -75,14 +75,6 @@ class Rpcs3InternalBridge {
             const <String, dynamic>{},
       );
 
-  static Future<Map<String, dynamic>> reserveAddressSpace() async =>
-      Map<String, dynamic>.from(
-        await _channel.invokeMapMethod<String, dynamic>(
-              'reserveAddressSpace',
-            ) ??
-            const <String, dynamic>{},
-      );
-
   static Future<Map<String, dynamic>> prepareJit({
     required String pairingFilePath,
   }) async => Map<String, dynamic>.from(
