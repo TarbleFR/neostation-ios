@@ -1305,42 +1305,6 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     return;
   }
 
-  if ([call.method isEqualToString:@"shutdown"]) {
-    dispatch_async(_runtimeQueue, ^{
-      if (!self.initialized) {
-        dispatch_async(dispatch_get_main_queue(), ^{ result(@{@"success": @YES, @"alreadyShutdown": @YES}); });
-        return;
-      }
-      rpcs3_ios_status stopStatus = self->_api.stop_emulation ? self->_api.stop_emulation() : 0;
-      if (stopStatus != 0) {
-        NSDictionary* failure = [self statusPayload:stopStatus];
-        dispatch_async(dispatch_get_main_queue(), ^{ result(failure); });
-        return;
-      }
-      [self stopDiagnosticPerformanceSampling];
-      if (self->_performanceTimer) { dispatch_source_cancel(self->_performanceTimer); self->_performanceTimer = nil; }
-      if (self->_api.set_display_surface) self->_api.set_display_surface(NULL);
-      [self deactivateRPCS3AudioSession];
-      self.activeTitleId = nil;
-      self.activeUiLocale = nil;
-      rpcs3_ios_status status = self->_api.shutdown ? self->_api.shutdown() : 0;
-      if (status == 0) {
-        self.initialized = NO;
-        self.llvmSelfTestPassed = NO;
-        self.initializedWithExpandedJit = NO;
-      }
-      NSDictionary* payload = [self statusPayload:status];
-      dispatch_async(dispatch_get_main_queue(), ^{
-        RPCS3GameViewController* controller = self.gameController;
-        [controller.inputController stop];
-        self.gameController = nil;
-        [controller dismissViewControllerAnimated:NO completion:nil];
-        result(payload);
-      });
-    });
-    return;
-  }
-
   if ([call.method isEqualToString:@"firmwareVersion"]) {
     dispatch_async(_runtimeQueue, ^{
       NSString* value = @"";
