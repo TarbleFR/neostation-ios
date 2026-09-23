@@ -9,6 +9,8 @@ plugin = (ROOT / "packages/dusklight_internal_bridge/ios/Classes/DusklightIntern
 abi = (ROOT / "packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h").read_text()
 loader = (ROOT / "packages/dusklight_internal_bridge/ios/Classes/DusklightCoreLoader.h").read_text()
 pins = json.loads((ROOT / "build-utils/dusklight/source.json").read_text())
+builder = (ROOT / "build-utils/dusklight/build_core.py").read_text()
+validator = (ROOT / "build-utils/validate_dusklight_ipa.py").read_text()
 
 assert "vendored_frameworks" not in podspec
 assert "preserve_paths" in podspec
@@ -26,6 +28,9 @@ assert set(pins["supported_disc_ids"]) == {
     "GZ2E01", "GZ2J01", "GZ2P01", "RZDE01", "RZDJ01", "RZDP01"
 }
 assert "NEO_DUSKLIGHT_ABI_VERSION 5u" in abi
+for source in (builder, validator):
+    assert '"abi_version"] == 5' in source or '"abi_version": 5' in source
+    assert "host_frame_loop_terminal_address_space_release" in source
 assert "NEO_DUSKLIGHT_RUNNING" in plugin and '@"stage": @"first_frame"' in plugin
 assert "DUSKLIGHT_FIRST_FRAME_TIMEOUT" in plugin
 assert "DUSKLIGHT_RESTART_REQUIRED" in plugin
