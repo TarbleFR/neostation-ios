@@ -27,7 +27,7 @@ void main() {
     expect(storage, contains('importGames()'));
     expect(storage, contains('importBios()'));
 
-    expect(systems, contains("const <String>['ps2', 'ps3']"));
+    expect(systems, contains("const <String>['ps2', 'ps3', 'ports']"));
     expect(list, contains('_isArmsx2Library'));
     expect(list, contains('_buildEmbeddedArmsx2ImportAction'));
 
@@ -55,7 +55,7 @@ void main() {
     ).readAsStringSync();
 
     expect(dialog, contains('_showsRecursiveScan'));
-    expect(dialog, contains("{'gc', 'wii', 'ps2', 'ps3'}"));
+    expect(dialog, contains("{'gc', 'wii', 'ps2', 'ps3', 'ports'}"));
     expect(tabs, contains('if (_showsRecursiveScan)'));
     expect(list, contains('Armsx2MultiDeleteDialog.show'));
     expect(deletion, contains('linkedArmsx2GameFolderPath'));
