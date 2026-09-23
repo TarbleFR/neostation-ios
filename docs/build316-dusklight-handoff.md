@@ -66,3 +66,9 @@ JIT helper inputs must retain Build 315 identities in the candidate IPA.
   Linux source checks are not substituted for those tests.
 - Compilation, exact native/host hashes and device outcomes are recorded below
   when available. No iPhone validation has yet occurred for this candidate.
+- First native run `35897475214` reproduced the original audio interference and
+  passed the new 100-cycle Foundation regression. The iOS compile gate then
+  rejected the macOS-only `mach_vm.h` import in the diagnostic reader. No IPA
+  was produced. The reader now uses `vm_region_recurse_64` from the iOS Mach
+  interface with arm64 `vm_address_t`/`vm_size_t`; a separate iPhoneOS SDK
+  syntax check is required before starting the native build.

@@ -54,6 +54,9 @@ jobs:
           c++ -std=c++20 -Wall -Wextra -Werror -Inative/dusklight/core \
             test/dusklight_vm_trace_test.cpp -o "$RUNNER_TEMP/dusklight-vm-trace-test"
           "$RUNNER_TEMP/dusklight-vm-trace-test"
+          xcrun --sdk iphoneos clang++ -std=c++20 -arch arm64 \
+            -miphoneos-version-min=17.4 -Wall -Wextra -Werror -fsyntax-only \
+            -Inative/dusklight/core test/dusklight_vm_trace_test.cpp
           python3 test/dusklight_menu_test.py
           python3 test/dusklight_language_test.py
       - name: Prepare native tools

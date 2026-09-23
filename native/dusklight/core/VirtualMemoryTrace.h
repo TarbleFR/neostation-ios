@@ -25,7 +25,6 @@ struct NeoDusklightVMHoles {
 
 #ifdef __APPLE__
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
 #include <cstdio>
 #include <unistd.h>
 
@@ -36,18 +35,19 @@ inline void NeoDusklightTraceVM(FILE* file, double timestamp, const char* build,
   const auto taskResult = task_info(mach_task_self(), TASK_VM_INFO,
       reinterpret_cast<task_info_t>(&task), &taskCount);
   NeoDusklightVMHoles holes;
-  mach_vm_address_t cursor = NeoDusklightVMHoles::begin;
+  static_assert(sizeof(vm_address_t) == 8, "Dusklight requires the arm64 address space");
+  vm_address_t cursor = NeoDusklightVMHoles::begin;
   unsigned regions = 0, written = 0;
   kern_return_t query = KERN_SUCCESS;
   bool complete = false;
   while (cursor < NeoDusklightVMHoles::end && regions < 4096) {
-    mach_vm_address_t address = cursor;
-    mach_vm_size_t size = 0;
+    vm_address_t address = cursor;
+    vm_size_t size = 0;
     natural_t depth = 0;
     vm_region_submap_info_data_64_t info{};
     do {
       mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
-      query = mach_vm_region_recurse(mach_task_self(), &address, &size, &depth,
+      query = vm_region_recurse_64(mach_task_self(), &address, &size, &depth,
           reinterpret_cast<vm_region_recurse_info_t>(&info), &count);
       if (query != KERN_SUCCESS || !info.is_submap) break;
       ++depth;
