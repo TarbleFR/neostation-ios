@@ -48,3 +48,28 @@ still fails, the new rejected-gap diagnostic records the exact kernel result.
 
 Compilation, artifact identities and device observations are recorded below as
 they become available. A build or simulated test is not an iPhone stability proof.
+
+## Dusklight game language
+
+The native menu now exposes a translated game-language page. Options come from
+the pinned Dusklight `available_languages` policy for the inspected disc: PAL
+includes French; Japanese discs remain Japanese; the supported Wii US revision 2
+also includes French. This changes game language, not the entire upstream UI.
+
+A selection is persisted separately in `NeoDusklightGameLanguage`. It does not
+mutate the live configuration: Dusklight's resource paths consult that setting
+while some language state is cached at startup. The validated preference is
+applied only during the next cold initialization, before `LanguageInit`; a warm
+return/resume keeps the current language. The help text explicitly explains
+saving the game and reopening NeoStation. The eight added labels are translated
+in all twelve catalogs and validated at the host/Core boundary.
+
+The native test executes the actual selection/application bodies through 100
+deferred changes, invalid preferences and incompatible disc language lists.
+The audio test executes the production manager with controlled activation and
+playback dependencies: 100 returns, preserved disabled preferences, an immediate
+new launch waiting for the prior handoff, and failure recovery.
+
+The legacy audio-policy source test no longer opens the retired
+`release-ipa.yml`; its assertions still check the active `ios-ci.yml` audio patch.
+It and the new behavior test are required before candidate packaging.

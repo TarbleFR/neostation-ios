@@ -227,6 +227,7 @@ jobs:
           python3 test/dusklight_queue_shutdown_test.py
           python3 test/dusklight_resume_test.py
           python3 test/dusklight_menu_test.py
+          python3 test/dusklight_language_test.py
           flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
@@ -236,6 +237,8 @@ jobs:
           python3 test/rpcs3_atomic_startup_test.py
           python3 test/rpcs3_failed_startup_test.py
           python3 test/game_launch_route_test.py
+          python3 test/game_audio_handoff_test.py
+          flutter test test/audio_policy_service_test.dart
           python3 test/carousel_chrome_layout_test.py
           python3 test/armsx2_patch_catalog_test.py
           python3 test/rpcs3_pod_header_visibility_test.py

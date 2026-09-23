@@ -219,7 +219,9 @@ static void OnCoreEvent(void* context, int state, const char* message) {
 
   char error[1024] = {};
   NSDictionary* uiText = [arguments[@"uiText"] isKindOfClass:NSDictionary.class] ? arguments[@"uiText"] : @{};
-  for (NSString* key in @[@"nativeMenu", @"resumeGame", @"returnToLibrary", @"resumeHint", @"cancelReturn"]) {
+  for (NSString* key in @[@"nativeMenu", @"resumeGame", @"returnToLibrary", @"resumeHint", @"cancelReturn",
+                          @"gameLanguage", @"gameLanguageHelp", @"languageEnglish", @"languageGerman",
+                          @"languageFrench", @"languageSpanish", @"languageItalian", @"languageJapanese"]) {
     NSString* value = [uiText[key] isKindOfClass:NSString.class] ? uiText[key] : @"";
     if (value.length == 0) {
       result(Failure(@"DUSKLIGHT_INITIALIZE_FAILED", @"ui_text", @"Missing translated native UI label."));

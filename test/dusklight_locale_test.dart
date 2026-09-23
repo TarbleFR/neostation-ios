@@ -37,7 +37,11 @@ void main() {
       }
       final imported = DusklightLocale.forLocale(locale, 'imported', count: 3);
       final nativeUI = DusklightLocale.nativeUI(locale);
-      expect(nativeUI.keys.toSet(), {'nativeMenu', 'resumeGame', 'returnToLibrary', 'resumeHint', 'cancelReturn'});
+      expect(nativeUI.keys.toSet(), {
+        'nativeMenu', 'resumeGame', 'returnToLibrary', 'resumeHint', 'cancelReturn',
+        'gameLanguage', 'gameLanguageHelp', 'languageEnglish', 'languageGerman',
+        'languageFrench', 'languageSpanish', 'languageItalian', 'languageJapanese',
+      });
       for (final label in nativeUI.entries) {
         expect(label.value, entry.value[label.key]);
       }

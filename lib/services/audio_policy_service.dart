@@ -15,7 +15,8 @@ import 'logger_service.dart';
 ///
 /// - application startup;
 /// - application resume;
-/// - after the shared SoLoud engine is created or recreated.
+/// - after the shared SoLoud engine is created or recreated;
+/// - after a game releases the shared native audio session.
 ///
 /// The native plugin also restores the same category after iOS
 /// interruption and route-change notifications.
@@ -48,6 +49,13 @@ class AudioPolicyService with WidgetsBindingObserver {
     required String reason,
   }) {
     return _apply(reason: 'shared-engine-initialized:$reason');
+  }
+
+  /// SDL deactivates AVAudioSession when its last device closes. Returning
+  /// from an embedded game does not produce an app-resume notification, and
+  /// unpausing a SoLoud voice does not reactivate the shared session.
+  Future<void> restoreAfterGameSession() {
+    return _apply(reason: 'game-session-ended');
   }
 
   Future<void> _apply({required String reason}) {

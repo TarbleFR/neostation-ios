@@ -794,6 +794,7 @@ int game_main(int argc, char* argv[]) {
                 dusk::getSettings().backend.isoPath.setValue(dvdLocation);
                 dusk::getSettings().backend.isoVerification.setValue(
                     dusk::DiscVerificationState::Unknown);
+                NeoDusklight_ApplyGameLanguage();
                 dusk::config::save();
                 dusk::IsGameLaunched = true;
                 skipPreLaunchUI = true;

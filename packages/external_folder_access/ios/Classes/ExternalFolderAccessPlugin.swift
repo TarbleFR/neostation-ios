@@ -402,7 +402,7 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
     ///
     /// Category writes are skipped when the session is already correct.
     /// Activation is forced only at startup, application resume, shared
-    /// SoLoud engine creation, or interruption end.
+    /// SoLoud engine creation, game-session return, or interruption end.
     @discardableResult
     private func applySilentModeAudioSession(
         forceActivation: Bool

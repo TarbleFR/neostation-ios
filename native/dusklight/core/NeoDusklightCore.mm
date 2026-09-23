@@ -308,6 +308,13 @@ extern "C" void NeoDusklight_FirstFrame() {
   if (session.firstFrame()) Emit("First native game frame submitted for this session.");
 }
 extern "C" void NeoDusklight_RequestReturn() { Stop(); }
+extern "C" int NeoDusklight_LoadGameLanguage() {
+  NSNumber* value = [NSUserDefaults.standardUserDefaults objectForKey:@"NeoDusklightGameLanguage"];
+  return [value isKindOfClass:NSNumber.class] ? value.intValue : -1;
+}
+extern "C" void NeoDusklight_SaveGameLanguage(int language) {
+  [NSUserDefaults.standardUserDefaults setInteger:language forKey:@"NeoDusklightGameLanguage"];
+}
 extern "C" int NeoDusklight_ShouldEnableTouch() {
   return ![NSUserDefaults.standardUserDefaults boolForKey:@"NeoDusklightTouchDefaultV1"];
 }

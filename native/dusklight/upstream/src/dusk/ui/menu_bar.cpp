@@ -77,6 +77,9 @@ void MenuBar::build_tabs() {
         NeoDusklight_ResumeGameplay();
     });
     mTabBar->add_tab("Settings", [this] { push(std::make_unique<SettingsWindow>()); });
+    mTabBar->add_tab(NeoDusklight_UIText("gameLanguage"), [] {
+        NeoDusklight_OpenLanguageMenu();
+    });
 
     if (getSettings().backend.enableAdvancedSettings) {
         mTabBar->add_tab("Warp", [this] { push(std::make_unique<WarpWindow>()); });

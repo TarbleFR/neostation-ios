@@ -10,6 +10,9 @@ on:
       - 'test/carousel_chrome_layout_test.py'
       - 'lib/widgets/carousel_chrome_layout.dart'
       - 'lib/screens/game_screen/my_games_carousel.dart'
+      - 'lib/services/game_launch_manager.dart'
+      - 'lib/services/audio_policy_service.dart'
+      - 'test/game_audio_handoff_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,3 +33,5 @@ jobs:
         run: python3 test/game_launch_route_test.py
       - name: Exercise carousel rail and alphabet layout
         run: python3 test/carousel_chrome_layout_test.py
+      - name: Exercise native-to-menu audio handoff and rapid relaunch
+        run: python3 test/game_audio_handoff_test.py

@@ -9,6 +9,8 @@ void main() {
     ).readAsStringSync();
 
     expect(policy, contains('restoreAfterSharedAudioEngineInitialization'));
+    expect(policy, contains('restoreAfterGameSession'));
+    expect(policy, contains("reason: 'game-session-ended'"));
     expect(policy, contains("reason: 'application-start'"));
     expect(policy, contains("reason: 'application-resumed'"));
     expect(policy, isNot(contains('prepareForPlayback')));
@@ -79,9 +81,6 @@ void main() {
     final fastCi = File(
       '.github/workflows/ios-ci.yml',
     ).readAsStringSync();
-    final releaseCi = File(
-      '.github/workflows/release-ipa.yml',
-    ).readAsStringSync();
     final native = File(
       'packages/external_folder_access/ios/Classes/'
       'ExternalFolderAccessPlugin.swift',
@@ -90,7 +89,6 @@ void main() {
     expect(patch, contains('NEOSTATION_AUDIO_SESSION_OWNED_EXTERNALLY'));
     expect(patch, contains('requestedCategory: .playback'));
     expect(fastCi, contains('patch_ios_video_player_audio_session.py'));
-    expect(releaseCi, contains('patch_ios_video_player_audio_session.py'));
     expect(native, contains('AVAudioSession.interruptionNotification'));
     expect(native, contains('AVAudioSession.routeChangeNotification'));
     expect(native, contains('session.category != .ambient'));

@@ -12,6 +12,7 @@ on:
       - 'test/dusklight_queue_shutdown_test.py'
       - 'test/dusklight_resume_test.py'
       - 'test/dusklight_menu_test.py'
+      - 'test/dusklight_language_test.py'
       - 'test/dusklight_clock_test.cpp'
   workflow_dispatch:
 permissions:
@@ -48,6 +49,7 @@ jobs:
           python3 test/dusklight_queue_shutdown_test.py
           python3 test/dusklight_resume_test.py
           python3 test/dusklight_menu_test.py
+          python3 test/dusklight_language_test.py
       - name: Prepare native tools
         run: |
           set -euo pipefail

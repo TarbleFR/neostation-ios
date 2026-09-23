@@ -4,6 +4,7 @@ import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
 import 'package:dusklight_internal_bridge/dusklight_internal_bridge.dart';
 import 'package:flutter/widgets.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'audio_policy_service.dart';
 import 'game_service.dart';
 import 'music_player_service.dart';
 import 'sfx_service.dart';
@@ -49,6 +50,10 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   /// Stores the user's SFX preference before starting the session.
   bool _sfxWasEnabled = true;
 
+  // A rapid new launch must wait until the previous audio handoff finishes;
+  // otherwise its delayed activation can interrupt the new native core.
+  Future<void>? _finalization;
+
   /// Periodic timer for monitoring the emulator process on desktop platforms.
   Timer? _monitoringTimer;
 
@@ -75,6 +80,8 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   ///
   /// Pauses background music, disables UI SFX, and registers lifecycle observers.
   Future<void> beginSession() async {
+    await _finalization;
+    _finalization = null;
     _phase = GameLaunchPhase.launching;
     _canDismiss = false;
     _isClosing = false;
@@ -140,16 +147,17 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Cleanup hook for when the session dialog is disposed.
   void onDialogDisposed() {
-    if (isActive) {
+    if (!isActive || _finalization != null) return;
+    if (_phase != GameLaunchPhase.closed) {
       _log.w(
         '[GameLaunchManager] Dialog disposed before session ended — forcing cleanup.',
       );
     }
-    _finalize();
+    unawaited(_finalization = _finalize());
   }
 
   /// Resets the controller state and restores audio preferences.
-  void _finalize() {
+  Future<void> _finalize() async {
     if (!isActive) return;
     _monitoringTimer?.cancel();
     _monitoringTimer = null;
@@ -158,7 +166,18 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     GameService.clearOnGameReturnedCallback();
     GameService.clearOnProcessExitCallback();
     WidgetsBinding.instance.removeObserver(this);
-    MusicPlayerService().resumeAfterGame();
+    try {
+      // The native session has ended before this route is disposed. Restore
+      // audio ownership before resuming any menu voices, including on failure.
+      await AudioPolicyService().restoreAfterGameSession();
+      await MusicPlayerService().resumeAfterGame();
+    } catch (error, stack) {
+      _log.e(
+        '[GameLaunchManager] Could not resume menu audio.',
+        error: error,
+        stackTrace: stack,
+      );
+    }
     SfxService().setEnabled(_sfxWasEnabled);
     _phase = null;
     _canDismiss = false;
