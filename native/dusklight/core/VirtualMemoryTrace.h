@@ -40,41 +40,41 @@ inline void NeoDusklightTraceVM(FILE* file, double timestamp, const char* build,
   unsigned regions = 0, written = 0;
   kern_return_t query = KERN_SUCCESS;
   bool complete = false;
-  while (cursor < NeoDusklightVMHoles::end && regions < 4096) {
+  // Match RPCS3's top-level map: holes inside reserved submaps are not free
+  // allocation ranges. Descending from depth zero at each leaf also revisited
+  // the first leaf of a submap and truncated the previous diagnostic.
+  while (cursor < NeoDusklightVMHoles::end && regions < 8192) {
     vm_address_t address = cursor;
     vm_size_t size = 0;
-    natural_t depth = 0;
-    vm_region_submap_info_data_64_t info{};
-    do {
-      mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
-      query = vm_region_recurse_64(mach_task_self(), &address, &size, &depth,
-          reinterpret_cast<vm_region_recurse_info_t>(&info), &count);
-      if (query != KERN_SUCCESS || !info.is_submap) break;
-      ++depth;
-    } while (depth < 64);
+    vm_region_basic_info_data_64_t info{};
+    mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+    mach_port_t object = MACH_PORT_NULL;
+    query = vm_region_64(mach_task_self(), &address, &size, VM_REGION_BASIC_INFO_64,
+        reinterpret_cast<vm_region_info_t>(&info), &count, &object);
+    if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);
     if (query == KERN_INVALID_ADDRESS || address >= NeoDusklightVMHoles::end) {
       complete = true;
       break;
     }
-    if (query != KERN_SUCCESS || info.is_submap || !size ||
+    if (query != KERN_SUCCESS || !size ||
         size > std::numeric_limits<uint64_t>::max() - address || address + size <= cursor) break;
     holes.observe(address, size);
     ++regions;
-    if (written < 256) {
-      fprintf(file, "%.3f pid=%d build=%s vm_region phase=%s start=0x%llx size=%llu tag=%u protection=%d resident_pages=%u\n",
+    if (written < 64 || size >= 1024 * 1024) {
+      fprintf(file, "%.3f pid=%d build=%s vm_region phase=%s start=0x%llx size=%llu protection=%d\n",
           timestamp, getpid(), build, phase, static_cast<unsigned long long>(address),
-          static_cast<unsigned long long>(size), info.user_tag, info.protection, info.pages_resident);
+          static_cast<unsigned long long>(size), info.protection);
       ++written;
     }
     cursor = address + size;
   }
   complete = complete || cursor >= NeoDusklightVMHoles::end;
   if (complete) holes.finish();
-  fprintf(file, "%.3f pid=%d build=%s vm_summary phase=%s task_result=%d footprint=%llu virtual=%llu low_mapped=%llu largest_visible_hole=%llu regions=%u written=%u complete=%d query=%d\n",
+  fprintf(file, "%.3f pid=%d build=%s vm_summary phase=%s task_result=%d footprint=%llu virtual=%llu low_mapped=%llu largest_visible_hole=%llu regions=%u written=%u complete=%d query=%d topology=top_level cursor=0x%llx\n",
       timestamp, getpid(), build, phase, taskResult,
       static_cast<unsigned long long>(task.phys_footprint), static_cast<unsigned long long>(task.virtual_size),
       static_cast<unsigned long long>(holes.mapped), static_cast<unsigned long long>(holes.largestHole),
-      regions, written, complete, query);
+      regions, written, complete, query, static_cast<unsigned long long>(cursor));
   fflush(file);
 }
 #endif

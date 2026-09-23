@@ -15,5 +15,9 @@
   "upstream/src/dusk/ui/overlay.cpp": "970a115a1afcdd693b7a21b3313981a65b24a2a411d37cc2501a4a7faf19cefb",
   "upstream/src/dusk/audio/DuskAudioSystem.cpp": "0bbbd05257fa8eda012d469ea8b8b81757ba6b190ac112d756bb1ec14a6600e7",
   "upstream/extern/aurora/lib/time_internal.hpp": "a67b70f6d86942dc16bd6439abb84a8fb6d4708bba58a56b095aa7d7351271b6",
-  "upstream/libs/JSystem/src/JFramework/JFWDisplay.cpp": "3febc54fdaa88492ad02fcb6987491add659a14a059ecfea2cf8bc187c16b317"
+  "upstream/libs/JSystem/src/JFramework/JFWDisplay.cpp": "3febc54fdaa88492ad02fcb6987491add659a14a059ecfea2cf8bc187c16b317",
+  "upstream/extern/aurora/lib/gfx/frame.cpp": "1b64edf2ff31e7839e2a579cd056167f425b70610ad829c118636930ff84e695",
+  "upstream/extern/aurora/lib/gfx/frame.hpp": "1ee5b043a796532501c5e71abaa4fe4713cb9c773828b469da492833c300c04b",
+  "upstream/extern/aurora/lib/webgpu/gpu.cpp": "d333710527abacf05095f398ae01ec8a2b6a7082efd05c9314618d49c18294e3",
+  "upstream/extern/aurora/lib/webgpu/gpu.hpp": "d318c9cf164bdcc5ffadcb5ed84498dc90ce3ed38b531bf1b351f683e5bee4a9"
 }

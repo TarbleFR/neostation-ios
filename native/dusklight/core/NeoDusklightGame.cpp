@@ -16,6 +16,7 @@
 #include "dusk/mouse.h"
 #include "dusk/settings.h"
 #include "../extern/aurora/lib/time_internal.hpp"
+#include "../extern/aurora/lib/gfx/frame.hpp"
 #include <cstdio>
 #include <exception>
 #include <algorithm>
@@ -103,6 +104,9 @@ extern "C" int NeoDusklight_InspectDisc(const char* path, char* error, size_t si
 }
 
 extern "C" int NeoDusklight_RunGame(int argc, char** argv) { return game_main(argc, argv); }
+extern "C" int NeoDusklight_ReleaseFrameResources() {
+    return aurora::gfx::release_frame_resources() ? 1 : 0;
+}
 extern "C" void NeoDusklight_SetGameSuspended(int suspended) {
     aurora::time::internal::set_pause_reason(aurora::time::internal::PauseReason::Host, suspended);
     // Release virtual sticks/buttons before hiding the owning SDL window.

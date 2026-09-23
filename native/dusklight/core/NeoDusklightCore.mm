@@ -86,6 +86,14 @@ void FinishReturn() {
   [displayLink invalidate];
   displayLink = nil;
   Suspend(true);
+  if (session.ready()) {
+    TraceResources("before_graphics_release");
+    @autoreleasepool {
+      Trace(NeoDusklight_ReleaseFrameResources()
+          ? "Transient graphics released after GPU and mapping completion (354 MiB buffers plus frame targets)."
+          : "Graphics drain did not complete; resources retained safely.");
+    }
+  }
   RestoreHost();
   menuRequested = false;
   TraceResources("return_to_host");

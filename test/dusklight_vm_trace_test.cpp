@@ -1,5 +1,6 @@
 #include "VirtualMemoryTrace.h"
 #include <cassert>
+#include <string>
 
 int main() {
   constexpr auto b = NeoDusklightVMHoles::begin;
@@ -27,6 +28,12 @@ int main() {
   assert(file);
   NeoDusklightTraceVM(file, 0, "test", "read_only");
   assert(ftell(file) > 0);
+  rewind(file);
+  std::string output;
+  char line[2048];
+  while (fgets(line, sizeof(line), file)) output += line;
+  assert(output.find("complete=1") != std::string::npos);
+  assert(output.find("topology=top_level") != std::string::npos);
   fclose(file);
 #endif
 }

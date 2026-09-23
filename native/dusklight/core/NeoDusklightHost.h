@@ -16,6 +16,7 @@ int NeoDusklight_InspectDisc(const char* path, char* error, size_t error_size);
 int NeoDusklight_RunGame(int argc, char** argv);
 int NeoDusklight_TickGame(void);
 void NeoDusklight_SetGameSuspended(int suspended);
+int NeoDusklight_ReleaseFrameResources(void);
 void NeoDusklight_SetAudioSuspended(int suspended);
 void NeoDusklight_OpenMenu(void);
 void NeoDusklight_OpenLanguageMenu(void);
