@@ -717,32 +717,58 @@ static NSString* DOLNSString(const std::string& value)
 static void DOLLoadCheatLists(std::vector<Gecko::GeckoCode>* gecko,
                               std::vector<ActionReplay::ARCode>* action_replay)
 {
-  Common::IniFile local;
-  const std::string local_path =
-      File::GetUserPath(D_GAMESETTINGS_IDX) + g_game_id + ".ini";
-  local.Load(local_path);
+  const Common::IniFile local =
+      SConfig::LoadLocalGameIni(g_game_id, g_game_revision);
   const Common::IniFile defaults =
       SConfig::LoadDefaultGameIni(g_game_id, g_game_revision);
   if (gecko) *gecko = Gecko::LoadCodes(defaults, local);
   if (action_replay) *action_replay = ActionReplay::LoadCodes(defaults, local);
 }
 
-static bool DOLSaveGeckoCodes(const std::vector<Gecko::GeckoCode>& codes)
+// Save an exact-revision override without copying shared definitions into it.
+// Otherwise every toggle duplicates codes inherited from a family/region INI.
+template <typename Code>
+static void DOLPrepareCodesForSave(std::vector<Code>& codes,
+                                  const std::vector<Code>& known,
+                                  const std::vector<Code>& owned)
 {
-  const std::string path =
-      File::GetUserPath(D_GAMESETTINGS_IDX) + g_game_id + ".ini";
+  for (auto& code : codes)
+  {
+    const auto named = [&](const Code& other) { return other.name == code.name; };
+    if (code.user_defined && std::any_of(known.begin(), known.end(), named) &&
+        !std::any_of(owned.begin(), owned.end(), named))
+      code.user_defined = false;
+    // Persist both on and off states, including overrides of shared local INIs.
+    code.default_enabled = !code.enabled;
+  }
+}
+
+static std::string DOLCheatOverridePath()
+{
+  return File::GetUserPath(D_GAMESETTINGS_IDX) + g_game_id + "r" +
+      std::to_string(g_game_revision) + ".ini";
+}
+
+static bool DOLSaveGeckoCodes(std::vector<Gecko::GeckoCode> codes)
+{
+  const std::string path = DOLCheatOverridePath();
   Common::IniFile local;
   local.Load(path);
+  std::vector<Gecko::GeckoCode> known;
+  DOLLoadCheatLists(&known, nullptr);
+  DOLPrepareCodesForSave(codes, known, Gecko::LoadCodes(Common::IniFile{}, local));
   Gecko::SaveCodes(local, codes);
   return local.Save(path);
 }
 
-static bool DOLSaveActionReplayCodes(const std::vector<ActionReplay::ARCode>& codes)
+static bool DOLSaveActionReplayCodes(std::vector<ActionReplay::ARCode> codes)
 {
-  const std::string path =
-      File::GetUserPath(D_GAMESETTINGS_IDX) + g_game_id + ".ini";
+  const std::string path = DOLCheatOverridePath();
   Common::IniFile local;
   local.Load(path);
+  std::vector<ActionReplay::ARCode> known;
+  DOLLoadCheatLists(nullptr, &known);
+  DOLPrepareCodesForSave(codes, known, ActionReplay::LoadCodes(Common::IniFile{}, local));
   ActionReplay::SaveCodes(&local, codes);
   return local.Save(path);
 }
@@ -1518,6 +1544,56 @@ def patch_metal_shutdown(root: Path) -> None:
     patch(backend, old, new, 'drain Metal before renderer destruction')
 
 
+# Raw INI lines are appended by IniFile::Load(merge=true). Resolve opposing
+# Enabled/Disabled entries in file-priority order for both boot and menu reads.
+LOCAL_CHEAT_INI_SOURCE = r'''Common::IniFile SConfig::LoadLocalGameIni(const std::string& id, std::optional<u16> revision)
+{
+  Common::IniFile game_ini;
+  std::map<std::string, std::map<std::string, bool>> states;
+  for (const std::string& filename : ConfigLoaders::GetGameIniFilenames(id, revision))
+  {
+    const std::string path = File::GetUserPath(D_GAMESETTINGS_IDX) + filename;
+    game_ini.Load(path, true);
+    Common::IniFile own;
+    own.Load(path);
+    for (const std::string kind : {"Gecko", "ActionReplay"})
+    {
+      for (const bool enabled : {true, false})
+      {
+        std::vector<std::string> lines;
+        own.GetLines(kind + (enabled ? "_Enabled" : "_Disabled"), &lines, false);
+        for (const std::string& line : lines)
+          if (!line.empty() && line.front() == '$') states[kind][line] = enabled;
+      }
+    }
+  }
+  for (const auto& [kind, codes] : states)
+  {
+    std::vector<std::string> enabled, disabled;
+    for (const auto& [name, state] : codes)
+      (state ? enabled : disabled).push_back(name);
+    game_ini.SetLines(kind + "_Enabled", enabled);
+    game_ini.SetLines(kind + "_Disabled", disabled);
+  }
+  return game_ini;
+}'''
+
+
+def patch_cheat_ini_resolution(root: Path) -> None:
+    path = root / 'Source/Core/Core/ConfigManager.cpp'
+    original = '''Common::IniFile SConfig::LoadLocalGameIni(const std::string& id, std::optional<u16> revision)
+{
+  Common::IniFile game_ini;
+  for (const std::string& filename : ConfigLoaders::GetGameIniFilenames(id, revision))
+    game_ini.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + filename, true);
+  return game_ini;
+}'''
+    replace_once(path, original, LOCAL_CHEAT_INI_SOURCE, 'local cheat INI priority')
+    content = path.read_text()
+    if '#include <map>' not in content:
+        path.write_text('#include <map>\n' + content)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('dolphin_root', type=Path)
@@ -1544,6 +1620,7 @@ def main() -> None:
     patch_savestate_memory(root)
     patch_performance_metrics(root)
     patch_metal_shutdown(root)
+    patch_cheat_ini_resolution(root)
     bridge.write_text(BRIDGE_SOURCE, encoding='utf-8')
     updated = memory.read_text()
     required = ('brk #0x69', '"mov x0, %0\\n"', '"mov x1, %1\\n"', 'if (rx_ptr == MAP_FAILED)')

@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--upstream',type=Path)
     args=parser.parse_args()
     core=(ROOT/'packages/armsx2_internal_bridge/core/ARMSX2Core.mm').read_text()
+    core=core.replace('#include "ARMSX2Patches.inc"', (ROOT/'packages/armsx2_internal_bridge/core/ARMSX2Patches.inc').read_text())
     headers=ROOT/'packages/armsx2_internal_bridge/ios/Classes'
     abi=(headers/'ARMSX2CoreABI.h').read_text()
     manifest=json.loads((ROOT/'build-utils/armsx2/source.json').read_text())

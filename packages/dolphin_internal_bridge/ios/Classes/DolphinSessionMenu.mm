@@ -337,7 +337,16 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
   if (self.page == DOLMenuHacks) return [self text:@"hacksHelp"];
-  if (self.page == DOLMenuCheats) return [self text:@"cheatsHelp"];
+  if (self.page == DOLMenuCheats) {
+    NSString* help=[self text:@"cheatsHelp"];
+    if (self.cheatsSnapshot && ![self.cheatsSnapshot[@"gecko"] count] &&
+        ![self.cheatsSnapshot[@"actionReplay"] count]) {
+      return [NSString stringWithFormat:@"%@\n%@ · r%@\n\n%@",
+          [self text:@"noCheatsAvailable"], self.cheatsSnapshot[@"gameId"] ?: @"",
+          self.cheatsSnapshot[@"revision"] ?: @0, help];
+    }
+    return help;
+  }
   if (self.page == DOLMenuAchievements) return [self text:@"achievementsHelp"];
   if (self.page == DOLMenuRecording) {
     NSString* help = [self text:@"recordingHelp"];
@@ -649,7 +658,9 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         menu.navigationController.view.userInteractionEnabled = YES;
         menu.navigationItem.rightBarButtonItem.enabled = YES;
         if ([request[@"kind"] isEqual:@"download"]) {
-          if (success) {
+          if (success && [result[@"downloaded"] integerValue] == 0) {
+            menu.stateMessage = [menu text:@"noCheatsAvailable"];
+          } else if (success) {
             NSInteger added = [result[@"added"] integerValue];
             menu.stateMessage = [[menu text:@"downloadedCodes"]
                 stringByReplacingOccurrencesOfString:@"{count}"

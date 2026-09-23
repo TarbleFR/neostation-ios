@@ -9,6 +9,7 @@ on:
       - 'packages/armsx2_jit_helper/**'
       - 'build-utils/armsx2/**'
       - 'test/armsx2_bios_hacks_test.py'
+      - 'test/armsx2_patch_catalog_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -64,6 +65,8 @@ jobs:
           python3 -m py_compile build-utils/armsx2/*.py
           bash -n build-utils/armsx2/build_core.sh
           git diff --check
+      - name: Verify patch selection and activation with Foundation
+        run: python3 test/armsx2_patch_catalog_test.py
       - name: Compile native core and verify binary ABI
         run: bash build-utils/armsx2/build_core.sh .native-sources/ARMSX2
       - uses: actions/upload-artifact@v4

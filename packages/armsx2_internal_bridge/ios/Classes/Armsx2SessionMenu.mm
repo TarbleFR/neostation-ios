@@ -273,12 +273,19 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     return ARMSX2MenuText(@"ARMSX2 already ships the PCSX2 patch catalogue. Available patches are matched to the current game's serial and CRC; no guessed patch is applied. Hardcore RetroAchievements can disable cheats and save-state features.",
                           @"ARMSX2 embarque déjà le catalogue de patches PCSX2. Les patches disponibles sont associés au numéro de série et au CRC du jeu courant ; aucun patch n’est deviné. Le mode Hardcore de RetroAchievements peut désactiver les cheats et certaines fonctions de save state.");
   if (self.page == ARMSX2MenuPatches) {
-    NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : @[];
-    return items.count
-        ? ARMSX2MenuText(@"These are the patches ARMSX2/PCSX2 found for this exact game revision. Changes are stored per game and applied through the native patch loader.",
-                         @"Voici les patches trouvés par ARMSX2/PCSX2 pour cette révision exacte du jeu. Les changements sont enregistrés par jeu et appliqués par le chargeur de patches natif.")
-        : ARMSX2MenuText(@"No built-in patch is available for this exact game revision.",
-                         @"Aucun patch intégré n’est disponible pour cette révision exacte du jeu.");
+    if (self.patchesLoading) return ARMSX2MenuText(@"Loading…", @"Chargement…");
+    if (![self.patches[@"available"] boolValue])
+      return ARMSX2MenuText(@"The patch catalogue could not be read. Reopen this menu to retry.",
+                           @"Impossible de lire les patches. Rouvrez ce menu pour réessayer.");
+    NSString* summary=[NSString stringWithFormat:ARMSX2MenuText(
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.",
+        @"%@ · CRC %@\nActifs : %@ patches, %@ cheats."),
+        self.patches[@"serial"] ?: @"", self.patches[@"crc"] ?: @"",
+        self.patches[@"activePatches"] ?: @0, self.patches[@"activeCheats"] ?: @0];
+    NSString* help=ARMSX2MenuText(
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.",
+        @"Les entrées nommées se sélectionnent individuellement. ARMSX2 gère automatiquement les commandes PNACH sans nom. Les codes appliqués uniquement au démarrage nécessitent de relancer le jeu. Le mode Hardcore peut bloquer leur activation.");
+    return [NSString stringWithFormat:@"%@\n\n%@",summary,help];
   }
   if (self.page == ARMSX2MenuControls)
     return ARMSX2MenuText(@"Choose whether NeoStation's PS2 touch overlay is visible.",
@@ -367,7 +374,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       cell.detailTextLabel.text = items
           ? [NSString stringWithFormat:@"%lu %@", (unsigned long)items.count,
               ARMSX2MenuText(@"for this game revision", @"pour cette révision du jeu")]
-          : ARMSX2MenuText(@"Open to scan the built-in catalogue", @"Ouvrir pour analyser le catalogue intégré");
+          : ARMSX2MenuText(@"Open to scan patches and imported cheats", @"Ouvrir pour lire les patches et cheats importés");
     } else {
       cell.textLabel.text = ARMSX2MenuText(@"Reload Cheats / Patches", @"Recharger cheats / patches");
       cell.accessoryType = UITableViewCellAccessoryNone;
@@ -382,8 +389,21 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       cell.detailTextLabel.text=description.length && author.length
           ? [NSString stringWithFormat:@"%@ — %@",description,author]
           : (description.length ? description : author);
-      NSInteger value=[item[@"value"] integerValue];
-      cell.accessoryType=value==1 ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryDisclosureIndicator;
+      if ([item[@"readOnly"] boolValue]) {
+        cell.textLabel.text=[NSString stringWithFormat:ARMSX2MenuText(
+            @"%@ unlabelled commands", @"%@ commandes sans nom"), item[@"unlabelled"] ?: @0];
+        cell.detailTextLabel.text=[item[@"cheat"] boolValue] ? @"ARMSX2/cheats" : @"ARMSX2/patches";
+        cell.accessoryType=UITableViewCellAccessoryNone;
+        cell.selectionStyle=UITableViewCellSelectionStyleNone;
+      } else {
+        NSInteger value=[item[@"value"] integerValue];
+        NSString* state=ARMSX2MenuText(value==1 ? @"On" : value==-1 ? @"Automatic" : @"Off",
+                                      value==1 ? @"Activé" : value==-1 ? @"Automatique" : @"Désactivé");
+        cell.detailTextLabel.text=[NSString stringWithFormat:@"%@ · %@%@%@",
+            [item[@"cheat"] boolValue] ? @"Cheat" : @"Patch", state,
+            cell.detailTextLabel.text.length ? @" — " : @"", cell.detailTextLabel.text ?: @""];
+        cell.accessoryType=value==1 ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryDisclosureIndicator;
+      }
     }
   } else if (self.page == ARMSX2MenuControls) {
     cell.textLabel.text = ARMSX2MenuText(@"Touch Controls", @"Commandes tactiles");
@@ -584,6 +604,8 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : @[];
     if (row >= (NSInteger)items.count || !self.performPatchCommand) return;
     NSDictionary* item=items[row];
+    if ([item[@"readOnly"] boolValue]) return;
+    NSString* identifier=[item[@"id"] isKindOfClass:NSString.class] ? item[@"id"] : item[@"name"];
     NSString* name=[item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
     if (!name.length) return;
     const BOOL automatic=[item[@"automatic"] boolValue];
@@ -594,7 +616,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     void (^apply)(NSInteger)=^(NSInteger value) {
       weakSelf.patchesLoading=YES;
       weakSelf.navigationController.view.userInteractionEnabled=NO;
-      weakSelf.performPatchCommand(name,value,^(BOOL success,NSString* message){
+      weakSelf.performPatchCommand(identifier,value,^(BOOL success,NSString* message){
         ARMSX2MenuOnMain(^{
           weakSelf.patchesLoading=NO;
           weakSelf.navigationController.view.userInteractionEnabled=YES;

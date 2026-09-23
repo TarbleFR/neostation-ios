@@ -77,7 +77,7 @@ def main() -> None:
         block = locale[start:end]
         for key in ("cheats", "enableCheats", "downloadGecko", "geckoCodes",
                     "actionReplayCodes", "cheatsHelp", "downloadedCodes",
-                    "cheatDownloadFailed", "cheatUpdated"):
+                    "cheatDownloadFailed", "cheatUpdated", "noCheatsAvailable"):
             assert f'"{key}":' in block, (language, key)
 
     print("PASS: Dolphin native Gecko/Action Replay manager and 12-locale UI contract")

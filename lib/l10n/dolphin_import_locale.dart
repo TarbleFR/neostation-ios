@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 abstract final class DolphinImportLocale {
   static const values = <String, Map<String, String>>{
     "en": {
+      "noCheatsAvailable": "No codes found for this game. Download Gecko codes or import its INI into GameSettings. Enabling cheats alone does not add codes.",
         "cheats": "Cheats",
       "enableCheats": "Enable cheats",
       "downloadGecko": "Download Gecko codes",
@@ -116,6 +117,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accepted: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Existing system files are backed up before replacement.",
     },
     "fr": {
+      "noCheatsAvailable": "Aucun code trouvé pour ce jeu. Téléchargez les codes Gecko ou importez son INI dans GameSettings. Activer les cheats ne suffit pas à ajouter des codes.",
         "cheats": "Cheats",
       "enableCheats": "Activer les cheats",
       "downloadGecko": "Télécharger les codes Gecko",
@@ -232,6 +234,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Acceptés : keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Une copie de secours précède le remplacement des fichiers système existants.",
     },
     "de": {
+      "noCheatsAvailable": "Keine Codes für dieses Spiel gefunden. Gecko-Codes herunterladen oder die INI in GameSettings importieren. Das Aktivieren allein fügt keine Codes hinzu.",
       "hardcoreCheatBlocked": "Im RetroAchievements-Hardcore-Modus blockiert",
       "cheats": "Cheats",
       "enableCheats": "Cheats aktivieren",
@@ -348,6 +351,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Erlaubt: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Bestehende Systemdateien werden vor dem Ersetzen gesichert.",
     },
     "es": {
+      "noCheatsAvailable": "No se encontraron códigos para este juego. Descarga códigos Gecko o importa su INI en GameSettings. Activar trucos no añade códigos.",
       "hardcoreCheatBlocked": "Bloqueado en el modo Hardcore de RetroAchievements",
       "cheats": "Trucos",
       "enableCheats": "Activar trucos",
@@ -464,6 +468,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Se aceptan: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Los archivos existentes se respaldan antes de reemplazarlos.",
     },
     "it": {
+      "noCheatsAvailable": "Nessun codice trovato per questo gioco. Scarica i codici Gecko o importa il suo INI in GameSettings. Attivare i trucchi non aggiunge codici.",
       "hardcoreCheatBlocked": "Bloccato in modalità Hardcore RetroAchievements",
       "cheats": "Trucchi",
       "enableCheats": "Abilita trucchi",
@@ -580,6 +585,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accettati: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. I file esistenti vengono salvati prima della sostituzione.",
     },
     "pt": {
+      "noCheatsAvailable": "Nenhum código encontrado para este jogo. Transfira códigos Gecko ou importe o INI em GameSettings. Ativar cheats não adiciona códigos.",
       "hardcoreCheatBlocked": "Bloqueado no modo Hardcore do RetroAchievements",
       "cheats": "Cheats",
       "enableCheats": "Ativar cheats",
@@ -696,6 +702,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Aceitos: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Os arquivos existentes são copiados antes da substituição.",
     },
     "ru": {
+      "noCheatsAvailable": "Коды для этой игры не найдены. Загрузите коды Gecko или импортируйте INI в GameSettings. Включение читов не добавляет коды.",
       "hardcoreCheatBlocked": "Заблокировано в режиме Hardcore RetroAchievements",
       "cheats": "Читы",
       "enableCheats": "Включить читы",
@@ -813,6 +820,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Допустимы: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Перед заменой существующие файлы копируются.",
     },
     "id": {
+      "noCheatsAvailable": "Kode untuk game ini tidak ditemukan. Unduh kode Gecko atau impor INI ke GameSettings. Mengaktifkan cheat saja tidak menambahkan kode.",
       "hardcoreCheatBlocked": "Diblokir dalam mode Hardcore RetroAchievements",
       "cheats": "Cheat",
       "enableCheats": "Aktifkan cheat",
@@ -927,6 +935,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Diterima: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Berkas lama dicadangkan sebelum diganti.",
     },
     "ja": {
+      "noCheatsAvailable": "このゲームのコードが見つかりません。Geckoコードをダウンロードするか、INIをGameSettingsにインポートしてください。チートを有効にするだけではコードは追加されません。",
       "hardcoreCheatBlocked": "RetroAchievements Hardcore モードでは使用できません",
       "cheats": "チート",
       "enableCheats": "チートを有効化",
@@ -1043,6 +1052,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "対応：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。既存ファイルは置き換え前にバックアップされます。",
     },
     "ko": {
+      "noCheatsAvailable": "이 게임의 코드를 찾을 수 없습니다. Gecko 코드를 다운로드하거나 INI를 GameSettings로 가져오세요. 치트를 켜는 것만으로 코드는 추가되지 않습니다.",
       "hardcoreCheatBlocked": "RetroAchievements Hardcore 모드에서 차단됨",
       "cheats": "치트",
       "enableCheats": "치트 활성화",
@@ -1158,6 +1168,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "지원: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. 기존 파일은 교체 전에 백업됩니다.",
     },
     "zh": {
+      "noCheatsAvailable": "未找到此游戏的代码。请下载 Gecko 代码或将其 INI 导入 GameSettings。仅启用金手指不会添加代码。",
       "hardcoreCheatBlocked": "在 RetroAchievements 硬核模式下被阻止",
       "cheats": "作弊",
       "enableCheats": "启用作弊",
@@ -1273,6 +1284,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "支持：keys.bin、fst.bin、clientca.pem、clientcakey.pem、rootca.pem。现有文件将在替换前备份。",
     },
     "zh_Hant": {
+      "noCheatsAvailable": "找不到此遊戲的代碼。請下載 Gecko 代碼或將其 INI 匯入 GameSettings。僅啟用金手指不會新增代碼。",
       "hardcoreCheatBlocked": "在 RetroAchievements Hardcore 模式下遭封鎖",
       "cheats": "作弊碼",
       "enableCheats": "啟用作弊碼",

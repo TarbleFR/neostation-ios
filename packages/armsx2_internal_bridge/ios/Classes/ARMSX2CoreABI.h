@@ -60,13 +60,11 @@ typedef struct NeoARMSX2API {
   int (*set_cheats_enabled)(int enabled, char* error, size_t capacity);
   int (*reload_cheats)(char* error, size_t capacity);
 
-  // Current-revision built-in PCSX2/ARMSX2 patch catalogue. The Core reads
-  // patches.zip through the upstream Patch subsystem; NeoStation never invents
-  // patch definitions or scrapes arbitrary web pages. State is persisted in
-  // the running game's own [Patches] Enable/Disable lists.
+  // Native catalogue from patches.zip, patches/ and cheats/. JSON includes
+  // typed item IDs, unlabelled command counts and actual active counts.
   int (*get_available_patches_json)(char* output, size_t capacity);
-  // state: -1 automatic/default (only globally toggleable patches), 0 off,
-  // 1 on. Normal per-game patches use 0/1.
+  // Accepts a catalogue item ID (neo-patch-v1: + JSON [isCheat,name]) or a
+  // legacy patch name. -1 automatic (presentation patches only), 0 off, 1 on.
   int (*set_patch_state)(const char* name, int state, char* error, size_t capacity);
 
   int (*has_save_state)(uint32_t slot);

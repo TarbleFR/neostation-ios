@@ -1,4 +1,4 @@
-name: Game launch route regression
+name: Launch and carousel UI regressions
 on:
   push:
     branches: [experimental]
@@ -7,6 +7,9 @@ on:
       - 'lib/utils/game_launch_utils.dart'
       - 'lib/widgets/game_launch_dialog.dart'
       - 'test/game_launch_route_test.py'
+      - 'test/carousel_chrome_layout_test.py'
+      - 'lib/widgets/carousel_chrome_layout.dart'
+      - 'lib/screens/game_screen/my_games_carousel.dart'
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,3 +28,5 @@ jobs:
           cache: true
       - name: Exercise production launch routes with Flutter Navigator
         run: python3 test/game_launch_route_test.py
+      - name: Exercise carousel rail and alphabet layout
+        run: python3 test/carousel_chrome_layout_test.py

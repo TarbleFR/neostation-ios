@@ -18,6 +18,7 @@ import 'package:neostation/utils/letter_jump.dart';
 import 'package:neostation/screens/app_screen.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/game_action_buttons.dart';
+import 'package:neostation/widgets/carousel_chrome_layout.dart';
 import 'package:neostation/widgets/legend_edge_reshow_zone.dart';
 import 'package:neostation/services/game_legend_visibility.dart';
 import 'package:neostation/widgets/native_carousel.dart';
@@ -623,8 +624,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
       offset += _calculateLetterWidth(letters[i], selectedTextStyle) + 6.r;
     }
     final letterWidth = _calculateLetterWidth(currentLetter, selectedTextStyle);
-    final screenWidth = MediaQuery.of(context).size.width;
-    double targetOffset = offset - (screenWidth / 2) + (letterWidth / 2);
+    final viewportWidth = _letterBarController.position.viewportDimension;
+    double targetOffset = 4.r + offset - (viewportWidth / 2) + (letterWidth / 2);
     targetOffset = targetOffset.clamp(
       0.0,
       _letterBarController.position.maxScrollExtent,
@@ -1081,21 +1082,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
         ? MediaQuery.viewPaddingOf(context).right
         : 0.0;
 
-    return Stack(
-      children: [
-        Column(
-          children: [
-            // #188 layout: drop the top spacer so the carousel gets the full
-            // height (bigger cards sit closer together). Pad symmetrically so
-            // the centered card stays centered on-screen while still clearing
-            // the vertical legend on the left.
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 60.r + safeLeftInset,
-                  right: 60.r + safeRightInset,
-                ),
-                child: NativeCarousel(
+    return CarouselChromeLayout(
+      unit: 1.r,
+      safeLeft: safeLeftInset,
+      safeRight: safeRightInset,
+      legendHidden: GameLegendVisibility.hidden.value,
+      artwork: NativeCarousel(
                   key: _carouselKey,
                   itemCount: widget.games.length,
                   initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
@@ -1125,13 +1117,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
                   },
                   onPageChanged: _onPageChanged,
                 ),
-              ),
-            ),
-            // Tight letter-bar box (chip height, no vertical slack) sits low
-            // against the footer. Reclaiming the old slack in real layout (vs a
-            // visual translate) lets the carousel above grow into it, so the
-            // artwork gets slightly bigger with no gap beneath it.
-            SizedBox(
+      letters: SizedBox(
               height: 30.r,
               child: SingleChildScrollView(
                 controller: _letterBarController,
@@ -1198,42 +1184,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 ),
               ),
             ),
-            // Footer pill driven by the debounced settled selection and
-            // memoized (see _buildSettledChrome) so it is not rebuilt on every
-            // fast-swipe frame.
-            // Flush to the bottom (no trailing spacer) so the footer sits at
-            // the same vertical position as the grid view's footer.
-            _chromeFooter!,
-          ],
-        ),
-        // Vertical action-button legend (shared with the game list view);
-        // also memoized on the settled selection. Select + B slides it off the
-        // left edge. The centered carousel itself is left in place (there is no
-        // left-gutter to reflow into for a centered PageView).
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          top: 12.r,
-          bottom: 12.r,
-          left: GameLegendVisibility.hidden.value
-              ? -(72.r + safeLeftInset)
-              : safeLeftInset + 10.r,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: GameLegendVisibility.hidden.value ? 0.0 : 1.0,
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.topLeft,
-                child: _chromeLegend!,
-              ),
-            ),
-          ),
-        ),
-        // Touch: swipe-right from the left edge reveals a hidden legend.
-        const LegendEdgeReshowZone(),
-      ],
+      footer: _chromeFooter!,
+      legend: _chromeLegend!,
+      edgeReshowZone: const LegendEdgeReshowZone(),
     );
   }
 }
