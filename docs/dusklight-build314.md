@@ -55,3 +55,12 @@ et hôte, en plus des tests 313 conservés. Il ne simule pas le hit-testing iOS.
    touche bloquée. Premier lancement vierge : choix du preset toujours requis.
 
 Une CI verte n’est pas une validation de ces interactions sur iPhone.
+
+## Identité du cœur compilé
+
+- Intégration native : `f2db7589478951446377cfeba0fc3abdbb06c542`.
+- CI native réussie : `35878858841`, artefact `10759444291`.
+- ABI 3, arm64 et 35 ressources vérifiées ; mêmes révisions upstream/SDL que 313.
+- Les avertissements de liaison des objets de compression Rust (cible 26.2,
+  liaison 17.4) sont toujours présents, comme en 313. La compatibilité sur
+  l’appareil reste à tester ; aucune validation iPhone n’est déduite de la CI.
