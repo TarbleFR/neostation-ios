@@ -73,3 +73,26 @@ new launch waiting for the prior handoff, and failure recovery.
 The legacy audio-policy source test no longer opens the retired
 `release-ipa.yml`; its assertions still check the active `ios-ci.yml` audio patch.
 It and the new behavior test are required before candidate packaging.
+
+## Native and host validation record
+
+- Dusklight Core input: `66179a6a83a565dcc35f7b3e4c1212a874be2946`.
+  CI run `35886713989` passed, including native menu/language/return tests and
+  the UIKit/C++ compilation boundary. The downloaded arm64 framework has SHA-256
+  `af7ddd22760dd78e14e2cb6161e7bee24261d0960e62dbf0f0ac2b49fddcc61d`.
+  Its 24 canonical source hashes match this repository, and all 35 resource
+  hashes match the packaged files. ABI remains 3.
+- Flutter behavior preflight at the same input: run `35886713954` passed.
+  It includes the three production-manager audio handoff scenarios, the five
+  launch navigation tests and the eight carousel tests.
+- RPCS3 Core input: `be4f8f3abbf478b18ae782dcdaf290181e92b7a2`.
+  CI run `35885420615` passed the startup regressions, iOS compilation and
+  binary checks. Downloaded Core SHA-256:
+  `bafe4e8ac378179b930379b2720f1a076890543b3c392c364fd043284465dcfc`.
+  Its ABI 30, source revision and canonical delta hash match the host inputs.
+  The rejected-gap diagnostic is present. Passive-load validation inspected
+  2,769 initializers (916 symbol groups), with no forbidden direct-call path
+  to the named JIT setup functions within the validator's depth-16 scope.
+- The candidate packaging workflow pins these exact successful native runs.
+  Dolphin, ARMSX2 and helper inputs retain the Build 314 pins; final IPA
+  comparison must verify their bytes before delivery.

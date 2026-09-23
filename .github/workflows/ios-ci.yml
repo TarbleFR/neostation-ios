@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 314 Dusklight Menu Navigation
-run-name: NeoStation iOS Build 314 • ${{ github.sha }}
+name: NeoStation iOS Build 315 Native Return and Language
+run-name: NeoStation iOS Build 315 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-314
+  group: neostation-ios-build-315
   cancel-in-progress: true
 
 jobs:
@@ -22,22 +22,22 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') }}
-    name: Build 314 Dusklight Menu Navigation IPA
+    name: Build 315 Native Return and Language IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '314'
-      IPA_NAME: 'NeoStation-iOS-Build-314-Dusklight-Menu-Navigation'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-314-Dusklight-Menu-Navigation'
+      BUILD_NUMBER: '315'
+      IPA_NAME: 'NeoStation-iOS-Build-315-Native-Return-Language'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-315-Native-Return-Language'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
       ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
       ARMSX2_CORE_RUN_ID: '35805854967'
-      RPCS3_CORE_HOST_SHA: 4e0ae3ccb6f58425fa5f2a0e9780f1f180e77a50
-      RPCS3_CORE_RUN_ID: '35799603880'
-      DUSKLIGHT_CORE_HOST_SHA: f2db7589478951446377cfeba0fc3abdbb06c542
-      DUSKLIGHT_CORE_RUN_ID: '35878858841'
+      RPCS3_CORE_HOST_SHA: be4f8f3abbf478b18ae782dcdaf290181e92b7a2
+      RPCS3_CORE_RUN_ID: '35885420615'
+      DUSKLIGHT_CORE_HOST_SHA: 66179a6a83a565dcc35f7b3e4c1212a874be2946
+      DUSKLIGHT_CORE_RUN_ID: '35886713989'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -451,7 +451,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 314 diagnostics
+          # Rewrite the Dolphin fields so the final Build 315 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -652,7 +652,7 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 314 IPA
+      - name: Package and validate Build 315 IPA
         shell: bash
         run: |
           set -euo pipefail
