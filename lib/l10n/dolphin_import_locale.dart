@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 abstract final class DolphinImportLocale {
   static const values = <String, Map<String, String>>{
     "en": {
+      "hardcoreCheatBlocked": "Blocked in RetroAchievements Hardcore",
       "noCheatsAvailable": "No codes found for this game. Download Gecko codes or import its INI into GameSettings. Enabling cheats alone does not add codes.",
         "cheats": "Cheats",
       "enableCheats": "Enable cheats",
@@ -117,6 +118,7 @@ abstract final class DolphinImportLocale {
       "filesHelp": "Accepted: keys.bin, fst.bin, clientca.pem, clientcakey.pem, rootca.pem. Existing system files are backed up before replacement.",
     },
     "fr": {
+      "hardcoreCheatBlocked": "Bloqué en mode Hardcore RetroAchievements",
       "noCheatsAvailable": "Aucun code trouvé pour ce jeu. Téléchargez les codes Gecko ou importez son INI dans GameSettings. Activer les cheats ne suffit pas à ajouter des codes.",
         "cheats": "Cheats",
       "enableCheats": "Activer les cheats",
@@ -1692,7 +1694,6 @@ abstract final class DolphinImportLocale {
 };
 
   static const _modernMenuEn = <String, String>{
-    "hardcoreCheatBlocked": "Blocked in RetroAchievements Hardcore",
     "hacks": "Compatibility hacks",
     "hacksHelp": "These options can improve speed or fix graphics, but may break individual games. VBI Skip can cause freezes; leave uncertain options off.",
     "viSkip": "VBI Skip",
@@ -1715,7 +1716,6 @@ abstract final class DolphinImportLocale {
   };
 
   static const _modernMenuFr = <String, String>{
-    "hardcoreCheatBlocked": "Bloqué en mode Hardcore RetroAchievements",
     "hacks": "Hacks de compatibilité",
     "hacksHelp": "Ces options peuvent améliorer les performances ou corriger l’image, mais aussi perturber certains jeux. VBI Skip peut provoquer des gels ; laissez les options incertaines désactivées.",
     "viSkip": "Saut VBI",
