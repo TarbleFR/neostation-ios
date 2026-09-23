@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 315 Native Return and Language
-run-name: NeoStation iOS Build 315 • ${{ github.sha }}
+name: NeoStation iOS Build 316 Dusklight Audio Handoff
+run-name: NeoStation iOS Build 316 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-315
+  group: neostation-ios-build-316
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') }}
-    name: Build 315 Native Return and Language IPA
+    name: Build 316 Dusklight Audio Handoff IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '315'
-      IPA_NAME: 'NeoStation-iOS-Build-315-Native-Return-Language'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-315-Native-Return-Language'
+      BUILD_NUMBER: '316'
+      IPA_NAME: 'NeoStation-iOS-Build-316-Dusklight-Handoff'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-316-Dusklight-Handoff'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -36,8 +36,8 @@ jobs:
       ARMSX2_CORE_RUN_ID: '35805854967'
       RPCS3_CORE_HOST_SHA: be4f8f3abbf478b18ae782dcdaf290181e92b7a2
       RPCS3_CORE_RUN_ID: '35885420615'
-      DUSKLIGHT_CORE_HOST_SHA: 66179a6a83a565dcc35f7b3e4c1212a874be2946
-      DUSKLIGHT_CORE_RUN_ID: '35886713989'
+      DUSKLIGHT_CORE_HOST_SHA: 2ba746a7728e6d1eb116e79ec84aa342a49e8643
+      DUSKLIGHT_CORE_RUN_ID: '35898031842'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -230,6 +230,9 @@ jobs:
           c++ -std=c++20 -Wall -Wextra -Werror -Inative/dusklight/core \
             test/dusklight_vm_trace_test.cpp -o "$RUNNER_TEMP/dusklight-vm-trace-test"
           "$RUNNER_TEMP/dusklight-vm-trace-test"
+          xcrun --sdk iphoneos clang++ -std=c++20 -arch arm64 \
+            -miphoneos-version-min=17.4 -Wall -Wextra -Werror -fsyntax-only \
+            -Inative/dusklight/core test/dusklight_vm_trace_test.cpp
           python3 test/dusklight_menu_test.py
           python3 test/dusklight_language_test.py
           flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
@@ -455,7 +458,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 315 diagnostics
+          # Rewrite the Dolphin fields so the final Build 316 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -536,6 +539,20 @@ jobs:
           assert identity['source_commit'] == pins['commit']
           assert identity['abi_version'] == 3
           assert identity['session_policy'] == 'host_frame_loop_suspend_resume_same_disc'
+          canonical = Path('native/dusklight')
+          expected_sources = {
+              name: canonical / name
+              for name in json.loads((canonical / 'upstream-manifest.json').read_text())
+          }
+          expected_sources.update({
+              'neostation/' + item.name: item
+              for item in (canonical / 'core').iterdir() if item.is_file()
+          })
+          expected_sources['neostation/DusklightCoreABI.h'] = Path(
+              'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h')
+          assert set(identity['canonical_sources']) == set(expected_sources)
+          for relative, source in expected_sources.items():
+              assert hashlib.sha256(source.read_bytes()).hexdigest() == identity['canonical_sources'][relative], relative
           framework = root / 'DusklightCore.framework'
           assert hashlib.sha256((framework / 'DusklightCore').read_bytes()).hexdigest() == identity['sha256']
           for relative, digest in identity['resources'].items():
@@ -656,7 +673,7 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 315 IPA
+      - name: Package and validate Build 316 IPA
         shell: bash
         run: |
           set -euo pipefail

@@ -72,3 +72,12 @@ JIT helper inputs must retain Build 315 identities in the candidate IPA.
   was produced. The reader now uses `vm_region_recurse_64` from the iOS Mach
   interface with arm64 `vm_address_t`/`vm_size_t`; a separate iPhoneOS SDK
   syntax check is required before starting the native build.
+- Native candidate `2ba746a7728e6d1eb116e79ec84aa342a49e8643`, run
+  `35898031842`, passed all required tests and the iOS arm64 compilation.
+  The downloaded artifact `10768120936` has ZIP SHA-256
+  `2ab24dba8f682aab1d3a20ed1dd393b2f96657c0b5ba9def0a8d0aeceadce6a0`.
+  Framework SHA-256:
+  `dd1dfd1402409ae0d88c4d6d9972bbd465937fe66931a326a8ae44767c856a22`.
+  ABI 3, all 26 canonical source hashes and all 35 resources were verified
+  locally against the downloaded artifact. The host packaging gate also
+  checks the complete canonical-source set and hashes before assembling an IPA.
