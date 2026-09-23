@@ -4,17 +4,20 @@ import 'package:dusklight_internal_bridge/dusklight_internal_bridge.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'dusklight_game_identity.dart';
 
 class DusklightImportResult {
   const DusklightImportResult({
     required this.imported,
     required this.rejected,
     this.errors = const <String>[],
+    this.importedPaths = const <String>[],
   });
 
   final int imported;
   final int rejected;
   final List<String> errors;
+  final List<String> importedPaths;
 }
 
 class DusklightLaunchResult {
@@ -103,6 +106,7 @@ class DusklightInternalService {
     var imported = 0;
     var rejected = 0;
     final errors = <String>[];
+    final importedPaths = <String>[];
     for (final picked in selection.files) {
       final sourcePath = picked.path;
       final extension = path
@@ -133,6 +137,13 @@ class DusklightInternalService {
 
       File? temporary;
       try {
+        // The embedded DiscIO reader also identifies compressed discs. Reject
+        // another game before copying it or attaching Twilight Princess media.
+        if (await DusklightGameIdentity.read(source.path) == null) {
+          rejected++;
+          errors.add('${picked.name}: this is not a readable Twilight Princess disc.');
+          continue;
+        }
         final output = await _uniqueDestination(destination, picked.name);
         temporary = File('${output.path}.part');
         if (await temporary.exists()) await temporary.delete();
@@ -141,6 +152,7 @@ class DusklightInternalService {
           throw const FileSystemException('Copied file length mismatch');
         }
         await temporary.rename(output.path);
+        importedPaths.add(output.path);
         imported++;
       } catch (error) {
         if (temporary != null && await temporary.exists()) {
@@ -154,6 +166,7 @@ class DusklightInternalService {
       imported: imported,
       rejected: rejected,
       errors: errors,
+      importedPaths: importedPaths,
     );
   }
 

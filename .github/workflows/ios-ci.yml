@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 309 Wii Cheats and Ports
-run-name: NeoStation iOS Build 309 • ${{ github.sha }}
+name: NeoStation iOS Build 310 Dusklight Library
+run-name: NeoStation iOS Build 310 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-309
+  group: neostation-ios-build-310
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 309 Wii Cheats and Ports IPA
+    name: Build 310 Dusklight Library IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '309'
-      IPA_NAME: 'NeoStation-iOS-Build-309-Wii-Cheats-Ports'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-309-Wii-Cheats-Ports'
+      BUILD_NUMBER: '310'
+      IPA_NAME: 'NeoStation-iOS-Build-310-Dusklight-Library'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-310-Dusklight-Library'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -220,6 +220,8 @@ jobs:
           python3 test/dolphin_cheats_menu_test.py
           python3 test/dolphin_https_resource_test.py
           python3 test/dusklight_bridge_contract_test.py
+          python3 test/integrated_import_tab_contract_test.py
+          flutter test test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
@@ -440,7 +442,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 309 diagnostics
+          # Rewrite the Dolphin fields so the final Build 310 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -605,7 +607,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 309 IPA
+      - name: Package and validate Build 310 IPA
         shell: bash
         run: |
           set -euo pipefail

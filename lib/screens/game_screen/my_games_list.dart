@@ -17,6 +17,8 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:ui';
+import '../../l10n/dusklight_locale.dart';
+import '../../services/dusklight_game_identity.dart';
 
 // DOLPHIN_ISOLATION_BEGIN: playlist_import
 import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
@@ -649,7 +651,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 child: _isLoading
                     ? _buildLoadingState()
                     : _games.isEmpty
-                    ? _buildEmptyState()
+                    ? (_isDusklightLibrary ? _buildGamesList() : _buildEmptyState())
                     : Consumer<SqliteConfigProvider>(
                         builder: (context, configProvider, child) {
                           if (widget.system.folderName == 'music') {
@@ -869,6 +871,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       );
 
   Widget _buildDusklightImportAction() => DusklightInternalPlaylistActions(
+    onGamesImported: _scrapeImportedDusklight,
     onInteractionChanged: (active) {
       if (!mounted) return;
       if (active) {
@@ -889,6 +892,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   Widget _buildEmbeddedDusklightImportAction() =>
       DusklightInternalPlaylistActions(
         embedded: true,
+        onGamesImported: _scrapeImportedDusklight,
         onInteractionChanged: (active) {
           if (!mounted) return;
           if (active) {
@@ -905,6 +909,29 @@ class _SystemGamesListState extends State<SystemGamesList> {
           if (mounted) await _loadGames();
         },
       );
+
+  Future<void> _scrapeImportedDusklight(List<String> paths) async {
+    try {
+      if (!await ScreenScraperService.hasSavedCredentials()) return;
+      for (final gamePath in paths) {
+        if (!await File(gamePath).exists()) continue;
+        await ScreenScraperService.scrapeSingleGame(
+          appSystemId: widget.system.id!,
+          systemFolder: 'ports',
+          romName: gamePath.split('/').last,
+          romPath: gamePath,
+        );
+        _scrapingProvider.markArtworkUpdated();
+        if (mounted) {
+          await _loadGames();
+        }
+      }
+    } catch (error) {
+      // Import is already committed and visible. Network failures can be
+      // retried with the ordinary per-game scrape action.
+      _log.w('Dusklight media enrichment failed: $error');
+    }
+  }
 
   Widget _buildEmbeddedRpcs3ImportAction() => Rpcs3InternalPlaylistActions(
     embedded: true,
@@ -1622,6 +1649,19 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   Widget _buildGameDetailsPanel() {
     if (_selectedGame == null) {
+      if (_isDusklightLibrary) {
+        return Center(child: Padding(
+          padding: EdgeInsets.all(24.r),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.sports_esports_outlined, size: 48.r),
+            SizedBox(height: 12.r),
+            Text(DusklightGameIdentity.title, textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18.r, fontWeight: FontWeight.w600)),
+            SizedBox(height: 8.r),
+            Text(DusklightLocale.emptyLibraryText(context), textAlign: TextAlign.center),
+          ]),
+        ));
+      }
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

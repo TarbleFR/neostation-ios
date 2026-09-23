@@ -31,8 +31,8 @@ class ScraperRepository {
       FROM user_detected_systems uds
       JOIN app_systems s ON uds.app_system_id = s.id
       WHERE s.folder_name != 'android-apps'
-        AND s.screenscraper_id IS NOT NULL
-        AND s.screenscraper_id != 0
+        AND ((s.screenscraper_id IS NOT NULL AND s.screenscraper_id != 0)
+             OR s.folder_name = 'ports')
       ORDER BY s.real_name
     ''');
 
@@ -344,15 +344,15 @@ class ScraperRepository {
       final mappings = await db.rawQuery('''
         SELECT
           asys.id as app_system_id,
-          asys.screenscraper_id as screenscraper_system_id,
+          COALESCE(asys.screenscraper_id, 0) as screenscraper_system_id,
           asys.folder_name as folder_name,
           asys.folder_name as primary_folder_name,
           asys.screenscraper_id as screenscraper_id,
           asys.real_name as real_name
         FROM app_systems asys
         INNER JOIN user_screenscraper_system_config ussc ON asys.id = ussc.app_system_id
-        WHERE asys.screenscraper_id IS NOT NULL 
-        AND asys.screenscraper_id > 0
+        WHERE ((asys.screenscraper_id IS NOT NULL AND asys.screenscraper_id > 0)
+               OR asys.folder_name = 'ports')
         AND ussc.enabled = 1
       ''');
       return mappings;
@@ -369,7 +369,7 @@ class ScraperRepository {
       SELECT COUNT(*) as count
       FROM user_detected_systems uds
       JOIN app_systems asys ON uds.app_system_id = asys.id
-      WHERE asys.screenscraper_id IS NULL
+      WHERE asys.screenscraper_id IS NULL AND asys.folder_name != 'ports'
     ''');
     return int.tryParse(result.first['count']?.toString() ?? '0') ?? 0;
   }
@@ -456,7 +456,7 @@ class ScraperRepository {
   static Future<void> initializeScraperSystemConfig() async {
     final db = await SqliteService.getDatabase();
     final mapped = await db.rawQuery(
-      'SELECT id as app_system_id FROM app_systems WHERE screenscraper_id IS NOT NULL AND screenscraper_id > 0',
+      "SELECT id as app_system_id FROM app_systems WHERE (screenscraper_id IS NOT NULL AND screenscraper_id > 0) OR folder_name = 'ports'",
     );
     if (mapped.isEmpty) return;
 

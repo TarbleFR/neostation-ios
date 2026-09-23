@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -11,11 +12,13 @@ class DusklightInternalPlaylistActions extends StatefulWidget {
     required this.onLibraryChanged,
     this.onInteractionChanged,
     this.embedded = false,
+    this.onGamesImported,
   });
 
   final Future<void> Function() onLibraryChanged;
   final ValueChanged<bool>? onInteractionChanged;
   final bool embedded;
+  final Future<void> Function(List<String>)? onGamesImported;
 
   @override
   State<DusklightInternalPlaylistActions> createState() =>
@@ -41,6 +44,8 @@ class _DusklightInternalPlaylistActionsState
       final result = await DusklightInternalService.importGames();
       if (result.imported > 0) {
         await widget.onLibraryChanged();
+        final enrich = widget.onGamesImported;
+        if (enrich != null) unawaited(enrich(result.importedPaths));
         _notice(
           _fr
               ? '${result.imported} disque(s) Dusklight importé(s).'
@@ -63,8 +68,10 @@ class _DusklightInternalPlaylistActionsState
     } finally {
       if (mounted) {
         setState(() => _busy = false);
-        widget.onInteractionChanged?.call(false);
       }
+      // The first import replaces the empty-view action with the tab action.
+      // Release the parent's navigation even if that replacement disposed us.
+      widget.onInteractionChanged?.call(false);
     }
   }
 
@@ -73,11 +80,14 @@ class _DusklightInternalPlaylistActionsState
     if (!Platform.isIOS) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final button = SizedBox(
-      width: 36.r,
+      width: 100.r,
       height: 36.r,
-      child: IconButton(
+      child: TextButton.icon(
         key: const ValueKey('dusklight-internal-import'),
-        tooltip: _fr ? 'Importer un jeu Dusklight' : 'Import a Dusklight game',
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.symmetric(horizontal: 8.r),
+          foregroundColor: widget.embedded ? scheme.onSurface : scheme.onTertiaryFixed,
+        ),
         onPressed: _busy ? null : _import,
         icon: _busy
             ? SizedBox(
@@ -86,7 +96,7 @@ class _DusklightInternalPlaylistActionsState
                 child: const CircularProgressIndicator(strokeWidth: 2),
               )
             : Icon(Icons.file_upload_outlined, size: 18.r),
-        color: widget.embedded ? scheme.onSurface : scheme.onTertiaryFixed,
+        label: Text('Dusklight', maxLines: 1, style: TextStyle(fontSize: 12.r)),
       ),
     );
     if (widget.embedded) return button;

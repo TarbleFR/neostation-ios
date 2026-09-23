@@ -5,6 +5,7 @@ import '../../utils/switch_title_extractor.dart';
 import 'sqlite_service.dart';
 import 'sqlite_config_service.dart';
 import '../../utils/vita_title_extractor.dart';
+import '../../services/dusklight_game_identity.dart';
 
 import 'package:neostation/services/android_service.dart';
 import 'package:neostation/services/saf_directory_service.dart';
@@ -509,6 +510,7 @@ class SqliteDatabaseService {
   /// known, so an extraction that failed once — unreadable file, missing Switch
   /// keys — is retried later instead of being frozen out by the path diff.
   static bool _needsMetadataExtraction(String systemId, RomEntry entry) {
+    if (systemId == 'ports') return true;
     if (systemId == 'switch' || systemId == 'nintendo-switch') return true;
     final lower = entry.filename.toLowerCase();
     return lower.endsWith('.psvita') || lower.endsWith('.steam');
@@ -563,6 +565,14 @@ class SqliteDatabaseService {
       for (final entry in romEntries) {
         String? titleId;
         String? titleName;
+
+        if (systemFolderName == 'ports') {
+          final identity = await DusklightGameIdentity.read(entry.path);
+          if (identity != null) {
+            titleId = identity.discId;
+            titleName = DusklightGameIdentity.displayTitle;
+          }
+        }
 
         if (isSwitch && !entry.path.startsWith('content://')) {
           try {

@@ -10,7 +10,8 @@ rpcs3 = (root / "lib/widgets/rpcs3_internal_playlist_actions.dart").read_text()
 
 assert "final Widget? importAction" in card
 assert "trailingAction: widget.importAction" in card
-assert "SizedBox(width: tabWidth, child: trailingAction)" in header
+assert "final double actionWidth = trailingActionWidth ?? tabWidth" in header
+assert "SizedBox(width: actionWidth, child: trailingAction)" in header
 assert "_buildEmbeddedDolphinImportAction" in screen
 assert "_buildEmbeddedRpcs3ImportAction" in screen
 assert screen.count("embedded: true") >= 2

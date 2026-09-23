@@ -22,6 +22,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
 
   /// Optional action occupying a real segment inside the shared tab pill.
   final Widget? trailingAction;
+  final double? trailingActionWidth;
 
   const GameDetailsTabsHeader({
     super.key,
@@ -30,6 +31,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
     required this.currentTab,
     required this.onTabChanged,
     this.trailingAction,
+    this.trailingActionWidth,
   });
 
   /// Ordered list of always-visible tab enums.
@@ -53,6 +55,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
     final int numTabs = visibleTabs.length;
     final double tabWidth = 36.r;
     final double totalTabsWidth = numTabs * tabWidth;
+    final double actionWidth = trailingActionWidth ?? tabWidth;
 
     // Resolve the visual index for the cursor animation, accounting for hidden tabs.
     final int visualIndex = visibleTabs
@@ -102,7 +105,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
               ),
               child: SizedBox(
                 // DOLPHIN_ISOLATION_BEGIN: import_action_width
-                width: totalTabsWidth + (trailingAction == null ? 0 : tabWidth),
+                width: totalTabsWidth + (trailingAction == null ? 0 : actionWidth),
                 // DOLPHIN_ISOLATION_END: import_action_width
                 height: 36.r,
                 child: Stack(
@@ -138,7 +141,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
                           ),
                         // DOLPHIN_ISOLATION_BEGIN: import_action_item
                         if (trailingAction != null)
-                          SizedBox(width: tabWidth, child: trailingAction),
+                          SizedBox(width: actionWidth, child: trailingAction),
                         // DOLPHIN_ISOLATION_END: import_action_item
                       ],
                     ),
@@ -158,7 +161,7 @@ class GameDetailsTabsHeader extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Keep every media tab visible even on a narrow details panel.
-        final minimumWidth = totalTabsWidth + tabWidth + 100.r;
+        final minimumWidth = totalTabsWidth + actionWidth + 100.r;
         return FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerRight,
