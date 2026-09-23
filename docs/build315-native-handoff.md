@@ -96,3 +96,25 @@ It and the new behavior test are required before candidate packaging.
 - The candidate packaging workflow pins these exact successful native runs.
   Dolphin, ARMSX2 and helper inputs retain the Build 314 pins; final IPA
   comparison must verify their bytes before delivery.
+
+## Delivered candidate identity
+
+- Host: `9c4a5b46a16e826c3bdabf22848dc5650a33209a`.
+- Full iOS CI: `35891226927`, successful. Flutter analysis, all required tests,
+  iOS compilation and final IPA validators passed on this exact revision.
+- Artifact: `10764988335`,
+  `NeoStation-iOS-Build-315-Native-Return-Language`.
+- IPA: `NeoStation-iOS-Build-315-Native-Return-Language.ipa`, 102,350,444 bytes.
+- IPA SHA-256:
+  `5943fd3ea482dcdd86f7ac089facd5abe3f5b27168539961ee840d479f249609`.
+- The downloaded ZIP and IPA hashes match the CI delivery. The IPA reports
+  build 315 and bundle `com.neogamelab.neostation`. Its RPCS3 and Dusklight
+  bytes exactly match the verified native artifacts above; Dusklight's 35
+  resources and passive loading were rechecked in the final archive.
+- Byte comparison with Build 314 confirms unchanged Dolphin and ARMSX2 cores,
+  all three JIT helper executables, their debugger scripts and the two StikJIT
+  scripts. No helper source or pin was changed for this defect.
+
+This candidate still requires the reported cross-core sequence to be tested on
+the user's iPhone. KartPad is not included: its verified compilation dependency
+and integration contract are recorded in `kartpad-integration.md`.
