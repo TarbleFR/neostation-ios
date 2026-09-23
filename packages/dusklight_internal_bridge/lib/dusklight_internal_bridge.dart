@@ -50,6 +50,7 @@ class DusklightInternalBridge {
     required String gamePath,
     required String supportPath,
     required String cachePath,
+    Map<String, String> uiText = const {},
   }) async {
     _ensureEventHandler();
     if (_sessionOwned) {
@@ -70,6 +71,7 @@ class DusklightInternalBridge {
           'gamePath': gamePath,
           'supportPath': supportPath,
           'cachePath': cachePath,
+          'uiText': uiText,
         }) ??
             const <String, dynamic>{},
       );

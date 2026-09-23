@@ -3,12 +3,12 @@
 #include "DusklightCoreABI.h"
 
 // All mutations are on the UIKit main thread, including stop from the close
-// button and the timeout. The upstream game owns process-lifetime singletons:
-// until they are made restartable, never enter game_main a second time.
+// button and the timeout. Keep the initialized engine, not a nested game_main
+// stack, between logical sessions. Fatal startup/runtime failures are terminal.
 class NeoDusklightSessionState {
  public:
   bool reserve() {
-    if (state_ != NEO_DUSKLIGHT_IDLE || entered_) return false;
+    if (state_ != NEO_DUSKLIGHT_IDLE) return false;
     state_ = NEO_DUSKLIGHT_STARTING;
     return true;
   }
@@ -18,22 +18,27 @@ class NeoDusklightSessionState {
     return true;
   }
   bool firstFrame() {
-    if (!entered_ || state_ != NEO_DUSKLIGHT_STARTING) return false;
+    if (!ready_ || state_ != NEO_DUSKLIGHT_STARTING) return false;
     state_ = NEO_DUSKLIGHT_RUNNING;
     return true;
   }
   void requestStop() {
     if (active()) state_ = NEO_DUSKLIGHT_STOPPING;
   }
-  void finish() { state_ = entered_ ? NEO_DUSKLIGHT_ENDED : NEO_DUSKLIGHT_IDLE; }
+  void initialized() { ready_ = true; }
+  // Call only after leaving the frame callback and suspending input/audio.
+  void finish() { state_ = entered_ && !ready_ ? NEO_DUSKLIGHT_ENDED : NEO_DUSKLIGHT_IDLE; }
+  void fail() { state_ = NEO_DUSKLIGHT_ENDED; }
   bool active() const {
     return state_ == NEO_DUSKLIGHT_STARTING || state_ == NEO_DUSKLIGHT_RUNNING ||
            state_ == NEO_DUSKLIGHT_STOPPING;
   }
   bool entered() const { return entered_; }
+  bool ready() const { return ready_; }
   int state() const { return state_; }
 
  private:
   int state_ = NEO_DUSKLIGHT_IDLE;
   bool entered_ = false;
+  bool ready_ = false;
 };

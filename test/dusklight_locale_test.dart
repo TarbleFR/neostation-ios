@@ -36,6 +36,11 @@ void main() {
             entry.value[error.value]);
       }
       final imported = DusklightLocale.forLocale(locale, 'imported', count: 3);
+      final nativeUI = DusklightLocale.nativeUI(locale);
+      expect(nativeUI.keys.toSet(), {'nativeMenu', 'returnToLibrary', 'resumeHint', 'cancelReturn'});
+      for (final label in nativeUI.entries) {
+        expect(label.value, entry.value[label.key]);
+      }
       expect(imported, contains('3'));
       expect(imported, isNot(contains('{count}')));
     });

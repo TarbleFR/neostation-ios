@@ -10,6 +10,8 @@ on:
       - 'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h'
       - 'test/dusklight_native_session_test.cpp'
       - 'test/dusklight_queue_shutdown_test.py'
+      - 'test/dusklight_resume_test.py'
+      - 'test/dusklight_clock_test.cpp'
   workflow_dispatch:
 permissions:
   contents: read
@@ -43,6 +45,7 @@ jobs:
             test/dusklight_native_session_test.cpp -o "$RUNNER_TEMP/dusklight-session-test"
           "$RUNNER_TEMP/dusklight-session-test"
           python3 test/dusklight_queue_shutdown_test.py
+          python3 test/dusklight_resume_test.py
       - name: Prepare native tools
         run: |
           set -euo pipefail
@@ -75,6 +78,11 @@ jobs:
           git -C "$SDL_SRC" fetch --depth 1 origin 8e37db5e797b6167f3a00d697d816a684bd259c7
           git -C "$SDL_SRC" checkout --detach FETCH_HEAD
           python3 build-utils/dusklight/build_core.py prepare "$SRC" "$SDL_SRC"
+          c++ -std=c++20 -pthread -Wall -Wextra -Werror \
+            -I"$SRC/extern/aurora/include" -I"$SRC/extern/aurora/lib" \
+            test/dusklight_clock_test.cpp "$SRC/extern/aurora/lib/time.cpp" \
+            -o "$RUNNER_TEMP/dusklight-clock-test"
+          "$RUNNER_TEMP/dusklight-clock-test"
       - name: Configure embedded framework
         run: |
           set -euo pipefail

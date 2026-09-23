@@ -292,7 +292,9 @@ const AuroraEvent* poll_events() {
   SDL_Event event;
   // Clear out the previous scroll values to prevent ghost input
   input::set_mouse_scroll(0, 0);
-  if (is_paused()) {
+  // The embedding app owns the run loop. Blocking here would deadlock the
+  // foreground callback needed to unpause a hidden/backgrounded window.
+  if (!NEO_DUSKLIGHT_EMBEDDED && is_paused()) {
     ZoneScopedN("SDL_WaitEvent (paused)");
     if (SDL_WaitEvent(&event)) {
       process_event(event);

@@ -121,14 +121,15 @@ static void OnCoreEvent(void* context, int state, const char* message) {
       _api->stop == nullptr ||
       _api->is_running == nullptr ||
       _api->set_event_callback == nullptr ||
-      _api->session_state == nullptr) {
+      _api->session_state == nullptr ||
+      _api->set_ui_text == nullptr) {
     _api = nullptr;
     // Objective-C classes register at dlopen; keep the image mapped even on
     // ABI refusal rather than leaving class method pointers in unloaded code.
     _loadError = Failure(
         @"DUSKLIGHT_ABI_MISMATCH",
         @"abi",
-        @"DusklightCore does not expose the NeoStation ABI v2 contract.");
+        @"DusklightCore does not expose the NeoStation ABI v3 contract.");
     return _loadError;
   }
   _api->set_event_callback(OnCoreEvent, (__bridge void*)self);
@@ -212,12 +213,20 @@ static void OnCoreEvent(void* context, int state, const char* message) {
 
   if (_api->session_state() == NEO_DUSKLIGHT_ENDED) {
     result(Failure(@"DUSKLIGHT_RESTART_REQUIRED", @"session",
-                   @"Pour relancer Dusklight après sa fermeture, redémarrez NeoStation."
-                   @" Le moteur natif de cette première version accepte une session par ouverture de l’application."));
+                   @"The native runtime failed and is no longer reusable."));
     return;
   }
 
   char error[1024] = {};
+  NSDictionary* uiText = [arguments[@"uiText"] isKindOfClass:NSDictionary.class] ? arguments[@"uiText"] : @{};
+  for (NSString* key in @[@"nativeMenu", @"returnToLibrary", @"resumeHint", @"cancelReturn"]) {
+    NSString* value = [uiText[key] isKindOfClass:NSString.class] ? uiText[key] : @"";
+    if (value.length == 0) {
+      result(Failure(@"DUSKLIGHT_INITIALIZE_FAILED", @"ui_text", @"Missing translated native UI label."));
+      return;
+    }
+    _api->set_ui_text(key.UTF8String, value.UTF8String);
+  }
   if (!_api->initialize(supportPath.fileSystemRepresentation,
                         cachePath.fileSystemRepresentation,
                         error, sizeof(error))) {
@@ -238,14 +247,16 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   _transaction = [arguments[@"transaction"] isKindOfClass:NSNumber.class]
       ? [arguments[@"transaction"] integerValue] : _transaction + 1;
   _sessionActive = YES;
-  if (!_api->start(gamePath.fileSystemRepresentation,
+  const int started = _api->start(gamePath.fileSystemRepresentation,
                    (__bridge void*)controller.view,
-                   error, sizeof(error))) {
+                   error, sizeof(error));
+  if (started <= 0) {
     NSString* message = error[0] != '\0'
         ? [NSString stringWithUTF8String:error]
         : @"DusklightCore could not start the selected disc.";
     _sessionActive = NO;
-    [self resolveLaunch:Failure(@"DUSKLIGHT_START_FAILED", @"start", message)];
+    [self resolveLaunch:Failure(started == NEO_DUSKLIGHT_DIFFERENT_DISC
+        ? @"DUSKLIGHT_DIFFERENT_DISC" : @"DUSKLIGHT_START_FAILED", @"start", message)];
     return;
   }
   __weak DusklightInternalBridgePlugin* weakSelf = self;
@@ -253,7 +264,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     DusklightInternalBridgePlugin* strongSelf = weakSelf;
     if (!strongSelf || !strongSelf->_pendingLaunch) return;
     [strongSelf resolveLaunch:Failure(@"DUSKLIGHT_FIRST_FRAME_TIMEOUT", @"first_frame",
-        @"Dusklight n’a pas produit sa première image. Consultez Ports/Dusklight/Logs et relancez NeoStation avant de réessayer.")];
+        @"Dusklight did not submit a frame for the current session within 90 seconds.")];
     // Retain ownership until the engine reports that native cleanup completed.
     strongSelf->_api->stop();
   }];

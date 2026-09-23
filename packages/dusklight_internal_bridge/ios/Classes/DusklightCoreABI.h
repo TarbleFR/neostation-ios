@@ -7,7 +7,8 @@
 extern "C" {
 #endif
 
-#define NEO_DUSKLIGHT_ABI_VERSION 2u
+#define NEO_DUSKLIGHT_ABI_VERSION 3u
+#define NEO_DUSKLIGHT_DIFFERENT_DISC (-2)
 
 enum NeoDusklightState {
   NEO_DUSKLIGHT_IDLE = 0,
@@ -37,6 +38,8 @@ typedef struct NeoDusklightAPI {
   int (*is_running)(void);
   void (*set_event_callback)(NeoDusklightEventFn callback, void* context);
   int (*session_state)(void);
+  // Translated by NeoStation's twelve-language catalog, copied by the Core.
+  void (*set_ui_text)(const char* key, const char* value);
 } NeoDusklightAPI;
 
 typedef const NeoDusklightAPI* (*NeoDusklightGetAPIFn)(void);

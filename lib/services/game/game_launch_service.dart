@@ -202,7 +202,8 @@ class GameLaunchService {
         }
         final DusklightLaunchResult report;
         try {
-          report = await DusklightInternalService.launch(gamePath);
+          report = await DusklightInternalService.launch(gamePath,
+            uiText: DusklightLocale.nativeUI(locale));
         } catch (error) {
           _log.e('[Dusklight launch] $error');
           return GameLaunchResult.failure(

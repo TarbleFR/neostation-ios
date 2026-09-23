@@ -18,16 +18,18 @@ assert "isExecutableFileAtPath" not in plugin
 assert "loaded.filePresent" in plugin and '@"buildNumber"' in plugin
 assert "DUSKLIGHT_CORE_NOT_READY" in plugin
 assert 'dlsym(_coreHandle, "NeoDusklight_GetAPI")' in plugin
-for member in ("initialize", "start", "stop", "is_running", "set_event_callback", "session_state"):
+for member in ("initialize", "start", "stop", "is_running", "set_event_callback", "session_state", "set_ui_text"):
     assert member in abi, member
 assert pins["commit"] == "ad979d3dae092d0f5cbdaf49eabca7b4f1db4838"
 assert pins["submodules"]["aurora"] == "d0933b745abe0eb9815bedcea8047575da18698d"
 assert set(pins["supported_disc_ids"]) == {
     "GZ2E01", "GZ2J01", "GZ2P01", "RZDE01", "RZDJ01", "RZDP01"
 }
-assert "NEO_DUSKLIGHT_ABI_VERSION 2u" in abi
+assert "NEO_DUSKLIGHT_ABI_VERSION 3u" in abi
 assert "NEO_DUSKLIGHT_RUNNING" in plugin and '@"stage": @"first_frame"' in plugin
 assert "DUSKLIGHT_FIRST_FRAME_TIMEOUT" in plugin
 assert "DUSKLIGHT_RESTART_REQUIRED" in plugin
 assert "dlclose(" not in plugin, "Objective-C method pointers must not outlive their native image"
-print("PASS: pinned Dusklight ABI v2 waits for a native frame and reports session teardown")
+assert "NEO_DUSKLIGHT_DIFFERENT_DISC" in plugin
+assert "started <= 0" in plugin
+print("PASS: pinned Dusklight ABI v3 waits for each session's native frame and carries translated controls")

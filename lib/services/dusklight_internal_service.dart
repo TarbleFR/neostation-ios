@@ -180,7 +180,9 @@ class DusklightInternalService {
     );
   }
 
-  static Future<DusklightLaunchResult> launch(String gamePath) async {
+  static Future<DusklightLaunchResult> launch(String gamePath, {
+    Map<String, String> uiText = const {},
+  }) async {
     await ensureLayout();
     final game = File(gamePath);
     if (!await game.exists() || await game.length() <= 0) {
@@ -206,6 +208,7 @@ class DusklightInternalService {
       gamePath: game.path,
       supportPath: (await rootDirectory()).path,
       cachePath: path.join(temporary.path, 'Dusklight'),
+      uiText: uiText,
     );
     final success = response['success'] == true;
     return DusklightLaunchResult(

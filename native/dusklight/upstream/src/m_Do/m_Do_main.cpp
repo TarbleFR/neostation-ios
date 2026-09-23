@@ -228,8 +228,11 @@ void main01(void) {
     OSReport("Entering Main Loop (main01)...\n");
 
     dusk::game_clock::initialize();
+}
 
-    do {
+// One frame per host display-link callback. No nested UIKit run loop and no
+// repeated initialization of the game's process-lifetime singleton state.
+extern "C" int NeoDusklight_TickGame() {
         // 1. Update Window Events
         const AuroraEvent* event = aurora_update();
         while (true) {
@@ -264,7 +267,8 @@ void main01(void) {
                 dusk::ImGuiEngine_Initialize(event->windowSize.scale);
                 break;
             case AURORA_EXIT:
-                goto exit;
+                NeoDusklight_RequestReturn();
+                return 1;
             }
 
             event++;
@@ -274,7 +278,7 @@ void main01(void) {
 
         if (!aurora_begin_frame()) {
             DuskLog.debug("aurora_begin_frame returned false, skipping draw this frame");
-            continue;
+            return 1;
         }
 
         VIWaitForRetrace();
@@ -342,32 +346,14 @@ void main01(void) {
         dusk::discord::update_presence();
 #endif
 
-        static Limiter main_loop_limiter;
-        static double last_fps_setting = 0.0;
-        static Limiter::duration_t target_ns = 0;
-
-        if (dusk::getSettings().game.enableFrameInterpolation.getValue() ==
-                dusk::FrameInterpMode::Capped &&
-            !dusk::getTransientSettings().turboMode)
-        {
-            ZoneScopedN("Frame limiter");
-            double current_fps = dusk::getSettings().video.maxFrameRate.getValue();
-            if (current_fps != last_fps_setting) {
-                last_fps_setting = current_fps;
-                target_ns = static_cast<Limiter::duration_t>(1'000'000'000.0 / current_fps);
-            }
-
-            Limiter::duration_t sleepTime = main_loop_limiter.Sleep(target_ns);
-            dusk::frameUsagePct =
-                100.0f * (1.0f - static_cast<float>(sleepTime) / static_cast<float>(target_ns));
-        } else {
-            main_loop_limiter.Reset();
+        // CADisplayLink paces presentation. Never sleep on NeoStation's UI thread.
+        if (!dusk::IsRunning) {
+            // Upstream prelaunch/quit actions also return to the host, without
+            // poisoning the retained engine's next logical session.
+            dusk::IsRunning = true;
+            NeoDusklight_RequestReturn();
         }
-    } while (dusk::IsRunning);
-
-    exit:;
-    dusk::mods::ModLoader::instance().shutdown();
-    dusk::ui::shutdown();
+        return 1;
 }
 
 static bool IsBackendAvailable(AuroraBackend backend) {
@@ -645,6 +631,11 @@ int game_main(int argc, char* argv[]) {
     log_build_info();
 
     dusk::config::load_from_user_preferences();
+    if (NeoDusklight_ShouldEnableTouch()) {
+        dusk::getSettings().game.enableTouchControls.setValue(true);
+        dusk::config::save();
+        NeoDusklight_DidEnableTouch();
+    }
     ApplyCVarOverrides(parsed_arg_options["cvar"]);
     borealis::sentry::Options sentryOptions{
         .release = fmt::format("{}@{}", dusk::AppInfo.appName, BOREALIS_APP_DESCRIBE),
@@ -739,21 +730,11 @@ int game_main(int argc, char* argv[]) {
     dusk::audio::SetMasterVolume(dusk::audio::MasterVolumeToLinear(dusk::getSettings().audio.masterVolume / 100.0f));
     dusk::audio::SetEnableReverb(dusk::getSettings().audio.enableReverb);
 
-    // Run ImGui UI loop if Aurora couldn't initialize a backend
+    // A failed embedded backend must report failure to NeoStation, not enter
+    // the standalone prelaunch loop and block the host run loop indefinitely.
     if (auroraInfo.backend == BACKEND_NULL) {
-        launchUILoop();
-        borealis::shutdown();
-        borealis::sentry::shutdown();
-        borealis::log::shutdown();
-        fflush(stdout);
-        fflush(stderr);
-#if BOREALIS_HAS_DISCORD
-        dusk::discord::shutdown();
-#endif
-        dusk::ui::shutdown();
-        dusk::config::shutdown();
-        aurora_shutdown();
-        return 0;
+        DuskLog.error("The embedded Metal backend could not initialize");
+        return 1;
     }
 
     if (dusk::getSettings().game.enableHighQualityMinimapTextures.getValue()) {
@@ -822,6 +803,13 @@ int game_main(int argc, char* argv[]) {
                 "DVD image from command line failed validation: {}, opening prelaunch UI", dvdPath);
             forcePreLaunchUI = true;
         }
+    }
+
+    // The host always supplies an already imported disc. Do not enter the
+    // standalone blocking file-picker loop if opening this disc fails.
+    if (!dvd_opened) {
+        DuskLog.error("The embedded runtime could not open its selected disc");
+        return 1;
     }
 
     // If we can't load right into the game, stop requesting to load a stage or save
@@ -964,6 +952,15 @@ int game_main(int argc, char* argv[]) {
     OSReport("Starting main01 (Game Loop)...\n");
 
     main01();
+    NeoDusklight_RuntimeReady();
+    // The host now drives NeoDusklight_TickGame. Retain heaps, disc reader and
+    // game state for a paused/resumable session; do not tear them down here.
+    return 0;
+}
+
+// Full teardown is reserved for process termination, never a playlist return.
+// Keep the ordered shutdown implementation for a future complete cold restart.
+void NeoDusklight_ShutdownGame() {
     borealis::shutdown();
 
     // We need to cleanly shut down the threads to avoid crashes on shutdown.
@@ -995,7 +992,6 @@ int game_main(int argc, char* argv[]) {
     fflush(stdout);
     fflush(stderr);
 
-    return 0;
 }
 
 

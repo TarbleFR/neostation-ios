@@ -2,7 +2,7 @@
 target_sources(dusklight PRIVATE neostation/NeoDusklightCore.mm neostation/NeoDusklightGame.cpp)
 set_source_files_properties(neostation/NeoDusklightCore.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 target_include_directories(dusklight PRIVATE "${CMAKE_SOURCE_DIR}/neostation")
-target_link_libraries(dusklight PRIVATE "-framework UIKit" "-framework Foundation")
+target_link_libraries(dusklight PRIVATE "-framework UIKit" "-framework Foundation" "-framework QuartzCore")
 target_link_options(dusklight PRIVATE
     "-Wl,-exported_symbols_list,${CMAKE_SOURCE_DIR}/neostation/exports.txt")
 set_target_properties(dusklight PROPERTIES

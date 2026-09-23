@@ -17,7 +17,7 @@ void main() {
       channel.name,
       codec.encodeMethodCall(MethodCall('sessionEnded', {
         'reason': 'closed',
-        'restartRequired': true,
+        'restartRequired': false,
         'transaction': oldTransaction ?? transaction,
       })),
       (_) => delivered.complete(),
@@ -69,18 +69,31 @@ void main() {
 
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       transaction = (call.arguments as Map)['transaction'] as int;
-      return {'success': false, 'errorCode': 'DUSKLIGHT_RESTART_REQUIRED'};
+      nativeLaunchCount++;
+      return {'success': true, 'stage': 'first_frame'};
     });
     final retry = await DusklightInternalBridge.launch(
       gamePath: '/ports/twilight.rvz',
       supportPath: '/ports',
       cachePath: '/cache',
     );
-    expect(retry['success'], isFalse);
+    expect(retry['success'], isTrue);
+    expect(nativeLaunchCount, 2);
     expect(DusklightInternalBridge.didEndSession, isFalse);
     await nativeEnd(oldTransaction: previousTransaction);
     expect(DusklightInternalBridge.didEndSession, isFalse,
         reason: 'A late native closure must not terminate a newer launch.');
+    await nativeEnd();
+    for (var repeat = 0; repeat < 10; repeat++) {
+      final resumed = await DusklightInternalBridge.launch(
+        gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
+        uiText: const {'nativeMenu': 'Menu et réglages Dusklight'},
+      );
+      expect(resumed['success'], isTrue);
+      expect(DusklightInternalBridge.didEndSession, isFalse);
+      await nativeEnd();
+      expect(DusklightInternalBridge.didEndSession, isTrue);
+    }
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 }
