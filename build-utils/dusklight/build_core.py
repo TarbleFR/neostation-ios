@@ -65,8 +65,17 @@ def package(source, framework, destination):
     info = plistlib.loads((target / "Info.plist").read_bytes())
     assert info["CFBundleExecutable"] == "DusklightCore", info
     assert info["CFBundlePackageType"] == "FMWK", info
-    assert (target / "res").is_dir()
-    assert any((target / "res").rglob("*.rml")), "Missing native UI resources"
+    # This revision constructs RmlUi documents in C++; its bundled files are
+    # RCSS stylesheets, fonts and images, not standalone .rml documents.
+    resource_root = source / "res"
+    resources = sorted(p for p in resource_root.rglob("*") if p.is_file())
+    assert resources, "Empty upstream resource tree"
+    for required in ("rml/global.rcss", "rml/touch_controls.rcss", "Inter-Regular.ttf", "icon.png"):
+        assert (resource_root / required).is_file(), f"Missing upstream resource: {required}"
+    for item in resources:
+        relative = item.relative_to(source)
+        assert (target / relative).is_file(), f"Missing native resource: {relative}"
+        assert sha(target / relative) == sha(item), f"Changed native resource: {relative}"
     exports = run("nm", "-gjU", str(binary)).splitlines()
     assert "_NeoDusklight_GetAPI" in exports
     assert not any(n in exports for n in ("_main", "_SDL_main", "_SDL_RunApp", "_aurora_main"))
