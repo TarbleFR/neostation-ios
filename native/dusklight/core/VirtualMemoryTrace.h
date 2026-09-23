@@ -9,18 +9,29 @@
 struct NeoDusklightVMHoles {
   static constexpr uint64_t begin = 0x100000000ULL;
   static constexpr uint64_t end = 0x1000000000ULL;
-  uint64_t cursor = begin, mapped = 0, largestHole = 0;
+  static constexpr uint64_t jitMinimum = 256ULL * 1024 * 1024;
+  uint64_t cursor = begin, mapped = 0, largestHole = 0, secondLargestHole = 0;
+  unsigned jitMinimumHoles = 0;
+  void observeHole(uint64_t size) {
+    if (size >= jitMinimum) ++jitMinimumHoles;
+    if (size > largestHole) {
+      secondLargestHole = largestHole;
+      largestHole = size;
+    } else if (size > secondLargestHole) {
+      secondLargestHole = size;
+    }
+  }
   void observe(uint64_t address, uint64_t size) {
     const uint64_t stop = size > std::numeric_limits<uint64_t>::max() - address
         ? std::numeric_limits<uint64_t>::max() : address + size;
     if (!size || stop <= cursor || address >= end) return;
     const uint64_t start = std::max(cursor, address);
-    largestHole = std::max(largestHole, start - cursor);
+    observeHole(start - cursor);
     const uint64_t clippedStop = std::min(stop, end);
     mapped += clippedStop - start;
     cursor = clippedStop;
   }
-  void finish() { largestHole = std::max(largestHole, end - cursor); }
+  void finish() { observeHole(end - cursor); }
 };
 
 #ifdef __APPLE__
@@ -70,11 +81,13 @@ inline void NeoDusklightTraceVM(FILE* file, double timestamp, const char* build,
   }
   complete = complete || cursor >= NeoDusklightVMHoles::end;
   if (complete) holes.finish();
-  fprintf(file, "%.3f pid=%d build=%s vm_summary phase=%s task_result=%d footprint=%llu virtual=%llu low_mapped=%llu largest_visible_hole=%llu regions=%u written=%u complete=%d query=%d topology=top_level cursor=0x%llx\n",
+  fprintf(file, "%.3f pid=%d build=%s vm_summary phase=%s task_result=%d footprint=%llu virtual=%llu low_mapped=%llu largest_visible_hole=%llu second_largest_visible_hole=%llu jit_min_holes=%u jit_minimum=%llu regions=%u written=%u complete=%d query=%d topology=top_level cursor=0x%llx\n",
       timestamp, getpid(), build, phase, taskResult,
       static_cast<unsigned long long>(task.phys_footprint), static_cast<unsigned long long>(task.virtual_size),
       static_cast<unsigned long long>(holes.mapped), static_cast<unsigned long long>(holes.largestHole),
-      regions, written, complete, query, static_cast<unsigned long long>(cursor));
+      static_cast<unsigned long long>(holes.secondLargestHole), holes.jitMinimumHoles,
+      static_cast<unsigned long long>(NeoDusklightVMHoles::jitMinimum), regions, written, complete, query,
+      static_cast<unsigned long long>(cursor));
   fflush(file);
 }
 #endif

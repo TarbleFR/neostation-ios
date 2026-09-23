@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 318 Dusklight Terminal Shutdown
-run-name: NeoStation iOS Build 318 • ${{ github.sha }}
+name: NeoStation iOS Build 319 Dusklight Address Space Release
+run-name: NeoStation iOS Build 319 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-318
+  group: neostation-ios-build-319
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') }}
-    name: Build 318 Dusklight Terminal Shutdown IPA
+    name: Build 319 Dusklight Address Space Release IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '318'
-      IPA_NAME: 'NeoStation-iOS-Build-318-Dusklight-Terminal-Shutdown'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-318-Dusklight-Terminal-Shutdown'
+      BUILD_NUMBER: '319'
+      IPA_NAME: 'NeoStation-iOS-Build-319-Dusklight-Address-Space-Release'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-319-Dusklight-Address-Space-Release'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -460,7 +460,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 318 diagnostics
+          # Rewrite the Dolphin fields so the final Build 319 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -539,8 +539,8 @@ jobs:
           pins = json.loads(Path('build-utils/dusklight/source.json').read_text())
           assert identity['host_commit'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']
           assert identity['source_commit'] == pins['commit']
-          assert identity['abi_version'] == 4
-          assert identity['session_policy'] == 'host_frame_loop_terminal_shutdown'
+          assert identity['abi_version'] == 5
+          assert identity['session_policy'] == 'host_frame_loop_terminal_address_space_release'
           canonical = Path('native/dusklight')
           expected_sources = {
               name: canonical / name
@@ -675,7 +675,7 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 318 IPA
+      - name: Package and validate Build 319 IPA
         shell: bash
         run: |
           set -euo pipefail

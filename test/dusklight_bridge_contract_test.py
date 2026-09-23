@@ -25,7 +25,7 @@ assert pins["submodules"]["aurora"] == "d0933b745abe0eb9815bedcea8047575da18698d
 assert set(pins["supported_disc_ids"]) == {
     "GZ2E01", "GZ2J01", "GZ2P01", "RZDE01", "RZDJ01", "RZDP01"
 }
-assert "NEO_DUSKLIGHT_ABI_VERSION 4u" in abi
+assert "NEO_DUSKLIGHT_ABI_VERSION 5u" in abi
 assert "NEO_DUSKLIGHT_RUNNING" in plugin and '@"stage": @"first_frame"' in plugin
 assert "DUSKLIGHT_FIRST_FRAME_TIMEOUT" in plugin
 assert "DUSKLIGHT_RESTART_REQUIRED" in plugin
@@ -33,4 +33,4 @@ assert "dlclose(" not in plugin, "Objective-C method pointers must not outlive t
 assert "NEO_DUSKLIGHT_DIFFERENT_DISC" in plugin
 assert "started <= 0" in plugin
 assert '@"runtimeReleased": @YES' in plugin
-print("PASS: pinned Dusklight ABI v4 waits for the first frame and reports the terminal shutdown barrier")
+print("PASS: pinned Dusklight ABI v5 waits for the first frame and reports the address-space release barrier")

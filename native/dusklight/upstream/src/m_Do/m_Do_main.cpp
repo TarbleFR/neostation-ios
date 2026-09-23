@@ -37,6 +37,9 @@
 #include "m_Do/m_Do_printf.h"
 #include "m_Do/m_Do_ext2.h"
 #include <cstring>
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+#endif
 
 #include "dusk/app_info.hpp"
 #include "dusk/audio/DuskAudioSystem.h"
@@ -996,6 +999,19 @@ bool NeoDusklight_ShutdownGame() {
 
     borealis::sentry::shutdown();
     borealis::log::shutdown();
+
+    // Unlike the standalone desktop executable, NeoStation stays alive and
+    // launches other native cores in this process. Destroy every remaining
+    // side-table only after all workers have joined, then return Aurora's
+    // MEM2/MEM1 mappings to the kernel before advertising runtimeReleased.
+    NeoDusklight_ReleaseMessageQueueRecords();
+    NeoDusklight_ReleaseMutexRecords();
+    NeoDusklight_ReleaseThreadRecords();
+    NeoDusklight_ReleaseARAM();
+    NeoDusklight_ReleaseMEM1();
+#if defined(__APPLE__)
+    malloc_zone_pressure_relief(nullptr, 0);
+#endif
     fflush(stdout);
     fflush(stderr);
     shutdownState = ShutdownState::Complete;

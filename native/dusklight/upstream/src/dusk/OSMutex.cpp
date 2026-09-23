@@ -83,6 +83,21 @@ void ClearCondMap() {
     // Keep condition variables alive through native worker joins.
 }
 
+extern "C" void NeoDusklight_ReleaseMutexRecords() {
+    {
+        std::lock_guard<std::mutex> lock(GetCondMapMutex());
+        auto& map = GetCondMap();
+        map.clear();
+        map.rehash(0);
+    }
+    {
+        std::lock_guard<std::mutex> lock(GetMutexMapMutex());
+        auto& map = GetMutexMap();
+        map.clear();
+        map.rehash(0);
+    }
+}
+
 // ============================================================================
 // C API functions
 // ============================================================================

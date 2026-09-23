@@ -707,8 +707,8 @@ void OSSetCurrentThreadName(const char* name) {
 }
 #endif
 
-// The main game thread calls these after movie/decompression shutdown. Tables
-// are not cleared here: remaining game singletons are pinned until app exit.
+// The main game thread calls these after movie/decompression shutdown. Records
+// stay alive through the join, then the terminal teardown destroys them.
 extern "C" void NeoDusklight_WakeGameThreads() {
     {
         std::lock_guard lock(GetThreadDataMutex());
@@ -736,4 +736,19 @@ extern "C" void NeoDusklight_JoinGameThreads() {
         }
     }
     for (auto* worker : workers) worker->nativeThread.join();
+}
+
+extern "C" void NeoDusklight_ReleaseThreadRecords() {
+    {
+        std::lock_guard lock(GetThreadDataMutex());
+        auto& map = GetThreadDataMap();
+        map.clear();
+        map.rehash(0);
+    }
+    {
+        std::lock_guard lock(GetQueueCvMutex());
+        auto& map = GetQueueCvMap();
+        map.clear();
+        map.rehash(0);
+    }
 }

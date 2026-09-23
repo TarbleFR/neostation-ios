@@ -42,7 +42,7 @@ class DusklightInternalBridge {
   /// Covers native closure while launch bookkeeping still awaits the database.
   static bool get didEndSession => _didEndSession;
 
-  /// True only after ABI v4 confirms the native teardown barrier completed.
+  /// True only after ABI v5 confirms the native address-space release barrier.
   static bool get didReleaseRuntime => _didReleaseRuntime;
 
   static Future<Map<String, dynamic>> diagnostics() async =>

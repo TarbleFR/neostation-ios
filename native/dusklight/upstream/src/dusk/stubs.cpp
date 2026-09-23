@@ -94,6 +94,13 @@ static void ClearMsgQueueMap() {
     }
 }
 
+extern "C" void NeoDusklight_ReleaseMessageQueueRecords() {
+    std::lock_guard<std::mutex> lock(GetMsgQueueMapMutex());
+    auto& map = GetMsgQueueMap();
+    map.clear();
+    map.rehash(0);
+}
+
 void OSInitMessageQueue(OSMessageQueue* mq, OSMessage* msgArray, s32 msgCount) {
     if (!mq) return;
     mq->queueSend.head = mq->queueSend.tail = nullptr;

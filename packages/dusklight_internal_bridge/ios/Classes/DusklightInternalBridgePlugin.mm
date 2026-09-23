@@ -129,7 +129,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     _loadError = Failure(
         @"DUSKLIGHT_ABI_MISMATCH",
         @"abi",
-        @"DusklightCore does not expose the NeoStation ABI v4 contract.");
+        @"DusklightCore does not expose the NeoStation ABI v5 contract.");
     return _loadError;
   }
   _api->set_event_callback(OnCoreEvent, (__bridge void*)self);
