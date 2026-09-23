@@ -36,6 +36,7 @@
 #include "m_Do/m_Do_machine.h"
 #include "m_Do/m_Do_printf.h"
 #include "m_Do/m_Do_ext2.h"
+#include <cstdio>
 #include <cstring>
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
@@ -965,11 +966,19 @@ int game_main(int argc, char* argv[]) {
 // Dusklight owns process-lifetime singletons and therefore cannot be cold-
 // restarted safely. Returning to NeoStation is a terminal, one-shot teardown:
 // stop callbacks, join every worker and disc thread, then destroy UI/graphics.
+namespace {
+char sNeoDusklightShutdownReport[160] = "Kernel unmap barrier has not run.";
+}
+
+extern "C" const char* NeoDusklight_LastShutdownReport() {
+    return sNeoDusklightShutdownReport;
+}
+
 bool NeoDusklight_ShutdownGame() {
-    enum class ShutdownState { NotStarted, InProgress, Complete };
+    enum class ShutdownState { NotStarted, InProgress, Complete, Failed };
     static ShutdownState shutdownState = ShutdownState::NotStarted;
     if (shutdownState == ShutdownState::Complete) return true;
-    if (shutdownState == ShutdownState::InProgress) return false;
+    if (shutdownState == ShutdownState::InProgress || shutdownState == ShutdownState::Failed) return false;
     shutdownState = ShutdownState::InProgress;
     borealis::shutdown();
 
@@ -1007,13 +1016,20 @@ bool NeoDusklight_ShutdownGame() {
     NeoDusklight_ReleaseMessageQueueRecords();
     NeoDusklight_ReleaseMutexRecords();
     NeoDusklight_ReleaseThreadRecords();
-    NeoDusklight_ReleaseARAM();
-    NeoDusklight_ReleaseMEM1();
+    const int aramRelease = NeoDusklight_ReleaseARAM();
+    const int mem1Release = NeoDusklight_ReleaseMEM1();
+    std::snprintf(sNeoDusklightShutdownReport, sizeof(sNeoDusklightShutdownReport),
+                  "Kernel unmap barrier: ARAM=%d MEM1=%d (1 means released).",
+                  aramRelease, mem1Release);
 #if defined(__APPLE__)
     malloc_zone_pressure_relief(nullptr, 0);
 #endif
     fflush(stdout);
     fflush(stderr);
+    if (aramRelease <= 0 || mem1Release <= 0) {
+        shutdownState = ShutdownState::Failed;
+        return false;
+    }
     shutdownState = ShutdownState::Complete;
 
     return true;

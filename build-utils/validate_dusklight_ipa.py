@@ -19,8 +19,8 @@ def validate(ipa, identity_path, core_host, build_number):
     assert identity["host_commit"] == core_host, "Wrong native Core build"
     assert identity["source_commit"] == pins["commit"], "Wrong Dusklight revision"
     assert identity["sdl_commit"] == pins["sdl"]["commit"], "Wrong SDL revision"
-    assert identity["abi_version"] == 5
-    assert identity["session_policy"] == "host_frame_loop_terminal_address_space_release"
+    assert identity["abi_version"] == 6
+    assert identity["session_policy"] == "host_frame_loop_terminal_kernel_unmap"
     with zipfile.ZipFile(ipa) as z:
         apps = [n for n in z.namelist() if n.startswith("Payload/") and n.endswith(".app/Info.plist") and n.count("/") == 2]
         assert len(apps) == 1

@@ -68,23 +68,34 @@ ordered_shutdown = [
     "NeoDusklight_ReleaseThreadRecords()",
     "NeoDusklight_ReleaseARAM()",
     "NeoDusklight_ReleaseMEM1()",
+    "Kernel unmap barrier: ARAM=%d MEM1=%d",
     "malloc_zone_pressure_relief(nullptr, 0)",
 ]
 positions = [shutdown.index(token) for token in ordered_shutdown]
 assert positions == sorted(positions), positions
 assert "ShutdownState::InProgress" in shutdown
+assert "ShutdownState::Failed" in shutdown
+assert "aramRelease <= 0 || mem1Release <= 0" in shutdown
 assert shutdown.index("ShutdownState::Complete;") > shutdown.index("borealis::log::shutdown()")
 
-# Build 318 proved that stopping callbacks was insufficient: its iPhone log
-# retained the exact 256 MiB MEM1 and 24 MiB MEM2 mappings needed around the
-# two minimum 256 MiB RPCS3 JIT arenas. ABI v5 must return both allocations and
-# destroy the native side tables before the host emits runtimeReleased.
+# Build 319 proved that free() was insufficient: its iPhone log retained the
+# exact 256 MiB MEM1 and 24 MiB MEM2 mappings. ABI v6 gives both allocations
+# explicit mmap/munmap ownership and fails closed before runtimeReleased.
 assert "config.mem1Size = 256 * 1024 * 1024" in game
 assert "config.mem2Size = 24 * 1024 * 1024" in game
-assert mem1.index("free(MEM1Start)") < mem1.index("MEM1Start = nullptr")
+for source, region, pointer, allocation_size in (
+    (mem1, "MEM1", "MEM1Start", "sMEM1AllocationSize"),
+    (aram, "ARAM", "sAramBuffer", "sAramAllocationSize"),
+):
+    apple = source[source.index("#if defined(__APPLE__)"):]
+    assert "MAP_PRIVATE | MAP_ANON" in apple, region
+    assert "mmap(nullptr" in apple, region
+    assert f"munmap({pointer}, {allocation_size})" in source, region
+    assert f"NEODUSKLIGHT_VM_RELEASE region={region}" in source, region
+    assert source.index(f"munmap({pointer}, {allocation_size})") < source.index(f"{pointer} = nullptr", source.index(f"munmap({pointer}, {allocation_size})")), region
 assert "MEM1End = nullptr" in mem1 and "OSBaseAddress = 0" in mem1
-aram_release = aram[aram.index('extern "C" void NeoDusklight_ReleaseARAM()'):]
-assert aram_release.index("free(sAramBuffer)") < aram_release.index("sAramBuffer = nullptr")
+assert 'extern "C" int NeoDusklight_ReleaseARAM()' in aram
+assert 'extern "C" int NeoDusklight_ReleaseMEM1()' in mem1
 for reset in ("AR_StackPointer = 0", "AR_BlockLength = nullptr", "AR_FreeBlocks = 0", "AR_init_flag = FALSE"):
     assert reset in aram, reset
 for source, release in (
@@ -95,9 +106,9 @@ for source, release in (
     function = source[source.index(release):]
     assert "map.clear()" in function and "map.rehash(0)" in function, release
 assert manifest["upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp"] == \
-    "4464ce818124cb84f313b63c75892d22249bd300ba8bb345cab322d7f8c8e153"
+    "d9701056ac8f8e27092228dcf5e83158339ffd7c7e34ad95c0f88e7d858f0f54"
 assert manifest["upstream/extern/aurora/lib/dolphin/AR.cpp"] == \
-    "4393e2393ea6577af55dbdf9f65de9bdcf671f9181cf5382c228dcd07d2fff7e"
+    "c1c7c9c764d456bb3d839465b80e5383f20c416f47fe42fb50f4f86ed66bb839"
 
 state_branch = plugin[plugin.index("- (void)coreState:") : plugin.index("- (void)handleMethodCall:")]
 assert '@"runtimeReleased": @YES' in state_branch
@@ -106,4 +117,4 @@ dusklight_monitor = dusklight_monitor[: dusklight_monitor.index("emulatorExe == 
 assert dusklight_monitor.index("event['runtimeReleased'] == true") < dusklight_monitor.index("_triggerClose()")
 assert "DusklightInternalBridge.didReleaseRuntime" in dusklight_monitor
 
-print("PASS: Dusklight releases MEM1, MEM2 and native records before exposing the next in-process core")
+print("PASS: Dusklight kernel-unmaps MEM1/MEM2 and fails closed before exposing the next in-process core")

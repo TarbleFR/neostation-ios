@@ -1,8 +1,8 @@
 {
   "upstream/CMakeLists.txt": "418b77394e29a6cb28575aab8d1471faae9ee45dba8cc2fe482fdbd648eaa3d4",
-  "upstream/src/m_Do/m_Do_main.cpp": "2ff7e7ec9caaa3591aca019c20bd697c330d4c3d7ad9631bd4f3e12c75e30477",
-  "upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp": "4464ce818124cb84f313b63c75892d22249bd300ba8bb345cab322d7f8c8e153",
-  "upstream/extern/aurora/lib/dolphin/AR.cpp": "4393e2393ea6577af55dbdf9f65de9bdcf671f9181cf5382c228dcd07d2fff7e",
+  "upstream/src/m_Do/m_Do_main.cpp": "2e0a08f873a420af93d2e3e62a2f96f38da3914d1b638439a3ff218600ed2977",
+  "upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp": "d9701056ac8f8e27092228dcf5e83158339ffd7c7e34ad95c0f88e7d858f0f54",
+  "upstream/extern/aurora/lib/dolphin/AR.cpp": "c1c7c9c764d456bb3d839465b80e5383f20c416f47fe42fb50f4f86ed66bb839",
   "upstream/extern/aurora/lib/window.cpp": "72f7afec8ebf6a0b3420868e0d746e3afd379bc3b60ee16d24f9f083a9b26e40",
   "sdl/src/filesystem/cocoa/SDL_sysfilesystem.m": "0f690c8536c07a8031e13c1a061cd04701a91aeb1541ae52ec15b538871e2652",
   "sdl/src/audio/coreaudio/SDL_coreaudio.m": "c1ed4d18205056f615ae3f7098b53cd69ccbb939e1e8f212f029c0e8c1cc44af",

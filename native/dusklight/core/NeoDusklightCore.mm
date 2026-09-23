@@ -111,6 +111,7 @@ void FinishReturn() {
 
   TraceResources("before_runtime_shutdown");
   const bool stopped = NeoDusklight_ShutdownRuntime() != 0;
+  Trace(NeoDusklight_LastShutdownReport());
   ReleaseHostLifecycle();
   TraceResources("after_runtime_shutdown");
   if (!stopped) {

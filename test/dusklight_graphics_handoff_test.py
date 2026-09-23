@@ -259,7 +259,7 @@ with tempfile.TemporaryDirectory() as directory:
                     str(cpp), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=15)
 
-# The partial handoff remains independently safe, but ABI v5 deliberately uses
+# The partial handoff remains independently safe, but ABI v6 deliberately uses
 # the stronger terminal shutdown path instead of resuming this frame runtime.
 core = (ROOT / 'native/dusklight/core/NeoDusklightCore.mm').read_text()
 finish = core[core.index('void FinishReturn()'):core.index('void Stop()')]
@@ -267,4 +267,4 @@ assert finish.index('if (inNativeCall) return;') < finish.index('Suspend(true);'
 assert 'NeoDusklight_ReleaseFrameResources()' not in finish
 assert finish.index('RestoreHost();') < finish.index('NeoDusklight_ShutdownRuntime()') < finish.index('session.terminate();')
 assert function('bool begin_frame()').index('resume_frame_resources();') < function('bool begin_frame()').index('acquire_frame_slot()')
-print('PASS: partial GPU release stays safe while ABI v5 uses the address-space release barrier')
+print('PASS: partial GPU release stays safe while ABI v6 uses the kernel-unmap barrier')

@@ -2,7 +2,12 @@
 #include "../internal.hpp"
 #include "dolphin/os.h"
 
+#include <cerrno>
+#include <cstdio>
 #include <cstdlib>
+#if defined(__APPLE__)
+#include <sys/mman.h>
+#endif
 
 static aurora::Module Log("aurora::ar");
 
@@ -18,6 +23,7 @@ static BOOL AR_init_flag;
 // at a base address returned by ARInit. We emulate this by malloc'ing a buffer
 // and using a simple bump allocator (matching ARAlloc behavior on real hardware).
 static u8* sAramBuffer = nullptr;
+static size_t sAramAllocationSize;
 
 // Convert an ARAM "address" (offset) to a real host pointer
 static u8* aramToHost(u32 aramAddr) {
@@ -64,7 +70,29 @@ u32 ARInit(u32* stack_index_addr, u32 num_entries) {
     return ARAM_STACK_START;
   }
 
-  sAramBuffer = (u8*)calloc(1, aurora::g_config.mem2Size);
+#if defined(__APPLE__)
+  errno = 0;
+  void* mapped = mmap(nullptr, aurora::g_config.mem2Size, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANON, -1, 0);
+  if (mapped == MAP_FAILED) {
+    const int savedErrno = errno;
+    fprintf(stderr,
+            "NEODUSKLIGHT_VM_ALLOC region=ARAM address=%p size=%u backend=mmap result=-1 errno=%d\n",
+            mapped, static_cast<unsigned>(aurora::g_config.mem2Size), savedErrno);
+    fflush(stderr);
+    sAramBuffer = nullptr;
+  } else {
+    sAramBuffer = static_cast<u8*>(mapped);
+    sAramAllocationSize = aurora::g_config.mem2Size;
+    fprintf(stderr,
+            "NEODUSKLIGHT_VM_ALLOC region=ARAM address=%p size=%zu backend=mmap result=0 errno=0\n",
+            mapped, sAramAllocationSize);
+    fflush(stderr);
+  }
+#else
+  sAramBuffer = static_cast<u8*>(calloc(1, aurora::g_config.mem2Size));
+  sAramAllocationSize = aurora::g_config.mem2Size;
+#endif
   if (sAramBuffer) {
     Log.debug("Initialized 0x{:X} bytes of ARAM!", aurora::g_config.mem2Size);
   } else {
@@ -82,13 +110,35 @@ u32 ARInit(u32* stack_index_addr, u32 num_entries) {
 // Aurora has no upstream ARAM shutdown because its desktop executable exits.
 // NeoStation remains alive to launch another core, so release this 24 MiB
 // mapping only after every reader and game worker has stopped.
-extern "C" void NeoDusklight_ReleaseARAM() {
+extern "C" int NeoDusklight_ReleaseARAM() {
+  int result = 1;
+#if defined(__APPLE__)
+  if (sAramBuffer) {
+    if (sAramAllocationSize == 0) {
+      result = -EINVAL;
+    } else {
+      errno = 0;
+      const int status = munmap(sAramBuffer, sAramAllocationSize);
+      const int savedErrno = errno;
+      result = status == 0 ? 1 : -(savedErrno == 0 ? EIO : savedErrno);
+      fprintf(stderr,
+              "NEODUSKLIGHT_VM_RELEASE region=ARAM address=%p size=%zu backend=munmap result=%d errno=%d\n",
+              static_cast<void*>(sAramBuffer), sAramAllocationSize, status, savedErrno);
+      fflush(stderr);
+    }
+  }
+#else
   free(sAramBuffer);
-  sAramBuffer = nullptr;
-  AR_StackPointer = 0;
-  AR_BlockLength = nullptr;
-  AR_FreeBlocks = 0;
-  AR_init_flag = FALSE;
+#endif
+  if (result > 0) {
+    sAramBuffer = nullptr;
+    sAramAllocationSize = 0;
+    AR_StackPointer = 0;
+    AR_BlockLength = nullptr;
+    AR_FreeBlocks = 0;
+    AR_init_flag = FALSE;
+  }
+  return result;
 }
 
 u32 ARGetSize(void) { return aurora::g_config.mem2Size; }

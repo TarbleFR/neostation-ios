@@ -7,7 +7,12 @@
 #include "fmt/base.h"
 
 #include <cassert>
+#include <cerrno>
+#include <cstdio>
 #include <cstdlib>
+#if defined(__APPLE__)
+#include <sys/mman.h>
+#endif
 
 #include "internal.hpp"
 #include <dolphin/os.h>
@@ -24,6 +29,7 @@ void* MEM1End;
 
 static void GuardGCMemory();
 static void* AllocMEM1(u32 size);
+static size_t sMEM1AllocationSize;
 
 #if _WIN64 && !NDEBUG
 static void* sMEM1BulkChunk;
@@ -43,18 +49,38 @@ void AuroraOSInitMemory() {
 // treats MEM1 as process-lifetime storage, but that leaves a 256 MiB mapping in
 // the low address range needed by RPCS3's paired JIT arenas. This is called only
 // after every Dusklight worker and Aurora subsystem has stopped.
-extern "C" void NeoDusklight_ReleaseMEM1() {
+extern "C" int NeoDusklight_ReleaseMEM1() {
+  int result = 1;
 #if _WIN64 && !NDEBUG
   if (sMEM1BulkChunk) {
-    VirtualFree(sMEM1BulkChunk, 0, MEM_RELEASE);
-    sMEM1BulkChunk = nullptr;
+    result = VirtualFree(sMEM1BulkChunk, 0, MEM_RELEASE) ? 1 : -static_cast<int>(GetLastError());
+    if (result > 0) sMEM1BulkChunk = nullptr;
+  }
+#elif defined(__APPLE__)
+  if (MEM1Start) {
+    if (sMEM1AllocationSize == 0) {
+      result = -EINVAL;
+    } else {
+      errno = 0;
+      const int status = munmap(MEM1Start, sMEM1AllocationSize);
+      const int savedErrno = errno;
+      result = status == 0 ? 1 : -(savedErrno == 0 ? EIO : savedErrno);
+      fprintf(stderr,
+              "NEODUSKLIGHT_VM_RELEASE region=MEM1 address=%p size=%zu backend=munmap result=%d errno=%d\n",
+              MEM1Start, sMEM1AllocationSize, status, savedErrno);
+      fflush(stderr);
+    }
   }
 #else
   free(MEM1Start);
 #endif
-  MEM1Start = nullptr;
-  MEM1End = nullptr;
-  OSBaseAddress = 0;
+  if (result > 0) {
+    MEM1Start = nullptr;
+    MEM1End = nullptr;
+    OSBaseAddress = 0;
+    sMEM1AllocationSize = 0;
+  }
+  return result;
 }
 
 #if GUARD_MEMORY
@@ -162,7 +188,28 @@ static void* AllocMEM1(u32 size) {
 }
 #else
 static void* AllocMEM1(u32 size) {
+#if defined(__APPLE__)
+  errno = 0;
+  void* result = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+  if (result == MAP_FAILED) {
+    const int savedErrno = errno;
+    fprintf(stderr,
+            "NEODUSKLIGHT_VM_ALLOC region=MEM1 address=%p size=%u backend=mmap result=-1 errno=%d\n",
+            result, static_cast<unsigned>(size), savedErrno);
+    fflush(stderr);
+    Log.fatal("Failed to mmap MEM1 (errno {})", savedErrno);
+    return nullptr;
+  }
+  sMEM1AllocationSize = size;
+  fprintf(stderr,
+          "NEODUSKLIGHT_VM_ALLOC region=MEM1 address=%p size=%u backend=mmap result=0 errno=0\n",
+          result, static_cast<unsigned>(size));
+  fflush(stderr);
+  return result;
+#else
+  sMEM1AllocationSize = size;
   return calloc(1, size);
+#endif
 }
 #endif
 

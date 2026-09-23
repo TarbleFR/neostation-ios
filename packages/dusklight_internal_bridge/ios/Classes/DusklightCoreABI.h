@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define NEO_DUSKLIGHT_ABI_VERSION 5u
+#define NEO_DUSKLIGHT_ABI_VERSION 6u
 #define NEO_DUSKLIGHT_DIFFERENT_DISC (-2)
 
 enum NeoDusklightState {
