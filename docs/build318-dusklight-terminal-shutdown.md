@@ -60,3 +60,28 @@ langues. RPCS3, StikJIT, Dolphin et ARMSX2 ne sont pas modifiés par ce correcti
   après succès CI ;
 - validation iPhone requise : Dusklight → retour → RPCS3, sans fermer
   NeoStation, puis contrôle du journal `after_runtime_shutdown`.
+
+## Compilation et livraison vérifiées
+
+| Élément | Identité |
+| --- | --- |
+| Sources natives | `2f49b2b1c56979a5ce067886cbb8f44d938cdc9a` |
+| Run natif / job | `35919913797` / `107380940062` — succès |
+| Archive native | artifact `10777210769`, SHA-256 `a011ca7affdf84c113a8e6c99dd793e8dee86a3c0f40231a9ccc1ff499893468` |
+| DusklightCore | SHA-256 `6a04608950711d31af05583e0d06faa77c0ad044f31fc4ee3704d9c53ae127cc` |
+| Hôte IPA | `43451713b35a6a7aea7dbbdb9821f31b67a0fb57` |
+| Run IPA / job | `35920703210` / `107383617206` — succès |
+| Archive IPA | artifact `10777102814`, SHA-256 `3ca73db82ee8460ee77c8cd9ed7604beee40880abe27b31fc161c0362dbbe652` |
+| IPA | `NeoStation-iOS-Build-318-Dusklight-Terminal-Shutdown.ipa`, 102 352 051 octets |
+| SHA-256 IPA | `652ca44397dda184cac9a5d3f5cc6cceb05c1f9c87cca23c21954c32d1c227dc` |
+
+La compilation arm64 du Core, l'analyse Flutter, les tests natifs, audio,
+menus, douze langues, route et JIT, la compilation de l'hôte et les validations
+de distribution passent. L'identité embarquée confirme l'ABI 4 et la politique
+`host_frame_loop_terminal_shutdown`.
+
+Validation sur iPhone de Build 318 : **en attente**. Tester depuis un démarrage
+neuf de NeoStation : Dusklight → retour → RPCS3 sans fermer l'application entre
+les deux. Le journal doit contenir `before_runtime_shutdown`, puis
+`after_runtime_shutdown`, avant `sessionEnded(runtimeReleased: true)` et avant
+l'attachement StikJIT de RPCS3.
