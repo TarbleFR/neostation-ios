@@ -61,3 +61,19 @@ revenir à NeoStation puis lancer RPCS3 sans fermer l’application. Le journal
 `after_runtime_shutdown` doit montrer la disparition des plages de 256 Mio et
 24 Mio et `jit_min_holes` au moins égal à 2 ; RPCS3 doit ensuite atteindre
 `arena_prepare_success` puis `jit_initialize_success` dans le même PID.
+
+## Compilation et livraison vérifiées
+
+| Élément | Identité |
+| --- | --- |
+| Hôte IPA | `defd5f7cef757d26dd69eb356e0dc25b0a7c7f94` |
+| Run IPA / job | `35927218756` / `107405062645` — succès |
+| Archive IPA | artifact `10780032719`, SHA-256 `8558605e9babe71483e33b9606969173d8aeee1018f40cab7e5892f928e1797a` |
+| IPA | `NeoStation-iOS-Build-319-Dusklight-Address-Space-Release.ipa`, 102 353 209 octets |
+| SHA-256 IPA | `095d644e9c4231d60345ec02862d43da59174965f44aefc6827ad821d8acb904` |
+
+La validation finale confirme que le framework reste chargé passivement, que
+son ABI 5 et ses 35 ressources correspondent exactement à l’identité native,
+et que RPCS3, Dolphin et ARMSX2 conservent leurs identités épinglées. Le test
+de succession Dusklight → RPCS3 sur iPhone reste indispensable pour mesurer la
+topologie VM réelle du noyau après la nouvelle libération.
