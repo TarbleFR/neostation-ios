@@ -7,9 +7,20 @@
 extern "C" {
 #endif
 
-#define NEO_DUSKLIGHT_ABI_VERSION 1u
+#define NEO_DUSKLIGHT_ABI_VERSION 2u
 
-/// Stable host/Core boundary. The future Core adapter owns the game runtime;
+enum NeoDusklightState {
+  NEO_DUSKLIGHT_IDLE = 0,
+  NEO_DUSKLIGHT_STARTING = 1,
+  NEO_DUSKLIGHT_RUNNING = 2,
+  NEO_DUSKLIGHT_STOPPING = 3,
+  NEO_DUSKLIGHT_ENDED = 4,
+};
+
+/// Delivered on the UIKit main thread. RUNNING means a game frame was submitted.
+typedef void (*NeoDusklightEventFn)(void* context, int state, const char* message);
+
+/// Stable host/Core boundary. The Core adapter owns the game runtime;
 /// UIKit window and application lifecycle remain owned by NeoStation.
 typedef struct NeoDusklightAPI {
   uint32_t abi_version;
@@ -24,6 +35,8 @@ typedef struct NeoDusklightAPI {
                size_t error_size);
   void (*stop)(void);
   int (*is_running)(void);
+  void (*set_event_callback)(NeoDusklightEventFn callback, void* context);
+  int (*session_state)(void);
 } NeoDusklightAPI;
 
 typedef const NeoDusklightAPI* (*NeoDusklightGetAPIFn)(void);

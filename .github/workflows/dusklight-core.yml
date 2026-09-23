@@ -1,0 +1,111 @@
+name: Dusklight native core
+run-name: Dusklight native core • ${{ github.sha }}
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/dusklight-core.yml'
+      - 'native/dusklight/**'
+      - 'build-utils/dusklight/**'
+      - 'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h'
+      - 'test/dusklight_native_session_test.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neostation-dusklight-core-experimental
+  cancel-in-progress: true
+jobs:
+  build:
+    name: Build embedded Dusklight Core arm64
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      CCACHE_DIR: ${{ github.workspace }}/.dusklight-ccache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Validate native session transitions
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 -m py_compile build-utils/dusklight/build_core.py
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            -Inative/dusklight/core -Ipackages/dusklight_internal_bridge/ios/Classes \
+            test/dusklight_native_session_test.cpp -o "$RUNNER_TEMP/dusklight-session-test"
+          "$RUNNER_TEMP/dusklight-session-test"
+      - name: Prepare native tools
+        run: |
+          set -euo pipefail
+          command -v cmake >/dev/null || brew install cmake
+          command -v ninja >/dev/null || brew install ninja
+          command -v ccache >/dev/null || brew install ccache
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-apple-ios
+          ccache --max-size=3G
+          mkdir -p build/dusklight-diagnostics dist/dusklight
+      - uses: actions/cache@v4
+        with:
+          path: .dusklight-ccache
+          key: dusklight-core-xcode16.4-${{ hashFiles('native/dusklight/**', 'build-utils/dusklight/source.json') }}-${{ github.run_id }}
+          restore-keys: |
+            dusklight-core-xcode16.4-
+      - name: Fetch pinned sources and materialize canonical integration
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/dusklight"
+          SDL_SRC="$RUNNER_TEMP/dusklight-sdl"
+          git init "$SRC"
+          git -C "$SRC" remote add origin https://github.com/TwilitRealm/dusklight.git
+          git -C "$SRC" fetch --depth 1 origin ad979d3dae092d0f5cbdaf49eabca7b4f1db4838
+          git -C "$SRC" checkout --detach FETCH_HEAD
+          git -C "$SRC" submodule update --init --recursive --depth 1 extern/aurora extern/borealis
+          git init "$SDL_SRC"
+          git -C "$SDL_SRC" remote add origin https://github.com/libsdl-org/SDL.git
+          git -C "$SDL_SRC" fetch --depth 1 origin 8e37db5e797b6167f3a00d697d816a684bd259c7
+          git -C "$SDL_SRC" checkout --detach FETCH_HEAD
+          python3 build-utils/dusklight/build_core.py prepare "$SRC" "$SDL_SRC"
+      - name: Configure embedded framework
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/dusklight"
+          cmake --preset ios-default -S "$SRC" -B "$SRC/build-neostation" \
+            -DCMAKE_BUILD_TYPE=Release -DDEPLOYMENT_TARGET=17.4 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache \
+            -DFETCHCONTENT_SOURCE_DIR_SDL="$RUNNER_TEMP/dusklight-sdl" \
+            -DAURORA_SDL3_PROVIDER=vendor -DAURORA_SDL3_LINKAGE=static \
+            -DAURORA_DAWN_PROVIDER=package -DAURORA_DAWN_LINKAGE=static \
+            -DBOREALIS_ENABLE_SENTRY=OFF -DBOREALIS_ENABLE_DISCORD=OFF \
+            -DBOREALIS_BUILD_TESTS=OFF -DBUILD_TESTING=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            2>&1 | tee build/dusklight-diagnostics/configure.log
+      - name: Build native Dusklight
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/dusklight/build-neostation" --target dusklight --parallel 3 \
+            2>&1 | tee build/dusklight-diagnostics/compile.log
+      - name: Verify and package private framework
+        run: |
+          set -euo pipefail
+          python3 build-utils/dusklight/build_core.py package "$RUNNER_TEMP/dusklight" \
+            "$RUNNER_TEMP/dusklight/build-neostation/DusklightCore.framework" dist/dusklight
+          cp "$RUNNER_TEMP/dusklight-sdl/LICENSE.txt" dist/dusklight/licenses/SDL-LICENSE.txt
+          cp dist/dusklight/identity.json build/dusklight-diagnostics/identity.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeoStation-Dusklight-Core-${{ github.sha }}
+          path: dist/dusklight
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoStation-Dusklight-Core-diagnostics-${{ github.sha }}
+          path: build/dusklight-diagnostics
+          retention-days: 7

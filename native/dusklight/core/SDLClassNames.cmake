@@ -1,0 +1,43 @@
+# SDL 3.4.10 Objective-C classes: private names prevent SDL2/SDL3 runtime collisions.
+add_compile_definitions(
+    Cocoa_PasteboardDataProvider=NeoDusk_Cocoa_PasteboardDataProvider
+    HIDBLEDevice=NeoDusk_HIDBLEDevice
+    HIDBLEManager=NeoDusk_HIDBLEManager
+    MyAppDelegate=NeoDusk_MyAppDelegate
+    SDL3AppDelegate=NeoDusk_SDL3AppDelegate
+    SDL3Application=NeoDusk_SDL3Application
+    SDL3Cocoa_WindowListener=NeoDusk_SDL3Cocoa_WindowListener
+    SDL3METAL_PaletteData=NeoDusk_SDL3METAL_PaletteData
+    SDL3METAL_RenderData=NeoDusk_SDL3METAL_RenderData
+    SDL3METAL_TextureData=NeoDusk_SDL3METAL_TextureData
+    SDL3MessageBoxPresenter=NeoDusk_SDL3MessageBoxPresenter
+    SDL3OpenGLContext=NeoDusk_SDL3OpenGLContext
+    SDL3TranslatorResponder=NeoDusk_SDL3TranslatorResponder
+    SDL3View=NeoDusk_SDL3View
+    SDL3Window=NeoDusk_SDL3Window
+    SDL3_RumbleContext=NeoDusk_SDL3_RumbleContext
+    SDL3_RumbleMotor=NeoDusk_SDL3_RumbleMotor
+    SDL3_cocoametalview=NeoDusk_SDL3_cocoametalview
+    SDLCaptureVideoDataOutputSampleBufferDelegate=NeoDusk_SDLCaptureVideoDataOutputSampleBufferDelegate
+    SDLEAGLContext=NeoDusk_SDLEAGLContext
+    SDLInterruptionListener=NeoDusk_SDLInterruptionListener
+    SDLIosMainCallbacksDisplayLink=NeoDusk_SDLIosMainCallbacksDisplayLink
+    SDLLaunchScreenController=NeoDusk_SDLLaunchScreenController
+    SDLLaunchStoryboardViewController=NeoDusk_SDLLaunchStoryboardViewController
+    SDLPrivateCameraData=NeoDusk_SDLPrivateCameraData
+    SDLUIKitDelegate=NeoDusk_SDLUIKitDelegate
+    SDLUIKitSceneDelegate=NeoDusk_SDLUIKitSceneDelegate
+    SDLUITextField=NeoDusk_SDLUITextField
+    SDL_CocoaVideoData=NeoDusk_SDL_CocoaVideoData
+    SDL_CocoaWindowData=NeoDusk_SDL_CocoaWindowData
+    SDL_DisplayWatch=NeoDusk_SDL_DisplayWatch
+    SDL_LifecycleObserver=NeoDusk_SDL_LifecycleObserver
+    SDL_UIKitDisplayData=NeoDusk_SDL_UIKitDisplayData
+    SDL_UIKitDisplayModeData=NeoDusk_SDL_UIKitDisplayModeData
+    SDL_UIKitVideoData=NeoDusk_SDL_UIKitVideoData
+    SDL_UIKitWindowData=NeoDusk_SDL_UIKitWindowData
+    SDL_uikitmetalview=NeoDusk_SDL_uikitmetalview
+    SDL_uikitopenglview=NeoDusk_SDL_uikitopenglview
+    SDL_uikitview=NeoDusk_SDL_uikitview
+    SDL_uikitviewcontroller=NeoDusk_SDL_uikitviewcontroller
+)
