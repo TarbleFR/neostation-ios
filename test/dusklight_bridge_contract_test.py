@@ -7,11 +7,15 @@ ROOT = Path(__file__).resolve().parents[1]
 podspec = (ROOT / "packages/dusklight_internal_bridge/ios/dusklight_internal_bridge.podspec").read_text()
 plugin = (ROOT / "packages/dusklight_internal_bridge/ios/Classes/DusklightInternalBridgePlugin.mm").read_text()
 abi = (ROOT / "packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h").read_text()
+loader = (ROOT / "packages/dusklight_internal_bridge/ios/Classes/DusklightCoreLoader.h").read_text()
 pins = json.loads((ROOT / "build-utils/dusklight/source.json").read_text())
 
 assert "vendored_frameworks" not in podspec
 assert "preserve_paths" in podspec
-assert "dlopen" in plugin and "RTLD_NOW | RTLD_LOCAL" in plugin
+assert "NeoDusklightLoadCore(path.fileSystemRepresentation)" in plugin
+assert "dlopen(path, RTLD_NOW | RTLD_LOCAL)" in loader
+assert "isExecutableFileAtPath" not in plugin
+assert "loaded.filePresent" in plugin and '@"buildNumber"' in plugin
 assert "DUSKLIGHT_CORE_NOT_READY" in plugin
 assert 'dlsym(_coreHandle, "NeoDusklight_GetAPI")' in plugin
 for member in ("initialize", "start", "stop", "is_running", "set_event_callback", "session_state"):

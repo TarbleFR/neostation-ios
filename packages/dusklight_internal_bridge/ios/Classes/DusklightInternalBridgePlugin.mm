@@ -1,5 +1,6 @@
 #import "DusklightInternalBridgePlugin.h"
 #import "DusklightCoreABI.h"
+#include "DusklightCoreLoader.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -43,6 +44,8 @@ NSDictionary* Failure(NSString* code, NSString* stage, NSString* message) {
     @"errorCode" : code,
     @"stage" : stage,
     @"message" : message,
+    @"buildNumber" : [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"unknown",
+    @"corePath" : CorePath(),
   };
 }
 }  // namespace
@@ -79,13 +82,13 @@ static void OnCoreEvent(void* context, int state, const char* message) {
 
 - (NSDictionary*)diagnostics {
   NSString* path = CorePath();
-  BOOL present = path.length > 0 &&
-      [NSFileManager.defaultManager isExecutableFileAtPath:path];
+  BOOL present = NeoDusklightCoreFilePresent(path.fileSystemRepresentation);
   return @{
     @"hostReady" : @YES,
     @"corePresent" : @(present),
     @"coreLoaded" : @(_api != nullptr),
     @"corePath" : path,
+    @"buildNumber" : [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"unknown",
     @"abiVersion" : @(NEO_DUSKLIGHT_ABI_VERSION),
     @"sessionState" : @(_api ? _api->session_state() : NEO_DUSKLIGHT_IDLE),
     @"restartRequired" : @(_api && _api->session_state() == NEO_DUSKLIGHT_ENDED),
@@ -96,21 +99,15 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   if (_api != nullptr) return nil;
   if (_loadError != nil) return _loadError;
   NSString* path = CorePath();
-  if (path.length == 0 ||
-      ![NSFileManager.defaultManager isExecutableFileAtPath:path]) {
-    return Failure(
-        @"DUSKLIGHT_CORE_NOT_READY",
-        @"core_missing",
-        @"DusklightCore is not included in this build yet.");
-  }
-
-  _coreHandle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
+  const auto loaded = NeoDusklightLoadCore(path.fileSystemRepresentation);
+  _coreHandle = loaded.handle;
   if (_coreHandle == nullptr) {
-    const char* raw = dlerror();
-    NSString* detail = raw != nullptr
-        ? [NSString stringWithUTF8String:raw]
-        : @"Unknown loader error.";
-    return Failure(@"DUSKLIGHT_CORE_LOAD_FAILED", @"dlopen", detail);
+    NSString* detail = [NSString stringWithUTF8String:loaded.detail.c_str()];
+    NSLog(@"[NeoStation/Dusklight] build=%@ present=%d path=%@ loader=%@",
+          [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"],
+          loaded.filePresent, path, detail);
+    return Failure(loaded.filePresent ? @"DUSKLIGHT_CORE_LOAD_FAILED" : @"DUSKLIGHT_CORE_NOT_READY",
+                   loaded.filePresent ? @"dlopen" : @"core_missing", detail);
   }
 
   auto getter = reinterpret_cast<NeoDusklightGetAPIFn>(

@@ -6,17 +6,25 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'dusklight_game_identity.dart';
 
+class DusklightImportIssue {
+  const DusklightImportIssue(this.fileName, this.messageKey, [this.details]);
+
+  final String fileName;
+  final String messageKey;
+  final String? details;
+}
+
 class DusklightImportResult {
   const DusklightImportResult({
     required this.imported,
     required this.rejected,
-    this.errors = const <String>[],
+    this.errors = const <DusklightImportIssue>[],
     this.importedPaths = const <String>[],
   });
 
   final int imported;
   final int rejected;
-  final List<String> errors;
+  final List<DusklightImportIssue> errors;
   final List<String> importedPaths;
 }
 
@@ -26,12 +34,14 @@ class DusklightLaunchResult {
     required this.message,
     this.stage,
     this.errorCode,
+    this.technicalDetails = '',
   });
 
   final bool success;
   final String message;
   final String? stage;
   final String? errorCode;
+  final String technicalDetails;
 }
 
 /// Files-visible library and native host boundary for NeoStation's Ports /
@@ -105,7 +115,7 @@ class DusklightInternalService {
     final destination = await gamesDirectory();
     var imported = 0;
     var rejected = 0;
-    final errors = <String>[];
+    final errors = <DusklightImportIssue>[];
     final importedPaths = <String>[];
     for (final picked in selection.files) {
       final sourcePath = picked.path;
@@ -115,14 +125,14 @@ class DusklightInternalService {
           .toLowerCase();
       if (sourcePath == null || !supportedGameExtensions.contains(extension)) {
         rejected++;
-        errors.add('${picked.name}: unsupported disc format.');
+        errors.add(DusklightImportIssue(picked.name, 'formatUnsupported'));
         continue;
       }
 
       final source = File(sourcePath);
       if (!await source.exists() || await source.length() <= 0) {
         rejected++;
-        errors.add('${picked.name}: source file is empty or unreadable.');
+        errors.add(DusklightImportIssue(picked.name, 'gameUnreadable'));
         continue;
       }
 
@@ -131,7 +141,7 @@ class DusklightInternalService {
       if ((extension == 'iso' || extension == 'gcm') &&
           !await _hasSupportedRawDiscId(source)) {
         rejected++;
-        errors.add('${picked.name}: this is not a supported Twilight Princess disc.');
+        errors.add(DusklightImportIssue(picked.name, 'unsupportedDisc'));
         continue;
       }
 
@@ -141,7 +151,7 @@ class DusklightInternalService {
         // another game before copying it or attaching Twilight Princess media.
         if (await DusklightGameIdentity.read(source.path) == null) {
           rejected++;
-          errors.add('${picked.name}: this is not a readable Twilight Princess disc.');
+          errors.add(DusklightImportIssue(picked.name, 'unsupportedDisc'));
           continue;
         }
         final output = await _uniqueDestination(destination, picked.name);
@@ -159,7 +169,7 @@ class DusklightInternalService {
           await temporary.delete();
         }
         rejected++;
-        errors.add('${picked.name}: $error');
+        errors.add(DusklightImportIssue(picked.name, 'importFailed', '$error'));
       }
     }
     return DusklightImportResult(
@@ -203,9 +213,13 @@ class DusklightInternalService {
       message: response['message']?.toString() ??
           (success
               ? 'Dusklight session started.'
-              : 'Dusklight Core is not ready in this build.'),
+              : 'The native bridge returned no launch detail.'),
       stage: response['stage']?.toString(),
       errorCode: response['errorCode']?.toString(),
+      technicalDetails: <String>[
+        if (response['buildNumber'] != null) 'Build: ${response['buildNumber']}',
+        if (response['corePath'] != null) 'Core: ${response['corePath']}',
+      ].join('\n'),
     );
   }
 

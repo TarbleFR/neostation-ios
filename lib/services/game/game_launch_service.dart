@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
+import 'package:neostation/l10n/dusklight_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -191,20 +192,31 @@ class GameLaunchService {
       // Never reinterpret a native-port disc as a RetroArch or share-sheet
       // title when the Core is absent or reports a lifecycle error.
       if (Platform.isIOS && system.folderName.toLowerCase() == 'ports') {
+        final locale = Localizations.localeOf(context);
         final gamePath = game.romPath;
         if (gamePath == null || gamePath.isEmpty) {
           return GameLaunchResult.failure(
-            'Dusklight launch refused: the game path is missing.',
+            DusklightLocale.launchError(locale, 'DUSKLIGHT_GAME_UNREADABLE'),
             system.folderName,
           );
         }
-        final report = await DusklightInternalService.launch(gamePath);
+        final DusklightLaunchResult report;
+        try {
+          report = await DusklightInternalService.launch(gamePath);
+        } catch (error) {
+          _log.e('[Dusklight launch] $error');
+          return GameLaunchResult.failure(
+            DusklightLocale.launchError(locale, null),
+            '$error',
+          );
+        }
         if (!context.mounted) return GameLaunchResult.failure('', '');
         if (!report.success) {
           return GameLaunchResult.failure(
-            report.message,
+            DusklightLocale.launchError(locale, report.errorCode),
             'Dusklight stage: ${report.stage ?? "unknown"}\n'
-            'Code: ${report.errorCode ?? "unknown"}',
+            'Code: ${report.errorCode ?? "unknown"}\n'
+            '${report.technicalDetails}\n${report.message}',
           );
         }
         GameSessionManager.registerGameLaunch(

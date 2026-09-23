@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 311 Dusklight Native Preview
-run-name: NeoStation iOS Build 311 • ${{ github.sha }}
+name: NeoStation iOS Build 312 Dusklight Loader L10n
+run-name: NeoStation iOS Build 312 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-311
+  group: neostation-ios-build-312
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') }}
-    name: Build 311 Dusklight Native Preview IPA
+    name: Build 312 Dusklight Loader L10n IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '311'
-      IPA_NAME: 'NeoStation-iOS-Build-311-Dusklight-Native-Preview'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-311-Dusklight-Native-Preview'
+      BUILD_NUMBER: '312'
+      IPA_NAME: 'NeoStation-iOS-Build-312-Dusklight-Loader-L10n'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-312-Dusklight-Loader-L10n'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -222,9 +222,10 @@ jobs:
           python3 test/dolphin_cheats_menu_test.py
           python3 test/dolphin_https_resource_test.py
           python3 test/dusklight_bridge_contract_test.py
+          python3 test/dusklight_core_loader_test.py
           python3 test/integrated_import_tab_contract_test.py
           python3 test/dusklight_queue_shutdown_test.py
-          flutter test test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
+          flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
@@ -445,7 +446,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 311 diagnostics
+          # Rewrite the Dolphin fields so the final Build 312 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -645,7 +646,7 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 311 IPA
+      - name: Package and validate Build 312 IPA
         shell: bash
         run: |
           set -euo pipefail

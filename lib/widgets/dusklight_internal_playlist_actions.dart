@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../services/dusklight_internal_service.dart';
+import '../services/logger_service.dart';
+import '../l10n/dusklight_locale.dart';
 
 class DusklightInternalPlaylistActions extends StatefulWidget {
   const DusklightInternalPlaylistActions({
@@ -29,8 +31,6 @@ class _DusklightInternalPlaylistActionsState
     extends State<DusklightInternalPlaylistActions> {
   bool _busy = false;
 
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
-
   void _notice(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -38,6 +38,7 @@ class _DusklightInternalPlaylistActionsState
 
   Future<void> _import() async {
     if (_busy) return;
+    final locale = Localizations.localeOf(context);
     setState(() => _busy = true);
     widget.onInteractionChanged?.call(true);
     try {
@@ -46,25 +47,23 @@ class _DusklightInternalPlaylistActionsState
         await widget.onLibraryChanged();
         final enrich = widget.onGamesImported;
         if (enrich != null) unawaited(enrich(result.importedPaths));
-        _notice(
-          _fr
-              ? '${result.imported} disque(s) Dusklight importé(s).'
-              : '${result.imported} Dusklight disc(s) imported.',
-        );
+        _notice(DusklightLocale.forLocale(locale, 'imported', count: result.imported));
       }
       if (result.rejected > 0) {
-        _notice(
-          result.errors.isNotEmpty
-              ? result.errors.first
-              : (_fr ? 'Certains fichiers ont été rejetés.' : 'Some files were rejected.'),
-        );
+        if (result.errors.isEmpty) {
+          _notice(DusklightLocale.forLocale(locale, 'rejected'));
+        } else {
+          final issue = result.errors.first;
+          _notice('${issue.fileName}: ${DusklightLocale.forLocale(locale, issue.messageKey)}');
+          for (final error in result.errors) {
+            LoggerService.instance.w('[Dusklight import] ${error.fileName}: '
+                '${error.messageKey} ${error.details ?? ""}');
+          }
+        }
       }
     } catch (error) {
-      _notice(
-        _fr
-            ? 'Échec de l’import Dusklight : $error'
-            : 'Dusklight import failed: $error',
-      );
+      LoggerService.instance.w('[Dusklight import] $error');
+      _notice(DusklightLocale.forLocale(locale, 'importFailed'));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
