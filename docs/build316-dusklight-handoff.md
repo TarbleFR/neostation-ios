@@ -81,3 +81,30 @@ JIT helper inputs must retain Build 315 identities in the candidate IPA.
   ABI 3, all 26 canonical source hashes and all 35 resources were verified
   locally against the downloaded artifact. The host packaging gate also
   checks the complete canonical-source set and hashes before assembling an IPA.
+
+## Packaged candidate identity
+
+- Host commit: `66ef2445374777539a78b991d37e9459ed8b6ed2`.
+- Full iOS CI run `35898960828`, job `107309907765`: successful. Required
+  behavior tests, twelve-language tests, iOS compilation and IPA validators
+  passed. Flutter analysis retained 60 informational notices under the existing
+  `--no-fatal-infos` policy; no analysis gate was weakened for this candidate.
+- Artifact `10767952811`, `NeoStation-iOS-Build-316-Dusklight-Handoff`.
+  ZIP SHA-256:
+  `72215d35582e5696ae6c0e1aa1c13093a182c9d1b003cd72080f51bb4bf23175`.
+- IPA `NeoStation-iOS-Build-316-Dusklight-Handoff.ipa`, 102,351,168 bytes.
+  SHA-256:
+  `30d0c0ae6d330ad8896486fef803f1a59faff16aab53dba1dd0bf60c70c8bdef`.
+- The downloaded IPA reports build 316 and bundle
+  `com.neogamelab.neostation`. Its Dusklight binary matches the native artifact;
+  all 35 bundled resources and the passive-load boundary were revalidated.
+- Byte comparison with the delivered Build 315 confirms unchanged RPCS3,
+  Dolphin and ARMSX2 cores, the three helper executables, both helpers'
+  JavaScript files and StikJIT's two debugger scripts. RPCS3 still has SHA-256
+  `bafe4e8ac378179b930379b2720f1a076890543b3c392c364fd043284465dcfc`.
+
+Device validation remains pending. Test Dusklight first, return to NeoStation,
+check music/navigation sounds, launch RPCS3 without restarting, then try another
+Dusklight session. If PS3 initialization still fails, the new application logs
+must be used to identify retained mappings; this release does not claim that
+the unresolved memory failure has been corrected.
