@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 306 RPCS3 Passive Core
-run-name: NeoStation iOS Build 306 • ${{ github.sha }}
+name: NeoStation iOS Build 307 RPCS3 Startup Recovery
+run-name: NeoStation iOS Build 307 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-306
+  group: neostation-ios-build-307
   cancel-in-progress: true
 
 jobs:
@@ -22,20 +22,20 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') }}
-    name: Build 306 RPCS3 Passive Core IPA
+    name: Build 307 RPCS3 Startup Recovery IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '306'
-      IPA_NAME: 'NeoStation-iOS-Build-306-RPCS3-Passive-Core'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-306-RPCS3-Passive-Core'
+      BUILD_NUMBER: '307'
+      IPA_NAME: 'NeoStation-iOS-Build-307-RPCS3-Startup-Recovery'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-307-RPCS3-Startup-Recovery'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: 105f9138e8d5ab5301fd891381cc433072b787ae
       DOLPHIN_CORE_RUN_ID: '35519943003'
       ARMSX2_CORE_HOST_SHA: 017c9c2f1e0628e43506707bd6943a76f44f8f44
       ARMSX2_CORE_RUN_ID: '35519677053'
-      RPCS3_CORE_HOST_SHA: 0d8072f9f80250ad19502a856d5c5fa1a1163b07
-      RPCS3_CORE_RUN_ID: '35792411555'
+      RPCS3_CORE_HOST_SHA: 4e0ae3ccb6f58425fa5f2a0e9780f1f180e77a50
+      RPCS3_CORE_RUN_ID: '35799603880'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -216,6 +216,8 @@ jobs:
           python3 test/rpcs3_diagnostics_native_test.py
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_atomic_startup_test.py
+          python3 test/rpcs3_failed_startup_test.py
+          python3 test/game_launch_route_test.py
           python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_reporter_send_order_test.py
           python3 test/rpcs3_host_entitlements_test.py
@@ -293,27 +295,8 @@ jobs:
             build-utils/validate_rpcs3_embedded_core.py \
             build-utils/validate_rpcs3_passive_dlopen.py \
             packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h
-          python3 - <<'PY'
-          import os
-          import subprocess
-          from pathlib import Path
-
-          source = subprocess.check_output(
-              ['git', 'show', os.environ['RPCS3_CORE_HOST_SHA'] +
-               ':.github/workflows/rpcs3-core.yml'], text=True,
-          )
-          # The sole permitted workflow delta skips rebuilding identical Core
-          # bytes on this host-only integration commit. Any other recipe or
-          # validation change requires a newly built artifact.
-          gate = "    if: " + "$" + "{{ !contains(github.event.head_commit.message, '[rpcs3-host-integration]') }}\n"
-          note = (
-              '    # The host integration reuses the already built, provenance-checked Core;\n'
-              '    # ios-ci validates its unchanged source, recipe, ABI, and binary identity.\n'
-          )
-          expected = source.replace('  build:\n', '  build:\n' + note + gate, 1)
-          if expected == source or Path('.github/workflows/rpcs3-core.yml').read_text() != expected:
-              raise SystemExit('RPCS3 Core workflow changed beyond the reviewed host-only skip')
-          PY
+          git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            .github/workflows/rpcs3-core.yml
           python3 - <<'PY'
           import json, os, shutil, sys
           from pathlib import Path
@@ -443,7 +426,7 @@ jobs:
           shutil.copytree(source / "Sys", sys_destination)
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 306 diagnostics
+          # Rewrite the Dolphin fields so the final Build 307 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -608,7 +591,7 @@ jobs:
           nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
           grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
 
-      - name: Package and validate Build 306 IPA
+      - name: Package and validate Build 307 IPA
         shell: bash
         run: |
           set -euo pipefail
