@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
+import 'package:dusklight_internal_bridge/dusklight_internal_bridge.dart';
 import 'package:flutter/widgets.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'game_service.dart';
@@ -199,6 +200,21 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   void _startPlatformMonitoring(String? emulatorExe) {
     if (Platform.isAndroid) {
       GameService.setOnGameReturnedCallback((_) => _triggerClose());
+      return;
+    }
+
+    if (Platform.isIOS && emulatorExe == 'ios_dusklight_internal') {
+      _embeddedSessionSubscription = DusklightInternalBridge.sessionEvents.listen(
+        (event) {
+          if (_phase == GameLaunchPhase.playing && !_isClosing) {
+            _log.i('[GameLaunchManager] Dusklight ended: ${event['reason']}');
+            _triggerClose();
+          }
+        },
+      );
+      if (DusklightInternalBridge.didEndSession && !_isClosing) {
+        _triggerClose();
+      }
       return;
     }
 

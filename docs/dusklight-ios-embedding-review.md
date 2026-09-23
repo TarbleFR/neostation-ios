@@ -1,5 +1,8 @@
 # Dusklight dans Ports — analyse de l'intégration iOS
 
+Ce document conserve l’audit initial des builds 309–310. L’intégration native
+de la candidate suivante est décrite dans [dusklight-build311.md](dusklight-build311.md).
+
 Sources examinées le 23 septembre 2026 :
 
 - [Dusklight](https://github.com/TwilitRealm/dusklight/tree/ad979d3dae092d0f5cbdaf49eabca7b4f1db4838), commit `ad979d3dae092d0f5cbdaf49eabca7b4f1db4838`.
