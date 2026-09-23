@@ -633,7 +633,7 @@ int game_main(int argc, char* argv[]) {
     const auto dataPaths = dusk::data::initialize_data(standardOptions.userDir);
     dusk::ConfigPath = dataPaths.userPath;
     dusk::CachePath = NeoDusklight_CachePath();
-    dusk::InitializeLogging(dusk::CachePath, standardOptions);
+    dusk::InitializeLogging(dusk::ConfigPath / "Logs", standardOptions);
     const auto startupLogLevel = borealis::log::level();
 
     // Development Mode
@@ -971,24 +971,26 @@ int game_main(int argc, char* argv[]) {
         daMP_c::m_myObj->daMP_c_Finish();
     }
 
-    borealis::sentry::shutdown();
-    borealis::log::shutdown();
-    fflush(stdout);
-    fflush(stderr);
-
     mDoMch_Destroy();
 
-    // Notifies all CVs and causes threads to exit
+    // Stop callbacks before waking workers; keep renderer and queues alive
+    // until every game-owned native thread has finished.
+    dusk::audio::Shutdown();
     OSResetSystem(OS_RESET_SHUTDOWN, 0, 0);
+    NeoDusklight_JoinGameThreads();
 
 #if BOREALIS_HAS_DISCORD
     dusk::discord::shutdown();
 #endif
-    dusk::audio::Shutdown();
     dusk::ui::shutdown();
     dusk::texture_replacements::shutdown();
     dusk::config::shutdown();
     aurora_shutdown();
+
+    borealis::sentry::shutdown();
+    borealis::log::shutdown();
+    fflush(stdout);
+    fflush(stderr);
 
     return 0;
 }

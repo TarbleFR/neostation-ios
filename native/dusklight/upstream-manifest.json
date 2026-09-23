@@ -2,5 +2,10 @@
   "upstream/CMakeLists.txt": "418b77394e29a6cb28575aab8d1471faae9ee45dba8cc2fe482fdbd648eaa3d4",
   "upstream/src/m_Do/m_Do_main.cpp": "2ff7e7ec9caaa3591aca019c20bd697c330d4c3d7ad9631bd4f3e12c75e30477",
   "upstream/extern/aurora/lib/window.cpp": "72f7afec8ebf6a0b3420868e0d746e3afd379bc3b60ee16d24f9f083a9b26e40",
-  "sdl/src/filesystem/cocoa/SDL_sysfilesystem.m": "0f690c8536c07a8031e13c1a061cd04701a91aeb1541ae52ec15b538871e2652"
+  "sdl/src/filesystem/cocoa/SDL_sysfilesystem.m": "0f690c8536c07a8031e13c1a061cd04701a91aeb1541ae52ec15b538871e2652",
+  "upstream/src/dusk/main.h": "69e33b90c1bbdc6e500a5d61cf0acf54621ebf405a1a6d3573732e1882e4c1ce",
+  "upstream/src/dusk/globals.cpp": "99c167659320a299af0859bb0a86613e8d672ce38f58fb4676b52ccc6546c8f1",
+  "upstream/src/dusk/stubs.cpp": "d31f3df623fd6c8d5d6061e077ff7a636f405d6a829fe8d39ad8309d0c8a65bb",
+  "upstream/src/dusk/OSMutex.cpp": "c10f57a4a082db8ef373242dd2c3dbd25db2182b6b22c2828e895dd29eade71a",
+  "upstream/src/dusk/OSThread.cpp": "10b31cc5c806cf47f0ec701eb7c7a1988793668ee2cd3b6655201181f084d107"
 }

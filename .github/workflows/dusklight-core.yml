@@ -9,6 +9,7 @@ on:
       - 'build-utils/dusklight/**'
       - 'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h'
       - 'test/dusklight_native_session_test.cpp'
+      - 'test/dusklight_queue_shutdown_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,7 +31,7 @@ jobs:
           persist-credentials: false
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.4'
+          xcode-version: '26.3'
       - name: Validate native session transitions
         run: |
           set -euo pipefail
@@ -40,6 +41,7 @@ jobs:
             -Inative/dusklight/core -Ipackages/dusklight_internal_bridge/ios/Classes \
             test/dusklight_native_session_test.cpp -o "$RUNNER_TEMP/dusklight-session-test"
           "$RUNNER_TEMP/dusklight-session-test"
+          python3 test/dusklight_queue_shutdown_test.py
       - name: Prepare native tools
         run: |
           set -euo pipefail
@@ -53,9 +55,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .dusklight-ccache
-          key: dusklight-core-xcode16.4-${{ hashFiles('native/dusklight/**', 'build-utils/dusklight/source.json') }}-${{ github.run_id }}
+          key: dusklight-core-xcode26.3-${{ hashFiles('native/dusklight/**', 'build-utils/dusklight/source.json') }}-${{ github.run_id }}
           restore-keys: |
-            dusklight-core-xcode16.4-
+            dusklight-core-xcode26.3-
       - name: Fetch pinned sources and materialize canonical integration
         run: |
           set -euo pipefail
