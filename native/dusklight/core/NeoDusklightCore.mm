@@ -5,6 +5,7 @@
 #include "DusklightCoreABI.h"
 #include "NeoDusklightHost.h"
 #include "SessionState.h"
+#include "VirtualMemoryTrace.h"
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -46,10 +47,15 @@ FILE* traceFile = nullptr;
 void Trace(const char* message) {
   NSLog(@"[NeoDusklight] %s", message);
   if (traceFile) {
-    fprintf(traceFile, "%.3f state=%d %s\n", NSDate.date.timeIntervalSince1970,
-            session.state(), message);
+    fprintf(traceFile, "%.3f state=%d pid=%d build=%s %s\n", NSDate.date.timeIntervalSince1970,
+            session.state(), getpid(),
+            [[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] UTF8String] ?: "unknown", message);
     fflush(traceFile);
   }
+}
+void TraceResources(const char* phase) {
+  NeoDusklightTraceVM(traceFile, NSDate.date.timeIntervalSince1970,
+      [[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] UTF8String] ?: "unknown", phase);
 }
 void Emit(const char* message) {
   Trace(message);
@@ -82,6 +88,7 @@ void FinishReturn() {
   Suspend(true);
   RestoreHost();
   menuRequested = false;
+  TraceResources("return_to_host");
   session.finish();
   Emit(session.ready() ? "Session suspended; same disc can resume without reinitialization."
                        : "Launch canceled before runtime initialization completed.");
@@ -205,6 +212,7 @@ int Initialize(const char* support, const char* cache, char* error, size_t size)
       name:UIApplicationDidBecomeActiveNotification object:nil];
   }
   Trace("Native framework and resources initialized.");
+  TraceResources("before_runtime_init");
   return 1;
 }
 int Start(const char* game, void* host, char* error, size_t size) {
@@ -305,7 +313,10 @@ extern "C" void NeoDusklight_WindowReady(void* window) {
 }
 extern "C" void NeoDusklight_RuntimeReady() { session.initialized(); }
 extern "C" void NeoDusklight_FirstFrame() {
-  if (session.firstFrame()) Emit("First native game frame submitted for this session.");
+  if (session.firstFrame()) {
+    TraceResources("first_frame");
+    Emit("First native game frame submitted for this session.");
+  }
 }
 extern "C" void NeoDusklight_RequestReturn() { Stop(); }
 extern "C" int NeoDusklight_LoadGameLanguage() {

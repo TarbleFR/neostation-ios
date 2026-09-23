@@ -14,6 +14,8 @@ on:
       - 'test/dusklight_menu_test.py'
       - 'test/dusklight_language_test.py'
       - 'test/dusklight_clock_test.cpp'
+      - 'test/dusklight_audio_owner_test.py'
+      - 'test/dusklight_vm_trace_test.cpp'
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,6 +50,10 @@ jobs:
           "$RUNNER_TEMP/dusklight-session-test"
           python3 test/dusklight_queue_shutdown_test.py
           python3 test/dusklight_resume_test.py
+          python3 test/dusklight_audio_owner_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/dusklight/core \
+            test/dusklight_vm_trace_test.cpp -o "$RUNNER_TEMP/dusklight-vm-trace-test"
+          "$RUNNER_TEMP/dusklight-vm-trace-test"
           python3 test/dusklight_menu_test.py
           python3 test/dusklight_language_test.py
       - name: Prepare native tools
@@ -81,6 +87,8 @@ jobs:
           git -C "$SDL_SRC" remote add origin https://github.com/libsdl-org/SDL.git
           git -C "$SDL_SRC" fetch --depth 1 origin 8e37db5e797b6167f3a00d697d816a684bd259c7
           git -C "$SDL_SRC" checkout --detach FETCH_HEAD
+          python3 test/dusklight_audio_owner_test.py \
+            --source "$SDL_SRC/src/audio/coreaudio/SDL_coreaudio.m" --expect-host-interference
           python3 build-utils/dusklight/build_core.py prepare "$SRC" "$SDL_SRC"
           c++ -std=c++20 -pthread -Wall -Wextra -Werror \
             -I"$SRC/extern/aurora/include" -I"$SRC/extern/aurora/lib" \

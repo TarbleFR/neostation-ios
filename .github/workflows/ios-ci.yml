@@ -226,6 +226,10 @@ jobs:
           python3 test/integrated_import_tab_contract_test.py
           python3 test/dusklight_queue_shutdown_test.py
           python3 test/dusklight_resume_test.py
+          python3 test/dusklight_audio_owner_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/dusklight/core \
+            test/dusklight_vm_trace_test.cpp -o "$RUNNER_TEMP/dusklight-vm-trace-test"
+          "$RUNNER_TEMP/dusklight-vm-trace-test"
           python3 test/dusklight_menu_test.py
           python3 test/dusklight_language_test.py
           flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
