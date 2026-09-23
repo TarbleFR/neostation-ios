@@ -63,8 +63,25 @@ extern "C" int NeoDusklight_PreferredFrameRate() {
 }
 
 extern "C" void NeoDusklight_OpenMenu() {
+    // A delayed/double tap must never lift MenuBar over Settings or a modal.
+    if (NeoDusklight_MenuVisible()) return;
     if (auto* menu = dusk::ui::find_document(dusk::ui::DocumentScope::MenuBar)) {
         dusk::ui::bring_document_to_front(*menu);
         menu->show();
+        dusk::ui::input::sync_input_block();
     }
+}
+
+extern "C" int NeoDusklight_MenuVisible() {
+    return dusk::ui::any_document_rendered() ? 1 : 0;
+}
+
+extern "C" void NeoDusklight_ResumeGameplay() {
+    // Initial setup and the prelaunch chooser must complete normally.
+    if (!dusk::getSettings().backend.wasPresetChosen || dusk::ui::is_prelaunch_open()) return;
+    // Close the complete stack, not just MenuBar: a covered Settings/Mods page
+    // must not keep intercepting input or reappear on the next menu opening.
+    dusk::ui::close_all_documents();
+    dusk::ui::input::reset_input_state();
+    dusk::config::save();
 }

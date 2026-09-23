@@ -20,7 +20,6 @@ extern "C" __attribute__((visibility("default")))
 const NeoDusklightAPI* NeoDusklight_GetAPI(void);
 
 @interface NeoDusklightControls : NSObject
-- (void)closeGame;
 - (void)openMenu;
 - (void)tick:(CADisplayLink*)link;
 - (void)background:(NSNotification*)note;
@@ -36,7 +35,6 @@ std::map<std::string, std::string> uiText;
 UIWindow* hostWindow;
 UIWindow* gameWindow;
 SDL_Window* sdlWindow = nullptr;
-UIButton* backButton;
 UIButton* menuButton;
 NeoDusklightControls* controls;
 NSTimer* startTimer;
@@ -116,6 +114,9 @@ void Tick() {
   try {
     if (menuRequested) { menuRequested = false; NeoDusklight_OpenMenu(); }
     ok = NeoDusklight_TickGame() != 0;
+    // Native RmlUI owns all navigation while a menu (including its closing
+    // animation) is on screen. No UIKit hit target may cover its close button.
+    menuButton.hidden = NeoDusklight_MenuVisible() != 0;
   } catch (const std::exception& ex) { Trace(ex.what()); }
     catch (...) { Trace("Unknown exception in native frame."); }
   inNativeCall = false;
@@ -150,9 +151,8 @@ void RunGame() {
   }
   if (session.state() == NEO_DUSKLIGHT_STOPPING) { FinishReturn(); return; }
   backgrounded = UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
-  backButton.accessibilityLabel = Label("returnToLibrary");
-  backButton.accessibilityHint = Label("resumeHint");
   menuButton.accessibilityLabel = Label("nativeMenu");
+  menuButton.hidden = NeoDusklight_MenuVisible() != 0;
   SDL_ShowWindow(sdlWindow);
   [gameWindow makeKeyAndVisible];
   // Never acknowledge a resume using the old session's last frame.
@@ -250,8 +250,12 @@ const NeoDusklightAPI api{NEO_DUSKLIGHT_ABI_VERSION, sizeof(NeoDusklightAPI),
 } // namespace
 
 @implementation NeoDusklightControls
-- (void)closeGame { Stop(); }
-- (void)openMenu { if (session.active()) menuRequested = true; }
+- (void)openMenu {
+  if (session.active() && !menuButton.hidden) {
+    menuButton.hidden = YES; // Consume rapid taps before the next native frame.
+    menuRequested = true;
+  }
+}
 - (void)tick:(CADisplayLink*)link { @autoreleasepool { Tick(); } }
 - (void)background:(NSNotification*)note {
   backgrounded = true;
@@ -282,27 +286,22 @@ extern "C" void NeoDusklight_WindowReady(void* window) {
     Stop();
     return;
   }
-  backButton = [UIButton buttonWithType:UIButtonTypeSystem];
   menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  NSArray<UIButton*>* buttons = @[backButton, menuButton];
-  NSArray<NSString*>* icons = @[@"arrow.uturn.backward.circle.fill", @"gearshape.fill"];
-  for (NSUInteger i = 0; i < buttons.count; ++i) {
-    UIButton* button = buttons[i];
-    button.translatesAutoresizingMaskIntoConstraints = NO;
-    [button setImage:[UIImage systemImageNamed:icons[i]] forState:UIControlStateNormal];
-    button.tintColor = UIColor.whiteColor;
-    button.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.65];
-    button.layer.cornerRadius = 22;
-    [gameWindow addSubview:button];
-    [NSLayoutConstraint activateConstraints:@[
-      [button.widthAnchor constraintEqualToConstant:44], [button.heightAnchor constraintEqualToConstant:44],
-      [button.trailingAnchor constraintEqualToAnchor:gameWindow.safeAreaLayoutGuide.trailingAnchor constant:-8 - 52 * (CGFloat)i],
-      [button.topAnchor constraintEqualToAnchor:gameWindow.safeAreaLayoutGuide.topAnchor constant:8],
-    ]];
-  }
-  [backButton addTarget:controls action:@selector(closeGame) forControlEvents:UIControlEventTouchUpInside];
+  menuButton.translatesAutoresizingMaskIntoConstraints = NO;
+  [menuButton setImage:[UIImage systemImageNamed:@"gearshape.fill"] forState:UIControlStateNormal];
+  menuButton.tintColor = UIColor.whiteColor;
+  menuButton.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.65];
+  menuButton.layer.cornerRadius = 22;
+  menuButton.hidden = YES; // Reconciled with native UI only after initialization.
+  [gameWindow addSubview:menuButton];
+  [NSLayoutConstraint activateConstraints:@[
+    [menuButton.widthAnchor constraintEqualToConstant:44],
+    [menuButton.heightAnchor constraintEqualToConstant:44],
+    [menuButton.trailingAnchor constraintEqualToAnchor:gameWindow.safeAreaLayoutGuide.trailingAnchor constant:-8],
+    [menuButton.topAnchor constraintEqualToAnchor:gameWindow.safeAreaLayoutGuide.topAnchor constant:8],
+  ]];
   [menuButton addTarget:controls action:@selector(openMenu) forControlEvents:UIControlEventTouchUpInside];
-  Trace("Owned Metal window attached; native menu and return controls available.");
+  Trace("Owned Metal window attached; single menu entry, native navigation owns menus.");
 }
 extern "C" void NeoDusklight_RuntimeReady() { session.initialized(); }
 extern "C" void NeoDusklight_FirstFrame() {

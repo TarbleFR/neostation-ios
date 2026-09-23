@@ -18,6 +18,8 @@ int NeoDusklight_TickGame(void);
 void NeoDusklight_SetGameSuspended(int suspended);
 void NeoDusklight_SetAudioSuspended(int suspended);
 void NeoDusklight_OpenMenu(void);
+int NeoDusklight_MenuVisible(void);
+void NeoDusklight_ResumeGameplay(void);
 int NeoDusklight_PreferredFrameRate(void);
 void NeoDusklight_RequestReturn(void);
 int NeoDusklight_ShouldEnableTouch(void);

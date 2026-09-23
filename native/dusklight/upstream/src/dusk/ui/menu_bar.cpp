@@ -54,7 +54,7 @@ MenuBar::MenuBar()
                                                   .onClose =
                                                       [this] {
                                                           mDoAud_seStartMenu(kSoundMenuClose);
-                                                          hide(false);
+                                                          NeoDusklight_ResumeGameplay();
                                                       },
                                                   .autoSelect = false,
                                               });
@@ -72,6 +72,10 @@ MenuBar::MenuBar()
 }
 
 void MenuBar::build_tabs() {
+    mTabBar->add_tab(NeoDusklight_UIText("resumeGame"), [] {
+        mDoAud_seStartMenu(kSoundMenuClose);
+        NeoDusklight_ResumeGameplay();
+    });
     mTabBar->add_tab("Settings", [this] { push(std::make_unique<SettingsWindow>()); });
 
     if (getSettings().backend.enableAdvancedSettings) {
@@ -153,6 +157,7 @@ void MenuBar::build_tabs() {
                             [dismiss](Modal& modal) {
                                 mDoAud_seStartMenu(kSoundClick);
                                 dismiss(modal);
+                                NeoDusklight_ResumeGameplay();
                                 NeoDusklight_RequestReturn();
                             },
                     },
@@ -247,7 +252,7 @@ bool MenuBar::handle_nav_command(Rml::Event& event, NavCommand cmd) {
     }
     if (cmd == NavCommand::Cancel && visible()) {
         mDoAud_seStartMenu(kSoundMenuClose);
-        hide(false);
+        NeoDusklight_ResumeGameplay();
         return true;
     }
     return Document::handle_nav_command(event, cmd);

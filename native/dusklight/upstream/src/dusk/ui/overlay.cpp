@@ -1,0 +1,527 @@
+#include "overlay.hpp"
+
+#include "controller_config.hpp"
+#include "popover.hpp"
+#include "window.hpp"
+
+#include "dusk/achievements.h"
+#include "dusk/action_bindings.h"
+#include "dusk/livesplit.h"
+#include "dusk/mod_loader.hpp"
+#include "dusk/settings.h"
+#include "dusk/speedrun.h"
+
+#include "m_Do/m_Do_main.h"
+
+#include <aurora/gfx.h>
+#include <borealis/log.hpp>
+#include <dolphin/pad.h>
+#include <fmt/format.h>
+#include <magic_enum.hpp>
+#include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_timer.h>
+
+#include <algorithm>
+
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+namespace dusk::ui {
+namespace {
+constexpr borealis::Log Log{"dusk::ui::overlay"};
+
+const Rml::String kDocumentSource = R"RML(
+<rml>
+<head>
+    <link type="text/rcss" href="res/rml/theme.rcss" />
+    <link type="text/rcss" href="res/rml/overlay.rcss" />
+</head>
+<body>
+    <fps id="fps" />
+    <pipeline-progress id="pipeline-progress">
+        <status>
+            <icon />
+            <status-label id="pipeline-progress-label" />
+        </status>
+        <progress id="pipeline-progress-bar" />
+    </pipeline-progress>
+    <speedrun-timer id="speedrun-timer">
+        <speedrun-rta id="speedrun-rta" />
+        <speedrun-igt id="speedrun-igt" />
+    </speedrun-timer>
+    <mods-display id="mods-display">
+    </mods-display>
+</body>
+</rml>
+)RML";
+
+constexpr std::array<std::pair<const char*, const char*>, 3> kAutoSaveLayers{{
+    {"inner", "res/org-icon-inner.png"},
+    {"outer", "res/org-icon-outer.png"},
+    {"center", "res/org-icon-center.png"},
+}};
+
+constexpr auto kMenuNotificationDuration = std::chrono::milliseconds(2500);
+constexpr auto kPipelineProgressOpenDelay = std::chrono::milliseconds(250);
+
+constexpr std::array<const char*, 4> kFpsCorners = {"tl", "tr", "bl", "br"};
+
+Rml::Element* create_toast(Rml::Element* parent, const Toast& toast) {
+    if (toast.type == "autosave") {
+        auto* logo = append(parent, "logo");
+        for (const auto [cls, src] : kAutoSaveLayers) {
+            auto* img = append(logo, "img");
+            img->SetClass(cls, true);
+            img->SetAttribute("src", src);
+        }
+        return logo;
+    }
+
+    auto* elem = append(parent, "toast");
+    if (!toast.modId.empty()) {
+        elem->SetAttribute("mod-id", toast.modId);
+    }
+    if (!toast.type.empty()) {
+        elem->SetClass(toast.type, true);
+    }
+    {
+        auto* heading = append(elem, "heading");
+        if (toast.title.starts_with("<")) {
+            heading->SetInnerRML(toast.title);
+        } else {
+            append_text(append(heading, "toast-title"), toast.title);
+        }
+        if (toast.type == "achievement") {
+            auto* icon = append(heading, "icon");
+            icon->SetClass("trophy", true);
+            mDoAud_seStartMenu(kSoundAchievementUnlock);
+        } else if (toast.type == "controller") {
+            auto* icon = append(heading, "icon");
+            icon->SetClass("controller", true);
+        } else if (toast.type == "warning") {
+            auto* icon = append(heading, "icon");
+            icon->SetClass("warning", true);
+        } else if (toast.type == "mod-installed") {
+            auto* icon = append(heading, "icon");
+            icon->SetClass("download-done", true);
+        }
+    }
+    {
+        auto* message = append(elem, "message");
+        if (toast.content.starts_with("<")) {
+            message->SetInnerRML(toast.content);
+        } else {
+            append_text(append(message, "toast-message-text"), toast.content);
+        }
+    }
+    {
+        auto* progress = append(elem, "progress");
+        progress->SetAttribute("value", 1.f);
+    }
+    return elem;
+}
+
+Rml::Element* create_controller_warning(Rml::Element* parent) {
+    auto* elem = append(parent, "toast");
+    elem->SetClass("controller-warning", true);
+
+    auto* heading = append(elem, "heading");
+    append_text(append(heading, "toast-title"), "No Device Assigned");
+    auto* icon = append(heading, "icon");
+    icon->SetClass("warning", true);
+
+    auto* message = append(elem, "message");
+    auto* content = append(message, "toast-message-text");
+    append_text(content, "Configure ");
+    append_text(append(content, "b"), "Port 1");
+    append_text(content, " in Settings.");
+
+    return elem;
+}
+
+SDL_Gamepad* gamepad_for_port(u32 port) noexcept {
+    const s32 index = PADGetIndexForPort(port);
+    if (index < 0) {
+        return nullptr;
+    }
+    return PADGetSDLGamepadForIndex(static_cast<u32>(index));
+}
+
+Rml::String back_button_name() {
+    if (auto* gamepad = gamepad_for_port(PAD_CHAN0)) {
+        switch (SDL_GetGamepadType(gamepad)) {
+        case SDL_GAMEPAD_TYPE_PS3:
+            return "Select";
+        case SDL_GAMEPAD_TYPE_PS4:
+            return "Share";
+        case SDL_GAMEPAD_TYPE_PS5:
+            return "Create";
+        case SDL_GAMEPAD_TYPE_XBOX360:
+            return "Back";
+        case SDL_GAMEPAD_TYPE_XBOXONE:
+            return "View";
+        case SDL_GAMEPAD_TYPE_GAMECUBE:
+            return "R + Start";
+        default:
+            break;
+        }
+    }
+    return "Back";
+}
+
+Rml::Element* create_menu_notification(Rml::Element* parent) {
+    auto* elem = append(parent, "toast");
+    elem->SetClass("menu-notification", true);
+
+    // Get name of button for action binding if the action is bound
+    Rml::String padButton{};
+    SDL_Gamepad* gamepad = gamepad_for_port(PAD_CHAN0);
+    if (isActionBound(ActionBinds::OPEN_DUSKLIGHT_MENU, PAD_CHAN0) && gamepad != nullptr) {
+        padButton = native_button_name(
+            gamepad, getActionBindButton(ActionBinds::OPEN_DUSKLIGHT_MENU, PAD_CHAN0));
+    } else {
+        padButton = back_button_name();
+    }
+
+    auto* message = append(elem, "message");
+    auto* row = append(message, "row");
+    auto* prefix = append(row, "notification-prefix");
+#if defined(TARGET_ANDROID) || (defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_MACCATALYST)
+    append_text(prefix, "3-finger tap or");
+#else
+    append_text(prefix, "Press ");
+    append_text(append(prefix, "b"), "F1");
+    append_text(prefix, " or");
+#endif
+    auto* icon = append(row, "icon");
+    icon->SetClass("controller", true);
+    append_text(append(append(row, "notification-button"), "b"), padButton);
+    append_text(append(row, "notification-action"), "to open menu");
+
+    return elem;
+}
+
+void remove_element(Rml::Element*& elem) noexcept {
+    if (elem == nullptr) {
+        return;
+    }
+    if (auto* parent = elem->GetParentNode()) {
+        parent->RemoveChild(elem);
+    }
+    elem = nullptr;
+}
+
+}  // namespace
+
+static std::string FormatElapsedTime(OSTime ticksElapsed) {
+    using namespace std::chrono;
+
+    milliseconds ms{OSTicksToMilliseconds(ticksElapsed)};
+
+    const hours hr = duration_cast<hours>(ms);
+    ms -= hr;
+    const minutes min = duration_cast<minutes>(ms);
+    ms -= min;
+    const seconds sec = duration_cast<seconds>(ms);
+    ms -= sec;
+
+    return fmt::format(
+        "{0:02}:{1:02}:{2:02}.{3:03}", hr.count(), min.count(), sec.count(), ms.count());
+}
+
+Overlay::Overlay() : Document(kDocumentSource, true, DocumentScope::Overlay) {
+    mFpsCounter = mDocument->GetElementById("fps");
+    mPipelineProgress = mDocument->GetElementById("pipeline-progress");
+    mPipelineProgressLabel = mDocument->GetElementById("pipeline-progress-label");
+    mPipelineProgressBar = mDocument->GetElementById("pipeline-progress-bar");
+    mSpeedrunTimer = mDocument->GetElementById("speedrun-timer");
+    mSpeedrunRta = mDocument->GetElementById("speedrun-rta");
+    mSpeedrunIgt = mDocument->GetElementById("speedrun-igt");
+    mModsDisplay = mDocument->GetElementById("mods-display");
+
+    listen(mDocument, Rml::EventId::Focus, [](Rml::Event&) { Log.warn("Overlay received focus"); });
+    listen(mDocument, Rml::EventId::Transitionend, [this](Rml::Event& event) {
+        if (event.GetTargetElement() == mCurrentToast) {
+            if (get_toasts().empty() ||
+                clock::now() >= mCurrentToastStartTime + get_toasts().front().duration)
+            {
+                mCurrentToast->SetPseudoClass("done", true);
+            }
+        } else if (mControllerWarning != nullptr &&
+                   event.GetTargetElement() == mControllerWarning &&
+                   !mControllerWarning->HasAttribute("open"))
+        {
+            mControllerWarning->SetPseudoClass("done", true);
+        } else if (mMenuNotification != nullptr && event.GetTargetElement() == mMenuNotification &&
+                   !mMenuNotification->HasAttribute("open"))
+        {
+            mMenuNotification->SetPseudoClass("done", true);
+        }
+    });
+}
+
+void Overlay::show() {
+    if (mDocument != nullptr) {
+        mDocument->Show(Rml::ModalFlag::None, Rml::FocusFlag::None, Rml::ScrollFlag::None);
+    }
+}
+
+void Overlay::update() {
+    Document::update();
+    if (mDocument == nullptr) {
+        return;
+    }
+
+    if (mFpsCounter != nullptr) {
+        // Do not cover native menu tabs; keep the user's FPS preference intact.
+        if (getSettings().video.enableFpsOverlay.getValue() && !any_document_rendered()) {
+            const int idx = getSettings().video.fpsOverlayCorner.getValue();
+            mFpsCounter->SetAttribute("open", "");
+            mFpsCounter->RemoveProperty(Rml::PropertyId::Bottom);
+            mFpsCounter->SetAttribute("corner", kFpsCorners[idx]);
+
+            if (idx == 2) {
+                if (mPipelineProgress && mPipelineProgress->GetAttribute("open")) {
+                    // 12 (height of pipeline box off bottom) + height of pipeline box + 3 (padding
+                    // space)
+                    mFpsCounter->SetProperty(Rml::PropertyId::Bottom,
+                        Rml::Property(15 + mPipelineProgress->GetOffsetHeight(), Rml::Unit::PX));
+                } else {
+                    // Return fps counter to default height off the bottom
+                    mFpsCounter->SetProperty(
+                        Rml::PropertyId::Bottom, Rml::Property(12, Rml::Unit::PX));
+                }
+            }
+
+            const Uint64 perfFreq = SDL_GetPerformanceFrequency();
+            float fps = aurora_get_fps();
+
+            const Uint64 now = SDL_GetPerformanceCounter();
+            // Limit updates to twice per second
+            const bool refreshLabel =
+                perfFreq == 0 || mFpsLastUpdate == 0 ||
+                static_cast<double>(now - mFpsLastUpdate) >= 0.5 * static_cast<double>(perfFreq);
+            if (refreshLabel) {
+                mFpsLastUpdate = now;
+                set_text_content(mFpsCounter, fmt::format("{:.0f} FPS", fps));
+            }
+        } else {
+            mFpsCounter->RemoveAttribute("open");
+            mFpsLastUpdate = 0;
+        }
+    }
+
+    update_pipeline_progress();
+
+#if !(defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_MACCATALYST))
+    if (dusk::speedrun::isActive() && getSettings().game.liveSplitEnabled) {
+        dusk::speedrun::updateLiveSplit();
+        if (dusk::speedrun::consumeConnectedEvent()) {
+            push_toast({.title = "LiveSplit connected", .duration = std::chrono::seconds(3)});
+        }
+        if (dusk::speedrun::consumeDisconnectedEvent()) {
+            push_toast({.title = "LiveSplit disconnected", .duration = std::chrono::seconds(3)});
+        }
+    }
+#endif
+
+    if (mSpeedrunTimer != nullptr && mSpeedrunRta != nullptr && mSpeedrunIgt != nullptr) {
+        if (dusk::speedrun::isActive()) {
+            // L+R+A+Start to reset timer
+            if (mDoCPd_c::getHoldL(PAD_1) && mDoCPd_c::getHoldR(PAD_1) &&
+                mDoCPd_c::getHoldA(PAD_1) && mDoCPd_c::getTrigZ(PAD_1))
+            {
+                dusk::speedrun::g_speedrunInfo.reset();
+            }
+
+            // L+R+A+Y to manually stop timer
+            if (mDoCPd_c::getHoldL(PAD_1) && mDoCPd_c::getHoldR(PAD_1) &&
+                mDoCPd_c::getHoldA(PAD_1) && mDoCPd_c::getTrigY(PAD_1))
+            {
+                if (speedrun::g_speedrunInfo.m_isRunStarted) {
+                    speedrun::g_speedrunInfo.stopRun();
+                }
+            }
+
+            OSTime rtaElapsedTime = 0;
+            if (speedrun::g_speedrunInfo.m_isRunStarted) {
+                rtaElapsedTime = OSGetNativeTime() - speedrun::g_speedrunInfo.m_rtaStartTimestamp;
+            } else if (speedrun::g_speedrunInfo.m_rtaTimer != 0) {
+                rtaElapsedTime = speedrun::g_speedrunInfo.m_rtaTimer;
+            }
+
+            if (speedrun::g_speedrunInfo.m_isRunStarted && !speedrun::g_speedrunInfo.m_isPauseIGT) {
+                speedrun::g_speedrunInfo.m_igtTimer = OSGetTime() -
+                                                      speedrun::g_speedrunInfo.m_igtStartTimestamp -
+                                                      speedrun::g_speedrunInfo.m_totalLoadTime;
+            }
+
+            mSpeedrunTimer->SetAttribute("open", "");
+
+            if (getSettings().game.showSpeedrunRTATimer) {
+                mSpeedrunRta->SetAttribute("open", "");
+                set_text_content(
+                    mSpeedrunRta, fmt::format("RTA  {}", FormatElapsedTime(rtaElapsedTime)));
+            } else {
+                mSpeedrunRta->RemoveAttribute("open");
+            }
+
+            set_text_content(mSpeedrunIgt,
+                fmt::format("IGT  {}", FormatElapsedTime(speedrun::g_speedrunInfo.m_igtTimer)));
+        } else {
+            mSpeedrunTimer->RemoveAttribute("open");
+        }
+    }
+
+    if (mModsDisplay != nullptr) {
+        if (dusk::speedrun::isActive() && !dusk::mods::ModLoader::instance().active_mods().empty()) {
+            std::string enabled_mods_list;
+            for (const auto& mod : dusk::mods::ModLoader::instance().active_mods()) {
+                const std::string& displayName = mod.metadata.name.empty() ? mod.metadata.id : mod.metadata.name;
+                if (!enabled_mods_list.empty()) {
+                    enabled_mods_list += "\n";
+                }
+                enabled_mods_list += fmt::format("• {}", displayName);
+            }
+
+            mModsDisplay->SetAttribute("open", "");
+            set_text_content(mModsDisplay, fmt::format("Enabled Mods:\n{}", enabled_mods_list));
+        } else {
+            mModsDisplay->RemoveAttribute("open");
+        }
+    }
+
+    u32 count = 0;
+    const bool showControllerWarning = PADGetIndexForPort(PAD_CHAN0) < 0 &&
+                                       PADGetKeyButtonBindings(PAD_CHAN0, &count) == nullptr &&
+                                       !getSettings().game.enableTouchControls &&
+                                       dynamic_cast<Window*>(top_document()) == nullptr &&
+                                       dynamic_cast<WindowSmall*>(top_document()) == nullptr &&
+                                       dynamic_cast<Popover*>(top_document()) == nullptr;
+    if (showControllerWarning && mControllerWarning == nullptr) {
+        mControllerWarning = create_controller_warning(mDocument);
+    } else if (showControllerWarning && mControllerWarning != nullptr) {
+        mControllerWarning->SetAttribute("open", "");
+        mControllerWarning->SetPseudoClass("opened", true);
+        mControllerWarning->SetPseudoClass("done", false);
+    } else if (!showControllerWarning && mControllerWarning != nullptr) {
+        if (mControllerWarning->IsPseudoClassSet("done") ||
+            !mControllerWarning->IsPseudoClassSet("opened"))
+        {
+            remove_element(mControllerWarning);
+        } else {
+            mControllerWarning->RemoveAttribute("open");
+        }
+    }
+
+    if (mMenuNotification != nullptr) {
+        if (clock::now() >= mMenuNotificationStartTime + kMenuNotificationDuration) {
+            if (mMenuNotification->IsPseudoClassSet("done") ||
+                !mMenuNotification->IsPseudoClassSet("opened"))
+            {
+                remove_element(mMenuNotification);
+            } else {
+                mMenuNotification->RemoveAttribute("open");
+            }
+        } else {
+            mMenuNotification->SetAttribute("open", "");
+            mMenuNotification->SetPseudoClass("opened", true);
+            mMenuNotification->SetPseudoClass("done", false);
+        }
+    }
+    if (consume_menu_notification_request()) {
+        if (mMenuNotification == nullptr) {
+            mMenuNotification = create_menu_notification(mDocument);
+        }
+        mMenuNotificationStartTime = clock::now();
+    }
+
+    auto& toasts = get_toasts();
+    if (mCurrentToast == nullptr) {
+        if (!toasts.empty()) {
+            const auto& toast = toasts.front();
+            mCurrentToast = create_toast(mDocument, toast);
+            mCurrentToastStartTime = clock::now();
+        }
+    } else if (!toasts.empty()) {
+        const auto& toast = toasts.front();
+        const float duration = std::chrono::duration<float>(toast.duration).count();
+        const float elapsed =
+            std::chrono::duration<float>(clock::now() - mCurrentToastStartTime).count();
+        const float ratio = duration > 0.0f ? std::clamp(elapsed / duration, 0.0f, 1.0f) : 1.0f;
+        const auto remaining = 1.f - ratio;
+        if (auto* progress = mCurrentToast->QuerySelector("progress")) {
+            progress->SetAttribute("value", remaining);
+        }
+        if (remaining == 0.f) {
+            if (mCurrentToast->IsPseudoClassSet("done") ||
+                // Fallback for large gaps in time where we never actually opened it
+                !mCurrentToast->IsPseudoClassSet("opened"))
+            {
+                remove_element(mCurrentToast);
+                toasts.pop_front();
+            } else {
+                mCurrentToast->RemoveAttribute("open");
+            }
+        } else {
+            mCurrentToast->SetAttribute("open", "");
+            mCurrentToast->SetPseudoClass("opened", true);
+        }
+    }
+}
+
+void Overlay::update_pipeline_progress() {
+    if (mPipelineProgress == nullptr || mPipelineProgressLabel == nullptr ||
+        mPipelineProgressBar == nullptr)
+    {
+        return;
+    }
+
+    const auto* stats = aurora_get_stats();
+    const uint32_t queuedPipelines = stats != nullptr ? stats->queuedPipelines : 0;
+    if (queuedPipelines == 0) {
+        mPipelineProgress->RemoveAttribute("open");
+        mPipelineProgressActive = false;
+        mPipelineBatchCreatedBase = 0;
+        mLastQueuedPipelines = 0;
+        return;
+    }
+
+    const uint32_t createdPipelines = stats->createdPipelines;
+    if (!mPipelineProgressActive || createdPipelines < mPipelineBatchCreatedBase) {
+        mPipelineProgressActive = true;
+        mPipelineBatchCreatedBase = createdPipelines;
+        mPipelineProgressStartTime = clock::now();
+        mLastQueuedPipelines = 0;
+    }
+
+    const uint32_t builtPipelines = createdPipelines - mPipelineBatchCreatedBase;
+    const uint32_t totalPipelines = queuedPipelines + builtPipelines;
+    const float progress = totalPipelines > 0 ? static_cast<float>(builtPipelines) /
+                                                    static_cast<float>(totalPipelines) :
+                                                0.0f;
+
+    if (queuedPipelines != mLastQueuedPipelines) {
+        mLastQueuedPipelines = queuedPipelines;
+        const auto noun = queuedPipelines == 1 ? "shader" : "shaders";
+        set_text_content(
+            mPipelineProgressLabel, fmt::format("Compiling {} {}", queuedPipelines, noun));
+    }
+    mPipelineProgressBar->SetAttribute("value", progress);
+
+    if (getSettings().backend.showPipelineCompilation.getValue() &&
+        clock::now() >= mPipelineProgressStartTime + kPipelineProgressOpenDelay)
+    {
+        mPipelineProgress->SetAttribute("open", "");
+    } else {
+        mPipelineProgress->RemoveAttribute("open");
+    }
+}
+
+bool Overlay::handle_nav_command(Rml::Event& event, NavCommand cmd) {
+    Log.warn("Overlay received nav command: {}", magic_enum::enum_name(cmd));
+    return false;
+}
+
+}  // namespace dusk::ui

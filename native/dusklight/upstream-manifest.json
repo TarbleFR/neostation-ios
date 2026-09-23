@@ -9,6 +9,9 @@
   "upstream/src/dusk/OSMutex.cpp": "c10f57a4a082db8ef373242dd2c3dbd25db2182b6b22c2828e895dd29eade71a",
   "upstream/src/dusk/OSThread.cpp": "10b31cc5c806cf47f0ec701eb7c7a1988793668ee2cd3b6655201181f084d107",
   "upstream/src/dusk/ui/menu_bar.cpp": "3780427f91f61b5d0472eb3386faf5a34f69d5b31686d6363042b0552e3ee817",
+  "upstream/src/dusk/ui/ui.cpp": "31f84cd1e38fb5b8d2075ef5d6e172eabba2cf09533eebe2f331c4d13ba49036",
+  "upstream/src/dusk/ui/ui.hpp": "3b6a16954908147cd04f4bb37fc545a45fdf1bc5761695ce1c426277c85e6a1d",
+  "upstream/src/dusk/ui/overlay.cpp": "970a115a1afcdd693b7a21b3313981a65b24a2a411d37cc2501a4a7faf19cefb",
   "upstream/src/dusk/audio/DuskAudioSystem.cpp": "0bbbd05257fa8eda012d469ea8b8b81757ba6b190ac112d756bb1ec14a6600e7",
   "upstream/extern/aurora/lib/time_internal.hpp": "a67b70f6d86942dc16bd6439abb84a8fb6d4708bba58a56b095aa7d7351271b6",
   "upstream/libs/JSystem/src/JFramework/JFWDisplay.cpp": "3febc54fdaa88492ad02fcb6987491add659a14a059ecfea2cf8bc187c16b317"
