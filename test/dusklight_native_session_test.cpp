@@ -23,29 +23,10 @@ int main() {
   state.requestStop();
   assert(!state.firstFrame());
   assert(state.active()); // Do not release host ownership before native cleanup.
-  state.finish();
+  state.terminate();
   assert(!state.active());
-  assert(state.state() == NEO_DUSKLIGHT_IDLE);
-  // Reuse the runtime, but require a fresh frame and new session ownership.
-  for (int repeat = 0; repeat < 100; ++repeat) {
-    assert(state.reserve());
-    assert(!state.reserve());
-    assert(!state.enter()); // game_main must never run twice.
-    assert(state.state() == NEO_DUSKLIGHT_STARTING);
-    assert(state.firstFrame());
-    state.requestStop();
-    assert(state.active());
-    assert(!state.firstFrame()); // Late frame after stop cannot report success.
-    state.finish();
-    assert(state.state() == NEO_DUSKLIGHT_IDLE);
-  }
-  // Cancel a resumed session before its timer/frame: still reusable.
-  assert(state.reserve());
-  state.requestStop();
-  state.finish();
-  assert(state.reserve());
-  state.fail();
-  assert(!state.reserve());
+  assert(state.state() == NEO_DUSKLIGHT_ENDED);
+  assert(!state.reserve()); // game_main and its singletons are one-shot.
 
   NeoDusklightSessionState failed;
   assert(failed.reserve());

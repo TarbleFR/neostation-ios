@@ -17,6 +17,7 @@ on:
       - 'test/dusklight_audio_owner_test.py'
       - 'test/dusklight_vm_trace_test.cpp'
       - 'test/dusklight_graphics_handoff_test.py'
+      - 'test/dusklight_terminal_shutdown_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +53,7 @@ jobs:
           python3 test/dusklight_queue_shutdown_test.py
           python3 test/dusklight_resume_test.py
           python3 test/dusklight_graphics_handoff_test.py
+          python3 test/dusklight_terminal_shutdown_test.py
           python3 test/dusklight_audio_owner_test.py
           c++ -std=c++20 -Wall -Wextra -Werror -Inative/dusklight/core \
             test/dusklight_vm_trace_test.cpp -o "$RUNNER_TEMP/dusklight-vm-trace-test"

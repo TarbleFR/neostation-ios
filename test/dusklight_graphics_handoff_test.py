@@ -259,10 +259,12 @@ with tempfile.TemporaryDirectory() as directory:
                     str(cpp), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=15)
 
-# The tested functions must remain wired into the actual host/frame paths.
+# The partial handoff remains independently safe, but ABI v4 deliberately uses
+# the stronger terminal shutdown path instead of resuming this frame runtime.
 core = (ROOT / 'native/dusklight/core/NeoDusklightCore.mm').read_text()
 finish = core[core.index('void FinishReturn()'):core.index('void Stop()')]
 assert finish.index('if (inNativeCall) return;') < finish.index('Suspend(true);')
-assert finish.index('NeoDusklight_ReleaseFrameResources()') < finish.index('RestoreHost();') < finish.index('session.finish();')
+assert 'NeoDusklight_ReleaseFrameResources()' not in finish
+assert finish.index('RestoreHost();') < finish.index('NeoDusklight_ShutdownRuntime()') < finish.index('session.terminate();')
 assert function('bool begin_frame()').index('resume_frame_resources();') < function('bool begin_frame()').index('acquire_frame_slot()')
-print('PASS: production 354 MiB GPU buffer handoff across 100 resumes, delayed/aborted mappings, queue errors/timeouts, idempotency and layout retention')
+print('PASS: partial GPU release stays safe while ABI v4 uses the terminal runtime shutdown barrier')

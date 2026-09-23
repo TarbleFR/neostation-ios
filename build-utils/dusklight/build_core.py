@@ -91,12 +91,12 @@ def package(source, framework, destination):
         "source_commit": PINS["commit"],
         "submodules": PINS["submodules"],
         "sdl_commit": PINS["sdl"]["commit"],
-        "abi_version": 3,
+        "abi_version": 4,
         "sha256": sha(binary),
         "resources": {str(p.relative_to(target)): sha(p) for p in sorted((target / "res").rglob("*")) if p.is_file()},
         "canonical_sources": json.loads((source / "neostation-sources.json").read_text()),
         "objc_classes": objc_classes,
-        "session_policy": "host_frame_loop_suspend_resume_same_disc",
+        "session_policy": "host_frame_loop_terminal_shutdown",
     }
     (destination / "identity.json").write_text(json.dumps(identity, indent=2) + "\n")
     # Preserve source notices alongside the generated framework.
@@ -105,7 +105,7 @@ def package(source, framework, destination):
     for name, directory in (("dusklight", source), ("aurora", source / "extern/aurora"), ("borealis", source / "extern/borealis")):
         for item in directory.glob("*LICENSE*"):
             if item.is_file(): shutil.copy2(item, notices / f"{name}-{item.name}")
-    print(f"Validated arm64 framework, private SDL classes, ABI v3 and {len(identity['resources'])} resources.")
+    print(f"Validated arm64 framework, private SDL classes, ABI v4 and {len(identity['resources'])} resources.")
 
 
 if __name__ == "__main__":

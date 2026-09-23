@@ -69,8 +69,9 @@ assert 'touch->hide(false)' in adapter
 assert 'session.entered()' not in core[core.index('int Start('):core.index('int IsRunning()')]
 assert 'UIApplicationWillResignActiveNotification' in core
 assert 'SDL_HideWindow(sdlWindow)' in core and 'connectedScenes' not in core
-assert 'candidate.st_ino != discIdentity.st_ino' in core
+assert 'NeoDusklight_ShutdownRuntime()' in core
+assert 'Resuming the retained native runtime.' not in core
 display = (ROOT / 'native/dusklight/upstream/libs/JSystem/src/JFramework/JFWDisplay.cpp').read_text()
 tick = display[display.index('static void waitForTick(u32 p1, u16 p2) {'):]
 assert tick.index('NEO_DUSKLIGHT_EMBEDDED') < tick.index('return;') < tick.index('static Limiter')
-print('PASS: production audio suspension across 100 resumes; frame/input/window ownership contracts')
+print('PASS: background audio suspension and terminal frame/input/window ownership contracts')

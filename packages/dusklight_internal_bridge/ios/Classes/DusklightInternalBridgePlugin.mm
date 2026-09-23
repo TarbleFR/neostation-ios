@@ -129,7 +129,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     _loadError = Failure(
         @"DUSKLIGHT_ABI_MISMATCH",
         @"abi",
-        @"DusklightCore does not expose the NeoStation ABI v3 contract.");
+        @"DusklightCore does not expose the NeoStation ABI v4 contract.");
     return _loadError;
   }
   _api->set_event_callback(OnCoreEvent, (__bridge void*)self);
@@ -156,6 +156,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     if (hadSession) {
       [_channel invokeMethod:@"sessionEnded" arguments:@{
         @"reason": message, @"restartRequired": @(state == NEO_DUSKLIGHT_ENDED),
+        @"runtimeReleased": @YES,
         @"transaction": @(_transaction)
       }];
     }
@@ -267,7 +268,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     if (!strongSelf || !strongSelf->_pendingLaunch) return;
     [strongSelf resolveLaunch:Failure(@"DUSKLIGHT_FIRST_FRAME_TIMEOUT", @"first_frame",
         @"Dusklight did not submit a frame for the current session within 90 seconds.")];
-    // Retain ownership until the engine reports that native cleanup completed.
+    // Retain ownership until the terminal native shutdown barrier completed.
     strongSelf->_api->stop();
   }];
   [NSRunLoop.mainRunLoop addTimer:_startupTimer forMode:NSRunLoopCommonModes];

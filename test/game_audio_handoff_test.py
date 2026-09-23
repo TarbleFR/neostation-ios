@@ -41,6 +41,7 @@ class DusklightInternalBridge {
   static final controller = StreamController<Map<String, dynamic>>.broadcast();
   static Stream<Map<String, dynamic>> get sessionEvents => controller.stream;
   static bool get didEndSession => false;
+  static bool get didReleaseRuntime => false;
 }
 class Armsx2InternalBridge {
   static Stream<Map<String, dynamic>> get sessionEvents => const Stream.empty();
@@ -97,7 +98,9 @@ void main() {
       sfx.isEnabled = effects; music.playing = playing;
       await manager.beginSession();
       manager.onGameStarted(emulatorExe: 'ios_dusklight_internal');
-      DusklightInternalBridge.controller.add({'reason': 'native-return'});
+      DusklightInternalBridge.controller.add({
+        'reason': 'native-return', 'runtimeReleased': true,
+      });
       await flush(); expect(manager.phase, GameLaunchPhase.closing);
       manager.completeClose(); manager.onDialogDisposed(); manager.onDialogDisposed();
       await flush();

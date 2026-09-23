@@ -225,13 +225,19 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     if (Platform.isIOS && emulatorExe == 'ios_dusklight_internal') {
       _embeddedSessionSubscription = DusklightInternalBridge.sessionEvents.listen(
         (event) {
-          if (_phase == GameLaunchPhase.playing && !_isClosing) {
+          // ABI v4 emits this event only after the terminal native shutdown
+          // barrier. Do not expose another in-process core before that proof.
+          if (event['runtimeReleased'] == true &&
+              _phase == GameLaunchPhase.playing &&
+              !_isClosing) {
             _log.i('[GameLaunchManager] Dusklight ended: ${event['reason']}');
             _triggerClose();
           }
         },
       );
-      if (DusklightInternalBridge.didEndSession && !_isClosing) {
+      if (DusklightInternalBridge.didEndSession &&
+          DusklightInternalBridge.didReleaseRuntime &&
+          !_isClosing) {
         _triggerClose();
       }
       return;

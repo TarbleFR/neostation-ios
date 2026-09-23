@@ -22,6 +22,7 @@
 #include <algorithm>
 
 int game_main(int argc, char* argv[]);
+bool NeoDusklight_ShutdownGame();
 
 namespace {
 dusk::iso::DiscInfo gameDiscInfo{};
@@ -106,6 +107,13 @@ extern "C" int NeoDusklight_InspectDisc(const char* path, char* error, size_t si
 extern "C" int NeoDusklight_RunGame(int argc, char** argv) { return game_main(argc, argv); }
 extern "C" int NeoDusklight_ReleaseFrameResources() {
     return aurora::gfx::release_frame_resources() ? 1 : 0;
+}
+extern "C" int NeoDusklight_ShutdownRuntime() {
+    try {
+        return NeoDusklight_ShutdownGame() ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
 }
 extern "C" void NeoDusklight_SetGameSuspended(int suspended) {
     aurora::time::internal::set_pause_reason(aurora::time::internal::PauseReason::Host, suspended);

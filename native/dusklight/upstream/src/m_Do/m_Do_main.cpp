@@ -954,14 +954,20 @@ int game_main(int argc, char* argv[]) {
 
     main01();
     NeoDusklight_RuntimeReady();
-    // The host now drives NeoDusklight_TickGame. Retain heaps, disc reader and
-    // game state for a paused/resumable session; do not tear them down here.
+    // The host now drives NeoDusklight_TickGame. The ordered teardown below is
+    // invoked once when the user returns to NeoStation.
     return 0;
 }
 
-// Full teardown is reserved for process termination, never a playlist return.
-// Keep the ordered shutdown implementation for a future complete cold restart.
-void NeoDusklight_ShutdownGame() {
+// Dusklight owns process-lifetime singletons and therefore cannot be cold-
+// restarted safely. Returning to NeoStation is a terminal, one-shot teardown:
+// stop callbacks, join every worker and disc thread, then destroy UI/graphics.
+bool NeoDusklight_ShutdownGame() {
+    enum class ShutdownState { NotStarted, InProgress, Complete };
+    static ShutdownState shutdownState = ShutdownState::NotStarted;
+    if (shutdownState == ShutdownState::Complete) return true;
+    if (shutdownState == ShutdownState::InProgress) return false;
+    shutdownState = ShutdownState::InProgress;
     borealis::shutdown();
 
     // We need to cleanly shut down the threads to avoid crashes on shutdown.
@@ -992,7 +998,9 @@ void NeoDusklight_ShutdownGame() {
     borealis::log::shutdown();
     fflush(stdout);
     fflush(stderr);
+    shutdownState = ShutdownState::Complete;
 
+    return true;
 }
 
 

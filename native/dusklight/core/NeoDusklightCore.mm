@@ -10,7 +10,6 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <dlfcn.h>
-#include <sys/stat.h>
 #include <cstdio>
 #include <exception>
 #include <map>
@@ -41,7 +40,7 @@ NeoDusklightControls* controls;
 NSTimer* startTimer;
 CADisplayLink* displayLink;
 bool inNativeCall = false, suspended = false, backgrounded = false, menuRequested = false;
-struct stat discIdentity{};
+std::string terminalReason;
 FILE* traceFile = nullptr;
 
 void Trace(const char* message) {
@@ -81,38 +80,78 @@ void RestoreHost() {
   if (hostWindow && hostWindow.windowScene) [hostWindow makeKeyAndVisible];
   hostWindow = nil;
 }
+void ReleaseHostLifecycle() {
+  [startTimer invalidate];
+  startTimer = nil;
+  [displayLink invalidate];
+  displayLink = nil;
+  if (controls) [NSNotificationCenter.defaultCenter removeObserver:controls];
+  [menuButton removeFromSuperview];
+  menuButton = nil;
+  controls = nil;
+  sdlWindow = nullptr;
+  gameWindow = nil;
+  menuRequested = false;
+  backgrounded = false;
+  suspended = false;
+}
 void FinishReturn() {
   if (inNativeCall) return; // Only at a frame boundary, never inside rendering.
   [displayLink invalidate];
   displayLink = nil;
-  Suspend(true);
-  if (session.ready()) {
-    TraceResources("before_graphics_release");
-    @autoreleasepool {
-      Trace(NeoDusklight_ReleaseFrameResources()
-          ? "Transient graphics released after GPU and mapping completion (354 MiB buffers plus frame targets)."
-          : "Graphics drain did not complete; resources retained safely.");
-    }
-  }
+  const bool initialized = session.ready();
+  if (initialized) Suspend(true);
   RestoreHost();
-  menuRequested = false;
-  TraceResources("return_to_host");
-  session.finish();
-  Emit(session.ready() ? "Session suspended; same disc can resume without reinitialization."
-                       : "Launch canceled before runtime initialization completed.");
+  if (!initialized) {
+    terminalReason.clear();
+    session.finish();
+    Emit("Launch canceled before runtime initialization completed.");
+    return;
+  }
+
+  TraceResources("before_runtime_shutdown");
+  const bool stopped = NeoDusklight_ShutdownRuntime() != 0;
+  ReleaseHostLifecycle();
+  TraceResources("after_runtime_shutdown");
+  if (!stopped) {
+    // Stay in STOPPING: the host must never advertise a cross-core handoff
+    // unless every native teardown stage returned successfully.
+    Emit("Dusklight shutdown was incomplete; restart NeoStation before launching another core.");
+    terminalReason.clear();
+    if (traceFile) {
+      fclose(traceFile);
+      traceFile = nullptr;
+    }
+    return;
+  }
+  session.terminate();
+  Emit(terminalReason.empty()
+      ? "Dusklight fully stopped; native workers, audio, disc, timers and rendering resources released."
+      : terminalReason.c_str());
+  terminalReason.clear();
+  if (traceFile) {
+    fclose(traceFile);
+    traceFile = nullptr;
+  }
 }
 void Stop() {
   if (!NSThread.isMainThread || !session.active()) return;
+  terminalReason.clear();
   session.requestStop();
-  Emit("Return requested; waiting for the native frame boundary.");
+  Emit("Full shutdown requested; waiting for the native frame boundary.");
   [startTimer invalidate];
   startTimer = nil;
   FinishReturn();
 }
 void RuntimeFailure(const char* reason) {
+  if (session.ready()) {
+    terminalReason = reason ? reason : "Dusklight stopped after a native runtime failure.";
+    session.requestStop();
+    FinishReturn();
+    return;
+  }
   [displayLink invalidate];
   displayLink = nil;
-  Suspend(true);
   RestoreHost();
   session.fail();
   Emit(reason);
@@ -142,27 +181,25 @@ void Tick() {
 void RunGame() {
   startTimer = nil;
   if (session.state() != NEO_DUSKLIGHT_STARTING) return;
-  if (!session.ready()) {
-    if (!session.enter()) return;
-    Emit("Initializing native Dusklight once (Metal, host-driven frames).");
-    SDL_SetMainReady();
-    // UIKit already runs NeoStation's main loop. SDL must not nest another.
-    SDL_SetiOSEventPump(false);
-    std::vector<std::string> arguments{
-        "Dusklight", "--dvd", gamePath, "--user-dir", supportPath, "--backend", "metal"};
-    std::vector<char*> argv;
-    for (auto& arg : arguments) argv.push_back(arg.data());
-    argv.push_back(nullptr);
-    int result = 1;
-    inNativeCall = true;
-    try { result = NeoDusklight_RunGame(static_cast<int>(arguments.size()), argv.data()); }
-    catch (const std::exception& ex) { Trace(ex.what()); }
-    catch (...) { Trace("Unknown exception escaped native initialization."); }
-    inNativeCall = false;
-    if (result != 0 || !session.ready() || !gameWindow) {
-      RuntimeFailure("Dusklight could not initialize its frame loop; see native logs.");
-      return;
-    }
+  if (!session.enter()) return;
+  Emit("Initializing native Dusklight once (Metal, host-driven frames).");
+  SDL_SetMainReady();
+  // UIKit already runs NeoStation's main loop. SDL must not nest another.
+  SDL_SetiOSEventPump(false);
+  std::vector<std::string> arguments{
+      "Dusklight", "--dvd", gamePath, "--user-dir", supportPath, "--backend", "metal"};
+  std::vector<char*> argv;
+  for (auto& arg : arguments) argv.push_back(arg.data());
+  argv.push_back(nullptr);
+  int result = 1;
+  inNativeCall = true;
+  try { result = NeoDusklight_RunGame(static_cast<int>(arguments.size()), argv.data()); }
+  catch (const std::exception& ex) { Trace(ex.what()); }
+  catch (...) { Trace("Unknown exception escaped native initialization."); }
+  inNativeCall = false;
+  if (result != 0 || !session.ready() || !gameWindow) {
+    RuntimeFailure("Dusklight could not initialize its frame loop; see native logs.");
+    return;
   }
   if (session.state() == NEO_DUSKLIGHT_STOPPING) { FinishReturn(); return; }
   backgrounded = UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
@@ -183,11 +220,6 @@ int Initialize(const char* support, const char* cache, char* error, size_t size)
   if (session.active()) return Fail(error, size, "A Dusklight session is already active.");
   if (!support || !*support || !cache || !*cache)
     return Fail(error, size, "Dusklight data directories are missing.");
-  if (session.ready()) {
-    if (supportPath != support || cachePath != cache)
-      return Fail(error, size, "Cannot change the initialized runtime's data directories.");
-    return 1;
-  }
   if (session.entered()) return Fail(error, size, "The native runtime failed and cannot be reused.");
   Dl_info image{};
   if (!dladdr(reinterpret_cast<const void*>(&NeoDusklight_GetAPI), &image) || !image.dli_fname)
@@ -232,21 +264,11 @@ int Start(const char* game, void* host, char* error, size_t size) {
     return Fail(error, size, "Dusklight has no game path or initialized resources.");
   if (session.active() || session.state() == NEO_DUSKLIGHT_ENDED)
     return Fail(error, size, "Dusklight cannot reserve this session.");
-  struct stat candidate{};
-  if (stat(game, &candidate) != 0) return Fail(error, size, "Cannot inspect the selected disc.");
-  if (session.ready() && (gamePath != game || candidate.st_dev != discIdentity.st_dev ||
-      candidate.st_ino != discIdentity.st_ino || candidate.st_size != discIdentity.st_size ||
-      candidate.st_mtimespec.tv_sec != discIdentity.st_mtimespec.tv_sec ||
-      candidate.st_mtimespec.tv_nsec != discIdentity.st_mtimespec.tv_nsec)) {
-    Fail(error, size, "The paused runtime owns another disc or the disc was replaced; hot swapping is unsupported.");
-    return NEO_DUSKLIGHT_DIFFERENT_DISC;
-  }
-  if (!session.ready() && !NeoDusklight_InspectDisc(game, error, size)) return 0;
+  if (!NeoDusklight_InspectDisc(game, error, size)) return 0;
   if (!session.reserve()) return Fail(error, size, "Dusklight could not reserve a session.");
   hostWindow = view.window;
   gamePath = game;
-  discIdentity = candidate;
-  Emit(session.ready() ? "Resuming the retained native runtime." : "Disc accepted; scheduling initialization.");
+  Emit("Disc accepted; scheduling initialization.");
   startTimer = [NSTimer timerWithTimeInterval:0.01 repeats:NO block:^(NSTimer*) {
     @autoreleasepool { RunGame(); }
   }];

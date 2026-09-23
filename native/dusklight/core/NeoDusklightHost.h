@@ -17,6 +17,7 @@ int NeoDusklight_RunGame(int argc, char** argv);
 int NeoDusklight_TickGame(void);
 void NeoDusklight_SetGameSuspended(int suspended);
 int NeoDusklight_ReleaseFrameResources(void);
+int NeoDusklight_ShutdownRuntime(void);
 void NeoDusklight_SetAudioSuspended(int suspended);
 void NeoDusklight_OpenMenu(void);
 void NeoDusklight_OpenLanguageMenu(void);

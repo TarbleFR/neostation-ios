@@ -16,6 +16,7 @@ class DusklightInternalBridge {
   static final _sessionEvents = StreamController<Map<String, dynamic>>.broadcast();
   static bool _eventHandlerInstalled = false;
   static bool _didEndSession = false;
+  static bool _didReleaseRuntime = false;
   static int _transaction = 0;
   static bool _sessionOwned = false;
 
@@ -26,6 +27,7 @@ class DusklightInternalBridge {
       if (call.method != 'sessionEnded') return;
       final arguments = call.arguments;
       if (arguments is! Map || arguments['transaction'] != _transaction) return;
+      _didReleaseRuntime = arguments['runtimeReleased'] == true;
       _didEndSession = true;
       _sessionOwned = false;
       _sessionEvents.add(Map<String, dynamic>.from(arguments));
@@ -39,6 +41,9 @@ class DusklightInternalBridge {
 
   /// Covers native closure while launch bookkeeping still awaits the database.
   static bool get didEndSession => _didEndSession;
+
+  /// True only after ABI v4 confirms the native teardown barrier completed.
+  static bool get didReleaseRuntime => _didReleaseRuntime;
 
   static Future<Map<String, dynamic>> diagnostics() async =>
       Map<String, dynamic>.from(
@@ -63,6 +68,7 @@ class DusklightInternalBridge {
     }
     _sessionOwned = true;
     _didEndSession = false;
+    _didReleaseRuntime = false;
     final transaction = ++_transaction;
     try {
       final response = Map<String, dynamic>.from(

@@ -17,7 +17,8 @@ void main() {
       channel.name,
       codec.encodeMethodCall(MethodCall('sessionEnded', {
         'reason': 'closed',
-        'restartRequired': false,
+        'restartRequired': true,
+        'runtimeReleased': true,
         'transaction': oldTransaction ?? transaction,
       })),
       (_) => delivered.complete(),
@@ -62,61 +63,33 @@ void main() {
     );
     expect(whilePlaying['errorCode'], 'DUSKLIGHT_SESSION_ACTIVE');
     expect(nativeLaunchCount, 1);
-    // Closure may arrive before GameLaunchManager finishes DB bookkeeping.
+    // Closure may arrive before GameLaunchManager finishes DB bookkeeping, but
+    // never before every native runtime resource has crossed the barrier.
+    final ended = DusklightInternalBridge.sessionEvents.first;
     await nativeEnd();
+    expect((await ended)['runtimeReleased'], isTrue);
     expect(DusklightInternalBridge.didEndSession, isTrue);
-    final previousTransaction = transaction;
+    expect(DusklightInternalBridge.didReleaseRuntime, isTrue);
 
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       transaction = (call.arguments as Map)['transaction'] as int;
       nativeLaunchCount++;
-      return {'success': true, 'stage': 'first_frame'};
+      return {
+        'success': false,
+        'errorCode': 'DUSKLIGHT_RESTART_REQUIRED',
+        'stage': 'session',
+      };
     });
     final retry = await DusklightInternalBridge.launch(
       gamePath: '/ports/twilight.rvz',
       supportPath: '/ports',
       cachePath: '/cache',
     );
-    expect(retry['success'], isTrue);
+    expect(retry['success'], isFalse);
+    expect(retry['errorCode'], 'DUSKLIGHT_RESTART_REQUIRED');
     expect(nativeLaunchCount, 2);
     expect(DusklightInternalBridge.didEndSession, isFalse);
-    await nativeEnd(oldTransaction: previousTransaction);
-    expect(DusklightInternalBridge.didEndSession, isFalse,
-        reason: 'A late native closure must not terminate a newer launch.');
-    await nativeEnd();
-    for (var repeat = 0; repeat < 10; repeat++) {
-      final resumed = await DusklightInternalBridge.launch(
-        gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
-        uiText: const {'nativeMenu': 'Menu et réglages Dusklight'},
-      );
-      expect(resumed['success'], isTrue);
-      expect(DusklightInternalBridge.didEndSession, isFalse);
-      await nativeEnd();
-      expect(DusklightInternalBridge.didEndSession, isTrue);
-    }
-    // A timed-out presentation still owns the runtime until its frame-boundary
-    // return arrives. It must not permit a concurrent resume.
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-      transaction = (call.arguments as Map)['transaction'] as int;
-      return {'success': false, 'errorCode': 'DUSKLIGHT_FIRST_FRAME_TIMEOUT'};
-    });
-    final timeout = await DusklightInternalBridge.launch(
-      gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
-    );
-    expect(timeout['errorCode'], 'DUSKLIGHT_FIRST_FRAME_TIMEOUT');
-    final duringReturn = await DusklightInternalBridge.launch(
-      gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
-    );
-    expect(duringReturn['errorCode'], 'DUSKLIGHT_SESSION_ACTIVE');
-    await nativeEnd();
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-      transaction = (call.arguments as Map)['transaction'] as int;
-      return {'success': true, 'stage': 'first_frame'};
-    });
-    expect((await DusklightInternalBridge.launch(
-      gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
-    ))['success'], isTrue);
-    await nativeEnd();
+    expect(DusklightInternalBridge.didReleaseRuntime, isFalse);
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 }
