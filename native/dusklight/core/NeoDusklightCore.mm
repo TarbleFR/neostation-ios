@@ -4,9 +4,6 @@
 #include "DusklightCoreABI.h"
 #include "NeoDusklightHost.h"
 #include "SessionState.h"
-#include <dolphin/types.h>
-#include "dusk/main.h"
-#include "dusk/iso_validate.hpp"
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -16,7 +13,6 @@
 #include <string>
 #include <vector>
 
-int game_main(int argc, char* argv[]);
 extern "C" __attribute__((visibility("default")))
 const NeoDusklightAPI* NeoDusklight_GetAPI(void);
 
@@ -64,7 +60,7 @@ void Stop() {
   }
   // Same thread as game_main, which pumps the UIKit run loop via SDL.
   // Never destroy SDL/rendering state from inside a UIKit callback.
-  dusk::IsRunning = false;
+  NeoDusklight_StopGame();
   SDL_Event quit{};
   quit.type = SDL_EVENT_QUIT;
   SDL_PushEvent(&quit);
@@ -91,7 +87,7 @@ void RunGame() {
   argv.push_back(nullptr);
   int result = 1;
   try {
-    result = game_main(static_cast<int>(arguments.size()), argv.data());
+    result = NeoDusklight_RunGame(static_cast<int>(arguments.size()), argv.data());
   } catch (const std::exception& ex) {
     Trace(ex.what());
   } catch (...) {
@@ -151,18 +147,7 @@ int Start(const char* game, void* host, char* error, size_t size) {
 
   // Authoritative upstream metadata/revision validation, also for RVZ/WBFS.
   // A rejected image never consumes the one native session or creates a window.
-  dusk::iso::DiscInfo disc{};
-  try {
-    const auto validation = dusk::iso::inspect(game, disc);
-    if (validation != dusk::iso::ValidationError::Success) {
-      const std::string reason = "Dusklight rejected the disc (validation " +
-          std::to_string(static_cast<int>(validation)) + ", ID " + disc.gameId +
-          ", revision " + std::to_string(disc.revision) + ").";
-      return Fail(error, size, reason.c_str());
-    }
-  } catch (const std::exception& ex) {
-    return Fail(error, size, ex.what());
-  }
+  if (!NeoDusklight_InspectDisc(game, error, size)) return 0;
   if (!session.reserve()) return Fail(error, size, "Dusklight could not reserve a session.");
   hostWindow = view.window;
   gamePath = game;

@@ -978,6 +978,9 @@ int game_main(int argc, char* argv[]) {
     dusk::audio::Shutdown();
     OSResetSystem(OS_RESET_SHUTDOWN, 0, 0);
     NeoDusklight_JoinGameThreads();
+    // Aurora's disc reader owns an additional std::thread outside OSThread.
+    // Join it while the game state and logging are still alive.
+    aurora_dvd_close();
 
 #if BOREALIS_HAS_DISCORD
     dusk::discord::shutdown();

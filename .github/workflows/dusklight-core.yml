@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[dusklight-core-only]') }}
     name: Build embedded Dusklight Core arm64
     runs-on: macos-15
     timeout-minutes: 180
@@ -52,7 +53,8 @@ jobs:
           rustup target add aarch64-apple-ios
           ccache --max-size=3G
           mkdir -p build/dusklight-diagnostics dist/dusklight
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: compiler-cache
         with:
           path: .dusklight-ccache
           key: dusklight-core-xcode26.3-${{ hashFiles('native/dusklight/**', 'build-utils/dusklight/source.json') }}-${{ github.run_id }}
@@ -88,6 +90,13 @@ jobs:
             -DBOREALIS_BUILD_TESTS=OFF -DBUILD_TESTING=OFF \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             2>&1 | tee build/dusklight-diagnostics/configure.log
+      - name: Compile the UIKit and C++ boundary first
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/dusklight/build-neostation" --parallel 3 --target \
+            CMakeFiles/dusklight.dir/neostation/NeoDusklightCore.mm.o \
+            CMakeFiles/dusklight.dir/neostation/NeoDusklightGame.cpp.o \
+            2>&1 | tee build/dusklight-diagnostics/bridge-compile.log
       - name: Build native Dusklight
         run: |
           set -euo pipefail
@@ -111,3 +120,8 @@ jobs:
           name: NeoStation-Dusklight-Core-diagnostics-${{ github.sha }}
           path: build/dusklight-diagnostics
           retention-days: 7
+      - uses: actions/cache/save@v4
+        if: always() && steps.compiler-cache.outputs.cache-primary-key != ''
+        with:
+          path: .dusklight-ccache
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
