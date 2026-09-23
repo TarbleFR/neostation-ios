@@ -106,9 +106,9 @@ for source, release in (
     function = source[source.index(release):]
     assert "map.clear()" in function and "map.rehash(0)" in function, release
 assert manifest["upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp"] == \
-    "d9701056ac8f8e27092228dcf5e83158339ffd7c7e34ad95c0f88e7d858f0f54"
+    "4464ce818124cb84f313b63c75892d22249bd300ba8bb345cab322d7f8c8e153"
 assert manifest["upstream/extern/aurora/lib/dolphin/AR.cpp"] == \
-    "c1c7c9c764d456bb3d839465b80e5383f20c416f47fe42fb50f4f86ed66bb839"
+    "4393e2393ea6577af55dbdf9f65de9bdcf671f9181cf5382c228dcd07d2fff7e"
 
 state_branch = plugin[plugin.index("- (void)coreState:") : plugin.index("- (void)handleMethodCall:")]
 assert '@"runtimeReleased": @YES' in state_branch
