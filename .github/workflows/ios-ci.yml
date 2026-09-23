@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 320 Dusklight Kernel Unmap
-run-name: NeoStation iOS Build 320 • ${{ github.sha }}
+name: NeoStation iOS Build 321 RPCS3 Early JIT Escrow
+run-name: NeoStation iOS Build 321 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-320
+  group: neostation-ios-build-321
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') }}
-    name: Build 320 Dusklight Kernel Unmap IPA
+    name: Build 321 RPCS3 Early JIT Escrow IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '320'
-      IPA_NAME: 'NeoStation-iOS-Build-320-Dusklight-Kernel-Unmap'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-320-Dusklight-Kernel-Unmap'
+      BUILD_NUMBER: '321'
+      IPA_NAME: 'NeoStation-iOS-Build-321-RPCS3-Early-JIT-Escrow'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-321-RPCS3-Early-JIT-Escrow'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -244,6 +244,12 @@ jobs:
           python3 test/rpcs3_diagnostics_native_test.py
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_atomic_startup_test.py
+          python3 test/rpcs3_early_escrow_integration_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            -Ipackages/rpcs3_internal_bridge/ios/Classes \
+            test/rpcs3_early_address_space_escrow_test.cpp \
+            -o "$RUNNER_TEMP/rpcs3-early-address-space-escrow-test"
+          "$RUNNER_TEMP/rpcs3-early-address-space-escrow-test"
           python3 test/rpcs3_failed_startup_test.py
           python3 test/game_launch_route_test.py
           python3 test/game_audio_handoff_test.py
@@ -460,7 +466,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 320 diagnostics
+          # Rewrite the Dolphin fields so the final Build 321 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -675,7 +681,7 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 320 IPA
+      - name: Package and validate Build 321 IPA
         shell: bash
         run: |
           set -euo pipefail

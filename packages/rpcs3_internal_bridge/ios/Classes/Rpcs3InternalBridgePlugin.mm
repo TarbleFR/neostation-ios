@@ -4,6 +4,7 @@
 #import "Rpcs3CoreABI.h"
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3EarlyLoaderDiagnostics.h"
+#import "Rpcs3EarlyAddressSpaceEscrow.h"
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
@@ -218,6 +219,7 @@ static UIViewController* RPCS3RootViewController(void) {
   uint64_t _diagnosticMinimumAvailableMemory;
   NSInteger _diagnosticWorstThermalState;
   rpcs3_ios_api _api;
+  neostation::rpcs3::early_escrow::EarlyAddressSpaceEscrow _jitEscrow;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -234,6 +236,10 @@ static UIViewController* RPCS3RootViewController(void) {
   if (self) {
     _runtimeQueue = dispatch_queue_create("com.neogamelab.neostation.rpcs3.runtime", DISPATCH_QUEUE_SERIAL);
     memset(&_api, 0, sizeof(_api));
+    const BOOL held = _jitEscrow.acquire();
+    NSString* detail = [NSString stringWithUTF8String:_jitEscrow.detail().c_str()] ?: @"";
+    RPCS3Milestone(@"early_jit_escrow", detail);
+    if (!held) RPCS3Diagnostic(@"early_jit_escrow_failed", detail);
   }
   return self;
 }
@@ -1232,6 +1238,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       @"llvmSelfTestPassed": @(self.llvmSelfTestPassed),
       @"expandedJitRegion": @(self.initializedWithExpandedJit),
       @"jitReady": @(self.llvmSelfTestPassed),
+      @"earlyJitEscrow": [NSString stringWithUTF8String:_jitEscrow.status()] ?: @"",
       @"debuggerFlag": @(RPCS3HostIsDebugged()),
       @"extendedVirtualAddressing": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.extended-virtual-addressing"))),
       @"increasedMemoryLimit": @(RPCS3HostHasEntitlement(CFSTR("com.apple.developer.kernel.increased-memory-limit"))),
@@ -1245,8 +1252,9 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     NSString* support = [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
     NSString* cache = [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
 
-    // The proven Build266 Core owns its adaptive JIT arena. The host only
-    // controls startup ordering and never reserves or adopts fixed VA ranges.
+    // Protect a Core-sized low-VA hole before another in-process emulator can
+    // fragment it. The proven Core still owns the adaptive JIT arena: the host
+    // drops this inaccessible placeholder immediately before initialize.
     BOOL expanded = NO;
     dispatch_async(_runtimeQueue, ^{
       NSString* error = nil;
@@ -1282,6 +1290,17 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       options.reserved = 0;
       RPCS3Milestone(@"rpcs3_initialize_begin", @"Calling explicit rpcs3_ios_initialize");
       RPCS3Milestone(@"core_initialize_begin", @"Calling rpcs3_ios_initialize");
+      if (!self->_jitEscrow.release_for_core()) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          result(@{
+            @"success": @NO,
+            @"code": @"RPCS3_EARLY_VA_HANDOFF_FAILED",
+            @"stage": @"arena_escrow",
+            @"message": @"RPCS3_EARLY_VA_HANDOFF_FAILED: the protected JIT address-space escrow could not be transferred to the Core.",
+          });
+        });
+        return;
+      }
       rpcs3_ios_status status = self->_api.initialize(&options);
       RPCS3Milestone(@"core_initialize_end", [NSString stringWithFormat:@"status=%d", status]);
       if (status == 0) {
