@@ -94,6 +94,29 @@ void main() {
       await nativeEnd();
       expect(DusklightInternalBridge.didEndSession, isTrue);
     }
+    // A timed-out presentation still owns the runtime until its frame-boundary
+    // return arrives. It must not permit a concurrent resume.
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      transaction = (call.arguments as Map)['transaction'] as int;
+      return {'success': false, 'errorCode': 'DUSKLIGHT_FIRST_FRAME_TIMEOUT'};
+    });
+    final timeout = await DusklightInternalBridge.launch(
+      gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
+    );
+    expect(timeout['errorCode'], 'DUSKLIGHT_FIRST_FRAME_TIMEOUT');
+    final duringReturn = await DusklightInternalBridge.launch(
+      gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
+    );
+    expect(duringReturn['errorCode'], 'DUSKLIGHT_SESSION_ACTIVE');
+    await nativeEnd();
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      transaction = (call.arguments as Map)['transaction'] as int;
+      return {'success': true, 'stage': 'first_frame'};
+    });
+    expect((await DusklightInternalBridge.launch(
+      gamePath: '/ports/twilight.rvz', supportPath: '/ports', cachePath: '/cache',
+    ))['success'], isTrue);
+    await nativeEnd();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 }

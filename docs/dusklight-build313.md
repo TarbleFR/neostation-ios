@@ -63,3 +63,12 @@ préexistants de l’amont ne sont pas réécrits par cette intervention.
 7. Sauvegarde dans le jeu, fermeture complète de l’application et relecture.
 
 La compilation et les tests simulés ne prouvent pas la stabilité sur iPhone.
+
+## Identité native validée
+
+- Intégration Core : `a67c21af847ce15ef8d9919f7299258993019753`.
+- CI native réussie : `35873765547`, artefact `10757247206`.
+- ABI 3 ; 35 ressources vérifiées ; upstream et SDL inchangés.
+- Les avertissements de liaison sur la version iOS des objets de compression
+  issus de Rust restent présents avec Xcode 26.3. Ils ne constituent pas une
+  validation sur toutes les versions d’iOS ; le test appareil reste nécessaire.
