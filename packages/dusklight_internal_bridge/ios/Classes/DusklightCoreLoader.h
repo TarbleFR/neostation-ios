@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef __cplusplus
+
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <string>
@@ -25,3 +27,5 @@ inline NeoDusklightCoreLoadResult NeoDusklightLoadCore(const char* path) {
   const std::string detail = raw ? raw : "The native loader returned no detail.";
   return {nullptr, NeoDusklightCoreFilePresent(path), detail};
 }
+
+#endif  // __cplusplus: CocoaPods also includes public headers in Objective-C modules.
