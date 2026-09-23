@@ -229,7 +229,7 @@ index f58f04522..abf76ff80 100644
  
  asmjit::inline_runtime::inline_runtime(uchar* data, usz size)
 diff --git a/Utilities/JITIOS.cpp b/Utilities/JITIOS.cpp
-index 96fcc1369..8bda15e9a 100644
+index 96fcc1369..f374d666f 100644
 --- a/Utilities/JITIOS.cpp
 +++ b/Utilities/JITIOS.cpp
 @@ -7,6 +7,7 @@
@@ -248,7 +248,7 @@ index 96fcc1369..8bda15e9a 100644
  	u32 preparation_chunks = 0;
  	rpcs3::ios::jit::arena_allocator code_allocator;
  	rpcs3::ios::jit::arena_allocator data_allocator;
-@@ -60,21 +62,198 @@ std::mutex g_arena_mutex;
+@@ -60,21 +62,204 @@ std::mutex g_arena_mutex;
  std::mutex g_error_mutex;
  arena_state g_arena;
  std::string g_last_error;
@@ -327,7 +327,13 @@ index 96fcc1369..8bda15e9a 100644
 +				}
 +				::vm_deallocate(mach_task_self(), address, static_cast<vm_size_t>(size));
 +			}
-+			if (last_result != KERN_NO_SPACE)
++			emit_diagnostic("NEOSTATION_JIT_REJECTED_GAP_V1 candidate=" + std::to_string(candidate) +
++				" size=" + std::to_string(size) + " kernel=" + std::to_string(last_result));
++			// vm_region_64 describes mappings, not XNU's allowed allocation
++			// ranges. A hole can cross a range boundary (KERN_INVALID_ADDRESS)
++			// while later holes remain usable after another native core ran.
++			// Keep searching; only a successful exact allocation grants ownership.
++			if (last_result != KERN_NO_SPACE && last_result != KERN_INVALID_ADDRESS)
 +			{
 +				break;
 +			}
@@ -451,7 +457,7 @@ index 96fcc1369..8bda15e9a 100644
  	std::lock_guard lock(g_error_mutex);
  	g_last_error = std::move(message);
  }
-@@ -89,6 +268,12 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
+@@ -89,6 +274,12 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
  	const usz runtime = executable ? g_arena.runtime_code_bytes : g_arena.runtime_data_bytes;
  	const usz peak = executable ? g_arena.peak_code_bytes : g_arena.peak_data_bytes;
  	std::string message = "JIT_ARENA_EXHAUSTED: ";
@@ -464,7 +470,7 @@ index 96fcc1369..8bda15e9a 100644
  	message += executable ? "code" : "data";
  	message += " arena could not satisfy ";
  	message += allocation_kind;
-@@ -103,7 +288,7 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
+@@ -103,7 +294,7 @@ void set_arena_exhaustion_error(bool executable, std::string_view allocation_kin
  	message += " bytes, live=" + std::to_string(live);
  	message += " bytes, runtime=" + std::to_string(runtime);
  	message += " bytes, peak=" + std::to_string(peak);
@@ -473,7 +479,7 @@ index 96fcc1369..8bda15e9a 100644
  	set_error(std::move(message));
  }
  
-@@ -227,15 +412,19 @@ u64 physical_memory_size() noexcept
+@@ -227,15 +418,19 @@ u64 physical_memory_size() noexcept
  	return ::sysctlbyname("hw.memsize", &value, &size, nullptr, 0) == 0 ? value : 0;
  }
  
@@ -496,7 +502,7 @@ index 96fcc1369..8bda15e9a 100644
  	}
  }
  
-@@ -275,6 +464,11 @@ bool legacy_debugger_is_ready() noexcept
+@@ -275,6 +470,11 @@ bool legacy_debugger_is_ready() noexcept
  
  namespace rpcs3::ios::jit
  {
@@ -508,7 +514,7 @@ index 96fcc1369..8bda15e9a 100644
  bool is_ready() noexcept
  {
  	{
-@@ -310,17 +504,21 @@ bool is_ready() noexcept
+@@ -310,17 +510,21 @@ bool is_ready() noexcept
  	return true;
  }
  
@@ -537,7 +543,7 @@ index 96fcc1369..8bda15e9a 100644
  		{
  			set_error("JIT arena capacity policy changed after the arena was prepared; relaunch is required");
  			return false;
-@@ -334,64 +532,74 @@ bool prepare_arena(bool expanded) noexcept
+@@ -334,64 +538,74 @@ bool prepare_arena(bool expanded) noexcept
  		return false;
  	}
  
@@ -635,7 +641,7 @@ index 96fcc1369..8bda15e9a 100644
  	vm_address_t alias = 0;
  	vm_prot_t current_protection = VM_PROT_NONE;
  	vm_prot_t maximum_protection = VM_PROT_NONE;
-@@ -407,9 +615,11 @@ bool prepare_arena(bool expanded) noexcept
+@@ -407,9 +621,11 @@ bool prepare_arena(bool expanded) noexcept
  		&current_protection,
  		&maximum_protection,
  		VM_INHERIT_SHARE);
@@ -648,7 +654,7 @@ index 96fcc1369..8bda15e9a 100644
  		set_error("mach_vm_remap failed while creating the arena's writable alias");
  		return false;
  	}
-@@ -417,7 +627,7 @@ bool prepare_arena(bool expanded) noexcept
+@@ -417,7 +633,7 @@ bool prepare_arena(bool expanded) noexcept
  	if (::vm_protect(mach_task_self(), alias, static_cast<vm_size_t>(capacity), false,
  		VM_PROT_READ | VM_PROT_WRITE) != KERN_SUCCESS)
  	{
@@ -657,7 +663,7 @@ index 96fcc1369..8bda15e9a 100644
  		set_error("mach_vm_protect failed for the arena's writable alias");
  		return false;
  	}
-@@ -429,35 +639,79 @@ bool prepare_arena(bool expanded) noexcept
+@@ -429,35 +645,79 @@ bool prepare_arena(bool expanded) noexcept
  		::mprotect(layout, capacity, PROT_READ | PROT_EXEC) != 0)
  	{
  		const std::string detail = std::strerror(errno);
@@ -743,7 +749,7 @@ index 96fcc1369..8bda15e9a 100644
  		if (g_arena.sealed)
  		{
  			return true;
-@@ -473,9 +727,7 @@ bool seal_arena() noexcept
+@@ -473,9 +733,7 @@ bool seal_arena() noexcept
  
  	// StikDebug's built-in Universal script detaches on command 0. The scoped
  	// fallback and Xcode stop hook consume the same command without detaching.
@@ -754,7 +760,7 @@ index 96fcc1369..8bda15e9a 100644
  	{
  		std::lock_guard lock(g_arena_mutex);
  		g_arena.sealed = false;
-@@ -486,24 +738,24 @@ bool seal_arena() noexcept
+@@ -486,24 +744,24 @@ bool seal_arena() noexcept
  
  void* runtime_memory(bool executable) noexcept
  {
@@ -787,7 +793,7 @@ index 96fcc1369..8bda15e9a 100644
  }
  
  bool claim_runtime(bool executable, usz offset, usz size) noexcept
-@@ -512,12 +764,12 @@ bool claim_runtime(bool executable, usz offset, usz size) noexcept
+@@ -512,12 +770,12 @@ bool claim_runtime(bool executable, usz offset, usz size) noexcept
  	{
  		return true;
  	}
@@ -803,7 +809,7 @@ index 96fcc1369..8bda15e9a 100644
  	arena_allocator& allocator = executable ? g_arena.code_allocator : g_arena.data_allocator;
  	arena_range allocation;
  	if (!allocator.allocate_lowest(size, 1, allocation) || allocation.offset != offset)
-@@ -563,12 +815,12 @@ void reset_runtime() noexcept
+@@ -563,12 +821,12 @@ void reset_runtime() noexcept
  
  void* allocate(bool executable, usz size, usz alignment) noexcept
  {
@@ -819,7 +825,7 @@ index 96fcc1369..8bda15e9a 100644
  	arena_allocator& allocator = executable ? g_arena.code_allocator : g_arena.data_allocator;
  	arena_range allocation;
  	if (!allocator.allocate_highest(size, alignment, allocation))
-@@ -594,7 +846,7 @@ void release_allocation(bool executable, void* address, usz size) noexcept
+@@ -594,7 +852,7 @@ void release_allocation(bool executable, void* address, usz size) noexcept
  	std::lock_guard lock(g_arena_mutex);
  	usz offset = 0;
  	u8* const base = executable ? g_arena.code : g_arena.data;
@@ -828,7 +834,7 @@ index 96fcc1369..8bda15e9a 100644
  	{
  		set_error("Attempted to release an address outside the JIT arena");
  		return;
-@@ -637,6 +889,7 @@ arena_statistics get_statistics() noexcept
+@@ -637,6 +895,7 @@ arena_statistics get_statistics() noexcept
  	std::lock_guard lock(g_arena_mutex);
  	arena_statistics result;
  	result.capacity = g_arena.capacity;

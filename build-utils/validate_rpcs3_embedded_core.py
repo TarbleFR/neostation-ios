@@ -15,6 +15,7 @@ REQUIRED_MARKERS = (
     ('passive dlopen JIT lifecycle', b'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1'),
     ('page-aligned adaptive reservation', b'NEOSTATION_PAGE_ALIGNED_JIT_GAPS_V1'),
     ('atomic low-address reservation', b'NEOSTATION_EXACT_ATOMIC_JIT_RESERVATION_V1'),
+    ('rejected VM gap recovery', b'NEOSTATION_JIT_REJECTED_GAP_V1'),
     ('Build 266 JIT', JIT_MARKER.encode('ascii')),
     ('Build 264 ARM64/ThinLTO', b'NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1'),
     ('Build 265 RSX/SPU/video', b'NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1'),

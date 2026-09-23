@@ -107,6 +107,7 @@ struct protection_call { vm_address_t address; vm_size_t size; int protection; }
 struct release_call { vm_address_t address; vm_size_t size; };
 
 std::map<vm_address_t, vm_size_t> live;
+std::map<vm_address_t, vm_size_t> invalid_ranges;
 std::vector<allocation_call> allocations;
 std::vector<protection_call> protections;
 std::vector<release_call> releases;
@@ -123,6 +124,7 @@ int mach_task_self() { return 42; }
 void reset_mock()
 {
     live.clear();
+    invalid_ranges.clear();
     allocations.clear();
     protections.clear();
     releases.clear();
@@ -173,6 +175,11 @@ kern_return_t vm_allocate(int task, vm_address_t* address, vm_size_t size, int f
     {
         return KERN_RESOURCE_SHORTAGE;
     }
+    // XNU user-range policy is not represented by vm_region_64 entries.
+    // A visible hole can therefore be rejected without occupying memory.
+    for (const auto& [base, length] : invalid_ranges)
+        if (requested < base + length && base < requested + size)
+            return KERN_INVALID_ADDRESS;
     const vm_address_t actual = requested + (relocate_success ? 0x4000000 : 0);
     for (auto it = live.begin(); it != live.end(); ++it)
     {
@@ -425,6 +432,32 @@ void check_minimum_failure_and_concurrent_mapping_preserve_ownership()
         assert(!(call.flags & (VM_FLAGS_ANYWHERE | VM_FLAGS_OVERWRITE)));
 }
 
+void check_unallocatable_gap_does_not_hide_later_valid_memory()
+{
+    using namespace rpcs3::ios::jit;
+    reset_mock();
+    const vm_address_t first = arena_address_begin;
+    const vm_address_t retained = first + 1024 * mib;
+    const vm_address_t usable = retained + 256 * mib;
+    // The retained port heap splits the visible VM map. Its first hole is
+    // outside an iOS allocation range; a later valid gap fits the whole JIT.
+    invalid_ranges.emplace(first, retained - first);
+    live.emplace(retained, 256 * mib);
+    live.emplace(usable + 896 * mib, arena_address_end - usable - 896 * mib);
+    const auto original = live;
+    u8* data = nullptr;
+    usz data_capacity = 0;
+    usz capacity = 448 * mib;
+    auto* code = reserve_capacity_layout(capacity, false, data, data_capacity);
+    assert(code == reinterpret_cast<u8*>(usable));
+    assert(data == code + capacity && data_capacity == capacity);
+    assert(capacity == 448 * mib); // Do not shrink because an unrelated gap failed.
+    assert(allocations.size() == 2);
+    assert(protections.size() == 1 && releases.empty());
+    assert(live.at(retained) == original.at(retained));
+    assert(diagnostics.size() >= 2);
+}
+
 int main()
 {
     check_exact_next_candidate_preserves_occupied_range();
@@ -436,6 +469,7 @@ int main()
     check_page_aligned_window_lost_by_old_64mib_rounding();
     check_standard_capacity_uses_available_virtual_space();
     check_minimum_failure_and_concurrent_mapping_preserve_ownership();
+    check_unallocatable_gap_does_not_hide_later_valid_memory();
     std::puts("PASS: atomic exact Mach JIT reservation, fragmented low VA and cleanup");
 }
 '''

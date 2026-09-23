@@ -4,7 +4,7 @@
     "CMakeLists.txt": "49a819604ddada41cb9f0bedfd08f70ff964ab10c93753723f7453a2bca4760d",
     "Utilities/JIT.h": "96b6c4ccb24dff64b2b58358ca040ac135a595890f5f10d4f1f767c0f4de5523",
     "Utilities/JITASM.cpp": "58817f3b9dc8ba941e27ee5106a0dfe235f64edd3c34d9cb852c3284c4348198",
-    "Utilities/JITIOS.cpp": "3dba8a35850b1c4cab26c44552cb02c22d04d13c75d5d0d1748dea6d414e07a0",
+    "Utilities/JITIOS.cpp": "afca38ec157ac1a0b53f0296d07ea443820d22272ea5cc15b1322ee841308e69",
     "Utilities/JITIOS.h": "8dbd63a1245c9c98e16f031c387324d82c3810ceb5689c6be9ff428ae2b3dade",
     "Utilities/JITIOSLayoutPolicy.h": "6cb25a160d68e2dfa546b62d0720d88d278010e08598d25fc0627882a101ac87",
     "Utilities/JITLLVM.cpp": "a2dc861d77522615849eb587fe8c236453b4b4c4c1ef2bd74f6d75e549d55fac",
@@ -54,8 +54,8 @@
     "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577",
     "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded"
   },
-  "patch_sha256": "472076ca989c211a96bd55e1cb1143880438ba81b36fc0b5845f4fa5c9e96454",
-  "policy": "Passive Core load; page-aligned atomic reservation; standard capacity follows available VA; complete failed JIT sessions; explicit early retry only",
+  "patch_sha256": "4803efa275317f65a61a8a89751f0d63591eeea39471ee79fbcbe7789a2cbc39",
+  "policy": "Passive Core load; page-aligned atomic reservation; standard capacity follows available VA; complete failed JIT sessions; explicit early retry only; continue past VM-policy-rejected gaps",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
   "upstream_repository": "XITRIX/rpcs3"
