@@ -1,0 +1,19 @@
+name: dusklight_internal_bridge
+resolution: workspace
+description: Lazy in-process Dusklight Core bridge for NeoStation iOS Ports.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.9.2'
+  flutter: '>=3.35.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: DusklightInternalBridgePlugin

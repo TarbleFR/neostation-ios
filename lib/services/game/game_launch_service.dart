@@ -14,6 +14,7 @@ import 'package:neostation/services/rpcs3_library_service.dart';
 import 'package:neostation/services/rpcs3_launch_service.dart';
 // DOLPHIN_ISOLATION_BEGIN: launcher_import
 import '../dolphin_internal_v2_service.dart';
+import '../dusklight_internal_service.dart';
 // DOLPHIN_ISOLATION_END: launcher_import
 import 'package:neostation/services/logger_service.dart';
 
@@ -185,6 +186,35 @@ class GameLaunchService {
         return GameLaunchResult.success();
       }
       // DOLPHIN_ISOLATION_END: explicit_gc_wii_route
+
+      // Ports are owned exclusively by NeoStation's embedded Dusklight host.
+      // Never reinterpret a native-port disc as a RetroArch or share-sheet
+      // title when the Core is absent or reports a lifecycle error.
+      if (Platform.isIOS && system.folderName.toLowerCase() == 'ports') {
+        final gamePath = game.romPath;
+        if (gamePath == null || gamePath.isEmpty) {
+          return GameLaunchResult.failure(
+            'Dusklight launch refused: the game path is missing.',
+            system.folderName,
+          );
+        }
+        final report = await DusklightInternalService.launch(gamePath);
+        if (!context.mounted) return GameLaunchResult.failure('', '');
+        if (!report.success) {
+          return GameLaunchResult.failure(
+            report.message,
+            'Dusklight stage: ${report.stage ?? "unknown"}\n'
+            'Code: ${report.errorCode ?? "unknown"}',
+          );
+        }
+        GameSessionManager.registerGameLaunch(
+          system,
+          game,
+          'ios_dusklight_internal',
+        );
+        await FavoritesService.recordGamePlayed(game);
+        return GameLaunchResult.success();
+      }
 
       // iOS: there's no equivalent of Android's "send an Intent with a file
       // to any installed app", and dart:io Process is unimplemented. What

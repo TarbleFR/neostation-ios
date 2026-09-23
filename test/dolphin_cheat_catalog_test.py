@@ -89,6 +89,7 @@ std::optional<GeckoCode::Code> DeserializeLine(const std::string& line) {
 namespace ActionReplay { struct ARCode {};
 std::vector<ARCode> LoadCodes(const Common::IniFile&,const Common::IniFile&) { return {}; } }
 std::string g_game_id="GZLE01"; u16 g_game_revision=1;
+void DOLRefreshRuntimeGameIdentity() {}
 // ADAPTER_FUNCTIONS
 int main() {
   auto& fs=Common::IniFile::files;
@@ -123,7 +124,19 @@ int main() {
   assert(codes.size()==2 && !codes[0].enabled && codes[1].enabled);
   g_game_id="GZLP01"; DOLLoadCheatLists(&codes,nullptr); assert(codes.size()==1);
   g_game_id="ABCD01"; DOLLoadCheatLists(&codes,nullptr); assert(codes.empty());
-  std::cout<<"PASS: family/region/revision detection, on/off persistence, no duplicated definitions, imported files preserved, exact identity\n";
+  // Wii uses the same hierarchical loader, but with Wii-specific system,
+  // family and exact IDs. Keep this separate from the GameCube fixture so a
+  // future GameCube-only regression cannot satisfy the contract.
+  fs.clear(); g_game_id="RMGE01"; g_game_revision=2;
+  fs["user/R.ini"]={{"Gecko",{"$Wii System","04000020 00000005"}}};
+  fs["user/RMG.ini"]={{"Gecko",{"$Wii Family","04000024 00000006"}}};
+  fs["user/RMGE01.ini"]={{"Gecko",{"$Wii Region","04000028 00000007"}},
+                           {"Gecko_Enabled",{"$Wii Region"}}};
+  fs["user/RMGE01r2.ini"]={{"Gecko",{"$Wii Revision","0400002c 00000008"}},
+                             {"Gecko_Enabled",{"$Wii Family"}}};
+  DOLLoadCheatLists(&codes,nullptr);
+  assert(codes.size()==4 && codes[1].enabled && codes[2].enabled);
+  std::cout<<"PASS: GameCube and Wii family/region/revision detection, on/off persistence, no duplicated definitions, imported files preserved, exact identity\n";
 }
 '''
 program = program.replace('// FILE_NAMES', extract_function(config, 'std::vector<std::string> GetGameIniFilenames('))

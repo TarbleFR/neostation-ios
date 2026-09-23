@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('PS3 system and game settings identify embedded RPCS3', () {
+  test('embedded iOS systems expose one truthful in-process engine identity', () {
     final gameTab = File(
       'lib/screens/game_screen/game_settings_dialog/'
       'game_settings_emulator_tab.dart',
@@ -12,12 +12,26 @@ void main() {
       'lib/widgets/system_emulator_settings_dialog/tabs.dart',
     ).readAsStringSync();
 
+    final dialog = File(
+      'lib/widgets/system_emulator_settings_dialog.dart',
+    ).readAsStringSync();
+
     for (final source in <String>[gameTab, systemDialog]) {
-      expect(source, contains("const Text('RPCS3')"));
       expect(source, contains('EmbeddedEmulatorLocale.integrated(context)'));
+      expect(source, contains('embeddedEngine'));
     }
-    expect(gameTab, contains("'ps3'"));
-    expect(systemDialog, contains("folderName.toLowerCase() == 'ps3'"));
+    for (final engine in <String>[
+      'DolphiniOS',
+      'ARMSX2',
+      'RPCS3',
+      'Dusklight',
+    ]) {
+      expect(gameTab + dialog, contains("'$engine'"), reason: engine);
+    }
+    for (final folder in <String>['gc', 'wii', 'ps2', 'ps3', 'ports']) {
+      expect(gameTab + dialog, contains("'$folder'"), reason: folder);
+    }
+    expect(systemDialog, isNot(contains("folderName.toLowerCase() == 'ps3'")));
   });
 
   test('embedded status is translated in all NeoStation locales', () {

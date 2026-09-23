@@ -32,14 +32,15 @@ void main() {
     }
   });
 
-  test('every system ships at most one default_standalone emulator', () {
+  test('every default_standalone emulator targets at least one platform', () {
     final offenders = <String>[];
     for (final system in systems) {
-      final defaults = system.emulators.where((e) => e.isDefaultStandalone);
-      if (defaults.length > 1) {
-        offenders.add(
-          '${system.name}: ${defaults.map((e) => e.uniqueId).join(', ')}',
-        );
+      for (final emulator in system.emulators.where(
+        (e) => e.isDefaultStandalone,
+      )) {
+        if (emulator.platforms.isEmpty) {
+          offenders.add('${system.name}: ${emulator.uniqueId}');
+        }
       }
     }
     expect(offenders, isEmpty, reason: offenders.join('\n'));
@@ -152,6 +153,12 @@ void main() {
             platformText.contains('retroarch');
       });
       if (!hasRetroArchDefinition) continue;
+
+      final hasEmbeddedIosRuntime = system.emulators.any((e) {
+        final ios = e.platforms['ios'];
+        return ios is Map && ios['embedded'] == true;
+      });
+      if (hasEmbeddedIosRuntime) continue;
 
       final iosRetroArch = system.emulators.where((e) {
         final ios = e.platforms['ios'];

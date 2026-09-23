@@ -1,0 +1,59 @@
+{
+  "system": {
+    "id": "ports",
+    "multidisc": false,
+    "name": "Ports",
+    "short_name": "Ports",
+    "details": {
+      "manufacturer": "Community",
+      "release_date": "2026-09-23",
+      "description": "Native game-engine ports integrated directly into NeoStation for iPhone and iPad.",
+      "type": "ports",
+      "architecture": "Apple ARM64",
+      "media": [
+        "digital",
+        "optical_disc"
+      ],
+      "collection_kind": "native_ports",
+      "notable_games": [
+        "The Legend of Zelda: Twilight Princess"
+      ]
+    },
+    "ids": {
+      "screenscraper": null,
+      "retroachievements": null
+    },
+    "folders": [
+      "ports",
+      "Ports",
+      "Native iOS Ports"
+    ],
+    "colors": [
+      "#D7A72E",
+      "#334C3B"
+    ],
+    "extensions": [
+      "iso",
+      "gcm",
+      "rvz",
+      "wia",
+      "wbfs",
+      "ciso",
+      "gcz"
+    ]
+  },
+  "emulators": [
+    {
+      "name": "Dusklight",
+      "default_standalone": true,
+      "unique_id": "ports.ios.dusklight",
+      "description": "Dusklight native iOS Core embedded in NeoStation.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "embedded": true
+        }
+      }
+    }
+  ]
+}

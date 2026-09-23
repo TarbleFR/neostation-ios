@@ -2,6 +2,7 @@ import 'dart:async';
 /* DOLPHIN_ISOLATION_BEGIN: provider_import */
 import '../services/dolphin_internal_v2_service.dart';
 import '../services/armsx2_internal_service.dart';
+import '../services/dusklight_internal_service.dart';
 /* DOLPHIN_ISOLATION_END: provider_import */
 import 'dart:io';
 import 'package:flutter/foundation.dart';

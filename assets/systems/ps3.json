@@ -74,6 +74,18 @@
           "args": "--no-gui \"{file.path}\""
         }
       }
+    },
+    {
+      "name": "RPCS3",
+      "default_standalone": true,
+      "unique_id": "ps3.ios.rpcs3",
+      "description": "RPCS3 PlayStation 3 Core embedded in NeoStation iOS.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "embedded": true
+        }
+      }
     }
   ]
 }

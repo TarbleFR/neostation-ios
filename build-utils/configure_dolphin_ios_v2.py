@@ -285,6 +285,12 @@ sys_ref.last_known_file_type = 'folder'
 unless runner.resources_build_phase.files.any? { |file| file.file_ref == sys_ref }
   runner.resources_build_phase.add_file_reference(sys_ref, true)
 end
+ca_ref = runner_group.files.find { |file| file.path == 'cacert.pem' }
+ca_ref ||= runner_group.new_file('cacert.pem')
+raise "Dolphin CA bundle does not resolve: #{ca_ref.real_path}" unless File.file?(ca_ref.real_path)
+unless runner.resources_build_phase.files.any? { |file| file.file_ref == ca_ref }
+  runner.resources_build_phase.add_file_reference(ca_ref, true)
+end
 
 protected_after = protected.to_h { |target| [target.uuid, target_snapshot(target)] }
 raise 'Dolphin modified an unrelated Xcode target' unless protected_before == protected_after
@@ -317,6 +323,8 @@ def main() -> None:
         raise SystemExit('Generate the clean Flutter iOS host first')
     if not (RUNNER / 'Sys').is_dir():
         raise SystemExit('Dolphin Data/Sys must be copied to ios/Runner/Sys first')
+    if not (RUNNER / 'cacert.pem').is_file():
+        raise SystemExit('Dolphin iOS CA bundle must be copied to ios/Runner/cacert.pem first')
     framework = ROOT / 'packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/StikJIT'
     if not framework.is_file():
         raise SystemExit(f'StikJIT device framework missing: {framework}')
@@ -326,7 +334,7 @@ def main() -> None:
     configure_podfile()
     configure_flutter_xcconfigs()
     configure_xcode_project()
-    print('Configured Runner, DolphinJITHelper and root Sys resources.')
+    print('Configured Runner, DolphinJITHelper, root Sys resources and Dolphin CA bundle.')
 
 
 if __name__ == '__main__':

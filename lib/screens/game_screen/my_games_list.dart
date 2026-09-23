@@ -23,6 +23,7 @@ import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
 import 'package:neostation/widgets/rpcs3_internal_playlist_actions.dart';
 import 'package:neostation/widgets/armsx2_internal_playlist_actions.dart';
+import 'package:neostation/widgets/dusklight_internal_playlist_actions.dart';
 
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
@@ -114,6 +115,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps3';
   bool get _isArmsx2Library =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps2';
+  bool get _isDusklightLibrary =>
+      Platform.isIOS && widget.system.folderName.toLowerCase() == 'ports';
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -722,6 +725,30 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   );
                 },
               ),
+            if (!_isGameLaunching && _isDusklightLibrary)
+              Consumer<SqliteConfigProvider>(
+                builder: (context, config, child) {
+                  final mode = config.config.gameViewMode;
+                  if (!_isLoading &&
+                      _games.isNotEmpty &&
+                      _selectedGame != null &&
+                      mode != 'grid' &&
+                      mode != 'carousel') {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    top: 8.r,
+                    right: 10.r,
+                    child: SafeArea(
+                      child: Material(
+                        color: Theme.of(context).colorScheme.tertiaryFixed,
+                        borderRadius: BorderRadius.circular(10.r),
+                        child: _buildDusklightImportAction(),
+                      ),
+                    ),
+                  );
+                },
+              ),
             // RPCS3_INTERNAL_BEGIN: playlist_actions
             if (!_isGameLaunching && _isRpcs3Library)
               Consumer<SqliteConfigProvider>(
@@ -837,6 +864,44 @@ class _SystemGamesListState extends State<SystemGamesList> {
           await context
               .read<SqliteConfigProvider>()
               .refreshArmsx2InternalLibrary();
+          if (mounted) await _loadGames();
+        },
+      );
+
+  Widget _buildDusklightImportAction() => DusklightInternalPlaylistActions(
+    onInteractionChanged: (active) {
+      if (!mounted) return;
+      if (active) {
+        _gamepadNav.deactivate();
+      } else {
+        _gamepadNav.activate();
+      }
+    },
+    onLibraryChanged: () async {
+      if (!mounted) return;
+      await context
+          .read<SqliteConfigProvider>()
+          .refreshDusklightInternalLibrary();
+      if (mounted) await _loadGames();
+    },
+  );
+
+  Widget _buildEmbeddedDusklightImportAction() =>
+      DusklightInternalPlaylistActions(
+        embedded: true,
+        onInteractionChanged: (active) {
+          if (!mounted) return;
+          if (active) {
+            _gamepadNav.deactivate();
+          } else {
+            _gamepadNav.activate();
+          }
+        },
+        onLibraryChanged: () async {
+          if (!mounted) return;
+          await context
+              .read<SqliteConfigProvider>()
+              .refreshDusklightInternalLibrary();
           if (mounted) await _loadGames();
         },
       );
@@ -1638,6 +1703,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ? _buildEmbeddedDolphinImportAction()
           : _isArmsx2Library
           ? _buildEmbeddedArmsx2ImportAction()
+          : _isDusklightLibrary
+          ? _buildEmbeddedDusklightImportAction()
           : _isRpcs3Library && _rpcs3FirmwareReady
           ? _buildEmbeddedRpcs3ImportAction()
           : null,

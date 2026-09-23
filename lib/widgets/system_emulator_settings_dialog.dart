@@ -92,10 +92,23 @@ class _SystemEmulatorSettingsDialogState
     // switch is misleading here and previously caused the same UI issue for
     // Dolphin/RPCS3.
     if (Platform.isIOS &&
-        const <String>{'gc', 'wii', 'ps2', 'ps3'}.contains(folder)) {
+        const <String>{'gc', 'wii', 'ps2', 'ps3', 'ports'}.contains(folder)) {
       return false;
     }
     return true;
+  }
+
+  /// Product identity of the in-process engine that owns this iOS library.
+  /// These systems never fall back to the generic RetroArch/standalone list.
+  String? get _iosEmbeddedEngineName {
+    if (!Platform.isIOS) return null;
+    return switch (_system.folderName.trim().toLowerCase()) {
+      'gc' || 'wii' => 'DolphiniOS',
+      'ps2' => 'ARMSX2',
+      'ps3' => 'RPCS3',
+      'ports' => 'Dusklight',
+      _ => null,
+    };
   }
 
   // Focus nodes for arrow key navigation blocking

@@ -171,13 +171,14 @@
       }
     },
     {
-      "name": "RetroArch",
-      "unique_id": "wii.ios.retroarch",
-      "description": "RetroArch for iOS. Individual core availability depends on the cores installed in RetroArch.",
+      "name": "DolphiniOS",
+      "default_standalone": true,
+      "unique_id": "wii.ios.dolphinios",
+      "description": "DolphiniOS Wii Core embedded in NeoStation iOS.",
       "is_retroachievements_compatible": false,
       "platforms": {
         "ios": {
-          "url_scheme": "retroarch"
+          "embedded": true
         }
       }
     }

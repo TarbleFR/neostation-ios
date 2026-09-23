@@ -189,6 +189,8 @@ def core_framework(source: Path) -> None:
     if sys_dest.exists():
         shutil.rmtree(sys_dest)
     shutil.copytree(source / 'Data/Sys', sys_dest)
+    shutil.copy2(source / 'Source/iOS/App/Project/Assets/cacert.pem',
+                 ROOT / 'ios/Runner/cacert.pem')
     (LOGS / 'dolphin-revision.txt').write_text(os.environ['DOLPHIN_SHA'] + '\n')
     with zipfile.ZipFile(LOGS / 'native-source.zip', 'w', zipfile.ZIP_DEFLATED) as z:
         for rel in ('Source/iOS/Library/NeoStationBridge.mm', 'Source/iOS/Library/CMakeLists.txt',

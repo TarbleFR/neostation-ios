@@ -598,12 +598,13 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
   }
 
   Widget _buildEmulatorsTab() {
-    if (Platform.isIOS && _system.folderName.toLowerCase() == 'ps3') {
+    final embeddedEngine = _iosEmbeddedEngineName;
+    if (embeddedEngine != null) {
       return Padding(
         padding: EdgeInsets.all(12.r),
         child: ListTile(
           leading: const Icon(Symbols.sports_esports_rounded),
-          title: const Text('RPCS3'),
+          title: Text(embeddedEngine),
           subtitle: Text(EmbeddedEmulatorLocale.integrated(context)),
           trailing: Icon(
             Icons.check_circle,

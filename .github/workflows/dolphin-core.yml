@@ -9,6 +9,7 @@ on:
       - '.github/workflows/dolphin-core.yml'
       - 'build-utils/patch_dolphin_internal_core_v2.py'
       - 'packages/dolphin_internal_bridge/core/**'
+      - 'packages/dolphin_internal_bridge/ci/build_support.py'
       - 'test/dolphin_cheat_manager_test.py'
       - 'test/dolphin_cheat_catalog_test.py'
       - 'test/dolphin_memory_permissions_test.py'
@@ -54,6 +55,7 @@ jobs:
           git diff --check
           python3 -m py_compile build-utils/patch_dolphin_internal_core_v2.py
           python3 test/dolphin_cheat_manager_test.py
+          python3 test/dolphin_https_resource_test.py
           python3 test/dolphin_memory_permissions_test.py
           python3 test/dolphin_process_lifecycle_test.py
 
@@ -124,6 +126,8 @@ jobs:
 
           ditto "$FRAMEWORK" dist/dolphin/DolphinCore.framework
           ditto "$SRC/Data/Sys" dist/dolphin/Sys
+          cp "$SRC/Source/iOS/App/Project/Assets/cacert.pem" dist/dolphin/cacert.pem
+          test -s dist/dolphin/cacert.pem
 
           python3 - <<'PY'
           import hashlib

@@ -264,7 +264,8 @@
       }
     },
     {
-      "name": "ARMSX2 (Embedded)",
+      "name": "ARMSX2",
+      "default_standalone": true,
       "unique_id": "ps2.ios.armsx2",
       "description": "ARMSX2 PlayStation 2 Core embedded in NeoStation iOS.",
       "is_retroachievements_compatible": false,

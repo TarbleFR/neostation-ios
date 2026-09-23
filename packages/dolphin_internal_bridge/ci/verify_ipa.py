@@ -239,6 +239,11 @@ def validate(ipa: Path) -> dict:
         for resource in ('Sys/GC/dsp_rom.bin', 'Sys/GC/dsp_coef.bin'):
             demand(app + '/' + resource in names, f'Missing Dolphin system resource: {resource}')
         demand(any(n.startswith(app + '/Sys/Wii/') for n in names), 'Wii system resources absent')
+        ca_bundle = app + '/cacert.pem'
+        demand(ca_bundle in names, 'Dolphin HTTPS CA bundle is absent from the application root')
+        ca_data = z.read(ca_bundle)
+        demand(len(ca_data) > 100_000 and b'BEGIN CERTIFICATE' in ca_data,
+               'Dolphin HTTPS CA bundle is invalid')
         touch_bundle = app + '/Frameworks/dolphin_internal_bridge.framework/'
         bridge_image = images.get(touch_bundle + 'dolphin_internal_bridge')
         demand(bridge_image is not None, 'Dolphin native UI bridge missing')

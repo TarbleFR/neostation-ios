@@ -714,9 +714,42 @@ static NSString* DOLNSString(const std::string& value)
   return [NSString stringWithUTF8String:value.c_str()] ?: @"";
 }
 
+// Wii boot metadata can be finalized by IOS/TMD after the image validation
+// pass.  Always prefer Dolphin's live identity before resolving GameSettings;
+// the pre-boot DiscIO values remain the fallback for GameCube and early boot.
+static void DOLRefreshRuntimeGameIdentity()
+{
+  const SConfig& config = SConfig::GetInstance();
+  const std::string runtime_id = config.GetGameID();
+  const std::string runtime_tdb_id = config.GetGameTDBID();
+  const u16 runtime_revision = config.GetRevision();
+  if (!runtime_id.empty() && runtime_id != "00000000")
+  {
+    const bool changed = runtime_id != g_game_id ||
+        (!runtime_tdb_id.empty() && runtime_tdb_id != g_gametdb_id) ||
+        runtime_revision != g_game_revision;
+    g_game_id = runtime_id;
+    g_gametdb_id = runtime_tdb_id.empty() ? runtime_id : runtime_tdb_id;
+    g_game_revision = runtime_revision;
+    if (changed)
+      Log("cheats.identity_refreshed", "Cheat catalogue now uses Dolphin's live game identity.");
+  }
+  else if (g_gametdb_id.empty())
+  {
+    g_gametdb_id = g_game_id;
+  }
+}
+
 static void DOLLoadCheatLists(std::vector<Gecko::GeckoCode>* gecko,
                               std::vector<ActionReplay::ARCode>* action_replay)
 {
+  DOLRefreshRuntimeGameIdentity();
+  if (g_game_id.empty())
+  {
+    if (gecko) gecko->clear();
+    if (action_replay) action_replay->clear();
+    return;
+  }
   const Common::IniFile local =
       SConfig::LoadLocalGameIni(g_game_id, g_game_revision);
   const Common::IniFile defaults =
@@ -776,10 +809,12 @@ static bool DOLSaveActionReplayCodes(std::vector<ActionReplay::ARCode> codes)
 extern "C" __attribute__((visibility("default")))
 char* neostation_dolphin_cheats_snapshot(void)
 {
-  if (!g_running || g_game_id.empty()) return nullptr;
+  if (!g_running) return nullptr;
   __block char* result = nullptr;
   DOLHostQueueRunSync(^{
     @autoreleasepool {
+      DOLRefreshRuntimeGameIdentity();
+      if (g_game_id.empty()) return;
       std::vector<Gecko::GeckoCode> gecko;
       std::vector<ActionReplay::ARCode> action_replay;
       DOLLoadCheatLists(&gecko, &action_replay);
@@ -853,9 +888,13 @@ char* neostation_dolphin_cheats_snapshot(void)
 extern "C" __attribute__((visibility("default")))
 int32_t neostation_dolphin_set_cheats_enabled(int32_t enabled)
 {
-  if (!g_running || g_game_id.empty()) return 0;
+  if (!g_running) return 0;
   const bool requested = enabled != 0;
+  __block bool identified = false;
   DOLHostQueueRunSync(^{
+    DOLRefreshRuntimeGameIdentity();
+    if (g_game_id.empty()) return;
+    identified = true;
     std::vector<Gecko::GeckoCode> gecko;
     std::vector<ActionReplay::ARCode> action_replay;
     DOLLoadCheatLists(&gecko, &action_replay);
@@ -885,6 +924,7 @@ int32_t neostation_dolphin_set_cheats_enabled(int32_t enabled)
       ActionReplay::ApplyCodes(action_replay, g_game_id, g_game_revision);
     }
   });
+  if (!identified) return 0;
   Log("cheats.master", requested ? "Cheats enabled." : "Cheats disabled.");
   return 1;
 }
@@ -892,11 +932,13 @@ int32_t neostation_dolphin_set_cheats_enabled(int32_t enabled)
 extern "C" __attribute__((visibility("default")))
 int32_t neostation_dolphin_set_cheat_enabled(const char* type, int32_t index, int32_t enabled)
 {
-  if (!g_running || g_game_id.empty() || !type || index < 0) return 0;
+  if (!g_running || !type || index < 0) return 0;
   __block bool success = false;
   const bool requested = enabled != 0;
   const std::string kind(type);
   DOLHostQueueRunSync(^{
+    DOLRefreshRuntimeGameIdentity();
+    if (g_game_id.empty()) return;
     if (kind == "gecko")
     {
       std::vector<Gecko::GeckoCode> codes;
@@ -949,11 +991,18 @@ int32_t neostation_dolphin_set_cheat_enabled(const char* type, int32_t index, in
 extern "C" __attribute__((visibility("default")))
 char* neostation_dolphin_download_gecko_codes(void)
 {
-  if (!g_running || g_game_id.empty() || g_gametdb_id.empty()) return nullptr;
+  if (!g_running) return nullptr;
+
+  __block std::string download_id;
+  DOLHostQueueRunSync(^{
+    DOLRefreshRuntimeGameIdentity();
+    download_id = g_gametdb_id;
+  });
+  if (download_id.empty()) return nullptr;
 
   bool downloaded = false;
   std::vector<Gecko::GeckoCode> incoming =
-      Gecko::DownloadCodes(g_gametdb_id, &downloaded);
+      Gecko::DownloadCodes(download_id, &downloaded);
   if (!downloaded)
   {
     const char* failure = "{\"success\":false,\"downloaded\":0,\"added\":0}";

@@ -91,6 +91,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
     if (Platform.isIOS) {
       await Armsx2InternalService.ensureLayout();
+      await DusklightInternalService.ensureLayout();
     }
 
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
@@ -184,17 +185,23 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         );
       }
 
-      if (Platform.isIOS &&
-          !detectedSystems.any((system) => system.folderName == 'ps2')) {
-        try {
-          final ps2 = _availableSystems.firstWhere(
-            (system) => system.folderName == 'ps2',
-          );
-          detectedSystems = [...detectedSystems, ps2];
-        } catch (e) {
-          SqliteConfigProvider._log.w(
-            'Could not expose embedded ARMSX2 PS2 playlist: $e',
-          );
+      if (Platform.isIOS) {
+        for (final folderName in const <String>['ps2', 'ports']) {
+          if (detectedSystems.any(
+            (system) => system.folderName == folderName,
+          )) {
+            continue;
+          }
+          try {
+            final nativeSystem = _availableSystems.firstWhere(
+              (system) => system.folderName == folderName,
+            );
+            detectedSystems = [...detectedSystems, nativeSystem];
+          } catch (e) {
+            SqliteConfigProvider._log.w(
+              'Could not expose embedded iOS playlist $folderName: $e',
+            );
+          }
         }
       }
 
@@ -231,7 +238,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         final List<String> fastScanFolders = Platform.isAndroid
             ? ['android']
             : Platform.isIOS
-            ? ['gc', 'wii', 'ps2']
+            ? ['gc', 'wii', 'ps2', 'ports']
             : [];
         // DOLPHIN_ISOLATION_END: fast_scan_playlists
 
@@ -539,10 +546,16 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         final isDolphinInternalSystem =
             Platform.isIOS &&
             DolphinInternalV2Service.isDolphinSystem(system.folderName);
+        final isEmbeddedIosLibrary =
+            Platform.isIOS &&
+            const <String>{'ps2', 'ports'}.contains(
+              system.folderName.toLowerCase(),
+            );
         if (romCount > 0 ||
             hasFolderWhenNonRecursive ||
             isAndroidVirtual ||
-            isDolphinInternalSystem) {
+            isDolphinInternalSystem ||
+            isEmbeddedIosLibrary) {
           systemsToKeep.add(system.copyWith(romCount: romCount));
         // DOLPHIN_ISOLATION_END: keep_empty_native_systems
 
@@ -645,6 +658,26 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     _notify();
   }
 
+  /// Refreshes only NeoStation's Files-visible Ports / Dusklight library.
+  Future<void> refreshDusklightInternalLibrary() async {
+    if (!Platform.isIOS) {
+      throw StateError('Embedded Dusklight refresh is available on iOS only.');
+    }
+    await DusklightInternalService.ensureLayout();
+    if (_availableSystems.isEmpty) await _loadAvailableSystems();
+    final system = _availableSystems.firstWhere(
+      (candidate) => candidate.folderName == 'ports',
+    );
+    await SystemRepository.addDetectedSystem(system.id!, system.folderName);
+    if (!_detectedSystems.any((candidate) => candidate.id == system.id)) {
+      _detectedSystems = [..._detectedSystems, system];
+    }
+    await _scanSystemRoms(system);
+    await _refreshDetectedSystemsFromDatabase();
+    _sortDetectedSystems();
+    _notify();
+  }
+
   /// Performs an isolated scan for a specific system.
   Future<ScanSummary> _scanSystemRoms(
     SystemModel system, {
@@ -657,8 +690,12 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           DolphinInternalV2Service.isDolphinSystem(system.folderName);
       final isArmsx2InternalSystem =
           Platform.isIOS && system.folderName.toLowerCase() == 'ps2';
+      final isDusklightInternalSystem =
+          Platform.isIOS && system.folderName.toLowerCase() == 'ports';
       final isNativeInternalSystem =
-          isDolphinInternalSystem || isArmsx2InternalSystem;
+          isDolphinInternalSystem ||
+          isArmsx2InternalSystem ||
+          isDusklightInternalSystem;
       // Native embedded playlists scan their own roots even when no public ROM
       // folder exists. Every other system retains the original early return.
       if (_config.romFolders.isEmpty &&
@@ -675,11 +712,19 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           ? [await DolphinInternalV2Service.scanRootPath()]
           : isArmsx2InternalSystem
           ? [(await Armsx2InternalService.gamesDirectory()).path]
+          : isDusklightInternalSystem
+          ? [(await DusklightInternalService.rootDirectory()).path]
           : _config.romFolders;
       final effectiveRootFoldersMap = isDolphinInternalSystem
           ? await SqliteDatabaseService.getExistingSubdirectories(
               nativeScanRoots,
             )
+          : isDusklightInternalSystem
+          ? <String, Map<String, String>>{
+              nativeScanRoots.single: <String, String>{
+                'ports': (await DusklightInternalService.gamesDirectory()).path,
+              },
+            }
           : rootFoldersMap;
       // DOLPHIN_ISOLATION_END: isolated_scan_root
 
@@ -776,7 +821,9 @@ extension SqliteConfigScanning on SqliteConfigProvider {
               (DolphinInternalV2Service.isDolphinSystem(
                     updatedSystem.folderName,
                   ) ||
-                  updatedSystem.folderName.toLowerCase() == 'ps2'));
+                  const <String>{'ps2', 'ports'}.contains(
+                    updatedSystem.folderName.toLowerCase(),
+                  )));
       // DOLPHIN_ISOLATION_END: refresh_keep_native_systems
 
       if (shouldKeep) {

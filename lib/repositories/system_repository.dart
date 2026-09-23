@@ -71,7 +71,7 @@ class SystemRepository {
     // games so their import actions are never trapped behind a missing tile.
     // Merely exposing these systems does not initialize either native Core.
     if (Platform.isIOS) {
-      for (final folderName in const <String>['ps2', 'ps3']) {
+      for (final folderName in const <String>['ps2', 'ps3', 'ports']) {
         if (visible.any((system) => system.folderName == folderName)) continue;
         for (final system in allSystems) {
           if (system.folderName == folderName) {

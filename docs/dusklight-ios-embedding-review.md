@@ -6,13 +6,28 @@ Sources examinées le 23 septembre 2026 :
 - Sous-module [Aurora](https://github.com/encounter/aurora/tree/d0933b745abe0eb9815bedcea8047575da18698d), commit `d0933b745abe0eb9815bedcea8047575da18698d`.
 - [Instructions officielles iOS](https://twilitrealm.dev/install/ios/).
 
-## Résultat
+## État de l'intégration
 
 Le moteur est disponible en sources et accepte un chemin de disque via `--dvd`.
 La distribution iOS officielle est cependant une application autonome. Ajouter
 son IPA aux fichiers de NeoStation ne crée pas un moteur que NeoStation puisse
-appeler. La catégorie de bibliothèque et l'import de disque ne suffisent pas.
-L'intégration exécutable n'est pas réalisée dans la Build 308.
+appeler.
+
+La première tranche d'intégration est maintenant présente :
+
+- catégorie `Ports` visible sur iOS, même à bibliothèque vide ;
+- racine privée `Documents/Ports/Dusklight` avec `Games`, `Saves`, `Config`,
+  `Mods` et `Metadata` ;
+- import atomique des formats officiels ISO/GCM/RVZ/WIA/WBFS/CISO/GCZ ;
+- validation immédiate des Game IDs pour les images ISO/GCM non compressées ;
+- route de lancement exclusive, sans repli silencieux vers RetroArch ;
+- plugin iOS chargé à la demande et ABI hôte/Core v1 (`initialize`, `start`,
+  `stop`, `is_running`).
+
+Le framework `DusklightCore.framework` n'est pas encore construit ni embarqué.
+Cette tranche rend donc l'import et la bibliothèque réels, mais signale
+explicitement `DUSKLIGHT_CORE_NOT_READY` lors du lancement. Elle n'intègre pas
+l'IPA autonome et ne prétend pas qu'un jeu est déjà exécutable.
 
 ## Obstacles établis dans les sources
 
@@ -33,7 +48,7 @@ L'intégration exécutable n'est pas réalisée dans la Build 308.
    ferme l'audio, les interfaces et Aurora. Un deuxième démarrage dans le même
    processus doit être vérifié sur ces ressources, pas seulement sur `mainCalled`.
 
-## Travail nécessaire pour obtenir le comportement demandé
+## Étape native suivante
 
 - Construire un framework iOS à révision figée, avec ressources séparées et une
   interface de session explicite. Ne pas embarquer de données du jeu.
@@ -42,12 +57,13 @@ L'intégration exécutable n'est pas réalisée dans la Build 308.
   partagés avec ARMSX2 avant l'édition des liens et au chargement.
 - Remplacer les sorties de processus par des erreurs retournées et réinitialiser
   les états de session après la libération/jonction des ressources natives.
-- Brancher l'import de disque validé par Dusklight sur une entrée Ports, avec
-  sauvegardes et configuration propres au moteur. La validation amont du disque
-  doit rester autoritaire ; ne pas reconnaître un jeu au seul nom du fichier.
+- Brancher le validateur amont et le moteur sur l'ABI déjà exposée. La validation
+  amont du disque doit rester autoritaire pour les formats compressés ; ne pas
+  reconnaître un jeu au seul nom du fichier.
 - Vérifier premier lancement, fermeture, relancement, disque invalide, changement
   de premier plan, manette et alternance avec Dolphin/ARMSX2/RPCS3 sur iPhone.
 
-Aucun raccourci externe, lancement d'IPA ou moteur factice n'a été ajouté aux
-sources livrées. Cette analyse constate la nécessité d'un portage ; elle ne
-constitue pas une validation de Dusklight intégré à NeoStation.
+Aucun raccourci externe, lancement d'IPA ou moteur factice n'a été ajouté. Le
+pont actuel est une frontière native testable et paresseuse ; la validation du
+jeu en fonctionnement ne pourra commencer qu'après adaptation et compilation
+du framework Core.
