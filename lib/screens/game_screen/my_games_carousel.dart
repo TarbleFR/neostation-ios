@@ -1088,102 +1088,102 @@ class _GamesCarouselState extends State<GamesCarousel> {
       safeRight: safeRightInset,
       legendHidden: GameLegendVisibility.hidden.value,
       artwork: NativeCarousel(
-                  key: _carouselKey,
-                  itemCount: widget.games.length,
-                  initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
-                  itemBuilder: (context, index) {
-                    final game = widget.games[index];
-                    final isCentred = index == _currentIndex;
-                    return KeyedSubtree(
-                      key: ValueKey(game.romname),
-                      child: GestureDetector(
-                        // Tapping an off-centre card brings it to the middle;
-                        // tapping the centred one plays it, so touch users
-                        // never need the footer's A button.
-                        onTap: () {
-                          if (isCentred) {
-                            SfxService().playEnterSound();
-                            widget.onPlay();
-                          } else {
-                            SfxService().playNavSound();
-                            _carouselKey.currentState?.animateToPage(index);
-                          }
-                        },
-                        child: isFanart
-                            ? _buildFanartCard(game, isCentred)
-                            : _buildBoxCard(game, isCentred),
-                      ),
-                    );
-                  },
-                  onPageChanged: _onPageChanged,
-                ),
+        key: _carouselKey,
+        itemCount: widget.games.length,
+        initialIndex: _currentIndex.clamp(0, widget.games.length - 1),
+        itemBuilder: (context, index) {
+          final game = widget.games[index];
+          final isCentred = index == _currentIndex;
+          return KeyedSubtree(
+            key: ValueKey(game.romname),
+            child: GestureDetector(
+              // Tapping an off-centre card brings it to the middle;
+              // tapping the centred one plays it, so touch users
+              // never need the footer's A button.
+              onTap: () {
+                if (isCentred) {
+                  SfxService().playEnterSound();
+                  widget.onPlay();
+                } else {
+                  SfxService().playNavSound();
+                  _carouselKey.currentState?.animateToPage(index);
+                }
+              },
+              child: isFanart
+                  ? _buildFanartCard(game, isCentred)
+                  : _buildBoxCard(game, isCentred),
+            ),
+          );
+        },
+        onPageChanged: _onPageChanged,
+      ),
       letters: SizedBox(
-              height: 30.r,
-              child: SingleChildScrollView(
-                controller: _letterBarController,
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.symmetric(horizontal: 4.r),
-                child: Stack(
-                  children: [
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 120),
-                      curve: Curves.easeInOut,
-                      left: _getLetterBarOffset(
-                        currentLetter,
-                        letters,
-                        selectedTextStyle,
-                      ),
-                      top: 0,
-                      bottom: 0,
-                      width: _calculateLetterWidth(
-                        currentLetter,
-                        selectedTextStyle,
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.secondary,
-                          borderRadius: BorderRadius.circular(12.r),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: letters.map((letter) {
-                        final isSelected = letter == currentLetter;
-                        final w = _calculateLetterWidth(
-                          letter,
-                          selectedTextStyle,
-                        );
-                        return GestureDetector(
-                          onTap: () {
-                            SfxService().playNavSound();
-                            final gi = _getFirstGameIndexForLetter(letter);
-                            _carouselKey.currentState?.animateToPage(gi);
-                          },
-                          child: Container(
-                            width: w,
-                            height: 30.r,
-                            margin: EdgeInsets.only(right: 6.r),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.1,
-                              ),
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                            child: Text(
-                              letter,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              style: isSelected ? selectedTextStyle : textStyle,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
+        height: 30.r,
+        child: SingleChildScrollView(
+          controller: _letterBarController,
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: 4.r),
+          child: Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeInOut,
+                left: _getLetterBarOffset(
+                  currentLetter,
+                  letters,
+                  selectedTextStyle,
+                ),
+                top: 0,
+                bottom: 0,
+                width: _calculateLetterWidth(
+                  currentLetter,
+                  selectedTextStyle,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondary,
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
                 ),
               ),
-            ),
+              Row(
+                children: letters.map((letter) {
+                  final isSelected = letter == currentLetter;
+                  final w = _calculateLetterWidth(
+                    letter,
+                    selectedTextStyle,
+                  );
+                  return GestureDetector(
+                    onTap: () {
+                      SfxService().playNavSound();
+                      final gi = _getFirstGameIndexForLetter(letter);
+                      _carouselKey.currentState?.animateToPage(gi);
+                    },
+                    child: Container(
+                      width: w,
+                      height: 30.r,
+                      margin: EdgeInsets.only(right: 6.r),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.1,
+                        ),
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      child: Text(
+                        letter,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: isSelected ? selectedTextStyle : textStyle,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
       footer: _chromeFooter!,
       legend: _chromeLegend!,
       edgeReshowZone: const LegendEdgeReshowZone(),
