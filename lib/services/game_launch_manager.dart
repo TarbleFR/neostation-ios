@@ -225,19 +225,19 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     if (Platform.isIOS && emulatorExe == 'ios_dusklight_internal') {
       _embeddedSessionSubscription = DusklightInternalBridge.sessionEvents.listen(
         (event) {
-          // ABI v4 emits this event only after the terminal native shutdown
-          // barrier. Do not expose another in-process core before that proof.
-          if (event['runtimeReleased'] == true &&
-              _phase == GameLaunchPhase.playing &&
-              !_isClosing) {
-            _log.i('[GameLaunchManager] Dusklight ended: ${event['reason']}');
+          if (_phase == GameLaunchPhase.playing && !_isClosing) {
+            _log.i(
+              '[GameLaunchManager] Dusklight returned to NeoStation: '
+              '${event['reason']} (runtimeReleased=${event['runtimeReleased']})',
+            );
+            // A normal return now retains the suspended Dusklight runtime so
+            // the same disc can reopen instantly. Build 321's early RPCS3 JIT
+            // escrow remains reserved before Dusklight can allocate memory.
             _triggerClose();
           }
         },
       );
-      if (DusklightInternalBridge.didEndSession &&
-          DusklightInternalBridge.didReleaseRuntime &&
-          !_isClosing) {
+      if (DusklightInternalBridge.didEndSession && !_isClosing) {
         _triggerClose();
       }
       return;
