@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 321 RPCS3 Early JIT Escrow
-run-name: NeoStation iOS Build 321 • ${{ github.sha }}
+name: NeoStation iOS Build 322 Dusklight Warm Resume
+run-name: NeoStation iOS Build 322 • ${{ github.sha }}
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-321
+  group: neostation-ios-build-322
   cancel-in-progress: true
 
 jobs:
@@ -22,13 +22,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') }}
-    name: Build 321 RPCS3 Early JIT Escrow IPA
+    name: Build 322 Dusklight Warm Resume IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '321'
-      IPA_NAME: 'NeoStation-iOS-Build-321-RPCS3-Early-JIT-Escrow'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-321-RPCS3-Early-JIT-Escrow'
+      BUILD_NUMBER: '322'
+      IPA_NAME: 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume'
+      ARTIFACT_NAME: 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -36,8 +36,8 @@ jobs:
       ARMSX2_CORE_RUN_ID: '35805854967'
       RPCS3_CORE_HOST_SHA: be4f8f3abbf478b18ae782dcdaf290181e92b7a2
       RPCS3_CORE_RUN_ID: '35885420615'
-      DUSKLIGHT_CORE_HOST_SHA: de7062685d7739511d22cc889965940d9db0207f
-      DUSKLIGHT_CORE_RUN_ID: '35931454781'
+      DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
+      DUSKLIGHT_CORE_RUN_ID: '35969089056'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -466,7 +466,7 @@ jobs:
           shutil.copy2(source / "cacert.pem", Path("ios/Runner/cacert.pem"))
 
           # The fast-runtime report initially describes the Build 270 donor.
-          # Rewrite the Dolphin fields so the final Build 321 diagnostics
+          # Rewrite the Dolphin fields so the final Build 322 diagnostics
           # describe the binary that is actually packaged.
           fast_path = Path("build/fast-native/identity.json")
           fast = json.loads(fast_path.read_text())
@@ -681,7 +681,7 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 321 IPA
+      - name: Package and validate Build 322 IPA
         shell: bash
         run: |
           set -euo pipefail
