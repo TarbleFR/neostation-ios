@@ -773,8 +773,14 @@ jobs:
             --identity dist/dusklight/identity.json --core-host "$DUSKLIGHT_CORE_HOST_SHA" \
             --build-number "$BUILD_NUMBER"
           if [ "$KARTPAD_CANDIDATE" = "1" ]; then
-            python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa"               --identity dist/kartpad-native/identity.json               --core-host "$KARTPAD_CORE_HOST_SHA"               --build-number "$BUILD_NUMBER"
+            python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+              --identity dist/kartpad-native/identity.json \
+              --core-host "$KARTPAD_CORE_HOST_SHA" \
+              --build-number "$BUILD_NUMBER"
             cp dist/kartpad-native/identity.json dist/kartpad-core-identity.json
+          else
+            python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+              --build-number "$BUILD_NUMBER" --expect-absent
           fi
           cp build/fast-native/identity.json dist/fast-native-identity.json
           cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
