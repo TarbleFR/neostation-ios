@@ -44,8 +44,8 @@ def patch_sdl_pump(runtime: Path) -> None:
     path = runtime / "aurora-main/lib/window.cpp"
     replace_once(
         path,
-        '#include "time_internal.hpp"\n',
-        """#include "time_internal.hpp"\n#if defined(__APPLE__)\n#include <TargetConditionals.h>\n#if TARGET_OS_IOS\n#include <dispatch/dispatch.h>\n#include <pthread.h>\n#endif\n#endif\n""",
+        '#include "internal.hpp"\n',
+        """#include "internal.hpp"\n#if defined(__APPLE__)\n#include <TargetConditionals.h>\n#if TARGET_OS_IOS\n#include <dispatch/dispatch.h>\n#include <pthread.h>\n#endif\n#endif\n""",
     )
     replace_once(
         path,
