@@ -58,6 +58,8 @@ def validate(root: Path) -> dict:
     core_exports = command("nm", "-gU", str(core))
     if "_NeoKartPad_GetAPI" not in core_exports:
         raise SystemExit("ERROR: donor Core ABI export missing")
+    if "_NeoKartPad_PrepareUserGame" not in core_exports:
+        raise SystemExit("ERROR: donor Core RVZ preparation export missing")
     core_deps = command("otool", "-L", str(core))
     if "KartPadRuntime.framework" in core_deps:
         raise SystemExit("ERROR: donor Core must lazy-load KartPadRuntime")
