@@ -4,6 +4,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/l10n/dusklight_locale.dart';
+import 'package:neostation/l10n/ports_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -208,17 +209,17 @@ class GameLaunchService {
           } catch (error) {
             _log.e('[KartPad launch] $error');
             return GameLaunchResult.failure(
-              'KartPad could not start.',
+              PortsLocale.kartPadLaunchError(locale, null),
               '$error',
             );
           }
           if (!context.mounted) return GameLaunchResult.failure('', '');
           if (!report.success) {
             return GameLaunchResult.failure(
-              report.message,
+              PortsLocale.kartPadLaunchError(locale, report.errorCode),
               'KartPad stage: ${report.stage ?? "unknown"}\n'
               'Code: ${report.errorCode ?? "unknown"}\n'
-              '${report.technicalDetails}',
+              '${report.technicalDetails}\n${report.message}',
             );
           }
           GameSessionManager.registerGameLaunch(
