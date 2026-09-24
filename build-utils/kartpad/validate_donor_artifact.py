@@ -51,6 +51,7 @@ def validate(root: Path) -> dict:
         "_SDL_GetWindows",
         "_SDL_HideWindow",
         "_SDL_ShowWindow",
+        "_SDL_SetMainReady",
     ):
         if symbol not in exports:
             raise SystemExit(f"ERROR: donor runtime export missing: {symbol}")
