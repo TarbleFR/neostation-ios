@@ -46,6 +46,12 @@ class DusklightInternalBridge {
 class Armsx2InternalBridge {
   static Stream<Map<String, dynamic>> get sessionEvents => const Stream.empty();
 }
+class KartPadInternalBridge {
+  static final controller = StreamController<Map<String, dynamic>>.broadcast();
+  static Stream<Map<String, dynamic>> get sessionEvents => controller.stream;
+  static bool get didEndSession => false;
+  static bool get didReleaseRuntime => false;
+}
 class SfxService {
   static final instance = SfxService._();
   factory SfxService() => instance;
