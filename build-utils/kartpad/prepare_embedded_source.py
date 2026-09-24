@@ -135,6 +135,20 @@ def patch_product(runtime: Path) -> None:
     replace_once(products, bundle, framework)
 
 
+def patch_rvz_import(kartpad: Path) -> None:
+    path = kartpad / "apple/ios/KartPadRuntimeOverlayHost.mm"
+    replace_once(
+        path,
+        """  return [extension isEqualToString:@"wbfs"] ||
+         [extension isEqualToString:@"iso"];
+""",
+        """  return [extension isEqualToString:@"wbfs"] ||
+         [extension isEqualToString:@"iso"] ||
+         [extension isEqualToString:@"rvz"];
+""",
+    )
+
+
 def patch_overlay(kartpad: Path) -> None:
     path = kartpad / "apple/ios/KartPadRuntimeOverlayHost.mm"
     replace_once(
@@ -218,6 +232,7 @@ def main() -> None:
     patch_first_frame(args.runtime_source)
     patch_runtime_entry(args.runtime_source)
     patch_product(args.runtime_source)
+    patch_rvz_import(args.kartpad_source)
     patch_overlay(args.kartpad_source)
     patch_auxiliary_support_root(
         args.kartpad_source / "apple/shared/KartPadMiiManager.mm"
