@@ -77,6 +77,8 @@ NSString* UIText(NSString* fallback, const char* key) {
 }
 
 static NSString* const kNeoKartPadLanguageKey = @"NeoKartPadGameLanguage";
+static NSString* const kKartPadRequestedRuntimeProfileKey =
+    @"KartPadRequestedRuntimeProfile";
 
 NSInteger CurrentGameLanguage() {
   NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:kNeoKartPadLanguageKey];
@@ -357,6 +359,133 @@ bool PrepareUserGameDiscovery(char* error, size_t errorSize) {
   return true;
 }
 
+bool EmbeddedPreparedGameDataReady() {
+  if (supportPath.empty()) return false;
+  NSString* support = [NSString stringWithUTF8String:supportPath.c_str()];
+  NSString* root = [support stringByAppendingPathComponent:@"Runtime/GameData"];
+  NSFileManager* files = NSFileManager.defaultManager;
+  NSArray<NSString*>* required = @[
+    @"sys/boot.bin", @"sys/bi2.bin", @"sys/apploader.img", @"sys/fst.bin",
+    @"sys/main.dol", @"files/rel/StaticR.rel",
+  ];
+  for (NSString* relative in required) {
+    if (![files isReadableFileAtPath:[root stringByAppendingPathComponent:relative]]) {
+      return false;
+    }
+  }
+
+  NSData* boot = [NSData dataWithContentsOfFile:
+      [root stringByAppendingPathComponent:@"sys/boot.bin"] options:0 error:nil];
+  if (boot.length < 0x20) return false;
+  const uint8_t* bytes = static_cast<const uint8_t*>(boot.bytes);
+  return memcmp(bytes, "RMCP01", 6) == 0 && bytes[6] == 0 && bytes[7] == 0;
+}
+
+bool EnsureEmbeddedDvdRootConfig(char* error, size_t errorSize) {
+  if (supportPath.empty()) {
+    return Fail(error, errorSize, "KartPad support directory is unavailable.");
+  }
+  NSString* support = [NSString stringWithUTF8String:supportPath.c_str()];
+  NSString* configPath = [support stringByAppendingPathComponent:@"Config/Config.toml"];
+  NSFileManager* files = NSFileManager.defaultManager;
+  NSError* failure = nil;
+  if (![files createDirectoryAtPath:configPath.stringByDeletingLastPathComponent
+        withIntermediateDirectories:YES attributes:nil error:&failure]) {
+    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+  }
+
+  NSString* config = [NSString stringWithContentsOfFile:configPath
+                                                encoding:NSUTF8StringEncoding
+                                                   error:&failure];
+  if (config == nil) {
+    if ([files fileExistsAtPath:configPath]) {
+      return Fail(error, errorSize,
+                  (failure.localizedDescription ?: @"KartPad Config.toml is unreadable.")
+                      .UTF8String);
+    }
+    config = @"";
+    failure = nil;
+  }
+
+  NSRegularExpression* dvdLine = [NSRegularExpression
+      regularExpressionWithPattern:@"(?m)^\\s*#?\\s*dvd_root\\s*=.*$"
+                           options:0 error:&failure];
+  if (!dvdLine) {
+    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+  }
+  config = [dvdLine stringByReplacingMatchesInString:config options:0
+      range:NSMakeRange(0, config.length) withTemplate:@""];
+
+  NSRegularExpression* paths = [NSRegularExpression
+      regularExpressionWithPattern:@"(?m)^\\s*\\[paths\\]\\s*$"
+                           options:0 error:&failure];
+  if (!paths) {
+    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+  }
+  NSTextCheckingResult* match =
+      [paths firstMatchInString:config options:0 range:NSMakeRange(0, config.length)];
+  if (match) {
+    const NSUInteger insertion = NSMaxRange(match.range);
+    config = [config stringByReplacingCharactersInRange:NSMakeRange(insertion, 0)
+                                              withString:@"\ndvd_root = \"GameData\""];
+  } else {
+    config = [config stringByAppendingString:
+        @"\n\n[paths]\ndvd_root = \"GameData\"\n"];
+  }
+  if (![config writeToFile:configPath atomically:YES
+                  encoding:NSUTF8StringEncoding error:&failure]) {
+    return Fail(error, errorSize,
+                (failure.localizedDescription ?: @"KartPad Config.toml could not be updated.")
+                    .UTF8String);
+  }
+  return true;
+}
+
+bool PrepareEmbeddedRuntimeBootstrap(char* error, size_t errorSize) {
+  NSString* resources = NSBundle.mainBundle.resourcePath;
+  if (resources.length == 0) {
+    return Fail(error, errorSize, "NeoStation bundle resources are unavailable.");
+  }
+
+  NSFileManager* files = NSFileManager.defaultManager;
+  NSArray<NSString*>* requiredResources = @[
+    @"dsp_coef.bin",
+    @"initial_pipeline_cache.db",
+    @"wii_bootstrap/shared2/wc24/misc.bin",
+  ];
+  for (NSString* relative in requiredResources) {
+    NSString* candidate = [resources stringByAppendingPathComponent:relative];
+    if (![files isReadableFileAtPath:candidate]) {
+      NSString* detail = [NSString stringWithFormat:
+          @"KartPad runtime resource is missing: %@", relative];
+      return Fail(error, errorSize, detail.UTF8String);
+    }
+  }
+
+  // SDL's official iOS SceneDelegate performs this before calling RuntimeMain.
+  // The embedded donor does not own UIApplication, so NeoStation must reproduce
+  // that exact resource-root contract before the runtime or Aurora starts.
+  if (![files changeCurrentDirectoryPath:resources]) {
+    return Fail(error, errorSize,
+                "KartPad could not switch to NeoStation's bundle resource directory.");
+  }
+
+  // NeoStation's Ports entry already selected the base game. Preserve the
+  // donor's normal startup contract without exposing its standalone chooser.
+  [NSUserDefaults.standardUserDefaults
+      setObject:@"base" forKey:kKartPadRequestedRuntimeProfileKey];
+  [NSUserDefaults.standardUserDefaults synchronize];
+
+  if (EmbeddedPreparedGameDataReady() &&
+      !EnsureEmbeddedDvdRootConfig(error, errorSize)) {
+    return false;
+  }
+
+  NSLog(@"[NeoKartPad/Donor] SDL embedded bootstrap ready cwd=%@ preparedGame=%d",
+        resources, EmbeddedPreparedGameDataReady() ? 1 : 0);
+  return true;
+}
+
 bool EnsureDonorRuntimeLoadedOnMain(char* error, size_t errorSize) {
   if (NSThread.isMainThread) return LoadRuntime(error, errorSize);
   __block bool loaded = false;
@@ -436,19 +565,40 @@ int PrepareCompressedGameData(const char* game,
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
   if (movedExisting) [files removeItemAtPath:rollback error:nil];
+  if (!EnsureEmbeddedDvdRootConfig(error, errorSize)) return 0;
   NSLog(@"[NeoKartPad/Donor] Prepared RMCP01 game data from compressed image.");
   return 1;
+}
+
+using FirstLaunchRunFn = BOOL (*)(id, SEL);
+FirstLaunchRunFn originalFirstLaunchRun = nullptr;
+
+BOOL NeoStationFirstLaunchRun(id receiver, SEL selector) {
+  if (EmbeddedPreparedGameDataReady()) {
+    NSLog(@"[NeoKartPad/Donor] Skipping standalone KartPad chooser; NeoStation game data is ready.");
+    return YES;
+  }
+  return originalFirstLaunchRun ? originalFirstLaunchRun(receiver, selector) : NO;
 }
 
 void InstallAutoImportSwizzle() {
   Class host = NSClassFromString(@"KartPadFirstLaunchHost");
   if (!host) return;
+
+  Method run = class_getInstanceMethod(host, NSSelectorFromString(@"run"));
+  if (run && !originalFirstLaunchRun) {
+    originalFirstLaunchRun =
+        reinterpret_cast<FirstLaunchRunFn>(method_getImplementation(run));
+    method_setImplementation(run, reinterpret_cast<IMP>(NeoStationFirstLaunchRun));
+  }
+
   Method show = class_getInstanceMethod(host, NSSelectorFromString(@"showOptions"));
   Method choose =
       class_getInstanceMethod(host, NSSelectorFromString(@"chooseDocumentsRoot"));
-  if (!show || !choose) return;
-  method_setImplementation(show, method_getImplementation(choose));
-  NSLog(@"[NeoKartPad/Donor] First-launch import redirected to NeoStation user game.");
+  if (show && choose) {
+    method_setImplementation(show, method_getImplementation(choose));
+  }
+  NSLog(@"[NeoKartPad/Donor] Embedded first-launch policy installed.");
 }
 
 bool LoadRuntime(char* error, size_t errorSize) {
@@ -663,6 +813,7 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   gamePath = game;
 
   if (!PrepareUserGameDiscovery(error, errorSize)) return 0;
+  if (!PrepareEmbeddedRuntimeBootstrap(error, errorSize)) return 0;
   if (!LoadRuntime(error, errorSize)) return 0;
   if (!session.reserve())
     return Fail(error, errorSize, "KartPad could not reserve a session.");
