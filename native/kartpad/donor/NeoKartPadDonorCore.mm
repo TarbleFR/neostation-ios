@@ -329,11 +329,46 @@ bool PrepareRuntimeStorage(char* error, size_t errorSize) {
   NSString* defaultCache =
       [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"]
           stringByAppendingPathComponent:@"KartPad"];
-  [files createDirectoryAtPath:defaultCache.stringByDeletingLastPathComponent
-   withIntermediateDirectories:YES attributes:nil error:nil];
-  if (!EnsureSymlink(defaultCache, cache, &failure)) {
+  if (![files createDirectoryAtPath:defaultCache.stringByDeletingLastPathComponent
+        withIntermediateDirectories:YES attributes:nil error:&failure]) {
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
+
+  // The converted official runtime resolves its cache path directly as
+  // <HOME>/Library/Caches/KartPad. Older NeoStation candidates tried to turn
+  // that path into a symlink to getTemporaryDirectory()/KartPad. That target
+  // is intentionally ephemeral on iOS and can disappear between launches,
+  // leaving a stale/dangling entry at Library/Caches/KartPad. Foundation then
+  // rejects recreating "KartPad" in Caches before RuntimeMain is ever reached.
+  //
+  // Keep the runtime on its canonical writable cache directory instead. If a
+  // previous experimental build left a symlink there, remove only that link;
+  // preserve an existing real cache directory and its renderer data.
+  NSString* staleCacheLink =
+      [files destinationOfSymbolicLinkAtPath:defaultCache error:nil];
+  if (staleCacheLink != nil) {
+    if (![files removeItemAtPath:defaultCache error:&failure]) {
+      return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+    }
+  }
+
+  BOOL cacheIsDirectory = NO;
+  if ([files fileExistsAtPath:defaultCache isDirectory:&cacheIsDirectory]) {
+    if (!cacheIsDirectory) {
+      if (![files removeItemAtPath:defaultCache error:&failure]) {
+        return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+      }
+    }
+  }
+  if (![files fileExistsAtPath:defaultCache]) {
+    if (![files createDirectoryAtPath:defaultCache withIntermediateDirectories:YES
+                           attributes:nil error:&failure]) {
+      return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+    }
+  }
+
+  cachePath = defaultCache.fileSystemRepresentation;
+  NSLog(@"[NeoKartPad/Donor] native cache ready at %@", defaultCache);
   if (!WriteGameLanguageSysConf(&failure)) {
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
