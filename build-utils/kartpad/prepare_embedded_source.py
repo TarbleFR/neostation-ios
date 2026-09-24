@@ -38,6 +38,20 @@ def patch_runtime_paths(runtime: Path) -> None:
         "inline std::filesystem::path CacheDataDirectory() {\n",
         """inline std::filesystem::path CacheDataDirectory() {\n#if defined(__APPLE__)\n    if (NeoKartPadEmbeddedCachePath) {\n        const char* value = NeoKartPadEmbeddedCachePath();\n        if (value && *value) return std::filesystem::path(value);\n    }\n#endif\n""",
     )
+    replace_once(
+        path,
+        """inline std::filesystem::path ResolveConfigPath() {\n    return ApplicationDataDirectory() / kConfigFileName;\n}\n""",
+        """inline std::filesystem::path ResolveConfigPath() {\n#if defined(__APPLE__)\n    if (NeoKartPadEmbeddedSupportPath) {\n        const char* value = NeoKartPadEmbeddedSupportPath();\n        if (value && *value) {\n            return std::filesystem::path(value) / "Config" / kConfigFileName;\n        }\n    }\n#endif\n    return ApplicationDataDirectory() / kConfigFileName;\n}\n""",
+    )
+
+
+def patch_nand_paths(runtime: Path) -> None:
+    path = runtime / "include/nand_path.h"
+    replace_once(
+        path,
+        """inline std::filesystem::path ManagedNandRootPath() {\n    return RuntimeConfigFile::ApplicationDataDirectory() / "NAND";\n}\n""",
+        """inline std::filesystem::path ManagedNandRootPath() {\n#if defined(__APPLE__)\n    if (NeoKartPadEmbeddedSupportPath) {\n        const char* value = NeoKartPadEmbeddedSupportPath();\n        if (value && *value) {\n            return std::filesystem::path(value) / "Saves" / "NAND";\n        }\n    }\n#endif\n    return RuntimeConfigFile::ApplicationDataDirectory() / "NAND";\n}\n""",
+    )
 
 
 def patch_sdl_pump(runtime: Path) -> None:
@@ -194,6 +208,7 @@ def main() -> None:
             parser.error(f"missing required source: {item}")
 
     patch_runtime_paths(args.runtime_source)
+    patch_nand_paths(args.runtime_source)
     patch_sdl_pump(args.runtime_source)
     patch_first_frame(args.runtime_source)
     patch_runtime_entry(args.runtime_source)
