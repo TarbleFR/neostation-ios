@@ -35,6 +35,11 @@ for p in "$UPSTREAM" "$TRANSLATION" "$DISCIO_SOURCE" "$DISCIO_BUILD"; do
   [[ -d "$p" ]] || { echo "ERROR: missing directory: $p" >&2; exit 66; }
 done
 [[ -f "$DAWN" ]] || { echo "ERROR: missing Dawn archive: $DAWN" >&2; exit 66; }
+actual_dawn_sha="$(shasum -a 256 "$DAWN" | awk '{print $1}')"
+[[ "$actual_dawn_sha" == "$DAWN_SHA256" ]] || {
+  echo "ERROR: physical-iOS Dawn hash mismatch: $actual_dawn_sha" >&2
+  exit 65
+}
 [[ -f "$TRANSLATION/build_shards/shards.cmake" ]] || {
   echo "ERROR: missing authorized RMCP01 translation graph" >&2
   exit 66
@@ -49,6 +54,7 @@ values={
   "EXPECTED_FUNCTIONS":str(p["discProfile"]["expectedTranslatedFunctions"]),
   "ABI_VERSION":str(p["neoStationAbi"]),
   "RUNTIME_IDENTITY":p["runtimeIdentity"],
+  "DAWN_SHA256":p["physicalIosDependencies"]["dawnSha256"],
 }
 for key,value in values.items():
     print(f"{key}={shlex.quote(value)}")
