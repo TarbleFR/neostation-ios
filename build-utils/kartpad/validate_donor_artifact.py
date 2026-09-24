@@ -36,6 +36,25 @@ def validate(root: Path) -> dict:
     if identity.get("runtime_sha256") != runtime_sha:
         raise SystemExit("ERROR: donor runtime hash mismatch")
 
+    resource_root = root / "runtime-resources"
+    expected_resources = identity.get("runtime_resources")
+    if not isinstance(expected_resources, dict) or not expected_resources:
+        raise SystemExit("ERROR: donor runtime resource identity is missing")
+    required_resources = {
+        "dsp_coef.bin",
+        "initial_pipeline_cache.db",
+        "wii_bootstrap/shared2/wc24/misc.bin",
+    }
+    if not required_resources.issubset(expected_resources):
+        raise SystemExit("ERROR: donor runtime resource identity is incomplete")
+    actual_resources = {}
+    for item in sorted(p for p in resource_root.rglob("*") if p.is_file()):
+        actual_resources[item.relative_to(resource_root).as_posix()] = hashlib.sha256(
+            item.read_bytes()
+        ).hexdigest()
+    if actual_resources != expected_resources:
+        raise SystemExit("ERROR: donor runtime resources do not match identity")
+
     header = command("otool", "-hv", str(runtime))
     if "DYLIB" not in header or "EXECUTE" in header:
         raise SystemExit("ERROR: converted KartPad runtime is not MH_DYLIB")
@@ -52,6 +71,8 @@ def validate(root: Path) -> dict:
         "_SDL_HideWindow",
         "_SDL_ShowWindow",
         "_SDL_SetMainReady",
+        "_SDL_SetiOSEventPump",
+        "_SDL_GetError",
     ):
         if symbol not in exports:
             raise SystemExit(f"ERROR: donor runtime export missing: {symbol}")
@@ -70,6 +91,7 @@ def validate(root: Path) -> dict:
         "coreSha256": core_sha,
         "runtimeSha256": runtime_sha,
         "officialIpaSha256": identity["official_ipa_sha256"],
+        "runtimeResources": len(expected_resources),
     }
 
 
