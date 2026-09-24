@@ -80,7 +80,7 @@ jobs:
           otool -D "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           xcrun vtool -show-build "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           nm -gU "$ROOT/KartPadRuntime.framework/KartPadRuntime" | \
-            grep -E '__Z11RuntimeMainiPPc|_SDL_GetWindows|_SDL_HideWindow|_SDL_ShowWindow'
+            grep -E '__Z11RuntimeMainiPPc|_SDL_GetWindows|_SDL_HideWindow|_SDL_ShowWindow|_SDL_SetMainReady'
           nm "$ROOT/KartPadRuntime.framework/KartPadRuntime" > build/kartpad-donor/runtime-symbols.txt
           grep -q '_OBJC_CLASS_\$_KartPadDiscExtractor' build/kartpad-donor/runtime-symbols.txt
 
