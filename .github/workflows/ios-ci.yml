@@ -21,7 +21,7 @@ jobs:
   build:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
-    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
     name: Build 322 Dusklight Warm Resume IPA
     runs-on: macos-15
     timeout-minutes: 90
