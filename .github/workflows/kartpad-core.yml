@@ -9,6 +9,7 @@ on:
       - '.github/workflows/kartpad-core.yml'
       - 'native/kartpad/**'
       - 'build-utils/kartpad/**'
+      - 'build-utils/validate_kartpad_ipa.py'
       - 'packages/kartpad_internal_bridge/**'
       - 'test/kartpad_native_session_test.cpp'
       - 'test/kartpad_embedded_patch_contract_test.py'
@@ -41,7 +42,9 @@ jobs:
           set -euo pipefail
           python3 -m py_compile \
             build-utils/kartpad/prepare_embedded_source.py \
-            build-utils/kartpad/validate_embedded_core.py
+            build-utils/kartpad/validate_embedded_core.py \
+            build-utils/kartpad/embed_core.py \
+            build-utils/validate_kartpad_ipa.py
           bash -n build-utils/kartpad/build_embedded_core.sh
           python3 test/kartpad_bridge_contract_test.py
           python3 test/kartpad_embedded_patch_contract_test.py
