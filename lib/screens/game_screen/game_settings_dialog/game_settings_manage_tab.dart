@@ -177,6 +177,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     final isDolphinInternal =
         Platform.isIOS &&
         DolphinInternalV2Service.isDolphinSystem(_targetSystemFolder);
+    final isPortsInternal =
+        Platform.isIOS && _targetSystemFolder.toLowerCase() == 'ports';
     var deleted = false;
 
     try {
@@ -197,6 +199,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
         await context
             .read<SqliteConfigProvider>()
             .refreshDolphinInternalLibrary(_targetSystemFolder);
+      } else if (isPortsInternal && mounted) {
+        await context.read<SqliteConfigProvider>().refreshPortsInternalLibrary();
       }
       deleted = true;
     } catch (e) {
