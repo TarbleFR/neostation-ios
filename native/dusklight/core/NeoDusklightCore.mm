@@ -10,6 +10,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <dlfcn.h>
+#include <sys/stat.h>
 #include <cstdio>
 #include <exception>
 #include <map>
@@ -180,7 +181,7 @@ void RuntimeFailure(const char* reason) {
   Emit(reason);
 }
 
-void Tick() {void Tick() {
+void Tick() {
   if (inNativeCall || !session.active()) return;
   if (session.state() == NEO_DUSKLIGHT_STOPPING) { FinishReturn(); return; }
   if (backgrounded) { Suspend(true); return; }
