@@ -94,6 +94,11 @@ def patch_runtime_entry(runtime: Path) -> None:
     replace_once(path, marker, helpers + marker)
     replace_once(
         path,
+        """        const std::string auroraUserPath = applicationDataDirectory.string();\n        const std::string auroraCachePath = rendererCacheDirectory.string();\n""",
+        """#if defined(MKW_NEOSTATION_EMBEDDED_CORE)\n        const auto auroraUserDirectory = applicationDataDirectory / "Mods";\n        std::error_code auroraUserPathError;\n        std::filesystem::create_directories(auroraUserDirectory, auroraUserPathError);\n        const std::string auroraUserPath = auroraUserDirectory.string();\n#else\n        const std::string auroraUserPath = applicationDataDirectory.string();\n#endif\n        const std::string auroraCachePath = rendererCacheDirectory.string();\n""",
+    )
+    replace_once(
+        path,
         "const AuroraInfo auroraInfo = aurora_initialize(0, nullptr, &auroraConfig);",
         "const AuroraInfo auroraInfo = NeoKartPadAuroraInitialize(&auroraConfig);",
     )
