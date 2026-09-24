@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "upstream": "chrissotraidis/kartpad",
+  "release": "v0.5.1-experimental.1",
+  "compiledSource": "67c7e2f942c1226af149e6a9cc571f647528e25e",
+  "sourceArchive": {
+    "name": "KartPad-v0.5.1-experimental.1-source.tar.gz",
+    "bytes": 361531088,
+    "sha256": "3a7f14e76d289efb398c1f42b3817e9eacd828cceef4d40d185663743c916360"
+  },
+  "referenceIpa": {
+    "name": "KartPad-v0.5.1-experimental.1-ios-unsigned.ipa",
+    "bytes": 41985168,
+    "sha256": "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58"
+  },
+  "discProfile": {
+    "id": "mkwii-rmcp01-rev0",
+    "discId": "RMCP01",
+    "discNumber": 0,
+    "revision": 0,
+    "expectedTranslatedFunctions": 29637,
+    "expectedBaseFunctions": 29065
+  },
+  "neoStationAbi": 1,
+  "runtimeIdentity": "kartpad_rmcp01_full_game_v1",
+  "publicSourceLimitation": "The upstream source delivery intentionally excludes generated game translation/profile inputs. A full KartPadCore must be built from an authorized RMCP01 translation graph; the standalone MH_EXECUTE IPA is not a loadable Core."
+}

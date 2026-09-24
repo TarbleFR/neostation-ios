@@ -14,6 +14,7 @@ workspace:
   - packages/dolphin_internal_bridge
   - packages/rpcs3_internal_bridge
   - packages/dusklight_internal_bridge
+  - packages/kartpad_internal_bridge
 
 version: 1.0.0+194
 environment:
@@ -41,6 +42,8 @@ dependencies:
     path: packages/rpcs3_internal_bridge
   dusklight_internal_bridge:
     path: packages/dusklight_internal_bridge
+  kartpad_internal_bridge:
+    path: packages/kartpad_internal_bridge
     
   file_picker: 12.0.0-beta.3
   device_info_plus: ^13.2.0
