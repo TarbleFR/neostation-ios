@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:kartpad_internal_bridge/kartpad_internal_bridge.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -44,15 +45,18 @@ class KartPadLaunchResult {
 class KartPadDiscIdentity {
   const KartPadDiscIdentity({
     required this.gameId,
-    required this.discNumber,
-    required this.revision,
+    this.discNumber,
+    this.revision,
   });
   final String gameId;
-  final int discNumber;
-  final int revision;
+  final int? discNumber;
+  final int? revision;
+
+  bool get hasExactRevisionMetadata =>
+      discNumber != null && revision != null;
 }
 
-/// Stage-1 user-data boundary for the future embedded KartPad Core.
+/// User-data boundary for the embedded KartPad Core.
 class KartPadInternalService {
   KartPadInternalService._();
 
@@ -60,7 +64,9 @@ class KartPadInternalService {
   static const String supportedDiscId = 'RMCP01';
   static const int supportedDiscNumber = 0;
   static const int supportedRevision = 0;
-  static const Set<String> supportedGameExtensions = <String>{'iso'};
+  static const Set<String> supportedGameExtensions = <String>{'iso', 'wbfs'};
+  static const MethodChannel _discIdentityChannel =
+      MethodChannel('neostation/dolphin_internal');
 
   static Future<Directory> rootDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
@@ -129,7 +135,7 @@ class KartPadInternalService {
       );
     }
 
-    final identity = await inspectRawIso(source);
+    final identity = await inspectGameFile(source);
     if (identity == null || identity.gameId != supportedDiscId) {
       return KartPadImportResult(
         imported: 0,
@@ -139,8 +145,9 @@ class KartPadInternalService {
         ],
       );
     }
-    if (identity.discNumber != supportedDiscNumber ||
-        identity.revision != supportedRevision) {
+    if (identity.hasExactRevisionMetadata &&
+        (identity.discNumber != supportedDiscNumber ||
+            identity.revision != supportedRevision)) {
       return KartPadImportResult(
         imported: 0,
         rejected: 1,
@@ -155,13 +162,21 @@ class KartPadInternalService {
     }
 
     final destination = await gamesDirectory();
-    final output = File(path.join(destination.path, '$displayTitle.iso'));
+    final output = File(path.join(destination.path, '$displayTitle.$extension'));
     final temporary = File('${output.path}.part');
     try {
       if (await temporary.exists()) await temporary.delete();
       await source.copy(temporary.path);
       if (await temporary.length() != await source.length()) {
         throw const FileSystemException('Copied file length mismatch');
+      }
+      for (final existingExtension in supportedGameExtensions) {
+        final existing = File(
+          path.join(destination.path, '$displayTitle.$existingExtension'),
+        );
+        if (await existing.exists() && !path.equals(existing.path, output.path)) {
+          await existing.delete();
+        }
       }
       if (await output.exists()) await output.delete();
       await temporary.rename(output.path);
@@ -179,6 +194,30 @@ class KartPadInternalService {
           KartPadImportIssue(picked.name, 'kartpadImportFailed', '$error'),
         ],
       );
+    }
+  }
+
+  static Future<KartPadDiscIdentity?> inspectGameFile(File file) async {
+    final extension =
+        path.extension(file.path).replaceFirst('.', '').toLowerCase();
+    if (extension == 'iso') return inspectRawIso(file);
+    if (extension != 'wbfs') return null;
+
+    try {
+      final data = await _discIdentityChannel.invokeMapMethod<String, dynamic>(
+        'saveIdentity',
+        <String, dynamic>{'gamePath': file.path, 'system': 'wii'},
+      );
+      final gameId = data?['gameId']?.toString().trim().toUpperCase();
+      if (gameId == null || gameId.isEmpty) return null;
+      // Dolphin DiscIO validates the WBFS container and Wii volume here.
+      // The current bridge does not expose disc/revision metadata, so KartPad's
+      // own importer performs that final RMCP01 rev0 check before guest start.
+      return KartPadDiscIdentity(gameId: gameId);
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
     }
   }
 
@@ -221,11 +260,12 @@ class KartPadInternalService {
       );
     }
 
-    final identity = await inspectRawIso(game);
+    final identity = await inspectGameFile(game);
     if (identity == null ||
         identity.gameId != supportedDiscId ||
-        identity.discNumber != supportedDiscNumber ||
-        identity.revision != supportedRevision) {
+        (identity.hasExactRevisionMetadata &&
+            (identity.discNumber != supportedDiscNumber ||
+                identity.revision != supportedRevision))) {
       return const KartPadLaunchResult(
         success: false,
         message: 'KartPad requires Mario Kart Wii PAL RMCP01, disc 0, revision 0.',
