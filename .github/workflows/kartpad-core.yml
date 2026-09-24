@@ -48,6 +48,7 @@ jobs:
           bash -n build-utils/kartpad/build_embedded_core.sh
           python3 test/kartpad_bridge_contract_test.py
           python3 test/kartpad_embedded_patch_contract_test.py
+          python3 test/kartpad_ipa_validation_test.py
           grep -q 'CMAKE_OSX_SYSROOT=iphoneos' build-utils/kartpad/build_embedded_core.sh
           grep -q 'MKW_NEOSTATION_EMBEDDED_CORE=ON' build-utils/kartpad/build_embedded_core.sh
           grep -q 'expectedTranslatedFunctions' build-utils/kartpad/build_embedded_core.sh
