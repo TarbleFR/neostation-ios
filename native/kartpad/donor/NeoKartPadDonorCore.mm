@@ -26,6 +26,8 @@ using SDLGetWindowsFn = SDL_Window** (*)(int*);
 using SDLWindowVisibilityFn = bool (*)(SDL_Window*);
 using SDLFreeFn = void (*)(void*);
 using SDLSetMainReadyFn = void (*)(void);
+using SDLiOSEventPumpFn = void (*)(bool);
+using SDLGetErrorFn = const char* (*)(void);
 
 void* runtimeHandle = nullptr;
 RuntimeMainFn runtimeMain = nullptr;
@@ -34,6 +36,8 @@ SDLWindowVisibilityFn sdlHideWindow = nullptr;
 SDLWindowVisibilityFn sdlShowWindow = nullptr;
 SDLFreeFn sdlFree = nullptr;
 SDLSetMainReadyFn sdlSetMainReady = nullptr;
+SDLiOSEventPumpFn sdlSetiOSEventPump = nullptr;
+SDLGetErrorFn sdlGetError = nullptr;
 
 std::atomic_bool runtimeThreadActive{false};
 std::string supportPath;
@@ -465,10 +469,14 @@ bool LoadRuntime(char* error, size_t errorSize) {
   sdlFree = reinterpret_cast<SDLFreeFn>(dlsym(runtimeHandle, "SDL_free"));
   sdlSetMainReady = reinterpret_cast<SDLSetMainReadyFn>(
       dlsym(runtimeHandle, "SDL_SetMainReady"));
+  sdlSetiOSEventPump = reinterpret_cast<SDLiOSEventPumpFn>(
+      dlsym(runtimeHandle, "SDL_SetiOSEventPump"));
+  sdlGetError = reinterpret_cast<SDLGetErrorFn>(
+      dlsym(runtimeHandle, "SDL_GetError"));
   if (!runtimeMain || !sdlGetWindows || !sdlHideWindow || !sdlShowWindow ||
-      !sdlSetMainReady) {
+      !sdlSetMainReady || !sdlSetiOSEventPump || !sdlGetError) {
     return Fail(error, errorSize,
-                "KartPad donor runtime is missing RuntimeMain or required SDL exports.");
+                "KartPad donor runtime is missing RuntimeMain or required SDL iOS exports.");
   }
   InstallAutoImportSwizzle();
   return true;
@@ -569,23 +577,43 @@ void PollForRuntimeWindow(int attempt) {
   });
 }
 
-void RuntimeThreadMain() {
+void RuntimeMainOnUIKitThread() {
+  if (!NSThread.isMainThread) {
+    dispatch_async(dispatch_get_main_queue(), ^{ RuntimeMainOnUIKitThread(); });
+    return;
+  }
   runtimeThreadActive.store(true, std::memory_order_release);
-  // RuntimeMain is normally entered through SDL_RunApp on iOS. NeoStation owns
-  // UIApplication and deliberately bypasses SDL_RunApp, so reproduce the
-  // mandatory initialization contract before SDL_Init runs.
-  if (sdlSetMainReady) sdlSetMainReady();
+
+  // The official iOS executable enters RuntimeMain through SDL_RunApp.
+  // NeoStation already owns UIApplication, so it must reproduce the parts of
+  // SDL's iOS bootstrap that are safe inside an existing application:
+  // main-ready state plus the UIKit event pump. RuntimeMain itself must remain
+  // on UIKit's main thread because SDL creates UIWindow/CAMetalLayer there.
+  sdlSetMainReady();
+  sdlSetiOSEventPump(true);
+
   char name[] = "KartPadRuntime";
   char* argv[] = {name, nullptr};
   const int result = runtimeMain ? runtimeMain(1, argv) : -1;
+
+  const char* rawError = sdlGetError ? sdlGetError() : nullptr;
+  const std::string runtimeError =
+      rawError && *rawError ? std::string(rawError) : std::string();
+  sdlSetiOSEventPump(false);
   runtimeThreadActive.store(false, std::memory_order_release);
-  dispatch_async(dispatch_get_main_queue(), ^{
-    if (session.state() != NEO_KARTPAD_ENDED) {
-      session.terminate();
-      Emit(result == 0 ? "KartPad donor runtime exited."
-                       : "KartPad donor runtime failed.");
+
+  if (session.state() != NEO_KARTPAD_ENDED) {
+    session.terminate();
+    if (result == 0) {
+      Emit("KartPad donor runtime exited.");
+    } else if (!runtimeError.empty()) {
+      const std::string message =
+          "KartPad donor runtime failed before first frame: " + runtimeError;
+      Emit(message.c_str());
+    } else {
+      Emit("KartPad donor runtime failed before first frame.");
     }
-  });
+  }
 }
 
 void ReturnToNeoStation() {
@@ -651,7 +679,10 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
     return 1;
   }
 
-  std::thread(RuntimeThreadMain).detach();
+  // Return from the Flutter method call first, then enter the official runtime
+  // on UIKit's main thread. SDL's own iOS pump services the nested main runloop
+  // while the game is active, just as it does in the standalone KartPad app.
+  dispatch_async(dispatch_get_main_queue(), ^{ RuntimeMainOnUIKitThread(); });
   PollForRuntimeWindow(0);
   return 1;
 }
