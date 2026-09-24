@@ -13,6 +13,15 @@ on:
       - 'lib/services/game_launch_manager.dart'
       - 'lib/services/audio_policy_service.dart'
       - 'test/game_audio_handoff_test.py'
+      - 'lib/services/kartpad_internal_service.dart'
+      - 'lib/l10n/ports_locale.dart'
+      - 'lib/widgets/ports_internal_playlist_actions.dart'
+      - 'lib/screens/game_screen/my_games_list.dart'
+      - 'lib/providers/sqlite_config_provider.dart'
+      - 'lib/providers/sqlite_config_provider/scanning.dart'
+      - 'lib/services/game/game_launch_service.dart'
+      - 'assets/systems/ports.json'
+      - 'test/dusklight_ports_stage1_test.dart'
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,3 +44,9 @@ jobs:
         run: python3 test/carousel_chrome_layout_test.py
       - name: Exercise native-to-menu audio handoff and rapid relaunch
         run: python3 test/game_audio_handoff_test.py
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Analyze Ports Stage 1 sources
+        run: flutter analyze --no-fatal-infos lib/services/kartpad_internal_service.dart lib/l10n/ports_locale.dart lib/widgets/ports_internal_playlist_actions.dart lib/screens/game_screen/my_games_list.dart lib/providers/sqlite_config_provider.dart lib/services/game/game_launch_service.dart
+      - name: Exercise Ports multi-import and KartPad isolation
+        run: flutter test test/dusklight_ports_stage1_test.dart
