@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -71,13 +72,9 @@ NSString* UIText(NSString* fallback, const char* key) {
 
 bool EnsureSymlink(NSString* linkPath, NSString* targetPath, NSError** error) {
   NSFileManager* files = NSFileManager.defaultManager;
-  NSDictionary* attrs = [files attributesOfItemAtPath:linkPath error:nil];
-  if (attrs != nil) {
-    NSString* type = attrs[NSFileType];
-    if ([type isEqualToString:NSFileTypeSymbolicLink]) {
-      NSString* current = [files destinationOfSymbolicLinkAtPath:linkPath error:nil];
-      if ([current isEqualToString:targetPath]) return true;
-    }
+  NSString* current = [files destinationOfSymbolicLinkAtPath:linkPath error:nil];
+  if ([current isEqualToString:targetPath]) return true;
+  if (current != nil || [files fileExistsAtPath:linkPath]) {
     if (![files removeItemAtPath:linkPath error:error]) return false;
   }
   return [files createSymbolicLinkAtPath:linkPath
