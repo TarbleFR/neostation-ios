@@ -52,10 +52,12 @@ void main() {
     expect(service, contains("'Mario Kart Wii'"));
     expect(
       service,
-      contains("supportedGameExtensions = <String>{'iso', 'wbfs'}"),
+      contains("supportedGameExtensions = <String>{'iso', 'wbfs', 'rvz'}"),
     );
     expect(service, contains("MethodChannel('neostation/dolphin_internal')"));
     expect(service, contains("'saveIdentity'"));
+    expect(service, contains('KartPadInternalBridge.prepareGame'));
+    expect(service, contains("'kartpadRvzPrepareFailed'"));
     expect(service, contains(r"File('${output.path}.part')"));
   });
 
