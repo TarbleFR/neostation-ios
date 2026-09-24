@@ -11,7 +11,9 @@ import '../widgets/game_launch_dialog.dart';
 /// Workflow details:
 /// 1. Initializes a new session via [GameLaunchManager].
 /// 2. Displays the [GameLaunchDialog] to show loading progress and metadata.
-/// 3. Introduces a brief delay (2s) to ensure the UI has settled and provide feedback.
+/// 3. Gives the launch route time to paint before execution. Internal Ports use
+///    only a short handoff delay; external emulator launches keep the legacy 2s.
+///
 /// 4. Executes the emulator/game via [GameService.launchGame].
 ///
 /// Responsibility requirements for the caller:
@@ -76,9 +78,15 @@ Future<void> launchGameWithDialog({
   }
 
   try {
-    // Preserve the existing presentation delay; readiness is determined by
-    // the native launch result, never by this delay.
-    await Future.delayed(const Duration(seconds: 2));
+    // KartPad/DuskLight are in-process native Ports. The old unconditional
+    // two-second presentation delay was pure startup latency for them. Keep a
+    // single short paint/handoff window, while preserving the legacy delay for
+    // external emulator launches.
+    final launchPresentationDelay =
+        system.folderName.toLowerCase() == 'ports'
+            ? const Duration(milliseconds: 150)
+            : const Duration(seconds: 2);
+    await Future.delayed(launchPresentationDelay);
     if (!context.mounted || !dialogRoute.isActive) {
       GameService.clearLaunchPending();
       closeLaunchDialog();

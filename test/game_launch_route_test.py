@@ -20,7 +20,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 class GameModel {}
-class SystemModel {}
+class SystemModel {
+  final String folderName;
+  SystemModel([this.folderName = 'test']);
+}
 class FileProvider {}
 class GameLaunchResult {
   final bool success;
@@ -109,6 +112,20 @@ void main() {
     expect(GameLaunchManager().starts, 1);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('Ports launch skips the artificial two-second delay', (tester) async {
+    await mount(tester);
+    launchFuture = launchGameWithDialog(context: launcherContext, game: GameModel(),
+      system: SystemModel('ports'), fileProvider: FileProvider(),
+      onGameClosed: () { closed++; });
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(GameService.calls, 1);
+    GameService.result.complete(GameLaunchResult(true));
+    await tester.pump(); await launchFuture;
+    expect(GameLaunchManager().starts, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('failure preserves its detail and removes only the launch dialog', (tester) async {
     await mount(tester); await start(tester);
     showDialog<void>(context: launcherContext, builder: (_) => const Text('other-dialog'));

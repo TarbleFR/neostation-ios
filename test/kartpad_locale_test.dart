@@ -12,6 +12,7 @@ void main() {
       expect(entry.value['kartpadBusy'], isNotEmpty, reason: entry.key);
       expect(entry.value['kartpadRestartRequired'], isNotEmpty, reason: entry.key);
       expect(entry.value['returnToLibrary'], isNotEmpty, reason: entry.key);
+      expect(entry.value['returnToGame'], isNotEmpty, reason: entry.key);
       expect(entry.value['kartpadRvzPrepareFailed'], isNotEmpty, reason: entry.key);
       for (final key in <String>[
         'settings',
@@ -37,6 +38,10 @@ void main() {
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['returnToLibrary'],
       'Retour à NeoStation',
+    );
+    expect(
+      PortsLocale.kartPadNativeUI(const Locale('fr'))['returnToGame'],
+      'Revenir au jeu',
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['settings'],

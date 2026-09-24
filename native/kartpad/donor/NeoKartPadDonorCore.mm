@@ -173,6 +173,14 @@ void RefreshSettingsMenu() {
 UIMenu* BuildNeoKartPadSettingsMenu() {
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
 
+  // Selecting this action simply dismisses UIKit's menu and hands controller
+  // focus straight back to the already-running guest. It deliberately does
+  // not mutate session state or rebuild the renderer.
+  UIAction* returnToGameAction = [UIAction actionWithTitle:
+      UIText(@"Return to Game", "returnToGame")
+      image:[UIImage systemImageNamed:@"play.fill"] identifier:nil
+      handler:^(__kindof UIAction*) {}];
+
   NSArray<NSNumber*>* languages = @[@1, @2, @3, @4, @5, @6];
   NSArray<NSString*>* languageKeys = @[
     @"languageEnglish", @"languageGerman", @"languageFrench",
@@ -274,7 +282,8 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
   return [UIMenu menuWithTitle:UIText(@"KartPad Settings", "settings")
                          image:[UIImage systemImageNamed:@"gearshape"]
                     identifier:@"com.neostation.kartpad.settings"
-                       options:0 children:@[languageMenu, graphicsMenu, hint]];
+                       options:0
+                      children:@[returnToGameAction, languageMenu, graphicsMenu, hint]];
 }
 
 bool EnsureSymlink(NSString* linkPath, NSString* targetPath, NSError** error) {
@@ -882,11 +891,27 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
     return Fail(error, errorSize, "NeoStation host window is unavailable.");
   neoStationWindow = hostView.window;
 
-  if (!gamePath.empty() && gamePath != game && runtimeThreadActive.load())
-    return Fail(error, errorSize,
-                "The retained donor runtime owns another Mario Kart Wii image.");
-  gamePath = game;
+  const bool retainedRuntime =
+      runtimeThreadActive.load(std::memory_order_acquire);
+  if (retainedRuntime) {
+    if (!gamePath.empty() && gamePath != game)
+      return Fail(error, errorSize,
+                  "The retained donor runtime owns another Mario Kart Wii image.");
+    gamePath = game;
+    if (!session.reserve())
+      return Fail(error, errorSize, "KartPad could not reserve a retained session.");
+    session.runtimeReady();
+    ForEachSDLWindow([](SDL_Window* window) { sdlShowWindow(window); });
+    if (donorWindow) [donorWindow makeKeyAndVisible];
+    returnButton.hidden = NO;
+    settingsButton.hidden = NO;
+    RefreshSettingsMenu();
+    session.firstFrame();
+    Emit("Resumed retained KartPad donor runtime without bootstrap.");
+    return 1;
+  }
 
+  gamePath = game;
   if (!PrepareUserGameDiscovery(error, errorSize)) return 0;
   if (!PrepareEmbeddedRuntimeBootstrap(error, errorSize)) return 0;
   if (!LoadRuntime(error, errorSize)) return 0;
@@ -894,16 +919,6 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
     return Fail(error, errorSize, "KartPad could not reserve a session.");
 
   session.runtimeReady();
-  if (runtimeThreadActive.load(std::memory_order_acquire)) {
-    ForEachSDLWindow([](SDL_Window* window) { sdlShowWindow(window); });
-    if (donorWindow) [donorWindow makeKeyAndVisible];
-    returnButton.hidden = NO;
-    settingsButton.hidden = NO;
-    RefreshSettingsMenu();
-    session.firstFrame();
-    Emit("Resumed retained KartPad donor runtime.");
-    return 1;
-  }
 
   // Return from the Flutter method call first, then enter the official runtime
   // on UIKit's main thread. SDL's own iOS pump services the nested main runloop

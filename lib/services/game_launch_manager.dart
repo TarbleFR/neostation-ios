@@ -63,6 +63,17 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   /// executable by the desktop process poller.
   StreamSubscription<Map<String, dynamic>>? _embeddedSessionSubscription;
 
+  static const Set<String> _embeddedIOSSessionExecutables = <String>{
+    'ios_dusklight_internal',
+    'ios_kartpad_internal',
+    'ios_armsx2_internal',
+  };
+  String? _activeEmulatorExe;
+
+  bool get _isEmbeddedIOSSession =>
+      Platform.isIOS &&
+      _embeddedIOSSessionExecutables.contains(_activeEmulatorExe);
+
   /// Flag for Android to detect if the app was resumed before monitoring started
   /// (indicating an immediate emulator failure).
   bool _resumedBeforeMonitoring = false;
@@ -73,6 +84,11 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   /// Whether the session management dialog can be manually closed.
   bool get canDismiss {
     if (_phase != GameLaunchPhase.playing) return false;
+    // In-process iOS runtimes keep receiving controller input while Flutter
+    // remains alive behind their native window. Never let A/B/Enter leak into
+    // the launch dialog and close the frontend session underneath gameplay.
+    // Their explicit native "Return to NeoStation" event owns teardown.
+    if (_isEmbeddedIOSSession) return false;
     if (Platform.isAndroid) return _canDismiss;
     return true;
   }
@@ -86,6 +102,7 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     _phase = GameLaunchPhase.launching;
     _canDismiss = false;
     _isClosing = false;
+    _activeEmulatorExe = null;
     unawaited(_embeddedSessionSubscription?.cancel());
     _embeddedSessionSubscription = null;
     WidgetsBinding.instance.addObserver(this);
@@ -110,6 +127,7 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
+    _activeEmulatorExe = emulatorExe;
     _phase = GameLaunchPhase.playing;
     notifyListeners();
     _startPlatformMonitoring(emulatorExe);
@@ -183,6 +201,7 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     _phase = null;
     _canDismiss = false;
     _isClosing = false;
+    _activeEmulatorExe = null;
     _sfxWasEnabled = true;
     _resumedBeforeMonitoring = false;
     notifyListeners();

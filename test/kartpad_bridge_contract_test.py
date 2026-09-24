@@ -35,6 +35,8 @@ assert 'KartPadInternalBridge.launch' in service
 assert 'KartPadInternalBridge.prepareGame' in service
 assert "'ios_kartpad_internal'" in launcher
 assert 'KartPadInternalBridge.sessionEvents.listen' in manager
+assert "'ios_kartpad_internal'" in manager
+assert 'if (_isEmbeddedIOSSession) return false;' in manager
 assert pins['release'] == 'v0.5.1-experimental.1'
 assert pins['compiledSource'] == '67c7e2f942c1226af149e6a9cc571f647528e25e'
 assert pins['discProfile']['expectedTranslatedFunctions'] == 29637
