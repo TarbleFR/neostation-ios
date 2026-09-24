@@ -3,8 +3,8 @@
 #include "DusklightCoreABI.h"
 
 // All mutations are on the UIKit main thread, including stop from the close
-// button and the timeout. A successfully initialized engine is terminal after
-// stop: its process-lifetime singletons cannot be initialized a second time.
+// button and the timeout. Keep the initialized engine, not a nested game_main
+// stack, between logical sessions. Fatal startup/runtime failures are terminal.
 class NeoDusklightSessionState {
  public:
   bool reserve() {
@@ -26,9 +26,10 @@ class NeoDusklightSessionState {
     if (active()) state_ = NEO_DUSKLIGHT_STOPPING;
   }
   void initialized() { ready_ = true; }
-  // Cancellation before game_main entered remains retryable.
+  // Call only after leaving the frame callback and suspending input/audio.
   void finish() { state_ = entered_ && !ready_ ? NEO_DUSKLIGHT_ENDED : NEO_DUSKLIGHT_IDLE; }
-  // Call only after the complete native shutdown barrier returned.
+  // Fatal teardown remains one-shot: process-lifetime game singletons are not
+  // cold-reinitialized after a native failure.
   void terminate() { state_ = NEO_DUSKLIGHT_ENDED; }
   void fail() { state_ = NEO_DUSKLIGHT_ENDED; }
   bool active() const {
