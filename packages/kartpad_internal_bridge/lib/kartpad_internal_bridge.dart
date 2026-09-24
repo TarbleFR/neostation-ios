@@ -44,6 +44,20 @@ class KartPadInternalBridge {
             const <String, dynamic>{},
       );
 
+  static Future<Map<String, dynamic>> prepareGame({
+    required String gamePath,
+    required String supportPath,
+    required String cachePath,
+  }) async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMapMethod<String, dynamic>('prepareGame', {
+              'gamePath': gamePath,
+              'supportPath': supportPath,
+              'cachePath': cachePath,
+            }) ??
+            const <String, dynamic>{},
+      );
+
   static Future<Map<String, dynamic>> launch({
     required String gamePath,
     required String supportPath,
