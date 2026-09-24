@@ -7,10 +7,11 @@ on:
     paths:
       - '.github/workflows/kartpad-donor-core.yml'
       - 'build-utils/kartpad/convert_official_runtime.py'
+      - 'build-utils/kartpad/prepare_embedded_source.py'
       - 'build-utils/kartpad/validate_donor_artifact.py'
       - 'build-utils/kartpad/embed_core.py'
       - 'build-utils/kartpad/validate_embedded_core.py'
-      - 'native/kartpad/donor/**'
+      - 'native/kartpad/**'
       - 'packages/kartpad_internal_bridge/ios/Classes/KartPadCoreABI.h'
       - 'native/kartpad/core/SessionState.h'
   workflow_dispatch:
