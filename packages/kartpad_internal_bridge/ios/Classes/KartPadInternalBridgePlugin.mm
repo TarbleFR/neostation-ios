@@ -11,6 +11,13 @@
 namespace {
 NSString* const kChannel = @"neostation/kartpad_internal";
 
+using NeoKartPadPrepareUserGameFn =
+    int (*)(const char* game_path,
+            const char* support_path,
+            const char* cache_path,
+            char* error,
+            size_t error_size);
+
 NSString* CorePath() {
   NSString* frameworks = NSBundle.mainBundle.privateFrameworksPath;
   if (frameworks.length == 0) return @"";
@@ -179,6 +186,64 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     result(@YES);
     return;
   }
+  if ([call.method isEqualToString:@"prepareGame"]) {
+    NSDictionary* args =
+        [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments : @{};
+    NSString* gamePath =
+        [args[@"gamePath"] isKindOfClass:NSString.class] ? args[@"gamePath"] : @"";
+    NSString* supportPath =
+        [args[@"supportPath"] isKindOfClass:NSString.class] ? args[@"supportPath"] : @"";
+    NSString* cachePath =
+        [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
+    if (!gamePath.length ||
+        ![NSFileManager.defaultManager isReadableFileAtPath:gamePath]) {
+      result(Failure(@"KARTPAD_GAME_UNREADABLE", @"prepare_input",
+                     @"The selected Mario Kart Wii file is not readable."));
+      return;
+    }
+    NSDictionary* loadFailure = [self loadCore];
+    if (loadFailure) {
+      result(loadFailure);
+      return;
+    }
+    if (_sessionActive || _api->is_running()) {
+      result(Failure(@"KARTPAD_SESSION_ACTIVE", @"prepare_session",
+                     @"KartPad cannot prepare game data while a session is active."));
+      return;
+    }
+    auto prepare = reinterpret_cast<NeoKartPadPrepareUserGameFn>(
+        dlsym(_coreHandle, "NeoKartPad_PrepareUserGame"));
+    if (!prepare) {
+      result(Failure(@"KARTPAD_PREPARE_UNAVAILABLE", @"prepare_api",
+                     @"This KartPad Core does not support direct compressed-image preparation."));
+      return;
+    }
+
+    FlutterResult completion = [result copy];
+    NSString* gameCopy = [gamePath copy];
+    NSString* supportCopy = [supportPath copy];
+    NSString* cacheCopy = [cachePath copy];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      char error[1024] = {};
+      const int prepared = prepare(
+          gameCopy.fileSystemRepresentation,
+          supportCopy.fileSystemRepresentation,
+          cacheCopy.fileSystemRepresentation,
+          error, sizeof(error));
+      NSString* message = prepared > 0
+          ? @"KartPad game data prepared."
+          : (error[0] ? [NSString stringWithUTF8String:error]
+                      : @"KartPad could not prepare the selected game image.");
+      NSDictionary* response = prepared > 0
+          ? @{@"success": @YES, @"stage": @"prepare", @"message": message}
+          : Failure(@"KARTPAD_PREPARE_FAILED", @"prepare", message);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        completion(response);
+      });
+    });
+    return;
+  }
+
   if (![call.method isEqualToString:@"launch"]) {
     result(FlutterMethodNotImplemented);
     return;
