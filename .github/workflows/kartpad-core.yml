@@ -65,6 +65,44 @@ jobs:
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           xcrun --sdk iphoneos clang++             -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++             -isysroot "$SDK" -miphoneos-version-min=17.4             -Inative/kartpad/core             -Ipackages/kartpad_internal_bridge/ios/Classes             native/kartpad/core/NeoKartPadCore.mm
 
+      - name: Syntax-check KartPad Flutter bridge
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          STUB="$RUNNER_TEMP/flutter-stub"
+          mkdir -p "$STUB/Flutter"
+          cat > "$STUB/Flutter/Flutter.h" <<'EOF'
+          #import <Foundation/Foundation.h>
+          typedef void (^FlutterResult)(id _Nullable result);
+          FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
+          @protocol FlutterBinaryMessenger <NSObject>
+          @end
+          @class FlutterMethodCall;
+          @class FlutterMethodChannel;
+          @protocol FlutterPluginRegistrar <NSObject>
+          @property(nonatomic, readonly) NSObject<FlutterBinaryMessenger>* messenger;
+          - (void)addMethodCallDelegate:(id)delegate channel:(FlutterMethodChannel*)channel;
+          @end
+          @protocol FlutterPlugin <NSObject>
+          + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar;
+          @end
+          @interface FlutterMethodCall : NSObject
+          @property(nonatomic, readonly) NSString* method;
+          @property(nonatomic, readonly) id arguments;
+          @end
+          @interface FlutterMethodChannel : NSObject
+          + (instancetype)methodChannelWithName:(NSString*)name
+                            binaryMessenger:(NSObject<FlutterBinaryMessenger>*)messenger;
+          - (void)invokeMethod:(NSString*)method arguments:(id)arguments;
+          @end
+          EOF
+          xcrun --sdk iphoneos clang++ \
+            -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ \
+            -isysroot "$SDK" -miphoneos-version-min=17.4 \
+            -I"$STUB" \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            packages/kartpad_internal_bridge/ios/Classes/KartPadInternalBridgePlugin.mm
+
       - name: Fetch exact KartPad v0.5.1 source
         run: |
           set -euo pipefail
