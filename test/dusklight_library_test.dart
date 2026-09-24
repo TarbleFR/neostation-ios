@@ -103,7 +103,7 @@ void main() {
       {'en', 'fr', 'es', 'pt', 'de', 'it', 'ru', 'zh', 'zh_Hant', 'id', 'ja', 'ko'});
     expect(DusklightLocale.emptyLibrary.values.every((s) => s.contains('Dusklight')), isTrue);
     final source = File('lib/screens/game_screen/my_games_list.dart').readAsStringSync();
-    expect(source, contains('_isDusklightLibrary ? _buildGamesList() : _buildEmptyState()'));
+    expect(source, contains('_isPortsLibrary ? _buildGamesList() : _buildEmptyState()'));
   });
 
   for (final width in [430.0, 220.0]) {
