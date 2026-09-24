@@ -1,71 +1,128 @@
-# KartPad native port — integration audit, 23 September 2026
+# KartPad native port — NeoStation integration
 
-## NeoStation integration resumed — 24 September 2026
+## Stable baseline
 
-Build 322 is the stable NeoStation iOS baseline. KartPad work resumes only on `experimental` and must not modify the Build 322 runtime identity.
+NeoStation iOS **Build 322** remains the stable restoration point. All KartPad
+work lives after that baseline on `experimental`; the Build 322 native cores
+are not modified by the KartPad integration.
 
-Stage 1 introduces the shared Ports import UX and a private `Ports/KartPad` library. The Ports playlist now uses one **Import** menu with **DuskLight** and **Mario Kart Pad** targets. KartPad imports are isolated from DuskLight and generic emulator routing. Until a callable KartPad Core ABI is packaged, launching an imported KartPad title is refused explicitly rather than misrouting it.
+## User model
 
-The first import profile accepts a raw PAL Mario Kart Wii `RMCP01`, disc 0, revision 0 ISO and stores it canonically as `Ports/KartPad/Games/Mario Kart Wii.iso`. WBFS/extracted DATA support will be connected to the native KartPad validation path rather than accepted on filename alone.
+NeoStation does **not** ship Mario Kart Wii. The user imports their own supported
+Mario Kart Wii PAL image (`RMCP01`, disc 0, revision 0) from the Ports playlist.
 
+The Ports action is now:
 
-Requested behavior: import Mario Kart Wii into Ports, display it as a normal
-scraped game, launch the embedded KartPad runtime with its native controls and
-settings, return to NeoStation, and resume without a second application launch.
+`Import → DuskLight / Mario Kart Pad`
 
-## Verified upstream inputs
+KartPad accepts ISO and WBFS user images. ISO headers are validated directly;
+WBFS is identified through NeoStation's embedded Dolphin DiscIO path and is
+validated again by KartPad before guest execution. The canonical private
+library is `Ports/KartPad/Games`, with separate `Saves`, `Config`,
+`Mods`, `Logs` and `Metadata` directories.
 
-- Project: https://github.com/chrissotraidis/kartpad (GPL-3.0).
-- Reviewed development revision: `0d657f361ccf0a03c0b8f9ec97b2bd237e16a658`.
-- Maintained iOS runtime pin at that revision:
-  `d0b8dec62a8c98dd45736a996ae18327ada8fe3f` in `vendor/runtimes/ios`.
-- Stable v0.5.0 source delivery: 361,516,349 bytes,
-  SHA-256 `70f1672b99d40114807fa36eb7c12f4d161b1d5a65c13636cf2451f7291a3457`.
-- That archive records compilation source revision
-  `a2f41d5515c688973e47573ae65504e891e222f1` and recursive source fingerprint
-  `204c960d3533eaef4d914306ede88bfdf657a1f0ecf4c0b5259d22961d5d38ad`.
-  This release source is distinct from the development revision above.
-- Stable iOS IPA: 41,995,797 bytes,
-  SHA-256 `7c64144ea996f438aab853e700c8ffa3b8b9db205fdb8033714b07ca6186cadf`.
-  Inspection confirms version 0.5.0, build 59, one Mach-O `MH_EXECUTE` executable
-  named `KartPad`, and no embedded framework/dylib providing a callable core ABI.
+The imported game is displayed and scraped as **Mario Kart Wii**, not as a
+DuskLight/Twilight Princess title.
 
-## Concrete build dependency
+## Embedded Core architecture
 
-`REBUILD.md`, step 5 in the verified source archive, requires regeneration of
-translation/profile inputs from a supported game. It explicitly excludes those
-generated inputs. `scripts/translate-base.sh` requires 29,637 translated
-functions and `build_shards/shards.cmake`; the iOS build consumes them.
+The standalone KartPad application is not nested or launched from NeoStation.
+NeoStation uses a lazy, host-owned Core boundary:
 
-The supported profile is Mario Kart Wii PAL `RMCP01`, disc 0, revision 0.
-The profile verifies these executable inputs:
+`GameLaunchService → KartPadInternalService → KartPadInternalBridge → KartPadCore.framework`
 
-| Extracted file | SHA-256 |
-| --- | --- |
-| `sys/main.dol` | `80d18895b39c63bd80f457398bfcbb91b7d16ac116a41a88967e954080155b05` |
-| `files/rel/StaticR.rel` | `16d9d146112541fefea701ecb5bc1a496f9d50e4a752fbb5b6778e7c6399f67d` |
+The bridge exposes NeoStation ABI v1 and validates the runtime identity
+`kartpad_rmcp01_full_game_v1` before launch. KartPadCore is loaded with
+`dlopen(..., RTLD_LOCAL)`; no NeoStation host image has a startup dyld
+dependency on the Core.
 
-Neither the supported disc nor the generated compilation inputs are present in
-the current workspace. A supported user-provided disc image or the matching
-generated source package is required before a real embedded Core can be built.
-The public standalone IPA cannot be passed to the Dusklight framework loader:
-it has its own application entry point and no NeoStation ABI.
+UIKit application ownership remains with NeoStation. The maintained KartPad iOS
+runtime is patched into framework mode rather than using its standalone
+`UIApplicationMain` entry point. The existing Metal renderer, SunPad touch
+controls, physical-controller handling and KartPad settings overlay remain owned
+by KartPad's runtime.
 
-## Required integration once the inputs are available
+The in-game return action is supplied by NeoStation in all twelve supported
+languages. A normal **Return to NeoStation** suspends the guest at KartPad's
+event boundary, releases its foreground UI/audio ownership and preserves the
+same runtime for a subsequent resume. The native session state regression gate
+exercises 100 consecutive return/resume cycles.
 
-1. Pin one source/runtime/dependency set; generate and validate the exact PAL
-   base game graph. Preserve its provenance with the resulting framework.
-2. Adapt the maintained iOS runtime to the existing host/Core ownership contract:
-   private symbols/SDL classes, one host-owned UIKit lifecycle, explicit first
-   frame, native settings/controls, input release, audio handoff, and repeatable
-   suspension/resume. The standalone runtime's nested main-menu run loop must
-   not become a second NeoStation navigation or application loop.
-3. Generalize the current Ports dispatch only when the callable core exists:
-   separate `Ports/KartPad` import/save/config directories, strict `RMCP01` and
-   revision validation, Wii metadata lookup for **Mario Kart Wii**, and native
-   session-end monitoring. Do not route KartPad to Dusklight or scrape it as Zelda.
-4. Translate every new label/error in all twelve NeoStation languages. Run the
-   import, unsupported-disc, first-frame, return, immediate relaunch and
-   cross-core tests, then package and inspect the actual framework in the IPA.
+Fatal runtime termination is a separate terminal state and is never treated as
+a normal warm return.
 
-Build 322 is the frozen stable baseline. KartPad Stage 1 is import-only and is not advertised as playable until NeoStation has a callable native Core ABI, first-frame/session ownership, audio handoff and repeatable return/relaunch validation.
+## Source pins
+
+- Upstream project: `chrissotraidis/kartpad` (GPL-3.0)
+- KartPad source pin: `0d657f361ccf0a03c0b8f9ec97b2bd237e16a658`
+- Maintained iOS runtime pin:
+  `d0b8dec62a8c98dd45736a996ae18327ada8fe3f`
+- NeoStation ABI: 1
+- Runtime identity: `kartpad_rmcp01_full_game_v1`
+- Supported disc: Mario Kart Wii PAL `RMCP01`, disc 0, revision 0
+- Expected translated functions: 29,637
+
+The physical-iOS builder also pins the Dawn iphoneos archive by SHA-256 and
+refuses a source/runtime/profile mismatch.
+
+## Why the user import and the build-time graph are separate
+
+KartPad is an **ahead-of-time translated port**. The user's ISO/WBFS supplies the
+game data used by the installed runtime. The Core binary itself must already
+contain the native translation graph generated from the supported RMCP01 code,
+just as KartPad's own distributed application does.
+
+Upstream intentionally excludes those generated C++ translation files from its
+public source archive. NeoStation therefore does not fabricate them and does not
+attempt to compile native code on the iPhone. The builder
+`build-utils/kartpad/build_embedded_core.sh` accepts an authorized generated
+RMCP01 graph, verifies the expected 29,637 functions and produces an
+iphoneos/arm64 `KartPadCore.framework`.
+
+This does **not** change the end-user flow: the installed NeoStation IPA still
+contains no Mario Kart Wii disc image or extracted game-data tree; the user
+imports their own game.
+
+## Packaging and validation
+
+NeoStation now contains:
+
+- `build-utils/kartpad/build_embedded_core.sh` — physical-iOS Core builder.
+- `build-utils/kartpad/validate_embedded_core.py` — Core identity/ABI validator.
+- `build-utils/kartpad/embed_core.py` — controlled Runner.app embedder.
+- `build-utils/validate_kartpad_ipa.py` — final IPA validator.
+
+The IPA validator checks the exact Core hash, ABI export, iPhoneOS Mach-O
+platform, packaged identity, lazy-load boundary and absence of a nested
+`KartPad.app`.
+
+## Current validation status
+
+The KartPad Core gate validates:
+
+- ABI v1 and lazy loader contract;
+- native retained-session state;
+- Objective-C++ host syntax against iphoneos;
+- the exact pinned upstream KartPad and iOS runtime revisions;
+- application of the NeoStation framework patch to those real upstream sources;
+- localized Return-to-NeoStation bridge;
+- physical-iOS builder/packaging tools.
+
+The Flutter/Ports gate validates:
+
+- the shared Import menu;
+- isolated DuskLight and KartPad libraries;
+- ISO/WBFS import ownership;
+- per-port ScreenScraper identity;
+- twelve-language KartPad user messages;
+- KartPad launch routing and native session monitoring;
+- immediate Ports refresh after deletion.
+
+## Remaining acceptance step
+
+The architecture and NeoStation-side implementation are prepared. A **real**
+KartPadCore artifact still needs to be built from an authorized RMCP01
+translation graph, embedded into a post-322 experimental IPA, and tested on a
+physical iPhone/iPad for first frame, controls, audio, return, resume and
+relaunch. Build 322 remains the rollback baseline until that device acceptance
+is complete.
