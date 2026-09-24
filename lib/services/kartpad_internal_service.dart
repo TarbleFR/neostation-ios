@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -273,6 +274,48 @@ class KartPadInternalService {
     }
   }
 
+  static Future<String> _latestRuntimeLogTail({
+    int maxBytes = 24 * 1024,
+  }) async {
+    try {
+      final root = await logsDirectory();
+      if (!await root.exists()) return '';
+
+      File? newest;
+      DateTime? newestModified;
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        final name = path.basename(entity.path).toLowerCase();
+        if (!name.endsWith('.log') && name != 'console.txt') continue;
+        final stat = await entity.stat();
+        if (newestModified == null || stat.modified.isAfter(newestModified)) {
+          newest = entity;
+          newestModified = stat.modified;
+        }
+      }
+      final file = newest;
+      if (file == null) return '';
+
+      final handle = await file.open();
+      try {
+        final length = await handle.length();
+        final start = length > maxBytes ? length - maxBytes : 0;
+        await handle.setPosition(start);
+        final bytes = await handle.read(maxBytes);
+        final text = utf8.decode(bytes, allowMalformed: true).trim();
+        if (text.isEmpty) return '';
+        return 'KartPad runtime log: ${file.path}\n$text';
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      return 'KartPad runtime log could not be read: $error';
+    }
+  }
+
   static Future<KartPadLaunchResult> launch(
     String gamePath, {
     Map<String, String> uiText = const <String, String>{},
@@ -319,6 +362,15 @@ class KartPadInternalService {
       uiText: uiText,
     );
     final success = response['success'] == true;
+    // A failed embedded startup can otherwise collapse into the same localized
+    // "could not start" message even though KartPad wrote the real renderer or
+    // runtime failure to its console log. Read the newest bounded tail while
+    // the failed session is still fresh so one physical-device test identifies
+    // the actual boundary instead of prompting another speculative bootstrap fix.
+    if (!success) {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+    final runtimeLogTail = success ? '' : await _latestRuntimeLogTail();
     return KartPadLaunchResult(
       success: success,
       message: response['message']?.toString() ??
@@ -332,6 +384,7 @@ class KartPadInternalService {
         if (response['corePath'] != null) 'Core: ${response['corePath']}',
         if (response['runtimeIdentity'] != null)
           'Runtime: ${response['runtimeIdentity']}',
+        if (runtimeLogTail.isNotEmpty) runtimeLogTail,
       ].join('\n'),
     );
   }
