@@ -7,6 +7,10 @@
 #include "../core/SessionState.h"
 
 #include <atomic>
+#include <cerrno>
+#include <cstring>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <cstdio>
 #include <functional>
 #include <mutex>
@@ -288,7 +292,6 @@ bool EnsureSymlink(NSString* linkPath, NSString* targetPath, NSError** error) {
 bool PrepareRuntimeStorage(char* error, size_t errorSize) {
   NSFileManager* files = NSFileManager.defaultManager;
   NSString* support = [NSString stringWithUTF8String:supportPath.c_str()];
-  NSString* cache = [NSString stringWithUTF8String:cachePath.c_str()];
   NSString* defaultRoot =
       [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"]
           stringByAppendingPathComponent:@"KartPad"];
@@ -297,11 +300,6 @@ bool PrepareRuntimeStorage(char* error, size_t errorSize) {
                          attributes:nil error:&failure]) {
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
-  if (![files createDirectoryAtPath:cache withIntermediateDirectories:YES
-                         attributes:nil error:&failure]) {
-    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
-  }
-
   NSArray<NSArray<NSString*>*>* mappings = @[
     @[[defaultRoot stringByAppendingPathComponent:@"NAND"],
       [support stringByAppendingPathComponent:@"Saves/NAND"]],
@@ -329,46 +327,88 @@ bool PrepareRuntimeStorage(char* error, size_t errorSize) {
   NSString* defaultCache =
       [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"]
           stringByAppendingPathComponent:@"KartPad"];
-  if (![files createDirectoryAtPath:defaultCache.stringByDeletingLastPathComponent
+  NSString* cacheParent = defaultCache.stringByDeletingLastPathComponent;
+  if (![files createDirectoryAtPath:cacheParent
         withIntermediateDirectories:YES attributes:nil error:&failure]) {
-    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+    const std::string detail =
+        "KartPad cache parent could not be prepared: " +
+        std::string(failure.localizedDescription.UTF8String ?: "unknown error");
+    return Fail(error, errorSize, detail.c_str());
   }
 
-  // The converted official runtime resolves its cache path directly as
-  // <HOME>/Library/Caches/KartPad. Older NeoStation candidates tried to turn
-  // that path into a symlink to getTemporaryDirectory()/KartPad. That target
-  // is intentionally ephemeral on iOS and can disappear between launches,
-  // leaving a stale/dangling entry at Library/Caches/KartPad. Foundation then
-  // rejects recreating "KartPad" in Caches before RuntimeMain is ever reached.
+  // Build 328 still reproduced the same Foundation EEXIST-style failure on
+  // device. Do not rely on NSFileManager's high-level symlink queries here:
+  // a dangling link can be reported as a missing item by fileExistsAtPath,
+  // while mkdir then fails because the directory entry still exists.
   //
-  // Keep the runtime on its canonical writable cache directory instead. If a
-  // previous experimental build left a symlink there, remove only that link;
-  // preserve an existing real cache directory and its renderer data.
-  NSString* staleCacheLink =
-      [files destinationOfSymbolicLinkAtPath:defaultCache error:nil];
-  if (staleCacheLink != nil) {
-    if (![files removeItemAtPath:defaultCache error:&failure]) {
-      return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+  // lstat observes the directory entry itself. Remove only a stale symlink or
+  // a non-directory object named Library/Caches/KartPad, preserve a real cache
+  // directory, and recreate the canonical directory only when it truly does
+  // not exist.
+  const char* cacheFs = defaultCache.fileSystemRepresentation;
+  struct stat cacheStat {};
+  if (::lstat(cacheFs, &cacheStat) == 0) {
+    if (S_ISLNK(cacheStat.st_mode)) {
+      if (::unlink(cacheFs) != 0) {
+        const std::string detail =
+            "KartPad stale cache symlink could not be removed: " +
+            std::string(std::strerror(errno));
+        return Fail(error, errorSize, detail.c_str());
+      }
+      NSLog(@"[NeoKartPad/Donor] removed stale cache symlink at %@", defaultCache);
+    } else if (!S_ISDIR(cacheStat.st_mode)) {
+      if (![files removeItemAtPath:defaultCache error:&failure]) {
+        const std::string detail =
+            "KartPad cache path is not a directory and could not be removed: " +
+            std::string(failure.localizedDescription.UTF8String ?: "unknown error");
+        return Fail(error, errorSize, detail.c_str());
+      }
+      NSLog(@"[NeoKartPad/Donor] removed non-directory cache object at %@", defaultCache);
     }
+  } else if (errno != ENOENT) {
+    const std::string detail =
+        "KartPad cache path could not be inspected: " +
+        std::string(std::strerror(errno));
+    return Fail(error, errorSize, detail.c_str());
   }
 
-  BOOL cacheIsDirectory = NO;
-  if ([files fileExistsAtPath:defaultCache isDirectory:&cacheIsDirectory]) {
-    if (!cacheIsDirectory) {
-      if (![files removeItemAtPath:defaultCache error:&failure]) {
-        return Fail(error, errorSize, failure.localizedDescription.UTF8String);
-      }
+  if (::lstat(cacheFs, &cacheStat) != 0) {
+    if (errno != ENOENT) {
+      const std::string detail =
+          "KartPad cache path could not be rechecked: " +
+          std::string(std::strerror(errno));
+      return Fail(error, errorSize, detail.c_str());
     }
-  }
-  if (![files fileExistsAtPath:defaultCache]) {
-    if (![files createDirectoryAtPath:defaultCache withIntermediateDirectories:YES
-                           attributes:nil error:&failure]) {
-      return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+    failure = nil;
+    if (![files createDirectoryAtPath:defaultCache
+          withIntermediateDirectories:YES attributes:nil error:&failure]) {
+      const std::string detail =
+          "KartPad canonical cache directory could not be created: " +
+          std::string(failure.localizedDescription.UTF8String ?: "unknown error");
+      return Fail(error, errorSize, detail.c_str());
     }
+  } else if (!S_ISDIR(cacheStat.st_mode)) {
+    return Fail(error, errorSize,
+                "KartPad cache path still exists but is not a directory.");
   }
+
+  // Verify actual write access now, before loading the donor runtime. This
+  // turns any remaining sandbox/path problem into a precise error rather than
+  // the generic Foundation 'couldn't be saved in Caches' message.
+  NSString* probe =
+      [defaultCache stringByAppendingPathComponent:@".neostation-kartpad-probe"];
+  NSData* probeData = [@"ok" dataUsingEncoding:NSUTF8StringEncoding];
+  failure = nil;
+  if (![probeData writeToFile:probe options:NSDataWritingAtomic error:&failure]) {
+    const std::string detail =
+        "KartPad canonical cache is not writable: " +
+        std::string(failure.localizedDescription.UTF8String ?: "unknown error");
+    return Fail(error, errorSize, detail.c_str());
+  }
+  [files removeItemAtPath:probe error:nil];
 
   cachePath = defaultCache.fileSystemRepresentation;
-  NSLog(@"[NeoKartPad/Donor] native cache ready at %@", defaultCache);
+  NSLog(@"[NeoKartPad/Donor] canonical cache verified writable at %@", defaultCache);
   if (!WriteGameLanguageSysConf(&failure)) {
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
