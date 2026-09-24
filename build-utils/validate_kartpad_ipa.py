@@ -46,7 +46,10 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
         core = macho(binary)
         assert core["fileType"] == 6, "KartPadCore is not a dynamic library"
         assert core["platform"] == 2, "KartPadCore is not an iPhoneOS image"
+        assert core["id"] == "@rpath/KartPadCore.framework/KartPadCore",             "KartPadCore install name is not @rpath-relative"
         assert "_NeoKartPad_GetAPI" in core["definedSymbols"], "KartPad ABI export missing"
+        assert "_main" not in core["definedSymbols"],             "Standalone KartPad main entry point remains"
+        assert "_UIApplicationMain" not in core["undefinedSymbols"],             "KartPadCore still depends on UIApplicationMain"
 
         packaged_identity = app + "KartPad-native-identity.json"
         assert packaged_identity in z.namelist(), "KartPad identity missing from app"
