@@ -19,6 +19,7 @@ on:
       - 'lib/l10n/ports_locale.dart'
       - 'lib/widgets/ports_internal_playlist_actions.dart'
       - 'lib/screens/game_screen/my_games_list.dart'
+      - 'lib/screens/game_screen/game_settings_dialog/game_settings_manage_tab.dart'
       - 'lib/providers/sqlite_config_provider.dart'
       - 'lib/providers/sqlite_config_provider/scanning.dart'
       - 'lib/services/game/game_launch_service.dart'
@@ -53,7 +54,7 @@ jobs:
       - name: Resolve Flutter dependencies
         run: flutter pub get --enforce-lockfile
       - name: Analyze Ports Stage 1 sources
-        run: flutter analyze --no-fatal-infos lib/services/kartpad_internal_service.dart lib/services/ports_game_identity.dart lib/services/screenscraper_service.dart lib/l10n/ports_locale.dart lib/widgets/ports_internal_playlist_actions.dart lib/screens/game_screen/my_games_list.dart lib/providers/sqlite_config_provider.dart lib/services/game/game_launch_service.dart lib/services/game_launch_manager.dart packages/kartpad_internal_bridge/lib/kartpad_internal_bridge.dart
+        run: flutter analyze --no-fatal-infos lib/services/kartpad_internal_service.dart lib/services/ports_game_identity.dart lib/services/screenscraper_service.dart lib/l10n/ports_locale.dart lib/widgets/ports_internal_playlist_actions.dart lib/screens/game_screen/my_games_list.dart lib/screens/game_screen/game_settings_dialog/game_settings_manage_tab.dart lib/providers/sqlite_config_provider.dart lib/services/game/game_launch_service.dart lib/services/game_launch_manager.dart packages/kartpad_internal_bridge/lib/kartpad_internal_bridge.dart
       - name: Exercise Ports multi-import and KartPad isolation
         run: flutter test test/dusklight_ports_stage1_test.dart test/kartpad_locale_test.dart
       - name: Exercise KartPad bridge contract
