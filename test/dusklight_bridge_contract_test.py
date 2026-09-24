@@ -27,15 +27,15 @@ assert pins["submodules"]["aurora"] == "d0933b745abe0eb9815bedcea8047575da18698d
 assert set(pins["supported_disc_ids"]) == {
     "GZ2E01", "GZ2J01", "GZ2P01", "RZDE01", "RZDJ01", "RZDP01"
 }
-assert "NEO_DUSKLIGHT_ABI_VERSION 6u" in abi
+assert "NEO_DUSKLIGHT_ABI_VERSION 7u" in abi
 for source in (builder, validator):
-    assert '"abi_version"] == 6' in source or '"abi_version": 6' in source
-    assert "host_frame_loop_terminal_kernel_unmap" in source
+    assert '"abi_version"] == 7' in source or '"abi_version": 7' in source
+    assert "host_frame_loop_warm_resume_rpcs3_jit_escrow" in source
 assert "NEO_DUSKLIGHT_RUNNING" in plugin and '@"stage": @"first_frame"' in plugin
 assert "DUSKLIGHT_FIRST_FRAME_TIMEOUT" in plugin
 assert "DUSKLIGHT_RESTART_REQUIRED" in plugin
 assert "dlclose(" not in plugin, "Objective-C method pointers must not outlive their native image"
 assert "NEO_DUSKLIGHT_DIFFERENT_DISC" in plugin
 assert "started <= 0" in plugin
-assert '@"runtimeReleased": @YES' in plugin
-print("PASS: pinned Dusklight ABI v6 waits for the first frame and reports the kernel-unmap barrier")
+assert '@"runtimeReleased": @(state == NEO_DUSKLIGHT_ENDED)' in plugin
+print("PASS: pinned Dusklight ABI v7 supports warm resume and reports terminal release separately")
