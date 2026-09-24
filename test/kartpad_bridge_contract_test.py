@@ -26,10 +26,13 @@ for member in ('initialize', 'start', 'stop', 'is_running', 'set_event_callback'
 assert 'dlopen(path, RTLD_NOW | RTLD_LOCAL)' in loader
 assert 'dlsym(_coreHandle, "NeoKartPad_GetAPI")' in plugin
 assert 'KARTPAD_RUNTIME_PROFILE_MISMATCH' in plugin
+assert 'NeoKartPad_PrepareUserGame' in plugin
+assert "'prepareGame'" in dart_bridge
 assert 'dlclose(' not in plugin
 assert "MethodChannel('neostation/kartpad_internal')" in dart_bridge
 assert 'sessionEvents' in dart_bridge and 'sessionEnded' in dart_bridge
 assert 'KartPadInternalBridge.launch' in service
+assert 'KartPadInternalBridge.prepareGame' in service
 assert "'ios_kartpad_internal'" in launcher
 assert 'KartPadInternalBridge.sessionEvents.listen' in manager
 assert pins['release'] == 'v0.5.1-experimental.1'
