@@ -14,28 +14,40 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "packages/dolphin_internal_bridge/ci"))
 from verify_ipa import macho  # noqa: E402
 
+OFFICIAL_IPA_SHA256 = "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58"
+
+
+def _single_app(z: zipfile.ZipFile) -> tuple[str, dict]:
+    apps = [
+        n for n in z.namelist()
+        if n.startswith("Payload/")
+        and n.endswith(".app/Info.plist")
+        and n.count("/") == 2
+    ]
+    assert len(apps) == 1, "IPA must contain one application"
+    app = apps[0].removesuffix("Info.plist")
+    info = plistlib.loads(z.read(apps[0]))
+    return app, info
+
 
 def validate_absent(ipa: Path, build_number: str):
     with zipfile.ZipFile(ipa) as z:
-        apps = [
-            n for n in z.namelist()
-            if n.startswith("Payload/")
-            and n.endswith(".app/Info.plist")
-            and n.count("/") == 2
-        ]
-        assert len(apps) == 1, "IPA must contain one application"
-        app = apps[0].removesuffix("Info.plist")
-        info = plistlib.loads(z.read(apps[0]))
+        app, info = _single_app(z)
         assert str(info["CFBundleVersion"]) == str(build_number)
         assert not any(
             n.startswith(app + "Frameworks/KartPadCore.framework/")
             for n in z.namelist()
         ), "Unexpected KartPadCore.framework in non-candidate IPA"
+        assert not any(
+            n.startswith(app + "Frameworks/KartPadRuntime.framework/")
+            for n in z.namelist()
+        ), "Unexpected KartPadRuntime.framework in non-candidate IPA"
         assert app + "KartPad-native-identity.json" not in z.namelist(),             "Unexpected KartPad identity in non-candidate IPA"
         assert not any("KartPad.app/" in n for n in z.namelist()),             "Standalone KartPad app must never be nested"
     return {
         "build": str(build_number),
         "kartPadCorePresent": False,
+        "kartPadRuntimePresent": False,
         "standaloneKartPadPresent": False,
     }
 
@@ -51,22 +63,13 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
     assert identity["translated_function_count"] == pins["discProfile"]["expectedTranslatedFunctions"]
 
     with zipfile.ZipFile(ipa) as z:
-        apps = [
-            n for n in z.namelist()
-            if n.startswith("Payload/")
-            and n.endswith(".app/Info.plist")
-            and n.count("/") == 2
-        ]
-        assert len(apps) == 1, "IPA must contain one application"
-        app = apps[0].removesuffix("Info.plist")
-        info = plistlib.loads(z.read(apps[0]))
+        app, info = _single_app(z)
         assert str(info["CFBundleVersion"]) == str(build_number)
 
-        framework = app + "Frameworks/KartPadCore.framework/"
-        binary_path = framework + "KartPadCore"
+        binary_path = app + "Frameworks/KartPadCore.framework/KartPadCore"
         assert binary_path in z.namelist(), "KartPadCore.framework missing"
         binary = z.read(binary_path)
-        assert hashlib.sha256(binary).hexdigest() == identity["sha256"], "KartPadCore bytes changed"
+        assert hashlib.sha256(binary).hexdigest() == identity["sha256"],             "KartPadCore bytes changed"
 
         core = macho(binary)
         assert core["fileType"] == 6, "KartPadCore is not a dynamic library"
@@ -75,15 +78,40 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
         assert "_NeoKartPad_GetAPI" in core["definedSymbols"], "KartPad ABI export missing"
         assert "_main" not in core["definedSymbols"],             "Standalone KartPad main entry point remains"
         assert "_UIApplicationMain" not in core["undefinedSymbols"],             "KartPadCore still depends on UIApplicationMain"
+        assert not any(
+            "KartPadRuntime.framework" in dependency["path"]
+            for dependency in core["dependencies"]
+        ), "KartPadCore must lazy-load KartPadRuntime"
+
+        mode = identity.get("mode", "source-built")
+        runtime_binary_path = app + "Frameworks/KartPadRuntime.framework/KartPadRuntime"
+        if mode == "official-ipa-donor":
+            assert identity.get("official_ipa_sha256") == OFFICIAL_IPA_SHA256
+            assert runtime_binary_path in z.namelist(),                 "KartPad donor runtime framework missing"
+            runtime_bytes = z.read(runtime_binary_path)
+            assert hashlib.sha256(runtime_bytes).hexdigest() == identity["runtime_sha256"],                 "KartPad donor runtime bytes changed"
+            runtime = macho(runtime_bytes)
+            assert runtime["fileType"] == 6, "KartPad donor runtime is not a dylib"
+            assert runtime["platform"] == 2, "KartPad donor runtime is not iPhoneOS"
+            assert runtime["id"] == "@rpath/KartPadRuntime.framework/KartPadRuntime",                 "KartPad donor runtime install name is wrong"
+            for symbol in (
+                "__Z11RuntimeMainiPPc",
+                "_SDL_GetWindows",
+                "_SDL_HideWindow",
+                "_SDL_ShowWindow",
+            ):
+                assert symbol in runtime["definedSymbols"], f"Donor export missing: {symbol}"
+        else:
+            assert runtime_binary_path not in z.namelist(),                 "Unexpected donor runtime in source-built KartPad candidate"
 
         packaged_identity = app + "KartPad-native-identity.json"
         assert packaged_identity in z.namelist(), "KartPad identity missing from app"
         assert json.loads(z.read(packaged_identity)) == identity
 
-        # Lazy-load boundary: no Mach-O other than the Core may carry a dyld
-        # load command for KartPadCore.
+        # Neither Runner nor unrelated frameworks may have a startup dyld edge
+        # to KartPad. Both KartPad images are host-owned and loaded lazily.
         for name in z.namelist():
-            if name == binary_path or z.getinfo(name).is_dir():
+            if name in (binary_path, runtime_binary_path) or z.getinfo(name).is_dir():
                 continue
             with z.open(name) as stream:
                 magic = stream.read(4)
@@ -95,7 +123,8 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
                 continue
             image = macho(z.read(name))
             assert not any(
-                "KartPadCore" in dependency["path"]
+                "KartPadCore" in dependency["path"] or
+                "KartPadRuntime" in dependency["path"]
                 for dependency in image["dependencies"]
             ), name
 
@@ -105,6 +134,7 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
         "build": str(build_number),
         "coreHostCommit": core_host,
         "coreSha256": identity["sha256"],
+        "mode": identity.get("mode", "source-built"),
         "runtimeIdentity": identity["runtime_identity"],
         "translatedFunctions": identity["translated_function_count"],
         "passiveLoad": True,
