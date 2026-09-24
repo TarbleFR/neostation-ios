@@ -101,8 +101,24 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
                 "_SDL_GetWindows",
                 "_SDL_HideWindow",
                 "_SDL_ShowWindow",
+                "_SDL_SetMainReady",
+                "_SDL_SetiOSEventPump",
+                "_SDL_GetError",
             ):
                 assert symbol in runtime["definedSymbols"], f"Donor export missing: {symbol}"
+
+            resources = identity.get("runtime_resources")
+            assert isinstance(resources, dict) and resources,                 "KartPad donor runtime resources missing from identity"
+            for relative, expected_hash in resources.items():
+                packaged = app + relative
+                assert packaged in z.namelist(),                     f"KartPad runtime resource missing: {relative}"
+                assert hashlib.sha256(z.read(packaged)).hexdigest() == expected_hash,                     f"KartPad runtime resource hash mismatch: {relative}"
+            for required in (
+                "dsp_coef.bin",
+                "initial_pipeline_cache.db",
+                "wii_bootstrap/shared2/wc24/misc.bin",
+            ):
+                assert required in resources,                     f"KartPad required runtime resource missing from identity: {required}"
         else:
             assert runtime_binary_path not in z.namelist(),                 "Unexpected donor runtime in source-built KartPad candidate"
 
