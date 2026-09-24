@@ -3,6 +3,7 @@ import 'dart:async';
 import '../services/dolphin_internal_v2_service.dart';
 import '../services/armsx2_internal_service.dart';
 import '../services/dusklight_internal_service.dart';
+import '../services/kartpad_internal_service.dart';
 /* DOLPHIN_ISOLATION_END: provider_import */
 import 'dart:io';
 import 'package:flutter/foundation.dart';
