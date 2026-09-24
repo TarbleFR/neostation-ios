@@ -52,6 +52,17 @@ jobs:
           cp "$APP/$EXE" build/kartpad-donor/KartPad-executable
           codesign --remove-signature build/kartpad-donor/KartPad-executable 2>/dev/null || true
 
+          # RuntimeMain resolves these resources relative to the process
+          # executable (Runner.app after embedding), not the converted dylib.
+          # Preserve the exact payload shipped by the verified official IPA.
+          test -d "$APP/wii_bootstrap/shared2/wc24"
+          test -f "$APP/dsp_coef.bin"
+          test -f "$APP/initial_pipeline_cache.db"
+          mkdir -p build/kartpad-donor/out/runtime-resources
+          ditto "$APP/wii_bootstrap"             build/kartpad-donor/out/runtime-resources/wii_bootstrap
+          cp "$APP/dsp_coef.bin"             build/kartpad-donor/out/runtime-resources/dsp_coef.bin
+          cp "$APP/initial_pipeline_cache.db"             build/kartpad-donor/out/runtime-resources/initial_pipeline_cache.db
+
       - name: Convert official executable to lazy donor runtime
         shell: bash
         run: |
@@ -80,7 +91,7 @@ jobs:
           otool -D "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           xcrun vtool -show-build "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           nm -gU "$ROOT/KartPadRuntime.framework/KartPadRuntime" | \
-            grep -E '__Z11RuntimeMainiPPc|_SDL_GetWindows|_SDL_HideWindow|_SDL_ShowWindow|_SDL_SetMainReady'
+            grep -E '__Z11RuntimeMainiPPc|_SDL_GetWindows|_SDL_HideWindow|_SDL_ShowWindow|_SDL_SetMainReady|_SDL_SetiOSEventPump|_SDL_GetError'
           nm "$ROOT/KartPadRuntime.framework/KartPadRuntime" > build/kartpad-donor/runtime-symbols.txt
           grep -q '_OBJC_CLASS_\$_KartPadDiscExtractor' build/kartpad-donor/runtime-symbols.txt
 
@@ -127,9 +138,23 @@ jobs:
           CORE_SHA="$(shasum -a 256 "$ROOT/KartPadCore.framework/KartPadCore" | awk '{print $1}')"
           RUNTIME_SHA="$(shasum -a 256 "$ROOT/KartPadRuntime.framework/KartPadRuntime" | awk '{print $1}')"
           python3 - "$ROOT/identity.json" "$CORE_SHA" "$RUNTIME_SHA" <<'PY'
-          import json, os, sys
+          import hashlib, json, os, sys
           from pathlib import Path
           out, core, runtime = sys.argv[1:]
+          root = Path(out).parent
+          resources = {}
+          resource_root = root / "runtime-resources"
+          for item in sorted(p for p in resource_root.rglob("*") if p.is_file()):
+              resources[item.relative_to(resource_root).as_posix()] = hashlib.sha256(
+                  item.read_bytes()
+              ).hexdigest()
+          required = {
+              "dsp_coef.bin",
+              "initial_pipeline_cache.db",
+              "wii_bootstrap/shared2/wc24/misc.bin",
+          }
+          if not required.issubset(resources):
+              raise SystemExit("KartPad donor resource set is incomplete")
           data = {
             "schemaVersion": 1,
             "mode": "official-ipa-donor",
@@ -145,6 +170,7 @@ jobs:
             "architectures": ["arm64"],
             "sha256": core,
             "runtime_sha256": runtime,
+            "runtime_resources": resources,
           }
           Path(out).write_text(json.dumps(data, indent=2) + "\n")
           PY
