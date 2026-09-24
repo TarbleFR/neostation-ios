@@ -15,6 +15,8 @@ pins = json.loads((ROOT / 'build-utils/kartpad/source.json').read_text())
 candidate_workflow = (ROOT / '.github/workflows/ios-ci.yml').read_text()
 embedder = (ROOT / 'build-utils/kartpad/embed_core.py').read_text()
 ipa_validator = (ROOT / 'build-utils/validate_kartpad_ipa.py').read_text()
+donor_core = (ROOT / 'native/kartpad/donor/NeoKartPadDonorCore.mm').read_text()
+ports_locale = (ROOT / 'lib/l10n/ports_locale.dart').read_text()
 
 assert 'packages/kartpad_internal_bridge' in pubspec
 assert 'kartpad_internal_bridge:' in pubspec
@@ -37,6 +39,22 @@ assert "'ios_kartpad_internal'" in launcher
 assert 'KartPadInternalBridge.sessionEvents.listen' in manager
 assert "'ios_kartpad_internal'" in manager
 assert 'if (_isEmbeddedIOSSession) return false;' in manager
+for token in (
+    'NeoKartPadGameLanguage',
+    'WriteGameLanguageSysConf',
+    '"IPL.LNG"',
+    '@[@1, @2, @3, @4, @5, @6]',
+    '"languageEnglish"',
+    '"languageGerman"',
+    '"languageFrench"',
+    '"languageSpanish"',
+    '"languageItalian"',
+    '"languageDutch"',
+    '"languageRestartHint"',
+    'game language=%ld persisted to Wii IPL.LNG',
+):
+    assert token in donor_core, token
+assert "'languageRestartHint'" in ports_locale
 assert pins['release'] == 'v0.5.1-experimental.1'
 assert pins['compiledSource'] == '67c7e2f942c1226af149e6a9cc571f647528e25e'
 assert pins['discProfile']['expectedTranslatedFunctions'] == 29637

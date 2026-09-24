@@ -189,27 +189,45 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
   NSArray<NSString*>* languageFallbacks = @[
     @"English", @"German", @"French", @"Spanish", @"Italian", @"Dutch"
   ];
+  const NSInteger currentLanguage = CurrentGameLanguage();
+  const NSUInteger currentLanguageIndex =
+      currentLanguage >= 1 && currentLanguage <= 6
+          ? static_cast<NSUInteger>(currentLanguage - 1)
+          : 0;
+  NSString* currentLanguageName =
+      UIText(languageFallbacks[currentLanguageIndex],
+             languageKeys[currentLanguageIndex].UTF8String);
   NSMutableArray<UIMenuElement*>* languageItems = [NSMutableArray array];
   for (NSUInteger index = 0; index < languages.count; ++index) {
     const NSInteger value = languages[index].integerValue;
     UIAction* action = [UIAction actionWithTitle:
         UIText(languageFallbacks[index], languageKeys[index].UTF8String)
         image:nil identifier:nil handler:^(__kindof UIAction*) {
-      [NSUserDefaults.standardUserDefaults setInteger:value
-                                               forKey:kNeoKartPadLanguageKey];
-      [NSUserDefaults.standardUserDefaults synchronize];
+      PersistInteger(kNeoKartPadLanguageKey, value);
       NSError* languageError = nil;
       if (!WriteGameLanguageSysConf(&languageError)) {
         NSLog(@"[NeoKartPad/Settings] language write failed: %@", languageError);
+      } else {
+        NSLog(@"[NeoKartPad/Settings] game language=%ld persisted to Wii IPL.LNG",
+              (long)value);
       }
       RefreshSettingsMenu();
     }];
     action.state =
-        CurrentGameLanguage() == value ? UIMenuElementStateOn : UIMenuElementStateOff;
+        currentLanguage == value ? UIMenuElementStateOn : UIMenuElementStateOff;
     [languageItems addObject:action];
   }
-  UIMenu* languageMenu = [UIMenu menuWithTitle:
-      UIText(@"Game Language", "gameLanguage")
+  UIAction* languageRestartHint = [UIAction actionWithTitle:
+      UIText(@"Saved now; restart NeoStation to apply the new game language.",
+             "languageRestartHint")
+      image:[UIImage systemImageNamed:@"info.circle"] identifier:nil
+      handler:^(__kindof UIAction*) {}];
+  languageRestartHint.attributes = UIMenuElementAttributesDisabled;
+  [languageItems addObject:languageRestartHint];
+
+  NSString* languageMenuTitle = [NSString stringWithFormat:@"%@ — %@",
+      UIText(@"Game Language", "gameLanguage"), currentLanguageName];
+  UIMenu* languageMenu = [UIMenu menuWithTitle:languageMenuTitle
       image:[UIImage systemImageNamed:@"globe"]
       identifier:@"com.neostation.kartpad.language" options:0
       children:languageItems];

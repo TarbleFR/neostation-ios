@@ -17,6 +17,7 @@ void main() {
       for (final key in <String>[
         'settings',
         'gameLanguage',
+        'languageRestartHint',
         'graphics',
         'renderResolution',
         'aspectRatio',
@@ -50,6 +51,10 @@ void main() {
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['gameLanguage'],
       'Langue du jeu',
+    );
+    expect(
+      PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartHint'],
+      contains('redémarrez NeoStation'),
     );
     expect(
       PortsLocale.kartPadLaunchError(
