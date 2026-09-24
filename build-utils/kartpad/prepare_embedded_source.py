@@ -121,7 +121,7 @@ def patch_overlay(kartpad: Path) -> None:
     replace_once(
         path,
         "#include <atomic>\n",
-        """#include <atomic>\nextern "C" const char* NeoKartPadEmbeddedSupportPath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedGamePath(void) __attribute__((weak_import));\nextern "C" int NeoKartPadEmbeddedShouldReturnToHost(void) __attribute__((weak_import));\nextern "C" void NeoKartPadEmbeddedSuspendGuestUntilResume(void) __attribute__((weak_import));\n""",
+        """#include <atomic>\nextern "C" const char* NeoKartPadEmbeddedSupportPath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedGamePath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedUIText(const char* key) __attribute__((weak_import));\nextern "C" int NeoKartPadEmbeddedShouldReturnToHost(void) __attribute__((weak_import));\nextern "C" void NeoKartPadEmbeddedSuspendGuestUntilResume(void) __attribute__((weak_import));\n""",
     )
     replace_once(
         path,
@@ -131,7 +131,7 @@ def patch_overlay(kartpad: Path) -> None:
     replace_once(
         path,
         """NSString *KartPadSupportRoot() {\n  return [[NSHomeDirectory() stringByAppendingPathComponent:\n      @"Library/Application Support"] stringByAppendingPathComponent:@"KartPad"];\n}\n""",
-        """NSString *KartPadSupportRoot() {\n  if (NeoKartPadEmbeddedSupportPath) {\n    const char* root = NeoKartPadEmbeddedSupportPath();\n    if (root && *root) return [NSString stringWithUTF8String:root];\n  }\n  return [[NSHomeDirectory() stringByAppendingPathComponent:\n      @"Library/Application Support"] stringByAppendingPathComponent:@"KartPad"];\n}\n""",
+        """NSString *NeoKartPadUIText(NSString *fallback, const char *key) {\n  if (NeoKartPadEmbeddedUIText) {\n    const char *value = NeoKartPadEmbeddedUIText(key);\n    if (value && *value) return [NSString stringWithUTF8String:value];\n  }\n  return fallback;\n}\n\nNSString *KartPadSupportRoot() {\n  if (NeoKartPadEmbeddedSupportPath) {\n    const char* root = NeoKartPadEmbeddedSupportPath();\n    if (root && *root) return [NSString stringWithUTF8String:root];\n  }\n  return [[NSHomeDirectory() stringByAppendingPathComponent:\n      @"Library/Application Support"] stringByAppendingPathComponent:@"KartPad"];\n}\n""",
     )
     replace_once(
         path,
@@ -150,7 +150,12 @@ def patch_overlay(kartpad: Path) -> None:
     old_install = """extern "C" void KartPadMobileRuntimeHostInstall(void *sdlWindow) {\n  if (sdlWindow == nullptr || !NSThread.isMainThread) {\n    NSLog(@"[KartPad] refusing overlay installation away from UIKit's main thread");\n    return;\n  }\n  [gRuntimeOverlayHost uninstall];\n  gRuntimeOverlayHost =\n      [[KartPadRuntimeOverlayHost alloc] initWithSDLWindow:(SDL_Window *)sdlWindow];\n}\n\nextern "C" void KartPadMobileRuntimeHostUninstall() {\n  [gRuntimeOverlayHost uninstall];\n  gRuntimeOverlayHost = nil;\n}\n"""
     new_install = """extern "C" void KartPadMobileRuntimeHostInstall(void *sdlWindow) {\n  if (sdlWindow == nullptr) return;\n  void (^work)(void) = ^{\n    [gRuntimeOverlayHost uninstall];\n    gRuntimeOverlayHost = [[KartPadRuntimeOverlayHost alloc]\n        initWithSDLWindow:(SDL_Window *)sdlWindow];\n  };\n  if (NSThread.isMainThread) work();\n  else dispatch_sync(dispatch_get_main_queue(), work);\n}\n\nextern "C" void KartPadMobileRuntimeHostUninstall() {\n  void (^work)(void) = ^{ [gRuntimeOverlayHost uninstall]; gRuntimeOverlayHost = nil; };\n  if (NSThread.isMainThread) work();\n  else dispatch_sync(dispatch_get_main_queue(), work);\n}\n\nextern "C" void KartPadMobileSetHostSuspended(int suspended) {\n  void (^work)(void) = ^{\n    [gRuntimeOverlayHost setNeoStationSuspended:(suspended != 0)];\n  };\n  if (NSThread.isMainThread) work();\n  else dispatch_sync(dispatch_get_main_queue(), work);\n}\n"""
     replace_once(path, old_install, new_install)
-    path.write_text(path.read_text().replace("Return to KartPad Menu", "Return to NeoStation"))
+    text = path.read_text()
+    text = text.replace(
+        'actionWithTitle:@"Return to KartPad Menu"',
+        'actionWithTitle:NeoKartPadUIText(@"Return to NeoStation", "returnToLibrary")',
+    )
+    path.write_text(text)
 
 
 def patch_auxiliary_support_root(path: Path) -> None:
