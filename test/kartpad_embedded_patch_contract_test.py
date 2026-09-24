@@ -24,7 +24,7 @@ for token in (
     "KartPadMobileSetHostSuspended",
     "Return to NeoStation",
     "patch_nand_paths",
-    "texture_replacements",
+    '"Mods"',
     "auroraUserDirectory",
     "ManagedNandRootPath",
     "Saves",
