@@ -25,6 +25,7 @@ using RuntimeMainFn = int (*)(int, char**);
 using SDLGetWindowsFn = SDL_Window** (*)(int*);
 using SDLWindowVisibilityFn = bool (*)(SDL_Window*);
 using SDLFreeFn = void (*)(void*);
+using SDLSetMainReadyFn = void (*)(void);
 
 void* runtimeHandle = nullptr;
 RuntimeMainFn runtimeMain = nullptr;
@@ -32,6 +33,7 @@ SDLGetWindowsFn sdlGetWindows = nullptr;
 SDLWindowVisibilityFn sdlHideWindow = nullptr;
 SDLWindowVisibilityFn sdlShowWindow = nullptr;
 SDLFreeFn sdlFree = nullptr;
+SDLSetMainReadyFn sdlSetMainReady = nullptr;
 
 std::atomic_bool runtimeThreadActive{false};
 std::string supportPath;
@@ -461,9 +463,12 @@ bool LoadRuntime(char* error, size_t errorSize) {
   sdlShowWindow = reinterpret_cast<SDLWindowVisibilityFn>(
       dlsym(runtimeHandle, "SDL_ShowWindow"));
   sdlFree = reinterpret_cast<SDLFreeFn>(dlsym(runtimeHandle, "SDL_free"));
-  if (!runtimeMain || !sdlGetWindows || !sdlHideWindow || !sdlShowWindow) {
+  sdlSetMainReady = reinterpret_cast<SDLSetMainReadyFn>(
+      dlsym(runtimeHandle, "SDL_SetMainReady"));
+  if (!runtimeMain || !sdlGetWindows || !sdlHideWindow || !sdlShowWindow ||
+      !sdlSetMainReady) {
     return Fail(error, errorSize,
-                "KartPad donor runtime is missing RuntimeMain or SDL window exports.");
+                "KartPad donor runtime is missing RuntimeMain or required SDL exports.");
   }
   InstallAutoImportSwizzle();
   return true;
@@ -566,6 +571,10 @@ void PollForRuntimeWindow(int attempt) {
 
 void RuntimeThreadMain() {
   runtimeThreadActive.store(true, std::memory_order_release);
+  // RuntimeMain is normally entered through SDL_RunApp on iOS. NeoStation owns
+  // UIApplication and deliberately bypasses SDL_RunApp, so reproduce the
+  // mandatory initialization contract before SDL_Init runs.
+  if (sdlSetMainReady) sdlSetMainReady();
   char name[] = "KartPadRuntime";
   char* argv[] = {name, nullptr};
   const int result = runtimeMain ? runtimeMain(1, argv) : -1;
