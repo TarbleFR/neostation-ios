@@ -84,6 +84,14 @@ void main() {
     expect(scraper, isNot(contains('DusklightGameIdentity.read')));
   });
 
+  test('Ports deletion refreshes the private library immediately', () {
+    final manage = File(
+      'lib/screens/game_screen/game_settings_dialog/game_settings_manage_tab.dart',
+    ).readAsStringSync();
+    expect(manage, contains("toLowerCase() == 'ports'"));
+    expect(manage, contains('refreshPortsInternalLibrary'));
+  });
+
   test('Ports scan and launch isolate KartPad from Dusklight', () {
     final scanning =
         File('lib/providers/sqlite_config_provider/scanning.dart')
