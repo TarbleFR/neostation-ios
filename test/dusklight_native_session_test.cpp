@@ -5,6 +5,7 @@ int main() {
   NeoDusklightSessionState state;
   assert(!state.active());
   assert(!state.firstFrame());
+
   // Cancel before the runtime enters: retry remains possible.
   assert(state.reserve());
   assert(!state.reserve());
@@ -13,6 +14,8 @@ int main() {
   assert(!state.firstFrame());
   state.finish();
   assert(state.state() == NEO_DUSKLIGHT_IDLE);
+
+  // Initialize exactly once.
   assert(state.reserve());
   assert(state.enter());
   assert(!state.enter());
@@ -22,15 +25,45 @@ int main() {
   assert(!state.firstFrame());
   state.requestStop();
   assert(!state.firstFrame());
-  assert(state.active()); // Do not release host ownership before native cleanup.
-  state.terminate();
+  assert(state.active());
+  state.finish();
   assert(!state.active());
-  assert(state.state() == NEO_DUSKLIGHT_ENDED);
-  assert(!state.reserve()); // game_main and its singletons are one-shot.
+  assert(state.state() == NEO_DUSKLIGHT_IDLE);
 
+  // Reuse the retained runtime repeatedly without entering game_main again.
+  for (int repeat = 0; repeat < 100; ++repeat) {
+    assert(state.reserve());
+    assert(!state.reserve());
+    assert(!state.enter());
+    assert(state.state() == NEO_DUSKLIGHT_STARTING);
+    assert(state.firstFrame());
+    state.requestStop();
+    assert(state.active());
+    assert(!state.firstFrame());
+    state.finish();
+    assert(state.state() == NEO_DUSKLIGHT_IDLE);
+  }
+
+  // Cancel a resumed presentation before its first frame: still reusable.
+  assert(state.reserve());
+  state.requestStop();
+  state.finish();
+  assert(state.reserve());
+  state.finish();
+  assert(state.state() == NEO_DUSKLIGHT_IDLE);
+
+  // A fatal runtime failure remains terminal.
+  assert(state.reserve());
+  assert(state.firstFrame());
+  state.requestStop();
+  state.terminate();
+  assert(state.state() == NEO_DUSKLIGHT_ENDED);
+  assert(!state.reserve());
+
+  // An early startup failure after game_main entered is also terminal.
   NeoDusklightSessionState failed;
   assert(failed.reserve());
   assert(failed.enter());
-  failed.finish(); // An early startup failure also consumes the unsafe singleton entry.
+  failed.finish();
   assert(!failed.reserve());
 }
