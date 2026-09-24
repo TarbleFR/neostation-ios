@@ -1,0 +1,58 @@
+name: Publish Build 327 IPA direct
+run-name: Publish Build 327 IPA • ${{ github.sha }}
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/publish-build327-ipa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: build-327-kartpad-failure-trace
+      ASSET: NeoStation-iOS-Build-327-KartPad-Failure-Trace.ipa
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download validated Build 327 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-327-KartPad-Failure-Trace
+          run-id: 36025228583
+          github-token: ${{ github.token }}
+          path: build327
+
+      - name: Locate and verify IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$(find build327 -type f -name '*.ipa' | head -n1)"
+          test -n "$IPA"
+          cp "$IPA" "$ASSET"
+          unzip -t "$ASSET" >/dev/null
+          shasum -a 256 "$ASSET"
+
+      - name: Publish direct IPA release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$ASSET" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "NeoStation iOS Build 327 KartPad Failure Trace" \
+              --notes "Diagnostic KartPad candidate based on stable Build 322. Failed launches now surface the exact native runtime message, startup stage/code, embedded GameData preflight and the latest KartPad runtime log tail so the physical-device failure boundary can be identified deterministically." \
+              --prerelease
+          fi
