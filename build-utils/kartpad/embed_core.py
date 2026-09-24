@@ -3,19 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from pathlib import Path
 
-from validate_embedded_core import main as _unused  # keeps validator importable
-import validate_embedded_core
 
 
 def embed(app: Path, artifact: Path) -> dict:
     framework = artifact / "KartPadCore.framework"
     identity_path = artifact / "identity.json"
-    validate_embedded_core.validate = getattr(validate_embedded_core, "validate", None)
-
     if not app.is_dir():
         raise SystemExit(f"ERROR: NeoStation app does not exist: {app}")
     if not (framework / "KartPadCore").is_file() or not identity_path.is_file():
@@ -35,6 +32,9 @@ def embed(app: Path, artifact: Path) -> dict:
         raise SystemExit("ERROR: KartPad runtime profile mismatch")
     if identity.get("translated_function_count") != pins["discProfile"]["expectedTranslatedFunctions"]:
         raise SystemExit("ERROR: incomplete KartPad translated graph")
+    core_bytes = (framework / "KartPadCore").read_bytes()
+    if hashlib.sha256(core_bytes).hexdigest() != identity.get("sha256"):
+        raise SystemExit("ERROR: KartPadCore hash does not match identity")
 
     destination = app / "Frameworks" / "KartPadCore.framework"
     if destination.exists():
