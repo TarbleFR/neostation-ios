@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 322 Dusklight Warm Resume
-run-name: NeoStation iOS Build 322 • ${{ github.sha }}
+name: NeoStation iOS Build 323 KartPad Donor Candidate
+run-name: NeoStation iOS Build 323 KartPad • ${{ github.sha }}
 
 on:
   push:
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-322
+  group: neostation-ios-build-323-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,16 +38,16 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 322 Dusklight Warm Resume IPA
+    name: Build 323 KartPad Donor Candidate IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '322' }}
-      IPA_NAME: ${{ inputs.kartpad_core_run_id != '' && format('NeoStation-iOS-Build-{0}-KartPad-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume' }}
-      ARTIFACT_NAME: ${{ inputs.kartpad_core_run_id != '' && format('NeoStation-iOS-Build-{0}-KartPad-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '' }}
-      KARTPAD_CANDIDATE: ${{ inputs.kartpad_core_run_id != '' && '1' || '0' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '323' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Donor-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-323-KartPad-Donor-Candidate' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Donor-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-323-KartPad-Donor-Candidate' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '35994499356' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '8ee10c775184e1da9c20721d04c5fa6473877dc0' }}
+      KARTPAD_CANDIDATE: '1'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
