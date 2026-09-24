@@ -42,8 +42,19 @@ def main() -> None:
         fail("KartPadCore architecture identity is not arm64-only")
 
     exports = subprocess.check_output(["nm", "-gU", str(binary)], text=True)
-    if "_NeoKartPad_GetAPI" not in exports.split():
+    symbols = set(exports.split())
+    if "_NeoKartPad_GetAPI" not in symbols:
         fail("KartPadCore ABI export is missing")
+    if "_main" in symbols:
+        fail("KartPadCore still exports a standalone main entry point")
+
+    undefined = subprocess.check_output(["nm", "-u", str(binary)], text=True)
+    if "_UIApplicationMain" in undefined.split():
+        fail("KartPadCore still depends on UIApplicationMain")
+
+    install_name = subprocess.check_output(["otool", "-D", str(binary)], text=True)
+    if "@rpath/KartPadCore.framework/KartPadCore" not in install_name:
+        fail("KartPadCore install name is not @rpath-relative")
 
     deps = subprocess.check_output(["otool", "-L", str(binary)], text=True)
     if "/opt/homebrew" in deps or "/usr/local" in deps:
