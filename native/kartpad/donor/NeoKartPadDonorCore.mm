@@ -40,7 +40,6 @@ std::string gamePath;
 UIWindow* neoStationWindow = nil;
 UIWindow* donorWindow = nil;
 UIButton* returnButton = nil;
-NSObject* returnTarget = nil;
 
 std::mutex uiTextMutex;
 std::unordered_map<std::string, std::string> uiText;
@@ -118,7 +117,7 @@ bool PrepareRuntimeStorage(char* error, size_t errorSize) {
                            attributes:nil error:&failure]) {
       return Fail(error, errorSize, failure.localizedDescription.UTF8String);
     }
-    if (![EnsureSymlink(pair[0], target, &failure)]) {
+    if (!EnsureSymlink(pair[0], target, &failure)) {
       return Fail(error, errorSize, failure.localizedDescription.UTF8String);
     }
   }
@@ -214,18 +213,10 @@ UIWindow* CurrentDonorWindow() {
 
 void ReturnToNeoStation();
 
-@interface NeoKartPadDonorReturnTarget : NSObject
-- (void)returnToNeoStation;
-@end
-@implementation NeoKartPadDonorReturnTarget
-- (void)returnToNeoStation { ReturnToNeoStation(); }
-@end
-
 void InstallReturnButton() {
   UIWindow* window = CurrentDonorWindow();
   if (!window || returnButton.superview) return;
   donorWindow = window;
-  if (!returnTarget) returnTarget = [NeoKartPadDonorReturnTarget new];
   UIButton* button = [UIButton buttonWithType:UIButtonTypeSystem];
   button.translatesAutoresizingMaskIntoConstraints = NO;
   button.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.72];
@@ -237,8 +228,10 @@ void InstallReturnButton() {
   [button setImage:[UIImage systemImageNamed:@"arrow.uturn.backward.circle.fill"]
           forState:UIControlStateNormal];
   button.accessibilityLabel = UIText(@"Return to NeoStation", "returnToLibrary");
-  [button addTarget:returnTarget action:@selector(returnToNeoStation)
-    forControlEvents:UIControlEventTouchUpInside];
+  UIAction* returnAction = [UIAction actionWithHandler:^(__kindof UIAction*) {
+    ReturnToNeoStation();
+  }];
+  [button addAction:returnAction forControlEvents:UIControlEventTouchUpInside];
   UIView* root = window.rootViewController.view ?: window;
   [root addSubview:button];
   [NSLayoutConstraint activateConstraints:@[
