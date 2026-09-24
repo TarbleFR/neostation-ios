@@ -1,0 +1,94 @@
+name: KartPad embedded core gate
+run-name: KartPad Core gate • ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/kartpad-core.yml'
+      - 'native/kartpad/**'
+      - 'build-utils/kartpad/**'
+      - 'packages/kartpad_internal_bridge/**'
+      - 'test/kartpad_native_session_test.cpp'
+      - 'test/kartpad_embedded_patch_contract_test.py'
+      - 'test/kartpad_bridge_contract_test.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kartpad-core-gate
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Validate KartPad bridge and embedded contracts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile build-utils/kartpad/prepare_embedded_source.py
+          python3 test/kartpad_bridge_contract_test.py
+          python3 test/kartpad_embedded_patch_contract_test.py
+
+      - name: Exercise retained native session state
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -Wall -Wextra -Werror             -Inative/kartpad/core             -Ipackages/kartpad_internal_bridge/ios/Classes             test/kartpad_native_session_test.cpp             -o "$RUNNER_TEMP/kartpad-session-test"
+          "$RUNNER_TEMP/kartpad-session-test"
+
+      - name: Syntax-check NeoKartPad Core host
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang++             -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++             -isysroot "$SDK" -miphoneos-version-min=17.4             -Inative/kartpad/core             -Ipackages/kartpad_internal_bridge/ios/Classes             native/kartpad/core/NeoKartPadCore.mm
+
+      - name: Fetch exact KartPad v0.5.1 source
+        run: |
+          set -euo pipefail
+          git init build/kartpad-upstream
+          git -C build/kartpad-upstream remote add origin             https://github.com/chrissotraidis/kartpad.git
+          git -C build/kartpad-upstream fetch --depth=1 origin             0d657f361ccf0a03c0b8f9ec97b2bd237e16a658
+          git -C build/kartpad-upstream checkout --detach FETCH_HEAD
+          test "$(git -C build/kartpad-upstream rev-parse HEAD)" =             "0d657f361ccf0a03c0b8f9ec97b2bd237e16a658"
+          git -C build/kartpad-upstream submodule update --init --depth=1             vendor/runtimes/ios
+          test "$(git -C build/kartpad-upstream/vendor/runtimes/ios rev-parse HEAD)" =             "d0b8dec62a8c98dd45736a996ae18327ada8fe3f"
+
+      - name: Apply NeoStation patch to real upstream sources
+        run: |
+          set -euo pipefail
+          python3 build/kartpad-upstream/scripts/stage-maintained-runtime.py             ios build/kartpad-runtime
+          python3 build-utils/kartpad/prepare_embedded_source.py             build/kartpad-runtime             build/kartpad-upstream             native/kartpad/core/NeoKartPadCore.mm
+
+          grep -q 'OUTPUT_NAME KartPadCore'             build/kartpad-runtime/cmake/PublicProducts.cmake
+          grep -q 'FRAMEWORK TRUE'             build/kartpad-runtime/cmake/PublicProducts.cmake
+          grep -q 'NeoKartPadRuntimeRunGuest'             build/kartpad-runtime/src/main.cpp
+          grep -q 'dispatch_sync_f(dispatch_get_main_queue()'             build/kartpad-runtime/aurora-main/lib/window.cpp
+          grep -q 'Return to NeoStation'             build/kartpad-upstream/apple/ios/KartPadRuntimeOverlayHost.mm
+          grep -q 'NeoKartPadEmbeddedSupportPath'             build/kartpad-upstream/apple/shared/KartPadMiiManager.mm
+
+      - name: Prove private translation remains required
+        run: |
+          set -euo pipefail
+          test ! -e build/kartpad-runtime/../generated/build_shards/shards.cmake
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          pins=json.loads(Path('build-utils/kartpad/source.json').read_text())
+          assert pins['discProfile']['expectedTranslatedFunctions'] == 29637
+          assert pins['discProfile']['expectedBaseFunctions'] == 29065
+          assert pins['runtimeIdentity'] == 'kartpad_rmcp01_full_game_v1'
+          print('KartPad Core gate validates host source only; no game translation is bundled.')
+          PY

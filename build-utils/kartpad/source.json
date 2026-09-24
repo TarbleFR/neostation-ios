@@ -23,5 +23,7 @@
   },
   "neoStationAbi": 1,
   "runtimeIdentity": "kartpad_rmcp01_full_game_v1",
-  "publicSourceLimitation": "The upstream source delivery intentionally excludes generated game translation/profile inputs. A full KartPadCore must be built from an authorized RMCP01 translation graph; the standalone MH_EXECUTE IPA is not a loadable Core."
+  "publicSourceLimitation": "The upstream source delivery intentionally excludes generated game translation/profile inputs. A full KartPadCore must be built from an authorized RMCP01 translation graph; the standalone MH_EXECUTE IPA is not a loadable Core.",
+  "releaseTagCommit": "0d657f361ccf0a03c0b8f9ec97b2bd237e16a658",
+  "iosRuntimeCommit": "d0b8dec62a8c98dd45736a996ae18327ada8fe3f"
 }
