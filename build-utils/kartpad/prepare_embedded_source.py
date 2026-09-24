@@ -25,8 +25,8 @@ def patch_runtime_paths(runtime: Path) -> None:
     path = runtime / "include/runtime_config.h"
     replace_once(
         path,
-        "#ifdef _WIN32\n",
-        """#if defined(__APPLE__)\nextern "C" const char* NeoKartPadEmbeddedSupportPath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedCachePath(void) __attribute__((weak_import));\n#endif\n#ifdef _WIN32\n""",
+        "#include <toml.hpp>\n#ifdef __APPLE__\n",
+        """#include <toml.hpp>\n#if defined(__APPLE__)\nextern "C" const char* NeoKartPadEmbeddedSupportPath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedCachePath(void) __attribute__((weak_import));\n#endif\n#ifdef __APPLE__\n""",
     )
     replace_once(
         path,
