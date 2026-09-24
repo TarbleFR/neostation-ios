@@ -24,7 +24,7 @@ void main() {
     expect((emulators.single['platforms'] as Map)['ios']['embedded'], isTrue);
   });
 
-  test('KartPad Stage 1 owns a strict private PAL RMCP01 import', () {
+  test('KartPad owns a strict private PAL RMCP01 user import', () {
     final service =
         File('lib/services/kartpad_internal_service.dart').readAsStringSync();
     for (final folder in <String>[
@@ -44,7 +44,12 @@ void main() {
     expect(service, contains('supportedRevision = 0'));
     expect(service, contains('0x5D1C9EA3'));
     expect(service, contains("'Mario Kart Wii'"));
-    expect(service, contains("supportedGameExtensions = <String>{'iso'}"));
+    expect(
+      service,
+      contains("supportedGameExtensions = <String>{'iso', 'wbfs'}"),
+    );
+    expect(service, contains("MethodChannel('neostation/dolphin_internal')"));
+    expect(service, contains("'saveIdentity'"));
     expect(service, contains(r"File('${output.path}.part')"));
   });
 
