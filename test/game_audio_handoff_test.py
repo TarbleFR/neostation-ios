@@ -99,7 +99,7 @@ void main() {
       await manager.beginSession();
       manager.onGameStarted(emulatorExe: 'ios_dusklight_internal');
       DusklightInternalBridge.controller.add({
-        'reason': 'native-return', 'runtimeReleased': true,
+        'reason': 'native-return', 'runtimeReleased': false,
       });
       await flush(); expect(manager.phase, GameLaunchPhase.closing);
       manager.completeClose(); manager.onDialogDisposed(); manager.onDialogDisposed();
