@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lock the one-shot Dusklight teardown and cross-core handoff ordering."""
+"""Lock warm-return behavior and the fatal terminal teardown ordering."""
 
 import json
 from pathlib import Path
@@ -16,25 +16,45 @@ mem1 = (ROOT / "native/dusklight/upstream/extern/aurora/lib/dolphin/os/OSMemory.
 aram = (ROOT / "native/dusklight/upstream/extern/aurora/lib/dolphin/AR.cpp").read_text()
 manifest = json.loads((ROOT / "native/dusklight/upstream-manifest.json").read_text())
 
-finish = core[core.index("void FinishReturn()") : core.index("void Stop()")]
+# A normal Return to Library is a logical session stop. It must release the
+# transient GPU footprint, restore NeoStation, and retain the initialized
+# runtime so the same disc can be reopened without another game_main entry.
+finish = core[core.index("void FinishReturn()") : core.index("void TerminalShutdown(")]
 ordered_finish = [
     "if (inNativeCall) return",
     "[displayLink invalidate]",
     "Suspend(true)",
+    'TraceResources("before_graphics_release")',
+    "NeoDusklight_ReleaseFrameResources()",
     "RestoreHost()",
+    'TraceResources("return_to_host")',
+    "session.finish()",
+]
+positions = [finish.index(token) for token in ordered_finish]
+assert positions == sorted(positions), positions
+assert "NeoDusklight_ShutdownRuntime()" not in finish
+assert "ReleaseHostLifecycle()" not in finish
+assert "session.terminate()" not in finish
+assert "Session suspended" in finish
+assert "Resuming the retained native runtime" in core
+
+# Fatal runtime failure still crosses the complete native shutdown barrier.
+terminal = core[core.index("void TerminalShutdown(") : core.index("void Stop()")]
+ordered_terminal = [
+    "[displayLink invalidate]",
+    "Suspend(true)",
+    "RestoreHost()",
+    "session.requestStop()",
     'TraceResources("before_runtime_shutdown")',
     "NeoDusklight_ShutdownRuntime()",
     "ReleaseHostLifecycle()",
     'TraceResources("after_runtime_shutdown")',
     "session.terminate()",
 ]
-positions = [finish.index(token) for token in ordered_finish]
+positions = [terminal.index(token) for token in ordered_terminal]
 assert positions == sorted(positions), positions
-assert finish.index("if (!stopped)") < finish.index("session.terminate()")
-assert finish.index("Emit(", finish.index("session.terminate()")) > finish.index("session.terminate()")
-assert "NeoDusklight_ReleaseFrameResources" not in finish
-assert "Session suspended" not in core
-assert "Resuming the retained native runtime" not in core
+assert terminal.index("if (!stopped)") < terminal.index("session.terminate()")
+assert terminal.index("Emit(", terminal.index("session.terminate()")) > terminal.index("session.terminate()")
 
 lifecycle = core[core.index("void ReleaseHostLifecycle()") : core.index("void FinishReturn()")]
 for token in (
@@ -48,6 +68,7 @@ for token in (
 ):
     assert token in lifecycle, token
 
+# The one-shot destructive path itself remains complete for fatal failures.
 shutdown = game[game.index("bool NeoDusklight_ShutdownGame()") : game.index("bool JKRHeap::dump_sort()")]
 ordered_shutdown = [
     "borealis::shutdown()",
@@ -78,9 +99,7 @@ assert "ShutdownState::Failed" in shutdown
 assert "aramRelease <= 0 || mem1Release <= 0" in shutdown
 assert shutdown.index("ShutdownState::Complete;") > shutdown.index("borealis::log::shutdown()")
 
-# Build 319 proved that free() was insufficient: its iPhone log retained the
-# exact 256 MiB MEM1 and 24 MiB MEM2 mappings. ABI v6 gives both allocations
-# explicit mmap/munmap ownership and fails closed before runtimeReleased.
+# The explicit mmap/munmap ownership from Builds 319-320 remains unchanged.
 assert "config.mem1Size = 256 * 1024 * 1024" in game
 assert "config.mem2Size = 24 * 1024 * 1024" in game
 for source, region, pointer, allocation_size in (
@@ -92,7 +111,8 @@ for source, region, pointer, allocation_size in (
     assert "mmap(nullptr" in apple, region
     assert f"munmap({pointer}, {allocation_size})" in source, region
     assert f"NEODUSKLIGHT_VM_RELEASE region={region}" in source, region
-    assert source.index(f"munmap({pointer}, {allocation_size})") < source.index(f"{pointer} = nullptr", source.index(f"munmap({pointer}, {allocation_size})")), region
+    unmap = source.index(f"munmap({pointer}, {allocation_size})")
+    assert unmap < source.index(f"{pointer} = nullptr", unmap), region
 assert "MEM1End = nullptr" in mem1 and "OSBaseAddress = 0" in mem1
 assert 'extern "C" int NeoDusklight_ReleaseARAM()' in aram
 assert 'extern "C" int NeoDusklight_ReleaseMEM1()' in mem1
@@ -110,11 +130,15 @@ assert manifest["upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp"] == \
 assert manifest["upstream/extern/aurora/lib/dolphin/AR.cpp"] == \
     "4393e2393ea6577af55dbdf9f65de9bdcf671f9181cf5382c228dcd07d2fff7e"
 
+# IDLE means the retained runtime is reusable; only ENDED means the destructive
+# fatal barrier ran. Returning to NeoStation must not be gated on destruction.
 state_branch = plugin[plugin.index("- (void)coreState:") : plugin.index("- (void)handleMethodCall:")]
-assert '@"runtimeReleased": @YES' in state_branch
+assert '@"runtimeReleased": @(state == NEO_DUSKLIGHT_ENDED)' in state_branch
+assert '@"restartRequired": @(state == NEO_DUSKLIGHT_ENDED)' in state_branch
 dusklight_monitor = manager[manager.index("emulatorExe == 'ios_dusklight_internal'") :]
 dusklight_monitor = dusklight_monitor[: dusklight_monitor.index("emulatorExe == 'ios_armsx2_internal'")]
-assert dusklight_monitor.index("event['runtimeReleased'] == true") < dusklight_monitor.index("_triggerClose()")
-assert "DusklightInternalBridge.didReleaseRuntime" in dusklight_monitor
+assert "event['runtimeReleased'] == true" not in dusklight_monitor
+assert "DusklightInternalBridge.didReleaseRuntime" not in dusklight_monitor
+assert "_triggerClose()" in dusklight_monitor
 
-print("PASS: Dusklight kernel-unmaps MEM1/MEM2 and fails closed before exposing the next in-process core")
+print("PASS: warm return is reusable; fatal failures still retain the full kernel-unmap barrier")
