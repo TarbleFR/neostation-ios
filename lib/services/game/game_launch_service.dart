@@ -4,6 +4,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/l10n/dusklight_locale.dart';
+import 'package:neostation/l10n/ports_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:neostation/services/rpcs3_launch_service.dart';
 // DOLPHIN_ISOLATION_BEGIN: launcher_import
 import '../dolphin_internal_v2_service.dart';
 import '../dusklight_internal_service.dart';
+import '../kartpad_internal_service.dart';
 // DOLPHIN_ISOLATION_END: launcher_import
 import 'package:neostation/services/logger_service.dart';
 
@@ -188,9 +190,9 @@ class GameLaunchService {
       }
       // DOLPHIN_ISOLATION_END: explicit_gc_wii_route
 
-      // Ports are owned exclusively by NeoStation's embedded Dusklight host.
-      // Never reinterpret a native-port disc as a RetroArch or share-sheet
-      // title when the Core is absent or reports a lifecycle error.
+      // Ports are explicitly dispatched by their private NeoStation owner.
+      // A staged KartPad import must never fall through into Dusklight,
+      // RetroArch or the iOS share sheet while its callable Core is unfinished.
       if (Platform.isIOS && system.folderName.toLowerCase() == 'ports') {
         final locale = Localizations.localeOf(context);
         final gamePath = game.romPath;
@@ -198,6 +200,13 @@ class GameLaunchService {
           return GameLaunchResult.failure(
             DusklightLocale.launchError(locale, 'DUSKLIGHT_GAME_UNREADABLE'),
             system.folderName,
+          );
+        }
+        if (await KartPadInternalService.ownsGamePath(gamePath)) {
+          return GameLaunchResult.failure(
+            PortsLocale.forLocale(locale, 'kartpadCorePending'),
+            'KartPad Stage 1: import and ownership routing are active; '
+                'the embedded native Core is not packaged yet.',
           );
         }
         final DusklightLaunchResult report;
