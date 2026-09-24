@@ -1,5 +1,14 @@
 # KartPad native port — integration audit, 23 September 2026
 
+## NeoStation integration resumed — 24 September 2026
+
+Build 322 is the stable NeoStation iOS baseline. KartPad work resumes only on `experimental` and must not modify the Build 322 runtime identity.
+
+Stage 1 introduces the shared Ports import UX and a private `Ports/KartPad` library. The Ports playlist now uses one **Import** menu with **DuskLight** and **Mario Kart Pad** targets. KartPad imports are isolated from DuskLight and generic emulator routing. Until a callable KartPad Core ABI is packaged, launching an imported KartPad title is refused explicitly rather than misrouting it.
+
+The first import profile accepts a raw PAL Mario Kart Wii `RMCP01`, disc 0, revision 0 ISO and stores it canonically as `Ports/KartPad/Games/Mario Kart Wii.iso`. WBFS/extracted DATA support will be connected to the native KartPad validation path rather than accepted on filename alone.
+
+
 Requested behavior: import Mario Kart Wii into Ports, display it as a normal
 scraped game, launch the embedded KartPad runtime with its native controls and
 settings, return to NeoStation, and resume without a second application launch.
@@ -59,6 +68,4 @@ it has its own application entry point and no NeoStation ABI.
    import, unsupported-disc, first-frame, return, immediate relaunch and
    cross-core tests, then package and inspect the actual framework in the IPA.
 
-Build 315 contains the completed audio/JIT corrections and Dusklight language
-selection. KartPad is not advertised as playable in that candidate while the
-native compilation inputs are missing.
+Build 322 is the frozen stable baseline. KartPad Stage 1 is import-only and is not advertised as playable until NeoStation has a callable native Core ABI, first-frame/session ownership, audio handoff and repeatable return/relaunch validation.
