@@ -545,8 +545,8 @@ jobs:
           pins = json.loads(Path('build-utils/dusklight/source.json').read_text())
           assert identity['host_commit'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']
           assert identity['source_commit'] == pins['commit']
-          assert identity['abi_version'] == 6
-          assert identity['session_policy'] == 'host_frame_loop_terminal_kernel_unmap'
+          assert identity['abi_version'] == 7
+          assert identity['session_policy'] == 'host_frame_loop_warm_resume_rpcs3_jit_escrow'
           canonical = Path('native/dusklight')
           expected_sources = {
               name: canonical / name
