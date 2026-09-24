@@ -126,3 +126,5 @@ translation graph, embedded into a post-322 experimental IPA, and tested on a
 physical iPhone/iPad for first frame, controls, audio, return, resume and
 relaunch. Build 322 remains the rollback baseline until that device acceptance
 is complete.
+
+A full NeoStation IPA is intentionally not produced from host/UI-only KartPad commits. The full candidate build is reserved for a validated, real KartPadCore artifact so Build 322 is not repackaged under a misleading candidate state.
