@@ -245,7 +245,7 @@ void RunGame() {
       : "Native frame scheduling active.");
 }
 
-int Initialize(int Initialize(const char* support, const char* cache, char* error, size_t size) {
+int Initialize(const char* support, const char* cache, char* error, size_t size) {
   if (!NSThread.isMainThread) return Fail(error, size, "Dusklight must initialize on the UIKit thread.");
   if (session.active()) return Fail(error, size, "A Dusklight session is already active.");
   if (!support || !*support || !cache || !*cache)
@@ -325,7 +325,7 @@ int Start(const char* game, void* host, char* error, size_t size) {
   [NSRunLoop.mainRunLoop addTimer:startTimer forMode:NSRunLoopCommonModes];
   return 1;
 }
-int IsRunning()int IsRunning() { return session.active() ? 1 : 0; }
+int IsRunning() { return session.active() ? 1 : 0; }
 int State() { return session.state(); }
 void SetCallback(NeoDusklightEventFn callback, void* context) {
   eventCallback = callback; eventContext = context;
