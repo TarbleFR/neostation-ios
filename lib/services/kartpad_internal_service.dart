@@ -64,7 +64,7 @@ class KartPadInternalService {
   static const String supportedDiscId = 'RMCP01';
   static const int supportedDiscNumber = 0;
   static const int supportedRevision = 0;
-  static const Set<String> supportedGameExtensions = <String>{'iso', 'wbfs'};
+  static const Set<String> supportedGameExtensions = <String>{'iso', 'wbfs', 'rvz'};
   static const MethodChannel _discIdentityChannel =
       MethodChannel('neostation/dolphin_internal');
 
@@ -161,6 +161,34 @@ class KartPadInternalService {
       );
     }
 
+    if (extension == 'rvz') {
+      final temporaryDirectory = await getTemporaryDirectory();
+      final prepared = await KartPadInternalBridge.prepareGame(
+        gamePath: source.path,
+        supportPath: (await rootDirectory()).path,
+        cachePath: path.join(temporaryDirectory.path, 'KartPad'),
+      );
+      if (prepared['success'] != true) {
+        return KartPadImportResult(
+          imported: 0,
+          rejected: 1,
+          errors: <KartPadImportIssue>[
+            KartPadImportIssue(
+              picked.name,
+              'kartpadRvzPrepareFailed',
+              <String>[
+                if (prepared['stage'] != null) 'stage=${prepared['stage']}',
+                if (prepared['errorCode'] != null)
+                  'code=${prepared['errorCode']}',
+                if (prepared['message'] != null)
+                  prepared['message'].toString(),
+              ].join(' '),
+            ),
+          ],
+        );
+      }
+    }
+
     final destination = await gamesDirectory();
     final output = File(path.join(destination.path, '$displayTitle.$extension'));
     final temporary = File('${output.path}.part');
@@ -201,7 +229,7 @@ class KartPadInternalService {
     final extension =
         path.extension(file.path).replaceFirst('.', '').toLowerCase();
     if (extension == 'iso') return inspectRawIso(file);
-    if (extension != 'wbfs') return null;
+    if (extension != 'wbfs' && extension != 'rvz') return null;
 
     try {
       final data = await _discIdentityChannel.invokeMapMethod<String, dynamic>(
