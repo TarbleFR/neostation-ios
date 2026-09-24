@@ -22,6 +22,7 @@ on:
       - 'lib/services/game/game_launch_service.dart'
       - 'assets/systems/ports.json'
       - 'test/dusklight_ports_stage1_test.dart'
+      - 'test/kartpad_locale_test.dart'
       - 'packages/kartpad_internal_bridge/**'
       - 'build-utils/kartpad/**'
       - 'test/kartpad_bridge_contract_test.py'
@@ -52,6 +53,6 @@ jobs:
       - name: Analyze Ports Stage 1 sources
         run: flutter analyze --no-fatal-infos lib/services/kartpad_internal_service.dart lib/l10n/ports_locale.dart lib/widgets/ports_internal_playlist_actions.dart lib/screens/game_screen/my_games_list.dart lib/providers/sqlite_config_provider.dart lib/services/game/game_launch_service.dart lib/services/game_launch_manager.dart packages/kartpad_internal_bridge/lib/kartpad_internal_bridge.dart
       - name: Exercise Ports multi-import and KartPad isolation
-        run: flutter test test/dusklight_ports_stage1_test.dart
+        run: flutter test test/dusklight_ports_stage1_test.dart test/kartpad_locale_test.dart
       - name: Exercise KartPad bridge contract
         run: python3 test/kartpad_bridge_contract_test.py
