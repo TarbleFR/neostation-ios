@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
 import 'package:dusklight_internal_bridge/dusklight_internal_bridge.dart';
+import 'package:kartpad_internal_bridge/kartpad_internal_bridge.dart';
 import 'package:flutter/widgets.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'audio_policy_service.dart';
@@ -238,6 +239,25 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
         },
       );
       if (DusklightInternalBridge.didEndSession && !_isClosing) {
+        _triggerClose();
+      }
+      return;
+    }
+
+    if (Platform.isIOS && emulatorExe == 'ios_kartpad_internal') {
+      _embeddedSessionSubscription = KartPadInternalBridge.sessionEvents.listen(
+        (event) {
+          if (_phase == GameLaunchPhase.playing && !_isClosing) {
+            _log.i(
+              '[GameLaunchManager] KartPad returned to NeoStation: '
+              '${event['reason'] ?? 'unknown'} '
+              '(runtimeReleased=${event['runtimeReleased']})',
+            );
+            _triggerClose();
+          }
+        },
+      );
+      if (KartPadInternalBridge.didEndSession && !_isClosing) {
         _triggerClose();
       }
       return;

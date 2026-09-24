@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:kartpad_internal_bridge/kartpad_internal_bridge.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
@@ -22,6 +23,22 @@ class KartPadImportResult {
   final int rejected;
   final List<KartPadImportIssue> errors;
   final List<String> importedPaths;
+}
+
+class KartPadLaunchResult {
+  const KartPadLaunchResult({
+    required this.success,
+    required this.message,
+    this.stage,
+    this.errorCode,
+    this.technicalDetails = '',
+  });
+
+  final bool success;
+  final String message;
+  final String? stage;
+  final String? errorCode;
+  final String technicalDetails;
 }
 
 class KartPadDiscIdentity {
@@ -187,6 +204,68 @@ class KartPadInternalService {
     } finally {
       await handle?.close();
     }
+  }
+
+  static Future<KartPadLaunchResult> launch(
+    String gamePath, {
+    Map<String, String> uiText = const <String, String>{},
+  }) async {
+    await ensureLayout();
+    final game = File(gamePath);
+    if (!await game.exists() || await game.length() < 0x20) {
+      return const KartPadLaunchResult(
+        success: false,
+        message: 'The selected Mario Kart Wii file is not readable.',
+        stage: 'input',
+        errorCode: 'KARTPAD_GAME_UNREADABLE',
+      );
+    }
+
+    final identity = await inspectRawIso(game);
+    if (identity == null ||
+        identity.gameId != supportedDiscId ||
+        identity.discNumber != supportedDiscNumber ||
+        identity.revision != supportedRevision) {
+      return const KartPadLaunchResult(
+        success: false,
+        message: 'KartPad requires Mario Kart Wii PAL RMCP01, disc 0, revision 0.',
+        stage: 'input',
+        errorCode: 'KARTPAD_GAME_UNSUPPORTED',
+      );
+    }
+
+    if (!await ownsGamePath(gamePath)) {
+      return const KartPadLaunchResult(
+        success: false,
+        message: 'Import Mario Kart Wii through the Ports menu before launching KartPad.',
+        stage: 'ownership',
+        errorCode: 'KARTPAD_GAME_OUTSIDE_LIBRARY',
+      );
+    }
+
+    final temporary = await getTemporaryDirectory();
+    final response = await KartPadInternalBridge.launch(
+      gamePath: game.path,
+      supportPath: (await rootDirectory()).path,
+      cachePath: path.join(temporary.path, 'KartPad'),
+      uiText: uiText,
+    );
+    final success = response['success'] == true;
+    return KartPadLaunchResult(
+      success: success,
+      message: response['message']?.toString() ??
+          (success
+              ? 'KartPad session started.'
+              : 'KartPadCore returned no launch detail.'),
+      stage: response['stage']?.toString(),
+      errorCode: response['errorCode']?.toString(),
+      technicalDetails: <String>[
+        if (response['buildNumber'] != null) 'Build: ${response['buildNumber']}',
+        if (response['corePath'] != null) 'Core: ${response['corePath']}',
+        if (response['runtimeIdentity'] != null)
+          'Runtime: ${response['runtimeIdentity']}',
+      ].join('\n'),
+    );
   }
 
   static Future<bool> ownsGamePath(String gamePath) async {

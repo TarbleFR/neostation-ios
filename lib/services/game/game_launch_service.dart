@@ -4,7 +4,6 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/l10n/dusklight_locale.dart';
-import 'package:neostation/l10n/ports_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -203,11 +202,32 @@ class GameLaunchService {
           );
         }
         if (await KartPadInternalService.ownsGamePath(gamePath)) {
-          return GameLaunchResult.failure(
-            PortsLocale.forLocale(locale, 'kartpadCorePending'),
-            'KartPad Stage 1: import and ownership routing are active; '
-                'the embedded native Core is not packaged yet.',
+          final KartPadLaunchResult report;
+          try {
+            report = await KartPadInternalService.launch(gamePath);
+          } catch (error) {
+            _log.e('[KartPad launch] $error');
+            return GameLaunchResult.failure(
+              'KartPad could not start.',
+              '$error',
+            );
+          }
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+          if (!report.success) {
+            return GameLaunchResult.failure(
+              report.message,
+              'KartPad stage: ${report.stage ?? "unknown"}\n'
+              'Code: ${report.errorCode ?? "unknown"}\n'
+              '${report.technicalDetails}',
+            );
+          }
+          GameSessionManager.registerGameLaunch(
+            system,
+            game,
+            'ios_kartpad_internal',
           );
+          await FavoritesService.recordGamePlayed(game);
+          return GameLaunchResult.success();
         }
         final DusklightLaunchResult report;
         try {

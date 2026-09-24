@@ -21,7 +21,7 @@ jobs:
   build:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
-    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') }}
     name: Build 322 Dusklight Warm Resume IPA
     runs-on: macos-15
     timeout-minutes: 90
@@ -81,6 +81,7 @@ jobs:
               Path('packages/rpcs3_internal_bridge'),
               Path('packages/armsx2_internal_bridge'),
               Path('packages/dusklight_internal_bridge'),
+              Path('packages/kartpad_internal_bridge'),
               Path('packages/armsx2_jit_helper'),
           )
           suffixes = {
@@ -205,6 +206,9 @@ jobs:
           xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
             -Ipackages/dusklight_internal_bridge/ios/Classes \
             packages/dusklight_internal_bridge/ios/Classes/DusklightInternalBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            packages/kartpad_internal_bridge/ios/Classes/KartPadInternalBridgePlugin.mm
 
       - name: Resolve Flutter and analyze
         shell: bash
