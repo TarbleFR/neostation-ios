@@ -57,6 +57,18 @@ Les tests couvrent :
 - l'ordre obligatoire : réservation au démarrage, `dlopen` passif, transfert,
   puis unique initialisation RPCS3.
 
+La chaîne iOS complète a réussi :
+
+- commit hôte : `d5c847850b62fbbfc9e0d561b717d248116e02d7` ;
+- run : `35935373119` ;
+- IPA : `NeoStation-iOS-Build-321-RPCS3-Early-JIT-Escrow.ipa` ;
+- taille : `102362024` octets ;
+- SHA-256 :
+  `a2fd853f3125c439c40b10127cafeeeb3881ee7f3d50142336963c36c2c70e7b`.
+
+La validation CI démontre la compilation, le packaging et les invariants de
+réservation. Elle ne remplace pas le test de transition sur iPhone réel.
+
 ## Validation iPhone attendue
 
 Sans fermer NeoStation : démarrer l'application, lancer un jeu Dusklight,
