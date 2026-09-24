@@ -15,6 +15,31 @@ sys.path.insert(0, str(ROOT / "packages/dolphin_internal_bridge/ci"))
 from verify_ipa import macho  # noqa: E402
 
 
+def validate_absent(ipa: Path, build_number: str):
+    with zipfile.ZipFile(ipa) as z:
+        apps = [
+            n for n in z.namelist()
+            if n.startswith("Payload/")
+            and n.endswith(".app/Info.plist")
+            and n.count("/") == 2
+        ]
+        assert len(apps) == 1, "IPA must contain one application"
+        app = apps[0].removesuffix("Info.plist")
+        info = plistlib.loads(z.read(apps[0]))
+        assert str(info["CFBundleVersion"]) == str(build_number)
+        assert not any(
+            n.startswith(app + "Frameworks/KartPadCore.framework/")
+            for n in z.namelist()
+        ), "Unexpected KartPadCore.framework in non-candidate IPA"
+        assert app + "KartPad-native-identity.json" not in z.namelist(),             "Unexpected KartPad identity in non-candidate IPA"
+        assert not any("KartPad.app/" in n for n in z.namelist()),             "Standalone KartPad app must never be nested"
+    return {
+        "build": str(build_number),
+        "kartPadCorePresent": False,
+        "standaloneKartPadPresent": False,
+    }
+
+
 def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
     identity = json.loads(identity_path.read_text())
     pins = json.loads((ROOT / "build-utils/kartpad/source.json").read_text())
@@ -89,11 +114,20 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("ipa", type=Path)
-    parser.add_argument("--identity", type=Path, required=True)
-    parser.add_argument("--core-host", required=True)
+    parser.add_argument("--identity", type=Path)
+    parser.add_argument("--core-host")
     parser.add_argument("--build-number", required=True)
+    parser.add_argument("--expect-absent", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(
-        validate(args.ipa, args.identity, args.core_host, args.build_number),
-        indent=2,
-    ))
+    if args.expect_absent:
+        result = validate_absent(args.ipa, args.build_number)
+    else:
+        if args.identity is None or not args.core_host:
+            parser.error("--identity and --core-host are required unless --expect-absent is used")
+        result = validate(
+            args.ipa,
+            args.identity,
+            args.core_host,
+            args.build_number,
+        )
+    print(json.dumps(result, indent=2))
