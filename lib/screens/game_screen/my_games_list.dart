@@ -17,8 +17,7 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:ui';
-import '../../l10n/dusklight_locale.dart';
-import '../../services/dusklight_game_identity.dart';
+import '../../l10n/ports_locale.dart';
 
 // DOLPHIN_ISOLATION_BEGIN: playlist_import
 import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
@@ -1650,10 +1649,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.sports_esports_outlined, size: 48.r),
             SizedBox(height: 12.r),
-            Text(DusklightGameIdentity.title, textAlign: TextAlign.center,
+            Text('Ports', textAlign: TextAlign.center,
               style: TextStyle(fontSize: 18.r, fontWeight: FontWeight.w600)),
             SizedBox(height: 8.r),
-            Text(DusklightLocale.emptyLibraryText(context), textAlign: TextAlign.center),
+            Text(
+              '${PortsLocale.text(context, 'import')}: '
+              '${PortsLocale.text(context, 'dusklight')} • '
+              '${PortsLocale.text(context, 'kartpad')}',
+              textAlign: TextAlign.center,
+            ),
           ]),
         ));
       }
