@@ -54,6 +54,23 @@ def embed(app: Path, artifact: Path) -> dict:
             raise SystemExit("ERROR: KartPad donor runtime hash mismatch")
         shutil.copytree(runtime, runtime_destination)
         (runtime_destination / "KartPadRuntime").chmod(0o755)
+
+        # The converted donor still resolves its executable-relative Wii/Aurora
+        # payload through the main process path. Recreate the official app
+        # layout at Runner.app root without embedding KartPad.app itself.
+        resource_root = artifact / "runtime-resources"
+        expected_resources = identity.get("runtime_resources")
+        if not isinstance(expected_resources, dict) or not expected_resources:
+            raise SystemExit("ERROR: KartPad donor runtime resources are missing")
+        for relative, expected_hash in expected_resources.items():
+            source = resource_root / relative
+            if not source.is_file():
+                raise SystemExit(f"ERROR: KartPad runtime resource missing: {relative}")
+            if hashlib.sha256(source.read_bytes()).hexdigest() != expected_hash:
+                raise SystemExit(f"ERROR: KartPad runtime resource hash mismatch: {relative}")
+            destination_resource = app / relative
+            destination_resource.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination_resource)
     elif mode not in ("source-built", None):
         raise SystemExit(f"ERROR: unsupported KartPad mode: {mode}")
 
