@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 327 KartPad Failure Trace
-run-name: NeoStation iOS Build 327 KartPad Failure Trace • ${{ github.sha }}
+name: NeoStation iOS Build 328 KartPad Cache Fix
+run-name: NeoStation iOS Build 328 KartPad Cache Fix • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '327'
+        default: '328'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-327-kartpad
+  group: neostation-ios-build-328-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,15 +38,15 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 327 KartPad Failure Trace IPA
+    name: Build 328 KartPad Cache Fix IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '327' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Failure-Trace', inputs.build_number) || 'NeoStation-iOS-Build-327-KartPad-Failure-Trace' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Failure-Trace', inputs.build_number) || 'NeoStation-iOS-Build-327-KartPad-Failure-Trace' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36018529254' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '140faab782ff249fc471de2eb7236a2c03fc41a4' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '328' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Cache-Fix', inputs.build_number) || 'NeoStation-iOS-Build-328-KartPad-Cache-Fix' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Cache-Fix', inputs.build_number) || 'NeoStation-iOS-Build-328-KartPad-Cache-Fix' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36029514234' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'fc2ab34bae115fa23749b7927b52ccff6883a6f9' }}
       KARTPAD_CANDIDATE: '1'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
