@@ -205,7 +205,10 @@ class GameLaunchService {
         if (await KartPadInternalService.ownsGamePath(gamePath)) {
           final KartPadLaunchResult report;
           try {
-            report = await KartPadInternalService.launch(gamePath);
+            report = await KartPadInternalService.launch(
+              gamePath,
+              uiText: PortsLocale.kartPadNativeUI(locale),
+            );
           } catch (error) {
             _log.e('[KartPad launch] $error');
             return GameLaunchResult.failure(
