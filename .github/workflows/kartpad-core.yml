@@ -39,9 +39,16 @@ jobs:
       - name: Validate KartPad bridge and embedded contracts
         run: |
           set -euo pipefail
-          python3 -m py_compile build-utils/kartpad/prepare_embedded_source.py
+          python3 -m py_compile \
+            build-utils/kartpad/prepare_embedded_source.py \
+            build-utils/kartpad/validate_embedded_core.py
+          bash -n build-utils/kartpad/build_embedded_core.sh
           python3 test/kartpad_bridge_contract_test.py
           python3 test/kartpad_embedded_patch_contract_test.py
+          grep -q 'CMAKE_OSX_SYSROOT=iphoneos' build-utils/kartpad/build_embedded_core.sh
+          grep -q 'MKW_NEOSTATION_EMBEDDED_CORE=ON' build-utils/kartpad/build_embedded_core.sh
+          grep -q 'expectedTranslatedFunctions' build-utils/kartpad/build_embedded_core.sh
+          grep -q 'physicalIosDependencies' build-utils/kartpad/source.json
 
       - name: Exercise retained native session state
         run: |
