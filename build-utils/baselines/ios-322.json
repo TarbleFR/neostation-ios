@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "name": "ios-322",
+  "role": "stable-reference-baseline",
+  "buildNumber": 322,
+  "commit": "a36a01bc519300369c0d8f9ba9073753c884786f",
+  "workflowRun": 35970470533,
+  "artifact": "NeoStation-iOS-Build-322-Dusklight-Warm-Resume",
+  "ipaSha256": "beb546f5b98b25f27b1903067f1c46956f57a3d2e92ff7fd79b6b34838e9236c",
+  "supersedes": "ios-289",
+  "validatedAt": "2026-09-24",
+  "nativeIdentity": {
+    "dolphinCoreSha256": "7129d9c654fb6d28f2fa92ae1a4c14d1f25a1fc3e87788237676b48a0fb3aa2d",
+    "rpcs3CoreSha256": "bafe4e8ac378179b930379b2720f1a076890543b3c392c364fd043284465dcfc",
+    "armsx2CoreSha256": "cadb6cd56c4b5d01b623bf9696800d48ba504eef8129a8de468c11381de8d162",
+    "dusklightCoreSha256": "5a64e2fd48c47831fd07306c90e28036535a125bd887149d92ba4567ac9af8a7",
+    "dusklightCoreHostCommit": "4de572747e794d69756fda5db761a7650e98e9f6",
+    "dusklightAbiVersion": 7,
+    "stikjitBinarySha256": "4de72ef84a1aef6d6d3b547222c730227b48e91d8d5eb7e59c1f9235961e4efe",
+    "stikjitUniversalJsSha256": "22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1",
+    "stikjitLegacyJsSha256": "787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec"
+  },
+  "status": "user-validated-stable",
+  "knownIssues": [],
+  "replacementPolicy": "Do not replace Build 322 as the stable baseline until a later build has compiled, packaged, passed validators, and been explicitly validated on-device."
+}

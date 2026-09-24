@@ -64,6 +64,12 @@ flutter create --platforms=ios --org com.neogamelab --project-name neostation .
 
 Create your local build environment file from `.env.example`, provide the required ScreenScraper values and build with the project's normal iOS release process. `.env` must never be committed.
 
+## Stable iOS baseline
+
+The current stable iOS reference is **Build 322** (commit `a36a01bc519300369c0d8f9ba9073753c884786f`, successful workflow run `35970470533`). Its packaged artifact is `NeoStation-iOS-Build-322-Dusklight-Warm-Resume`, SHA-256 `beb546f5b98b25f27b1903067f1c46956f57a3d2e92ff7fd79b6b34838e9236c`.
+
+Build 322 is the restoration point for subsequent work. New port integrations and experiments must remain on `experimental` until separately validated.
+
 ## Books and manga
 
 NeoStation iOS allows users to import, organize and read books and manga. Users must add their own files or independently find and configure compatible sources. NeoStation iOS does not provide or host copyrighted content sources.
