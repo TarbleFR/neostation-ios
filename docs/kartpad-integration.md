@@ -18,8 +18,12 @@ The Ports action is now:
 KartPad accepts ISO and WBFS user images. ISO headers are validated directly;
 WBFS is identified through NeoStation's embedded Dolphin DiscIO path and is
 validated again by KartPad before guest execution. The canonical private
-library is `Ports/KartPad/Games`, with separate `Saves`, `Config`,
-`Mods`, `Logs` and `Metadata` directories.
+library is `Ports/KartPad/Games`. Runtime state is mapped deliberately into
+NeoStation's Files-visible layout: Wii NAND/save data lives in
+`Ports/KartPad/Saves/NAND`, runtime configuration in
+`Ports/KartPad/Config/Config.toml`, logs in `Ports/KartPad/Logs`, and Aurora
+texture replacements under `Ports/KartPad/Mods/texture_replacements`.
+`Metadata` remains reserved for NeoStation-side port metadata.
 
 The imported game is displayed and scraped as **Mario Kart Wii**, not as a
 DuskLight/Twilight Princess title.
@@ -44,8 +48,10 @@ by KartPad's runtime.
 
 The in-game return action is supplied by NeoStation in all twelve supported
 languages. A normal **Return to NeoStation** suspends the guest at KartPad's
-event boundary, releases its foreground UI/audio ownership and preserves the
-same runtime for a subsequent resume. The native session state regression gate
+event boundary, waits for Aurora's frame worker, releases the WebGPU/Metal
+presentation surface plus foreground UI/audio ownership, and preserves the
+same guest runtime for a subsequent resume. The presentation surface is
+recreated when KartPad becomes visible again. The native session state regression gate
 exercises 100 consecutive return/resume cycles.
 
 Fatal runtime termination is a separate terminal state and is never treated as
