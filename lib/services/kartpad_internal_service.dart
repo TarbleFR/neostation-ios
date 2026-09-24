@@ -274,6 +274,75 @@ class KartPadInternalService {
     }
   }
 
+  static Future<String> _embeddedStartupSnapshot(String gamePath) async {
+    try {
+      final root = await rootDirectory();
+      final preparedRoot =
+          Directory(path.join(root.path, 'Runtime', 'GameData'));
+      const required = <String>[
+        'sys/boot.bin',
+        'sys/bi2.bin',
+        'sys/apploader.img',
+        'sys/fst.bin',
+        'sys/main.dol',
+        'files/rel/StaticR.rel',
+      ];
+      final preparedState = <String>[];
+      for (final relative in required) {
+        final file = File(path.join(preparedRoot.path, relative));
+        if (!await file.exists()) {
+          preparedState.add('$relative=missing');
+          continue;
+        }
+        final length = await file.length();
+        preparedState.add('$relative=$length');
+      }
+
+      var bootIdentity = 'unavailable';
+      final boot = File(path.join(preparedRoot.path, 'sys', 'boot.bin'));
+      if (await boot.exists()) {
+        final handle = await boot.open();
+        try {
+          final header = await handle.read(0x20);
+          if (header.length >= 8) {
+            final id = String.fromCharCodes(header.sublist(0, 6));
+            bootIdentity =
+                '$id disc=${header[6]} revision=${header[7]}';
+          }
+        } finally {
+          await handle.close();
+        }
+      }
+
+      final config = File(path.join(root.path, 'Config', 'Config.toml'));
+      String dvdRoot = 'missing Config.toml';
+      if (await config.exists()) {
+        final lines = await config.readAsLines();
+        final line = lines.cast<String?>().firstWhere(
+              (value) =>
+                  value != null &&
+                  RegExp(r'^\s*dvd_root\s*=').hasMatch(value),
+              orElse: () => null,
+            );
+        dvdRoot = line?.trim() ?? 'dvd_root missing';
+      }
+
+      final game = File(gamePath);
+      final gameBytes = await game.exists() ? await game.length() : -1;
+      return <String>[
+        'NeoStation KartPad preflight:',
+        'game=${path.basename(gamePath)} bytes=$gameBytes',
+        'supportRoot=${root.path}',
+        'preparedGameData=${await preparedRoot.exists()}',
+        'boot=$bootIdentity',
+        dvdRoot,
+        ...preparedState,
+      ].join('\n');
+    } catch (error) {
+      return 'NeoStation KartPad preflight failed: $error';
+    }
+  }
+
   static Future<String> _latestRuntimeLogTail({
     int maxBytes = 24 * 1024,
   }) async {
@@ -362,6 +431,8 @@ class KartPadInternalService {
       uiText: uiText,
     );
     final success = response['success'] == true;
+    final startupSnapshot =
+        success ? '' : await _embeddedStartupSnapshot(game.path);
     // A failed embedded startup can otherwise collapse into the same localized
     // "could not start" message even though KartPad wrote the real renderer or
     // runtime failure to its console log. Read the newest bounded tail while
@@ -384,6 +455,7 @@ class KartPadInternalService {
         if (response['corePath'] != null) 'Core: ${response['corePath']}',
         if (response['runtimeIdentity'] != null)
           'Runtime: ${response['runtimeIdentity']}',
+        if (startupSnapshot.isNotEmpty) startupSnapshot,
         if (runtimeLogTail.isNotEmpty) runtimeLogTail,
       ].join('\n'),
     );
