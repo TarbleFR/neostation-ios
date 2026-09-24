@@ -1,0 +1,58 @@
+name: Publish Build 325 IPA direct
+run-name: Publish Build 325 IPA • ${{ github.sha }}
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/publish-build325-ipa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: build-325-kartpad-startup-fix
+      ASSET: NeoStation-iOS-Build-325-KartPad-Startup-Fix.ipa
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download validated Build 325 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-iOS-Build-325-KartPad-Startup-Fix
+          run-id: 36014063644
+          github-token: ${{ github.token }}
+          path: build325
+
+      - name: Locate and verify IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$(find build325 -type f -name '*.ipa' | head -n1)"
+          test -n "$IPA"
+          cp "$IPA" "$ASSET"
+          unzip -t "$ASSET" >/dev/null
+          shasum -a 256 "$ASSET"
+
+      - name: Publish direct IPA release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$ASSET" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "NeoStation iOS Build 325 KartPad Startup Fix" \
+              --notes "Experimental KartPad startup-fix candidate based on stable Build 322." \
+              --prerelease
+          fi
