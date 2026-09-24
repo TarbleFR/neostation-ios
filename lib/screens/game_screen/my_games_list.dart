@@ -25,7 +25,7 @@ import 'package:neostation/widgets/dolphin_internal_playlist_actions.dart';
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
 import 'package:neostation/widgets/rpcs3_internal_playlist_actions.dart';
 import 'package:neostation/widgets/armsx2_internal_playlist_actions.dart';
-import 'package:neostation/widgets/dusklight_internal_playlist_actions.dart';
+import 'package:neostation/widgets/ports_internal_playlist_actions.dart';
 
 // DOLPHIN_ISOLATION_END: playlist_import
 import '../../services/game_service.dart';
@@ -117,7 +117,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps3';
   bool get _isArmsx2Library =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps2';
-  bool get _isDusklightLibrary =>
+  bool get _isPortsLibrary =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ports';
   int _selectedGameIndex = 0;
   late GamepadNavigation
@@ -651,7 +651,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                 child: _isLoading
                     ? _buildLoadingState()
                     : _games.isEmpty
-                    ? (_isDusklightLibrary ? _buildGamesList() : _buildEmptyState())
+                    ? (_isPortsLibrary ? _buildGamesList() : _buildEmptyState())
                     : Consumer<SqliteConfigProvider>(
                         builder: (context, configProvider, child) {
                           if (widget.system.folderName == 'music') {
@@ -727,7 +727,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   );
                 },
               ),
-            if (!_isGameLaunching && _isDusklightLibrary)
+            if (!_isGameLaunching && _isPortsLibrary)
               Consumer<SqliteConfigProvider>(
                 builder: (context, config, child) {
                   final mode = config.config.gameViewMode;
@@ -745,7 +745,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                       child: Material(
                         color: Theme.of(context).colorScheme.tertiaryFixed,
                         borderRadius: BorderRadius.circular(10.r),
-                        child: _buildDusklightImportAction(),
+                        child: _buildPortsImportAction(),
                       ),
                     ),
                   );
@@ -870,8 +870,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
         },
       );
 
-  Widget _buildDusklightImportAction() => DusklightInternalPlaylistActions(
-    onGamesImported: _scrapeImportedDusklight,
+  Widget _buildPortsImportAction() => PortsInternalPlaylistActions(
+    onGamesImported: _scrapeImportedPortGames,
     onInteractionChanged: (active) {
       if (!mounted) return;
       if (active) {
@@ -882,35 +882,30 @@ class _SystemGamesListState extends State<SystemGamesList> {
     },
     onLibraryChanged: () async {
       if (!mounted) return;
-      await context
-          .read<SqliteConfigProvider>()
-          .refreshDusklightInternalLibrary();
+      await context.read<SqliteConfigProvider>().refreshPortsInternalLibrary();
       if (mounted) await _loadGames();
     },
   );
 
-  Widget _buildEmbeddedDusklightImportAction() =>
-      DusklightInternalPlaylistActions(
-        embedded: true,
-        onGamesImported: _scrapeImportedDusklight,
-        onInteractionChanged: (active) {
-          if (!mounted) return;
-          if (active) {
-            _gamepadNav.deactivate();
-          } else {
-            _gamepadNav.activate();
-          }
-        },
-        onLibraryChanged: () async {
-          if (!mounted) return;
-          await context
-              .read<SqliteConfigProvider>()
-              .refreshDusklightInternalLibrary();
-          if (mounted) await _loadGames();
-        },
-      );
+  Widget _buildEmbeddedPortsImportAction() => PortsInternalPlaylistActions(
+    embedded: true,
+    onGamesImported: _scrapeImportedPortGames,
+    onInteractionChanged: (active) {
+      if (!mounted) return;
+      if (active) {
+        _gamepadNav.deactivate();
+      } else {
+        _gamepadNav.activate();
+      }
+    },
+    onLibraryChanged: () async {
+      if (!mounted) return;
+      await context.read<SqliteConfigProvider>().refreshPortsInternalLibrary();
+      if (mounted) await _loadGames();
+    },
+  );
 
-  Future<void> _scrapeImportedDusklight(List<String> paths) async {
+  Future<void> _scrapeImportedPortGames(List<String> paths) async {
     try {
       if (!await ScreenScraperService.hasSavedCredentials()) return;
       for (final gamePath in paths) {
@@ -929,7 +924,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     } catch (error) {
       // Import is already committed and visible. Network failures can be
       // retried with the ordinary per-game scrape action.
-      _log.w('Dusklight media enrichment failed: $error');
+      _log.w('Ports media enrichment failed: $error');
     }
   }
 
@@ -1649,7 +1644,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   Widget _buildGameDetailsPanel() {
     if (_selectedGame == null) {
-      if (_isDusklightLibrary) {
+      if (_isPortsLibrary) {
         return Center(child: Padding(
           padding: EdgeInsets.all(24.r),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1743,8 +1738,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
           ? _buildEmbeddedDolphinImportAction()
           : _isArmsx2Library
           ? _buildEmbeddedArmsx2ImportAction()
-          : _isDusklightLibrary
-          ? _buildEmbeddedDusklightImportAction()
+          : _isPortsLibrary
+          ? _buildEmbeddedPortsImportAction()
           : _isRpcs3Library && _rpcs3FirmwareReady
           ? _buildEmbeddedRpcs3ImportAction()
           : null,
