@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 324 KartPad RVZ Settings Candidate
-run-name: NeoStation iOS Build 324 KartPad RVZ Settings • ${{ github.sha }}
+name: NeoStation iOS Build 325 KartPad Startup Fix
+run-name: NeoStation iOS Build 325 KartPad Startup Fix • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '324'
+        default: '325'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -38,15 +38,15 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 324 KartPad RVZ Settings Candidate IPA
+    name: Build 325 KartPad Startup Fix IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '324' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RVZ-Settings-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-324-KartPad-RVZ-Settings-Candidate' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RVZ-Settings-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-324-KartPad-RVZ-Settings-Candidate' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36008701300' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'b390e4961a3d7f74510b3ddb36a54994a40a842f' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '325' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RVZ-Settings-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-325-KartPad-Startup-Fix' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RVZ-Settings-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-325-KartPad-Startup-Fix' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36013957580' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '106cc4aeab06106a71490fbab254fec61836e812' }}
       KARTPAD_CANDIDATE: '1'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
