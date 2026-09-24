@@ -15,7 +15,7 @@ import 'screenscraper/screenscraper_client.dart';
 import 'screenscraper/media_downloader.dart';
 import 'screenscraper/game_id_media_fallback.dart';
 import 'screenscraper/screenscraper_exceptions.dart';
-import 'dusklight_game_identity.dart';
+import 'ports_game_identity.dart';
 import '../providers/scraping_provider.dart';
 import '../l10n/app_locale.dart';
 import '../widgets/scraping_summary_dialog.dart';
@@ -688,7 +688,7 @@ class ScreenScraperService {
       }
 
       final port = systemFolder == 'ports'
-          ? await DusklightGameIdentity.read(romPath) : null;
+          ? await PortGameIdentity.read(romPath) : null;
       if (systemFolder == 'ports' && port == null) {
         return {'success': false, 'message': AppLocale.scrapeGameNotFound};
       }
@@ -712,7 +712,7 @@ class ScreenScraperService {
       final lowerRomPath = romPath.toLowerCase();
       final isMeloNxVirtual = lowerRomPath.startsWith('melonx://');
       final isRpcs3Virtual = lowerRomPath.startsWith('rpcs3-library://');
-      var effectiveGameName = port == null ? gameName : DusklightGameIdentity.title;
+      var effectiveGameName = port == null ? gameName : port.title;
       if (isRpcs3Virtual &&
           !shouldRetryRpcs3ByNameForTesting(effectiveGameName, serialNumber) &&
           (serialNumber?.trim().isNotEmpty ?? false)) {
@@ -769,7 +769,7 @@ class ScreenScraperService {
           gameInfo,
           preferredLanguage: preferredLanguage,
         );
-        if (port != null) metadata['real_name'] = DusklightGameIdentity.displayTitle;
+        if (port != null) metadata['real_name'] = port.displayTitle;
         await _saveGameMetadata(metadata, appSystemId, isFullyScraped: true);
       }
 
@@ -854,7 +854,7 @@ class ScreenScraperService {
       }
 
       final port = systemFolder == 'ports'
-          ? await DusklightGameIdentity.read(romPath) : null;
+          ? await PortGameIdentity.read(romPath) : null;
       if (systemFolder == 'ports' && port == null) {
         return {'success': false, 'message': AppLocale.scrapeGameNotFound};
       }
@@ -884,7 +884,7 @@ class ScreenScraperService {
           romName,
           appSystemId: appSystemId,
           maxDailyRequests: 0,
-          gameName: port != null ? DusklightGameIdentity.title :
+          gameName: port != null ? port.title :
               (systemFolder == 'android' || isMeloNxVirtual || isRpcs3Virtual)
               ? gameName : null,
           serialNumber: port?.discId ?? (isRpcs3Virtual ? serialNumber : null),
@@ -1167,7 +1167,7 @@ class ScreenScraperService {
       final titleName = rom['title_name']?.toString();
       final titleId = rom['title_id']?.toString().trim();
       final port = systemFolder == 'ports'
-          ? await DusklightGameIdentity.read(romPath) : null;
+          ? await PortGameIdentity.read(romPath) : null;
       if (systemFolder == 'ports' && port == null) {
         return {'success': false, 'requests': 0};
       }
@@ -1175,7 +1175,7 @@ class ScreenScraperService {
       final lowerRomPath = romPath.toLowerCase();
       final isMeloNxVirtual = lowerRomPath.startsWith('melonx://');
       final isRpcs3Virtual = lowerRomPath.startsWith('rpcs3-library://');
-      var effectiveTitleName = port == null ? titleName : DusklightGameIdentity.title;
+      var effectiveTitleName = port == null ? titleName : port.title;
       if (isRpcs3Virtual &&
           !shouldRetryRpcs3ByNameForTesting(effectiveTitleName, titleId) &&
           (titleId?.isNotEmpty ?? false)) {
@@ -1278,7 +1278,7 @@ class ScreenScraperService {
             gameInfo,
             preferredLanguage: preferredLanguage,
           );
-          if (port != null) metadata['real_name'] = DusklightGameIdentity.displayTitle;
+          if (port != null) metadata['real_name'] = port.displayTitle;
           await _saveGameMetadata(metadata, appSystemId, isFullyScraped: false);
         }
 
