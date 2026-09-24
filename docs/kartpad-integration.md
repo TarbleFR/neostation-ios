@@ -15,9 +15,12 @@ The Ports action is now:
 
 `Import → DuskLight / Mario Kart Pad`
 
-KartPad accepts ISO and WBFS user images. ISO headers are validated directly;
-WBFS is identified through NeoStation's embedded Dolphin DiscIO path and is
-validated again by KartPad before guest execution. The canonical private
+KartPad accepts ISO, WBFS and RVZ user images. ISO headers are validated
+directly; WBFS and RVZ are identified through NeoStation's embedded Dolphin
+DiscIO path. RVZ is then extracted transactionally during the Import action by
+KartPad's own pinned DiscIO extractor, so the user never has to convert it to
+ISO first. KartPad validates RMCP01 disc 0 revision 0 before committing the
+prepared game data. The canonical private
 library is `Ports/KartPad/Games`. Runtime state is mapped deliberately into
 NeoStation's Files-visible layout: Wii NAND/save data lives in
 `Ports/KartPad/Saves/NAND`, runtime configuration in
@@ -56,6 +59,26 @@ exercises 100 consecutive return/resume cycles.
 
 Fatal runtime termination is a separate terminal state and is never treated as
 a normal warm return.
+
+## Internal KartPad settings
+
+The embedded donor host adds a NeoStation-owned **KartPad Settings** gear next
+to **Return to NeoStation**. It uses KartPad/SunPad's canonical preferences
+rather than introducing a second graphics configuration:
+
+- Game language: English, German, French, Spanish, Italian or Dutch, matching
+  the localization resources shipped by PAL RMCP01. The selection is persisted
+  as Wii `IPL.LNG` in KartPad's private NAND so the game's own
+  `SCGetLanguage()` sees it.
+- Render resolution: 1x, 2x, 3x or 4x via `SunPadRenderScale`.
+- Aspect ratio: original 4:3, fixed 16:9 or fill screen via
+  `SunPadAspectRatioMode`.
+- FPS counter via `SunPadShowFPSCounter`.
+
+KartPad retains its guest runtime after a normal return to the library.
+Therefore language, render resolution and aspect changes are persisted safely
+and are applied after restarting NeoStation rather than destructively
+reinitializing the retained runtime in-process.
 
 ## Source pins
 
