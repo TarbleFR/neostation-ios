@@ -6,6 +6,22 @@ on:
     branches:
       - experimental
   workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Candidate build number (used only for manual runs)'
+        required: true
+        default: '323'
+        type: string
+      kartpad_core_run_id:
+        description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
+        required: false
+        default: ''
+        type: string
+      kartpad_core_host_sha:
+        description: 'Commit SHA recorded by the KartPadCore artifact'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -26,9 +42,12 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: '322'
-      IPA_NAME: 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume'
-      ARTIFACT_NAME: 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume'
+      BUILD_NUMBER: ${{ inputs.build_number || '322' }}
+      IPA_NAME: ${{ inputs.kartpad_core_run_id != '' && format('NeoStation-iOS-Build-{0}-KartPad-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume' }}
+      ARTIFACT_NAME: ${{ inputs.kartpad_core_run_id != '' && format('NeoStation-iOS-Build-{0}-KartPad-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-322-Dusklight-Warm-Resume' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '' }}
+      KARTPAD_CANDIDATE: ${{ inputs.kartpad_core_run_id != '' && '1' || '0' }}
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -50,6 +69,20 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate KartPad candidate inputs
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KARTPAD_CORE_RUN_ID"
+          test -n "$KARTPAD_CORE_HOST_SHA"
+          [[ "$KARTPAD_CORE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$KARTPAD_CORE_HOST_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$BUILD_NUMBER" != "322" || {
+            echo "KartPad candidates must not reuse the stable Build 322 number." >&2
+            exit 1
+          }
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
@@ -571,6 +604,31 @@ jobs:
               assert hashlib.sha256((framework / relative).read_bytes()).hexdigest() == digest, relative
           PYCORE
 
+      - name: Download validated KartPad Core candidate
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: KartPadCore-${{ env.KARTPAD_CORE_HOST_SHA }}
+          run-id: ${{ env.KARTPAD_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/kartpad-native
+
+      - name: Verify KartPad Core candidate identity
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/kartpad-native/KartPadCore.framework/KartPadCore
+          test -f dist/kartpad-native/identity.json
+          python3 build-utils/kartpad/validate_embedded_core.py             dist/kartpad-native/KartPadCore.framework             dist/kartpad-native/identity.json
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          identity=json.loads(Path('dist/kartpad-native/identity.json').read_text())
+          assert identity['host_commit'] == os.environ['KARTPAD_CORE_HOST_SHA'], identity
+          PY
+          git diff --exit-code "$KARTPAD_CORE_HOST_SHA" "$GITHUB_SHA" --             native/kartpad             build-utils/kartpad             packages/kartpad_internal_bridge
+
       - name: Prepare emulator build definitions
         shell: bash
         run: |
@@ -685,7 +743,15 @@ jobs:
           ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
           cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
 
-      - name: Package and validate Build 322 IPA
+      - name: Embed validated KartPad Core candidate
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          python3 build-utils/kartpad/embed_core.py             --app "$APP"             --artifact dist/kartpad-native
+
+      - name: Package and validate NeoStation IPA
         shell: bash
         run: |
           set -euo pipefail
@@ -706,6 +772,10 @@ jobs:
           python3 build-utils/validate_dusklight_ipa.py "dist/$IPA_NAME.ipa" \
             --identity dist/dusklight/identity.json --core-host "$DUSKLIGHT_CORE_HOST_SHA" \
             --build-number "$BUILD_NUMBER"
+          if [ "$KARTPAD_CANDIDATE" = "1" ]; then
+            python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa"               --identity dist/kartpad-native/identity.json               --core-host "$KARTPAD_CORE_HOST_SHA"               --build-number "$BUILD_NUMBER"
+            cp dist/kartpad-native/identity.json dist/kartpad-core-identity.json
+          fi
           cp build/fast-native/identity.json dist/fast-native-identity.json
           cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
