@@ -45,8 +45,8 @@ jobs:
       BUILD_NUMBER: ${{ inputs.build_number || '330' }}
       IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Gameplay-Fixes', inputs.build_number) || 'NeoStation-iOS-Build-330-KartPad-Gameplay-Fixes' }}
       ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Gameplay-Fixes', inputs.build_number) || 'NeoStation-iOS-Build-330-KartPad-Gameplay-Fixes' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36032339683' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '1ea98f10d2ad3a9ce9d4fdc6b4f43c86f4c41399' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36055177483' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '32e8cd8778ba3eaa201c2bdb8e53125c776f3d4b' }}
       KARTPAD_CANDIDATE: '1'
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
