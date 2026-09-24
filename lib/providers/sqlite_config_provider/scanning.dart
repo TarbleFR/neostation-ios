@@ -658,12 +658,13 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     _notify();
   }
 
-  /// Refreshes only NeoStation's Files-visible Ports / Dusklight library.
-  Future<void> refreshDusklightInternalLibrary() async {
+  /// Refreshes NeoStation's Files-visible native Ports libraries.
+  Future<void> refreshPortsInternalLibrary() async {
     if (!Platform.isIOS) {
-      throw StateError('Embedded Dusklight refresh is available on iOS only.');
+      throw StateError('Embedded Ports refresh is available on iOS only.');
     }
     await DusklightInternalService.ensureLayout();
+    await KartPadInternalService.ensureLayout();
     if (_availableSystems.isEmpty) await _loadAvailableSystems();
     final system = _availableSystems.firstWhere(
       (candidate) => candidate.folderName == 'ports',
@@ -678,6 +679,10 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     _notify();
   }
 
+  /// Compatibility alias while the former single-port API is retired.
+  Future<void> refreshDusklightInternalLibrary() =>
+      refreshPortsInternalLibrary();
+
   /// Performs an isolated scan for a specific system.
   Future<ScanSummary> _scanSystemRoms(
     SystemModel system, {
@@ -690,12 +695,12 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           DolphinInternalV2Service.isDolphinSystem(system.folderName);
       final isArmsx2InternalSystem =
           Platform.isIOS && system.folderName.toLowerCase() == 'ps2';
-      final isDusklightInternalSystem =
+      final isPortsInternalSystem =
           Platform.isIOS && system.folderName.toLowerCase() == 'ports';
       final isNativeInternalSystem =
           isDolphinInternalSystem ||
           isArmsx2InternalSystem ||
-          isDusklightInternalSystem;
+          isPortsInternalSystem;
       // Native embedded playlists scan their own roots even when no public ROM
       // folder exists. Every other system retains the original early return.
       if (_config.romFolders.isEmpty &&
@@ -708,24 +713,37 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           systemName: system.realName,
         );
       }
-      final nativeScanRoots = isDolphinInternalSystem
-          ? [await DolphinInternalV2Service.scanRootPath()]
-          : isArmsx2InternalSystem
-          ? [(await Armsx2InternalService.gamesDirectory()).path]
-          : isDusklightInternalSystem
-          ? [(await DusklightInternalService.rootDirectory()).path]
-          : _config.romFolders;
-      final effectiveRootFoldersMap = isDolphinInternalSystem
-          ? await SqliteDatabaseService.getExistingSubdirectories(
-              nativeScanRoots,
-            )
-          : isDusklightInternalSystem
-          ? <String, Map<String, String>>{
-              nativeScanRoots.single: <String, String>{
-                'ports': (await DusklightInternalService.gamesDirectory()).path,
-              },
-            }
-          : rootFoldersMap;
+      late final List<String> nativeScanRoots;
+      Map<String, Map<String, String>>? effectiveRootFoldersMap =
+          rootFoldersMap;
+      if (isDolphinInternalSystem) {
+        nativeScanRoots = <String>[
+          await DolphinInternalV2Service.scanRootPath(),
+        ];
+        effectiveRootFoldersMap =
+            await SqliteDatabaseService.getExistingSubdirectories(
+          nativeScanRoots,
+        );
+      } else if (isArmsx2InternalSystem) {
+        nativeScanRoots = <String>[
+          (await Armsx2InternalService.gamesDirectory()).path,
+        ];
+      } else if (isPortsInternalSystem) {
+        final dusklightRoot =
+            (await DusklightInternalService.rootDirectory()).path;
+        final kartPadRoot = (await KartPadInternalService.rootDirectory()).path;
+        nativeScanRoots = <String>[dusklightRoot, kartPadRoot];
+        effectiveRootFoldersMap = <String, Map<String, String>>{
+          dusklightRoot: <String, String>{
+            'ports': (await DusklightInternalService.gamesDirectory()).path,
+          },
+          kartPadRoot: <String, String>{
+            'ports': (await KartPadInternalService.gamesDirectory()).path,
+          },
+        };
+      } else {
+        nativeScanRoots = _config.romFolders;
+      }
       // DOLPHIN_ISOLATION_END: isolated_scan_root
 
       // DOLPHIN_ISOLATION_BEGIN: isolated_scan_call
