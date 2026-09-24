@@ -11,6 +11,8 @@ for token in (
     "NeoKartPadEmbeddedSupportPath",
     "NeoKartPadEmbeddedCachePath",
     "NeoKartPadEmbeddedGamePath",
+    "NeoKartPadEmbeddedUIText",
+    "NeoKartPadUIText",
     "NeoKartPadEmbeddedShouldReturnToHost",
     "NeoKartPadEmbeddedSuspendGuestUntilResume",
     "NeoKartPadEmbeddedFramePresented",
