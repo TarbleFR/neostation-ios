@@ -78,10 +78,10 @@ jobs:
             find "$APP" -type d -name '*.framework' -print || true
             echo
             echo "=== RELEVANT GLOBAL SYMBOLS ==="
-            nm -gU "$BIN" 2>/dev/null | grep -E 'NeoKartPad|RuntimeMain|KartPadMobile|aurora_|WiiCompiled|RMCP01' || true
+            nm -gU "$BIN" 2>/dev/null | grep -E 'NeoKartPad|RuntimeMain|KartPadMobile|aurora_|WiiCompiled|RMCP01|SDL_GetWindows|SDL_HideWindow|SDL_ShowWindow|SDL_PauseAudioDevice|SDL_ResumeAudioDevice' || true
             echo
             echo "=== RELEVANT ALL SYMBOLS ==="
-            nm "$BIN" 2>/dev/null | grep -E 'NeoKartPad|RuntimeMain|KartPadMobile|aurora_|WiiCompiled|RMCP01' | head -n 300 || true
+            nm "$BIN" 2>/dev/null | grep -E 'NeoKartPad|RuntimeMain|KartPadMobile|aurora_|WiiCompiled|RMCP01|SDL_GetWindows|SDL_HideWindow|SDL_ShowWindow|SDL_PauseAudioDevice|SDL_ResumeAudioDevice' | head -n 300 || true
           } | tee "$ROOT/ipa-audit.txt"
 
           if find "$APP" -type f \( -name '*.dylib' -o -path '*.framework/*' \) | grep -q .; then
