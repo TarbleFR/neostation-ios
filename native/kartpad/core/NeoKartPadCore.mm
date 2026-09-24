@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 extern "C" int NeoKartPadRuntimeRunGuest(void);
 
@@ -29,6 +30,8 @@ std::atomic_bool returnRequested{false};
 std::atomic_bool guestSuspended{false};
 std::atomic_bool terminalRequested{false};
 std::atomic_bool guestStarted{false};
+std::mutex uiTextMutex;
+std::unordered_map<std::string, std::string> uiText;
 
 int Fail(char* error, size_t errorSize, const char* message) {
   if (error && errorSize) std::snprintf(error, errorSize, "%s", message);
@@ -181,7 +184,11 @@ void SetCallback(NeoKartPadEventFn value, void* context) {
   callbackContext = context;
 }
 
-void SetUIText(const char*, const char*) {}
+void SetUIText(const char* key, const char* value) {
+  if (!key || !*key || !value) return;
+  std::lock_guard lock(uiTextMutex);
+  uiText[std::string(key)] = std::string(value);
+}
 
 const char* RuntimeIdentity() {
   return NEO_KARTPAD_RUNTIME_IDENTITY;
@@ -204,6 +211,16 @@ const NeoKartPadAPI api{
 extern "C" __attribute__((visibility("default")))
 const NeoKartPadAPI* NeoKartPad_GetAPI(void) {
   return &api;
+}
+
+extern "C" const char* NeoKartPadEmbeddedUIText(const char* key) {
+  static thread_local std::string result;
+  if (!key || !*key) return nullptr;
+  std::lock_guard lock(uiTextMutex);
+  const auto it = uiText.find(std::string(key));
+  if (it == uiText.end()) return nullptr;
+  result = it->second;
+  return result.c_str();
 }
 
 extern "C" const char* NeoKartPadEmbeddedSupportPath(void) {
