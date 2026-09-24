@@ -40,6 +40,7 @@ std::string gamePath;
 UIWindow* neoStationWindow = nil;
 UIWindow* donorWindow = nil;
 UIButton* returnButton = nil;
+UIButton* settingsButton = nil;
 
 std::mutex uiTextMutex;
 std::unordered_map<std::string, std::string> uiText;
@@ -67,6 +68,201 @@ NSString* UIText(NSString* fallback, const char* key) {
   const auto it = uiText.find(key ? std::string(key) : std::string());
   if (it == uiText.end() || it->second.empty()) return fallback;
   return [NSString stringWithUTF8String:it->second.c_str()];
+}
+
+static NSString* const kNeoKartPadLanguageKey = @"NeoKartPadGameLanguage";
+
+NSInteger CurrentGameLanguage() {
+  NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:kNeoKartPadLanguageKey];
+  return value >= 1 && value <= 6 ? value : 1;
+}
+
+bool WriteGameLanguageSysConf(NSError** error) {
+  if (supportPath.empty()) return true;
+  NSString* support = [NSString stringWithUTF8String:supportPath.c_str()];
+  NSString* directory =
+      [support stringByAppendingPathComponent:@"Saves/NAND/shared2/sys"];
+  NSFileManager* files = NSFileManager.defaultManager;
+  if (![files createDirectoryAtPath:directory withIntermediateDirectories:YES
+                         attributes:nil error:error]) {
+    return false;
+  }
+  NSString* filePath = [directory stringByAppendingPathComponent:@"SYSCONF"];
+  NSMutableData* data = nil;
+  NSData* existing = [NSData dataWithContentsOfFile:filePath options:0 error:nil];
+  if (existing.length == 0x4000) {
+    const uint8_t* raw = static_cast<const uint8_t*>(existing.bytes);
+    if (memcmp(raw, "SCv0", 4) == 0 &&
+        memcmp(raw + 0x3ffc, "SCed", 4) == 0) {
+      data = [existing mutableCopy];
+      uint8_t* bytes = static_cast<uint8_t*>(data.mutableBytes);
+      const uint16_t count =
+          (static_cast<uint16_t>(bytes[4]) << 8) | bytes[5];
+      bool patched = false;
+      for (uint16_t index = 0; index < count; ++index) {
+        const size_t table = 6 + static_cast<size_t>(index) * 2;
+        if (table + 1 >= data.length) break;
+        const uint16_t offset =
+            (static_cast<uint16_t>(bytes[table]) << 8) | bytes[table + 1];
+        if (offset + 1 >= data.length) continue;
+        const uint8_t description = bytes[offset];
+        const uint8_t type = (description & 0xe0u) >> 5;
+        const size_t nameLength = (description & 0x1fu) + 1u;
+        if (offset + 1 + nameLength >= data.length) continue;
+        if (type == 3 && nameLength == 7 &&
+            memcmp(bytes + offset + 1, "IPL.LNG", 7) == 0) {
+          bytes[offset + 1 + nameLength] =
+              static_cast<uint8_t>(CurrentGameLanguage());
+          patched = true;
+          break;
+        }
+      }
+      if (patched) {
+        return [data writeToFile:filePath options:NSDataWritingAtomic error:error];
+      }
+      // Preserve any valid existing SYSCONF that we do not understand rather
+      // than destroying unrelated virtual-console settings.
+      return true;
+    }
+  }
+
+  data = [NSMutableData dataWithLength:0x4000];
+  uint8_t* bytes = static_cast<uint8_t*>(data.mutableBytes);
+  memcpy(bytes, "SCv0", 4);
+  bytes[4] = 0;
+  bytes[5] = 1;       // one entry
+  bytes[6] = 0;
+  bytes[7] = 10;      // IPL.LNG entry offset
+  bytes[8] = 0;
+  bytes[9] = 19;      // dummy past-the-end offset
+  bytes[10] = static_cast<uint8_t>((3u << 5) | 6u); // Byte + 7-char name
+  memcpy(bytes + 11, "IPL.LNG", 7);
+  bytes[18] = static_cast<uint8_t>(CurrentGameLanguage());
+  memcpy(bytes + 0x3ffc, "SCed", 4);
+  return [data writeToFile:filePath options:NSDataWritingAtomic error:error];
+}
+
+void PersistInteger(NSString* key, NSInteger value) {
+  [NSUserDefaults.standardUserDefaults setInteger:value forKey:key];
+  [NSUserDefaults.standardUserDefaults synchronize];
+}
+
+void PersistBool(NSString* key, BOOL value) {
+  [NSUserDefaults.standardUserDefaults setBool:value forKey:key];
+  [NSUserDefaults.standardUserDefaults synchronize];
+}
+
+UIMenu* BuildNeoKartPadSettingsMenu();
+
+void RefreshSettingsMenu() {
+  if (settingsButton) settingsButton.menu = BuildNeoKartPadSettingsMenu();
+}
+
+UIMenu* BuildNeoKartPadSettingsMenu() {
+  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+
+  NSArray<NSNumber*>* languages = @[@1, @2, @3, @4, @5, @6];
+  NSArray<NSString*>* languageKeys = @[
+    @"languageEnglish", @"languageGerman", @"languageFrench",
+    @"languageSpanish", @"languageItalian", @"languageDutch"
+  ];
+  NSArray<NSString*>* languageFallbacks = @[
+    @"English", @"German", @"French", @"Spanish", @"Italian", @"Dutch"
+  ];
+  NSMutableArray<UIMenuElement*>* languageItems = [NSMutableArray array];
+  for (NSUInteger index = 0; index < languages.count; ++index) {
+    const NSInteger value = languages[index].integerValue;
+    UIAction* action = [UIAction actionWithTitle:
+        UIText(languageFallbacks[index], languageKeys[index].UTF8String)
+        image:nil identifier:nil handler:^(__kindof UIAction*) {
+      [NSUserDefaults.standardUserDefaults setInteger:value
+                                               forKey:kNeoKartPadLanguageKey];
+      [NSUserDefaults.standardUserDefaults synchronize];
+      NSError* languageError = nil;
+      if (!WriteGameLanguageSysConf(&languageError)) {
+        NSLog(@"[NeoKartPad/Settings] language write failed: %@", languageError);
+      }
+      RefreshSettingsMenu();
+    }];
+    action.state =
+        CurrentGameLanguage() == value ? UIMenuElementStateOn : UIMenuElementStateOff;
+    [languageItems addObject:action];
+  }
+  UIMenu* languageMenu = [UIMenu menuWithTitle:
+      UIText(@"Game Language", "gameLanguage")
+      image:[UIImage systemImageNamed:@"globe"]
+      identifier:@"com.neostation.kartpad.language" options:0
+      children:languageItems];
+
+  NSInteger renderScale = [defaults integerForKey:@"SunPadRenderScale"];
+  if (renderScale < 1 || renderScale > 4) renderScale = 1;
+  NSMutableArray<UIMenuElement*>* resolutionItems = [NSMutableArray array];
+  for (NSInteger scale = 1; scale <= 4; ++scale) {
+    NSString* title = [NSString stringWithFormat:@"%ld×", (long)scale];
+    UIAction* action = [UIAction actionWithTitle:title image:nil identifier:nil
+        handler:^(__kindof UIAction*) {
+      PersistInteger(@"SunPadRenderScale", scale);
+      RefreshSettingsMenu();
+    }];
+    action.state = renderScale == scale ? UIMenuElementStateOn : UIMenuElementStateOff;
+    [resolutionItems addObject:action];
+  }
+  UIMenu* resolutionMenu = [UIMenu menuWithTitle:
+      UIText(@"Render Resolution", "renderResolution")
+      image:[UIImage systemImageNamed:@"sparkles.rectangle.stack"]
+      identifier:@"com.neostation.kartpad.resolution" options:0
+      children:resolutionItems];
+
+  NSInteger aspect = [defaults integerForKey:@"SunPadAspectRatioMode"];
+  if (aspect < 0 || aspect > 2) aspect = 0;
+  NSArray<NSString*>* aspectKeys =
+      @[@"aspectOriginal", @"aspectWidescreen", @"aspectFill"];
+  NSArray<NSString*>* aspectFallbacks = @[@"4:3", @"16:9", @"Fill Screen"];
+  NSMutableArray<UIMenuElement*>* aspectItems = [NSMutableArray array];
+  for (NSInteger mode = 0; mode < 3; ++mode) {
+    UIAction* action = [UIAction actionWithTitle:
+        UIText(aspectFallbacks[mode], aspectKeys[mode].UTF8String)
+        image:nil identifier:nil handler:^(__kindof UIAction*) {
+      PersistInteger(@"SunPadAspectRatioMode", mode);
+      RefreshSettingsMenu();
+    }];
+    action.state = aspect == mode ? UIMenuElementStateOn : UIMenuElementStateOff;
+    [aspectItems addObject:action];
+  }
+  UIMenu* aspectMenu = [UIMenu menuWithTitle:
+      UIText(@"Aspect Ratio", "aspectRatio")
+      image:[UIImage systemImageNamed:@"rectangle.arrowtriangle.2.outward"]
+      identifier:@"com.neostation.kartpad.aspect" options:0
+      children:aspectItems];
+
+  BOOL fps = [defaults boolForKey:@"SunPadShowFPSCounter"];
+  UIAction* fpsAction = [UIAction actionWithTitle:
+      UIText(@"Show FPS Counter", "fpsCounter")
+      image:[UIImage systemImageNamed:@"speedometer"] identifier:nil
+      handler:^(__kindof UIAction*) {
+    PersistBool(@"SunPadShowFPSCounter",
+                ![NSUserDefaults.standardUserDefaults boolForKey:@"SunPadShowFPSCounter"]);
+    RefreshSettingsMenu();
+  }];
+  fpsAction.state = fps ? UIMenuElementStateOn : UIMenuElementStateOff;
+
+  UIMenu* graphicsMenu = [UIMenu menuWithTitle:
+      UIText(@"Graphics", "graphics")
+      image:[UIImage systemImageNamed:@"display"]
+      identifier:@"com.neostation.kartpad.graphics" options:0
+      children:@[resolutionMenu, aspectMenu, fpsAction]];
+
+  UIAction* hint = [UIAction actionWithTitle:
+      UIText(@"Language and graphics apply on the next KartPad launch.",
+             "settingsRestartHint")
+      image:[UIImage systemImageNamed:@"info.circle"] identifier:nil
+      handler:^(__kindof UIAction*) {}];
+  hint.attributes = UIMenuElementAttributesDisabled;
+
+  return [UIMenu menuWithTitle:UIText(@"KartPad Settings", "settings")
+                         image:[UIImage systemImageNamed:@"gearshape"]
+                    identifier:@"com.neostation.kartpad.settings"
+                       options:0 children:@[languageMenu, graphicsMenu, hint]];
 }
 
 bool EnsureSymlink(NSString* linkPath, NSString* targetPath, NSError** error) {
@@ -130,8 +326,13 @@ bool PrepareRuntimeStorage(char* error, size_t errorSize) {
   if (!EnsureSymlink(defaultCache, cache, &failure)) {
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
+  if (!WriteGameLanguageSysConf(&failure)) {
+    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+  }
   return true;
 }
+
+bool LoadRuntime(char* error, size_t errorSize);
 
 bool PrepareUserGameDiscovery(char* error, size_t errorSize) {
   NSString* source = [NSString stringWithUTF8String:gamePath.c_str()];
@@ -148,6 +349,89 @@ bool PrepareUserGameDiscovery(char* error, size_t errorSize) {
     return Fail(error, errorSize, failure.localizedDescription.UTF8String);
   }
   return true;
+}
+
+bool EnsureDonorRuntimeLoadedOnMain(char* error, size_t errorSize) {
+  if (NSThread.isMainThread) return LoadRuntime(error, errorSize);
+  __block bool loaded = false;
+  dispatch_sync(dispatch_get_main_queue(), ^{
+    loaded = LoadRuntime(error, errorSize);
+  });
+  return loaded;
+}
+
+int PrepareCompressedGameData(const char* game,
+                              const char* support,
+                              const char* cache,
+                              char* error,
+                              size_t errorSize) {
+  if (!game || !*game || !support || !*support || !cache || !*cache) {
+    return Fail(error, errorSize, "KartPad RVZ preparation paths are incomplete.");
+  }
+  if (runtimeThreadActive.load(std::memory_order_acquire) || session.active()) {
+    return Fail(error, errorSize, "KartPad cannot prepare RVZ while its runtime is active.");
+  }
+  supportPath = support;
+  cachePath = cache;
+  gamePath = game;
+  if (!PrepareRuntimeStorage(error, errorSize)) return 0;
+  if (!EnsureDonorRuntimeLoadedOnMain(error, errorSize)) return 0;
+
+  Class extractor = NSClassFromString(@"KartPadDiscExtractor");
+  SEL selector = NSSelectorFromString(
+      @"extractImageAtPath:toDirectory:progress:error:");
+  if (!extractor || ![extractor respondsToSelector:selector]) {
+    return Fail(error, errorSize,
+                "KartPad's DiscIO extractor is unavailable in the donor runtime.");
+  }
+
+  NSString* supportRoot = [NSString stringWithUTF8String:support];
+  NSString* runtimeRoot = [supportRoot stringByAppendingPathComponent:@"Runtime"];
+  NSString* finalPath = [runtimeRoot stringByAppendingPathComponent:@"GameData"];
+  NSString* staging = [runtimeRoot stringByAppendingPathComponent:
+      [NSString stringWithFormat:@"GameData.import-%@", NSUUID.UUID.UUIDString]];
+  NSString* rollback = [runtimeRoot stringByAppendingPathComponent:
+      [NSString stringWithFormat:@"GameData.rollback-%@", NSUUID.UUID.UUIDString]];
+  NSFileManager* files = NSFileManager.defaultManager;
+  NSError* failure = nil;
+  [files createDirectoryAtPath:runtimeRoot withIntermediateDirectories:YES
+                    attributes:nil error:&failure];
+  if (failure) return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+
+  using ExtractFn =
+      BOOL (*)(id, SEL, NSString*, NSString*, id, NSError**);
+  IMP implementation = [extractor methodForSelector:selector];
+  if (!implementation) {
+    return Fail(error, errorSize, "KartPad DiscIO extractor entry point is missing.");
+  }
+  NSString* source = [NSString stringWithUTF8String:game];
+  BOOL extracted =
+      reinterpret_cast<ExtractFn>(implementation)(
+          extractor, selector, source, staging, nil, &failure);
+  if (!extracted || failure) {
+    [files removeItemAtPath:staging error:nil];
+    return Fail(error, errorSize,
+                (failure.localizedDescription ?: @"KartPad could not extract this RVZ.")
+                    .UTF8String);
+  }
+
+  BOOL movedExisting = NO;
+  if ([files fileExistsAtPath:finalPath]) {
+    movedExisting = [files moveItemAtPath:finalPath toPath:rollback error:&failure];
+  }
+  if (!failure) {
+    [files moveItemAtPath:staging toPath:finalPath error:&failure];
+  }
+  if (failure) {
+    [files removeItemAtPath:staging error:nil];
+    if (movedExisting && ![files fileExistsAtPath:finalPath]) {
+      [files moveItemAtPath:rollback toPath:finalPath error:nil];
+    }
+    return Fail(error, errorSize, failure.localizedDescription.UTF8String);
+  }
+  if (movedExisting) [files removeItemAtPath:rollback error:nil];
+  NSLog(@"[NeoKartPad/Donor] Prepared RMCP01 game data from compressed image.");
+  return 1;
 }
 
 void InstallAutoImportSwizzle() {
@@ -239,6 +523,26 @@ void InstallReturnButton() {
     [button.trailingAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.trailingAnchor constant:-8],
   ]];
   returnButton = button;
+
+  UIButton* gear = [UIButton buttonWithType:UIButtonTypeSystem];
+  gear.translatesAutoresizingMaskIntoConstraints = NO;
+  gear.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.72];
+  gear.tintColor = UIColor.whiteColor;
+  gear.layer.cornerRadius = 12.0;
+  gear.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
+  [gear setImage:[UIImage systemImageNamed:@"gearshape.fill"]
+        forState:UIControlStateNormal];
+  gear.accessibilityLabel = UIText(@"KartPad Settings", "settings");
+  gear.showsMenuAsPrimaryAction = YES;
+  gear.menu = BuildNeoKartPadSettingsMenu();
+  [root addSubview:gear];
+  [NSLayoutConstraint activateConstraints:@[
+    [gear.topAnchor constraintEqualToAnchor:button.bottomAnchor constant:8],
+    [gear.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
+    [gear.widthAnchor constraintGreaterThanOrEqualToConstant:44],
+    [gear.heightAnchor constraintGreaterThanOrEqualToConstant:44],
+  ]];
+  settingsButton = gear;
 }
 
 void PollForRuntimeWindow(int attempt) {
@@ -284,6 +588,7 @@ void ReturnToNeoStation() {
   session.requestStop();
   ForEachSDLWindow([](SDL_Window* window) { sdlHideWindow(window); });
   returnButton.hidden = YES;
+  settingsButton.hidden = YES;
   if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
   session.finishRetained();
   Emit("KartPad donor runtime hidden and retained.");
@@ -330,6 +635,8 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
     ForEachSDLWindow([](SDL_Window* window) { sdlShowWindow(window); });
     if (donorWindow) [donorWindow makeKeyAndVisible];
     returnButton.hidden = NO;
+    settingsButton.hidden = NO;
+    RefreshSettingsMenu();
     session.firstFrame();
     Emit("Resumed retained KartPad donor runtime.");
     return 1;
@@ -376,4 +683,14 @@ const NeoKartPadAPI api{
 extern "C" __attribute__((visibility("default")))
 const NeoKartPadAPI* NeoKartPad_GetAPI(void) {
   return &api;
+}
+
+extern "C" __attribute__((visibility("default")))
+int NeoKartPad_PrepareUserGame(const char* game_path,
+                               const char* support_path,
+                               const char* cache_path,
+                               char* error,
+                               size_t error_size) {
+  return PrepareCompressedGameData(
+      game_path, support_path, cache_path, error, error_size);
 }
