@@ -253,7 +253,7 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
       children:@[resolutionMenu, aspectMenu, fpsAction]];
 
   UIAction* hint = [UIAction actionWithTitle:
-      UIText(@"Language and graphics apply on the next KartPad launch.",
+      UIText(@"Restart NeoStation to apply language and graphics changes.",
              "settingsRestartHint")
       image:[UIImage systemImageNamed:@"info.circle"] identifier:nil
       handler:^(__kindof UIAction*) {}];
