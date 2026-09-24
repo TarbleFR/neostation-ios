@@ -55,6 +55,18 @@
           "embedded": true
         }
       }
+    },
+    {
+      "name": "Mario Kart Pad",
+      "default_standalone": false,
+      "unique_id": "ports.ios.kartpad",
+      "description": "KartPad native iOS Core embedded in NeoStation for Mario Kart Wii.",
+      "is_retroachievements_compatible": false,
+      "platforms": {
+        "ios": {
+          "embedded": true
+        }
+      }
     }
   ]
 }
