@@ -213,6 +213,79 @@ const NeoKartPadAPI* NeoKartPad_GetAPI(void) {
   return &api;
 }
 
+extern "C" __attribute__((visibility("default")))
+int NeoKartPad_PrepareUserGame(const char* game_path,
+                               const char* support_path,
+                               const char* cache_path,
+                               char* error,
+                               size_t error_size) {
+  if (!game_path || !*game_path || !support_path || !*support_path ||
+      !cache_path || !*cache_path) {
+    return Fail(error, error_size, "KartPad preparation paths are incomplete.");
+  }
+  if (session.active()) {
+    return Fail(error, error_size,
+                "KartPad cannot prepare game data while a session is active.");
+  }
+
+  __block int initialized = 0;
+  void (^initializeBlock)(void) = ^{
+    initialized = Initialize(
+        support_path, cache_path, error, error_size);
+  };
+  if (NSThread.isMainThread) initializeBlock();
+  else dispatch_sync(dispatch_get_main_queue(), initializeBlock);
+  if (!initialized) return 0;
+
+  Class extractor = NSClassFromString(@"KartPadDiscExtractor");
+  SEL selector = NSSelectorFromString(
+      @"extractImageAtPath:toDirectory:progress:error:");
+  if (!extractor || ![extractor respondsToSelector:selector]) {
+    return Fail(error, error_size, "KartPad DiscIO extractor is unavailable.");
+  }
+
+  NSString* support = [NSString stringWithUTF8String:support_path];
+  NSString* finalPath = [support stringByAppendingPathComponent:@"GameData"];
+  NSString* staging = [support stringByAppendingPathComponent:
+      [NSString stringWithFormat:@"GameData.import-%@", NSUUID.UUID.UUIDString]];
+  NSString* rollback = [support stringByAppendingPathComponent:
+      [NSString stringWithFormat:@"GameData.rollback-%@", NSUUID.UUID.UUIDString]];
+  NSFileManager* files = NSFileManager.defaultManager;
+  NSError* failure = nil;
+
+  using ExtractFn =
+      BOOL (*)(id, SEL, NSString*, NSString*, id, NSError**);
+  IMP implementation = [extractor methodForSelector:selector];
+  if (!implementation) {
+    return Fail(error, error_size, "KartPad DiscIO extractor entry point is missing.");
+  }
+  BOOL extracted = reinterpret_cast<ExtractFn>(implementation)(
+      extractor, selector, [NSString stringWithUTF8String:game_path],
+      staging, nil, &failure);
+  if (!extracted || failure) {
+    [files removeItemAtPath:staging error:nil];
+    return Fail(error, error_size,
+                (failure.localizedDescription ?: @"KartPad extraction failed.")
+                    .UTF8String);
+  }
+
+  BOOL movedExisting = NO;
+  if ([files fileExistsAtPath:finalPath]) {
+    movedExisting = [files moveItemAtPath:finalPath toPath:rollback error:&failure];
+  }
+  if (!failure) [files moveItemAtPath:staging toPath:finalPath error:&failure];
+  if (failure) {
+    [files removeItemAtPath:staging error:nil];
+    if (movedExisting && ![files fileExistsAtPath:finalPath]) {
+      [files moveItemAtPath:rollback toPath:finalPath error:nil];
+    }
+    return Fail(error, error_size, failure.localizedDescription.UTF8String);
+  }
+  if (movedExisting) [files removeItemAtPath:rollback error:nil];
+  return 1;
+}
+
+
 extern "C" const char* NeoKartPadEmbeddedUIText(const char* key) {
   static thread_local std::string result;
   if (!key || !*key) return nullptr;
