@@ -156,7 +156,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     if (hadSession) {
       [_channel invokeMethod:@"sessionEnded" arguments:@{
         @"reason": message, @"restartRequired": @(state == NEO_DUSKLIGHT_ENDED),
-        @"runtimeReleased": @YES,
+        @"runtimeReleased": @(state == NEO_DUSKLIGHT_ENDED),
         @"transaction": @(_transaction)
       }];
     }
