@@ -259,12 +259,17 @@ with tempfile.TemporaryDirectory() as directory:
                     str(cpp), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=15)
 
-# The partial handoff remains independently safe, but ABI v6 deliberately uses
-# the stronger terminal shutdown path instead of resuming this frame runtime.
+# Normal library return deliberately keeps the initialized game runtime while
+# releasing large transient GPU storage. Fatal runtime failure still uses the
+# stronger terminal shutdown path in NeoDusklightCore.mm.
 core = (ROOT / 'native/dusklight/core/NeoDusklightCore.mm').read_text()
-finish = core[core.index('void FinishReturn()'):core.index('void Stop()')]
+finish = core[core.index('void FinishReturn()'):core.index('void TerminalShutdown(')]
 assert finish.index('if (inNativeCall) return;') < finish.index('Suspend(true);')
-assert 'NeoDusklight_ReleaseFrameResources()' not in finish
-assert finish.index('RestoreHost();') < finish.index('NeoDusklight_ShutdownRuntime()') < finish.index('session.terminate();')
+assert finish.index('Suspend(true);') < finish.index('NeoDusklight_ReleaseFrameResources()')
+assert finish.index('NeoDusklight_ReleaseFrameResources()') < finish.index('RestoreHost();')
+assert finish.index('RestoreHost();') < finish.index('session.finish();')
+assert 'NeoDusklight_ShutdownRuntime()' not in finish
+terminal = core[core.index('void TerminalShutdown('):core.index('void Stop()')]
+assert terminal.index('RestoreHost();') < terminal.index('NeoDusklight_ShutdownRuntime()') < terminal.index('session.terminate();')
 assert function('bool begin_frame()').index('resume_frame_resources();') < function('bool begin_frame()').index('acquire_frame_slot()')
-print('PASS: partial GPU release stays safe while ABI v6 uses the kernel-unmap barrier')
+print('PASS: ABI v7 warm return releases transient GPU resources and resumes them safely')
