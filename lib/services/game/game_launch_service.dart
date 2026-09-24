@@ -218,11 +218,22 @@ class GameLaunchService {
           }
           if (!context.mounted) return GameLaunchResult.failure('', '');
           if (!report.success) {
+            final runtimeMessage = report.message.trim();
+            final details =
+                'KartPad stage: ${report.stage ?? "unknown"}\n'
+                'Code: ${report.errorCode ?? "unknown"}\n'
+                '${report.technicalDetails}\n'
+                'Runtime message: ${runtimeMessage.isEmpty ? "none" : runtimeMessage}';
+            _log.e('[KartPad launch]\n$details');
+            // Keep the localized fallback only when the native runtime supplied
+            // no useful text. Otherwise put its exact failure in the primary
+            // error box so the next physical-device run cannot hide the real
+            // cause behind the generic KartPad message.
             return GameLaunchResult.failure(
-              PortsLocale.kartPadLaunchError(locale, report.errorCode),
-              'KartPad stage: ${report.stage ?? "unknown"}\n'
-              'Code: ${report.errorCode ?? "unknown"}\n'
-              '${report.technicalDetails}\n${report.message}',
+              runtimeMessage.isNotEmpty
+                  ? runtimeMessage
+                  : PortsLocale.kartPadLaunchError(locale, report.errorCode),
+              details,
             );
           }
           GameSessionManager.registerGameLaunch(
