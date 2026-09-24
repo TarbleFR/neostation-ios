@@ -64,7 +64,7 @@ def patch_first_frame(runtime: Path) -> None:
     replace_once(
         path,
         "void aurora_end_frame() { aurora::end_frame(); }\n",
-        """void aurora_end_frame() {\n  aurora::end_frame();\n#if defined(__APPLE__)\n  if (NeoKartPadEmbeddedFramePresented) NeoKartPadEmbeddedFramePresented();\n#endif\n}\n""",
+        """void aurora_end_frame() {\n  aurora::end_frame();\n#if defined(__APPLE__)\n  if (NeoKartPadEmbeddedFramePresented) NeoKartPadEmbeddedFramePresented();\n#endif\n}\n\nextern "C" void NeoKartPadEmbeddedPresentationSuspend(void) {\n#ifdef AURORA_ENABLE_GX\n  aurora::wait_for_frame_worker();\n  aurora::window::set_surface_ready(false);\n  aurora::webgpu::release_surface();\n#endif\n}\n\nextern "C" int NeoKartPadEmbeddedPresentationResume(void) {\n#ifdef AURORA_ENABLE_GX\n  aurora::window::set_surface_ready(true);\n  return aurora::webgpu::refresh_surface(true) ? 1 : 0;\n#else\n  return 1;\n#endif\n}\n""",
     )
 
 
@@ -121,7 +121,7 @@ def patch_overlay(kartpad: Path) -> None:
     replace_once(
         path,
         "#include <atomic>\n",
-        """#include <atomic>\nextern "C" const char* NeoKartPadEmbeddedSupportPath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedGamePath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedUIText(const char* key) __attribute__((weak_import));\nextern "C" int NeoKartPadEmbeddedShouldReturnToHost(void) __attribute__((weak_import));\nextern "C" void NeoKartPadEmbeddedSuspendGuestUntilResume(void) __attribute__((weak_import));\n""",
+        """#include <atomic>\nextern "C" const char* NeoKartPadEmbeddedSupportPath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedGamePath(void) __attribute__((weak_import));\nextern "C" const char* NeoKartPadEmbeddedUIText(const char* key) __attribute__((weak_import));\nextern "C" void NeoKartPadEmbeddedPresentationSuspend(void) __attribute__((weak_import));\nextern "C" int NeoKartPadEmbeddedPresentationResume(void) __attribute__((weak_import));\nextern "C" int NeoKartPadEmbeddedShouldReturnToHost(void) __attribute__((weak_import));\nextern "C" void NeoKartPadEmbeddedSuspendGuestUntilResume(void) __attribute__((weak_import));\n""",
     )
     replace_once(
         path,
@@ -140,7 +140,7 @@ def patch_overlay(kartpad: Path) -> None:
     )
 
     run_marker = "- (void)runMainMenu {\n"
-    suspend_method = """- (void)setNeoStationSuspended:(BOOL)suspended {\n  if (suspended) {\n    [(KartPadGameOverlay *)_overlay resetKartPadControlAppearance];\n    [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];\n    [[KartPadMotionSteering sharedSteering] stop];\n    AudioBackend::Instance().SetPausedForHost(true);\n    _window.hidden = YES;\n  } else {\n    [_window makeKeyAndVisible];\n    [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];\n    [[KartPadMotionSteering sharedSteering] start];\n    AudioBackend::Instance().SetPausedForHost(false);\n  }\n}\n\n"""
+    suspend_method = """- (void)setNeoStationSuspended:(BOOL)suspended {\n  if (suspended) {\n    [(KartPadGameOverlay *)_overlay resetKartPadControlAppearance];\n    [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];\n    [[KartPadMotionSteering sharedSteering] stop];\n    AudioBackend::Instance().SetPausedForHost(true);\n    if (NeoKartPadEmbeddedPresentationSuspend) {\n      NeoKartPadEmbeddedPresentationSuspend();\n    }\n    _window.hidden = YES;\n  } else {\n    [_window makeKeyAndVisible];\n    if (NeoKartPadEmbeddedPresentationResume &&\n        !NeoKartPadEmbeddedPresentationResume()) {\n      NSLog(@"[KartPad/NeoStation] presentation surface resume deferred");\n    }\n    [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];\n    [[KartPadMotionSteering sharedSteering] start];\n    AudioBackend::Instance().SetPausedForHost(false);\n  }\n}\n\n"""
     replace_once(path, run_marker, suspend_method + run_marker)
 
     old_service = """extern "C" void KartPadMobileServiceMainMenu() {\n  static BOOL previewShown=![NSProcessInfo.processInfo.environment[@"KARTPAD_UI_PREVIEW"] isEqualToString:@"report"];\n"""
