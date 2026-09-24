@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the production audio suspension function, not a rewritten model."""
+"""Exercise production audio suspension and reusable host-frame ownership."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -32,7 +32,7 @@ int main() {
   InitSDL3Output();
   for (int session = 0; session < 100; ++session) {
     NeoDusklight_SetAudioSuspended(1);
-    assert(!PlaybackStream); // Other emulators now own the audio device.
+    assert(!PlaybackStream); // NeoStation/another core owns the audio device.
     int previousCloses = closes;
     NeoDusklight_SetAudioSuspended(1);
     assert(closes == previousCloses);
@@ -66,12 +66,19 @@ assert 'NeoDusklightTouchDefaultV1' in core
 assert 'NeoDusklight_OpenMenu();' in core and 'menu->show();' in adapter
 assert 'PauseReason::Host' in adapter
 assert 'touch->hide(false)' in adapter
-assert 'session.entered()' not in core[core.index('int Start('):core.index('int IsRunning()')]
+start_body = core[core.index('int Start('):core.index('int IsRunning()')]
+assert 'session.entered()' not in start_body
+assert 'candidate.st_ino != discIdentity.st_ino' in start_body
+assert 'Resuming the retained native runtime.' in start_body
 assert 'UIApplicationWillResignActiveNotification' in core
 assert 'SDL_HideWindow(sdlWindow)' in core and 'connectedScenes' not in core
-assert 'NeoDusklight_ShutdownRuntime()' in core
-assert 'Resuming the retained native runtime.' not in core
+finish = core[core.index('void FinishReturn()'):core.index('void TerminalShutdown(')]
+assert 'NeoDusklight_ReleaseFrameResources()' in finish
+assert 'NeoDusklight_ShutdownRuntime()' not in finish
+terminal = core[core.index('void TerminalShutdown('):core.index('void Stop()')]
+assert 'NeoDusklight_ShutdownRuntime()' in terminal
+assert 'session.terminate()' in terminal
 display = (ROOT / 'native/dusklight/upstream/libs/JSystem/src/JFramework/JFWDisplay.cpp').read_text()
 tick = display[display.index('static void waitForTick(u32 p1, u16 p2) {'):]
 assert tick.index('NEO_DUSKLIGHT_EMBEDDED') < tick.index('return;') < tick.index('static Limiter')
-print('PASS: background audio suspension and terminal frame/input/window ownership contracts')
+print('PASS: production audio suspension supports warm resume while fatal failures retain terminal teardown')
