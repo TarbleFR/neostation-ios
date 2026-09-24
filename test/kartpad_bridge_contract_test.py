@@ -12,6 +12,9 @@ service = (ROOT / 'lib/services/kartpad_internal_service.dart').read_text()
 launcher = (ROOT / 'lib/services/game/game_launch_service.dart').read_text()
 manager = (ROOT / 'lib/services/game_launch_manager.dart').read_text()
 pins = json.loads((ROOT / 'build-utils/kartpad/source.json').read_text())
+candidate_workflow = (ROOT / '.github/workflows/ios-ci.yml').read_text()
+embedder = (ROOT / 'build-utils/kartpad/embed_core.py').read_text()
+ipa_validator = (ROOT / 'build-utils/validate_kartpad_ipa.py').read_text()
 
 assert 'packages/kartpad_internal_bridge' in pubspec
 assert 'kartpad_internal_bridge:' in pubspec
@@ -33,4 +36,18 @@ assert pins['release'] == 'v0.5.1-experimental.1'
 assert pins['compiledSource'] == '67c7e2f942c1226af149e6a9cc571f647528e25e'
 assert pins['discProfile']['expectedTranslatedFunctions'] == 29637
 assert pins['runtimeIdentity'] == 'kartpad_rmcp01_full_game_v1'
+for token in (
+    'kartpad_core_run_id',
+    'kartpad_core_host_sha',
+    'KARTPAD_CANDIDATE',
+    'Download validated KartPad Core candidate',
+    'Embed validated KartPad Core candidate',
+    'validate_kartpad_ipa.py',
+    'KartPad candidates must not reuse the stable Build 322 number.',
+):
+    assert token in candidate_workflow, token
+assert 'KartPadCore.framework' in embedder
+assert 'KartPad-native-identity.json' in embedder
+assert 'KartPad.app/' in ipa_validator
+assert 'passiveLoad' in ipa_validator
 print('PASS: KartPad ABI v1, lazy loader, launch route and session monitor are wired')
