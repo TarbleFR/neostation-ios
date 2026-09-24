@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embed a validated KartPadCore.framework into an already-built NeoStation app."""
+"""Embed a validated KartPad runtime into an already-built NeoStation app."""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +8,7 @@ import json
 import shutil
 from pathlib import Path
 
+OFFICIAL_IPA_SHA256 = "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58"
 
 
 def embed(app: Path, artifact: Path) -> dict:
@@ -18,8 +19,6 @@ def embed(app: Path, artifact: Path) -> dict:
     if not (framework / "KartPadCore").is_file() or not identity_path.is_file():
         raise SystemExit("ERROR: KartPad artifact is incomplete")
 
-    # Re-run the standalone validator in-process by duplicating its required
-    # identity checks before any bytes are copied into the application.
     identity = json.loads(identity_path.read_text())
     pins = json.loads((Path(__file__).resolve().parent / "source.json").read_text())
     if identity.get("upstream_commit") != pins["releaseTagCommit"]:
@@ -31,15 +30,36 @@ def embed(app: Path, artifact: Path) -> dict:
     if identity.get("runtime_identity") != pins["runtimeIdentity"]:
         raise SystemExit("ERROR: KartPad runtime profile mismatch")
     if identity.get("translated_function_count") != pins["discProfile"]["expectedTranslatedFunctions"]:
-        raise SystemExit("ERROR: incomplete KartPad translated graph")
+        raise SystemExit("ERROR: incomplete KartPad translated runtime identity")
     core_bytes = (framework / "KartPadCore").read_bytes()
     if hashlib.sha256(core_bytes).hexdigest() != identity.get("sha256"):
         raise SystemExit("ERROR: KartPadCore hash does not match identity")
 
-    destination = app / "Frameworks" / "KartPadCore.framework"
+    frameworks = app / "Frameworks"
+    frameworks.mkdir(parents=True, exist_ok=True)
+
+    runtime_destination = frameworks / "KartPadRuntime.framework"
+    if runtime_destination.exists():
+        shutil.rmtree(runtime_destination)
+
+    mode = identity.get("mode", "source-built")
+    if mode == "official-ipa-donor":
+        if identity.get("official_ipa_sha256") != OFFICIAL_IPA_SHA256:
+            raise SystemExit("ERROR: official KartPad donor IPA identity mismatch")
+        runtime = artifact / "KartPadRuntime.framework"
+        runtime_binary = runtime / "KartPadRuntime"
+        if not runtime_binary.is_file():
+            raise SystemExit("ERROR: KartPad donor runtime is missing")
+        if hashlib.sha256(runtime_binary.read_bytes()).hexdigest() != identity.get("runtime_sha256"):
+            raise SystemExit("ERROR: KartPad donor runtime hash mismatch")
+        shutil.copytree(runtime, runtime_destination)
+        (runtime_destination / "KartPadRuntime").chmod(0o755)
+    elif mode not in ("source-built", None):
+        raise SystemExit(f"ERROR: unsupported KartPad mode: {mode}")
+
+    destination = frameworks / "KartPadCore.framework"
     if destination.exists():
         shutil.rmtree(destination)
-    destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(framework, destination)
     (destination / "KartPadCore").chmod(0o755)
 
@@ -48,8 +68,10 @@ def embed(app: Path, artifact: Path) -> dict:
 
     return {
         "framework": str(destination),
+        "runtimeFramework": str(runtime_destination) if runtime_destination.exists() else None,
         "identity": str(packaged_identity),
         "coreHostCommit": identity.get("host_commit"),
+        "mode": mode,
         "sha256": identity.get("sha256"),
     }
 
