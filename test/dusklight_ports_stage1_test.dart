@@ -45,7 +45,7 @@ void main() {
     expect(service, contains('0x5D1C9EA3'));
     expect(service, contains("'Mario Kart Wii'"));
     expect(service, contains("supportedGameExtensions = <String>{'iso'}"));
-    expect(service, contains("File('${output.path}.part')"));
+    expect(service, contains(r"File('${output.path}.part')"));
   });
 
   test('Ports exposes one Import menu with DuskLight and Mario Kart Pad', () {
