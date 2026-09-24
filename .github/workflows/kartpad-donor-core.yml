@@ -1,0 +1,153 @@
+name: KartPad donor Core candidate
+run-name: KartPad donor Core • ${{ github.sha }}
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/kartpad-donor-core.yml'
+      - 'build-utils/kartpad/convert_official_runtime.py'
+      - 'build-utils/kartpad/validate_donor_artifact.py'
+      - 'native/kartpad/donor/**'
+      - 'packages/kartpad_internal_bridge/ios/Classes/KartPadCoreABI.h'
+      - 'native/kartpad/core/SessionState.h'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kartpad-donor-core
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Download verified official KartPad IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/kartpad-donor/source build/kartpad-donor/out
+          curl -fL --retry 3 --retry-delay 2 \
+            https://github.com/chrissotraidis/kartpad/releases/download/v0.5.1-experimental.1/KartPad-v0.5.1-experimental.1-ios-unsigned.ipa \
+            -o build/kartpad-donor/KartPad.ipa
+          echo "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58  build/kartpad-donor/KartPad.ipa" | shasum -a 256 -c -
+          ditto -x -k build/kartpad-donor/KartPad.ipa build/kartpad-donor/source
+          APP="$(find build/kartpad-donor/source/Payload -maxdepth 1 -type d -name '*.app' | head -n1)"
+          EXE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")"
+          cp "$APP/$EXE" build/kartpad-donor/KartPad-executable
+          codesign --remove-signature build/kartpad-donor/KartPad-executable 2>/dev/null || true
+
+      - name: Convert official executable to lazy donor runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=build/kartpad-donor/out
+          mkdir -p "$ROOT/KartPadRuntime.framework"
+          python3 build-utils/kartpad/convert_official_runtime.py \
+            build/kartpad-donor/KartPad-executable \
+            "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          chmod 755 "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          cat > "$ROOT/KartPadRuntime.framework/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleExecutable</key><string>KartPadRuntime</string>
+          <key>CFBundleIdentifier</key><string>com.neogamelab.neostation.kartpad-runtime</string>
+          <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+          <key>CFBundleName</key><string>KartPadRuntime</string>
+          <key>CFBundlePackageType</key><string>FMWK</string>
+          <key>CFBundleShortVersionString</key><string>0.5.1</string>
+          <key>CFBundleVersion</key><string>1</string>
+          <key>MinimumOSVersion</key><string>17.4</string>
+          </dict></plist>
+          PLIST
+          otool -hv "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          otool -D "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          xcrun vtool -show-build "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          nm -gU "$ROOT/KartPadRuntime.framework/KartPadRuntime" | \
+            grep -E '__Z11RuntimeMainiPPc|_SDL_GetWindows|_SDL_HideWindow|_SDL_ShowWindow'
+
+      - name: Build NeoStation donor wrapper Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=build/kartpad-donor/out
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p "$ROOT/KartPadCore.framework"
+          xcrun --sdk iphoneos clang++ \
+            -dynamiclib -arch arm64 -isysroot "$SDK" \
+            -miphoneos-version-min=17.4 -std=c++20 -fobjc-arc -fblocks \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            -Inative/kartpad/core \
+            native/kartpad/donor/NeoKartPadDonorCore.mm \
+            -framework Foundation -framework UIKit -framework QuartzCore \
+            -Wl,-install_name,@rpath/KartPadCore.framework/KartPadCore \
+            -o "$ROOT/KartPadCore.framework/KartPadCore"
+          chmod 755 "$ROOT/KartPadCore.framework/KartPadCore"
+          cat > "$ROOT/KartPadCore.framework/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleExecutable</key><string>KartPadCore</string>
+          <key>CFBundleIdentifier</key><string>com.neogamelab.neostation.kartpadcore</string>
+          <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+          <key>CFBundleName</key><string>KartPadCore</string>
+          <key>CFBundlePackageType</key><string>FMWK</string>
+          <key>CFBundleShortVersionString</key><string>1.0</string>
+          <key>CFBundleVersion</key><string>1</string>
+          <key>MinimumOSVersion</key><string>17.4</string>
+          </dict></plist>
+          PLIST
+          nm -gU "$ROOT/KartPadCore.framework/KartPadCore" | grep -q '_NeoKartPad_GetAPI'
+          ! otool -L "$ROOT/KartPadCore.framework/KartPadCore" | grep -q 'KartPadRuntime.framework'
+
+      - name: Write and validate donor identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=build/kartpad-donor/out
+          CORE_SHA="$(shasum -a 256 "$ROOT/KartPadCore.framework/KartPadCore" | awk '{print $1}')"
+          RUNTIME_SHA="$(shasum -a 256 "$ROOT/KartPadRuntime.framework/KartPadRuntime" | awk '{print $1}')"
+          python3 - "$ROOT/identity.json" "$CORE_SHA" "$RUNTIME_SHA" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          out, core, runtime = sys.argv[1:]
+          data = {
+            "schemaVersion": 1,
+            "mode": "official-ipa-donor",
+            "host_commit": os.environ["GITHUB_SHA"],
+            "official_release": "v0.5.1-experimental.1",
+            "official_ipa_sha256": "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58",
+            "upstream_commit": "0d657f361ccf0a03c0b8f9ec97b2bd237e16a658",
+            "ios_runtime_commit": "d0b8dec62a8c98dd45736a996ae18327ada8fe3f",
+            "abi_version": 1,
+            "runtime_identity": "kartpad_rmcp01_full_game_v1",
+            "translated_function_count": 29637,
+            "translation_evidence": "verified official release binary",
+            "architectures": ["arm64"],
+            "sha256": core,
+            "runtime_sha256": runtime,
+          }
+          Path(out).write_text(json.dumps(data, indent=2) + "\n")
+          PY
+          python3 build-utils/kartpad/validate_donor_artifact.py "$ROOT"
+
+      - name: Upload KartPad donor Core
+        uses: actions/upload-artifact@v4
+        with:
+          name: KartPadCore-${{ github.sha }}
+          path: build/kartpad-donor/out/
+          if-no-files-found: error
+          retention-days: 14
