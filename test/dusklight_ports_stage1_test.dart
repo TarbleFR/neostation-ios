@@ -18,10 +18,16 @@ void main() {
         'Mario Kart Wii',
       ]),
     );
-    expect(emulators, hasLength(1));
-    expect(emulators.single['name'], 'Dusklight');
-    expect(emulators.single['unique_id'], 'ports.ios.dusklight');
-    expect((emulators.single['platforms'] as Map)['ios']['embedded'], isTrue);
+    expect(emulators, hasLength(2));
+    final byId = <String, Map>{
+      for (final emulator in emulators) emulator['unique_id'] as String: emulator,
+    };
+    expect(byId['ports.ios.dusklight']?['name'], 'Dusklight');
+    expect(byId['ports.ios.kartpad']?['name'], 'Mario Kart Pad');
+    expect(
+      ((byId['ports.ios.kartpad']?['platforms'] as Map)['ios'] as Map)['embedded'],
+      isTrue,
+    );
   });
 
   test('KartPad owns a strict private PAL RMCP01 user import', () {
@@ -63,6 +69,19 @@ void main() {
     expect(widget, contains("'kartpad'"));
     expect(widget, contains('DusklightInternalService.importGames()'));
     expect(widget, contains('KartPadInternalService.importGame()'));
+  });
+
+  test('Ports scraper resolves KartPad independently from Dusklight', () {
+    final identity =
+        File('lib/services/ports_game_identity.dart').readAsStringSync();
+    final scraper =
+        File('lib/services/screenscraper_service.dart').readAsStringSync();
+
+    expect(identity, contains('KartPadInternalService.ownsGamePath'));
+    expect(identity, contains('screenScraperSystemId: 16'));
+    expect(identity, contains('PortGameIdentity'));
+    expect(scraper, contains('PortGameIdentity.read'));
+    expect(scraper, isNot(contains('DusklightGameIdentity.read')));
   });
 
   test('Ports scan and launch isolate KartPad from Dusklight', () {
