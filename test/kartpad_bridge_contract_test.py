@@ -16,6 +16,7 @@ candidate_workflow = (ROOT / '.github/workflows/ios-ci.yml').read_text()
 embedder = (ROOT / 'build-utils/kartpad/embed_core.py').read_text()
 ipa_validator = (ROOT / 'build-utils/validate_kartpad_ipa.py').read_text()
 donor_core = (ROOT / 'native/kartpad/donor/NeoKartPadDonorCore.mm').read_text()
+language_patcher = (ROOT / 'build-utils/kartpad/patch_donor_language_bridge.py').read_text()
 ports_locale = (ROOT / 'lib/l10n/ports_locale.dart').read_text()
 
 assert 'packages/kartpad_internal_bridge' in pubspec
@@ -74,24 +75,38 @@ for token in (
     'ScheduleNativeMenuRefresh',
     'KartPadSettingsIOQueue',
     'ApplyLiveLanguageAndRestartGame',
-    'func_801B11C4',
+    'SetRuntimeLanguageOverride',
+    'g_dynamicAspectRatioEnabled',
+    'com.neostation.kartpad.return-to-game',
+    '"returnToGame"',
     'func_80635A3C',
     'func_80635AC8',
     '0x809C1E38u',
     '0x40u',
-    'SC_ITEM_ID_IPL_LANGUAGE = 11',
+    '0x000000FFu',
     'TitleFromReset requested',
 ):
     assert token in donor_core, token
 
 # The native three-dot menu must expose language at root, not bury it inside
 # Display, and it must not rebuild itself synchronously from a UIAction.
+assert '[children insertObject:returnToGame atIndex:0]' in donor_core
 assert '[children insertObject:languageMenu' in donor_core
 assert 'atIndex:MIN(languageIndex, children.count)' in donor_core
 assert 'menuButton.menu == lastPatched' in donor_core
 assert 'dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC))' in donor_core
 assert 'std::exit(0)' not in donor_core
 assert 'PresentRestartRequired' not in donor_core
+assert 'func_801B11C4' not in donor_core
+assert 'KartPadGuestWrite8Fn' not in donor_core
+for token in (
+    'SCGETLANGUAGE_SYMBOL = "_func_801B1D0C"',
+    'ASPECT_SYMBOL = "_g_dynamicAspectRatioEnabled"',
+    'EXPECTED_PROLOGUE = bytes.fromhex("f85fbca9f65701a9f44f02a9")',
+    'encode_adrp',
+    'encode_ldrb_w',
+):
+    assert token in language_patcher, token
 assert "'languageRestartHint'" in ports_locale
 for token in (
     "'restartRequiredTitle'", "'languageRestartMessage'",
