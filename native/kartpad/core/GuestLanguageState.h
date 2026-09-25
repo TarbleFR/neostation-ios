@@ -111,6 +111,37 @@ struct LanguageState {
   }
 };
 
+// SystemBMGHolder::Init (80637a20) caches another language-dependent resource,
+// independently of Common/UI archives. Its real donor instructions and parser
+// are exercised by kartpad_system_messages_test.py for every PAL language.
+struct SystemMessageState {
+  uint32_t holder = 0;
+  std::array<uint8_t, 20> before{};
+
+  static uint32_t source(uint32_t language) {
+    constexpr uint32_t offsets[]{0, 0, 0x248, 0x124, 0x490, 0x36c};
+    return 0x80898150u + offsets[LanguageState::assetLanguage(language)];
+  }
+  static SystemMessageState inspect(const GuestMemory& mem) {
+    SystemMessageState state;
+    const auto sectionManager = mem.read32(kSectionManager);
+    state.holder = mem.read32(sectionManager + 0x94);
+    std::memcpy(state.before.data(), mem.at(state.holder, state.before.size()), state.before.size());
+    bool known = false;
+    const auto currentSource = mem.read32(state.holder);
+    for (uint32_t language = 1; language <= 5; ++language)
+      known |= currentSource == source(language);
+    if (!known) throw std::runtime_error("unexpected system message holder source");
+    return state;
+  }
+  void rollback(const GuestMemory& mem) const {
+    std::memcpy(mem.at(holder, before.size()), before.data(), before.size());
+  }
+  bool matches(const GuestMemory& mem, uint32_t language) const {
+    return mem.read32(holder) == source(language);
+  }
+};
+
 // UIKit and frame callbacks are serialized on the runtime's main thread.
 // This transaction gives late alert/IO callbacks a generation to validate.
 class SessionCommands {
