@@ -1,5 +1,5 @@
 name: neostation
-description: NeoStation - Emulation Hub
+description: NeoStation iOS - emulation frontend for iPhone and iPad with embedded native runtimes, external emulator integrations, JIT workflows, and metadata services.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
