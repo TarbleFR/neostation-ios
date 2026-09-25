@@ -67,7 +67,11 @@ void main() {
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartHint'],
-      contains('redémarrez NeoStation'),
+      contains('redémarre automatiquement'),
+    );
+    expect(
+      PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartMessage'],
+      contains('Mario Kart Wii redémarre automatiquement'),
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['restartRequiredTitle'],
