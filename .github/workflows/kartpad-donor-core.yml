@@ -9,6 +9,10 @@ on:
       - 'build-utils/kartpad/convert_official_runtime.py'
       - 'build-utils/kartpad/patch_donor_language_bridge.py'
       - 'test/kartpad_language_bridge_test.py'
+      - 'build-utils/kartpad/patch_donor_session_bridge.py'
+      - 'test/kartpad_session_bridge_test.py'
+      - 'test/kartpad_system_messages_test.py'
+      - 'test/kartpad_guest_language_state_test.cpp'
       - 'build-utils/kartpad/prepare_embedded_source.py'
       - 'build-utils/kartpad/validate_donor_artifact.py'
       - 'build-utils/kartpad/embed_core.py'
@@ -80,6 +84,8 @@ jobs:
           # language byte. The patcher aborts on any symbol/prologue drift.
           python3 build-utils/kartpad/patch_donor_language_bridge.py \
             "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          python3 build-utils/kartpad/patch_donor_session_bridge.py \
+            "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           chmod 755 "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           cat > "$ROOT/KartPadRuntime.framework/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -115,6 +121,15 @@ jobs:
           "$TEST_ENV/bin/python" test/kartpad_language_bridge_test.py \
             --runtime build/kartpad-donor/out/KartPadRuntime.framework/KartPadRuntime \
             2>&1 | tee build/kartpad-donor/out/language-abi-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_session_bridge_test.py \
+            --runtime build/kartpad-donor/out/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee build/kartpad-donor/out/session-bridge-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_system_messages_test.py \
+            --runtime build/kartpad-donor/out/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee build/kartpad-donor/out/system-messages-tests.txt
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
+            test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
+          "$RUNNER_TEMP/kartpad-language-state-test"
           python3 test/kartpad_bridge_contract_test.py
           c++ -std=c++20 -Inative/kartpad/core \
             -Ipackages/kartpad_internal_bridge/ios/Classes \
