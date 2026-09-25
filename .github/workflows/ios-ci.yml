@@ -48,6 +48,7 @@ jobs:
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36145859404' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '6890719b9bccfc31905d3bf044d751a7316db774' }}
       KARTPAD_CANDIDATE: '1'
+      # Build 333 includes the updated native-menu/language regression contract.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
