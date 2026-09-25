@@ -1,0 +1,29 @@
+name: KartPad regression audit
+run-name: KartPad Build 334 startup crash source audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [experimental]
+    paths: [.github/workflows/kartpad-regression-audit.yml]
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked sources and provenance only
+        run: |
+          mkdir -p audit
+          git rev-parse HEAD > audit/source-commit.txt
+          git archive --format=tar.gz HEAD > audit/neostation-sources.tar.gz
+          sha256sum audit/neostation-sources.tar.gz > audit/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kartpad-regression-sources-${{ github.sha }}
+          path: audit/
+          retention-days: 7
+          if-no-files-found: error
