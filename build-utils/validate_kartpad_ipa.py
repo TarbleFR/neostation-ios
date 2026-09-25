@@ -139,7 +139,7 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
             if magic not in (
                 b"\xcf\xfa\xed\xfe",
                 b"\xca\xfe\xba\xbe",
-                b"\xca\xfe\ba\bf",
+                b"\xca\xfe\xba\xbf",
             ):
                 continue
             image = macho(z.read(name))
