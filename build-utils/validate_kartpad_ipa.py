@@ -13,6 +13,8 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "packages/dolphin_internal_bridge/ci"))
 from verify_ipa import macho  # noqa: E402
+sys.path.insert(0, str(ROOT / "build-utils/kartpad"))
+from patch_donor_language_bridge import validate_bridge  # noqa: E402
 
 OFFICIAL_IPA_SHA256 = "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58"
 
@@ -92,6 +94,7 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
             assert runtime_binary_path in z.namelist(),                 "KartPad donor runtime framework missing"
             runtime_bytes = z.read(runtime_binary_path)
             assert hashlib.sha256(runtime_bytes).hexdigest() == identity["runtime_sha256"],                 "KartPad donor runtime bytes changed"
+            validate_bridge(runtime_bytes)
             runtime = macho(runtime_bytes)
             assert runtime["fileType"] == 6, "KartPad donor runtime is not a dylib"
             assert runtime["platform"] == 2, "KartPad donor runtime is not iPhoneOS"
@@ -136,7 +139,7 @@ def validate(ipa: Path, identity_path: Path, core_host: str, build_number: str):
             if magic not in (
                 b"\xcf\xfa\xed\xfe",
                 b"\xca\xfe\xba\xbe",
-                b"\xca\xfe\xba\xbf",
+                b"\xca\xfe\ba\bf",
             ):
                 continue
             image = macho(z.read(name))
