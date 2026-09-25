@@ -102,9 +102,12 @@ assert 'KartPadGuestWrite8Fn' not in donor_core
 for token in (
     'SCGETLANGUAGE_SYMBOL = "_func_801B1D0C"',
     'ASPECT_SYMBOL = "_g_dynamicAspectRatioEnabled"',
-    'EXPECTED_PROLOGUE = bytes.fromhex("f85fbca9f65701a9f44f02a9")',
+    'EXPECTED_PROLOGUE = bytes.fromhex("f85fbca9f65701a9f44f02a9fd7b03a9")',
     'encode_adrp',
     'encode_ldrb_w',
+    'encode_str_w',
+    'CPU_CONTEXT_R3_OFFSET = 12',
+    'validate_bridge',
 ):
     assert token in language_patcher, token
 assert "'languageRestartHint'" in ports_locale
