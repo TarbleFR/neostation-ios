@@ -1,5 +1,5 @@
 name: KartPad language ABI regression
-run-name: KartPad language ABI regression • ${{ github.sha }}
+run-name: KartPad source and ABI audit • ${{ github.sha }}
 on:
   workflow_dispatch:
   push:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   language-abi:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,7 +24,7 @@ jobs:
           git rev-parse HEAD > audit/source-commit.txt
           git archive --format=tar.gz HEAD > audit/neostation-sources.tar.gz
           (cd audit && sha256sum neostation-sources.tar.gz > SHA256SUMS)
-          python3 -m pip download --only-binary=:all: --no-deps unicorn==2.1.2 -d audit/test-deps
+          python3 -m pip download --only-binary=:all: --no-deps unicorn==2.1.2 capstone==5.0.6 -d audit/test-deps
           python3 -m venv /tmp/kartpad-abi-tests
           /tmp/kartpad-abi-tests/bin/pip install --no-index --find-links audit/test-deps unicorn==2.1.2
       - name: Execute fixed ABI and reproduce the Build 334 defect
@@ -32,6 +32,23 @@ jobs:
         run: |
           set -euo pipefail
           /tmp/kartpad-abi-tests/bin/python test/kartpad_language_bridge_test.py 2>&1 | tee audit/language-abi-tests.txt
+      - name: Export pinned public source for lifecycle audit
+        if: contains(github.event.head_commit.message, 'audit(kartpad)')
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/chrissotraidis/kartpad/releases/download/v0.5.1-experimental.1/KartPad-v0.5.1-experimental.1-source.tar.gz -o /tmp/kartpad-source.tar.gz
+          echo '3a7f14e76d289efb398c1f42b3817e9eacd828cceef4d40d185663743c916360  /tmp/kartpad-source.tar.gz' | sha256sum -c -
+          python3 - <<'PY'
+          import tarfile, pathlib
+          with tarfile.open('/tmp/kartpad-source.tar.gz') as src, tarfile.open('audit/upstream-code.tar.gz','w:gz') as dst:
+              members=src.getmembers()
+              pathlib.Path('audit/upstream-manifest.txt').write_text('\n'.join(f'{m.size} {m.name}' for m in members))
+              for m in members:
+                  p=pathlib.PurePosixPath(m.name)
+                  if m.isfile() and m.size < 10000000 and (p.suffix.lower() in {'.cpp','.c','.cc','.h','.hpp','.mm','.m','.json','.toml','.map','.yml','.yaml','.txt','.md','.cmake','.py','.sh'}):
+                      dst.addfile(m,src.extractfile(m))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
