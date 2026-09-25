@@ -350,9 +350,10 @@ void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
   NSMutableArray<UIMenuElement*>* children = [NSMutableArray array];
   BOOL alreadyCurrent = NO;
   for (UIMenuElement* child in source.children) {
-    if ([child.identifier isEqualToString:kNeoKartPadRuntimeLanguageMenuIdentifier]) {
-      if ([child isKindOfClass:UIMenu.class] &&
-          [((UIMenu*)child).title isEqualToString:desiredTitle]) {
+    if ([child isKindOfClass:UIMenu.class] &&
+        [((UIMenu*)child).identifier
+            isEqualToString:kNeoKartPadRuntimeLanguageMenuIdentifier]) {
+      if ([((UIMenu*)child).title isEqualToString:desiredTitle]) {
         alreadyCurrent = YES;
       }
       continue;
