@@ -20,6 +20,11 @@ void main() {
         'languageRestartHint',
         'restartRequiredTitle',
         'languageRestartMessage',
+        'restartGame',
+        'cancel',
+        'okay',
+        'languageApplyFailed',
+        'closeFailed',
         'graphicsRestartMessage',
         'closeNeoStation',
         'later',
@@ -67,15 +72,15 @@ void main() {
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartHint'],
-      contains('redémarre automatiquement'),
+      contains('confirmation'),
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartMessage'],
-      contains('Mario Kart Wii redémarre automatiquement'),
+      contains('NeoStation reste ouvert'),
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['restartRequiredTitle'],
-      'Redémarrage requis',
+      'Redémarrer le jeu ?',
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['advancedGraphics'],
@@ -89,4 +94,21 @@ void main() {
       PortsLocale.forLocale(const Locale('fr'), 'kartpadCorePending'),
     );
   });
+  test('KartPad consent, failure and close labels reach every native locale', () {
+    for (final language in PortsLocale.values.keys) {
+      final locale = language == 'zh_Hant'
+          ? const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')
+          : Locale(language);
+      final native = PortsLocale.kartPadNativeUI(locale);
+      for (final key in <String>[
+        'restartGame', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed',
+        'languageRestartMessage', 'returnToGame', 'returnToLibrary',
+      ]) {
+        expect(native[key], PortsLocale.values[language]![key], reason: '$language/$key');
+      }
+    }
+    expect(PortsLocale.kartPadNativeUI(const Locale('fr'))['restartGame'], 'Redémarrer le jeu');
+    expect(PortsLocale.kartPadNativeUI(const Locale('fr'))['cancel'], 'Annuler');
+  });
+
 }

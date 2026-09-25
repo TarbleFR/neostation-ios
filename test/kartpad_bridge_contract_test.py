@@ -17,6 +17,8 @@ embedder = (ROOT / 'build-utils/kartpad/embed_core.py').read_text()
 ipa_validator = (ROOT / 'build-utils/validate_kartpad_ipa.py').read_text()
 donor_core = (ROOT / 'native/kartpad/donor/NeoKartPadDonorCore.mm').read_text()
 language_patcher = (ROOT / 'build-utils/kartpad/patch_donor_language_bridge.py').read_text()
+session_control = (ROOT / 'native/kartpad/donor/DonorSessionControl.inc').read_text()
+guest_language = (ROOT / 'native/kartpad/core/GuestLanguageState.h').read_text()
 ports_locale = (ROOT / 'lib/l10n/ports_locale.dart').read_text()
 
 assert 'packages/kartpad_internal_bridge' in pubspec
@@ -51,7 +53,6 @@ for token in (
     '"languageSpanish"',
     '"languageItalian"',
     '"languageDutch"',
-    'game language=%ld persisted to Wii IPL.LNG',
     'com.neostation.kartpad.runtime-language',
     'PatchKartPadRuntimeMenuButton',
     'menuByReplacingChildren',
@@ -74,17 +75,14 @@ for token in (
     'kNeoKartPadMenuActionInFlight',
     'ScheduleNativeMenuRefresh',
     'KartPadSettingsIOQueue',
-    'ApplyLiveLanguageAndRestartGame',
     'SetRuntimeLanguageOverride',
+    'ConfirmGameLanguage',
+    'BuildReturnToNeoStationAction',
+    'com.neostation.kartpad.return-to-neostation',
+    'ReleaseTerminalGuestMemory',
     'g_dynamicAspectRatioEnabled',
     'com.neostation.kartpad.return-to-game',
     '"returnToGame"',
-    'func_80635A3C',
-    'func_80635AC8',
-    '0x809C1E38u',
-    '0x40u',
-    '0x000000FFu',
-    'TitleFromReset requested',
 ):
     assert token in donor_core, token
 
@@ -137,3 +135,31 @@ assert 'KartPad-native-identity.json' in embedder
 assert 'KartPad.app/' in ipa_validator
 assert 'passiveLoad' in ipa_validator
 print('PASS: KartPad ABI v1, lazy loader, launch route and session monitor are wired')
+
+# The old string assertions prescribed a Wii system reset and direct UIKit
+# guest writes. The behavioral tests now prove those are the wrong contracts.
+for token in ('PresentSessionAlert', 'commands.choose', 'commands.confirm',
+              'commands.cancel', 'KartPadFrameBoundary', 'BeginTitleTransition',
+              'func_80635A3C', 'func_80635AC8', 'languageBefore.rollback',
+              'commands.accepted', 'LanguageState::inspect', 'stopMixWorkerFn()',
+              'waitFrameWorkerFn()', 'cleanSocketsFn()', 'KartPadExitAfterMain'):
+    assert token in session_control, token
+assert 'kTitleFromBoot = 0x3fu' in guest_language
+assert 'ApplyLiveLanguageAndRestartGame' not in donor_core
+assert 'finishRetainedReturn' not in donor_core
+assert 'ScheduleAutomaticLanguageRestart' not in donor_core
+assert '[children insertObject:BuildReturnToNeoStationAction() atIndex:1]' in donor_core
+stop = donor_core.split('void ReturnToNeoStation() {', 1)[1].split('int Initialize', 1)[0]
+assert 'commands.requestClose()' in stop and 'session.requestStop()' in stop
+assert 'sdlHideWindow' not in stop and 'Emit(' not in stop
+assert 'ReleaseTerminalGuestMemory();' in donor_core
+runtime = donor_core.split('void RuntimeMainOnUIKitThread() {', 1)[1].split('void ReturnToNeoStation() {', 1)[0]
+assert runtime.index('runtimeMain(1, argv)') < runtime.index('ReleaseTerminalGuestMemory()') < runtime.index('session.terminate()')
+assert 'validate_session_bridge(runtime_bytes)' in ipa_validator
+for key in ('restartGame', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed'):
+    assert ('"' + key + '"') in session_control
+    assert ("'" + key + "'") in ports_locale
+print('PASS: confirmed language transaction, actual teardown and guarded exit are wired')
+
+assert "WriteGameLanguageSysConf(&error)" in session_control
+assert session_control.index("if (language) PersistAcceptedLanguage(language)") > session_control.index("if (!accepted)")

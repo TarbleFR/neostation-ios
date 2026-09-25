@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from patch_donor_language_bridge import validate_bridge
+from patch_donor_session_bridge import validate as validate_session_bridge
 
 OFFICIAL_IPA_SHA256 = "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58"
 
@@ -39,6 +40,7 @@ def validate(root: Path) -> dict:
         raise SystemExit("ERROR: donor runtime hash mismatch")
 
     language_bridge = validate_bridge(runtime.read_bytes())
+    session_bridge = validate_session_bridge(runtime.read_bytes())
 
     resource_root = root / "runtime-resources"
     expected_resources = identity.get("runtime_resources")
@@ -97,6 +99,7 @@ def validate(root: Path) -> dict:
         "officialIpaSha256": identity["official_ipa_sha256"],
         "runtimeResources": len(expected_resources),
         "languageBridge": language_bridge,
+        "sessionBridge": session_bridge,
     }
 
 

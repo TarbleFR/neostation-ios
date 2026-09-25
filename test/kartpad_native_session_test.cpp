@@ -20,6 +20,9 @@ int main() {
   }
 
   state.requestStop();
+  state.cancelStop();
+  assert(state.state() == NEO_KARTPAD_RUNNING);
+  state.requestStop();
   state.terminate();
   assert(state.state() == NEO_KARTPAD_ENDED);
   assert(!state.reserve());

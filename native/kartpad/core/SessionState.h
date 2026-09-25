@@ -25,6 +25,11 @@ class NeoKartPadSessionState {
     if (active()) state_ = NEO_KARTPAD_STOPPING;
   }
 
+  void cancelStop() {
+    if (state_ == NEO_KARTPAD_STOPPING)
+      state_ = firstFrameSeen_ ? NEO_KARTPAD_RUNNING : NEO_KARTPAD_STARTING;
+  }
+
   void finishRetained() {
     state_ = runtimeReady_ ? NEO_KARTPAD_IDLE : NEO_KARTPAD_ENDED;
     firstFrameSeen_ = false;

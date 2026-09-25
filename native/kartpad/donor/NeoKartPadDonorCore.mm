@@ -6,6 +6,12 @@
 
 #include "KartPadCoreABI.h"
 #include "../core/SessionState.h"
+#include "../core/GuestLanguageState.h"
+#include <algorithm>
+#include <array>
+#include <vector>
+#include <stdexcept>
+#include <sys/mman.h>
 
 #include <atomic>
 #include <cerrno>
@@ -367,9 +373,8 @@ bool InvokeKartPadGuestPreservingCpu(
   if (!cpu || !fn) return false;
 
   // The pinned WiiCompiled runtime has static_assert(sizeof(CpuContext) == 464).
-  // Preserve the entire translated register file because this callback is
-  // entered from UIKit while guest execution is temporarily inside its event
-  // pump. Only the requested guest-side section transition may survive.
+  // The frame gate calls this only after onEndFrame returns. Preserve every
+  // translated register; only the requested guest-side transition survives.
   alignas(16) uint8_t snapshot[464];
   std::memcpy(snapshot, cpu, sizeof(snapshot));
   auto* gpr = static_cast<uint32_t*>(cpu);
@@ -388,83 +393,7 @@ bool InvokeKartPadGuestPreservingCpu(
   return true;
 }
 
-bool ApplyLiveLanguageAndRestartGame(NSInteger language) {
-  if (!runtimeHandle ||
-      !runtimeThreadActive.load(std::memory_order_acquire) ||
-      !session.active()) {
-    NSLog(@"[NeoKartPad/Language] automatic restart skipped: runtime inactive.");
-    return false;
-  }
-
-  // SCGetLanguage itself is now host-controlled, so changing the language no
-  // longer depends on mutating the Wii SDK's private in-memory SYSCONF cache
-  // from UIKit. That removed the re-entrant SCReplaceIntegerItem call that
-  // could stall the native menu on device.
-  if (!SetRuntimeLanguageOverride(language)) {
-    return false;
-  }
-
-  auto getCpu = reinterpret_cast<KartPadGetCpuFn>(
-      dlsym(runtimeHandle, "_Z23GetPersistentCpuContextv"));
-  auto read32 = reinterpret_cast<KartPadGuestRead32Fn>(
-      dlsym(runtimeHandle, "_ZN6Memory6Read32Ej"));
-  auto setNextSection = reinterpret_cast<KartPadGuestCpuFn>(
-      dlsym(runtimeHandle, "func_80635A3C"));
-  auto startChangeSection = reinterpret_cast<KartPadGuestCpuFn>(
-      dlsym(runtimeHandle, "func_80635AC8"));
-
-  if (!getCpu || !read32 || !setNextSection || !startChangeSection) {
-    NSLog(@"[NeoKartPad/Language] automatic title-reload symbols are unavailable.");
-    return false;
-  }
-
-  void* cpu = getCpu();
-  if (!cpu) return false;
-
-  uint32_t sectionManager = 0;
-  try {
-    // RMCP01 PAL SectionManager::s_instance from the pinned symbol map.
-    sectionManager = read32(0x809C1E38u);
-  } catch (...) {
-    NSLog(@"[NeoKartPad/Language] SectionManager lookup failed.");
-    return false;
-  }
-  if (sectionManager == 0u) {
-    NSLog(@"[NeoKartPad/Language] SectionManager is not initialized.");
-    return false;
-  }
-
-  // Re-enter Mario Kart Wii's own TitleFromReset section. Page::Anim::None is
-  // -1 and the normal section transition color is 0x000000ff. This reloads the
-  // title/menu resources while keeping Aurora, the KartPad runtime and
-  // NeoStation alive.
-  if (!InvokeKartPadGuestPreservingCpu(
-          cpu, setNextSection, sectionManager, 0x40u, 0xFFFFFFFFu) ||
-      !InvokeKartPadGuestPreservingCpu(
-          cpu, startChangeSection, sectionManager, 0u, 0x000000FFu)) {
-    NSLog(@"[NeoKartPad/Language] TitleFromReset transition failed.");
-    return false;
-  }
-
-  NSLog(@"[NeoKartPad/Language] language=%ld applied; TitleFromReset requested.",
-        (long)language);
-  return true;
-}
-
-void ScheduleAutomaticLanguageRestart(NSInteger language) {
-  // Let UIKit finish dismissing the nested UIMenu first. This callback is then
-  // serviced by KartPad's iOS event pump on the UIKit thread, where the guest
-  // CPU context is quiescent long enough for a bounded SC update/section reset.
-  dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)),
-      dispatch_get_main_queue(), ^{
-    const bool restarted = ApplyLiveLanguageAndRestartGame(language);
-    if (!restarted) {
-      NSLog(@"[NeoKartPad/Language] persisted language remains queued for next title boot.");
-    }
-    kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
-  });
-}
+#include "DonorSessionControl.inc"
 
 void QueueVideoSetting(
     NSString* key, NSString* value, void (^onChange)(void)) {
@@ -521,30 +450,7 @@ UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
     UIAction* action = [UIAction actionWithTitle:
         UIText(languageFallbacks[index], languageKeys[index].UTF8String)
         image:nil identifier:nil handler:^(__kindof UIAction*) {
-      if (CurrentGameLanguage() == value) return;
-      bool expected = false;
-      if (!kNeoKartPadMenuActionInFlight.compare_exchange_strong(
-              expected, true, std::memory_order_acq_rel)) {
-        return;
-      }
-
-      PersistInteger(kNeoKartPadLanguageKey, value);
-      dispatch_async(KartPadSettingsIOQueue(), ^{
-        NSError* languageError = nil;
-        const bool wrote = WriteGameLanguageSysConf(&languageError);
-        dispatch_async(dispatch_get_main_queue(), ^{
-          if (!wrote) {
-            NSLog(@"[NeoKartPad/Settings] language write failed: %@", languageError);
-            kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
-            return;
-          }
-          NSLog(@"[NeoKartPad/Settings] game language=%ld persisted to Wii IPL.LNG",
-                (long)value);
-          RefreshSettingsMenu();
-          if (onChange) onChange();
-          ScheduleAutomaticLanguageRestart(value);
-        });
-      });
+      ConfirmGameLanguage(value, onChange);
     }];
     action.state =
         currentLanguage == value ? UIMenuElementStateOn : UIMenuElementStateOff;
@@ -558,6 +464,13 @@ UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
                     identifier:kNeoKartPadRuntimeLanguageMenuIdentifier
                        options:0
                       children:languageItems];
+}
+
+UIAction* BuildReturnToNeoStationAction() {
+  return [UIAction actionWithTitle:UIText(@"Return to NeoStation", "returnToLibrary")
+      image:[UIImage systemImageNamed:@"arrow.uturn.backward.circle.fill"]
+      identifier:@"com.neostation.kartpad.return-to-neostation"
+      handler:^(__kindof UIAction*) { ReturnToNeoStation(); }];
 }
 
 UIMenu* BuildNeoKartPadSettingsMenu() {
@@ -639,7 +552,7 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
                          image:[UIImage systemImageNamed:@"gearshape"]
                     identifier:@"com.neostation.kartpad.settings"
                        options:0
-                      children:@[returnToGameAction, languageMenu, graphicsMenu, hint]];
+                      children:@[returnToGameAction, BuildReturnToNeoStationAction(), languageMenu, graphicsMenu, hint]];
 }
 
 UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void)) {
@@ -771,6 +684,11 @@ void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
   BOOL foundDisplay = NO;
   for (UIMenuElement* child in source.children) {
     if ([child isKindOfClass:UIAction.class]) {
+      NSString* identifier = ((UIAction*)child).identifier;
+      if ([identifier isEqualToString:@"dev.kartpad.main-menu"] ||
+          [identifier isEqualToString:@"com.neostation.kartpad.return-to-neostation"]) continue;
+    }
+    if ([child isKindOfClass:UIAction.class]) {
       UIAction* action = (UIAction*)child;
       if ([action.identifier isEqualToString:kNeoKartPadReturnToGameIdentifier]) {
         continue;
@@ -814,16 +732,9 @@ void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
   // cannot recursively rebuild the menu or block guest execution.
   [children insertObject:returnToGame atIndex:0];
 
-  // Keep KartPad's own "Return to KartPad Menu" directly below it when present,
-  // then expose language at root. This keeps all three navigation/language
-  // controls visible without opening Display.
-  NSUInteger languageIndex = 1;
-  if (children.count > 1 && [children[1] isKindOfClass:UIAction.class]) {
-    UIAction* firstNative = (UIAction*)children[1];
-    if ([firstNative.identifier isEqualToString:@"dev.kartpad.main-menu"]) {
-      languageIndex = 2;
-    }
-  }
+  // This action terminates the embedded session, never the standalone menu.
+  [children insertObject:BuildReturnToNeoStationAction() atIndex:1];
+  NSUInteger languageIndex = 2;
   [children insertObject:languageMenu
                  atIndex:MIN(languageIndex, children.count)];
   if (!foundDisplay) {
@@ -1385,6 +1296,7 @@ bool LoadRuntime(char* error, size_t errorSize) {
     return Fail(error, errorSize,
                 "KartPad donor runtime is missing RuntimeMain or required SDL iOS exports.");
   }
+  if (!BindSessionBridge(error, errorSize)) return false;
   if (!SetRuntimeLanguageOverride(CurrentGameLanguage())) {
     return Fail(error, errorSize,
                 "KartPad donor runtime is missing the NeoStation language bridge.");
@@ -1513,8 +1425,21 @@ void RuntimeMainOnUIKitThread() {
   sdlSetiOSEventPump(false);
   runtimeThreadActive.store(false, std::memory_order_release);
 
+  ReleaseTerminalGuestMemory();
+  [returnButton removeFromSuperview];
+  [settingsButton removeFromSuperview];
+  returnButton = nil;
+  settingsButton = nil;
+  donorWindow = nil;
+  if (ownedSessionAlert) [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
+  ownedSessionAlert = nil;
+  if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
   if (session.state() != NEO_KARTPAD_ENDED) {
     session.terminate();
+    if (orderlyRuntimeReturn && result == 0) {
+      Emit("KartPad session closed after guest, audio and graphics shutdown.");
+      return;
+    }
     if (result == 0) {
       Emit("KartPad donor runtime exited.");
     } else if (!runtimeError.empty()) {
@@ -1532,14 +1457,16 @@ void ReturnToNeoStation() {
     dispatch_async(dispatch_get_main_queue(), ^{ ReturnToNeoStation(); });
     return;
   }
-  if (!session.active()) return;
+  if (!session.active() || !commands.requestClose()) return;
   session.requestStop();
-  ForEachSDLWindow([](SDL_Window* window) { sdlHideWindow(window); });
-  returnButton.hidden = YES;
-  settingsButton.hidden = YES;
-  if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
-  session.finishRetained();
-  Emit("KartPad donor runtime hidden and retained.");
+  kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel);
+  if (ownedSessionAlert) [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
+  ownedSessionAlert = nil;
+  returnButton.enabled = NO;
+  settingsButton.enabled = NO;
+  // The next safe frame boundary requests the normal title transition to flush
+  // saves, then returns through RuntimeMain cleanup. Hiding is not shutdown.
+  NSLog(@"[NeoKartPad/Session] close requested; waiting for guest teardown");
 }
 
 int Initialize(const char* support, const char* cache,
@@ -1571,30 +1498,8 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
     return Fail(error, errorSize, "NeoStation host window is unavailable.");
   neoStationWindow = hostView.window;
 
-  const bool retainedRuntime =
-      runtimeThreadActive.load(std::memory_order_acquire);
-  if (retainedRuntime) {
-    if (!gamePath.empty() && gamePath != game)
-      return Fail(error, errorSize,
-                  "The retained donor runtime owns another Mario Kart Wii image.");
-    gamePath = game;
-    if (!session.reserve())
-      return Fail(error, errorSize, "KartPad could not reserve a retained session.");
-    session.runtimeReady();
-    if (!SetRuntimeLanguageOverride(CurrentGameLanguage())) {
-      session.finishRetained();
-      return Fail(error, errorSize,
-                  "KartPad could not restore the selected game language.");
-    }
-    ForEachSDLWindow([](SDL_Window* window) { sdlShowWindow(window); });
-    if (donorWindow) [donorWindow makeKeyAndVisible];
-    returnButton.hidden = NO;
-    settingsButton.hidden = NO;
-    RefreshSettingsMenu();
-    session.firstFrame();
-    Emit("Resumed retained KartPad donor runtime without bootstrap.");
-    return 1;
-  }
+  if (runtimeThreadActive.load(std::memory_order_acquire))
+    return Fail(error, errorSize, "KartPad cleanup is still in progress.");
 
   gamePath = game;
   if (!PrepareUserGameDiscovery(error, errorSize)) return 0;
