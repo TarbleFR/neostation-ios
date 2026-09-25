@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/kartpad-donor-core.yml'
       - 'build-utils/kartpad/convert_official_runtime.py'
+      - 'build-utils/kartpad/patch_donor_language_bridge.py'
       - 'build-utils/kartpad/prepare_embedded_source.py'
       - 'build-utils/kartpad/validate_donor_artifact.py'
       - 'build-utils/kartpad/embed_core.py'
@@ -72,6 +73,12 @@ jobs:
           python3 build-utils/kartpad/convert_official_runtime.py \
             build/kartpad-donor/KartPad-executable \
             "$ROOT/KartPadRuntime.framework/KartPadRuntime"
+          # RMCP01 has direct translated calls to SCGetLanguage, so merely
+          # updating SYSCONF cannot change every already-loaded call path.
+          # Patch the verified donor function to read NeoStation's host-owned
+          # language byte. The patcher aborts on any symbol/prologue drift.
+          python3 build-utils/kartpad/patch_donor_language_bridge.py \
+            "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           chmod 755 "$ROOT/KartPadRuntime.framework/KartPadRuntime"
           cat > "$ROOT/KartPadRuntime.framework/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -94,6 +101,8 @@ jobs:
             grep -E '__Z11RuntimeMainiPPc|_SDL_GetWindows|_SDL_HideWindow|_SDL_ShowWindow|_SDL_SetMainReady|_SDL_SetiOSEventPump|_SDL_GetError'
           nm "$ROOT/KartPadRuntime.framework/KartPadRuntime" > build/kartpad-donor/runtime-symbols.txt
           grep -q '_OBJC_CLASS_\$_KartPadDiscExtractor' build/kartpad-donor/runtime-symbols.txt
+          grep -q '_func_801B1D0C' build/kartpad-donor/runtime-symbols.txt
+          grep -q '_g_dynamicAspectRatioEnabled' build/kartpad-donor/runtime-symbols.txt
 
       - name: Build NeoStation donor wrapper Core
         shell: bash
