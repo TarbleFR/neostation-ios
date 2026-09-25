@@ -11,6 +11,7 @@ static KartPadGuestCpuFn originalRun = nullptr;
 static KartPadGuestCpuFn originalExitAfterMain = nullptr;
 static KartPadGuestCpuFn setNextSectionFn = nullptr;
 static KartPadGuestCpuFn changeSectionFn = nullptr;
+static KartPadGuestCpuFn initializeSystemMessagesFn = nullptr;
 static DonorVoidFn stopMixWorkerFn = nullptr;
 static DonorVoidFn cleanSocketsFn = nullptr;
 static DonorVoidFn waitFrameWorkerFn = nullptr;
@@ -123,25 +124,37 @@ bool BeginTitleTransition(void* cpu, uint32_t language) {
   std::array<uint8_t, 0x34> managerBefore;
   std::memcpy(managerBefore.data(), guestMemory.at(manager, managerBefore.size()), managerBefore.size());
   neokartpad::LanguageState languageBefore;
-  if (language) languageBefore = neokartpad::LanguageState::inspect(guestMemory);
+  neokartpad::SystemMessageState messagesBefore;
+  // Validate all destinations before changing any language-related state.
   if (language) {
-    languageBefore.apply(guestMemory, language);
-    if (!SetRuntimeLanguageOverride(language)) {
-      languageBefore.rollback(guestMemory); throw std::runtime_error("host language slot unavailable");
-    }
+    languageBefore = neokartpad::LanguageState::inspect(guestMemory);
+    messagesBefore = neokartpad::SystemMessageState::inspect(guestMemory);
   }
-  bool accepted = InvokeKartPadGuestPreservingCpu(cpu, setNextSectionFn, manager,
-      neokartpad::kTitleFromBoot, 0xffffffffu);
-  accepted = accepted && guestMemory.read32(manager + 0xc) == neokartpad::kTitleFromBoot;
-  accepted = accepted && InvokeKartPadGuestPreservingCpu(cpu, changeSectionFn, manager, 0u, 0x000000ffu);
-  accepted = accepted && guestMemory.read32(manager + 0x30) == 2;
-  if (!accepted) {
+  try {
+    if (language) {
+      languageBefore.apply(guestMemory, language);
+      if (!SetRuntimeLanguageOverride(language))
+        throw std::runtime_error("host language slot unavailable");
+      if (!InvokeKartPadGuestPreservingCpu(cpu, initializeSystemMessagesFn,
+                                           messagesBefore.holder, 0u, 0u) ||
+          !messagesBefore.matches(guestMemory, language))
+        throw std::runtime_error("system messages did not rebind to selected language");
+    }
+    bool accepted = InvokeKartPadGuestPreservingCpu(cpu, setNextSectionFn, manager,
+        neokartpad::kTitleFromBoot, 0xffffffffu);
+    accepted = accepted && guestMemory.read32(manager + 0xc) == neokartpad::kTitleFromBoot;
+    accepted = accepted && InvokeKartPadGuestPreservingCpu(cpu, changeSectionFn, manager, 0u, 0x000000ffu);
+    accepted = accepted && guestMemory.read32(manager + 0x30) == 2;
+    if (!accepted)
+      throw std::runtime_error("title transition rejected; language transaction rolled back");
+  } catch (...) {
     std::memcpy(guestMemory.at(manager, managerBefore.size()), managerBefore.data(), managerBefore.size());
     if (language) {
+      messagesBefore.rollback(guestMemory);
       languageBefore.rollback(guestMemory);
       SetRuntimeLanguageOverride(languageBefore.requestedLanguage);
     }
-    throw std::runtime_error("title transition rejected; language transaction rolled back");
+    throw;
   }
   if (language) PersistAcceptedLanguage(language);
   commands.accepted();
@@ -173,9 +186,10 @@ uint32_t KartPadFrameBoundary(void* cpu) {
         guestMemory.read32(manager + 0xc) != 0xffffffffu) return 0;
     if (languageWrites.load(std::memory_order_acquire)) return 0;
     if (!closing) {
-      if (!neokartpad::LanguageState::inspect(guestMemory).matches(commands.selected))
+      if (!neokartpad::LanguageState::inspect(guestMemory).matches(commands.selected) ||
+          !neokartpad::SystemMessageState::inspect(guestMemory).matches(guestMemory, commands.selected))
         throw std::runtime_error("title loaded but SystemManager/archive language verification failed");
-      NSLog(@"[NeoKartPad/Language] completed title reload language=%u; cache and UI/Common suffixes verified",
+      NSLog(@"[NeoKartPad/Language] completed title reload language=%u; cache, system messages and UI/Common suffixes verified",
             commands.selected);
       commands.complete();
       kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
@@ -234,6 +248,7 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   guestMemory.pointer = reinterpret_cast<DonorPointerFn>(dlsym(runtimeHandle, "_ZN6Memory10GetPointerEjm"));
   setNextSectionFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80635A3C"));
   changeSectionFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80635AC8"));
+  initializeSystemMessagesFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80637A20"));
   stopMixWorkerFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"_ZN8AxDspHle17ShutdownMixWorkerEv"));
   cleanSocketsFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"_ZN10NetworkHle20CleanupAllWiiSocketsEv"));
   waitFrameWorkerFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"aurora_wait_for_frame_worker"));
@@ -241,7 +256,7 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   resetMemoryFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"_ZN6Memory5ResetEv"));
   describeMemoryFn = reinterpret_cast<DonorDescribeFn>(dlsym(runtimeHandle,"_ZN6Memory15DescribeRegionsEv"));
   flatGuestBase = reinterpret_cast<uint8_t**>(dlsym(runtimeHandle,"_ZN9GuestFlat14gFlatGuestBaseE"));
-  if (!guestMemory.pointer || !setNextSectionFn || !changeSectionFn || !stopMixWorkerFn ||
+  if (!guestMemory.pointer || !setNextSectionFn || !changeSectionFn || !initializeSystemMessagesFn || !stopMixWorkerFn ||
       !cleanSocketsFn || !waitFrameWorkerFn || !setWaitCallbackFn || !resetMemoryFn ||
       !describeMemoryFn || !flatGuestBase)
     return Fail(error, errorSize, "KartPad cooperative cleanup symbols missing");
