@@ -163,6 +163,7 @@ jobs:
             build-utils/validate_build273_identity.py
             build-utils/validate_build274_identity.py
             build-utils/validate_build275_identity.py
+            build-utils/validate_build276_identity.py
             build-utils/validate_vpn_build279_artifact.py
             build-utils/validate_vpn_build282_handoff.py
             build-utils/validate_vpn_build284_frozen.py
