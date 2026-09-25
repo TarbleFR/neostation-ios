@@ -20,10 +20,20 @@ int main() {
     auto* c=mem.at(h+8,2);c[0]=0;c[1]=2;
     std::memset(mem.at(s,128),0,128);std::memcpy(mem.at(s,128),"_E.szs",7);
   }
+  constexpr uint32_t sectionMgr=0x81006000, messageHolder=0x81007000;
+  mem.write32(kSectionManager, sectionMgr);
+  mem.write32(sectionMgr+0x94, messageHolder);
+  mem.write32(messageHolder, SystemMessageState::source(1));
   const auto original=ram;
   for (uint32_t language=1;language<=6;++language) {
     const auto state=LanguageState::inspect(mem);
+    const auto messageState=SystemMessageState::inspect(mem);
     state.apply(mem,language);
+    // The separate ARM64 test executes the actual donor rebind function.
+    // Here exercise production validation and transaction rollback helpers.
+    mem.write32(messageHolder, SystemMessageState::source(language));
+    assert(messageState.matches(mem, language));
+    messageState.rollback(mem);
     assert(LanguageState::inspect(mem).matches(language));
     assert(mem.read32(sys+0x5c)==(language==6?1:language));
     state.rollback(mem);assert(ram==original);
