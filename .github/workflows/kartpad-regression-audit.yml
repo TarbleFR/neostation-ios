@@ -40,14 +40,11 @@ jobs:
           curl -fL --retry 3 https://github.com/chrissotraidis/kartpad/releases/download/v0.5.1-experimental.1/KartPad-v0.5.1-experimental.1-source.tar.gz -o /tmp/kartpad-source.tar.gz
           echo '3a7f14e76d289efb398c1f42b3817e9eacd828cceef4d40d185663743c916360  /tmp/kartpad-source.tar.gz' | sha256sum -c -
           python3 - <<'PY'
-          import tarfile, pathlib
-          with tarfile.open('/tmp/kartpad-source.tar.gz') as src, tarfile.open('audit/upstream-code.tar.gz','w:gz') as dst:
-              members=src.getmembers()
-              pathlib.Path('audit/upstream-manifest.txt').write_text('\n'.join(f'{m.size} {m.name}' for m in members))
-              for m in members:
-                  p=pathlib.PurePosixPath(m.name)
-                  if m.isfile() and m.size < 10000000 and (p.suffix.lower() in {'.cpp','.c','.cc','.h','.hpp','.mm','.m','.json','.toml','.map','.yml','.yaml','.txt','.md','.cmake','.py','.sh'}):
-                      dst.addfile(m,src.extractfile(m))
+          import tarfile, pathlib, shutil
+          with tarfile.open('/tmp/kartpad-source.tar.gz') as src:
+              with src.extractfile('KartPad-core-source.tar.gz') as stream, open('audit/KartPad-core-source.tar.gz','wb') as out:
+                  shutil.copyfileobj(stream,out)
+              pathlib.Path('audit/SOURCE-MANIFEST.json').write_bytes(src.extractfile('SOURCE-MANIFEST.json').read())
           PY
       - uses: actions/upload-artifact@v4
         if: always()
