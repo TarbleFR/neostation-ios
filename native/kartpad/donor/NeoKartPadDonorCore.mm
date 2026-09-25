@@ -93,7 +93,10 @@ static NSString* const kNeoKartPadAdvancedGraphicsMenuIdentifier =
     @"com.neostation.kartpad.advanced-graphics";
 static NSString* const kKartPadAutoAccelerateKey =
     @"KartPadAutoAccelerate";
-static char kNeoKartPadMenuPatchSignatureKey;
+static char kNeoKartPadPatchedMenuKey;
+static std::atomic_bool kNeoKartPadMenuPatchInProgress{false};
+static std::atomic_bool kNeoKartPadMenuActionInFlight{false};
+static std::atomic_uint_fast64_t kNeoKartPadMenuRefreshGeneration{0};
 
 NSInteger CurrentGameLanguage() {
   NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:kNeoKartPadLanguageKey];
@@ -166,13 +169,13 @@ bool WriteGameLanguageSysConf(NSError** error) {
 }
 
 void PersistInteger(NSString* key, NSInteger value) {
+  // NSUserDefaults is already asynchronously persisted by Foundation. Calling
+  // synchronize from a UIKit menu action can block the main thread on storage.
   [NSUserDefaults.standardUserDefaults setInteger:value forKey:key];
-  [NSUserDefaults.standardUserDefaults synchronize];
 }
 
 void PersistBool(NSString* key, BOOL value) {
   [NSUserDefaults.standardUserDefaults setBool:value forKey:key];
-  [NSUserDefaults.standardUserDefaults synchronize];
 }
 
 NSString* KartPadConfigPath() {
@@ -287,68 +290,214 @@ bool WriteVideoSetting(NSString* key, NSString* value, NSError** error) {
                       encoding:NSUTF8StringEncoding error:error];
 }
 
-UIViewController* KartPadSettingsPresenter() {
-  UIWindow* window = donorWindow;
-  if (window == nil) {
-    for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
-      if (![scene isKindOfClass:UIWindowScene.class] ||
-          scene.activationState != UISceneActivationStateForegroundActive) {
-        continue;
-      }
-      for (UIWindow* candidate in ((UIWindowScene*)scene).windows) {
-        if (candidate.isKeyWindow) {
-          window = candidate;
-          break;
-        }
-      }
-      if (window) break;
-    }
-  }
-  UIViewController* presenter = window.rootViewController;
-  while (presenter.presentedViewController) {
-    presenter = presenter.presentedViewController;
-  }
-  return presenter;
-}
-
-void PresentRestartRequired(NSString* messageKey, NSString* fallbackMessage) {
-  dispatch_async(dispatch_get_main_queue(), ^{
-    UIViewController* presenter = KartPadSettingsPresenter();
-    if (!presenter) return;
-    UIAlertController* alert = [UIAlertController
-        alertControllerWithTitle:UIText(@"Restart required", "restartRequiredTitle")
-        message:UIText(fallbackMessage, messageKey.UTF8String)
-        preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction
-        actionWithTitle:UIText(@"Later", "later")
-        style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction
-        actionWithTitle:UIText(@"Close NeoStation", "closeNeoStation")
-        style:UIAlertActionStyleDestructive
-        handler:^(__kindof UIAlertAction*) {
-      [NSUserDefaults.standardUserDefaults synchronize];
-      dispatch_after(
-          dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-          dispatch_get_main_queue(), ^{
-        std::exit(0);
-      });
-    }]];
-    [presenter presentViewController:alert animated:YES completion:nil];
+dispatch_queue_t KartPadSettingsIOQueue() {
+  static dispatch_queue_t queue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    queue = dispatch_queue_create(
+        "com.neostation.kartpad.settings-io", DISPATCH_QUEUE_SERIAL);
   });
-}
-
-void ApplyNeoStationKartPadInputPolicy() {
-  [NSUserDefaults.standardUserDefaults setBool:NO
-                                       forKey:kKartPadAutoAccelerateKey];
-  [NSUserDefaults.standardUserDefaults synchronize];
+  return queue;
 }
 
 UIMenu* BuildNeoKartPadSettingsMenu();
 void PatchKartPadRuntimeMenuButton(UIButton* menuButton);
 
 void RefreshSettingsMenu() {
-  if (settingsButton) settingsButton.menu = BuildNeoKartPadSettingsMenu();
+  // Never replace a UIMenu while UIKit is dismissing that same menu. The old
+  // implementation did this synchronously from UIAction handlers, which could
+  // leave context-menu transitions focused/frozen on physical devices.
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+    if (settingsButton) settingsButton.menu = BuildNeoKartPadSettingsMenu();
+  });
 }
+
+void ScheduleNativeMenuRefresh(UIButton* button) {
+  if (!button) return;
+  const uint64_t generation =
+      kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+  __weak UIButton* weakButton = button;
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+    if (generation !=
+        kNeoKartPadMenuRefreshGeneration.load(std::memory_order_acquire)) {
+      return;
+    }
+    UIButton* strongButton = weakButton;
+    if (!strongButton) return;
+    objc_setAssociatedObject(
+        strongButton, &kNeoKartPadPatchedMenuKey, nil,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    PatchKartPadRuntimeMenuButton(strongButton);
+  });
+}
+
+using KartPadGuestCpuFn = void (*)(void*);
+using KartPadGetCpuFn = void* (*)(void);
+using KartPadGuestRead32Fn = uint32_t (*)(uint32_t);
+using KartPadGuestWrite8Fn = void (*)(uint32_t, uint8_t);
+
+bool InvokeKartPadGuestPreservingCpu(
+    void* cpu, KartPadGuestCpuFn fn,
+    uint32_t r3, uint32_t r4, uint32_t r5,
+    uint32_t* resultR3 = nullptr) {
+  if (!cpu || !fn) return false;
+
+  // The pinned WiiCompiled runtime has static_assert(sizeof(CpuContext) == 464).
+  // Preserve the entire translated register file because this callback is
+  // entered from UIKit while guest execution is temporarily inside its event
+  // pump. Only the guest side effects requested below are allowed to survive.
+  alignas(16) uint8_t snapshot[464];
+  std::memcpy(snapshot, cpu, sizeof(snapshot));
+  auto* gpr = static_cast<uint32_t*>(cpu);
+  gpr[3] = r3;
+  gpr[4] = r4;
+  gpr[5] = r5;
+  try {
+    fn(cpu);
+    if (resultR3) *resultR3 = gpr[3];
+  } catch (...) {
+    std::memcpy(cpu, snapshot, sizeof(snapshot));
+    NSLog(@"[NeoKartPad/Language] translated guest helper threw unexpectedly.");
+    return false;
+  }
+  std::memcpy(cpu, snapshot, sizeof(snapshot));
+  return true;
+}
+
+bool ApplyLiveLanguageAndRestartGame(NSInteger language) {
+  if (!runtimeHandle ||
+      !runtimeThreadActive.load(std::memory_order_acquire) ||
+      !session.active()) {
+    NSLog(@"[NeoKartPad/Language] automatic restart skipped: runtime inactive.");
+    return false;
+  }
+
+  auto getCpu = reinterpret_cast<KartPadGetCpuFn>(
+      dlsym(runtimeHandle, "_Z23GetPersistentCpuContextv"));
+  auto read32 = reinterpret_cast<KartPadGuestRead32Fn>(
+      dlsym(runtimeHandle, "_ZN6Memory6Read32Ej"));
+  auto write8 = reinterpret_cast<KartPadGuestWrite8Fn>(
+      dlsym(runtimeHandle, "_ZN6Memory6Write8Ejh"));
+  auto replaceInteger = reinterpret_cast<KartPadGuestCpuFn>(
+      dlsym(runtimeHandle, "func_801B11C4"));
+  auto setNextSection = reinterpret_cast<KartPadGuestCpuFn>(
+      dlsym(runtimeHandle, "func_80635A3C"));
+  auto startChangeSection = reinterpret_cast<KartPadGuestCpuFn>(
+      dlsym(runtimeHandle, "func_80635AC8"));
+
+  if (!getCpu || !read32 || !write8 || !replaceInteger ||
+      !setNextSection || !startChangeSection) {
+    NSLog(@"[NeoKartPad/Language] automatic restart symbols are unavailable.");
+    return false;
+  }
+
+  void* cpu = getCpu();
+  if (!cpu) return false;
+  auto* gpr = static_cast<uint32_t*>(cpu);
+  const uint32_t stack = gpr[1];
+  if (stack < 0x200u) {
+    NSLog(@"[NeoKartPad/Language] guest stack is unavailable.");
+    return false;
+  }
+
+  // RVL SDK: SC_ITEM_ID_IPL_LANGUAGE = 11, SC_ITEM_BYTE = (3 << 5).
+  // Update the live SC cache as well as the persisted SYSCONF so the title
+  // screen rebuilt below sees the new language without restarting NeoStation.
+  const uint32_t scratch = stack - 0x100u;
+  uint32_t replaceResult = 0;
+  try {
+    write8(scratch, static_cast<uint8_t>(language));
+  } catch (...) {
+    NSLog(@"[NeoKartPad/Language] could not write guest SC scratch byte.");
+    return false;
+  }
+  if (!InvokeKartPadGuestPreservingCpu(
+          cpu, replaceInteger, scratch, 11u, 0x60u, &replaceResult) ||
+      replaceResult == 0u) {
+    NSLog(@"[NeoKartPad/Language] live SC language replacement failed.");
+    return false;
+  }
+
+  uint32_t sectionManager = 0;
+  try {
+    // RMCP01 PAL SectionManager::s_instance from the pinned symbol map.
+    sectionManager = read32(0x809C1E38u);
+  } catch (...) {
+    NSLog(@"[NeoKartPad/Language] SectionManager lookup failed.");
+    return false;
+  }
+  if (sectionManager == 0u) {
+    NSLog(@"[NeoKartPad/Language] SectionManager is not initialized.");
+    return false;
+  }
+
+  // Re-enter the game's own TitleFromReset section instead of terminating the
+  // process. This is a game-level restart: renderer/runtime/NeoStation stay
+  // alive, the current Mario Kart UI is torn down and rebuilt, and the freshly
+  // updated SC language is read by the new title/menu scene.
+  if (!InvokeKartPadGuestPreservingCpu(
+          cpu, setNextSection, sectionManager, 0x40u, 0xFFFFFFFFu) ||
+      !InvokeKartPadGuestPreservingCpu(
+          cpu, startChangeSection, sectionManager, 0u, 0u)) {
+    NSLog(@"[NeoKartPad/Language] TitleFromReset transition failed.");
+    return false;
+  }
+
+  NSLog(@"[NeoKartPad/Language] language=%ld applied live; TitleFromReset requested.",
+        (long)language);
+  return true;
+}
+
+void ScheduleAutomaticLanguageRestart(NSInteger language) {
+  // Let UIKit finish dismissing the nested UIMenu first. This callback is then
+  // serviced by KartPad's iOS event pump on the UIKit thread, where the guest
+  // CPU context is quiescent long enough for a bounded SC update/section reset.
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+    const bool restarted = ApplyLiveLanguageAndRestartGame(language);
+    if (!restarted) {
+      NSLog(@"[NeoKartPad/Language] persisted language remains queued for next title boot.");
+    }
+    kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+  });
+}
+
+void QueueVideoSetting(
+    NSString* key, NSString* value, void (^onChange)(void)) {
+  bool expected = false;
+  if (!kNeoKartPadMenuActionInFlight.compare_exchange_strong(
+          expected, true, std::memory_order_acq_rel)) {
+    return;
+  }
+  dispatch_async(KartPadSettingsIOQueue(), ^{
+    NSError* error = nil;
+    const bool ok = WriteVideoSetting(key, value, &error);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (!ok) {
+        NSLog(@"[NeoKartPad/Settings] video setting %@ write failed: %@", key, error);
+      } else if (onChange) {
+        onChange();
+      }
+      RefreshSettingsMenu();
+      dispatch_after(
+          dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
+          dispatch_get_main_queue(), ^{
+        kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+      });
+    });
+  });
+}
+
+void ApplyNeoStationKartPadInputPolicy() {
+  [NSUserDefaults.standardUserDefaults setBool:NO
+                                       forKey:kKartPadAutoAccelerateKey];
+}
+
 
 UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
   NSArray<NSNumber*>* languages = @[@1, @2, @3, @4, @5, @6];
@@ -374,21 +523,29 @@ UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
         UIText(languageFallbacks[index], languageKeys[index].UTF8String)
         image:nil identifier:nil handler:^(__kindof UIAction*) {
       if (CurrentGameLanguage() == value) return;
+      bool expected = false;
+      if (!kNeoKartPadMenuActionInFlight.compare_exchange_strong(
+              expected, true, std::memory_order_acq_rel)) {
+        return;
+      }
+
       PersistInteger(kNeoKartPadLanguageKey, value);
-      NSError* languageError = nil;
-      if (!WriteGameLanguageSysConf(&languageError)) {
-        NSLog(@"[NeoKartPad/Settings] language write failed: %@", languageError);
-      } else {
-        NSLog(@"[NeoKartPad/Settings] game language=%ld persisted to Wii IPL.LNG",
-              (long)value);
-      }
-      RefreshSettingsMenu();
-      if (onChange) {
-        dispatch_async(dispatch_get_main_queue(), onChange);
-      }
-      PresentRestartRequired(
-          @"languageRestartMessage",
-          @"Language saved. Close and reopen NeoStation to apply it to Mario Kart Wii.");
+      dispatch_async(KartPadSettingsIOQueue(), ^{
+        NSError* languageError = nil;
+        const bool wrote = WriteGameLanguageSysConf(&languageError);
+        dispatch_async(dispatch_get_main_queue(), ^{
+          if (!wrote) {
+            NSLog(@"[NeoKartPad/Settings] language write failed: %@", languageError);
+            kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+            return;
+          }
+          NSLog(@"[NeoKartPad/Settings] game language=%ld persisted to Wii IPL.LNG",
+                (long)value);
+          RefreshSettingsMenu();
+          if (onChange) onChange();
+          ScheduleAutomaticLanguageRestart(value);
+        });
+      });
     }];
     action.state =
         currentLanguage == value ? UIMenuElementStateOn : UIMenuElementStateOff;
@@ -487,29 +644,20 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
 }
 
 UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void)) {
-  BOOL sharperPicture = ReadVideoBool(@"disable_copy_filter", YES);
-  BOOL skipShaders = ReadVideoBool(@"skip_unready_pipelines", YES);
-  NSInteger postMask = ReadVideoInteger(@"disabled_post_processing_paths", 0);
-  BOOL disableBloom = (postMask & 0x10) != 0;
-  NSInteger interpolation = ReadVideoInteger(@"frame_interpolation_fps", 0);
-
-  void (^saveBool)(NSString*, BOOL) = ^(NSString* key, BOOL value) {
-    NSError* error = nil;
-    if (!WriteVideoSetting(key, value ? @"true" : @"false", &error)) {
-      NSLog(@"[NeoKartPad/Settings] video setting %@ write failed: %@", key, error);
-      return;
-    }
-    if (onChange) dispatch_async(dispatch_get_main_queue(), onChange);
-    PresentRestartRequired(
-        @"graphicsRestartMessage",
-        @"Graphics setting saved. Close and reopen NeoStation to apply it.");
-  };
+  const BOOL sharperPicture = ReadVideoBool(@"disable_copy_filter", YES);
+  const BOOL skipShaders = ReadVideoBool(@"skip_unready_pipelines", YES);
+  const NSInteger postMask =
+      ReadVideoInteger(@"disabled_post_processing_paths", 0);
+  const BOOL disableBloom = (postMask & 0x10) != 0;
+  const NSInteger interpolation =
+      ReadVideoInteger(@"frame_interpolation_fps", 0);
 
   UIAction* sharp = [UIAction actionWithTitle:
       UIText(@"Sharper picture", "sharperPicture")
       image:[UIImage systemImageNamed:@"wand.and.stars"] identifier:nil
       handler:^(__kindof UIAction*) {
-    saveBool(@"disable_copy_filter", !ReadVideoBool(@"disable_copy_filter", YES));
+    QueueVideoSetting(
+        @"disable_copy_filter", sharperPicture ? @"false" : @"true", onChange);
   }];
   sharp.state = sharperPicture ? UIMenuElementStateOn : UIMenuElementStateOff;
 
@@ -517,20 +665,11 @@ UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void)) {
       UIText(@"Disable bloom", "disableBloom")
       image:[UIImage systemImageNamed:@"sun.max"] identifier:nil
       handler:^(__kindof UIAction*) {
-    NSInteger mask = ReadVideoInteger(@"disabled_post_processing_paths", 0);
-    BOOL enabled = (mask & 0x10) != 0;
-    NSInteger next = enabled ? (mask & ~0x10) : (mask | 0x10);
-    NSError* error = nil;
-    if (!WriteVideoSetting(
-            @"disabled_post_processing_paths",
-            [NSString stringWithFormat:@"%ld", (long)next], &error)) {
-      NSLog(@"[NeoKartPad/Settings] bloom setting write failed: %@", error);
-      return;
-    }
-    if (onChange) dispatch_async(dispatch_get_main_queue(), onChange);
-    PresentRestartRequired(
-        @"graphicsRestartMessage",
-        @"Graphics setting saved. Close and reopen NeoStation to apply it.");
+    const NSInteger next =
+        disableBloom ? (postMask & ~0x10) : (postMask | 0x10);
+    QueueVideoSetting(
+        @"disabled_post_processing_paths",
+        [NSString stringWithFormat:@"%ld", (long)next], onChange);
   }];
   bloom.state = disableBloom ? UIMenuElementStateOn : UIMenuElementStateOff;
 
@@ -538,8 +677,8 @@ UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void)) {
       UIText(@"Skip draws while shaders compile", "skipShaders")
       image:[UIImage systemImageNamed:@"bolt"] identifier:nil
       handler:^(__kindof UIAction*) {
-    saveBool(@"skip_unready_pipelines",
-             !ReadVideoBool(@"skip_unready_pipelines", YES));
+    QueueVideoSetting(
+        @"skip_unready_pipelines", skipShaders ? @"false" : @"true", onChange);
   }];
   skip.state = skipShaders ? UIMenuElementStateOn : UIMenuElementStateOff;
 
@@ -552,22 +691,14 @@ UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void)) {
   ];
   NSMutableArray<UIMenuElement*>* interpolationItems = [NSMutableArray array];
   for (NSUInteger index = 0; index < interpolationValues.count; ++index) {
-    NSInteger value = interpolationValues[index].integerValue;
+    const NSInteger value = interpolationValues[index].integerValue;
     UIAction* action = [UIAction actionWithTitle:
         UIText(interpolationFallbacks[index],
                interpolationKeys[index].UTF8String)
         image:nil identifier:nil handler:^(__kindof UIAction*) {
-      NSError* error = nil;
-      if (!WriteVideoSetting(
-              @"frame_interpolation_fps",
-              [NSString stringWithFormat:@"%ld", (long)value], &error)) {
-        NSLog(@"[NeoKartPad/Settings] interpolation write failed: %@", error);
-        return;
-      }
-      if (onChange) dispatch_async(dispatch_get_main_queue(), onChange);
-      PresentRestartRequired(
-          @"graphicsRestartMessage",
-          @"Graphics setting saved. Close and reopen NeoStation to apply it.");
+      QueueVideoSetting(
+          @"frame_interpolation_fps",
+          [NSString stringWithFormat:@"%ld", (long)value], onChange);
     }];
     action.state =
         interpolation == value ? UIMenuElementStateOn : UIMenuElementStateOff;
@@ -600,55 +731,26 @@ UIButton* FindButtonWithAccessibilityLabel(UIView* root, NSString* label) {
 
 void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
   if (!menuButton || !menuButton.menu) return;
-  UIMenu* source = menuButton.menu;
 
-  const NSInteger currentLanguage = CurrentGameLanguage();
-  const BOOL sharper = ReadVideoBool(@"disable_copy_filter", YES);
-  const BOOL skipShaders = ReadVideoBool(@"skip_unready_pipelines", YES);
-  const NSInteger postMask = ReadVideoInteger(@"disabled_post_processing_paths", 0);
-  const NSInteger interpolation = ReadVideoInteger(@"frame_interpolation_fps", 0);
-  NSString* signature = [NSString stringWithFormat:
-      @"lang=%ld;sharp=%d;skip=%d;bloom=%d;interp=%ld",
-      (long)currentLanguage, sharper, skipShaders, (postMask & 0x10) != 0,
-      (long)interpolation];
+  // layoutSubviews can run every frame. An already patched immutable UIMenu is
+  // therefore an O(1) no-op: no plist reads, no tree walk, no allocation.
+  UIMenu* lastPatched =
+      objc_getAssociatedObject(menuButton, &kNeoKartPadPatchedMenuKey);
+  if (lastPatched && menuButton.menu == lastPatched) return;
 
-  BOOL displayHasLanguage = NO;
-  BOOL displayHasAdvanced = NO;
-  BOOL topLevelLanguage = NO;
-  for (UIMenuElement* child in source.children) {
-    if (![child isKindOfClass:UIMenu.class]) continue;
-    UIMenu* menu = (UIMenu*)child;
-    if ([menu.identifier isEqualToString:kNeoKartPadRuntimeLanguageMenuIdentifier]) {
-      topLevelLanguage = YES;
-    }
-    if ([menu.identifier isEqualToString:@"dev.kartpad.display"]) {
-      for (UIMenuElement* displayChild in menu.children) {
-        if (![displayChild isKindOfClass:UIMenu.class]) continue;
-        UIMenu* displayMenu = (UIMenu*)displayChild;
-        if ([displayMenu.identifier
-                isEqualToString:kNeoKartPadRuntimeLanguageMenuIdentifier]) {
-          displayHasLanguage = YES;
-        }
-        if ([displayMenu.identifier
-                isEqualToString:kNeoKartPadAdvancedGraphicsMenuIdentifier]) {
-          displayHasAdvanced = YES;
-        }
-      }
-    }
-  }
-  NSString* previous =
-      objc_getAssociatedObject(menuButton, &kNeoKartPadMenuPatchSignatureKey);
-  if (!topLevelLanguage && displayHasLanguage && displayHasAdvanced &&
-      [previous isEqualToString:signature]) {
+  bool expected = false;
+  if (!kNeoKartPadMenuPatchInProgress.compare_exchange_strong(
+          expected, true, std::memory_order_acq_rel)) {
     return;
   }
 
+  UIMenu* source = menuButton.menu;
   __weak UIButton* weakButton = menuButton;
   UIMenu* languageMenu = BuildGameLanguageMenu(^{
-    PatchKartPadRuntimeMenuButton(weakButton);
+    ScheduleNativeMenuRefresh(weakButton);
   });
   UIMenu* advancedMenu = BuildAdvancedGraphicsMenu(^{
-    PatchKartPadRuntimeMenuButton(weakButton);
+    ScheduleNativeMenuRefresh(weakButton);
   });
 
   NSMutableArray<UIMenuElement*>* children = [NSMutableArray array];
@@ -656,10 +758,14 @@ void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
   for (UIMenuElement* child in source.children) {
     if ([child isKindOfClass:UIMenu.class]) {
       UIMenu* menu = (UIMenu*)child;
+
+      // Strip every previous NeoStation injection before rebuilding. This
+      // prevents nested copies after KartPad refreshMenuButton/backgrounding.
       if ([menu.identifier isEqualToString:kNeoKartPadRuntimeLanguageMenuIdentifier] ||
           [menu.identifier isEqualToString:kNeoKartPadAdvancedGraphicsMenuIdentifier]) {
         continue;
       }
+
       if ([menu.identifier isEqualToString:@"dev.kartpad.display"]) {
         foundDisplay = YES;
         NSMutableArray<UIMenuElement*>* displayChildren = [NSMutableArray array];
@@ -676,23 +782,38 @@ void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
           [displayChildren addObject:item];
         }
         [displayChildren insertObject:advancedMenu atIndex:0];
-        [displayChildren insertObject:languageMenu atIndex:0];
         [children addObject:[menu menuByReplacingChildren:displayChildren]];
         continue;
       }
     }
     [children addObject:child];
   }
+
+  // Language is intentionally a root-level item in KartPad's native three-dot
+  // menu. Keep Return to KartPad Menu first when it exists, then language, so
+  // it remains visible without opening Display or scrolling a long submenu.
+  NSUInteger languageIndex = 0;
+  if (children.count > 0 &&
+      [children.firstObject isKindOfClass:UIAction.class]) {
+    UIAction* first = (UIAction*)children.firstObject;
+    if ([first.identifier isEqualToString:@"dev.kartpad.main-menu"]) {
+      languageIndex = 1;
+    }
+  }
+  [children insertObject:languageMenu
+                 atIndex:MIN(languageIndex, children.count)];
   if (!foundDisplay) {
-    [children addObject:languageMenu];
-    [children addObject:advancedMenu];
+    [children insertObject:advancedMenu
+                   atIndex:MIN(languageIndex + 1, children.count)];
   }
 
-  menuButton.menu = [source menuByReplacingChildren:children];
+  UIMenu* patched = [source menuByReplacingChildren:children];
+  menuButton.menu = patched;
   menuButton.showsMenuAsPrimaryAction = YES;
   objc_setAssociatedObject(
-      menuButton, &kNeoKartPadMenuPatchSignatureKey, signature,
-      OBJC_ASSOCIATION_COPY_NONATOMIC);
+      menuButton, &kNeoKartPadPatchedMenuKey, patched,
+      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  kNeoKartPadMenuPatchInProgress.store(false, std::memory_order_release);
 }
 
 using OverlayLayoutSubviewsFn = void (*)(id, SEL);
@@ -705,6 +826,10 @@ void NeoStationKartPadOverlayLayoutSubviews(id receiver, SEL selector) {
   if (![receiver isKindOfClass:UIView.class]) return;
   UIButton* menuButton =
       FindButtonWithAccessibilityLabel((UIView*)receiver, @"Menu");
+  if (!menuButton) return;
+  UIMenu* patched =
+      objc_getAssociatedObject(menuButton, &kNeoKartPadPatchedMenuKey);
+  if (patched && menuButton.menu == patched) return;
   PatchKartPadRuntimeMenuButton(menuButton);
 }
 
