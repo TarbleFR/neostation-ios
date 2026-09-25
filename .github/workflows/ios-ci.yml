@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 333 KartPad Native Menu Language Restart Fix
-run-name: NeoStation iOS Build 333 KartPad Native Menu Language Restart Fix • ${{ github.sha }}
+name: NeoStation iOS Build 334 KartPad Return Language Apply Fix
+run-name: NeoStation iOS Build 334 KartPad Return Language Apply Fix • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '333'
+        default: '334'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-333-kartpad
+  group: neostation-ios-build-334-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,17 +38,17 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 333 KartPad Native Menu Language Restart Fix IPA
+    name: Build 334 KartPad Return Language Apply Fix IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '333' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Native-Menu-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-333-KartPad-Native-Menu-Language-Restart-Fix' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Native-Menu-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-333-KartPad-Native-Menu-Language-Restart-Fix' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36145859404' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '6890719b9bccfc31905d3bf044d751a7316db774' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '334' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Return-Language-Apply-Fix', inputs.build_number) || 'NeoStation-iOS-Build-334-KartPad-Return-Language-Apply-Fix' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Return-Language-Apply-Fix', inputs.build_number) || 'NeoStation-iOS-Build-334-KartPad-Return-Language-Apply-Fix' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36151832197' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'f2f6ce0fb8a4e8c4186c5c22b1651122f1583bf4' }}
       KARTPAD_CANDIDATE: '1'
-      # Build 333 includes the updated native-menu/language regression contract.
+      # Build 334 pins the verified donor SCGetLanguage bridge and explicit native Return to Game action.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -275,6 +275,8 @@ jobs:
             -Inative/dusklight/core test/dusklight_vm_trace_test.cpp
           python3 test/dusklight_menu_test.py
           python3 test/dusklight_language_test.py
+          python3 test/kartpad_bridge_contract_test.py
+          flutter test test/kartpad_locale_test.dart
           flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
           python3 test/rpcs3_loader_stability_280_test.py
           python3 test/rpcs3_build283_boot_stability_test.py
