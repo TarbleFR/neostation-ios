@@ -1,27 +1,39 @@
-name: KartPad regression audit
-run-name: KartPad Build 334 startup crash source audit
+name: KartPad language ABI regression
+run-name: KartPad language ABI regression • ${{ github.sha }}
 on:
   workflow_dispatch:
   push:
     branches: [experimental]
-    paths: [.github/workflows/kartpad-regression-audit.yml]
+    paths:
+      - .github/workflows/kartpad-regression-audit.yml
+      - build-utils/kartpad/patch_donor_language_bridge.py
+      - test/kartpad_language_bridge_test.py
 permissions:
   contents: read
 jobs:
-  source-audit:
+  language-abi:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Export tracked sources and provenance only
+      - name: Prepare pinned instruction emulator and source witnesses
         run: |
-          mkdir -p audit
+          mkdir -p audit/test-deps
           git rev-parse HEAD > audit/source-commit.txt
           git archive --format=tar.gz HEAD > audit/neostation-sources.tar.gz
-          sha256sum audit/neostation-sources.tar.gz > audit/SHA256SUMS
+          (cd audit && sha256sum neostation-sources.tar.gz > SHA256SUMS)
+          python3 -m pip download --only-binary=:all: --no-deps unicorn==2.1.2 -d audit/test-deps
+          python3 -m venv /tmp/kartpad-abi-tests
+          /tmp/kartpad-abi-tests/bin/pip install --no-index --find-links audit/test-deps unicorn==2.1.2
+      - name: Execute fixed ABI and reproduce the Build 334 defect
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/kartpad-abi-tests/bin/python test/kartpad_language_bridge_test.py 2>&1 | tee audit/language-abi-tests.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: kartpad-regression-sources-${{ github.sha }}
           path: audit/
