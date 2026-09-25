@@ -1,0 +1,93 @@
+name: KartPad 336 canonical source update (one time)
+run-name: KartPad 336 canonical source validation • ${{ github.sha }}
+on:
+  push:
+    branches: [experimental]
+    paths: [.github/workflows/kartpad-336-canonicalize-once.yml]
+permissions:
+  contents: write
+concurrency:
+  group: kartpad-336-canonicalize-once
+  cancel-in-progress: false
+jobs:
+  canonicalize:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Materialize reviewed source delta with before and after hashes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, pathlib, subprocess, urllib.request
+          shas = ('f3c802559807c0129198c71875513e3ccd9f0113', '10df9b49ecd23ff12e26ee50fd6114b7ec9bd57f', '079045fafdd15ad48cf6481caf4aa966ab278ffc')
+          pieces = []
+          for sha in shas:
+              request = urllib.request.Request('https://api.github.com/repos/TarbleFR/neostation-ios/git/blobs/' + sha, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(request) as response:
+                  item = json.load(response)
+              pieces.append(base64.b64decode(item['content']))
+          compressed = base64.b64decode(b''.join(pieces), validate=True)
+          assert hashlib.sha256(compressed).hexdigest() == '69c4fd6cdbb8569aba15a74af4995f9395f68e6d08e3debf6edd75811876a2e9'
+          update = json.loads(gzip.decompress(compressed))
+          subprocess.run(['git', 'merge-base', '--is-ancestor', update['base'], 'HEAD'], check=True)
+          paths = []
+          for item in update['files']:
+              path = pathlib.Path(item['path'])
+              assert not path.is_absolute() and '..' not in path.parts
+              assert path.parts[0] in ('native', 'test', 'build-utils', 'lib')
+              before = path.read_bytes() if path.exists() else b''
+              assert (hashlib.sha256(before).hexdigest() if path.exists() else None) == item['old_sha256'], str(path)
+              text = before.decode('utf-8')
+              last = len(text) + 1
+              for start, end, replacement in reversed(item['edits']):
+                  assert 0 <= start <= end < last
+                  text = text[:start] + replacement + text[end:]
+                  last = start
+              after = text.encode('utf-8')
+              assert hashlib.sha256(after).hexdigest() == item['new_sha256'], str(path)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_bytes(after)
+              paths.append(str(path))
+          pathlib.Path('/tmp/kartpad-reviewed-paths.json').write_text(json.dumps(paths))
+          print('Applied exactly', len(paths), 'reviewed canonical source files')
+          PY
+      - name: Validate canonical behavior and iPhoneOS wrapper syntax
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 test/kartpad_bridge_contract_test.py
+          python3 test/kartpad_ipa_validation_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core -Ipackages/kartpad_internal_bridge/ios/Classes test/kartpad_native_session_test.cpp -o /tmp/kartpad-session-test
+          /tmp/kartpad-session-test
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core test/kartpad_guest_language_state_test.cpp -o /tmp/kartpad-language-test
+          /tmp/kartpad-language-test
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang++ -arch arm64 -isysroot "$SDK" -miphoneos-version-min=17.4 -std=c++20 -fobjc-arc -fblocks -fsyntax-only -Ipackages/kartpad_internal_bridge/ios/Classes -Inative/kartpad/core native/kartpad/donor/NeoKartPadDonorCore.mm
+      - name: Commit only reviewed sources without moving any other branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, urllib.request
+          request = urllib.request.Request('https://api.github.com/repos/TarbleFR/neostation-ios/git/ref/heads/experimental', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN']})
+          with urllib.request.urlopen(request) as response:
+              head = json.load(response)['object']['sha']
+          assert head == os.environ['GITHUB_SHA'], 'experimental moved during source validation; refusing push'
+          paths = json.load(open('/tmp/kartpad-reviewed-paths.json'))
+          subprocess.run(['git','add','--'] + paths, check=True)
+          PY
+          git config user.name 'Tarble FR'
+          git config user.email '249503225+TarbleFR@users.noreply.github.com'
+          git diff --cached --stat
+          git commit -m 'fix(kartpad): confirmed cached-language reload and cooperative native shutdown [kartpad-core-only]'
+          git push origin HEAD:experimental
+          git rev-parse HEAD
