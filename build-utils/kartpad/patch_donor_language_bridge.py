@@ -5,14 +5,21 @@ The official RMCP01 translated runtime calls func_801B1D0C (SCGetLanguage)
 directly from multiple generated call sites, so changing only SYSCONF or the
 runtime registry is not sufficient for an already-running embedded session.
 
-For the pinned official v0.5.1 iOS binary, this script replaces only the first
-three arm64 instructions of func_801B1D0C with:
+The translated entry point has ABI void(CpuContext*), NOT uint8_t(void).
+The native x0 argument points to a 464-byte CpuContext; guest r3 is the native
+uint32_t at byte offset 12. The Build 334 stub loaded the language into w0 and
+returned, leaving guest r3 stale (and truncating the context pointer in x0).
+Generated callers then used that stale r3 to select localized game resources.
+
+For the pinned official v0.5.1 iOS binary, replace the first four instructions:
     adrp x8, <language slot page>
-    ldrb w0, [x8, <language slot offset>]
+    ldrb w8, [x8, <language slot offset>]
+    str  w8, [x0, #12]  // CpuContext.gpr[3], native little-endian uint32_t
     ret
-The byte-sized language slot is an alignment byte immediately after the exported
-bool g_dynamicAspectRatioEnabled and before the next symbol. NeoStation writes
-that byte through dlsym(). The patch is ASLR-safe because ADRP is page-relative.
+Only guest r3 and the caller-saved native x8 are modified. The byte-sized
+language slot is an alignment byte immediately after the exported bool
+g_dynamicAspectRatioEnabled and before the next symbol. NeoStation writes
+that byte through dlsym(). ADRP remains ASLR-safe under page-aligned slides.
 
 Every address and original byte sequence is discovered/validated from the Mach-O
 symbol table. Any upstream drift aborts the build instead of patching blindly.
@@ -20,6 +27,7 @@ symbol table. Any upstream drift aborts the build instead of patching blindly.
 from __future__ import annotations
 
 import argparse
+import json
 import struct
 from pathlib import Path
 
@@ -31,7 +39,11 @@ NLIST_64 = struct.Struct("<IBBHQ")
 
 SCGETLANGUAGE_SYMBOL = "_func_801B1D0C"
 ASPECT_SYMBOL = "_g_dynamicAspectRatioEnabled"
-EXPECTED_PROLOGUE = bytes.fromhex("f85fbca9f65701a9f44f02a9")
+# Include the fourth overwritten instruction, not just the old three.
+EXPECTED_PROLOGUE = bytes.fromhex("f85fbca9f65701a9f44f02a9fd7b03a9")
+CPU_CONTEXT_R3_OFFSET = 12
+CPU_CONTEXT_SIZE = 464
+BRIDGE_SIZE = 16
 
 
 def parse_macho(data: bytes):
@@ -40,6 +52,9 @@ def parse_macho(data: bytes):
     magic, _cpu, _sub, _type, ncmds, sizeofcmds, _flags, _res = HEADER.unpack_from(data)
     if magic != MH_MAGIC_64:
         raise SystemExit(f"ERROR: expected thin arm64 Mach-O, got 0x{magic:08x}")
+
+    if _cpu != 0x0100000C or _type != 6:
+        raise SystemExit("ERROR: expected converted arm64 MH_DYLIB")
 
     command_end = HEADER.size + sizeofcmds
     if command_end > len(data):
@@ -119,8 +134,23 @@ def encode_ldrb_w(rt: int, rn: int, offset: int) -> int:
     return 0x39400000 | (offset << 10) | (rn << 5) | rt
 
 
-def patch(path: Path) -> None:
-    data = bytearray(path.read_bytes())
+def encode_str_w(rt: int, rn: int, offset: int) -> int:
+    if offset < 0 or offset % 4 or offset // 4 > 0xFFF:
+        raise SystemExit("ERROR: context offset is outside STR W imm12 range")
+    return 0xB9000000 | ((offset // 4) << 10) | (rn << 5) | rt
+
+
+def bridge_bytes(function_vm: int, language_slot_vm: int) -> bytes:
+    return struct.pack(
+        "<IIII",
+        encode_adrp(8, function_vm, language_slot_vm),
+        encode_ldrb_w(8, 8, language_slot_vm & 0xFFF),
+        encode_str_w(8, 0, CPU_CONTEXT_R3_OFFSET),
+        0xD65F03C0,
+    )
+
+
+def bridge_layout(data: bytes) -> tuple[int, int, int]:
     segments, symtab = parse_macho(data)
     symbols, ordered = load_symbols(data, symtab)
 
@@ -142,7 +172,46 @@ def patch(path: Path) -> None:
             f"ERROR: language slot overlaps {next_name} at 0x{next_vm:x}"
         )
 
+    # Neither the code write nor the host-owned byte may cross its segment.
+    code = next((s for s in segments if s[0] == b"__TEXT"
+                 and s[1] <= function_vm
+                 and function_vm + BRIDGE_SIZE <= s[1] + s[4]), None)
+    slot = next((s for s in segments if s[0] == b"__DATA"
+                 and s[1] <= language_slot_vm < s[1] + s[2]), None)
+    if code is None or slot is None:
+        raise SystemExit("ERROR: language bridge is outside expected TEXT/DATA segments")
+    following_functions = [addr for addr, _ in ordered if addr > function_vm]
+    if not following_functions or following_functions[0] < function_vm + BRIDGE_SIZE:
+        raise SystemExit("ERROR: language bridge would overwrite the next symbol")
     function_file = vm_to_file(segments, function_vm)
+    if function_file + BRIDGE_SIZE > len(data):
+        raise SystemExit("ERROR: truncated SCGetLanguage function")
+    return function_vm, function_file, language_slot_vm
+
+
+def validate_bridge(data: bytes) -> dict:
+    function_vm, function_file, language_slot_vm = bridge_layout(data)
+    actual = bytes(data[function_file:function_file + BRIDGE_SIZE])
+    expected = bridge_bytes(function_vm, language_slot_vm)
+    if actual != expected:
+        raise SystemExit(
+            "ERROR: SCGetLanguage guest ABI bridge missing or invalid; "
+            "expected CpuContext.r3 store, not a native w0 return "
+            f"(got {actual.hex()}, expected {expected.hex()})"
+        )
+    return {
+        "abi": "void(CpuContext*)",
+        "guestReturnOffset": CPU_CONTEXT_R3_OFFSET,
+        "preservesContextPointer": True,
+        "functionVm": hex(function_vm),
+        "languageSlotVm": hex(language_slot_vm),
+        "instructions": actual.hex(),
+    }
+
+
+def patch(path: Path) -> None:
+    data = bytearray(path.read_bytes())
+    function_vm, function_file, language_slot_vm = bridge_layout(data)
     original = bytes(data[function_file:function_file + len(EXPECTED_PROLOGUE)])
     if original != EXPECTED_PROLOGUE:
         raise SystemExit(
@@ -150,22 +219,20 @@ def patch(path: Path) -> None:
             f"(got {original.hex()})"
         )
 
-    adrp = encode_adrp(8, function_vm, language_slot_vm)
-    ldrb = encode_ldrb_w(0, 8, language_slot_vm & 0xFFF)
-    replacement = struct.pack("<III", adrp, ldrb, 0xD65F03C0)
+    replacement = bridge_bytes(function_vm, language_slot_vm)
     data[function_file:function_file + len(replacement)] = replacement
+    report = validate_bridge(data)
     path.write_bytes(data)
+    print("Patched donor SCGetLanguage guest ABI: " + json.dumps(report, sort_keys=True))
 
-    print(
-        "Patched donor SCGetLanguage: "
-        f"func=0x{function_vm:x} file=0x{function_file:x} "
-        f"slot=0x{language_slot_vm:x} next={next_name}@0x{next_vm:x} "
-        f"bytes={replacement.hex()}"
-    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("runtime", type=Path)
+    parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
-    patch(args.runtime)
+    if args.verify:
+        print(json.dumps(validate_bridge(args.runtime.read_bytes()), indent=2))
+    else:
+        patch(args.runtime)
