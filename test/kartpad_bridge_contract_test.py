@@ -50,7 +50,6 @@ for token in (
     '"languageSpanish"',
     '"languageItalian"',
     '"languageDutch"',
-    '"languageRestartHint"',
     'game language=%ld persisted to Wii IPL.LNG',
     'com.neostation.kartpad.runtime-language',
     'PatchKartPadRuntimeMenuButton',
