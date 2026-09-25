@@ -68,11 +68,30 @@ for token in (
     'disabled_post_processing_paths',
     'skip_unready_pipelines',
     'frame_interpolation_fps',
-    'PresentRestartRequired',
-    'std::exit(0)',
     'dev.kartpad.display',
+    'kNeoKartPadPatchedMenuKey',
+    'kNeoKartPadMenuActionInFlight',
+    'ScheduleNativeMenuRefresh',
+    'KartPadSettingsIOQueue',
+    'ApplyLiveLanguageAndRestartGame',
+    'func_801B11C4',
+    'func_80635A3C',
+    'func_80635AC8',
+    '0x809C1E38u',
+    '0x40u',
+    'SC_ITEM_ID_IPL_LANGUAGE = 11',
+    'TitleFromReset requested',
 ):
     assert token in donor_core, token
+
+# The native three-dot menu must expose language at root, not bury it inside
+# Display, and it must not rebuild itself synchronously from a UIAction.
+assert '[children insertObject:languageMenu' in donor_core
+assert 'atIndex:MIN(languageIndex, children.count)' in donor_core
+assert 'menuButton.menu == lastPatched' in donor_core
+assert 'dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC))' in donor_core
+assert 'std::exit(0)' not in donor_core
+assert 'PresentRestartRequired' not in donor_core
 assert "'languageRestartHint'" in ports_locale
 for token in (
     "'restartRequiredTitle'", "'languageRestartMessage'",
