@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 335 KartPad Startup ABI Fix
-run-name: NeoStation iOS Build 335 KartPad Startup ABI Fix • ${{ github.sha }}
+name: NeoStation iOS Build 336 KartPad Language Confirm Clean Exit
+run-name: NeoStation iOS Build 336 KartPad Language Confirm Clean Exit • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '335'
+        default: '336'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-335-kartpad
+  group: neostation-ios-build-336-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,17 +38,17 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 335 KartPad Startup ABI Fix IPA
+    name: Build 336 KartPad Language Confirm Clean Exit IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '335' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Startup-ABI-Fix', inputs.build_number) || 'NeoStation-iOS-Build-335-KartPad-Startup-ABI-Fix' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Startup-ABI-Fix', inputs.build_number) || 'NeoStation-iOS-Build-335-KartPad-Startup-ABI-Fix' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36181522406' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '07642903a1051025a05510899430dd16072cf498' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '336' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Language-Confirm-Clean-Exit', inputs.build_number) || 'NeoStation-iOS-Build-336-KartPad-Language-Confirm-Clean-Exit' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Language-Confirm-Clean-Exit', inputs.build_number) || 'NeoStation-iOS-Build-336-KartPad-Language-Confirm-Clean-Exit' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36196257250' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '23361e84215f9c27bbfb53724c45611384c4d6de' }}
       KARTPAD_CANDIDATE: '1'
-      # Build 335 fixes the guest SCGetLanguage return ABI while preserving the native menu and title reset.
+      # Build 336 preserves the validated startup ABI and adds confirmed language reload plus cooperative exit.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -163,7 +163,6 @@ jobs:
             build-utils/validate_build273_identity.py
             build-utils/validate_build274_identity.py
             build-utils/validate_build275_identity.py
-            build-utils/validate_build276_identity.py
             build-utils/validate_vpn_build279_artifact.py
             build-utils/validate_vpn_build282_handoff.py
             build-utils/validate_vpn_build284_frozen.py
@@ -644,6 +643,19 @@ jobs:
           "$TEST_ENV/bin/python" test/kartpad_language_bridge_test.py \
             --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
             2>&1 | tee dist/kartpad-language-abi-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_session_bridge_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-session-bridge-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_system_messages_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-system-messages-tests.txt
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
+            test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
+          "$RUNNER_TEMP/kartpad-language-state-test"
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            test/kartpad_native_session_test.cpp -o "$RUNNER_TEMP/kartpad-session-test"
+          "$RUNNER_TEMP/kartpad-session-test"
 
       - name: Prepare emulator build definitions
         shell: bash
