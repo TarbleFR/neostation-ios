@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import <dlfcn.h>
 
 #include "KartPadCoreABI.h"
@@ -83,6 +84,10 @@ NSString* UIText(NSString* fallback, const char* key) {
 static NSString* const kNeoKartPadLanguageKey = @"NeoKartPadGameLanguage";
 static NSString* const kKartPadRequestedRuntimeProfileKey =
     @"KartPadRequestedRuntimeProfile";
+static NSString* const kKartPadPreferredGameKey =
+    @"KartPadPreferredGame";
+static NSString* const kNeoKartPadRuntimeLanguageMenuIdentifier =
+    @"com.neostation.kartpad.runtime-language";
 
 NSInteger CurrentGameLanguage() {
   NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:kNeoKartPadLanguageKey];
@@ -165,22 +170,13 @@ void PersistBool(NSString* key, BOOL value) {
 }
 
 UIMenu* BuildNeoKartPadSettingsMenu();
+void PatchKartPadRuntimeMenuButton(UIButton* menuButton);
 
 void RefreshSettingsMenu() {
   if (settingsButton) settingsButton.menu = BuildNeoKartPadSettingsMenu();
 }
 
-UIMenu* BuildNeoKartPadSettingsMenu() {
-  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
-
-  // Selecting this action simply dismisses UIKit's menu and hands controller
-  // focus straight back to the already-running guest. It deliberately does
-  // not mutate session state or rebuild the renderer.
-  UIAction* returnToGameAction = [UIAction actionWithTitle:
-      UIText(@"Return to Game", "returnToGame")
-      image:[UIImage systemImageNamed:@"play.fill"] identifier:nil
-      handler:^(__kindof UIAction*) {}];
-
+UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
   NSArray<NSNumber*>* languages = @[@1, @2, @3, @4, @5, @6];
   NSArray<NSString*>* languageKeys = @[
     @"languageEnglish", @"languageGerman", @"languageFrench",
@@ -212,11 +208,15 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
               (long)value);
       }
       RefreshSettingsMenu();
+      if (onChange) {
+        dispatch_async(dispatch_get_main_queue(), onChange);
+      }
     }];
     action.state =
         currentLanguage == value ? UIMenuElementStateOn : UIMenuElementStateOff;
     [languageItems addObject:action];
   }
+
   UIAction* languageRestartHint = [UIAction actionWithTitle:
       UIText(@"Saved now; restart NeoStation to apply the new game language.",
              "languageRestartHint")
@@ -225,12 +225,24 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
   languageRestartHint.attributes = UIMenuElementAttributesDisabled;
   [languageItems addObject:languageRestartHint];
 
-  NSString* languageMenuTitle = [NSString stringWithFormat:@"%@ — %@",
+  NSString* title = [NSString stringWithFormat:@"%@ — %@",
       UIText(@"Game Language", "gameLanguage"), currentLanguageName];
-  UIMenu* languageMenu = [UIMenu menuWithTitle:languageMenuTitle
-      image:[UIImage systemImageNamed:@"globe"]
-      identifier:@"com.neostation.kartpad.language" options:0
-      children:languageItems];
+  return [UIMenu menuWithTitle:title
+                         image:[UIImage systemImageNamed:@"globe"]
+                    identifier:kNeoKartPadRuntimeLanguageMenuIdentifier
+                       options:0
+                      children:languageItems];
+}
+
+UIMenu* BuildNeoKartPadSettingsMenu() {
+  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+
+  UIAction* returnToGameAction = [UIAction actionWithTitle:
+      UIText(@"Return to Game", "returnToGame")
+      image:[UIImage systemImageNamed:@"play.fill"] identifier:nil
+      handler:^(__kindof UIAction*) {}];
+
+  UIMenu* languageMenu = BuildGameLanguageMenu(nil);
 
   NSInteger renderScale = [defaults integerForKey:@"SunPadRenderScale"];
   if (renderScale < 1 || renderScale > 4) renderScale = 1;
@@ -302,6 +314,113 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
                     identifier:@"com.neostation.kartpad.settings"
                        options:0
                       children:@[returnToGameAction, languageMenu, graphicsMenu, hint]];
+}
+
+UIButton* FindButtonWithAccessibilityLabel(UIView* root, NSString* label) {
+  if ([root isKindOfClass:UIButton.class] &&
+      [root.accessibilityLabel isEqualToString:label]) {
+    return (UIButton*)root;
+  }
+  for (UIView* child in root.subviews) {
+    UIButton* found = FindButtonWithAccessibilityLabel(child, label);
+    if (found) return found;
+  }
+  return nil;
+}
+
+void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
+  if (!menuButton || !menuButton.menu) return;
+  UIMenu* source = menuButton.menu;
+  const NSInteger currentLanguage = CurrentGameLanguage();
+  NSArray<NSString*>* languageKeys = @[
+    @"languageEnglish", @"languageGerman", @"languageFrench",
+    @"languageSpanish", @"languageItalian", @"languageDutch"
+  ];
+  NSArray<NSString*>* languageFallbacks = @[
+    @"English", @"German", @"French", @"Spanish", @"Italian", @"Dutch"
+  ];
+  const NSUInteger currentIndex =
+      currentLanguage >= 1 && currentLanguage <= 6
+          ? static_cast<NSUInteger>(currentLanguage - 1)
+          : 0;
+  NSString* desiredTitle = [NSString stringWithFormat:@"%@ — %@",
+      UIText(@"Game Language", "gameLanguage"),
+      UIText(languageFallbacks[currentIndex], languageKeys[currentIndex].UTF8String)];
+
+  NSMutableArray<UIMenuElement*>* children = [NSMutableArray array];
+  BOOL alreadyCurrent = NO;
+  for (UIMenuElement* child in source.children) {
+    if ([child.identifier isEqualToString:kNeoKartPadRuntimeLanguageMenuIdentifier]) {
+      if ([child isKindOfClass:UIMenu.class] &&
+          [((UIMenu*)child).title isEqualToString:desiredTitle]) {
+        alreadyCurrent = YES;
+      }
+      continue;
+    }
+    [children addObject:child];
+  }
+  if (alreadyCurrent) return;
+
+  __weak UIButton* weakButton = menuButton;
+  UIMenu* languageMenu = BuildGameLanguageMenu(^{
+    PatchKartPadRuntimeMenuButton(weakButton);
+  });
+  const NSUInteger insertion = MIN((NSUInteger)2, children.count);
+  [children insertObject:languageMenu atIndex:insertion];
+  menuButton.menu = [source menuByReplacingChildren:children];
+  menuButton.showsMenuAsPrimaryAction = YES;
+}
+
+using OverlayLayoutSubviewsFn = void (*)(id, SEL);
+OverlayLayoutSubviewsFn originalKartPadOverlayLayoutSubviews = nullptr;
+
+void NeoStationKartPadOverlayLayoutSubviews(id receiver, SEL selector) {
+  if (originalKartPadOverlayLayoutSubviews) {
+    originalKartPadOverlayLayoutSubviews(receiver, selector);
+  }
+  if (![receiver isKindOfClass:UIView.class]) return;
+  UIButton* menuButton =
+      FindButtonWithAccessibilityLabel((UIView*)receiver, @"Menu");
+  PatchKartPadRuntimeMenuButton(menuButton);
+}
+
+using ViewDidLoadFn = void (*)(id, SEL);
+ViewDidLoadFn originalKartPadFirstLaunchViewDidLoad = nullptr;
+
+void UpdateKartPadFirstLaunchPreference(id receiver) {
+  [NSUserDefaults.standardUserDefaults setObject:@"base"
+                                         forKey:kKartPadPreferredGameKey];
+  [NSUserDefaults.standardUserDefaults synchronize];
+  SEL update = NSSelectorFromString(@"updatePreferenceTitle");
+  if ([receiver respondsToSelector:update]) {
+    ((void (*)(id, SEL))objc_msgSend)(receiver, update);
+  }
+}
+
+void NeoStationKartPadFirstLaunchViewDidLoad(id receiver, SEL selector) {
+  if (originalKartPadFirstLaunchViewDidLoad) {
+    originalKartPadFirstLaunchViewDidLoad(receiver, selector);
+  }
+  UpdateKartPadFirstLaunchPreference(receiver);
+  @try {
+    id rawButton = [receiver valueForKey:@"preferenceButton"];
+    if ([rawButton isKindOfClass:UIButton.class]) {
+      UIButton* button = (UIButton*)rawButton;
+      button.enabled = NO;
+      button.userInteractionEnabled = NO;
+      button.accessibilityHint =
+          @"NeoStation manages Mario Kart Wii directly.";
+    }
+  } @catch (NSException* exception) {
+    NSLog(@"[NeoKartPad/Donor] could not disable On Launch control: %@",
+          exception.reason);
+  }
+}
+
+void NeoStationKartPadShowLaunchPreference(id receiver, SEL selector) {
+  (void)selector;
+  UpdateKartPadFirstLaunchPreference(receiver);
+  NSLog(@"[NeoKartPad/Donor] ignored KartPad On Launch chooser; NeoStation owns RMCP01.");
 }
 
 bool EnsureSymlink(NSString* linkPath, NSString* targetPath, NSError** error) {
@@ -576,6 +695,8 @@ bool PrepareEmbeddedRuntimeBootstrap(char* error, size_t errorSize) {
   // donor's normal startup contract without exposing its standalone chooser.
   [NSUserDefaults.standardUserDefaults
       setObject:@"base" forKey:kKartPadRequestedRuntimeProfileKey];
+  [NSUserDefaults.standardUserDefaults
+      setObject:@"base" forKey:kKartPadPreferredGameKey];
   [NSUserDefaults.standardUserDefaults synchronize];
 
   if (EmbeddedPreparedGameDataReady() &&
@@ -700,7 +821,44 @@ void InstallAutoImportSwizzle() {
   if (show && choose) {
     method_setImplementation(show, method_getImplementation(choose));
   }
-  NSLog(@"[NeoKartPad/Donor] Embedded first-launch policy installed.");
+
+  Class chooser = NSClassFromString(@"KartPadFirstLaunchViewController");
+  if (chooser) {
+    Method viewDidLoad =
+        class_getInstanceMethod(chooser, @selector(viewDidLoad));
+    if (viewDidLoad && !originalKartPadFirstLaunchViewDidLoad) {
+      originalKartPadFirstLaunchViewDidLoad =
+          reinterpret_cast<ViewDidLoadFn>(method_getImplementation(viewDidLoad));
+      method_setImplementation(
+          viewDidLoad,
+          reinterpret_cast<IMP>(NeoStationKartPadFirstLaunchViewDidLoad));
+    }
+    Method launchPreference = class_getInstanceMethod(
+        chooser, NSSelectorFromString(@"showLaunchPreference"));
+    if (launchPreference) {
+      method_setImplementation(
+          launchPreference,
+          reinterpret_cast<IMP>(NeoStationKartPadShowLaunchPreference));
+    }
+  }
+
+  Class overlay = NSClassFromString(@"KartPadGameOverlay");
+  if (overlay) {
+    Method layout = class_getInstanceMethod(overlay, @selector(layoutSubviews));
+    if (layout && !originalKartPadOverlayLayoutSubviews) {
+      originalKartPadOverlayLayoutSubviews =
+          reinterpret_cast<OverlayLayoutSubviewsFn>(
+              method_getImplementation(layout));
+      method_setImplementation(
+          layout,
+          reinterpret_cast<IMP>(NeoStationKartPadOverlayLayoutSubviews));
+    }
+  }
+
+  [NSUserDefaults.standardUserDefaults setObject:@"base"
+                                         forKey:kKartPadPreferredGameKey];
+  [NSUserDefaults.standardUserDefaults synchronize];
+  NSLog(@"[NeoKartPad/Donor] Embedded first-launch and native menu policy installed.");
 }
 
 bool LoadRuntime(char* error, size_t errorSize) {

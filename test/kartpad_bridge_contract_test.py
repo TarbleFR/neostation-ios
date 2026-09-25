@@ -52,6 +52,15 @@ for token in (
     '"languageDutch"',
     '"languageRestartHint"',
     'game language=%ld persisted to Wii IPL.LNG',
+    'com.neostation.kartpad.runtime-language',
+    'PatchKartPadRuntimeMenuButton',
+    'menuByReplacingChildren',
+    'NSClassFromString(@"KartPadGameOverlay")',
+    'NeoStationKartPadOverlayLayoutSubviews',
+    'KartPadPreferredGame',
+    'NeoStationKartPadShowLaunchPreference',
+    'ignored KartPad On Launch chooser',
+    'button.enabled = NO',
 ):
     assert token in donor_core, token
 assert "'languageRestartHint'" in ports_locale
