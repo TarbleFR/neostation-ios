@@ -18,6 +18,19 @@ void main() {
         'settings',
         'gameLanguage',
         'languageRestartHint',
+        'restartRequiredTitle',
+        'languageRestartMessage',
+        'graphicsRestartMessage',
+        'closeNeoStation',
+        'later',
+        'advancedGraphics',
+        'sharperPicture',
+        'disableBloom',
+        'skipShaders',
+        'frameInterpolation',
+        'frameInterpolationOff',
+        'frameInterpolation120',
+        'frameInterpolation180',
         'graphics',
         'renderResolution',
         'aspectRatio',
@@ -55,6 +68,14 @@ void main() {
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartHint'],
       contains('redémarrez NeoStation'),
+    );
+    expect(
+      PortsLocale.kartPadNativeUI(const Locale('fr'))['restartRequiredTitle'],
+      'Redémarrage requis',
+    );
+    expect(
+      PortsLocale.kartPadNativeUI(const Locale('fr'))['advancedGraphics'],
+      'Graphismes avancés',
     );
     expect(
       PortsLocale.kartPadLaunchError(

@@ -61,9 +61,27 @@ for token in (
     'NeoStationKartPadShowLaunchPreference',
     'ignored KartPad On Launch chooser',
     'button.enabled = NO',
+    'KartPadAutoAccelerate',
+    'auto-accelerate lock forced off',
+    'NeoStationKartPadAutoAccelerateChanged',
+    'advanced-graphics',
+    'disable_copy_filter',
+    'disabled_post_processing_paths',
+    'skip_unready_pipelines',
+    'frame_interpolation_fps',
+    'PresentRestartRequired',
+    'std::exit(0)',
+    'dev.kartpad.display',
 ):
     assert token in donor_core, token
 assert "'languageRestartHint'" in ports_locale
+for token in (
+    "'restartRequiredTitle'", "'languageRestartMessage'",
+    "'graphicsRestartMessage'", "'advancedGraphics'",
+    "'sharperPicture'", "'disableBloom'", "'skipShaders'",
+    "'frameInterpolation'",
+):
+    assert token in ports_locale, token
 assert pins['release'] == 'v0.5.1-experimental.1'
 assert pins['compiledSource'] == '67c7e2f942c1226af149e6a9cc571f647528e25e'
 assert pins['discProfile']['expectedTranslatedFunctions'] == 29637
