@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 339 KartPad Reusable Lifecycle Language Restart Fix
-run-name: NeoStation iOS Build 339 KartPad Reusable Lifecycle Language Restart Fix • ${{ github.sha }}
+name: NeoStation iOS Build 340 KartPad Guest Data Reentry Fix
+run-name: NeoStation iOS Build 340 KartPad Guest Data Reentry Fix • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '339'
+        default: '340'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-339-kartpad
+  group: neostation-ios-build-340-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,17 +38,17 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 339 KartPad Reusable Lifecycle Language Restart Fix IPA
+    name: Build 340 KartPad Guest Data Reentry Fix IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '339' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Reusable-Lifecycle-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-339-KartPad-Reusable-Lifecycle-Language-Restart-Fix' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Reusable-Lifecycle-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-339-KartPad-Reusable-Lifecycle-Language-Restart-Fix' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36266918316' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '6ab687d0ca33f1cb494a9062a2db80fc2c6ff3a7' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '340' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Guest-Data-Reentry-Fix', inputs.build_number) || 'NeoStation-iOS-Build-340-KartPad-Guest-Data-Reentry-Fix' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Guest-Data-Reentry-Fix', inputs.build_number) || 'NeoStation-iOS-Build-340-KartPad-Guest-Data-Reentry-Fix' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36269642391' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '56c1a5f76e9f0457be472ea3c6b6f74d4ce1a9f1' }}
       KARTPAD_CANDIDATE: '1'
-      # Build 339 pins tested audio-session release, one menu return control, and persistent host lifecycle traces.
+      # Build 340 pins guest data reinitialization on every reusable KartPad session.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
