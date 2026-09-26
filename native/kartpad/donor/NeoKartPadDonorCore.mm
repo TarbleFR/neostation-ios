@@ -8,6 +8,7 @@
 #include "../core/SessionState.h"
 #include "../core/SessionRunLoop.h"
 #include "../core/GuestLanguageState.h"
+#include "../core/DonorAudioSession.h"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -65,11 +66,23 @@ std::string cachePath;
 std::string gamePath;
 UIWindow* neoStationWindow = nil;
 UIWindow* donorWindow = nil;
-UIButton* returnButton = nil;
 UIButton* settingsButton = nil;
 
 std::mutex uiTextMutex;
 std::unordered_map<std::string, std::string> uiText;
+
+// The donor closes console.log before RuntimeMain returns. Keep these few host
+// boundaries outside that redirected stream so teardown does not erase proof.
+void LogLifecycleBoundary(const char* boundary) {
+  if (supportPath.empty()) return;
+  const std::string path = supportPath + "/neostation-kartpad-lifecycle.log";
+  FILE* file = std::fopen(path.c_str(), "a");
+  if (!file) return;
+  std::fprintf(file, "time=%.3f uptime=%.3f session=%llu state=%d %s\n",
+      NSDate.date.timeIntervalSince1970, NSProcessInfo.processInfo.systemUptime,
+      (unsigned long long)sessionSerial.load(), session.state(), boundary);
+  std::fclose(file);
+}
 
 int Fail(char* error, size_t errorSize, const char* message) {
   if (error && errorSize) std::snprintf(error, errorSize, "%s", message);
@@ -78,6 +91,7 @@ int Fail(char* error, size_t errorSize, const char* message) {
 }
 
 void Emit(const char* message) {
+  LogLifecycleBoundary(message ? message : "event");
   NSLog(@"[NeoKartPad/Donor] state=%d %s", session.state(),
         message ? message : "");
   if (callback) callback(callbackContext, session.state(), message ? message : "");
@@ -1351,33 +1365,12 @@ UIWindow* CurrentDonorWindow() {
 
 void ReturnToNeoStation(int reason);
 
-void InstallReturnButton() {
+void InstallSettingsButton() {
   UIWindow* window = CurrentDonorWindow();
-  if (!window || returnButton.superview) return;
+  if (!window || settingsButton.superview) return;
   donorWindow = window;
-  UIButton* button = [UIButton buttonWithType:UIButtonTypeSystem];
-  button.translatesAutoresizingMaskIntoConstraints = NO;
-  button.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.72];
-  button.tintColor = UIColor.whiteColor;
-  button.layer.cornerRadius = 12.0;
-  button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
-  [button setTitle:UIText(@"NeoStation", "returnToLibrary")
-          forState:UIControlStateNormal];
-  [button setImage:[UIImage systemImageNamed:@"arrow.uturn.backward.circle.fill"]
-          forState:UIControlStateNormal];
-  button.accessibilityLabel = UIText(@"Return to NeoStation", "returnToLibrary");
-  UIAction* returnAction = [UIAction actionWithHandler:^(__kindof UIAction*) {
-    ReturnToNeoStation(NEO_KARTPAD_EXIT_USER_RETURN);
-  }];
-  [button addAction:returnAction forControlEvents:UIControlEventTouchUpInside];
   UIView* root = window.rootViewController.view ?: window;
-  [root addSubview:button];
-  [NSLayoutConstraint activateConstraints:@[
-    [button.topAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.topAnchor constant:8],
-    [button.trailingAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.trailingAnchor constant:-8],
-  ]];
-  returnButton = button;
-
+  // Return to NeoStation belongs exclusively to the settings menu.
   UIButton* gear = [UIButton buttonWithType:UIButtonTypeSystem];
   gear.translatesAutoresizingMaskIntoConstraints = NO;
   gear.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.72];
@@ -1391,8 +1384,8 @@ void InstallReturnButton() {
   gear.menu = BuildNeoKartPadSettingsMenu();
   [root addSubview:gear];
   [NSLayoutConstraint activateConstraints:@[
-    [gear.topAnchor constraintEqualToAnchor:button.bottomAnchor constant:8],
-    [gear.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
+    [gear.topAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.topAnchor constant:8],
+    [gear.trailingAnchor constraintEqualToAnchor:root.safeAreaLayoutGuide.trailingAnchor constant:-8],
     [gear.widthAnchor constraintGreaterThanOrEqualToConstant:44],
     [gear.heightAnchor constraintGreaterThanOrEqualToConstant:44],
   ]];
@@ -1407,7 +1400,7 @@ void PollForRuntimeWindow(int attempt, uint64_t serial) {
     if (windows && sdlFree) sdlFree(windows);
   }
   if (count > 0 && CurrentDonorWindow()) {
-    InstallReturnButton();
+    InstallSettingsButton();
     if (session.firstFrame()) {
       NSLog(@"[NeoKartPad/Lifecycle] session=%llu running (runtime window ready)",
             (unsigned long long)serial);
@@ -1452,6 +1445,7 @@ void RuntimeMainOnUIKitThread() {
           (unsigned long long)serial);
   }
 
+  LogLifecycleBoundary("RuntimeMain returned; donor transcript already closed");
   const char* rawError = sdlGetError ? sdlGetError() : nullptr;
   if (runtimeError.empty() && rawError && *rawError) runtimeError = rawError;
   sdlSetiOSEventPump(false);
@@ -1470,10 +1464,10 @@ void RuntimeMainOnUIKitThread() {
   // Complete settings writes before the next session reads its configuration.
   // Writers never synchronously wait for UIKit, so this drain cannot deadlock.
   dispatch_sync(KartPadSettingsIOQueue(), ^{});
+  LogLifecycleBoundary("settings writes drained; guest reset begin");
   PrepareReusableGuestMemory();
-  [returnButton removeFromSuperview];
+  LogLifecycleBoundary("guest reset complete; UIKit cleanup begin");
   [settingsButton removeFromSuperview];
-  returnButton = nil;
   settingsButton = nil;
   donorWindow = nil;
   if (ownedSessionAlert) {
@@ -1539,11 +1533,12 @@ void ReturnToNeoStation(int reason) {
   if (!session.active() || !commands.requestClose()) return;
   requestedExitReason = reason;
   session.requestStop();
+  LogLifecycleBoundary(reason == NEO_KARTPAD_EXIT_LANGUAGE_RESTART
+      ? "shutdown requested: languageRestart" : "shutdown requested: userReturn");
   kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel);
   if (ownedSessionAlert)
     [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
   ownedSessionAlert = nil;
-  returnButton.enabled = NO;
   settingsButton.enabled = NO;
   NSLog(@"[NeoKartPad/Lifecycle] session=%llu state=stopping exitReason=%s",
         (unsigned long long)sessionSerial.load(std::memory_order_acquire),

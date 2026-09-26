@@ -13,6 +13,9 @@ static KartPadGuestCpuFn setNextSectionFn = nullptr;
 static KartPadGuestCpuFn changeSectionFn = nullptr;
 static KartPadGuestCpuFn initializeSystemMessagesFn = nullptr;
 static DonorVoidFn stopMixWorkerFn = nullptr;
+static void* (*audioBackendInstanceFn)() = nullptr;
+static void (*destroyAudioStreamFn)(void*) = nullptr;
+static void (*quitAudioSubsystemFn)(uint32_t) = nullptr;
 static DonorVoidFn cleanSocketsFn = nullptr;
 static DonorVoidFn waitFrameWorkerFn = nullptr;
 static DonorVoidFn resetMemoryFn = nullptr;
@@ -65,7 +68,6 @@ void ShowSessionFailure(bool closing, const char* diagnostic) {
   NSLog(@"[NeoKartPad/Session] %@ failed: %s", closing ? @"close" : @"language", diagnostic);
   commands.failed();
   session.cancelStop();
-  if (returnButton) returnButton.enabled = YES;
   if (settingsButton) settingsButton.enabled = YES;
   kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
   UIAlertController* alert = [UIAlertController alertControllerWithTitle:
@@ -233,9 +235,25 @@ uint32_t KartPadFrameBoundary(void* cpu) {
     // Do not emit sessionEnded or expose the library until RuntimeMain's own
     // fiber/renderer/window cleanup has returned.
     setWaitCallbackFn(nullptr); // no late VI/guest callbacks while draining GPU
+    LogLifecycleBoundary("guest transition complete; AX join begin");
     stopMixWorkerFn();          // join AX worker BEFORE guest memory can disappear
+    LogLifecycleBoundary("AX joined; audio stream release begin");
+    // Aurora's SDL_Quit destroys SDL streams but cannot reset the persistent
+    // C++ AudioBackend. Without this, the next Init returns early with a freed
+    // stream, and menu/volume callbacks may touch it during a language restart.
+    {
+      static_assert(sizeof(std::mutex) == 0x40, "pinned Darwin audio mutex ABI");
+      void* backend = audioBackendInstanceFn();
+      std::lock_guard<std::mutex> lock(*static_cast<std::mutex*>(backend));
+      neokartpad::ReleaseDonorAudioSession(
+          backend, destroyAudioStreamFn, quitAudioSubsystemFn);
+    }
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu audio stream released and backend reset",
+          (unsigned long long)sessionSerial.load());
+    LogLifecycleBoundary("audio stream released; GPU drain begin");
     waitFrameWorkerFn();
     cleanSocketsFn();
+    LogLifecycleBoundary("GPU and sockets drained; donor cleanup begin");
     commands.complete();
     orderlyRuntimeReturn = true;
     NSLog(@"[NeoKartPad/Session] save transition complete; AX/GPU drained; returning through RuntimeMain cleanup");
@@ -270,6 +288,18 @@ void KartPadExitAfterMain(void* cpu) {
 }
 
 bool BindSessionBridge(char* error, size_t errorSize) {
+  audioBackendInstanceFn = reinterpret_cast<void* (*)()>(
+      dlsym(runtimeHandle, "_ZN12AudioBackend8InstanceEv"));
+  destroyAudioStreamFn = reinterpret_cast<void (*)(void*)>(
+      dlsym(runtimeHandle, "SDL_DestroyAudioStream"));
+  quitAudioSubsystemFn = reinterpret_cast<void (*)(uint32_t)>(
+      dlsym(runtimeHandle, "SDL_QuitSubSystem"));
+  const void* audioLayout = dlsym(runtimeHandle,
+      "_ZN12AudioBackend23EnsureInitializedLockedEjj");
+  if (!audioBackendInstanceFn || !destroyAudioStreamFn || !quitAudioSubsystemFn ||
+      !audioLayout || std::memcmp(audioLayout, neokartpad::kDonorAudioLayoutWitness,
+                                 sizeof(neokartpad::kDonorAudioLayoutWitness)) != 0)
+    return Fail(error, errorSize, "KartPad audio session layout/symbols do not match the verified donor.");
   Dl_info info{};
   if (!dladdr(reinterpret_cast<void*>(runtimeMain), &info) || !info.dli_fbase)
     return Fail(error, errorSize, "KartPad session image base unavailable");

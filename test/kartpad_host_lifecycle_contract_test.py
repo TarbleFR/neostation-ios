@@ -66,3 +66,12 @@ assert 'dispatch_async(dispatch_get_main_queue(), ^{ RuntimeMainOnUIKitThread();
 assert 'commands = neokartpad::SessionCommands{}' not in core
 assert '[runtimeWindowTimer invalidate]' in core
 assert '[sessionAlertRetryTimer invalidate]' in core
+
+# The only library-return control belongs to the settings menu, never the HUD.
+assert 'returnButton' not in core
+assert 'InstallReturnButton' not in core
+settings_overlay = core.split('void InstallSettingsButton() {', 1)[1].split('void PollForRuntimeWindow', 1)[0]
+assert 'BuildNeoKartPadSettingsMenu()' in settings_overlay
+assert 'ReturnToNeoStation(' not in settings_overlay
+assert 'root.safeAreaLayoutGuide.topAnchor' in settings_overlay
+assert 'BuildReturnToNeoStationAction()' in core

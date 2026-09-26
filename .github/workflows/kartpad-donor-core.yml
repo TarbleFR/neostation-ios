@@ -15,6 +15,8 @@ on:
       - 'test/kartpad_guest_language_state_test.cpp'
       - 'test/kartpad_host_lifecycle_contract_test.py'
       - 'test/kartpad_native_session_test.cpp'
+      - 'test/kartpad_audio_session_test.cpp'
+      - 'test/kartpad_audio_donor_test.py'
       - 'test/kartpad_main_runloop_test.mm'
       - 'test/kartpad_bridge_contract_test.py'
       - 'build-utils/kartpad/prepare_embedded_source.py'
@@ -131,6 +133,9 @@ jobs:
           "$TEST_ENV/bin/python" test/kartpad_system_messages_test.py \
             --runtime build/kartpad-donor/out/KartPadRuntime.framework/KartPadRuntime \
             2>&1 | tee build/kartpad-donor/out/system-messages-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_audio_donor_test.py \
+            --runtime build/kartpad-donor/out/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee build/kartpad-donor/out/audio-session-tests.txt
           c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
             test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
           "$RUNNER_TEMP/kartpad-language-state-test"
