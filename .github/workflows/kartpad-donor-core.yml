@@ -15,6 +15,7 @@ on:
       - 'test/kartpad_guest_language_state_test.cpp'
       - 'test/kartpad_host_lifecycle_contract_test.py'
       - 'test/kartpad_native_session_test.cpp'
+      - 'test/kartpad_main_runloop_test.mm'
       - 'test/kartpad_bridge_contract_test.py'
       - 'build-utils/kartpad/prepare_embedded_source.py'
       - 'build-utils/kartpad/validate_donor_artifact.py'
@@ -139,6 +140,15 @@ jobs:
             -Ipackages/kartpad_internal_bridge/ios/Classes \
             test/kartpad_native_session_test.cpp -o "$RUNNER_TEMP/kartpad-session-test"
           "$RUNNER_TEMP/kartpad-session-test"
+
+      - name: Verify production UIKit entry and queue responsiveness
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -Wall -Wextra -Werror \
+            -framework Foundation -framework CoreFoundation \
+            test/kartpad_main_runloop_test.mm -o "$RUNNER_TEMP/kartpad-main-runloop"
+          "$RUNNER_TEMP/kartpad-main-runloop" 2>&1 | tee build/kartpad-donor/out/main-runloop-tests.txt
 
       - name: Build NeoStation donor wrapper Core
         shell: bash

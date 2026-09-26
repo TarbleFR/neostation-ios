@@ -6,6 +6,7 @@
 
 #include "KartPadCoreABI.h"
 #include "../core/SessionState.h"
+#include "../core/SessionRunLoop.h"
 #include "../core/GuestLanguageState.h"
 #include <algorithm>
 #include <array>
@@ -30,6 +31,13 @@ struct SDL_Window;
 
 namespace {
 NeoKartPadSessionState session;
+std::atomic_uint_fast64_t sessionSerial{0};
+NSTimer* runtimeEntryTimer = nil;
+NSTimer* runtimeWindowTimer = nil;
+
+bool IsCurrentSession(uint64_t serial) {
+  return serial == sessionSerial.load(std::memory_order_acquire) && session.active();
+}
 NeoKartPadEventFn callback = nullptr;
 void* callbackContext = nullptr;
 
@@ -315,9 +323,11 @@ void RefreshSettingsMenu() {
   // Never replace a UIMenu while UIKit is dismissing that same menu. The old
   // implementation did this synchronously from UIAction handlers, which could
   // leave context-menu transitions focused/frozen on physical devices.
+  const uint64_t serial = sessionSerial.load();
   dispatch_after(
       dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
       dispatch_get_main_queue(), ^{
+    if (!IsCurrentSession(serial) || session.state() == NEO_KARTPAD_STOPPING) return;
     if (settingsButton) settingsButton.menu = BuildNeoKartPadSettingsMenu();
   });
 }
@@ -402,10 +412,12 @@ void QueueVideoSetting(
           expected, true, std::memory_order_acq_rel)) {
     return;
   }
+  const uint64_t serial = sessionSerial.load();
   dispatch_async(KartPadSettingsIOQueue(), ^{
     NSError* error = nil;
     const bool ok = WriteVideoSetting(key, value, &error);
     dispatch_async(dispatch_get_main_queue(), ^{
+      if (!IsCurrentSession(serial) || session.state() == NEO_KARTPAD_STOPPING) return;
       if (!ok) {
         NSLog(@"[NeoKartPad/Settings] video setting %@ write failed: %@", key, error);
       } else if (onChange) {
@@ -415,6 +427,7 @@ void QueueVideoSetting(
       dispatch_after(
           dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
           dispatch_get_main_queue(), ^{
+        if (!IsCurrentSession(serial)) return;
         kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
       });
     });
@@ -436,6 +449,7 @@ UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
   NSArray<NSString*>* languageFallbacks = @[
     @"English", @"German", @"French", @"Spanish", @"Italian", @"Dutch"
   ];
+  const uint64_t serial = sessionSerial.load();
   const NSInteger currentLanguage = CurrentGameLanguage();
   const NSUInteger currentLanguageIndex =
       currentLanguage >= 1 && currentLanguage <= 6
@@ -450,6 +464,7 @@ UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
     UIAction* action = [UIAction actionWithTitle:
         UIText(languageFallbacks[index], languageKeys[index].UTF8String)
         image:nil identifier:nil handler:^(__kindof UIAction*) {
+      if (!IsCurrentSession(serial)) return;
       ConfirmGameLanguage(value, onChange);
     }];
     action.state =
@@ -467,10 +482,13 @@ UIMenu* BuildGameLanguageMenu(void (^onChange)(void)) {
 }
 
 UIAction* BuildReturnToNeoStationAction() {
+  const uint64_t serial = sessionSerial.load();
   return [UIAction actionWithTitle:UIText(@"Return to NeoStation", "returnToLibrary")
       image:[UIImage systemImageNamed:@"arrow.uturn.backward.circle.fill"]
       identifier:@"com.neostation.kartpad.return-to-neostation"
-      handler:^(__kindof UIAction*) { ReturnToNeoStation(NEO_KARTPAD_EXIT_USER_RETURN); }];
+      handler:^(__kindof UIAction*) {
+        if (IsCurrentSession(serial)) ReturnToNeoStation(NEO_KARTPAD_EXIT_USER_RETURN);
+      }];
 }
 
 UIMenu* BuildNeoKartPadSettingsMenu() {
@@ -1381,8 +1399,8 @@ void InstallReturnButton() {
   settingsButton = gear;
 }
 
-void PollForRuntimeWindow(int attempt) {
-  if (session.state() != NEO_KARTPAD_STARTING) return;
+void PollForRuntimeWindow(int attempt, uint64_t serial) {
+  if (!IsCurrentSession(serial) || session.state() != NEO_KARTPAD_STARTING) return;
   __block int count = 0;
   if (sdlGetWindows) {
     SDL_Window** windows = sdlGetWindows(&count);
@@ -1390,20 +1408,22 @@ void PollForRuntimeWindow(int attempt) {
   }
   if (count > 0 && CurrentDonorWindow()) {
     InstallReturnButton();
-    if (session.firstFrame()) Emit("KartPad donor runtime window is ready.");
+    if (session.firstFrame()) {
+      NSLog(@"[NeoKartPad/Lifecycle] session=%llu running (runtime window ready)",
+            (unsigned long long)serial);
+      Emit("KartPad donor runtime window is ready.");
+    }
     return;
   }
   if (attempt >= 900) return;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
-                 dispatch_get_main_queue(), ^{
-    PollForRuntimeWindow(attempt + 1);
+  runtimeWindowTimer = NeoKartPadScheduleRunLoop(0.1, ^{
+    PollForRuntimeWindow(attempt + 1, serial);
   });
 }
 
 void RuntimeMainOnUIKitThread() {
   if (!NSThread.isMainThread) {
-    RunOnUIKitRunLoop(^{ RuntimeMainOnUIKitThread(); });
-    return;
+    return; // Only the owned UIKit timer may enter the runtime.
   }
 
   const uint64_t serial = sessionSerial.load(std::memory_order_acquire);
@@ -1441,6 +1461,15 @@ void RuntimeMainOnUIKitThread() {
   int exitReason = requestedExitReason;
   requestedExitReason = NEO_KARTPAD_EXIT_NONE;
 
+  [runtimeEntryTimer invalidate];
+  runtimeEntryTimer = nil;
+  [runtimeWindowTimer invalidate];
+  runtimeWindowTimer = nil;
+  [sessionAlertRetryTimer invalidate];
+  sessionAlertRetryTimer = nil;
+  // Complete settings writes before the next session reads its configuration.
+  // Writers never synchronously wait for UIKit, so this drain cannot deadlock.
+  dispatch_sync(KartPadSettingsIOQueue(), ^{});
   PrepareReusableGuestMemory();
   [returnButton removeFromSuperview];
   [settingsButton removeFromSuperview];
@@ -1457,7 +1486,7 @@ void RuntimeMainOnUIKitThread() {
       exitReason = NEO_KARTPAD_EXIT_NORMAL_TERMINATION;
     lastExitReason.store(exitReason, std::memory_order_release);
     session.finishReusable();
-    commands = neokartpad::SessionCommands{};
+    commands.failed(); // Invalidate old confirmation IDs without resetting the epoch.
     frameGateEntered = false;
     orderlyRuntimeReturn = false;
     languageWrites.store(0, std::memory_order_release);
@@ -1468,6 +1497,9 @@ void RuntimeMainOnUIKitThread() {
     NSLog(@"[NeoKartPad/Lifecycle] session=%llu resourcesReleased state=idle exitReason=%d",
           (unsigned long long)serial, exitReason);
     if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
+    neoStationWindow = nil;
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu destroyed; process runtime image/reservation retained",
+          (unsigned long long)serial);
 
     if (exitReason == NEO_KARTPAD_EXIT_LANGUAGE_RESTART) {
       Emit("KartPad session stopped for explicit language restart.");
@@ -1574,11 +1606,14 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   NSLog(@"[NeoKartPad/Lifecycle] session=%llu created language=%ld",
         (unsigned long long)serial, (long)CurrentGameLanguage());
 
-  // Return from the Flutter method call first, then enter the official runtime
-  // on UIKit's main thread. SDL's own iOS pump services the nested main runloop
-  // while the game is active, just as it does in the standalone KartPad app.
-  dispatch_async(dispatch_get_main_queue(), ^{ RuntimeMainOnUIKitThread(); });
-  PollForRuntimeWindow(0);
+  // Return from Flutter first, then enter through an independent run-loop
+  // source. A GCD main-queue block would starve the same queue for the entire
+  // game session, delaying launch completion and menu callbacks until shutdown.
+  runtimeEntryTimer = NeoKartPadScheduleRunLoop(0.001, ^{
+    if (!IsCurrentSession(serial) || runtimeThreadActive.load()) return;
+    RuntimeMainOnUIKitThread();
+  });
+  PollForRuntimeWindow(0, serial);
   return 1;
 }
 

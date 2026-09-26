@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <dispatch/dispatch.h>
+#include "../native/kartpad/core/SessionRunLoop.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -29,15 +30,19 @@ int main() {
             "negative control did not release delayed completion on runtime return");
 
     __block bool timerEntered = false, deliveredInside = false;
-    NSTimer* timer = [NSTimer timerWithTimeInterval:0.001 repeats:NO block:^(NSTimer*) {
+    NeoKartPadScheduleRunLoop(0.001, ^{
       timerEntered = true;
       dispatch_async(dispatch_get_main_queue(), ^{ deliveredInside = true; });
       Pump(0.08);
       Require(deliveredInside, "run-loop entry still starves queued UI/launch work");
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
+    });
     Pump(0.20);
     Require(timerEntered && deliveredInside, "fresh runtime entry never executed");
+    __block bool staleEntered = false;
+    NSTimer* cancelled = NeoKartPadScheduleRunLoop(0.01, ^{ staleEntered = true; });
+    [cancelled invalidate];
+    Pump(0.05);
+    Require(!staleEntered, "cancelled session entry executed after shutdown");
     std::puts("PASS: real GCD starvation reproduced; NSTimer runtime entry services nested main-queue callbacks");
   }
 }

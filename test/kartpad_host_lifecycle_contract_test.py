@@ -58,3 +58,11 @@ for token in (
     assert token in patcher, token
 
 print("PASS: explicit exit reasons, single completion, host-owned language restart, and reentrant pinned profile")
+
+# The behavioral Apple test must exercise the same entry as production.
+assert '#include "../core/SessionRunLoop.h"' in core
+assert 'runtimeEntryTimer = NeoKartPadScheduleRunLoop' in core
+assert 'dispatch_async(dispatch_get_main_queue(), ^{ RuntimeMainOnUIKitThread(); });' not in core
+assert 'commands = neokartpad::SessionCommands{}' not in core
+assert '[runtimeWindowTimer invalidate]' in core
+assert '[sessionAlertRetryTimer invalidate]' in core

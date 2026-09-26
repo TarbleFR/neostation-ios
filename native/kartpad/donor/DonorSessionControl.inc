@@ -23,7 +23,7 @@ static bool frameGateEntered = false;
 static bool orderlyRuntimeReturn = false;
 static int requestedExitReason = NEO_KARTPAD_EXIT_NONE;
 static std::atomic_int lastExitReason{NEO_KARTPAD_EXIT_NONE};
-static std::atomic_uint_fast64_t sessionSerial{0};
+static NSTimer* sessionAlertRetryTimer = nil;
 static std::atomic_uint languageWrites{0};
 static bool languageWriteFailed = false;
 static UIAlertController* ownedSessionAlert = nil;
@@ -51,11 +51,10 @@ void PresentSessionAlert(UIAlertController* alert, uint64_t generation,
       NSLog(@"[NeoKartPad/Session] owned alert presentation unavailable after menu transition");
       return;
     }
-    NSTimer* retry = [NSTimer timerWithTimeInterval:0.05 repeats:NO
-        block:^(__unused NSTimer* timer) {
+    [sessionAlertRetryTimer invalidate];
+    sessionAlertRetryTimer = NeoKartPadScheduleRunLoop(0.05, ^{
       PresentSessionAlert(alert, generation, attempt + 1);
-    }];
-    [NSRunLoop.mainRunLoop addTimer:retry forMode:NSRunLoopCommonModes];
+    });
     return;
   }
   ownedSessionAlert = alert;
@@ -103,15 +102,15 @@ void ConfirmGameLanguage(NSInteger value, void (^onChange)(void)) {
                      "languageRestartMessage") preferredStyle:UIAlertControllerStyleAlert];
   [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Cancel", "cancel")
       style:UIAlertActionStyleCancel handler:^(__kindof UIAlertAction*) {
+    if (!commands.cancel(generation)) return;
     ownedSessionAlert = nil;
-    commands.cancel(generation);
     kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
     if (onChange) onChange();
   }]];
   [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Restart", "restartGame")
       style:UIAlertActionStyleDefault handler:^(__kindof UIAlertAction*) {
-    ownedSessionAlert = nil;
     if (!commands.confirm(generation)) return;
+    ownedSessionAlert = nil;
 
     // Persist the desired language before shutdown. The active guest is not
     // patched in place: the confirmed operation is a full shutdown -> cleanup

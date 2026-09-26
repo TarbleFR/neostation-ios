@@ -57,5 +57,17 @@ int main() {
     SessionCommands normal;assert(normal.confirm(normal.choose(3)));
     normal.accepted();normal.complete();assert(normal.choose(4));normal.failed();assert(normal.choose(5));
   }
+  // Reuse the production transaction object across sessions. Resetting it by
+  // assignment previously reused ID 1 and allowed an old alert to confirm a
+  // new session's pending language choice (ABA).
+  SessionCommands reused;
+  for (int cycle = 0; cycle < 1000; ++cycle) {
+    const auto old = reused.choose(1); assert(old);
+    assert(reused.requestClose()); reused.complete(); reused.failed();
+    const auto fresh = reused.choose(3); assert(fresh > old);
+    assert(!reused.confirm(old)); assert(!reused.cancel(old));
+    assert(reused.phase == SessionCommands::Phase::confirming);
+    assert(reused.confirm(fresh)); reused.accepted(); reused.complete();
+  }
   std::cout << "PASS: real cache/suffix changes, rollback, invalid pointers/languages, 1000 consent/close cycles\n";
 }
