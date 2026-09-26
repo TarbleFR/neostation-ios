@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 337 KartPad Reusable Lifecycle Language Restart Fix
-run-name: NeoStation iOS Build 337 KartPad Reusable Lifecycle Language Restart Fix • ${{ github.sha }}
+name: NeoStation iOS Build 338 KartPad Reusable Lifecycle Language Restart Fix
+run-name: NeoStation iOS Build 338 KartPad Reusable Lifecycle Language Restart Fix • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '337'
+        default: '338'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-337-kartpad
+  group: neostation-ios-build-338-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,17 +38,17 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 337 KartPad Reusable Lifecycle Language Restart Fix IPA
+    name: Build 338 KartPad Reusable Lifecycle Language Restart Fix IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '337' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Reusable-Lifecycle-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-337-KartPad-Reusable-Lifecycle-Language-Restart-Fix' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Reusable-Lifecycle-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-337-KartPad-Reusable-Lifecycle-Language-Restart-Fix' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36249638270' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '10fb202055c75c742359e2356c4e3581ac80d3e8' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '338' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Reusable-Lifecycle-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-338-KartPad-Reusable-Lifecycle-Language-Restart-Fix' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Reusable-Lifecycle-Language-Restart-Fix', inputs.build_number) || 'NeoStation-iOS-Build-338-KartPad-Reusable-Lifecycle-Language-Restart-Fix' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36262497005' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '4e8dcef489eea44be7185a5b7cf6af4d706f21d7' }}
       KARTPAD_CANDIDATE: '1'
-      # Build 337 preserves the validated startup ABI, makes orderly KartPad shutdown reusable, and performs confirmed language changes as a full fresh-session restart.
+      # Build 338 pins ABI v2 exit reasons, profile/DVD reentry, production run-loop scheduling and stale callback rejection.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'

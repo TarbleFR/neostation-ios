@@ -38,7 +38,7 @@ NeoStation uses a lazy, host-owned Core boundary:
 
 `GameLaunchService → KartPadInternalService → KartPadInternalBridge → KartPadCore.framework`
 
-The bridge exposes NeoStation ABI v1 and validates the runtime identity
+The bridge exposes NeoStation ABI v2 and validates the runtime identity
 `kartpad_rmcp01_full_game_v1` before launch. KartPadCore is loaded with
 `dlopen(..., RTLD_LOCAL)`; no NeoStation host image has a startup dyld
 dependency on the Core.
@@ -50,15 +50,31 @@ controls, physical-controller handling and KartPad settings overlay remain owned
 by KartPad's runtime.
 
 The in-game return action is supplied by NeoStation in all twelve supported
-languages. A normal **Return to NeoStation** suspends the guest at KartPad's
-event boundary, waits for Aurora's frame worker, releases the WebGPU/Metal
-presentation surface plus foreground UI/audio ownership, and preserves the
-same guest runtime for a subsequent resume. The presentation surface is
-recreated when KartPad becomes visible again. The native session state regression gate
-exercises 100 consecutive return/resume cycles.
+languages. Normal return and confirmed language restart request a cooperative
+guest exit at the frame boundary. The host waits for the save/title transition,
+AX worker, GPU frame worker and sockets, then lets RuntimeMain unwind its
+fibers, mobile host, Aurora renderer and transcript workers. Only after that
+return does the native session become reusable.
 
-Fatal runtime termination is a separate terminal state and is never treated as
-a normal warm return.
+The ABI reports an explicit termination reason. A clean `userReturn` completes
+the host session; `languageRestart` alone permits the bridge to create another
+session on a later host turn. An unsuccessful shutdown remains a real failure,
+regardless of the user's original intent. An unexpected native failure is not
+proof that it is safe to launch again.
+
+RuntimeMain is entered by the owned NSTimer scheduler in `SessionRunLoop.h`,
+not by a block occupying the main dispatch queue throughout gameplay. The Apple
+regression exercises this same scheduler and reproduces the previous queue
+starvation as a negative control. Entry, window-poll and alert-retry timers are
+invalidated at teardown; confirmation IDs remain monotonic between sessions.
+Language/return menu actions and delayed settings work reject stale sessions.
+
+This donor is not a completely unloadable runtime. Its Objective-C image,
+GuestFlat address reservation, frozen translation registry and DVD host index
+remain process-owned. Guest page tables are reset and the next RuntimeMain
+reinitializes the guest backing sections and republishes the DVD globals.
+Logs explicitly distinguish session teardown from retained process resources.
+Do not describe this as proof that all runtime mappings are freed.
 
 ## Internal KartPad settings
 
@@ -75,10 +91,11 @@ rather than introducing a second graphics configuration:
   `SunPadAspectRatioMode`.
 - FPS counter via `SunPadShowFPSCounter`.
 
-KartPad retains its guest runtime after a normal return to the library.
-Therefore language, render resolution and aspect changes are persisted safely
-and are applied after restarting NeoStation rather than destructively
-reinitializing the retained runtime in-process.
+A game-language change is confirmed through the twelve-language NeoStation
+catalog. Acceptance persists the selection and Wii SYSCONF, requests orderly
+shutdown, then launches a new session with the selected language. Cancellation
+keeps the existing selection. The PAL game supports six languages; that is
+separate from NeoStation's twelve interface languages.
 
 ## Source pins
 
@@ -86,7 +103,7 @@ reinitializing the retained runtime in-process.
 - KartPad source pin: `0d657f361ccf0a03c0b8f9ec97b2bd237e16a658`
 - Maintained iOS runtime pin:
   `d0b8dec62a8c98dd45736a996ae18327ada8fe3f`
-- NeoStation ABI: 1
+- NeoStation ABI: 2
 - Runtime identity: `kartpad_rmcp01_full_game_v1`
 - Supported disc: Mario Kart Wii PAL `RMCP01`, disc 0, revision 0
 - Expected translated functions: 29,637
@@ -125,35 +142,21 @@ The IPA validator checks the exact Core hash, ABI export, iPhoneOS Mach-O
 platform, packaged identity, lazy-load boundary and absence of a nested
 `KartPad.app`.
 
-## Current validation status
+## Validation scope
 
-The KartPad Core gate validates:
+The regression gates execute the ARM64 language and frame-return bridges,
+profile/DVD reentry guards, guest language rollback, 1,000 session transitions
+and stale confirmation rejection. The Apple test reproduces the main-queue
+starvation and verifies the actual production timer scheduler. A separate
+UIKit probe checks selected native ABI and registry operations. These tests do
+not run a complete Mario Kart Wii gameplay session.
 
-- ABI v1 and lazy loader contract;
-- native retained-session state;
-- Objective-C++ host syntax against iphoneos;
-- the exact pinned upstream KartPad and iOS runtime revisions;
-- application of the NeoStation framework patch to those real upstream sources;
-- localized Return-to-NeoStation bridge;
-- physical-iOS builder/packaging tools.
+The donor build gates the exact binary, host sources and production scheduler;
+the full IPA build checks the embedded Core identity and runtime bridge bytes.
+No other emulator Core is rebuilt for this change.
 
-The Flutter/Ports gate validates:
-
-- the shared Import menu;
-- isolated DuskLight and KartPad libraries;
-- ISO/WBFS import ownership;
-- per-port ScreenScraper identity;
-- twelve-language KartPad user messages;
-- KartPad launch routing and native session monitoring;
-- immediate Ports refresh after deletion.
-
-## Remaining acceptance step
-
-The architecture and NeoStation-side implementation are prepared. A **real**
-KartPadCore artifact still needs to be built from an authorized RMCP01
-translation graph, embedded into a post-322 experimental IPA, and tested on a
-physical iPhone/iPad for first frame, controls, audio, return, resume and
-relaunch. Build 322 remains the rollback baseline until that device acceptance
-is complete.
-
-A full NeoStation IPA is intentionally not produced from host/UI-only KartPad commits. The full candidate build is reserved for a validated, real KartPadCore artifact so Build 322 is not repackaged under a misleading candidate state.
+Physical-device acceptance is still required: French → English → French with
+confirmed restarts, at least three manual launch/return cycles followed by
+repetition, continued NeoStation responsiveness, and resource counts after each
+shutdown. An IPA build, native state-machine loop or UIKit ABI probe is not
+acceptance evidence for those end-to-end scenarios.
