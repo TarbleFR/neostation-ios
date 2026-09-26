@@ -39,6 +39,12 @@ EXPECTED_ENTRY_SHA = '47c297f928e428b89922a7cdaa0a5d4a7086820d0cf6583a8c8dd6d281
 MAGIC = b'NEOKARTPAD-FRAME-RETURN-v1\0'
 MAGIC_VM = BASE + 0x8F00
 EXPECTED_RUN_SHA = '5a52a9da9e56a0b71691bb2eeff9c5685f2f3982f697f1538a43dc63a98f48e6'
+SELECT_PROFILE = 0x100059EC8
+SELECT_PROFILE_SIZE = 0x394
+SELECT_PROFILE_SHA = '3a06e5aaeab0916914d46d6bc240018af32a68ffd5cbc69ee628aea319b4d159'
+SELECT_FROZEN_BRANCH = 0x100059F1C
+SELECT_FROZEN_ORIGINAL = 0x540002A0  # b.eq throw("cannot change ... after finalization")
+SELECT_FROZEN_RETURN = 0x10005A0FC  # mutex unlock + normal epilogue
 PROLOGUE = bytes.fromhex('ff0303d1fc6f06a9fa6707a9f85f08a9')
 FRAME_INSTRUCTION = 0x29424666  # ldp w6, w17, [x19, #0x10]
 
@@ -48,6 +54,13 @@ def branch(pc, target, opcode=0x14000000):
     if delta % 4 or not -(1 << 27) <= delta < 1 << 27:
         raise SystemExit('ERROR: session bridge branch out of range')
     return opcode | ((delta // 4) & 0x3ffffff)
+
+
+def cond_branch(pc, target, cond=0):
+    delta = target - pc
+    if delta % 4 or not -(1 << 20) <= delta < (1 << 20):
+        raise SystemExit('ERROR: conditional branch out of range')
+    return 0x54000000 | (((delta // 4) & 0x7ffff) << 5) | (cond & 0xf)
 
 
 def pair(load, vector, r1, r2, offset):
@@ -112,6 +125,7 @@ def expected_patches():
                    ldr_x(16,16,CONTROL & 0xfff),0xD61F0200,0xD503201F])
     trampoline = PROLOGUE + words([branch(TRAMPOLINE+16,RUN+16)])
     return {RUN:entry, FRAME:words([branch(FRAME,GATE)]),
+            SELECT_FROZEN_BRANCH: words([cond_branch(SELECT_FROZEN_BRANCH, SELECT_FROZEN_RETURN, 0)]),
             TRAMPOLINE:trampoline, GATE:gate_bytes(), MAGIC_VM:MAGIC,
             EXIT_CALL:words([branch(EXIT_CALL,EXIT_GATE,0x94000000)]),
             EXIT_GATE:words([encode_adrp(16,EXIT_GATE,CONTROL),
@@ -123,6 +137,8 @@ def layout(data):
     symbols, _ = load_symbols(data, table)
     if symbols.get('_func_8000951C') != RUN:
         raise SystemExit('ERROR: RKSystem::run symbol drift')
+    if symbols.get('__ZN26TranslatedFunctionRegistry13SelectProfileEPKc') != SELECT_PROFILE:
+        raise SystemExit('ERROR: translated profile selector symbol drift')
     text = next((s for s in segments if s[0]==b'__TEXT'),None)
     ds = next((s for s in segments if s[0]==b'__DATA'),None)
     if not text or text[1]!=BASE or not ds or not ds[1]+ds[4] <= CONTROL < CONTROL+64 <= ds[1]+ds[2]:
@@ -156,6 +172,12 @@ def validate(data):
         off=vm_to_file(segments,address)
         if data[off:off+len(expected)]!=expected:
             raise SystemExit(f'ERROR: donor frame/return bridge missing at {address:#x}')
+    select_off=vm_to_file(segments,SELECT_PROFILE)
+    select_original=bytearray(data[select_off:select_off+SELECT_PROFILE_SIZE])
+    branch_offset=SELECT_FROZEN_BRANCH-SELECT_PROFILE
+    struct.pack_into('<I',select_original,branch_offset,SELECT_FROZEN_ORIGINAL)
+    if hashlib.sha256(select_original).hexdigest()!=SELECT_PROFILE_SHA:
+        raise SystemExit('ERROR: unreviewed instructions changed inside translated profile selector')
     entry_off=vm_to_file(segments,ENTRY)
     entry=bytearray(data[entry_off:entry_off+ENTRY_SIZE])
     struct.pack_into('<I',entry,EXIT_CALL-ENTRY,branch(EXIT_CALL,EXIT_ORIGINAL,0x94000000))
@@ -171,7 +193,9 @@ def validate(data):
             'returnPath':'native-epilogue -> guest-main -> RuntimeMain cleanup',
             'gateSha256':hashlib.sha256(gate_bytes()).hexdigest(),
             'preservesBuild335LanguageABI':True, 'guardedGuestExit':hex(EXIT_CALL),
-            'preservesHostFloatingPointEnvironment':True}
+            'preservesHostFloatingPointEnvironment':True,
+            'reentrantFrozenProfile':True,
+            'frozenProfileBranch':hex(SELECT_FROZEN_BRANCH)}
 
 
 def patch(path):
@@ -184,6 +208,11 @@ def patch(path):
     off=vm_to_file(segments,RUN)
     if hashlib.sha256(data[off:off+RUN_SIZE]).hexdigest()!=EXPECTED_RUN_SHA:
         raise SystemExit('ERROR: RKSystem::run original instruction hash drift')
+    select_off=vm_to_file(segments,SELECT_PROFILE)
+    if hashlib.sha256(data[select_off:select_off+SELECT_PROFILE_SIZE]).hexdigest()!=SELECT_PROFILE_SHA:
+        raise SystemExit('ERROR: translated profile selector original instruction hash drift')
+    if struct.unpack_from('<I',data,vm_to_file(segments,SELECT_FROZEN_BRANCH))[0]!=SELECT_FROZEN_ORIGINAL:
+        raise SystemExit('ERROR: frozen profile branch original instruction drift')
     if any(data[TRAMPOLINE-BASE:MAGIC_VM-BASE+len(MAGIC)]):
         raise SystemExit('ERROR: executable header padding is not unused')
     for address, code in expected_patches().items():
