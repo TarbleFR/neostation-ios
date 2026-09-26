@@ -13,6 +13,7 @@ on:
       - 'test/kartpad_session_bridge_test.py'
       - 'test/kartpad_system_messages_test.py'
       - 'test/kartpad_guest_language_state_test.cpp'
+      - 'test/kartpad_host_lifecycle_contract_test.py'
       - 'test/kartpad_native_session_test.cpp'
       - 'test/kartpad_bridge_contract_test.py'
       - 'build-utils/kartpad/prepare_embedded_source.py'
@@ -133,6 +134,7 @@ jobs:
             test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
           "$RUNNER_TEMP/kartpad-language-state-test"
           python3 test/kartpad_bridge_contract_test.py
+          python3 test/kartpad_host_lifecycle_contract_test.py
           c++ -std=c++20 -Inative/kartpad/core \
             -Ipackages/kartpad_internal_bridge/ios/Classes \
             test/kartpad_native_session_test.cpp -o "$RUNNER_TEMP/kartpad-session-test"
