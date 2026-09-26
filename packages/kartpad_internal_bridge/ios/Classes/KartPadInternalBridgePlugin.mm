@@ -42,6 +42,18 @@ UIViewController* ActiveViewController() {
   return controller;
 }
 
+NSString* ExitReasonName(int reason) {
+  switch (reason) {
+    case NEO_KARTPAD_EXIT_USER_RETURN: return @"userReturn";
+    case NEO_KARTPAD_EXIT_LANGUAGE_RESTART: return @"languageRestart";
+    case NEO_KARTPAD_EXIT_NORMAL_TERMINATION: return @"normalTermination";
+    case NEO_KARTPAD_EXIT_LAUNCH_FAILURE: return @"launchFailure";
+    case NEO_KARTPAD_EXIT_RUNTIME_FAILURE: return @"runtimeFailure";
+    case NEO_KARTPAD_EXIT_CRASH: return @"crash";
+    default: return @"none";
+  }
+}
+
 NSDictionary* Failure(NSString* code, NSString* stage, NSString* message) {
   return @{
     @"success": @NO,
@@ -56,6 +68,11 @@ NSDictionary* Failure(NSString* code, NSString* stage, NSString* message) {
 
 @interface KartPadInternalBridgePlugin ()
 - (void)coreState:(int)state message:(NSString*)message;
+- (void)restartFreshSessionForTransaction:(NSInteger)transaction;
+- (void)deliverSessionEndedForTransaction:(NSInteger)transaction
+                               exitReason:(int)exitReason
+                                  message:(NSString*)message
+                                  success:(BOOL)success;
 @end
 
 static void OnCoreEvent(void* context, int state, const char* message) {
@@ -75,6 +92,13 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   NSDictionary* _loadError;
   NSInteger _transaction;
   NSInteger _activeTransaction;
+  BOOL _launchCompletionDelivered;
+  BOOL _terminationDelivered;
+  BOOL _restartInProgress;
+  NSString* _lastGamePath;
+  NSString* _lastSupportPath;
+  NSString* _lastCachePath;
+  __weak UIView* _lastHostView;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -126,7 +150,8 @@ static void OnCoreEvent(void* context, int state, const char* message) {
       _api->struct_size < sizeof(NeoKartPadAPI) ||
       !_api->initialize || !_api->start || !_api->stop ||
       !_api->is_running || !_api->set_event_callback ||
-      !_api->session_state || !_api->set_ui_text || !_api->runtime_identity) {
+      !_api->session_state || !_api->set_ui_text || !_api->runtime_identity ||
+      !_api->last_exit_reason) {
     _api = nullptr;
     _loadError = Failure(@"KARTPAD_ABI_MISMATCH", @"abi",
                          @"KartPadCore does not expose the NeoStation ABI v1 contract.");
@@ -147,44 +172,166 @@ static void OnCoreEvent(void* context, int state, const char* message) {
 }
 
 - (void)resolveLaunch:(NSDictionary*)response {
+  if (_launchCompletionDelivered) return;
+  FlutterResult pending = _pendingLaunch;
+  if (!pending) return;
+  _launchCompletionDelivered = YES;
   [_startupTimer invalidate];
   _startupTimer = nil;
-  FlutterResult pending = _pendingLaunch;
   _pendingLaunch = nil;
-  if (pending) pending(response);
+  pending(response);
+}
+
+- (void)deliverSessionEndedForTransaction:(NSInteger)transaction
+                               exitReason:(int)exitReason
+                                  message:(NSString*)message
+                                  success:(BOOL)success {
+  if (_terminationDelivered || transaction <= 0) return;
+  _terminationDelivered = YES;
+  NSString* reasonName = ExitReasonName(exitReason);
+  NSLog(@"[NeoStation/KartPad] transaction=%ld hostResult=%@ success=%d",
+        (long)transaction, reasonName, success);
+  [_channel invokeMethod:@"sessionEnded" arguments:@{
+    @"reason": message ?: @"",
+    @"exitReason": reasonName,
+    @"success": @(success),
+    @"restartRequired": @(exitReason == NEO_KARTPAD_EXIT_RUNTIME_FAILURE ||
+                           exitReason == NEO_KARTPAD_EXIT_CRASH),
+    @"runtimeReleased": @YES,
+    @"transaction": @(transaction),
+  }];
+}
+
+- (void)restartFreshSessionForTransaction:(NSInteger)transaction {
+  if (!_sessionActive || !_restartInProgress ||
+      transaction != _activeTransaction || !_api) return;
+
+  if (_api->session_state() != NEO_KARTPAD_IDLE) {
+    NSLog(@"[NeoStation/KartPad] transaction=%ld restart deferred: native state=%d",
+          (long)transaction, _api->session_state());
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self restartFreshSessionForTransaction:transaction];
+    });
+    return;
+  }
+
+  UIView* hostView = _lastHostView;
+  if (!hostView || !hostView.window) {
+    hostView = ActiveViewController().view;
+  }
+  char error[1024] = {};
+  const char* support = _lastSupportPath.fileSystemRepresentation;
+  const char* cache = _lastCachePath.fileSystemRepresentation;
+  const char* game = _lastGamePath.fileSystemRepresentation;
+
+  if (!hostView || !hostView.window || !support || !cache || !game ||
+      !_api->initialize(support, cache, error, sizeof(error))) {
+    NSString* detail = error[0] ? [NSString stringWithUTF8String:error]
+                                : @"KartPad could not initialize a fresh language-restart session.";
+    _restartInProgress = NO;
+    _sessionActive = NO;
+    NSInteger ended = _activeTransaction;
+    _activeTransaction = 0;
+    [self deliverSessionEndedForTransaction:ended
+                                 exitReason:NEO_KARTPAD_EXIT_LAUNCH_FAILURE
+                                    message:detail
+                                    success:NO];
+    return;
+  }
+
+  const int started = _api->start(game, (__bridge void*)hostView,
+                                  error, sizeof(error));
+  if (started <= 0) {
+    NSString* detail = error[0] ? [NSString stringWithUTF8String:error]
+                                : @"KartPad could not start the fresh language-restart session.";
+    _restartInProgress = NO;
+    _sessionActive = NO;
+    NSInteger ended = _activeTransaction;
+    _activeTransaction = 0;
+    [self deliverSessionEndedForTransaction:ended
+                                 exitReason:NEO_KARTPAD_EXIT_LAUNCH_FAILURE
+                                    message:detail
+                                    success:NO];
+    return;
+  }
+  NSLog(@"[NeoStation/KartPad] transaction=%ld fresh language-restart session accepted",
+        (long)transaction);
 }
 
 - (void)coreState:(int)state message:(NSString*)message {
-  NSLog(@"[NeoStation/KartPad] state=%d %@", state, message);
+  const int exitReason = (_api && _api->last_exit_reason)
+      ? _api->last_exit_reason() : NEO_KARTPAD_EXIT_NONE;
+  NSLog(@"[NeoStation/KartPad] state=%d exitReason=%@ %@",
+        state, ExitReasonName(exitReason), message);
+
   if (state == NEO_KARTPAD_RUNNING) {
+    if (_restartInProgress) {
+      _restartInProgress = NO;
+      NSLog(@"[NeoStation/KartPad] transaction=%ld languageRestart running",
+            (long)_activeTransaction);
+      [_channel invokeMethod:@"sessionRestarted" arguments:@{
+        @"exitReason": @"languageRestart",
+        @"transaction": @(_activeTransaction),
+      }];
+      return;
+    }
     [self resolveLaunch:@{@"success": @YES, @"stage": @"first_frame",
-                         @"message": message, @"transaction": @(_transaction)}];
+                         @"message": message ?: @"",
+                         @"transaction": @(_transaction)}];
     return;
   }
-  if (state == NEO_KARTPAD_IDLE || state == NEO_KARTPAD_ENDED) {
-    const BOOL hadSession = _sessionActive;
-    const NSInteger endedTransaction = _activeTransaction;
-    _sessionActive = NO;
-    _activeTransaction = 0;
 
-    // Only fail a launch that truly ended before its first frame. A normal
-    // post-game IDLE callback arrives after the successful launch result and
-    // must never be turned into a second launch-error dialog.
-    if (_pendingLaunch) {
+  if (state != NEO_KARTPAD_IDLE && state != NEO_KARTPAD_ENDED) return;
+
+  const BOOL hadSession = _sessionActive;
+  const NSInteger endedTransaction = _activeTransaction;
+
+  if (state == NEO_KARTPAD_IDLE &&
+      exitReason == NEO_KARTPAD_EXIT_LANGUAGE_RESTART &&
+      hadSession && endedTransaction > 0) {
+    // The Core has fully returned from RuntimeMain. Schedule the new Start on
+    // the next host turn; never recursively enter RuntimeMain from its own
+    // teardown callback.
+    _restartInProgress = YES;
+    NSLog(@"[NeoStation/KartPad] transaction=%ld hostResult=languageRestart; scheduling fresh session",
+          (long)endedTransaction);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self restartFreshSessionForTransaction:endedTransaction];
+    });
+    return;
+  }
+
+  _sessionActive = NO;
+  _restartInProgress = NO;
+  _activeTransaction = 0;
+
+  const BOOL cleanExit =
+      exitReason == NEO_KARTPAD_EXIT_USER_RETURN ||
+      exitReason == NEO_KARTPAD_EXIT_NORMAL_TERMINATION;
+  if (_pendingLaunch && !_launchCompletionDelivered) {
+    if (cleanExit) {
+      // A user can hit the native return control as soon as the window exists.
+      // That is cancellation after successful native creation, never a launch
+      // failure. Resolve success once, then deliver the normal end event.
+      [self resolveLaunch:@{@"success": @YES,
+                           @"stage": @"session_closed",
+                           @"message": message ?: @"",
+                           @"transaction": @(endedTransaction)}];
+    } else {
       [self resolveLaunch:Failure(@"KARTPAD_ENDED_BEFORE_FIRST_FRAME",
-                                  @"startup", message)];
-    }
-    if (hadSession && endedTransaction > 0) {
-      [_channel invokeMethod:@"sessionEnded" arguments:@{
-        @"reason": message,
-        @"restartRequired": @(state == NEO_KARTPAD_ENDED),
-        @"runtimeReleased": @YES,
-        @"transaction": @(endedTransaction),
-      }];
+                                  @"startup", message ?: @"KartPad ended before its first frame.")];
     }
   }
-}
 
+  if (hadSession && endedTransaction > 0) {
+    [self deliverSessionEndedForTransaction:endedTransaction
+                                 exitReason:(cleanExit ? exitReason :
+                                   (exitReason == NEO_KARTPAD_EXIT_NONE
+                                     ? NEO_KARTPAD_EXIT_RUNTIME_FAILURE : exitReason))
+                                    message:message
+                                    success:cleanExit];
+  }
+}
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([call.method isEqualToString:@"diagnostics"]) {
     result([self diagnostics]);
@@ -317,10 +464,17 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   }
 
   _pendingLaunch = [result copy];
+  _launchCompletionDelivered = NO;
+  _terminationDelivered = NO;
+  _restartInProgress = NO;
   _transaction = [args[@"transaction"] isKindOfClass:NSNumber.class]
       ? [args[@"transaction"] integerValue] : _transaction + 1;
   _activeTransaction = _transaction;
   _sessionActive = YES;
+  _lastGamePath = [gamePath copy];
+  _lastSupportPath = [supportPath copy];
+  _lastCachePath = [cachePath copy];
+  _lastHostView = controller.view;
   NSLog(@"[NeoStation/KartPad] transaction=%ld session launch accepted",
         (long)_activeTransaction);
   const int started = _api->start(
