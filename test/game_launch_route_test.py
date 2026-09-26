@@ -198,9 +198,12 @@ void main() {
     state._closeDialog();
     showDialog<void>(context: launcherContext, builder: (_) => const Text('newer-dialog'));
     await tester.pump();
+    // The route removal callback must run on this turn; Navigator may still
+    // paint its outgoing overlay until a later frame.
+    expect(closed, 1);
+    await tester.pumpAndSettle();
     expect(find.text('launch-pending'), findsNothing);
     expect(find.text('newer-dialog'), findsOneWidget);
-    expect(closed, 1);
     navigator.currentState!.pop(); await tester.pumpAndSettle();
     expect(find.text('library'), findsOneWidget);
   });
