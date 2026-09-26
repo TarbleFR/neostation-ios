@@ -23,10 +23,10 @@ ports_locale = (ROOT / 'lib/l10n/ports_locale.dart').read_text()
 
 assert 'packages/kartpad_internal_bridge' in pubspec
 assert 'kartpad_internal_bridge:' in pubspec
-assert 'NEO_KARTPAD_ABI_VERSION 1u' in abi
+assert 'NEO_KARTPAD_ABI_VERSION 2u' in abi
 assert 'kartpad_rmcp01_full_game_v1' in abi
 for member in ('initialize', 'start', 'stop', 'is_running', 'set_event_callback',
-               'session_state', 'set_ui_text', 'runtime_identity'):
+               'session_state', 'set_ui_text', 'runtime_identity', 'last_exit_reason'):
     assert member in abi, member
 assert 'dlopen(path, RTLD_NOW | RTLD_LOCAL)' in loader
 assert 'dlsym(_coreHandle, "NeoKartPad_GetAPI")' in plugin
