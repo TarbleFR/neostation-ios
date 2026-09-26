@@ -206,7 +206,7 @@ jobs:
             "official_ipa_sha256": "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58",
             "upstream_commit": "0d657f361ccf0a03c0b8f9ec97b2bd237e16a658",
             "ios_runtime_commit": "d0b8dec62a8c98dd45736a996ae18327ada8fe3f",
-            "abi_version": 1,
+            "abi_version": 2,
             "runtime_identity": "kartpad_rmcp01_full_game_v1",
             "translated_function_count": 29637,
             "translation_evidence": "verified official release binary",
