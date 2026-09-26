@@ -51,12 +51,11 @@ void PresentSessionAlert(UIAlertController* alert, uint64_t generation,
       NSLog(@"[NeoKartPad/Session] owned alert presentation unavailable after menu transition");
       return;
     }
-    [root performSelector:@selector(setNeedsStatusBarAppearanceUpdate)
-               withObject:nil afterDelay:0.05 inModes:@[NSRunLoopCommonModes]];
-    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+    NSTimer* retry = [NSTimer timerWithTimeInterval:0.05 repeats:NO
+        block:^(__unused NSTimer* timer) {
       PresentSessionAlert(alert, generation, attempt + 1);
-    });
-    CFRunLoopWakeUp(CFRunLoopGetMain());
+    }];
+    [NSRunLoop.mainRunLoop addTimer:retry forMode:NSRunLoopCommonModes];
     return;
   }
   ownedSessionAlert = alert;
