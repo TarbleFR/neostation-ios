@@ -340,9 +340,7 @@ void RefreshSettingsMenu() {
   // implementation did this synchronously from UIAction handlers, which could
   // leave context-menu transitions focused/frozen on physical devices.
   const uint64_t serial = sessionSerial.load();
-  dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
-      dispatch_get_main_queue(), ^{
+  NeoKartPadScheduleRunLoop(0.45, ^{
     if (!IsCurrentSession(serial) || session.state() == NEO_KARTPAD_STOPPING) return;
     if (settingsButton) settingsButton.menu = BuildNeoKartPadSettingsMenu();
   });
@@ -353,9 +351,7 @@ void ScheduleNativeMenuRefresh(UIButton* button) {
   const uint64_t generation =
       kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
   __weak UIButton* weakButton = button;
-  dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
-      dispatch_get_main_queue(), ^{
+  NeoKartPadScheduleRunLoop(0.45, ^{
     if (generation !=
         kNeoKartPadMenuRefreshGeneration.load(std::memory_order_acquire)) {
       return;
@@ -432,7 +428,7 @@ void QueueVideoSetting(
   dispatch_async(KartPadSettingsIOQueue(), ^{
     NSError* error = nil;
     const bool ok = WriteVideoSetting(key, value, &error);
-    dispatch_async(dispatch_get_main_queue(), ^{
+    RunOnUIKitRunLoop(^{
       if (!IsCurrentSession(serial) || session.state() == NEO_KARTPAD_STOPPING) return;
       if (!ok) {
         NSLog(@"[NeoKartPad/Settings] video setting %@ write failed: %@", key, error);
@@ -440,9 +436,7 @@ void QueueVideoSetting(
         onChange();
       }
       RefreshSettingsMenu();
-      dispatch_after(
-          dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)),
-          dispatch_get_main_queue(), ^{
+      NeoKartPadScheduleRunLoop(0.45, ^{
         if (!IsCurrentSession(serial)) return;
         kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
       });
@@ -700,7 +694,7 @@ void PatchKartPadRuntimeMenuButton(UIButton* menuButton) {
     // Selecting a UIMenu action dismisses the menu. Do not rebuild or present
     // anything from this handler; simply clear transient UIKit button state on
     // the next run-loop turn so gameplay input resumes immediately.
-    dispatch_async(dispatch_get_main_queue(), ^{
+    RunOnUIKitRunLoop(^{
       UIButton* strongButton = weakButton;
       if (!strongButton) return;
       strongButton.selected = NO;

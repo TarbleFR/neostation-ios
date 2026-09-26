@@ -143,6 +143,31 @@ class SessionBridgeTest(unittest.TestCase):
                         self.assertEqual(u.reg_read(arm.UC_ARM64_REG_W8), 0x35)
                     self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X19), entry)
 
+    def test_sdl_audio_keeps_host_policy_and_device_observers(self):
+        patches = bridge.expected_patches()
+        for slide in SLIDES:
+            for opening in (False, True):
+                with self.subTest(slide=slide, opening=opening):
+                    u = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+                    pages = {addr & ~4095 for addr in (
+                        bridge.AUDIO_POLICY_HOOK + slide,
+                        bridge.AUDIO_HOST_GATE + slide,
+                        bridge.AUDIO_OBSERVER_OPEN + slide,
+                        bridge.AUDIO_OBSERVER_CLOSE + slide)}
+                    for page in pages:
+                        u.mem_map(page, 4096)
+                    u.mem_write(bridge.AUDIO_POLICY_HOOK + slide,
+                                patches[bridge.AUDIO_POLICY_HOOK])
+                    u.mem_write(bridge.AUDIO_HOST_GATE + slide,
+                                patches[bridge.AUDIO_HOST_GATE])
+                    u.reg_write(arm.UC_ARM64_REG_W24, int(opening))
+                    destination = (bridge.AUDIO_OBSERVER_OPEN if opening else
+                                   bridge.AUDIO_OBSERVER_CLOSE) + slide
+                    u.emu_start(bridge.AUDIO_POLICY_HOOK + slide,
+                                destination, count=5)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_PC), destination)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_W24), int(opening))
+
     def test_branch_range_validation(self):
         for pc,dest in ((0,1),(0,1<<28)):
             with self.assertRaises(SystemExit):bridge.branch(pc,dest)

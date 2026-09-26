@@ -38,6 +38,18 @@ int main() {
     });
     Pump(0.20);
     Require(timerEntered && deliveredInside, "fresh runtime entry never executed");
+    __block bool ioCompletionDelivered = false;
+    NeoKartPadScheduleRunLoop(0.001, ^{
+      dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NeoKartPadPerformRunLoop(^{
+          Require(NSThread.isMainThread, "I/O completion ran off UIKit thread");
+          ioCompletionDelivered = true;
+        });
+      });
+      Pump(0.10);
+      Require(ioCompletionDelivered, "I/O completion was starved by nested runtime loop");
+    });
+    Pump(0.20);
     __block bool staleEntered = false;
     NSTimer* cancelled = NeoKartPadScheduleRunLoop(0.01, ^{ staleEntered = true; });
     [cancelled invalidate];

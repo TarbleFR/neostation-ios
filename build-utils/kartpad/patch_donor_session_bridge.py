@@ -67,6 +67,18 @@ DVD_DIRECTORY_GATE = BASE + 0x8B00
 DVD_DIRECTORY_LOOP = 0x10011ACA8
 DVD_DIRECTORY_NEXT = 0x10011AC9C
 DVD_DIRECTORY_ORIGINAL = 0x39C05E68  # ldrsb w8, [x19, #0x17]
+# SDL's private iOS CoreAudio driver considers itself the owner of the whole
+# AVAudioSession. Its last-device close deactivates the session that Flutter's
+# SoLoud engine still uses. Keep SDL's per-device interruption observers, but
+# let NeoStation own the process-wide category and activation, as in Dusklight.
+AUDIO_SESSION = 0x1041C61FC
+AUDIO_SESSION_SIZE = 0x568
+AUDIO_SESSION_SHA = '25a25f5e43df5b064d68c62f63a4b639354d766e95fa38f6e250179535ec3d0a'
+AUDIO_POLICY_HOOK = 0x1041C62A8  # after autorelease pool and saved arguments
+AUDIO_POLICY_ORIGINAL = 0xB4000560
+AUDIO_HOST_GATE = BASE + 0x8C00
+AUDIO_OBSERVER_OPEN = 0x1041C6604
+AUDIO_OBSERVER_CLOSE = 0x1041C6550
 PROLOGUE = bytes.fromhex('ff0303d1fc6f06a9fa6707a9f85f08a9')
 FRAME_INSTRUCTION = 0x29424666  # ldp w6, w17, [x19, #0x10]
 
@@ -187,6 +199,17 @@ def dvd_directory_gate_bytes():
     ])
 
 
+def audio_host_gate_bytes():
+    # w24 is the verified 'open' argument. Both destinations still register
+    # or remove SDL's interruption listeners and reach the normal epilogue.
+    # Neither path changes the shared AVAudioSession's category or active bit.
+    return words([
+        cbz_w(24, AUDIO_HOST_GATE, AUDIO_HOST_GATE + 8),
+        branch(AUDIO_HOST_GATE + 4, AUDIO_OBSERVER_OPEN),
+        branch(AUDIO_HOST_GATE + 8, AUDIO_OBSERVER_CLOSE),
+    ])
+
+
 def expected_patches():
     entry = words([encode_adrp(16, RUN, CONTROL),
                    ldr_x(16,16,CONTROL & 0xfff),0xD61F0200,0xD503201F])
@@ -199,6 +222,8 @@ def expected_patches():
             DVD_REGISTER_GATE: dvd_register_gate_bytes(),
             DVD_DIRECTORY_LOOP: words([branch(DVD_DIRECTORY_LOOP, DVD_DIRECTORY_GATE)]),
             DVD_DIRECTORY_GATE: dvd_directory_gate_bytes(),
+            AUDIO_POLICY_HOOK: words([branch(AUDIO_POLICY_HOOK, AUDIO_HOST_GATE)]),
+            AUDIO_HOST_GATE: audio_host_gate_bytes(),
             TRAMPOLINE:trampoline, GATE:gate_bytes(), MAGIC_VM:MAGIC,
             EXIT_CALL:words([branch(EXIT_CALL,EXIT_GATE,0x94000000)]),
             EXIT_GATE:words([encode_adrp(16,EXIT_GATE,CONTROL),
@@ -216,6 +241,8 @@ def layout(data):
         raise SystemExit('ERROR: DVDInit symbol drift')
     if symbols.get('__ZL17RegisterFileEntryNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEERKNS_4__fs10filesystem4pathEj') != REGISTER_FILE:
         raise SystemExit('ERROR: DVD RegisterFileEntry symbol drift')
+    if symbols.get('_UpdateAudioSession') != AUDIO_SESSION:
+        raise SystemExit('ERROR: SDL iOS audio-session symbol drift')
     text = next((s for s in segments if s[0]==b'__TEXT'),None)
     ds = next((s for s in segments if s[0]==b'__DATA'),None)
     if not text or text[1]!=BASE or not ds or not ds[1]+ds[4] <= CONTROL < CONTROL+64 <= ds[1]+ds[2]:
@@ -266,6 +293,11 @@ def validate(data):
     register_original[:16]=REGISTER_FILE_PROLOGUE
     if hashlib.sha256(register_original).hexdigest()!=REGISTER_FILE_SHA:
         raise SystemExit('ERROR: unreviewed instructions changed inside DVD file registration')
+    audio_off=vm_to_file(segments,AUDIO_SESSION)
+    audio_original=bytearray(data[audio_off:audio_off+AUDIO_SESSION_SIZE])
+    struct.pack_into('<I',audio_original,AUDIO_POLICY_HOOK-AUDIO_SESSION,AUDIO_POLICY_ORIGINAL)
+    if hashlib.sha256(audio_original).hexdigest()!=AUDIO_SESSION_SHA:
+        raise SystemExit('ERROR: unreviewed SDL audio-session instructions changed')
     entry_off=vm_to_file(segments,ENTRY)
     entry=bytearray(data[entry_off:entry_off+ENTRY_SIZE])
     struct.pack_into('<I',entry,EXIT_CALL-ENTRY,branch(EXIT_CALL,EXIT_ORIGINAL,0x94000000))
@@ -286,7 +318,9 @@ def validate(data):
             'frozenProfileBranch':hex(SELECT_FROZEN_BRANCH),
             'reentrantDvdGuestPublish':True,
             'dvdHostIndexReuseGate':hex(DVD_REGISTER_GATE),
-            'dvdDirectoryReentryGate':hex(DVD_DIRECTORY_GATE)}
+            'dvdDirectoryReentryGate':hex(DVD_DIRECTORY_GATE),
+            'hostOwnsAudioSession':True,
+            'sdlAudioObserverGate':hex(AUDIO_HOST_GATE)}
 
 
 def patch(path):
@@ -314,6 +348,11 @@ def patch(path):
     register_off=vm_to_file(segments,REGISTER_FILE)
     if hashlib.sha256(data[register_off:register_off+REGISTER_FILE_SIZE]).hexdigest()!=REGISTER_FILE_SHA:
         raise SystemExit('ERROR: DVD file registration original instruction hash drift')
+    audio_off=vm_to_file(segments,AUDIO_SESSION)
+    if hashlib.sha256(data[audio_off:audio_off+AUDIO_SESSION_SIZE]).hexdigest()!=AUDIO_SESSION_SHA:
+        raise SystemExit('ERROR: SDL audio-session original instruction hash drift')
+    if struct.unpack_from('<I',data,vm_to_file(segments,AUDIO_POLICY_HOOK))[0]!=AUDIO_POLICY_ORIGINAL:
+        raise SystemExit('ERROR: SDL audio-session branch instruction drift')
     if any(data[TRAMPOLINE-BASE:MAGIC_VM-BASE+len(MAGIC)]):
         raise SystemExit('ERROR: executable header padding is not unused')
     for address, code in expected_patches().items():

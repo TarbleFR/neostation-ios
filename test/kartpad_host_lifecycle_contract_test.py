@@ -22,7 +22,14 @@ for token in (
 
 assert "restartAfterShutdown" not in control
 assert "restartLanguage" not in control
-assert "ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART)" in control
+confirmation = control.split('void ConfirmGameLanguage(', 1)[1].split('void PersistAcceptedLanguage(', 1)[0]
+assert 'commands.confirm(generation)' in confirmation
+assert 'ReturnToNeoStation(' not in confirmation
+assert 'BeginTitleTransition(cpu, commands.selected)' in control
+assert 'RunOnUIKitRunLoop(^{\n      languageWriteFailed' in control
+assert 'NeoKartPadPerformRunLoop(block);' in control
+assert 'language SYSCONF write completed on UIKit run loop' in control
+assert 'title and localized resources reloaded in current guest session' in control
 assert "requestedExitReason = reason" in core
 assert "lastExitReason.store(exitReason" in core
 assert "caught RuntimeMain exception" in core
@@ -60,7 +67,7 @@ for token in (
 ):
     assert token in patcher, token
 
-print("PASS: explicit exit reasons, single completion, host-owned language restart, and reentrant pinned profile")
+print("PASS: explicit exit reasons, single completion, in-guest language reload, and reentrant pinned profile")
 
 # The behavioral Apple test must exercise the same entry as production.
 assert '#include "../core/SessionRunLoop.h"' in core

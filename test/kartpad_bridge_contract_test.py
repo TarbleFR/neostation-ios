@@ -92,7 +92,8 @@ assert '[children insertObject:returnToGame atIndex:0]' in donor_core
 assert '[children insertObject:languageMenu' in donor_core
 assert 'atIndex:MIN(languageIndex, children.count)' in donor_core
 assert 'menuButton.menu == lastPatched' in donor_core
-assert 'dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC))' in donor_core
+assert 'NeoKartPadScheduleRunLoop(0.45' in donor_core
+assert 'dispatch_after(' not in donor_core
 assert 'std::exit(0)' not in donor_core
 assert 'PresentRestartRequired' not in donor_core
 assert 'func_801B11C4' not in donor_core

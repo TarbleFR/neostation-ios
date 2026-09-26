@@ -24,6 +24,7 @@ static DonorDescribeFn describeMemoryFn = nullptr;
 static uint8_t** flatGuestBase = nullptr;
 static uint8_t* donorDataInitialized = nullptr;
 static bool frameGateEntered = false;
+static uint64_t firstFrameLoggedForSession = 0;
 static bool orderlyRuntimeReturn = false;
 static int requestedExitReason = NEO_KARTPAD_EXIT_NONE;
 static std::atomic_int lastExitReason{NEO_KARTPAD_EXIT_NONE};
@@ -35,9 +36,7 @@ UIWindow* CurrentDonorWindow();
 void ReturnToNeoStation(int reason);
 
 void RunOnUIKitRunLoop(dispatch_block_t block) {
-  if (!block) return;
-  CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, block);
-  CFRunLoopWakeUp(CFRunLoopGetMain());
+  NeoKartPadPerformRunLoop(block);
 }
 
 void PresentSessionAlert(UIAlertController* alert, uint64_t generation,
@@ -115,21 +114,12 @@ void ConfirmGameLanguage(NSInteger value, void (^onChange)(void)) {
     if (!commands.confirm(generation)) return;
     ownedSessionAlert = nil;
 
-    // Persist the desired language before shutdown. The active guest is not
-    // patched in place: the confirmed operation is a full shutdown -> cleanup
-    // -> fresh RuntimeMain session.
-    PersistInteger(kNeoKartPadLanguageKey, value);
-    NSError* persistenceError = nil;
-    if (!WriteGameLanguageSysConf(&persistenceError)) {
-      PersistInteger(kNeoKartPadLanguageKey, applied);
-      commands.failed();
-      kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
-      ShowSessionFailure(false, persistenceError.localizedDescription.UTF8String);
-      return;
-    }
-    NSLog(@"[NeoKartPad/Lifecycle] session=%llu exitReason=languageRestart requested %ld -> %ld",
-          (unsigned long long)sessionSerial.load(), (long)applied, (long)value);
-    ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART);
+    // Reload the title at the verified guest frame boundary. Re-entering
+    // RuntimeMain tears down and recreates process-wide SDL/Aurora state just
+    // to change a language; the donor already supports a title transition
+    // with checked archive, system-message and SYSCONF updates.
+    NSLog(@"[NeoKartPad/Language] confirmed title reload %ld -> %ld transaction=%llu",
+          (long)applied, (long)value, (unsigned long long)generation);
   }]];
 
   // RuntimeMain owns the UIKit thread. GCD main-queue work may not be drained
@@ -144,10 +134,15 @@ void PersistAcceptedLanguage(uint32_t language) {
   dispatch_async(KartPadSettingsIOQueue(), ^{
     NSError* error = nil;
     const bool okay = WriteGameLanguageSysConf(&error);
-    dispatch_async(dispatch_get_main_queue(), ^{
+    // RuntimeMain owns a nested UIKit run loop. A GCD main-queue completion
+    // can remain pending until the game exits, leaving languageWrites > 0 and
+    // the language menu locked even after the title has reloaded.
+    RunOnUIKitRunLoop(^{
       languageWriteFailed |= !okay;
       if (!okay) NSLog(@"[NeoKartPad/Language] Wii IPL.LNG persistence failed: %@", error);
       languageWrites.fetch_sub(1, std::memory_order_acq_rel);
+      LogLifecycleBoundary(okay ? "language SYSCONF write completed on UIKit run loop"
+                                 : "language SYSCONF write failed on UIKit run loop");
     });
   });
 }
@@ -201,6 +196,13 @@ bool BeginTitleTransition(void* cpu, uint32_t language) {
 // Called only after RKSystem::onEndFrame has returned. The gate preserves all
 // native registers; any translated helper gets a complete guest CPU snapshot.
 uint32_t KartPadFrameBoundary(void* cpu) {
+  if (cpu && session.active()) {
+    const uint64_t serial = sessionSerial.load(std::memory_order_acquire);
+    if (firstFrameLoggedForSession != serial) {
+      firstFrameLoggedForSession = serial;
+      LogLifecycleBoundary("guest reached first frame boundary");
+    }
+  }
   if (frameGateEntered || !cpu || commands.phase == neokartpad::SessionCommands::Phase::idle ||
       commands.phase == neokartpad::SessionCommands::Phase::confirming ||
       commands.phase == neokartpad::SessionCommands::Phase::closed) return 0;
@@ -226,6 +228,7 @@ uint32_t KartPadFrameBoundary(void* cpu) {
         throw std::runtime_error("title loaded but SystemManager/archive language verification failed");
       NSLog(@"[NeoKartPad/Language] completed title reload language=%u; cache, system messages and UI/Common suffixes verified",
             commands.selected);
+      LogLifecycleBoundary("title and localized resources reloaded in current guest session");
       commands.complete();
       kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
       RefreshSettingsMenu();
