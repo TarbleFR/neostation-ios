@@ -13,6 +13,8 @@ on:
       - 'test/kartpad_session_bridge_test.py'
       - 'test/kartpad_system_messages_test.py'
       - 'test/kartpad_guest_language_state_test.cpp'
+      - 'test/kartpad_native_session_test.cpp'
+      - 'test/kartpad_bridge_contract_test.py'
       - 'build-utils/kartpad/prepare_embedded_source.py'
       - 'build-utils/kartpad/validate_donor_artifact.py'
       - 'build-utils/kartpad/embed_core.py'
