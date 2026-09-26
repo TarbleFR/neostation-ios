@@ -21,6 +21,7 @@ void main() {
         'restartRequiredTitle',
         'languageRestartMessage',
         'restartGame',
+        'closeGameForLanguage',
         'cancel',
         'okay',
         'languageApplyFailed',
@@ -76,7 +77,7 @@ void main() {
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['languageRestartMessage'],
-      contains('NeoStation reste ouvert'),
+      contains('Rouvrez-le depuis NeoStation'),
     );
     expect(
       PortsLocale.kartPadNativeUI(const Locale('fr'))['restartRequiredTitle'],
@@ -101,13 +102,14 @@ void main() {
           : Locale(language);
       final native = PortsLocale.kartPadNativeUI(locale);
       for (final key in <String>[
-        'restartGame', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed',
+        'restartGame', 'closeGameForLanguage', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed',
         'languageRestartMessage', 'returnToGame', 'returnToLibrary',
       ]) {
         expect(native[key], PortsLocale.values[language]![key], reason: '$language/$key');
       }
     }
     expect(PortsLocale.kartPadNativeUI(const Locale('fr'))['restartGame'], 'Redémarrer le jeu');
+    expect(PortsLocale.kartPadNativeUI(const Locale('fr'))['closeGameForLanguage'], 'Fermer le jeu');
     expect(PortsLocale.kartPadNativeUI(const Locale('fr'))['cancel'], 'Annuler');
   });
 

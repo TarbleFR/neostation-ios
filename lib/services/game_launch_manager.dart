@@ -281,13 +281,8 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
           );
           if (_phase != GameLaunchPhase.playing || _isClosing) return;
 
-          // A language restart is owned by the native bridge and must never
-          // unwind NeoStation's game-launch UI. The plugin normally suppresses
-          // sessionEnded for it; this guard makes a stale/duplicate callback
-          // harmless as well.
-          if (exitReason == 'languageRestart') return;
-
           if (exitReason == 'userReturn' ||
+              exitReason == 'languageRestart' ||
               exitReason == 'normalTermination' ||
               exitReason == 'runtimeFailure' ||
               exitReason == 'crash' ||

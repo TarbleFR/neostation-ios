@@ -22,14 +22,14 @@ for token in (
 
 assert "restartAfterShutdown" not in control
 assert "restartLanguage" not in control
-confirmation = control.split('void ConfirmGameLanguage(', 1)[1].split('void PersistAcceptedLanguage(', 1)[0]
+confirmation = control.split('void ConfirmGameLanguage(', 1)[1].split('bool BeginExitTransition(', 1)[0]
 assert 'commands.confirm(generation)' in confirmation
-assert 'ReturnToNeoStation(' not in confirmation
-assert 'BeginTitleTransition(cpu, commands.selected)' in control
-assert 'RunOnUIKitRunLoop(^{\n      languageWriteFailed' in control
+assert 'WriteGameLanguageSysConf(&persistenceError)' in confirmation
+assert 'ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART)' in confirmation
+assert confirmation.index('WriteGameLanguageSysConf(&persistenceError)') < confirmation.index('ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART)')
+assert 'BeginExitTransition(cpu)' in control
 assert 'NeoKartPadPerformRunLoop(block);' in control
-assert 'language SYSCONF write completed on UIKit run loop' in control
-assert 'title and localized resources reloaded in current guest session' in control
+assert 'languageBefore.apply' not in control
 assert "requestedExitReason = reason" in core
 assert "lastExitReason.store(exitReason" in core
 assert "caught RuntimeMain exception" in core
@@ -45,15 +45,14 @@ for token in (
     "ExitReasonName",
     '@"exitReason"',
     'exitReason == NEO_KARTPAD_EXIT_LANGUAGE_RESTART',
-    "restartFreshSessionForTransaction",
-    'invokeMethod:@"sessionRestarted"',
-    "hostResult=languageRestart",
 ):
     assert token in plugin, token
 
-# A language restart is consumed internally by the bridge. It cannot become a
-# terminal Flutter session event and the manager defensively ignores one.
-assert "if (exitReason == 'languageRestart') return;" in manager
+# A language change closes the game and the Flutter route exactly once. The
+# player relaunches it from NeoStation after the terminal event.
+assert 'restartFreshSessionForTransaction' not in plugin
+assert 'sessionRestarted' not in plugin
+assert "exitReason == 'languageRestart' ||" in manager
 assert "exitReason == 'userReturn'" in manager
 assert "exitReason == 'runtimeFailure'" in manager
 
@@ -67,7 +66,7 @@ for token in (
 ):
     assert token in patcher, token
 
-print("PASS: explicit exit reasons, single completion, in-guest language reload, and reentrant pinned profile")
+print("PASS: explicit exit reasons, single completion, manual language relaunch, and reentrant pinned profile")
 
 # The behavioral Apple test must exercise the same entry as production.
 assert '#include "../core/SessionRunLoop.h"' in core

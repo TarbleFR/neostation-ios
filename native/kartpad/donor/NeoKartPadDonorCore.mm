@@ -1487,8 +1487,6 @@ void RuntimeMainOnUIKitThread() {
     commands.failed(); // Invalidate old confirmation IDs without resetting the epoch.
     frameGateEntered = false;
     orderlyRuntimeReturn = false;
-    languageWrites.store(0, std::memory_order_release);
-    languageWriteFailed = false;
     kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
     kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel);
 

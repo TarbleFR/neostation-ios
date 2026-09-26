@@ -143,30 +143,26 @@ class SessionBridgeTest(unittest.TestCase):
                         self.assertEqual(u.reg_read(arm.UC_ARM64_REG_W8), 0x35)
                     self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X19), entry)
 
-    def test_sdl_audio_keeps_host_policy_and_device_observers(self):
+    def test_sdl_audio_preserves_open_path_and_skips_only_close_deactivation(self):
         patches = bridge.expected_patches()
+        # Device setup and interruption-observer registration are performed
+        # by the donor's original open path. Build 342 diverted that path and
+        # the device log stopped before audio initialization.
+        self.assertNotIn(0x1041C62A8, patches)
+        self.assertNotIn(bridge.BASE + 0x8C00, patches)
         for slide in SLIDES:
-            for opening in (False, True):
-                with self.subTest(slide=slide, opening=opening):
-                    u = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
-                    pages = {addr & ~4095 for addr in (
-                        bridge.AUDIO_POLICY_HOOK + slide,
-                        bridge.AUDIO_HOST_GATE + slide,
-                        bridge.AUDIO_OBSERVER_OPEN + slide,
-                        bridge.AUDIO_OBSERVER_CLOSE + slide)}
-                    for page in pages:
-                        u.mem_map(page, 4096)
-                    u.mem_write(bridge.AUDIO_POLICY_HOOK + slide,
-                                patches[bridge.AUDIO_POLICY_HOOK])
-                    u.mem_write(bridge.AUDIO_HOST_GATE + slide,
-                                patches[bridge.AUDIO_HOST_GATE])
-                    u.reg_write(arm.UC_ARM64_REG_W24, int(opening))
-                    destination = (bridge.AUDIO_OBSERVER_OPEN if opening else
-                                   bridge.AUDIO_OBSERVER_CLOSE) + slide
-                    u.emu_start(bridge.AUDIO_POLICY_HOOK + slide,
-                                destination, count=5)
-                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_PC), destination)
-                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_W24), int(opening))
+            with self.subTest(slide=slide):
+                u = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+                start = bridge.AUDIO_SESSION_DEACTIVATE + slide
+                destination = bridge.AUDIO_SESSION_CLOSE_CONTINUE + slide
+                u.mem_map(start & ~4095, 4096)
+                u.mem_write(start, patches[bridge.AUDIO_SESSION_DEACTIVATE])
+                u.reg_write(arm.UC_ARM64_REG_X20, 0x123456789abc)
+                u.reg_write(arm.UC_ARM64_REG_X0, 0xfeedface)
+                u.emu_start(start, destination, count=2)
+                self.assertEqual(u.reg_read(arm.UC_ARM64_REG_PC), destination)
+                self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X0), 0xfeedface)
+                self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X20), 0x123456789abc)
 
     def test_branch_range_validation(self):
         for pc,dest in ((0,1),(0,1<<28)):

@@ -11,7 +11,6 @@ static KartPadGuestCpuFn originalRun = nullptr;
 static KartPadGuestCpuFn originalExitAfterMain = nullptr;
 static KartPadGuestCpuFn setNextSectionFn = nullptr;
 static KartPadGuestCpuFn changeSectionFn = nullptr;
-static KartPadGuestCpuFn initializeSystemMessagesFn = nullptr;
 static DonorVoidFn stopMixWorkerFn = nullptr;
 static void* (*audioBackendInstanceFn)() = nullptr;
 static void (*destroyAudioStreamFn)(void*) = nullptr;
@@ -29,8 +28,6 @@ static bool orderlyRuntimeReturn = false;
 static int requestedExitReason = NEO_KARTPAD_EXIT_NONE;
 static std::atomic_int lastExitReason{NEO_KARTPAD_EXIT_NONE};
 static NSTimer* sessionAlertRetryTimer = nil;
-static std::atomic_uint languageWrites{0};
-static bool languageWriteFailed = false;
 static UIAlertController* ownedSessionAlert = nil;
 UIWindow* CurrentDonorWindow();
 void ReturnToNeoStation(int reason);
@@ -109,17 +106,26 @@ void ConfirmGameLanguage(NSInteger value, void (^onChange)(void)) {
     kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
     if (onChange) onChange();
   }]];
-  [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Restart", "restartGame")
+  [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Close Game", "closeGameForLanguage")
       style:UIAlertActionStyleDefault handler:^(__kindof UIAlertAction*) {
     if (!commands.confirm(generation)) return;
     ownedSessionAlert = nil;
 
-    // Reload the title at the verified guest frame boundary. Re-entering
-    // RuntimeMain tears down and recreates process-wide SDL/Aurora state just
-    // to change a language; the donor already supports a title transition
-    // with checked archive, system-message and SYSCONF updates.
-    NSLog(@"[NeoKartPad/Language] confirmed title reload %ld -> %ld transaction=%llu",
+    // Persist before the normal guest shutdown, then return to NeoStation.
+    // The player explicitly opens the game again with the new language; no
+    // title reload or nested/automatic RuntimeMain occurs in this callback.
+    PersistInteger(kNeoKartPadLanguageKey, value);
+    NSError* persistenceError = nil;
+    if (!WriteGameLanguageSysConf(&persistenceError)) {
+      PersistInteger(kNeoKartPadLanguageKey, applied);
+      ShowSessionFailure(false, persistenceError.localizedDescription.UTF8String
+                                    ?: "Could not save the language setting.");
+      return;
+    }
+    NSLog(@"[NeoKartPad/Language] confirmed next-launch language %ld -> %ld transaction=%llu",
           (long)applied, (long)value, (unsigned long long)generation);
+    LogLifecycleBoundary("language saved; clean game close requested for manual relaunch");
+    ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART);
   }]];
 
   // RuntimeMain owns the UIKit thread. GCD main-queue work may not be drained
@@ -127,69 +133,27 @@ void ConfirmGameLanguage(NSInteger value, void (^onChange)(void)) {
   RunOnUIKitRunLoop(^{ PresentSessionAlert(alert, generation); });
 }
 
-void PersistAcceptedLanguage(uint32_t language) {
-  PersistInteger(kNeoKartPadLanguageKey, language);
-  languageWriteFailed = false;
-  languageWrites.fetch_add(1, std::memory_order_acq_rel);
-  dispatch_async(KartPadSettingsIOQueue(), ^{
-    NSError* error = nil;
-    const bool okay = WriteGameLanguageSysConf(&error);
-    // RuntimeMain owns a nested UIKit run loop. A GCD main-queue completion
-    // can remain pending until the game exits, leaving languageWrites > 0 and
-    // the language menu locked even after the title has reloaded.
-    RunOnUIKitRunLoop(^{
-      languageWriteFailed |= !okay;
-      if (!okay) NSLog(@"[NeoKartPad/Language] Wii IPL.LNG persistence failed: %@", error);
-      languageWrites.fetch_sub(1, std::memory_order_acq_rel);
-      LogLifecycleBoundary(okay ? "language SYSCONF write completed on UIKit run loop"
-                                 : "language SYSCONF write failed on UIKit run loop");
-    });
-  });
-}
-
-bool BeginTitleTransition(void* cpu, uint32_t language) {
+bool BeginExitTransition(void* cpu) {
+  if (!commands.closing) return false;
   const uint32_t manager = guestMemory.read32(neokartpad::kSectionManager);
   if (!manager || guestMemory.read32(manager + 0x30) != 0 ||
       guestMemory.read32(manager + 0xc) != 0xffffffffu) return false;
   std::array<uint8_t, 0x34> managerBefore;
   std::memcpy(managerBefore.data(), guestMemory.at(manager, managerBefore.size()), managerBefore.size());
-  neokartpad::LanguageState languageBefore;
-  neokartpad::SystemMessageState messagesBefore;
-  // Validate all destinations before changing any language-related state.
-  if (language) {
-    languageBefore = neokartpad::LanguageState::inspect(guestMemory);
-    messagesBefore = neokartpad::SystemMessageState::inspect(guestMemory);
-  }
   try {
-    if (language) {
-      languageBefore.apply(guestMemory, language);
-      if (!SetRuntimeLanguageOverride(language))
-        throw std::runtime_error("host language slot unavailable");
-      if (!InvokeKartPadGuestPreservingCpu(cpu, initializeSystemMessagesFn,
-                                           messagesBefore.holder, 0u, 0u) ||
-          !messagesBefore.matches(guestMemory, language))
-        throw std::runtime_error("system messages did not rebind to selected language");
-    }
     bool accepted = InvokeKartPadGuestPreservingCpu(cpu, setNextSectionFn, manager,
         neokartpad::kTitleFromBoot, 0xffffffffu);
     accepted = accepted && guestMemory.read32(manager + 0xc) == neokartpad::kTitleFromBoot;
     accepted = accepted && InvokeKartPadGuestPreservingCpu(cpu, changeSectionFn, manager, 0u, 0x000000ffu);
     accepted = accepted && guestMemory.read32(manager + 0x30) == 2;
     if (!accepted)
-      throw std::runtime_error("title transition rejected; language transaction rolled back");
+      throw std::runtime_error("guest title exit rejected");
   } catch (...) {
     std::memcpy(guestMemory.at(manager, managerBefore.size()), managerBefore.data(), managerBefore.size());
-    if (language) {
-      messagesBefore.rollback(guestMemory);
-      languageBefore.rollback(guestMemory);
-      SetRuntimeLanguageOverride(languageBefore.requestedLanguage);
-    }
     throw;
   }
-  if (language) PersistAcceptedLanguage(language);
   commands.accepted();
-  NSLog(@"[NeoKartPad/Session] accepted title transition=0x3f language=%u closing=%d (not yet completed)",
-        language, commands.closing);
+  NSLog(@"[NeoKartPad/Session] accepted title exit transition=0x3f (not yet completed)");
   return true;
 }
 
@@ -214,27 +178,14 @@ uint32_t KartPadFrameBoundary(void* cpu) {
       ShowSessionFailure(closing, "frame-boundary operation timed out; no forced exit"); return 0;
     }
     if (commands.phase == neokartpad::SessionCommands::Phase::queued) {
-      BeginTitleTransition(cpu, commands.selected); return 0;
+      BeginExitTransition(cpu); return 0;
     }
     const auto manager = guestMemory.read32(neokartpad::kSectionManager);
     if (!manager || guestMemory.read32(manager + 0x30) != 0) return 0;
     const auto section = guestMemory.read32(manager);
     if (!section || guestMemory.read32(section) != neokartpad::kTitleFromBoot ||
         guestMemory.read32(manager + 0xc) != 0xffffffffu) return 0;
-    if (languageWrites.load(std::memory_order_acquire)) return 0;
-    if (!closing) {
-      if (!neokartpad::LanguageState::inspect(guestMemory).matches(commands.selected) ||
-          !neokartpad::SystemMessageState::inspect(guestMemory).matches(guestMemory, commands.selected))
-        throw std::runtime_error("title loaded but SystemManager/archive language verification failed");
-      NSLog(@"[NeoKartPad/Language] completed title reload language=%u; cache, system messages and UI/Common suffixes verified",
-            commands.selected);
-      LogLifecycleBoundary("title and localized resources reloaded in current guest session");
-      commands.complete();
-      kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
-      RefreshSettingsMenu();
-      if (languageWriteFailed) ShowSessionFailure(false, "language applied but SYSCONF persistence failed");
-      return 0;
-    }
+    if (!closing) return 0;
     // SectionMgr::ExitSection has now run its normal save/network transitions.
     // Do not emit sessionEnded or expose the library until RuntimeMain's own
     // fiber/renderer/window cleanup has returned.
@@ -329,7 +280,6 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   guestMemory.pointer = reinterpret_cast<DonorPointerFn>(dlsym(runtimeHandle, "_ZN6Memory10GetPointerEjm"));
   setNextSectionFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80635A3C"));
   changeSectionFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80635AC8"));
-  initializeSystemMessagesFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80637A20"));
   stopMixWorkerFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"_ZN8AxDspHle17ShutdownMixWorkerEv"));
   cleanSocketsFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"_ZN10NetworkHle20CleanupAllWiiSocketsEv"));
   waitFrameWorkerFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"aurora_wait_for_frame_worker"));
@@ -337,7 +287,7 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   resetMemoryFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle,"_ZN6Memory5ResetEv"));
   describeMemoryFn = reinterpret_cast<DonorDescribeFn>(dlsym(runtimeHandle,"_ZN6Memory15DescribeRegionsEv"));
   flatGuestBase = reinterpret_cast<uint8_t**>(dlsym(runtimeHandle,"_ZN9GuestFlat14gFlatGuestBaseE"));
-  if (!guestMemory.pointer || !setNextSectionFn || !changeSectionFn || !initializeSystemMessagesFn || !stopMixWorkerFn ||
+  if (!guestMemory.pointer || !setNextSectionFn || !changeSectionFn || !stopMixWorkerFn ||
       !cleanSocketsFn || !waitFrameWorkerFn || !setWaitCallbackFn || !resetMemoryFn ||
       !describeMemoryFn || !flatGuestBase)
     return Fail(error, errorSize, "KartPad cooperative cleanup symbols missing");

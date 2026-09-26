@@ -140,9 +140,9 @@ print('PASS: KartPad ABI v2, explicit exit reasons, lazy loader, launch route an
 # The old string assertions prescribed a Wii system reset and direct UIKit
 # guest writes. The behavioral tests now prove those are the wrong contracts.
 for token in ('PresentSessionAlert', 'commands.choose', 'commands.confirm',
-              'commands.cancel', 'KartPadFrameBoundary', 'BeginTitleTransition',
-              'func_80635A3C', 'func_80635AC8', 'languageBefore.rollback',
-              'commands.accepted', 'LanguageState::inspect', 'stopMixWorkerFn()',
+              'commands.cancel', 'KartPadFrameBoundary', 'BeginExitTransition',
+              'func_80635A3C', 'func_80635AC8',
+              'commands.accepted', 'stopMixWorkerFn()',
               'waitFrameWorkerFn()', 'cleanSocketsFn()', 'KartPadExitAfterMain'):
     assert token in session_control, token
 assert 'kTitleFromBoot = 0x3fu' in guest_language
@@ -157,10 +157,11 @@ assert 'PrepareReusableGuestMemory();' in donor_core
 runtime = donor_core.split('void RuntimeMainOnUIKitThread() {', 1)[1].split('void ReturnToNeoStation(int reason) {', 1)[0]
 assert runtime.index('runtimeMain(1, argv)') < runtime.index('PrepareReusableGuestMemory()') < runtime.index('session.terminate()')
 assert 'validate_session_bridge(runtime_bytes)' in ipa_validator
-for key in ('restartGame', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed'):
+for key in ('closeGameForLanguage', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed'):
     assert ('"' + key + '"') in session_control
     assert ("'" + key + "'") in ports_locale
-print('PASS: confirmed language transaction, actual teardown and guarded exit are wired')
-
-assert "WriteGameLanguageSysConf(&error)" in session_control
-assert session_control.index("if (language) PersistAcceptedLanguage(language)") > session_control.index("if (!accepted)")
+confirmation = session_control.split('void ConfirmGameLanguage(', 1)[1].split('bool BeginExitTransition(', 1)[0]
+assert confirmation.index('WriteGameLanguageSysConf(&persistenceError)') < confirmation.index('ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART)')
+assert 'languageBefore.apply' not in session_control
+assert 'BeginExitTransition(cpu)' in session_control
+print('PASS: selected language persists before guarded guest teardown and manual relaunch')
