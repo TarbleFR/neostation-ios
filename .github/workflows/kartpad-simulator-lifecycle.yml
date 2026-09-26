@@ -32,12 +32,25 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p probe/Probe.app/Frameworks evidence
+          git rev-parse HEAD > evidence/source.txt
           APP="$PWD/probe/Probe.app"
           ditto donor/KartPadRuntime.framework "$APP/Frameworks/KartPadRuntime.framework"
           RUNTIME="$APP/Frameworks/KartPadRuntime.framework/KartPadRuntime"
-          # Test-only platform adjustment. Production donor is never replaced by this copy.
-          xcrun vtool -set-build-version iossimulator 17.4 18.5 -replace -output "$RUNTIME.sim" "$RUNTIME"
-          mv "$RUNTIME.sim" "$RUNTIME"
+          # Test-only platform adjustment: no text instruction is modified.
+          python3 - "$RUNTIME" <<'PY'
+          from pathlib import Path
+          import struct,sys
+          p=Path(sys.argv[1]); b=bytearray(p.read_bytes()); cursor=32; count=0
+          for _ in range(struct.unpack_from('<I',b,16)[0]):
+              cmd,size=struct.unpack_from('<II',b,cursor)
+              if cmd==0x32:
+                  assert struct.unpack_from('<I',b,cursor+8)[0]==2
+                  struct.pack_into('<I',b,cursor+8,7)
+                  count+=1
+              cursor+=size
+          assert count==1
+          p.write_bytes(b)
+          PY
           chmod 755 "$RUNTIME"
           SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
           xcrun clang++ -target arm64-apple-ios17.4-simulator -isysroot "$SDK" \
