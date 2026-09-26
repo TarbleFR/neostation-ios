@@ -304,47 +304,18 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   return true;
 }
 
-void ReleaseTerminalGuestMemory() {
-  // This donor has process-lifetime native registries, so a stopped runtime is
-  // deliberately terminal (the existing relaunch barrier remains). It is safe
-  // to reclaim its guest reservation only AFTER RuntimeMain has shut down all
-  // fibers and Aurora. The ObjC/SDL image itself remains loaded: no dlclose.
-  if (!orderlyRuntimeReturn || !flatGuestBase || !*flatGuestBase) return;
-  struct Range { uintptr_t begin, end; };
-  std::vector<Range> ranges;
-  const size_t page = static_cast<size_t>(getpagesize());
-  const uintptr_t flat = reinterpret_cast<uintptr_t>(*flatGuestBase);
-  const size_t flatSize = (size_t{1} << 32) + page;
-  try {
-    const auto regions = describeMemoryFn();
-    for (const auto& region : regions) {
-      if (!region.size || region.size > (size_t{1} << 30))
-        throw std::runtime_error("invalid terminal guest mapping size");
-      const auto begin = reinterpret_cast<uintptr_t>(guestMemory.pointer(region.base, region.size));
-      const auto end = begin + ((region.size + page - 1) & ~(page - 1));
-      if (!begin || begin % page || end <= begin || (begin < flat + flatSize && flat < end))
-        throw std::runtime_error("invalid terminal host alias mapping");
-      ranges.push_back({begin, end});
-    }
-    std::sort(ranges.begin(), ranges.end(), [](const Range& a, const Range& b) { return a.begin < b.begin; });
-    std::vector<Range> merged;
-    for (const auto& range : ranges) {
-      if (!merged.empty() && range.begin <= merged.back().end)
-        merged.back().end = std::max(merged.back().end, range.end);
-      else merged.push_back(range);
-    }
-    resetMemoryFn(); // resolves deferred page protections before any munmap
-    size_t released = 0;
-    for (const auto& range : merged) {
-      if (munmap(reinterpret_cast<void*>(range.begin), range.end-range.begin) == 0)
-        released += range.end-range.begin;
-      else NSLog(@"[NeoKartPad/Session] host alias munmap failed: %d", errno);
-    }
-    const int result = munmap(reinterpret_cast<void*>(flat), flatSize);
-    if (result == 0) *flatGuestBase = nullptr;
-    NSLog(@"[NeoKartPad/Session] terminal cleanup host-ram=%zu flat-reservation=%zu result=%d",
-          released, flatSize, result);
-  } catch (const std::exception& error) {
-    NSLog(@"[NeoKartPad/Session] mapping reclaim refused safely: %s", error.what());
-  }
+void PrepareReusableGuestMemory() {
+  // Do NOT munmap GuestFlat's reservation or backing aliases here. The pinned
+  // runtime intentionally keeps g_initialized/g_layout/g_sections in native
+  // process-lifetime storage; tearing the mappings down behind those objects
+  // made the next RuntimeMain dereference stale section.host pointers.
+  //
+  // Memory::Reset clears translated page tables/deferred reads. On the next
+  // GuestFlat::Initialize with the same verified layout, the runtime zeros
+  // every backing section before rebuilding Memory regions. This gives each
+  // KartPad launch clean guest contents without accumulating mappings.
+  if (!orderlyRuntimeReturn || !resetMemoryFn || !flatGuestBase || !*flatGuestBase)
+    return;
+  resetMemoryFn();
+  NSLog(@"[NeoKartPad/Lifecycle] reusable guest reservation retained and page tables reset");
 }
