@@ -104,8 +104,6 @@ static void* Required(void* handle,const char* symbol) {
              @"guestFlatBase":@(firstFlat)});
     } catch (const std::exception& e) {
       Save(@{@"success":@NO,@"error":@(e.what())});
-    } @catch(NSException* e) {
-      Save(@{@"success":@NO,@"error":e.description});
     }
   }];
   [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
