@@ -267,7 +267,14 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
         if (!audioInit(audioInstance(),32000,2)) throw std::runtime_error("SDL audio startup failed");
         Progress([NSString stringWithFormat:@"renderer/audio cycle %d: render frame",cycle]);
         if (!beginFrame()) throw std::runtime_error("Metal begin-frame failed");
-        endFrame(); waitFrame();
+        endFrame();
+        // Match VI_HLE_PresentFrame's producer protocol: end submits the
+        // worker job; the following begin grants prepareAllowed. Waiting for
+        // DONE before that begin would deadlock the test's own producer.
+        if (!beginFrame()) throw std::runtime_error("Metal next-frame preparation failed");
+        Progress([NSString stringWithFormat:@"renderer/audio cycle %d: drain worker",cycle]);
+        waitFrame();
+        Progress([NSString stringWithFormat:@"renderer/audio cycle %d: release audio",cycle]);
         {
           void* backend=audioInstance();
           std::lock_guard lock(*static_cast<std::mutex*>(backend));
