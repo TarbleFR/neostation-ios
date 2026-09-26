@@ -1431,7 +1431,7 @@ void RuntimeMainOnUIKitThread() {
   const bool shouldRestart = orderly && restartAfterShutdown;
   const uint32_t pendingLanguage = restartLanguage;
 
-  ReleaseTerminalGuestMemory();
+  PrepareReusableGuestMemory();
   [returnButton removeFromSuperview];
   [settingsButton removeFromSuperview];
   returnButton = nil;
