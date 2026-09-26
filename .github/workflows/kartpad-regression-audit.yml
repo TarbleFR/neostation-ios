@@ -13,6 +13,7 @@ on:
       - test/kartpad_session_bridge_test.py
       - test/kartpad_guest_language_state_test.cpp
       - test/kartpad_native_session_test.cpp
+      - test/kartpad_main_runloop_test.mm
 permissions:
   contents: read
 jobs:
@@ -48,5 +49,28 @@ jobs:
         with:
           name: kartpad-regression-sources-${{ github.sha }}
           path: audit/
+          retention-days: 7
+          if-no-files-found: error
+  apple-runloop:
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reproduce queued-runtime starvation and test independent run-loop entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -Wall -Wextra -Werror \
+            -framework Foundation -framework CoreFoundation \
+            test/kartpad_main_runloop_test.mm -o "$RUNNER_TEMP/kartpad-main-runloop"
+          "$RUNNER_TEMP/kartpad-main-runloop" 2>&1 | tee evidence/main-runloop.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kartpad-apple-runloop-${{ github.sha }}
+          path: evidence/
           retention-days: 7
           if-no-files-found: error
