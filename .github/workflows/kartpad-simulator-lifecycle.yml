@@ -63,7 +63,7 @@ jobs:
           SOLOUD="$RUNNER_TEMP/soloud/src"
           SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
           xcrun clang++ -target arm64-apple-ios17.4-simulator -isysroot "$SDK" \
-            -std=c++20 -O1 -fobjc-arc -fblocks -DWITH_MINIAUDIO -I"$RUNNER_TEMP" \
+            -x objective-c++ -std=c++20 -O1 -fobjc-arc -fblocks -DWITH_MINIAUDIO -I"$RUNNER_TEMP" \
             -I"$SOLOUD" -I"$SOLOUD/soloud/include" -I"$SOLOUD/soloud/src/backend/miniaudio" \
             -framework UIKit -framework Foundation -framework AVFAudio -framework AudioToolbox \
             "$SOLOUD"/soloud/src/core/*.cpp "$SOLOUD/soloud/src/backend/miniaudio/soloud_miniaudio.cpp" \
