@@ -74,6 +74,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   BOOL _sessionActive;
   NSDictionary* _loadError;
   NSInteger _transaction;
+  NSInteger _activeTransaction;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -161,16 +162,24 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     return;
   }
   if (state == NEO_KARTPAD_IDLE || state == NEO_KARTPAD_ENDED) {
-    BOOL hadSession = _sessionActive;
+    const BOOL hadSession = _sessionActive;
+    const NSInteger endedTransaction = _activeTransaction;
     _sessionActive = NO;
-    [self resolveLaunch:Failure(@"KARTPAD_ENDED_BEFORE_FIRST_FRAME",
-                                @"startup", message)];
-    if (hadSession) {
+    _activeTransaction = 0;
+
+    // Only fail a launch that truly ended before its first frame. A normal
+    // post-game IDLE callback arrives after the successful launch result and
+    // must never be turned into a second launch-error dialog.
+    if (_pendingLaunch) {
+      [self resolveLaunch:Failure(@"KARTPAD_ENDED_BEFORE_FIRST_FRAME",
+                                  @"startup", message)];
+    }
+    if (hadSession && endedTransaction > 0) {
       [_channel invokeMethod:@"sessionEnded" arguments:@{
         @"reason": message,
         @"restartRequired": @(state == NEO_KARTPAD_ENDED),
-        @"runtimeReleased": @(state == NEO_KARTPAD_ENDED),
-        @"transaction": @(_transaction),
+        @"runtimeReleased": @YES,
+        @"transaction": @(endedTransaction),
       }];
     }
   }
@@ -310,7 +319,10 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   _pendingLaunch = [result copy];
   _transaction = [args[@"transaction"] isKindOfClass:NSNumber.class]
       ? [args[@"transaction"] integerValue] : _transaction + 1;
+  _activeTransaction = _transaction;
   _sessionActive = YES;
+  NSLog(@"[NeoStation/KartPad] transaction=%ld session launch accepted",
+        (long)_activeTransaction);
   const int started = _api->start(
       gamePath.fileSystemRepresentation, (__bridge void*)controller.view,
       error, sizeof(error));
@@ -319,6 +331,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
         ? [NSString stringWithUTF8String:error]
         : @"KartPadCore could not start Mario Kart Wii.";
     _sessionActive = NO;
+    _activeTransaction = 0;
     [self resolveLaunch:Failure(@"KARTPAD_START_FAILED", @"start", message)];
     return;
   }
