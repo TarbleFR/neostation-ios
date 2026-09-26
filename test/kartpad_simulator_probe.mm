@@ -43,6 +43,12 @@ static void Save(NSDictionary* report) {
   NSData* data=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
   [data writeToFile:[dir stringByAppendingPathComponent:@"probe.json"] atomically:YES];
 }
+static void Progress(NSString* stage) {
+  NSLog(@"[KartPadProbe] %@",stage);
+  NSString* dir=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+  [[stage stringByAppendingString:@"\n"] writeToFile:[dir stringByAppendingPathComponent:@"probe-progress.log"]
+      atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
 static void* Required(void* handle,const char* symbol) {
   void* value=dlsym(handle,symbol);
   if (!value) throw std::runtime_error(std::string("missing symbol: ")+symbol);
@@ -94,6 +100,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
   [self.window makeKeyAndVisible];
   NSTimer* timer=[NSTimer timerWithTimeInterval:0.01 repeats:NO block:^(NSTimer*) {
     try {
+      Progress(@"loading donor runtime");
       NSString* path=[NSBundle.mainBundle.privateFrameworksPath stringByAppendingPathComponent:@"KartPadRuntime.framework/KartPadRuntime"];
       void* handle=dlopen(path.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);
       if (!handle) { Save(@{@"success":@NO,@"error":@(dlerror())}); return; }
@@ -106,6 +113,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
 
       neokartpad::DonorSessionReset sessionReset;
       if (!sessionReset.bind(base, handle)) throw std::runtime_error("session reset ABI drift");
+      Progress(@"native ABI validated");
 
       using DefaultsFn=RuntimeMemoryConfig(*)();
       using InitFn=void(*)(const RuntimeMemoryConfig&);
@@ -155,6 +163,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
         reset();
       }
       if (!reused || !zeroed) throw std::runtime_error("GuestFlat restart contract failed");
+      Progress(@"GuestFlat reset cycles passed");
 
       using GuestFn=void(*)(void*);
       auto viInit=reinterpret_cast<GuestFn>(Required(handle,"VIInit_HLE_801b94a4"));
@@ -194,6 +203,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
       if (!sessionReset.resetAfterRuntimeReturn()) throw std::runtime_error("initial reset refused");
       reset();
       for (int cycle=0; cycle<20; ++cycle) {
+        Progress([NSString stringWithFormat:@"HLE reset cycle %d",cycle]);
         init(config); fiberInit(); viInit(cpu);
         setR3(0); viSetPre(cpu);
         if (r3()!=0 || sleepPending(0x80010000)) throw std::runtime_error("stale guest callback or timer survived reset");
@@ -237,9 +247,11 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
       const std::string rendererPath=std::string(NSTemporaryDirectory().UTF8String)+"renderer";
       std::filesystem::create_directories(rendererPath);
       SoLoud::Soloud frontend;
+      Progress(@"initial CoreAudio playback");
       if (frontend.init(0,SoLoud::Soloud::MINIAUDIO)!=0) throw std::runtime_error("initial frontend audio startup failed");
       VerifyFrontendAudio(frontend);
       for (int cycle=0; cycle<3; ++cycle) {
+        Progress([NSString stringWithFormat:@"renderer/audio cycle %d: initialize",cycle]);
         AuroraConfig config{};
         config.appName="KartPad lifecycle probe";
         config.userPath=rendererPath.c_str(); config.cachePath=rendererPath.c_str();
@@ -250,6 +262,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
         if (info.initializationStatus!=AURORA_INITIALIZATION_SUCCESS)
           throw std::runtime_error(info.initializationError ?: "renderer startup failed");
         if (!audioInit(audioInstance(),32000,2)) throw std::runtime_error("SDL audio startup failed");
+        Progress([NSString stringWithFormat:@"renderer/audio cycle %d: render frame",cycle]);
         if (!beginFrame()) throw std::runtime_error("Metal begin-frame failed");
         endFrame(); waitFrame();
         {
@@ -258,6 +271,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
           neokartpad::ReleaseDonorAudioSession(backend,destroyStream,quitAudio);
         }
         auroraStop();
+        Progress([NSString stringWithFormat:@"renderer/audio cycle %d: donor stopped",cycle]);
         if (!sessionReset.resetAfterRuntimeReturn()) throw std::runtime_error("post-renderer reset refused");
         [self.window makeKeyAndVisible];
         // The same native device recreation performed by restoreAfterKartPad.
@@ -269,6 +283,7 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
         if (audioError || ![AVAudioSession.sharedInstance setActive:YES error:&audioError])
           throw std::runtime_error("host audio session recovery failed");
         VerifyFrontendAudio(frontend);
+        Progress([NSString stringWithFormat:@"renderer/audio cycle %d: CoreAudio playback restored",cycle]);
       }
       frontend.deinit();
 
