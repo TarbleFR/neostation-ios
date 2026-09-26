@@ -23,8 +23,8 @@ jobs:
           xcode-version: '16.4'
       - uses: actions/download-artifact@v4
         with:
-          name: KartPadCore-23361e84215f9c27bbfb53724c45611384c4d6de
-          run-id: 36196257250
+          name: KartPadCore-2fa79ff83361869381dd9e489bd70172a7a16578
+          run-id: 36255961320
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: donor
       - name: Build isolated simulator test app
@@ -95,6 +95,7 @@ jobs:
           import json
           result=json.load(open('evidence/probe.json'))
           assert result.get('success'), result
+          assert result['profileFinalizeCycles']==4, result
           assert result['threadSize']==8 and result['mutexSize']==64, result
           assert result['vectorSize']==24 and result['mapSize']==24 and result['hashMapSize']==40, result
           PY
