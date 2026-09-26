@@ -98,6 +98,23 @@ class SessionBridgeTest(unittest.TestCase):
             self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X0),0x123456789100)
             self.assertEqual(u.reg_read(arm.UC_ARM64_REG_SP),0x2345678000)
             self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X30),done)
+
+    def test_reentrant_process_guards_are_exact(self):
+        self.assertEqual(
+            bridge.cond_branch(bridge.SELECT_FROZEN_BRANCH,
+                               bridge.SELECT_FROZEN_RETURN, 0),
+            0x54000F00,
+        )
+        self.assertEqual(
+            bridge.cbz_w(17, bridge.DVD_REGISTER_GATE + 8,
+                         bridge.DVD_REGISTER_GATE + 16),
+            0x34000051,
+        )
+        gate = bridge.dvd_register_gate_bytes()
+        self.assertEqual(len(gate), 36)
+        self.assertEqual(gate[12:16], bytes.fromhex("c0035fd6"))
+        self.assertEqual(gate[16:32], bridge.REGISTER_FILE_PROLOGUE)
+
     def test_branch_range_validation(self):
         for pc,dest in ((0,1),(0,1<<28)):
             with self.assertRaises(SystemExit):bridge.branch(pc,dest)
