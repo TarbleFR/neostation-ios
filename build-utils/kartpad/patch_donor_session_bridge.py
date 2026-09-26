@@ -63,6 +63,10 @@ REGISTER_FILE_SIZE = 0x2F4
 REGISTER_FILE_SHA = 'cd651a05e6f49bb24997a55fa35ee22c3e0e2a9b0fcc89232867a185f339f908'
 REGISTER_FILE_PROLOGUE = bytes.fromhex('ffc302d1f85f07a9f65708a9f44f09a9')
 DVD_REGISTER_GATE = BASE + 0x8A00
+DVD_DIRECTORY_GATE = BASE + 0x8B00
+DVD_DIRECTORY_LOOP = 0x10011ACA8
+DVD_DIRECTORY_NEXT = 0x10011AC9C
+DVD_DIRECTORY_ORIGINAL = 0x39C05E68  # ldrsb w8, [x19, #0x17]
 PROLOGUE = bytes.fromhex('ff0303d1fc6f06a9fa6707a9f85f08a9')
 FRAME_INSTRUCTION = 0x29424666  # ldp w6, w17, [x19, #0x10]
 
@@ -100,6 +104,10 @@ def cbz_w(rt, pc, target):
     if delta % 4 or not -(1 << 20) <= delta < (1 << 20):
         raise SystemExit('ERROR: DVD gate conditional branch out of range')
     return 0x34000000 | (((delta // 4) & 0x7ffff) << 5) | rt
+
+
+def cbnz_w(rt, pc, target):
+    return cbz_w(rt, pc, target) | 0x01000000
 
 
 def ldr_x(rt, rn, offset):
@@ -165,6 +173,20 @@ def dvd_register_gate_bytes():
     ])
 
 
+def dvd_directory_gate_bytes():
+    # Session 2 reuses the published host index. That vector now contains
+    # synthetic directory nodes (including "/"), whereas BuildImage takes
+    # files only. Skip directory nodes when reconstructing registrations;
+    # keep the exact original file-copy instruction and loop increment.
+    return words([
+        ldrb_w(8, 19, 0x38),
+        cbnz_w(8, DVD_DIRECTORY_GATE + 4, DVD_DIRECTORY_GATE + 16),
+        DVD_DIRECTORY_ORIGINAL,
+        branch(DVD_DIRECTORY_GATE + 12, DVD_DIRECTORY_LOOP + 4),
+        branch(DVD_DIRECTORY_GATE + 16, DVD_DIRECTORY_NEXT),
+    ])
+
+
 def expected_patches():
     entry = words([encode_adrp(16, RUN, CONTROL),
                    ldr_x(16,16,CONTROL & 0xfff),0xD61F0200,0xD503201F])
@@ -175,6 +197,8 @@ def expected_patches():
             REGISTER_FILE: words([branch(REGISTER_FILE, DVD_REGISTER_GATE),
                                   0xD503201F, 0xD503201F, 0xD503201F]),
             DVD_REGISTER_GATE: dvd_register_gate_bytes(),
+            DVD_DIRECTORY_LOOP: words([branch(DVD_DIRECTORY_LOOP, DVD_DIRECTORY_GATE)]),
+            DVD_DIRECTORY_GATE: dvd_directory_gate_bytes(),
             TRAMPOLINE:trampoline, GATE:gate_bytes(), MAGIC_VM:MAGIC,
             EXIT_CALL:words([branch(EXIT_CALL,EXIT_GATE,0x94000000)]),
             EXIT_GATE:words([encode_adrp(16,EXIT_GATE,CONTROL),
@@ -234,6 +258,7 @@ def validate(data):
     dvd_off=vm_to_file(segments,DVD_INIT)
     dvd_original=bytearray(data[dvd_off:dvd_off+DVD_INIT_SIZE])
     struct.pack_into('<I',dvd_original,DVD_INIT_GUARD-DVD_INIT,DVD_INIT_GUARD_ORIGINAL)
+    struct.pack_into('<I',dvd_original,DVD_DIRECTORY_LOOP-DVD_INIT,DVD_DIRECTORY_ORIGINAL)
     if hashlib.sha256(dvd_original).hexdigest()!=DVD_INIT_SHA:
         raise SystemExit('ERROR: unreviewed instructions changed inside DVDInit')
     register_off=vm_to_file(segments,REGISTER_FILE)
@@ -260,7 +285,8 @@ def validate(data):
             'reentrantFrozenProfile':True,
             'frozenProfileBranch':hex(SELECT_FROZEN_BRANCH),
             'reentrantDvdGuestPublish':True,
-            'dvdHostIndexReuseGate':hex(DVD_REGISTER_GATE)}
+            'dvdHostIndexReuseGate':hex(DVD_REGISTER_GATE),
+            'dvdDirectoryReentryGate':hex(DVD_DIRECTORY_GATE)}
 
 
 def patch(path):
@@ -283,6 +309,8 @@ def patch(path):
         raise SystemExit('ERROR: DVDInit original instruction hash drift')
     if struct.unpack_from('<I',data,vm_to_file(segments,DVD_INIT_GUARD))[0]!=DVD_INIT_GUARD_ORIGINAL:
         raise SystemExit('ERROR: DVDInit process-lifetime guard instruction drift')
+    if struct.unpack_from('<I',data,vm_to_file(segments,DVD_DIRECTORY_LOOP))[0]!=DVD_DIRECTORY_ORIGINAL:
+        raise SystemExit('ERROR: DVDInit directory registration instruction drift')
     register_off=vm_to_file(segments,REGISTER_FILE)
     if hashlib.sha256(data[register_off:register_off+REGISTER_FILE_SIZE]).hexdigest()!=REGISTER_FILE_SHA:
         raise SystemExit('ERROR: DVD file registration original instruction hash drift')

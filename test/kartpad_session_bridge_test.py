@@ -114,6 +114,34 @@ class SessionBridgeTest(unittest.TestCase):
         self.assertEqual(len(gate), 36)
         self.assertEqual(gate[12:16], bytes.fromhex("c0035fd6"))
         self.assertEqual(gate[16:32], bridge.REGISTER_FILE_PROLOGUE)
+        self.assertEqual(len(bridge.dvd_directory_gate_bytes()), 20)
+
+    def test_dvd_second_session_excludes_synthetic_directories(self):
+        # BuildAndPublishRuntimeFst rewrites the host vector with FST indexed
+        # entries after the first session. On reentry the root is a directory,
+        # not a RegisteredFile; the unguarded loop produced dvd_fst fatal.
+        patches = bridge.expected_patches()
+        for slide in SLIDES:
+            for directory in (False, True):
+                with self.subTest(slide=slide, directory=directory):
+                    u = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+                    for addr in (bridge.DVD_DIRECTORY_LOOP + slide,
+                                 bridge.DVD_DIRECTORY_GATE + slide,
+                                 0x3456000000):
+                        u.mem_map(addr & ~4095, 4096)
+                    for addr in (bridge.DVD_DIRECTORY_LOOP, bridge.DVD_DIRECTORY_GATE):
+                        u.mem_write(addr + slide, patches[addr])
+                    entry = 0x3456000000
+                    u.mem_write(entry + 0x17, b'\x35')  # source string tag
+                    u.mem_write(entry + 0x38, bytes([int(directory)]))
+                    u.reg_write(arm.UC_ARM64_REG_X19, entry)
+                    stop = (bridge.DVD_DIRECTORY_NEXT if directory else
+                            bridge.DVD_DIRECTORY_LOOP + 4) + slide
+                    u.emu_start(bridge.DVD_DIRECTORY_LOOP + slide, stop, count=10)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_PC), stop)
+                    if not directory:
+                        self.assertEqual(u.reg_read(arm.UC_ARM64_REG_W8), 0x35)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X19), entry)
 
     def test_branch_range_validation(self):
         for pc,dest in ((0,1),(0,1<<28)):
