@@ -152,9 +152,9 @@ assert '[children insertObject:BuildReturnToNeoStationAction() atIndex:1]' in do
 stop = donor_core.split('void ReturnToNeoStation() {', 1)[1].split('int Initialize', 1)[0]
 assert 'commands.requestClose()' in stop and 'session.requestStop()' in stop
 assert 'sdlHideWindow' not in stop and 'Emit(' not in stop
-assert 'ReleaseTerminalGuestMemory();' in donor_core
+assert 'PrepareReusableGuestMemory();' in donor_core
 runtime = donor_core.split('void RuntimeMainOnUIKitThread() {', 1)[1].split('void ReturnToNeoStation() {', 1)[0]
-assert runtime.index('runtimeMain(1, argv)') < runtime.index('ReleaseTerminalGuestMemory()') < runtime.index('session.terminate()')
+assert runtime.index('runtimeMain(1, argv)') < runtime.index('PrepareReusableGuestMemory()') < runtime.index('session.terminate()')
 assert 'validate_session_bridge(runtime_bytes)' in ipa_validator
 for key in ('restartGame', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed'):
     assert ('"' + key + '"') in session_control
