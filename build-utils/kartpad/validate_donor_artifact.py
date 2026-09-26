@@ -27,7 +27,7 @@ def validate(root: Path) -> dict:
         raise SystemExit("ERROR: donor mode identity is missing")
     if identity.get("official_ipa_sha256") != OFFICIAL_IPA_SHA256:
         raise SystemExit("ERROR: unexpected official KartPad IPA")
-    if identity.get("abi_version") != 1:
+    if identity.get("abi_version") != 2:
         raise SystemExit("ERROR: unexpected donor ABI")
     if identity.get("runtime_identity") != "kartpad_rmcp01_full_game_v1":
         raise SystemExit("ERROR: unexpected donor runtime identity")
