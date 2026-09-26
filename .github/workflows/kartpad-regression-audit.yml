@@ -14,6 +14,7 @@ on:
       - test/kartpad_guest_language_state_test.cpp
       - test/kartpad_native_session_test.cpp
       - test/kartpad_main_runloop_test.mm
+      - test/kartpad_host_lifecycle_contract_test.py
 permissions:
   contents: read
 jobs:
@@ -43,6 +44,7 @@ jobs:
           c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core -Ipackages/kartpad_internal_bridge/ios/Classes test/kartpad_native_session_test.cpp -o /tmp/kartpad-native-session
           /tmp/kartpad-native-session
           python3 test/kartpad_bridge_contract_test.py
+          python3 test/kartpad_host_lifecycle_contract_test.py
           python3 test/kartpad_ipa_validation_test.py
       - uses: actions/upload-artifact@v4
         if: always()
