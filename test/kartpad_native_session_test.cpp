@@ -1,9 +1,32 @@
 #include "SessionState.h"
 #include "DonorDataLifecycle.h"
+#include "WindowHandoff.h"
 #include <cassert>
 #include <initializer_list>
+#include <vector>
 
 int main() {
+  struct Window { int id; bool hidden = false; bool visible = false; };
+  Window host{1}, donor{2}, unrelated{3};
+  std::vector<int> handoff;
+  const auto hide = [&](Window* window) {
+    handoff.push_back(-window->id);
+    window->hidden = true;
+  };
+  const auto show = [&](Window* window) {
+    handoff.push_back(window->id);
+    window->visible = true;
+  };
+  neokartpad::RestoreOwnedWindow(&host, &donor, hide, show);
+  assert((handoff == std::vector<int>{-2, 1}));
+  assert(donor.hidden && host.visible && !host.hidden && !unrelated.hidden);
+  handoff.clear();
+  neokartpad::RestoreOwnedWindow(&host, &host, hide, show);
+  assert((handoff == std::vector<int>{1}) && !host.hidden);
+  handoff.clear();
+  neokartpad::RestoreOwnedWindow(&host, static_cast<Window*>(nullptr), hide, show);
+  assert((handoff == std::vector<int>{1}));
+
   // A clean guest reset must make the donor reload its initial DOL data on
   // every subsequent entry. Otherwise OS::__ThreadInit calls the cleared
   // switch-thread callback at guest 0x80385AE0.

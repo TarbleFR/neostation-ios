@@ -10,6 +10,7 @@
 #include "../core/GuestLanguageState.h"
 #include "../core/DonorAudioSession.h"
 #include "../core/DonorDataLifecycle.h"
+#include "../core/WindowHandoff.h"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -1366,6 +1367,16 @@ UIWindow* CurrentDonorWindow() {
 
 void ReturnToNeoStation(int reason);
 
+void RestoreNeoStationWindow() {
+  neokartpad::RestoreOwnedWindow(
+      neoStationWindow, donorWindow,
+      [](UIWindow* window) { window.hidden = YES; },
+      [](UIWindow* window) { [window makeKeyAndVisible]; });
+  donorWindow = nil;
+  neoStationWindow = nil;
+  LogLifecycleBoundary("owned game window hidden; host window restored");
+}
+
 void InstallSettingsButton() {
   UIWindow* window = CurrentDonorWindow();
   if (!window || settingsButton.superview) return;
@@ -1471,7 +1482,6 @@ void RuntimeMainOnUIKitThread() {
   requestedExitReason = NEO_KARTPAD_EXIT_NONE;
   [settingsButton removeFromSuperview];
   settingsButton = nil;
-  donorWindow = nil;
   if (ownedSessionAlert) {
     [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
   }
@@ -1490,8 +1500,7 @@ void RuntimeMainOnUIKitThread() {
 
     NSLog(@"[NeoKartPad/Lifecycle] session=%llu resourcesReleased state=idle exitReason=%d",
           (unsigned long long)serial, exitReason);
-    if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
-    neoStationWindow = nil;
+    RestoreNeoStationWindow();
     NSLog(@"[NeoKartPad/Lifecycle] session=%llu destroyed; process runtime image/reservation retained",
           (unsigned long long)serial);
 
@@ -1507,7 +1516,7 @@ void RuntimeMainOnUIKitThread() {
 
   orderlyRuntimeReturn = false;
   lastExitReason.store(exitReason, std::memory_order_release);
-  if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
+  RestoreNeoStationWindow();
   if (session.state() != NEO_KARTPAD_ENDED) session.terminate();
 
   NSLog(@"[NeoKartPad/Lifecycle] session=%llu runtimeFailed result=%d exitReason=%d detail=%s",

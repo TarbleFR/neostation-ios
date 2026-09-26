@@ -28,6 +28,9 @@ assert "lastExitReason.store(exitReason" in core
 assert "caught RuntimeMain exception" in core
 assert "RuntimeMainOnUIKitThread();\n        PollForRuntimeWindow(0);" not in core
 assert "finishReusable()" in core
+assert core.count("RestoreNeoStationWindow();") == 2
+assert 'RestoreNeoStationWindow();\n    NSLog' in core
+assert 'RestoreNeoStationWindow();\n  if (session.state()' in core
 
 for token in (
     "_launchCompletionDelivered",
