@@ -56,10 +56,18 @@ jobs:
           curl -fL --retry 3 https://raw.githubusercontent.com/chrissotraidis/wiicompiled/d0b8dec62a8c98dd45736a996ae18327ada8fe3f/aurora-main/include/aurora/aurora.h -o "$RUNNER_TEMP/aurora-probe-api.h"
           echo "3959cc80683a3f674353a77b452219fc7276a2b55b96d5f42e90f5043f12908d  $RUNNER_TEMP/aurora-probe-api.h" | shasum -a 256 -c -
           ditto donor/runtime-resources "$APP"
+          curl -fL --retry 3 https://pub.dev/api/archives/flutter_soloud-4.0.12.tar.gz -o "$RUNNER_TEMP/soloud.tar.gz"
+          echo "5ffc8db6d9e5751ff2e8c3b7934b1973dc788fb541b9000561b1168c7798dae0  $RUNNER_TEMP/soloud.tar.gz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/soloud"
+          tar -xzf "$RUNNER_TEMP/soloud.tar.gz" -C "$RUNNER_TEMP/soloud"
+          SOLOUD="$RUNNER_TEMP/soloud/src"
           SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
           xcrun clang++ -target arm64-apple-ios17.4-simulator -isysroot "$SDK" \
-            -std=c++20 -fobjc-arc -fblocks -I"$RUNNER_TEMP" -framework UIKit -framework Foundation -framework AVFAudio \
-            test/kartpad_simulator_probe.mm -o "$APP/Probe"
+            -std=c++20 -O1 -fobjc-arc -fblocks -DWITH_MINIAUDIO -I"$RUNNER_TEMP" \
+            -I"$SOLOUD" -I"$SOLOUD/soloud/include" -I"$SOLOUD/soloud/src/backend/miniaudio" \
+            -framework UIKit -framework Foundation -framework AVFAudio -framework AudioToolbox \
+            "$SOLOUD"/soloud/src/core/*.cpp "$SOLOUD/soloud/src/backend/miniaudio/soloud_miniaudio.cpp" \
+            "$SOLOUD/soloud_common.cpp" test/kartpad_simulator_probe.mm -o "$APP/Probe"
           python3 - "$APP/Info.plist" <<'PY'
           import plistlib,sys
           plistlib.dump({'CFBundleIdentifier':'com.neostation.kartpad.lifecycle-probe',
@@ -102,6 +110,7 @@ jobs:
           assert result['profileFinalizeCycles']==4, result
           assert result['reproducedStaleCallback'] and result['reproducedStaleTimer'], result
           assert result['hleResetCycles']==20 and result['rendererAudioCycles']==3, result
+          assert result['frontendAudioCycles']==3, result
           assert result['threadSize']==8 and result['mutexSize']==64, result
           assert result['vectorSize']==24 and result['mapSize']==24 and result['hashMapSize']==40, result
           PY

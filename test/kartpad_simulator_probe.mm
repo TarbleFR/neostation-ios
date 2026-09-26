@@ -8,12 +8,15 @@
 #import <dlfcn.h>
 #import <AVFAudio/AVFAudio.h>
 #include "aurora-probe-api.h"
+#include "soloud.h"
+#include "miniaudio.h"
 #include "../native/kartpad/core/DonorAudioSession.h"
 #include "../native/kartpad/core/DonorSessionReset.h"
 #include <fcntl.h>
 #include <array>
 #include <atomic>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <deque>
 #include <fstream>
@@ -44,6 +47,42 @@ static void* Required(void* handle,const char* symbol) {
   void* value=dlsym(handle,symbol);
   if (!value) throw std::runtime_error(std::string("missing symbol: ")+symbol);
   return value;
+}
+
+// Count samples requested by the real CoreAudio output callback. No manual
+// mix() calls or null backend can satisfy this assertion.
+static std::atomic<uint64_t> frontendFrames{0};
+namespace SoLoud { extern ma_device gDevice; }
+class ProbeToneInstance final : public SoLoud::AudioSourceInstance {
+ public:
+  unsigned int getAudio(float* buffer,unsigned int samples,unsigned int) override {
+    for (unsigned int i=0;i<samples;++i) buffer[i]=0.02f*std::sin(phase_++*0.0626893772);
+    frontendFrames.fetch_add(samples);
+    return samples;
+  }
+  bool hasEnded() override { return false; }
+ private:
+  uint64_t phase_=0;
+};
+class ProbeTone final : public SoLoud::AudioSource {
+ public:
+  ProbeTone() { mChannels=1; mBaseSamplerate=44100; }
+  SoLoud::AudioSourceInstance* createInstance() override { return new ProbeToneInstance; }
+};
+static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
+  if (frontend.getBackendId()!=SoLoud::Soloud::MINIAUDIO ||
+      !SoLoud::gDevice.pContext || SoLoud::gDevice.pContext->backend!=ma_backend_coreaudio)
+    throw std::runtime_error("frontend did not open the production audio backend");
+  ProbeTone source;
+  frontendFrames.store(0);
+  const auto voice=frontend.play(source);
+  const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(4);
+  while (frontendFrames.load()<2048 && std::chrono::steady_clock::now()<deadline) {
+    [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  }
+  if (frontendFrames.load()<2048 || !frontend.isValidVoiceHandle(voice))
+    throw std::runtime_error("frontend CoreAudio callback did not resume playback");
+  frontend.stop(voice);
 }
 @interface ProbeDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic,strong) UIWindow* window;
@@ -197,6 +236,9 @@ static void* Required(void* handle,const char* symbol) {
       reinterpret_cast<void(*)()>(Required(handle,"SDL_SetMainReady"))();
       const std::string rendererPath=std::string(NSTemporaryDirectory().UTF8String)+"renderer";
       std::filesystem::create_directories(rendererPath);
+      SoLoud::Soloud frontend;
+      if (frontend.init(0,SoLoud::Soloud::MINIAUDIO)!=0) throw std::runtime_error("initial frontend audio startup failed");
+      VerifyFrontendAudio(frontend);
       for (int cycle=0; cycle<3; ++cycle) {
         AuroraConfig config{};
         config.appName="KartPad lifecycle probe";
@@ -218,16 +260,22 @@ static void* Required(void* handle,const char* symbol) {
         auroraStop();
         if (!sessionReset.resetAfterRuntimeReturn()) throw std::runtime_error("post-renderer reset refused");
         [self.window makeKeyAndVisible];
+        // The same native device recreation performed by restoreAfterKartPad.
+        frontend.deinit();
+        if (frontend.init(0,SoLoud::Soloud::MINIAUDIO)!=0) throw std::runtime_error("frontend audio recreation failed");
         NSError* audioError=nil;
         [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryAmbient
             mode:AVAudioSessionModeDefault options:AVAudioSessionCategoryOptionMixWithOthers error:&audioError];
         if (audioError || ![AVAudioSession.sharedInstance setActive:YES error:&audioError])
           throw std::runtime_error("host audio session recovery failed");
+        VerifyFrontendAudio(frontend);
       }
+      frontend.deinit();
 
       Save(@{@"success":@YES,@"nativeRuntimeLoaded":@YES,
              @"reproducedStaleCallback":@(reproducedStaleCallback),
              @"reproducedStaleTimer":@(reproducedStaleTimer),@"hleResetCycles":@20,@"rendererAudioCycles":@3,
+             @"frontendAudioCycles":@3,@"frontendAudioPackage":@"flutter_soloud 4.0.12",
              @"cpuOffset":@((uint8_t*)cpu-base),
              @"threadSize":@(sizeof(std::thread)),@"mutexSize":@(sizeof(std::mutex)),
              @"vectorSize":@(sizeof(std::vector<int>)),@"dequeSize":@(sizeof(std::deque<int>)),

@@ -42,6 +42,9 @@ Validation gates:
 - Native UIKit simulator executes Memory, VI, fibers, sleep timer registration,
   NAND callback enqueue/dequeue, and file close with the production reset header.
   It must reproduce the old state leak and pass 20 corrected session cycles.
+- Three SDL/Metal/audio create/destroy cycles, with the exact flutter_soloud
+  4.0.12 native backend restored after each. Real CoreAudio callbacks must consume
+  the test sound after reopening; a successful init flag alone does not pass.
 - Frontend GameLaunchManager exercises userReturn/languageRestart, audio
   activation/recreation order, rapid relaunch, and disabled sound preferences.
 - Core compile and IPA identity checks remain mandatory.
