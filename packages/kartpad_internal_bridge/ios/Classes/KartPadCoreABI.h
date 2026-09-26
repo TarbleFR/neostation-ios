@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define NEO_KARTPAD_ABI_VERSION 1u
+#define NEO_KARTPAD_ABI_VERSION 2u
 #define NEO_KARTPAD_RUNTIME_IDENTITY "kartpad_rmcp01_full_game_v1"
 
 enum NeoKartPadState {
@@ -16,6 +16,16 @@ enum NeoKartPadState {
   NEO_KARTPAD_RUNNING = 2,
   NEO_KARTPAD_STOPPING = 3,
   NEO_KARTPAD_ENDED = 4,
+};
+
+enum NeoKartPadExitReason {
+  NEO_KARTPAD_EXIT_NONE = 0,
+  NEO_KARTPAD_EXIT_USER_RETURN = 1,
+  NEO_KARTPAD_EXIT_LANGUAGE_RESTART = 2,
+  NEO_KARTPAD_EXIT_NORMAL_TERMINATION = 3,
+  NEO_KARTPAD_EXIT_LAUNCH_FAILURE = 4,
+  NEO_KARTPAD_EXIT_RUNTIME_FAILURE = 5,
+  NEO_KARTPAD_EXIT_CRASH = 6,
 };
 
 typedef void (*NeoKartPadEventFn)(void* context, int state, const char* message);
@@ -37,6 +47,7 @@ typedef struct NeoKartPadAPI {
   int (*session_state)(void);
   void (*set_ui_text)(const char* key, const char* value);
   const char* (*runtime_identity)(void);
+  int (*last_exit_reason)(void);
 } NeoKartPadAPI;
 
 typedef const NeoKartPadAPI* (*NeoKartPadGetAPIFn)(void);
