@@ -1402,16 +1402,18 @@ void PollForRuntimeWindow(int attempt) {
 
 void RuntimeMainOnUIKitThread() {
   if (!NSThread.isMainThread) {
-    dispatch_async(dispatch_get_main_queue(), ^{ RuntimeMainOnUIKitThread(); });
+    RunOnUIKitRunLoop(^{ RuntimeMainOnUIKitThread(); });
     return;
   }
+
+  const uint64_t serial = sessionSerial.load(std::memory_order_acquire);
   runtimeThreadActive.store(true, std::memory_order_release);
+  NSLog(@"[NeoKartPad/Lifecycle] session=%llu RuntimeMain begin",
+        (unsigned long long)serial);
 
   // The official iOS executable enters RuntimeMain through SDL_RunApp.
   // NeoStation already owns UIApplication, so it must reproduce the parts of
-  // SDL's iOS bootstrap that are safe inside an existing application:
-  // main-ready state plus the UIKit event pump. RuntimeMain itself must remain
-  // on UIKit's main thread because SDL creates UIWindow/CAMetalLayer there.
+  // SDL's iOS bootstrap that are safe inside an existing application.
   sdlSetMainReady();
   sdlSetiOSEventPump(true);
 
@@ -1425,30 +1427,79 @@ void RuntimeMainOnUIKitThread() {
   sdlSetiOSEventPump(false);
   runtimeThreadActive.store(false, std::memory_order_release);
 
+  const bool orderly = orderlyRuntimeReturn && result == 0;
+  const bool shouldRestart = orderly && restartAfterShutdown;
+  const uint32_t pendingLanguage = restartLanguage;
+
   ReleaseTerminalGuestMemory();
   [returnButton removeFromSuperview];
   [settingsButton removeFromSuperview];
   returnButton = nil;
   settingsButton = nil;
   donorWindow = nil;
-  if (ownedSessionAlert) [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
+  if (ownedSessionAlert) {
+    [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
+  }
   ownedSessionAlert = nil;
-  if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
-  if (session.state() != NEO_KARTPAD_ENDED) {
-    session.terminate();
-    if (orderlyRuntimeReturn && result == 0) {
-      Emit("KartPad session closed after guest, audio and graphics shutdown.");
+
+  if (orderly) {
+    session.finishReusable();
+    commands = neokartpad::SessionCommands{};
+    frameGateEntered = false;
+    orderlyRuntimeReturn = false;
+    languageWrites.store(0, std::memory_order_release);
+    languageWriteFailed = false;
+    kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+    kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel);
+
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu resources released; state=idle restart=%d",
+          (unsigned long long)serial, shouldRestart);
+
+    if (shouldRestart) {
+      restartAfterShutdown = false;
+      restartLanguage = 0;
+      if (!SetRuntimeLanguageOverride(pendingLanguage)) {
+        session.terminate();
+        if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
+        Emit("KartPad language restart failed while preparing the fresh runtime.");
+        return;
+      }
+      if (!session.reserve()) {
+        session.terminate();
+        if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
+        Emit("KartPad could not reserve a fresh restart session.");
+        return;
+      }
+      session.runtimeReady();
+      const uint64_t next = sessionSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+      NSLog(@"[NeoKartPad/Lifecycle] session=%llu created from explicit language restart language=%u",
+            (unsigned long long)next, pendingLanguage);
+      RunOnUIKitRunLoop(^{
+        RuntimeMainOnUIKitThread();
+        PollForRuntimeWindow(0);
+      });
       return;
     }
-    if (result == 0) {
-      Emit("KartPad donor runtime exited.");
-    } else if (!runtimeError.empty()) {
-      const std::string message =
-          "KartPad donor runtime failed before first frame: " + runtimeError;
-      Emit(message.c_str());
-    } else {
-      Emit("KartPad donor runtime failed before first frame.");
-    }
+
+    restartAfterShutdown = false;
+    restartLanguage = 0;
+    if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
+    Emit("KartPad session closed after guest, audio and graphics shutdown.");
+    return;
+  }
+
+  restartAfterShutdown = false;
+  restartLanguage = 0;
+  if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
+  if (session.state() != NEO_KARTPAD_ENDED) session.terminate();
+  if (result == 0) {
+    Emit("KartPad donor runtime exited unexpectedly.");
+  } else if (!runtimeError.empty()) {
+    const std::string message =
+        "KartPad donor runtime failed before first frame: " + runtimeError;
+    Emit(message.c_str());
+  } else {
+    Emit("KartPad donor runtime failed before first frame.");
   }
 }
 
@@ -1476,7 +1527,8 @@ int Initialize(const char* support, const char* cache,
   if (!support || !*support || !cache || !*cache)
     return Fail(error, errorSize, "KartPad data directories are missing.");
   if (session.state() == NEO_KARTPAD_ENDED)
-    return Fail(error, errorSize, "KartPad donor runtime is terminal.");
+    return Fail(error, errorSize,
+                "KartPad donor runtime ended after an unexpected native failure.");
   supportPath = support;
   cachePath = cache;
   ApplyNeoStationKartPadInputPolicy();
@@ -1505,10 +1557,15 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   if (!PrepareUserGameDiscovery(error, errorSize)) return 0;
   if (!PrepareEmbeddedRuntimeBootstrap(error, errorSize)) return 0;
   if (!LoadRuntime(error, errorSize)) return 0;
+  if (!SetRuntimeLanguageOverride(CurrentGameLanguage()))
+    return Fail(error, errorSize, "KartPad language bridge is unavailable.");
   if (!session.reserve())
     return Fail(error, errorSize, "KartPad could not reserve a session.");
 
   session.runtimeReady();
+  const uint64_t serial = sessionSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+  NSLog(@"[NeoKartPad/Lifecycle] session=%llu created language=%ld",
+        (unsigned long long)serial, (long)CurrentGameLanguage());
 
   // Return from the Flutter method call first, then enter the official runtime
   // on UIKit's main thread. SDL's own iOS pump services the nested main runloop
