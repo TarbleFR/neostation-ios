@@ -1,0 +1,42 @@
+{
+  "__Z30InitializePersistentCpuContextv": {
+    "address": "0x10005bfbc",
+    "size": 68,
+    "sha256": "c2c7af8ec1875eb3a90ea564e625c1098412ee0dd40f427a11c104043ae64911"
+  },
+  "__ZL18SeedViStateForInitP10CpuContextPKc": {
+    "address": "0x100191cf4",
+    "size": 344,
+    "sha256": "5eed0008d23ee2f7d001dcc4c4e9298bde8eccd107edfa36cb5ef9863bd1c409"
+  },
+  "_OSStopAudioSystem_801A1520": {
+    "address": "0x100113b2c",
+    "size": 64,
+    "sha256": "59b127d53de960326715768083bf9951c159813fd726ee6fe4993d36c9656065"
+  },
+  "__Z20NandQueueIosCallbackjij": {
+    "address": "0x10005cea4",
+    "size": 260,
+    "sha256": "51545b30d37caa4202060609ba20d0673fc2fc1a0505818588d3933697f7ef41"
+  },
+  "__Z7CloseFdi": {
+    "address": "0x100092c4c",
+    "size": 272,
+    "sha256": "5f119f10a260e218e738e55edff5e556407bbe6696190d136d47368031c279a7"
+  },
+  "__ZN5Fiber17GuestFiberManager8ShutdownEv": {
+    "address": "0x100067d18",
+    "size": 264,
+    "sha256": "577bf539d78938e3aeec7d8949b4ed9e1ec3a762efb5f6568776f9c07cf10f7d"
+  },
+  "__Z27NandProcessPendingCallbacksP10CpuContexti": {
+    "address": "0x10005cfa8",
+    "size": 952,
+    "sha256": "ce327875758702c6f5217e38a0ba192e8e197d340f61bae83682ab0e9c04c561"
+  },
+  "__ZN12_GLOBAL__N_118AdvanceDueRetracesEP10CpuContextib": {
+    "address": "0x100190580",
+    "size": 288,
+    "sha256": "da83d02ea8cb9db3ef605bf08bd9890be5877a700c6d7d829195ce9330cbdc76"
+  }
+}

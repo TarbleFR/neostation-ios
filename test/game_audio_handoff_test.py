@@ -67,12 +67,24 @@ class MusicPlayerService {
   Future<void> pauseForGame() async {
     events.add('pause'); wasPlaying = playing; playing = false;
   }
+  Future<void> restoreAfterKartPad() async {
+    expect(AudioPolicyService().active, isTrue);
+    events.add('reopen-device');
+    playing = wasPlaying; wasPlaying = false;
+  }
   Future<void> resumeAfterGame() async {
     expect(AudioPolicyService().active, isTrue);
     events.add('resume');
     if (failResume) throw StateError('injected audio backend error');
     playing = wasPlaying; wasPlaying = false;
   }
+}
+class HomeMusicService {
+  static final instance = HomeMusicService._();
+  factory HomeMusicService() => instance;
+  HomeMusicService._();
+  Future<void> beforeSharedEngineRestart() async { events.add('home-stop'); }
+  Future<void> afterSharedEngineRestart() async { events.add('home-ready'); }
 }
 class AudioPolicyService {
   static final instance = AudioPolicyService._();
@@ -116,6 +128,26 @@ void main() {
       expect(events.indexOf('activated'), lessThan(events.indexOf('resume')));
       expect(manager.isActive, isFalse);
       expect(music.playing, playing); expect(sfx.isEnabled, effects);
+    }
+  });
+  test('KartPad recreates frontend output and restores muted preferences for both exit reasons', () async {
+    for (final reason in ['userReturn', 'languageRestart']) {
+      for (final enabled in [true, false]) {
+        events.clear(); audio.active = false;
+        sfx.isEnabled = enabled; music.playing = enabled;
+        await manager.beginSession();
+        manager.onGameStarted(emulatorExe: 'ios_kartpad_internal');
+        KartPadInternalBridge.controller.add({'exitReason': reason, 'success': true, 'runtimeReleased': true});
+        await flush(); expect(manager.phase, GameLaunchPhase.closing);
+        manager.completeClose(); manager.onDialogDisposed(); await flush();
+        expect(events.indexOf('activated'), lessThan(events.indexOf('reopen-device')));
+        expect(events.indexOf('home-stop'), lessThan(events.indexOf('reopen-device')));
+        expect(events.indexOf('reopen-device'), lessThan(events.indexOf('home-ready')));
+        expect(events.indexOf('home-ready'), lessThan(events.indexOf('sfx:$enabled', events.indexOf('home-ready'))));
+        expect(events.where((e) => e == 'reopen-device').length, 1);
+        expect(sfx.isEnabled, enabled); expect(music.playing, enabled);
+        expect(manager.isActive, false);
+      }
     }
   });
   test('rapid new launch waits for the old activation instead of being interrupted', () async {

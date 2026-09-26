@@ -10,6 +10,7 @@
 #include "../core/GuestLanguageState.h"
 #include "../core/DonorAudioSession.h"
 #include "../core/DonorDataLifecycle.h"
+#include "../core/DonorSessionReset.h"
 #include "../core/WindowHandoff.h"
 #include <algorithm>
 #include <array>

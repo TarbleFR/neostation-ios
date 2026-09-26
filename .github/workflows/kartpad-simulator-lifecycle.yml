@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/kartpad-simulator-lifecycle.yml
       - test/kartpad_simulator_probe.mm
+      - native/kartpad/core/DonorSessionReset.h
 permissions:
   contents: read
   actions: read
@@ -23,8 +24,8 @@ jobs:
           xcode-version: '16.4'
       - uses: actions/download-artifact@v4
         with:
-          name: KartPadCore-2fa79ff83361869381dd9e489bd70172a7a16578
-          run-id: 36255961320
+          name: KartPadCore-b51206dbf50a8fc2520107a6269265e075262362
+          run-id: 36277444837
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: donor
       - name: Build isolated simulator test app
@@ -52,9 +53,12 @@ jobs:
           p.write_bytes(b)
           PY
           chmod 755 "$RUNTIME"
+          curl -fL --retry 3 https://raw.githubusercontent.com/chrissotraidis/wiicompiled/d0b8dec62a8c98dd45736a996ae18327ada8fe3f/aurora-main/include/aurora/aurora.h -o "$RUNNER_TEMP/aurora-probe-api.h"
+          echo "3959cc80683a3f674353a77b452219fc7276a2b55b96d5f42e90f5043f12908d  $RUNNER_TEMP/aurora-probe-api.h" | shasum -a 256 -c -
+          ditto donor/runtime-resources "$APP"
           SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
           xcrun clang++ -target arm64-apple-ios17.4-simulator -isysroot "$SDK" \
-            -std=c++20 -fobjc-arc -fblocks -framework UIKit -framework Foundation \
+            -std=c++20 -fobjc-arc -fblocks -I"$RUNNER_TEMP" -framework UIKit -framework Foundation -framework AVFAudio \
             test/kartpad_simulator_probe.mm -o "$APP/Probe"
           python3 - "$APP/Info.plist" <<'PY'
           import plistlib,sys
@@ -96,6 +100,8 @@ jobs:
           result=json.load(open('evidence/probe.json'))
           assert result.get('success'), result
           assert result['profileFinalizeCycles']==4, result
+          assert result['reproducedStaleCallback'] and result['reproducedStaleTimer'], result
+          assert result['hleResetCycles']==20 and result['rendererAudioCycles']==3, result
           assert result['threadSize']==8 and result['mutexSize']==64, result
           assert result['vectorSize']==24 and result['mapSize']==24 and result['hashMapSize']==40, result
           PY

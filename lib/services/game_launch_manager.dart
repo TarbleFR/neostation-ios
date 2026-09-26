@@ -6,6 +6,7 @@ import 'package:kartpad_internal_bridge/kartpad_internal_bridge.dart';
 import 'package:flutter/widgets.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'audio_policy_service.dart';
+import 'home_music_service.dart';
 import 'game_service.dart';
 import 'music_player_service.dart';
 import 'sfx_service.dart';
@@ -195,7 +196,16 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
       // The native session has ended before this route is disposed. Restore
       // audio ownership before resuming any menu voices, including on failure.
       await AudioPolicyService().restoreAfterGameSession();
-      await MusicPlayerService().resumeAfterGame();
+      if (Platform.isIOS && _activeEmulatorExe == 'ios_kartpad_internal') {
+        await HomeMusicService().beforeSharedEngineRestart();
+        try {
+          await MusicPlayerService().restoreAfterKartPad();
+        } finally {
+          await HomeMusicService().afterSharedEngineRestart();
+        }
+      } else {
+        await MusicPlayerService().resumeAfterGame();
+      }
     } catch (error, stack) {
       _log.e(
         '[GameLaunchManager] Could not resume menu audio.',

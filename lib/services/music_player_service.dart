@@ -775,6 +775,29 @@ class MusicPlayerService extends ChangeNotifier {
     _wasPlayingBeforeGame = false;
   }
 
+  /// Recreate the iOS output device after KartPad releases SDL's AudioQueue.
+  /// An active AVAudioSession alone does not repair an AudioUnit that was
+  /// invalidated by another engine in the same process. This uses the existing
+  /// background/foreground recovery, including reloading all SFX sources.
+  Future<void> restoreAfterKartPad() async {
+    Duration? restorePosition;
+    if (_currentHandle != null && SoLoud.instance.isInitialized) {
+      restorePosition = SoLoud.instance.getPosition(_currentHandle!);
+    }
+    _positionTimer?.cancel();
+    _durationTimer?.cancel();
+    _playerStateTimer?.cancel();
+    if (!_engineTornDownByPause) _teardownEngine();
+    // A native embedded return need not generate an iOS resumed event.
+    _isAppActive = false;
+    await appResumed();
+    if (!SoLoud.instance.isInitialized || !SfxService().isInitialized) {
+      throw StateError('Frontend audio did not reopen after KartPad.');
+    }
+    if (restorePosition != null && _isPlaying) await seek(restorePosition);
+    _logger.i('[Audio] KartPad released; frontend audio device and SFX reopened.');
+  }
+
   /// Seeks to a specific position in the active track.
   Future<void> seek(Duration position) async {
     if (!_isInitialized || _currentHandle == null) return;

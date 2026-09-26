@@ -40,6 +40,8 @@ class HomeMusicService extends ChangeNotifier with WidgetsBindingObserver {
   bool _mainMenuActive = false;
   bool _appActive = true;
   bool _starting = false;
+  bool _sharedEngineRestarting = false;
+  Completer<void>? _startFinished;
 
   String? _musicPath;
   String? _musicName;
@@ -333,7 +335,19 @@ class HomeMusicService extends ChangeNotifier with WidgetsBindingObserver {
       hasMusic &&
       _mainMenuActive &&
       _appActive &&
+      !_sharedEngineRestarting &&
       !MusicPlayerService().isPlaying;
+
+  Future<void> beforeSharedEngineRestart() async {
+    _sharedEngineRestarting = true;
+    await _startFinished?.future;
+    await _stopPlayback();
+  }
+
+  Future<void> afterSharedEngineRestart() async {
+    _sharedEngineRestarting = false;
+    await _syncPlayback();
+  }
 
   Future<void> _syncPlayback() async {
     if (_shouldPlay) {
@@ -348,6 +362,7 @@ class HomeMusicService extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     _starting = true;
+    _startFinished = Completer<void>();
 
     try {
       // SFX owns the shared SoLoud initialization path. Once the
@@ -380,6 +395,8 @@ class HomeMusicService extends ChangeNotifier with WidgetsBindingObserver {
       _log.w('[HomeMusic] Could not start selected music: $e');
     } finally {
       _starting = false;
+      _startFinished?.complete();
+      _startFinished = null;
     }
   }
 

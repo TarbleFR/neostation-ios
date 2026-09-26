@@ -12,6 +12,8 @@ static KartPadGuestCpuFn originalExitAfterMain = nullptr;
 static KartPadGuestCpuFn setNextSectionFn = nullptr;
 static KartPadGuestCpuFn changeSectionFn = nullptr;
 static DonorVoidFn stopMixWorkerFn = nullptr;
+static DonorVoidFn stopGuestAudioFn = nullptr;
+static neokartpad::DonorSessionReset donorSessionReset;
 static void* (*audioBackendInstanceFn)() = nullptr;
 static void (*destroyAudioStreamFn)(void*) = nullptr;
 static void (*quitAudioSubsystemFn)(uint32_t) = nullptr;
@@ -191,6 +193,7 @@ uint32_t KartPadFrameBoundary(void* cpu) {
     // fiber/renderer/window cleanup has returned.
     setWaitCallbackFn(nullptr); // no late VI/guest callbacks while draining GPU
     LogLifecycleBoundary("guest transition complete; AX join begin");
+    stopGuestAudioFn();         // disable AI DMA callbacks and stop DSP work
     stopMixWorkerFn();          // join AX worker BEFORE guest memory can disappear
     LogLifecycleBoundary("AX joined; audio stream release begin");
     // Aurora's SDL_Quit destroys SDL streams but cannot reset the persistent
@@ -259,6 +262,11 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   if (!dladdr(reinterpret_cast<void*>(runtimeMain), &info) || !info.dli_fbase)
     return Fail(error, errorSize, "KartPad session image base unavailable");
   auto* base = static_cast<uint8_t*>(info.dli_fbase);
+  if (!donorSessionReset.bind(base, runtimeHandle))
+    return Fail(error, errorSize, "KartPad HLE session reset layout does not match the verified donor.");
+  stopGuestAudioFn = reinterpret_cast<DonorVoidFn>(dlsym(runtimeHandle, "OSStopAudioSystem_801A1520"));
+  if (!stopGuestAudioFn)
+    return Fail(error, errorSize, "KartPad AI shutdown entry is missing.");
   constexpr char marker[] = "NEOKARTPAD-FRAME-RETURN-v1";
   if (std::memcmp(base + 0x8f00, marker, sizeof(marker)) != 0)
     return Fail(error, errorSize, "KartPad checked frame/return bridge missing");
@@ -312,6 +320,8 @@ bool PrepareReusableGuestMemory() {
   // KartPad launch clean guest contents without accumulating mappings.
   if (!orderlyRuntimeReturn) return true;
   if (!resetMemoryFn || !flatGuestBase || !*flatGuestBase) return false;
+  if (!donorSessionReset.resetAfterRuntimeReturn()) return false;
+  LogLifecycleBoundary("HLE callbacks, timers, files, CPU, VI and AI reset after runtime shutdown");
   resetMemoryFn();
   if (!neokartpad::RearmDonorDataSections(donorDataInitialized)) {
     NSLog(@"[NeoKartPad/Lifecycle] data-section guard could not be rearmed after guest reset");
