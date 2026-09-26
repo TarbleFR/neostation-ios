@@ -45,6 +45,24 @@ SELECT_PROFILE_SHA = '3a06e5aaeab0916914d46d6bc240018af32a68ffd5cbc69ee628aea319
 SELECT_FROZEN_BRANCH = 0x100059F1C
 SELECT_FROZEN_ORIGINAL = 0x540002A0  # b.eq throw("cannot change ... after finalization")
 SELECT_FROZEN_RETURN = 0x10005A0FC  # mutex unlock + normal epilogue
+
+# The donor's DVD host index is process-lifetime, while guest RAM is rebuilt for
+# every RuntimeMain. Stock DVDInit returns immediately once g_dvdInitialized is
+# true, leaving the second guest with no DVD globals/FST. We re-enter DVDInit,
+# but make RegisterFileEntry a no-op after the first completed index. This
+# preserves the host vectors/map without duplicating thousands of entries, while
+# BuildAndPublishRuntimeFst republishes them into the fresh guest memory.
+DVD_INIT = 0x100118344
+DVD_INIT_SIZE = 0x3604
+DVD_INIT_SHA = 'ef88d7116fde476a270575f6a97188a169d66d895945ae6da22c1ebb6600a400'
+DVD_INIT_GUARD = 0x100118380
+DVD_INIT_GUARD_ORIGINAL = 0x3701AE29
+DVD_INITIALIZED = 0x1051B9490
+REGISTER_FILE = 0x10012E684
+REGISTER_FILE_SIZE = 0x2F4
+REGISTER_FILE_SHA = 'cd651a05e6f49bb24997a55fa35ee22c3e0e2a9b0fcc89232867a185f339f908'
+REGISTER_FILE_PROLOGUE = bytes.fromhex('ffc302d1f85f07a9f65708a9f44f09a9')
+DVD_REGISTER_GATE = BASE + 0x8A00
 PROLOGUE = bytes.fromhex('ff0303d1fc6f06a9fa6707a9f85f08a9')
 FRAME_INSTRUCTION = 0x29424666  # ldp w6, w17, [x19, #0x10]
 
@@ -69,6 +87,19 @@ def pair(load, vector, r1, r2, offset):
         raise SystemExit('ERROR: invalid session bridge stack pair')
     op = (0xAD400000 if load else 0xAD000000) if vector else (0xA9400000 if load else 0xA9000000)
     return op | ((offset // unit) << 15) | (r2 << 10) | (31 << 5) | r1
+
+
+def ldrb_w(rt, rn, offset):
+    if not 0 <= offset <= 0xfff:
+        raise SystemExit('ERROR: invalid DVD gate byte offset')
+    return 0x39400000 | (offset << 10) | (rn << 5) | rt
+
+
+def cbz_w(rt, pc, target):
+    delta = target - pc
+    if delta % 4 or not -(1 << 20) <= delta < (1 << 20):
+        raise SystemExit('ERROR: DVD gate conditional branch out of range')
+    return 0x34000000 | (((delta // 4) & 0x7ffff) << 5) | rt
 
 
 def ldr_x(rt, rn, offset):
@@ -120,12 +151,30 @@ def gate_bytes():
     return words(code)
 
 
+def dvd_register_gate_bytes():
+    # If the first session already built the host-side disc index, registration
+    # is deliberately skipped. Otherwise execute the exact original prologue.
+    code = [
+        encode_adrp(16, DVD_REGISTER_GATE, DVD_INITIALIZED),
+        ldrb_w(17, 16, DVD_INITIALIZED & 0xfff),
+        cbz_w(17, DVD_REGISTER_GATE + 8, DVD_REGISTER_GATE + 16),
+        0xD65F03C0,  # ret: keep the existing host index on session >= 2
+    ]
+    return words(code) + REGISTER_FILE_PROLOGUE + words([
+        branch(DVD_REGISTER_GATE + 32, REGISTER_FILE + 16)
+    ])
+
+
 def expected_patches():
     entry = words([encode_adrp(16, RUN, CONTROL),
                    ldr_x(16,16,CONTROL & 0xfff),0xD61F0200,0xD503201F])
     trampoline = PROLOGUE + words([branch(TRAMPOLINE+16,RUN+16)])
     return {RUN:entry, FRAME:words([branch(FRAME,GATE)]),
             SELECT_FROZEN_BRANCH: words([cond_branch(SELECT_FROZEN_BRANCH, SELECT_FROZEN_RETURN, 0)]),
+            DVD_INIT_GUARD: words([0xD503201F]),
+            REGISTER_FILE: words([branch(REGISTER_FILE, DVD_REGISTER_GATE),
+                                  0xD503201F, 0xD503201F, 0xD503201F]),
+            DVD_REGISTER_GATE: dvd_register_gate_bytes(),
             TRAMPOLINE:trampoline, GATE:gate_bytes(), MAGIC_VM:MAGIC,
             EXIT_CALL:words([branch(EXIT_CALL,EXIT_GATE,0x94000000)]),
             EXIT_GATE:words([encode_adrp(16,EXIT_GATE,CONTROL),
@@ -139,6 +188,10 @@ def layout(data):
         raise SystemExit('ERROR: RKSystem::run symbol drift')
     if symbols.get('__ZN26TranslatedFunctionRegistry13SelectProfileEPKc') != SELECT_PROFILE:
         raise SystemExit('ERROR: translated profile selector symbol drift')
+    if symbols.get('_DVDInit_8015EA1C') != DVD_INIT:
+        raise SystemExit('ERROR: DVDInit symbol drift')
+    if symbols.get('__ZL17RegisterFileEntryNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEERKNS_4__fs10filesystem4pathEj') != REGISTER_FILE:
+        raise SystemExit('ERROR: DVD RegisterFileEntry symbol drift')
     text = next((s for s in segments if s[0]==b'__TEXT'),None)
     ds = next((s for s in segments if s[0]==b'__DATA'),None)
     if not text or text[1]!=BASE or not ds or not ds[1]+ds[4] <= CONTROL < CONTROL+64 <= ds[1]+ds[2]:
@@ -178,6 +231,16 @@ def validate(data):
     struct.pack_into('<I',select_original,branch_offset,SELECT_FROZEN_ORIGINAL)
     if hashlib.sha256(select_original).hexdigest()!=SELECT_PROFILE_SHA:
         raise SystemExit('ERROR: unreviewed instructions changed inside translated profile selector')
+    dvd_off=vm_to_file(segments,DVD_INIT)
+    dvd_original=bytearray(data[dvd_off:dvd_off+DVD_INIT_SIZE])
+    struct.pack_into('<I',dvd_original,DVD_INIT_GUARD-DVD_INIT,DVD_INIT_GUARD_ORIGINAL)
+    if hashlib.sha256(dvd_original).hexdigest()!=DVD_INIT_SHA:
+        raise SystemExit('ERROR: unreviewed instructions changed inside DVDInit')
+    register_off=vm_to_file(segments,REGISTER_FILE)
+    register_original=bytearray(data[register_off:register_off+REGISTER_FILE_SIZE])
+    register_original[:16]=REGISTER_FILE_PROLOGUE
+    if hashlib.sha256(register_original).hexdigest()!=REGISTER_FILE_SHA:
+        raise SystemExit('ERROR: unreviewed instructions changed inside DVD file registration')
     entry_off=vm_to_file(segments,ENTRY)
     entry=bytearray(data[entry_off:entry_off+ENTRY_SIZE])
     struct.pack_into('<I',entry,EXIT_CALL-ENTRY,branch(EXIT_CALL,EXIT_ORIGINAL,0x94000000))
@@ -195,7 +258,9 @@ def validate(data):
             'preservesBuild335LanguageABI':True, 'guardedGuestExit':hex(EXIT_CALL),
             'preservesHostFloatingPointEnvironment':True,
             'reentrantFrozenProfile':True,
-            'frozenProfileBranch':hex(SELECT_FROZEN_BRANCH)}
+            'frozenProfileBranch':hex(SELECT_FROZEN_BRANCH),
+            'reentrantDvdGuestPublish':True,
+            'dvdHostIndexReuseGate':hex(DVD_REGISTER_GATE)}
 
 
 def patch(path):
@@ -213,6 +278,14 @@ def patch(path):
         raise SystemExit('ERROR: translated profile selector original instruction hash drift')
     if struct.unpack_from('<I',data,vm_to_file(segments,SELECT_FROZEN_BRANCH))[0]!=SELECT_FROZEN_ORIGINAL:
         raise SystemExit('ERROR: frozen profile branch original instruction drift')
+    dvd_off=vm_to_file(segments,DVD_INIT)
+    if hashlib.sha256(data[dvd_off:dvd_off+DVD_INIT_SIZE]).hexdigest()!=DVD_INIT_SHA:
+        raise SystemExit('ERROR: DVDInit original instruction hash drift')
+    if struct.unpack_from('<I',data,vm_to_file(segments,DVD_INIT_GUARD))[0]!=DVD_INIT_GUARD_ORIGINAL:
+        raise SystemExit('ERROR: DVDInit process-lifetime guard instruction drift')
+    register_off=vm_to_file(segments,REGISTER_FILE)
+    if hashlib.sha256(data[register_off:register_off+REGISTER_FILE_SIZE]).hexdigest()!=REGISTER_FILE_SHA:
+        raise SystemExit('ERROR: DVD file registration original instruction hash drift')
     if any(data[TRAMPOLINE-BASE:MAGIC_VM-BASE+len(MAGIC)]):
         raise SystemExit('ERROR: executable header padding is not unused')
     for address, code in expected_patches().items():
