@@ -1,8 +1,29 @@
 #include "SessionState.h"
+#include "DonorDataLifecycle.h"
 #include <cassert>
 #include <initializer_list>
 
 int main() {
+  // A clean guest reset must make the donor reload its initial DOL data on
+  // every subsequent entry. Otherwise OS::__ThreadInit calls the cleared
+  // switch-thread callback at guest 0x80385AE0.
+  uint8_t donorDataInitialized = 0;
+  uint32_t switchThreadCallback = 0;
+  for (int cycle = 0; cycle < 1000; ++cycle) {
+    if (!donorDataInitialized) {
+      donorDataInitialized = 1;
+      switchThreadCallback = 0x801A9514;
+    }
+    assert(switchThreadCallback != 0);
+    switchThreadCallback = 0;  // Memory::Init will clear the guest region.
+    assert(neokartpad::RearmDonorDataSections(&donorDataInitialized));
+    assert(donorDataInitialized == 0);
+  }
+  assert(!neokartpad::RearmDonorDataSections(&donorDataInitialized));
+  assert(!neokartpad::RearmDonorDataSections(nullptr));
+  donorDataInitialized = 2;
+  assert(!neokartpad::RearmDonorDataSections(&donorDataInitialized));
+
   NeoKartPadSessionState state;
   assert(state.state() == NEO_KARTPAD_IDLE);
 

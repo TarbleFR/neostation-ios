@@ -22,6 +22,7 @@ static DonorVoidFn resetMemoryFn = nullptr;
 static DonorSetWaitFn setWaitCallbackFn = nullptr;
 static DonorDescribeFn describeMemoryFn = nullptr;
 static uint8_t** flatGuestBase = nullptr;
+static uint8_t* donorDataInitialized = nullptr;
 static bool frameGateEntered = false;
 static bool orderlyRuntimeReturn = false;
 static int requestedExitReason = NEO_KARTPAD_EXIT_NONE;
@@ -307,6 +308,21 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   constexpr char marker[] = "NEOKARTPAD-FRAME-RETURN-v1";
   if (std::memcmp(base + 0x8f00, marker, sizeof(marker)) != 0)
     return Fail(error, errorSize, "KartPad checked frame/return bridge missing");
+  // InitializeDataSections checks g_dataInitialized before loading the DOL's
+  // .sdata, including the switch-thread callback at guest 0x80385AE0. This
+  // exact pinned instruction sequence and BSS offset are verified together.
+  // The symbol is local, so dlsym cannot resolve it in the converted dylib.
+  constexpr uint8_t dataInitGuard[] = {
+      0x28, 0x85, 0x02, 0xd0, // adrp x8, g_dataInitialized page
+      0x09, 0x21, 0x48, 0x39, // ldrb w9, [x8, #0x208]
+      0x49, 0x40, 0x00, 0x37, // tbnz w9, #0, skip initialization
+      0x29, 0x00, 0x80, 0x52, // mov w9, #1
+  };
+  if (std::memcmp(base + 0x10c740, dataInitGuard, sizeof(dataInitGuard)) != 0)
+    return Fail(error, errorSize, "KartPad data-section initialization guard changed.");
+  donorDataInitialized = base + 0x51b2208;
+  if (*donorDataInitialized != 0)
+    return Fail(error, errorSize, "KartPad data-section guard was already active before launch.");
   guestMemory.pointer = reinterpret_cast<DonorPointerFn>(dlsym(runtimeHandle, "_ZN6Memory10GetPointerEjm"));
   setNextSectionFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80635A3C"));
   changeSectionFn = reinterpret_cast<KartPadGuestCpuFn>(dlsym(runtimeHandle,"func_80635AC8"));
@@ -331,7 +347,7 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   return true;
 }
 
-void PrepareReusableGuestMemory() {
+bool PrepareReusableGuestMemory() {
   // Do NOT munmap GuestFlat's reservation or backing aliases here. The pinned
   // runtime intentionally keeps g_initialized/g_layout/g_sections in native
   // process-lifetime storage; tearing the mappings down behind those objects
@@ -341,8 +357,14 @@ void PrepareReusableGuestMemory() {
   // GuestFlat::Initialize with the same verified layout, the runtime zeros
   // every backing section before rebuilding Memory regions. This gives each
   // KartPad launch clean guest contents without accumulating mappings.
-  if (!orderlyRuntimeReturn || !resetMemoryFn || !flatGuestBase || !*flatGuestBase)
-    return;
+  if (!orderlyRuntimeReturn) return true;
+  if (!resetMemoryFn || !flatGuestBase || !*flatGuestBase) return false;
   resetMemoryFn();
+  if (!neokartpad::RearmDonorDataSections(donorDataInitialized)) {
+    NSLog(@"[NeoKartPad/Lifecycle] data-section guard could not be rearmed after guest reset");
+    return false;
+  }
   NSLog(@"[NeoKartPad/Lifecycle] reusable guest reservation retained and page tables reset");
+  LogLifecycleBoundary("data-section guard rearmed for next RuntimeMain");
+  return true;
 }

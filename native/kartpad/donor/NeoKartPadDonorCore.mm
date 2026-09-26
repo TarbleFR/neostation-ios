@@ -9,6 +9,7 @@
 #include "../core/SessionRunLoop.h"
 #include "../core/GuestLanguageState.h"
 #include "../core/DonorAudioSession.h"
+#include "../core/DonorDataLifecycle.h"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -1423,6 +1424,7 @@ void RuntimeMainOnUIKitThread() {
   runtimeThreadActive.store(true, std::memory_order_release);
   NSLog(@"[NeoKartPad/Lifecycle] session=%llu RuntimeMain begin",
         (unsigned long long)serial);
+  LogLifecycleBoundary("RuntimeMain begin");
 
   sdlSetMainReady();
   sdlSetiOSEventPump(true);
@@ -1451,10 +1453,6 @@ void RuntimeMainOnUIKitThread() {
   sdlSetiOSEventPump(false);
   runtimeThreadActive.store(false, std::memory_order_release);
 
-  const bool orderly = orderlyRuntimeReturn && result == 0;
-  const int exitReason = session.exitReasonAfterReturn(orderly, requestedExitReason);
-  requestedExitReason = NEO_KARTPAD_EXIT_NONE;
-
   [runtimeEntryTimer invalidate];
   runtimeEntryTimer = nil;
   [runtimeWindowTimer invalidate];
@@ -1465,8 +1463,12 @@ void RuntimeMainOnUIKitThread() {
   // Writers never synchronously wait for UIKit, so this drain cannot deadlock.
   dispatch_sync(KartPadSettingsIOQueue(), ^{});
   LogLifecycleBoundary("settings writes drained; guest reset begin");
-  PrepareReusableGuestMemory();
-  LogLifecycleBoundary("guest reset complete; UIKit cleanup begin");
+  const bool guestReady = PrepareReusableGuestMemory();
+  LogLifecycleBoundary(guestReady ? "guest reset complete; UIKit cleanup begin"
+                                  : "guest reset failed; UIKit cleanup begin");
+  const bool orderly = orderlyRuntimeReturn && result == 0 && guestReady;
+  const int exitReason = session.exitReasonAfterReturn(orderly, requestedExitReason);
+  requestedExitReason = NEO_KARTPAD_EXIT_NONE;
   [settingsButton removeFromSuperview];
   settingsButton = nil;
   donorWindow = nil;
@@ -1593,6 +1595,7 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   const uint64_t serial = sessionSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
   NSLog(@"[NeoKartPad/Lifecycle] session=%llu created language=%ld",
         (unsigned long long)serial, (long)CurrentGameLanguage());
+  LogLifecycleBoundary("session created");
 
   // Return from Flutter first, then enter through an independent run-loop
   // source. A GCD main-queue block would starve the same queue for the entire

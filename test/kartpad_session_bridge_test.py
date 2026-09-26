@@ -159,5 +159,24 @@ if __name__=='__main__':
         assert run_statefree(data,'_func_80634B80_statefree',0x40)==5
         assert run_statefree(data,'_func_80634B80_statefree',0x3f)==1
         assert run_statefree(data,'_func_80631588_statefree',0x3f)==1
+        # The actual donor has a process-lifetime data-section guard. The
+        # previous session clears guest .sdata, while the old guard skips its
+        # reloading, leaving OS::__ThreadInit's callback pointer zero.
+        _,table=parse_macho(data);symbols,_=load_symbols(data,table)
+        init=symbols['_InitializeDataSections']
+        flag=symbols['__ZN12_GLOBAL__N_117g_dataInitializedE']
+        assert init==0x10010c72c and flag==0x1051b2208
+        guard=init+0x14
+        assert data[vm_to_file(segments,guard):vm_to_file(segments,guard)+16]==bytes.fromhex(
+            '288502d0092148394940003729008052')
+        for initial, expected_pc, expected_flag in ((0,init+0x34,1),(1,init+0x824,1)):
+            u=Uc(UC_ARCH_ARM64,UC_MODE_ARM)
+            u.mem_map(init&~4095,4096)
+            u.mem_map(flag&~4095,4096)
+            u.mem_write(guard,data[vm_to_file(segments,guard):vm_to_file(segments,guard)+0x20])
+            u.mem_write(flag,bytes([initial]))
+            u.emu_start(guard,expected_pc,count=10)
+            assert u.reg_read(arm.UC_ARM64_REG_PC)==expected_pc
+            assert u.mem_read(flag,1)==bytes([expected_flag])
         print('PASS: exact donor gate; 0x40 system-reset hazard reproduced; safe 0x3f menu scene verified',report)
     print('PASS: 100 machine-state frame-gate cases, native epilogue and entry trampoline')
