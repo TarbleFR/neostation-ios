@@ -244,6 +244,9 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
       auto destroyStream=reinterpret_cast<void(*)(void*)>(Required(handle,"SDL_DestroyAudioStream"));
       auto quitAudio=reinterpret_cast<void(*)(uint32_t)>(Required(handle,"SDL_QuitSubSystem"));
       reinterpret_cast<void(*)()>(Required(handle,"SDL_SetMainReady"))();
+      // Match RuntimeMainOnUIKitThread: the timer owns the UIKit thread, so
+      // SDL must service UIKit while the renderer acquires/presents drawables.
+      reinterpret_cast<void(*)(bool)>(Required(handle,"SDL_SetiOSEventPump"))(true);
       const std::string rendererPath=std::string(NSTemporaryDirectory().UTF8String)+"renderer";
       std::filesystem::create_directories(rendererPath);
       SoLoud::Soloud frontend;

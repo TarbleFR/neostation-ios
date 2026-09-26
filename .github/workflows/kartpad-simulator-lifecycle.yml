@@ -129,6 +129,10 @@ jobs:
           if [ -n "${PROBE_DATA:-}" ]; then
             cp "$PROBE_DATA/Documents/"probe* evidence/ 2>/dev/null || true
           fi
+          PROBE_PID="$(pgrep -x Probe | head -1 || true)"
+          if [ -n "$PROBE_PID" ]; then
+            sample "$PROBE_PID" 2 -file evidence/probe-threads.txt || true
+          fi
           if [ -n "${PROBE_DEVICE:-}" ]; then
             xcrun simctl spawn "$PROBE_DEVICE" log show --last 3m --style compact \
               --predicate 'process == "Probe"' > evidence/probe-system.log 2>&1 || true
