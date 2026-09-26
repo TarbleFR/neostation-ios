@@ -7384,3 +7384,166 @@ index cd3dfab08..e6901e4f6 100644
  	}
  }
  
+diff --git a/rpcs3/Emu/Cell/PPUAnalyser.cpp b/rpcs3/Emu/Cell/PPUAnalyser.cpp
+index 608e213..9c6b016 100644
+--- a/rpcs3/Emu/Cell/PPUAnalyser.cpp
++++ b/rpcs3/Emu/Cell/PPUAnalyser.cpp
+@@ -1,5 +1,6 @@
+ #include "stdafx.h"
+ #include "PPUAnalyser.h"
++#include "PPUNoSizeSplitPolicy.h"
+ 
+ #include "lv2/sys_sync.h"
+ 
+@@ -3243,12 +3244,30 @@ bool ppu_module<lv2_obj>::analyse(u32 lib_toc, u32 entry, const u32 sec_end, con
+ 		}
+ 	}
+ 
++	// ARMSX3 70dbdc8: a large executable with poorly identified functions can
++	// otherwise turn every instruction after the last known function into its
++	// own JIT function and exhaust the iOS JIT arena during compilation.
++	u64 unbounded_bytes = 0;
++	for (const auto& [addr, block] : fmap)
++	{
++		if (block.attr & ppu_attr::no_size && block.size > 4)
++		{
++			unbounded_bytes += block.size;
++		}
++	}
++
++	const bool split_unbounded = ppu_analysis::split_unbounded_blocks(used_fallback, unbounded_bytes);
++	if (!used_fallback && !split_unbounded)
++	{
++		ppu_log.warning("%llu instructions after the last known function: compiling whole blocks", unbounded_bytes / 4);
++	}
++
+ 	// Convert map to vector (destructive)
+ 	for (auto it = fmap.begin(); it != fmap.end(); it = fmap.begin())
+ 	{
+ 		ppu_function_ext block = std::move(fmap.extract(it).mapped());
+ 
+-		if (block.attr & ppu_attr::no_size && block.size > 4 && !used_fallback)
++		if (block.attr & ppu_attr::no_size && block.size > 4 && split_unbounded)
+ 		{
+ 			ppu_log.warning("Block 0x%x will be compiled on per-instruction basis (size=0x%x)", block.addr, block.size);
+ 
+diff --git a/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h b/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h
+new file mode 100644
+index 0000000..76893b1
+--- /dev/null
++++ b/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h
+@@ -0,0 +1,15 @@
++#pragma once
++
++#include <cstdint>
++
++// Only split small, poorly bounded PPU regions into one JIT function per
++// instruction. Large regions can use the existing whole-block fallback.
++namespace ppu_analysis
++{
++	constexpr std::uint64_t max_unbounded_split_instructions = 65'536;
++
++	constexpr bool split_unbounded_blocks(bool used_fallback, std::uint64_t unbounded_bytes) noexcept
++	{
++		return !used_fallback && unbounded_bytes / 4 <= max_unbounded_split_instructions;
++	}
++}
+diff --git a/Utilities/JITLLVM.cpp b/Utilities/JITLLVM.cpp
+index 144920e..ac0673c 100644
+--- a/Utilities/JITLLVM.cpp
++++ b/Utilities/JITLLVM.cpp
+@@ -43,6 +43,7 @@ LOG_CHANNEL(jit_log, "JIT");
+ #pragma GCC diagnostic ignored "-Wmissing-noreturn"
+ #endif
+ #include <llvm/Support/CodeGen.h>
++#include <llvm/Support/CommandLine.h>
+ #include "llvm/Support/TargetSelect.h"
+ #include "llvm/TargetParser/Host.h"
+ #include "llvm/ExecutionEngine/ExecutionEngine.h"
+@@ -905,6 +906,26 @@ jit_compiler::jit_compiler(const std::unordered_map<std::string, u64>& _link, st
+ 		return true;
+ 	}();
+ 
++#if defined(RPCS3_IOS) && defined(ARCH_ARM64)
++	// ARMSX3 85d074b: this AArch64 codegen pass can spend minutes walking
++	// deep PS3 vector shuffle chains without finding an interleaved load.
++	// The pinned LLVM submodule registers this option before JIT compilation.
++	[[maybe_unused]] static const bool s_disable_interleaved_load_combine = []()
++	{
++		auto& options = llvm::cl::getRegisteredOptions();
++		const auto found = options.find("disable-interleaved-load-combine");
++		if (found == options.end())
++		{
++			jit_log.error("LLVM: disable-interleaved-load-combine option is unavailable");
++			return false;
++		}
++
++		static_cast<llvm::cl::opt<bool>*>(found->second)->setValue(true);
++		jit_log.notice("LLVM: InterleavedLoadCombine disabled for iOS ARM64 JIT");
++		return true;
++	}();
++#endif
++
+ 	std::string result;
+ 
+ 	auto null_mod = std::make_unique<llvm::Module> ("null_", *m_context);
+diff --git a/rpcs3/Emu/Cell/PPUThread.cpp b/rpcs3/Emu/Cell/PPUThread.cpp
+index 9b149ae..746bf78 100644
+--- a/rpcs3/Emu/Cell/PPUThread.cpp
++++ b/rpcs3/Emu/Cell/PPUThread.cpp
+@@ -4380,7 +4380,18 @@ extern void ppu_precompile(std::vector<std::string>& dir_queue, std::vector<ppu_
+ 	// The growth in memory requirements of LLVM is not linear with file size of course
+ 	// But these estimates should hopefully protect RPCS3 in the coming years
+ 	// Especially when thread count is on the rise with each CPU generation
++#ifdef RPCS3_IOS
++	// ARMSX3 d0df12f: installed RAM overstates what a mobile process can use.
++	// Budget concurrent LLVM work from iOS process headroom, with 25% reserved
++	// for guest memory, RSX and the rest of the Core.
++	const u64 process_headroom = rpcs3::ios::available_process_memory_headroom();
++	atomic_t<u32> file_size_limit = rpcs3::ios::get_ppu_module_file_budget(
++		utils::get_total_memory(), process_headroom);
++	ppu_log.notice("iOS PPU module compile budget: %u KiB in flight, process headroom %llu MiB",
++		file_size_limit / 1024, process_headroom >> 20);
++#else
+ 	atomic_t<u32> file_size_limit = static_cast<u32>(std::clamp<u64>(utils::aligned_div<u64>(utils::get_total_memory(), 2000), 65536, u32{umax}));
++#endif
+ 
+ 	const u32 software_thread_limit = std::min<u32>(rpcs3::utils::get_max_threads(), ::size32(file_queue));
+ 	const u32 cpu_thread_limit = utils::get_thread_count() > 8u ? std::max<u32>(utils::get_thread_count(), 2) - 1 : utils::get_thread_count(); // One LLVM thread less
+diff --git a/rpcs3/ios/IOSMemoryPressurePolicy.h b/rpcs3/ios/IOSMemoryPressurePolicy.h
+index 6dc9a20..f96effe 100644
+--- a/rpcs3/ios/IOSMemoryPressurePolicy.h
++++ b/rpcs3/ios/IOSMemoryPressurePolicy.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <limits>
+ 
+ namespace rpcs3::ios
+ {
+@@ -15,6 +16,24 @@ namespace rpcs3::ios
+ 	inline constexpr std::uint64_t process_memory_mib = 0x100000ull;
+ 	inline constexpr std::uint32_t automatic_llvm_compile_threads = 3;
+ 	inline constexpr std::uint32_t savestate_compression_threads = 3;
++	inline constexpr std::uint32_t min_ppu_module_file_budget = 65'536;
++
++	// Limit simultaneous PPU module compilation by the process's current iOS
++	// memory allowance. A single larger module still runs because the queue's
++	// token take is saturating; the floor guarantees forward progress.
++	constexpr std::uint32_t get_ppu_module_file_budget(
++		std::uint64_t physical_bytes, std::uint64_t process_headroom_bytes) noexcept
++	{
++		const std::uint64_t available = process_headroom_bytes < physical_bytes
++			? process_headroom_bytes : physical_bytes;
++		const std::uint64_t budget = available / 4 * 3;
++		const std::uint64_t file_bytes = budget / 2000 + (budget % 2000 != 0);
++		return file_bytes < min_ppu_module_file_budget
++			? min_ppu_module_file_budget
++			: file_bytes > std::numeric_limits<std::uint32_t>::max()
++				? std::numeric_limits<std::uint32_t>::max()
++				: static_cast<std::uint32_t>(file_bytes);
++	}
+ 
+ 	// LLVM compilation has a large transient working set. On iOS, a zero
+ 	// configuration value means a memory-safe automatic limit instead of every

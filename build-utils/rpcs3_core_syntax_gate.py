@@ -7,8 +7,9 @@ import shlex
 import subprocess
 import sys
 
-UNITS = {'JITIOS.cpp', 'JITASM.cpp', 'PPUFunction.cpp', 'PPUThread.cpp',
-         'SPUCommonRecompiler.cpp', 'RPCS3IOS.cpp'}
+UNITS = {'JITIOS.cpp', 'JITASM.cpp', 'JITLLVM.cpp', 'PPUAnalyser.cpp',
+         'PPUFunction.cpp', 'PPUThread.cpp', 'SPUCommonRecompiler.cpp',
+         'RPCS3IOS.cpp'}
 
 def main(database: Path) -> None:
     build = database.resolve().parent
@@ -55,7 +56,7 @@ def main(database: Path) -> None:
     for entry, command in commands:
         print('iOS syntax gate:', Path(entry['file']).name, flush=True)
         subprocess.run(command, cwd=entry['directory'], check=True)
-    print('PASS: actual compiler, target, flags and module maps for all six startup units')
+    print(f'PASS: actual compiler, target, flags and module maps for all {len(UNITS)} startup units')
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

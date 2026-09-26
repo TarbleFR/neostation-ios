@@ -117,6 +117,14 @@ python3 "$PWD/test/rpcs3_build301_passive_dlopen_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_atomic_startup_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_failed_startup_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC"
+python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
+HOST_CXX="$(xcrun --sdk macosx --find clang++)"
+"$HOST_CXX" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
+  "$PWD/test/rpcs3_ppu_no_size_split_policy_test.cpp" -o "$WORK_ROOT/ppu-no-size-split-test"
+"$WORK_ROOT/ppu-no-size-split-test"
+"$HOST_CXX" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
+  "$PWD/test/rpcs3_ios_ppu_compile_budget_test.cpp" -o "$WORK_ROOT/ppu-compile-budget-test"
+"$WORK_ROOT/ppu-compile-budget-test"
 
 log "Configure RPCS3Core for iPhoneOS arm64 with macOS TableGen"
 cmake -S "$SRC" -B "$BUILD" -G Ninja \

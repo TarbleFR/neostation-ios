@@ -41,7 +41,7 @@ class SyntaxGateTests(unittest.TestCase):
             with patch.object(gate.subprocess, 'run', side_effect=run):
                 gate.main(database)
             self.assertEqual(calls[0][0], 'cmake')
-            self.assertEqual(len(calls), 7)
+            self.assertEqual(len(calls), len(gate.UNITS) + 1)
 
     def test_missing_translation_units_are_an_error(self):
         with tempfile.TemporaryDirectory() as temp:

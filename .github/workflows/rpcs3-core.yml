@@ -2,22 +2,26 @@ name: RPCS3 passive startup core
 run-name: RPCS3 passive startup Core • ${{ github.sha }}
 on:
   push:
-    branches: [experimental]
+    branches: [experimental, work/rpcs3-armsx3-perf]
     paths:
       - '.github/workflows/rpcs3-core.yml'
       - 'build-utils/build_rpcs3_embedded_core.sh'
       - 'build-utils/materialize_rpcs3_core.py'
+      - 'build-utils/rpcs3_core_syntax_gate.py'
       - 'build-utils/rpcs3/embedded-core.patch'
       - 'build-utils/rpcs3/canonical-source.json'
       - 'build-utils/validate_rpcs3_embedded_core.py'
       - 'test/rpcs3_atomic_startup_test.py'
       - 'test/rpcs3_failed_startup_test.py'
       - 'test/rpcs3_embedded_core_validator_test.py'
+      - 'test/rpcs3_ppu_no_size_split_policy_test.cpp'
+      - 'test/rpcs3_ios_ppu_compile_budget_test.cpp'
+      - 'test/rpcs3_core_syntax_gate_test.py'
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: neostation-rpcs3-core-recovery
+  group: neostation-rpcs3-core-recovery-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
@@ -48,6 +52,7 @@ jobs:
           bash -n build-utils/build_rpcs3_embedded_core.sh
           python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py
           python3 test/rpcs3_embedded_core_validator_test.py
+          python3 test/rpcs3_core_syntax_gate_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
           python3 test/rpcs3_atomic_startup_test.py
           python3 test/rpcs3_failed_startup_test.py
