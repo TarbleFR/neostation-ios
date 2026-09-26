@@ -1,5 +1,6 @@
 #include "SessionState.h"
 #include <cassert>
+#include <initializer_list>
 
 int main() {
   NeoKartPadSessionState state;
@@ -9,6 +10,8 @@ int main() {
   // STARTING -> RUNNING.
   assert(state.reserve());
   assert(!state.firstFrame());
+  assert(state.exitReasonAfterReturn(false, NEO_KARTPAD_EXIT_USER_RETURN) ==
+         NEO_KARTPAD_EXIT_LAUNCH_FAILURE);
   state.runtimeReady();
   assert(state.firstFrame());
   assert(state.state() == NEO_KARTPAD_RUNNING);
@@ -35,6 +38,13 @@ int main() {
   state.requestStop();
   state.cancelStop();
   assert(state.state() == NEO_KARTPAD_RUNNING);
+
+  for (int intent : {NEO_KARTPAD_EXIT_NONE, NEO_KARTPAD_EXIT_USER_RETURN,
+                     NEO_KARTPAD_EXIT_LANGUAGE_RESTART}) {
+    assert(state.exitReasonAfterReturn(false, intent) == NEO_KARTPAD_EXIT_RUNTIME_FAILURE);
+    assert(state.exitReasonAfterReturn(true, intent) ==
+           (intent == NEO_KARTPAD_EXIT_NONE ? NEO_KARTPAD_EXIT_NORMAL_TERMINATION : intent));
+  }
 
   // ENDED remains reserved for a genuine unexpected native failure.
   state.requestStop();

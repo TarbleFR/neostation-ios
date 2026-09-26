@@ -1458,7 +1458,7 @@ void RuntimeMainOnUIKitThread() {
   runtimeThreadActive.store(false, std::memory_order_release);
 
   const bool orderly = orderlyRuntimeReturn && result == 0;
-  int exitReason = requestedExitReason;
+  const int exitReason = session.exitReasonAfterReturn(orderly, requestedExitReason);
   requestedExitReason = NEO_KARTPAD_EXIT_NONE;
 
   [runtimeEntryTimer invalidate];
@@ -1482,8 +1482,6 @@ void RuntimeMainOnUIKitThread() {
   ownedSessionAlert = nil;
 
   if (orderly) {
-    if (exitReason == NEO_KARTPAD_EXIT_NONE)
-      exitReason = NEO_KARTPAD_EXIT_NORMAL_TERMINATION;
     lastExitReason.store(exitReason, std::memory_order_release);
     session.finishReusable();
     commands.failed(); // Invalidate old confirmation IDs without resetting the epoch.
@@ -1512,11 +1510,6 @@ void RuntimeMainOnUIKitThread() {
   }
 
   orderlyRuntimeReturn = false;
-  if (exitReason == NEO_KARTPAD_EXIT_NONE) {
-    exitReason = session.state() == NEO_KARTPAD_STARTING
-        ? NEO_KARTPAD_EXIT_LAUNCH_FAILURE
-        : NEO_KARTPAD_EXIT_RUNTIME_FAILURE;
-  }
   lastExitReason.store(exitReason, std::memory_order_release);
   if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
   if (session.state() != NEO_KARTPAD_ENDED) session.terminate();

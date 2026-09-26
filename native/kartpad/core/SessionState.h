@@ -44,6 +44,16 @@ class NeoKartPadSessionState {
     firstFrameSeen_ = false;
   }
 
+  int exitReasonAfterReturn(bool orderly, int requested) const {
+    if (!orderly) {
+      // A requested close/restart is intent, never proof of successful cleanup.
+      return firstFrameSeen_ ? NEO_KARTPAD_EXIT_RUNTIME_FAILURE
+                             : NEO_KARTPAD_EXIT_LAUNCH_FAILURE;
+    }
+    return requested == NEO_KARTPAD_EXIT_NONE
+        ? NEO_KARTPAD_EXIT_NORMAL_TERMINATION : requested;
+  }
+
   void terminate() { state_ = NEO_KARTPAD_ENDED; }
 
   bool active() const {
