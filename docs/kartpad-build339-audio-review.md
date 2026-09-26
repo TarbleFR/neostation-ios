@@ -44,3 +44,10 @@ These are focused tests, not complete in-game cycles. The language-restart crash
 frontend silence and long return still require device verification; the audio
 defect is not claimed to explain all three. Do not call the candidate validated
 on iPhone or overwrite the Build 338 artifact with it.
+
+## Native build
+
+Core revision: `6ab687d0ca33f1cb494a9062a2db80fc2c6ff3a7`.
+Core workflow: https://github.com/TarbleFR/neostation-ios/actions/runs/36266918316
+Xcode 16.4 arm64 build and all native gates succeeded. Build 339 pins this exact
+artifact. IPA compilation and iPhone acceptance remain separate gates.
