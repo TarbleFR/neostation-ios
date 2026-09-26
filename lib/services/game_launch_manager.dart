@@ -266,12 +266,25 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     if (Platform.isIOS && emulatorExe == 'ios_kartpad_internal') {
       _embeddedSessionSubscription = KartPadInternalBridge.sessionEvents.listen(
         (event) {
-          if (_phase == GameLaunchPhase.playing && !_isClosing) {
-            _log.i(
-              '[GameLaunchManager] KartPad returned to NeoStation: '
-              '${event['reason'] ?? 'unknown'} '
-              '(runtimeReleased=${event['runtimeReleased']})',
-            );
+          final exitReason = event['exitReason']?.toString() ?? 'unknown';
+          _log.i(
+            '[GameLaunchManager] KartPad host result=$exitReason '
+            'message=${event['reason'] ?? 'unknown'} '
+            '(success=${event['success']}, runtimeReleased=${event['runtimeReleased']})',
+          );
+          if (_phase != GameLaunchPhase.playing || _isClosing) return;
+
+          // A language restart is owned by the native bridge and must never
+          // unwind NeoStation's game-launch UI. The plugin normally suppresses
+          // sessionEnded for it; this guard makes a stale/duplicate callback
+          // harmless as well.
+          if (exitReason == 'languageRestart') return;
+
+          if (exitReason == 'userReturn' ||
+              exitReason == 'normalTermination' ||
+              exitReason == 'runtimeFailure' ||
+              exitReason == 'crash' ||
+              exitReason == 'launchFailure') {
             _triggerClose();
           }
         },
