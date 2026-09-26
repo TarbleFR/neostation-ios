@@ -207,11 +207,17 @@ static void OnCoreEvent(void* context, int state, const char* message) {
       transaction != _activeTransaction || !_api) return;
 
   if (_api->session_state() != NEO_KARTPAD_IDLE) {
-    NSLog(@"[NeoStation/KartPad] transaction=%ld restart deferred: native state=%d",
-          (long)transaction, _api->session_state());
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [self restartFreshSessionForTransaction:transaction];
-    });
+    const int nativeState = _api->session_state();
+    NSLog(@"[NeoStation/KartPad] transaction=%ld restart rejected: native state=%d",
+          (long)transaction, nativeState);
+    _restartInProgress = NO;
+    _sessionActive = NO;
+    NSInteger ended = _activeTransaction;
+    _activeTransaction = 0;
+    [self deliverSessionEndedForTransaction:ended
+                                 exitReason:NEO_KARTPAD_EXIT_RUNTIME_FAILURE
+                                    message:@"KartPad did not reach the reusable idle state before restart."
+                                    success:NO];
     return;
   }
 
