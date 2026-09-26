@@ -21,14 +21,14 @@ static DonorDescribeFn describeMemoryFn = nullptr;
 static uint8_t** flatGuestBase = nullptr;
 static bool frameGateEntered = false;
 static bool orderlyRuntimeReturn = false;
-static bool restartAfterShutdown = false;
-static uint32_t restartLanguage = 0;
+static int requestedExitReason = NEO_KARTPAD_EXIT_NONE;
+static std::atomic_int lastExitReason{NEO_KARTPAD_EXIT_NONE};
 static std::atomic_uint_fast64_t sessionSerial{0};
 static std::atomic_uint languageWrites{0};
 static bool languageWriteFailed = false;
 static UIAlertController* ownedSessionAlert = nil;
 UIWindow* CurrentDonorWindow();
-void ReturnToNeoStation();
+void ReturnToNeoStation(int reason);
 
 void RunOnUIKitRunLoop(dispatch_block_t block) {
   if (!block) return;
@@ -125,11 +125,9 @@ void ConfirmGameLanguage(NSInteger value, void (^onChange)(void)) {
       ShowSessionFailure(false, persistenceError.localizedDescription.UTF8String);
       return;
     }
-    restartAfterShutdown = true;
-    restartLanguage = static_cast<uint32_t>(value);
-    NSLog(@"[NeoKartPad/Lifecycle] session=%llu language restart requested %ld -> %ld",
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu exitReason=languageRestart requested %ld -> %ld",
           (unsigned long long)sessionSerial.load(), (long)applied, (long)value);
-    ReturnToNeoStation();
+    ReturnToNeoStation(NEO_KARTPAD_EXIT_LANGUAGE_RESTART);
   }]];
 
   // RuntimeMain owns the UIKit thread. GCD main-queue work may not be drained
