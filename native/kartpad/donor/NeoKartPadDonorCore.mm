@@ -470,7 +470,7 @@ UIAction* BuildReturnToNeoStationAction() {
   return [UIAction actionWithTitle:UIText(@"Return to NeoStation", "returnToLibrary")
       image:[UIImage systemImageNamed:@"arrow.uturn.backward.circle.fill"]
       identifier:@"com.neostation.kartpad.return-to-neostation"
-      handler:^(__kindof UIAction*) { ReturnToNeoStation(); }];
+      handler:^(__kindof UIAction*) { ReturnToNeoStation(NEO_KARTPAD_EXIT_USER_RETURN); }];
 }
 
 UIMenu* BuildNeoKartPadSettingsMenu() {
@@ -1331,7 +1331,7 @@ UIWindow* CurrentDonorWindow() {
   return donorWindow;
 }
 
-void ReturnToNeoStation();
+void ReturnToNeoStation(int reason);
 
 void InstallReturnButton() {
   UIWindow* window = CurrentDonorWindow();
@@ -1349,7 +1349,7 @@ void InstallReturnButton() {
           forState:UIControlStateNormal];
   button.accessibilityLabel = UIText(@"Return to NeoStation", "returnToLibrary");
   UIAction* returnAction = [UIAction actionWithHandler:^(__kindof UIAction*) {
-    ReturnToNeoStation();
+    ReturnToNeoStation(NEO_KARTPAD_EXIT_USER_RETURN);
   }];
   [button addAction:returnAction forControlEvents:UIControlEventTouchUpInside];
   UIView* root = window.rootViewController.view ?: window;
@@ -1411,25 +1411,35 @@ void RuntimeMainOnUIKitThread() {
   NSLog(@"[NeoKartPad/Lifecycle] session=%llu RuntimeMain begin",
         (unsigned long long)serial);
 
-  // The official iOS executable enters RuntimeMain through SDL_RunApp.
-  // NeoStation already owns UIApplication, so it must reproduce the parts of
-  // SDL's iOS bootstrap that are safe inside an existing application.
   sdlSetMainReady();
   sdlSetiOSEventPump(true);
 
   char name[] = "KartPadRuntime";
   char* argv[] = {name, nullptr};
-  const int result = runtimeMain ? runtimeMain(1, argv) : -1;
+  int result = -1;
+  std::string runtimeError;
+  try {
+    result = runtimeMain ? runtimeMain(1, argv) : -1;
+  } catch (const std::exception& error) {
+    runtimeError = error.what();
+    result = -2;
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu caught RuntimeMain exception: %s",
+          (unsigned long long)serial, error.what());
+  } catch (...) {
+    runtimeError = "unknown native exception";
+    result = -3;
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu caught unknown RuntimeMain exception",
+          (unsigned long long)serial);
+  }
 
   const char* rawError = sdlGetError ? sdlGetError() : nullptr;
-  const std::string runtimeError =
-      rawError && *rawError ? std::string(rawError) : std::string();
+  if (runtimeError.empty() && rawError && *rawError) runtimeError = rawError;
   sdlSetiOSEventPump(false);
   runtimeThreadActive.store(false, std::memory_order_release);
 
   const bool orderly = orderlyRuntimeReturn && result == 0;
-  const bool shouldRestart = orderly && restartAfterShutdown;
-  const uint32_t pendingLanguage = restartLanguage;
+  int exitReason = requestedExitReason;
+  requestedExitReason = NEO_KARTPAD_EXIT_NONE;
 
   PrepareReusableGuestMemory();
   [returnButton removeFromSuperview];
@@ -1443,6 +1453,9 @@ void RuntimeMainOnUIKitThread() {
   ownedSessionAlert = nil;
 
   if (orderly) {
+    if (exitReason == NEO_KARTPAD_EXIT_NONE)
+      exitReason = NEO_KARTPAD_EXIT_NORMAL_TERMINATION;
+    lastExitReason.store(exitReason, std::memory_order_release);
     session.finishReusable();
     commands = neokartpad::SessionCommands{};
     frameGateEntered = false;
@@ -1452,72 +1465,64 @@ void RuntimeMainOnUIKitThread() {
     kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
     kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel);
 
-    NSLog(@"[NeoKartPad/Lifecycle] session=%llu resources released; state=idle restart=%d",
-          (unsigned long long)serial, shouldRestart);
-
-    if (shouldRestart) {
-      restartAfterShutdown = false;
-      restartLanguage = 0;
-      if (!SetRuntimeLanguageOverride(pendingLanguage)) {
-        session.terminate();
-        if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
-        Emit("KartPad language restart failed while preparing the fresh runtime.");
-        return;
-      }
-      if (!session.reserve()) {
-        session.terminate();
-        if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
-        Emit("KartPad could not reserve a fresh restart session.");
-        return;
-      }
-      session.runtimeReady();
-      const uint64_t next = sessionSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
-      NSLog(@"[NeoKartPad/Lifecycle] session=%llu created from explicit language restart language=%u",
-            (unsigned long long)next, pendingLanguage);
-      RunOnUIKitRunLoop(^{
-        RuntimeMainOnUIKitThread();
-        PollForRuntimeWindow(0);
-      });
-      return;
-    }
-
-    restartAfterShutdown = false;
-    restartLanguage = 0;
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu resourcesReleased state=idle exitReason=%d",
+          (unsigned long long)serial, exitReason);
     if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
-    Emit("KartPad session closed after guest, audio and graphics shutdown.");
+
+    if (exitReason == NEO_KARTPAD_EXIT_LANGUAGE_RESTART) {
+      Emit("KartPad session stopped for explicit language restart.");
+    } else if (exitReason == NEO_KARTPAD_EXIT_USER_RETURN) {
+      Emit("KartPad session returned to NeoStation after clean shutdown.");
+    } else {
+      Emit("KartPad session ended normally after clean shutdown.");
+    }
     return;
   }
 
-  restartAfterShutdown = false;
-  restartLanguage = 0;
+  orderlyRuntimeReturn = false;
+  if (exitReason == NEO_KARTPAD_EXIT_NONE) {
+    exitReason = session.state() == NEO_KARTPAD_STARTING
+        ? NEO_KARTPAD_EXIT_LAUNCH_FAILURE
+        : NEO_KARTPAD_EXIT_RUNTIME_FAILURE;
+  }
+  lastExitReason.store(exitReason, std::memory_order_release);
   if (neoStationWindow) [neoStationWindow makeKeyAndVisible];
   if (session.state() != NEO_KARTPAD_ENDED) session.terminate();
-  if (result == 0) {
-    Emit("KartPad donor runtime exited unexpectedly.");
-  } else if (!runtimeError.empty()) {
-    const std::string message =
-        "KartPad donor runtime failed before first frame: " + runtimeError;
+
+  NSLog(@"[NeoKartPad/Lifecycle] session=%llu runtimeFailed result=%d exitReason=%d detail=%s",
+        (unsigned long long)serial, result, exitReason,
+        runtimeError.empty() ? "none" : runtimeError.c_str());
+  if (!runtimeError.empty()) {
+    const std::string message = "KartPad donor runtime failure: " + runtimeError;
     Emit(message.c_str());
+  } else if (result == 0) {
+    Emit("KartPad donor runtime exited unexpectedly.");
   } else {
-    Emit("KartPad donor runtime failed before first frame.");
+    Emit("KartPad donor runtime failed.");
   }
 }
 
-void ReturnToNeoStation() {
+void ReturnToNeoStation(int reason) {
   if (!NSThread.isMainThread) {
-    dispatch_async(dispatch_get_main_queue(), ^{ ReturnToNeoStation(); });
+    dispatch_async(dispatch_get_main_queue(), ^{ ReturnToNeoStation(reason); });
     return;
   }
+  if (reason != NEO_KARTPAD_EXIT_USER_RETURN &&
+      reason != NEO_KARTPAD_EXIT_LANGUAGE_RESTART) {
+    reason = NEO_KARTPAD_EXIT_USER_RETURN;
+  }
   if (!session.active() || !commands.requestClose()) return;
+  requestedExitReason = reason;
   session.requestStop();
   kNeoKartPadMenuRefreshGeneration.fetch_add(1, std::memory_order_acq_rel);
-  if (ownedSessionAlert) [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
+  if (ownedSessionAlert)
+    [ownedSessionAlert dismissViewControllerAnimated:NO completion:nil];
   ownedSessionAlert = nil;
   returnButton.enabled = NO;
   settingsButton.enabled = NO;
-  // The next safe frame boundary requests the normal title transition to flush
-  // saves, then returns through RuntimeMain cleanup. Hiding is not shutdown.
-  NSLog(@"[NeoKartPad/Session] close requested; waiting for guest teardown");
+  NSLog(@"[NeoKartPad/Lifecycle] session=%llu state=stopping exitReason=%s",
+        (unsigned long long)sessionSerial.load(std::memory_order_acquire),
+        reason == NEO_KARTPAD_EXIT_LANGUAGE_RESTART ? "languageRestart" : "userReturn");
 }
 
 int Initialize(const char* support, const char* cache,
@@ -1553,6 +1558,8 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   if (runtimeThreadActive.load(std::memory_order_acquire))
     return Fail(error, errorSize, "KartPad cleanup is still in progress.");
 
+  requestedExitReason = NEO_KARTPAD_EXIT_NONE;
+  lastExitReason.store(NEO_KARTPAD_EXIT_NONE, std::memory_order_release);
   gamePath = game;
   if (!PrepareUserGameDiscovery(error, errorSize)) return 0;
   if (!PrepareEmbeddedRuntimeBootstrap(error, errorSize)) return 0;
@@ -1575,9 +1582,12 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   return 1;
 }
 
-void Stop() { ReturnToNeoStation(); }
+void Stop() { ReturnToNeoStation(NEO_KARTPAD_EXIT_USER_RETURN); }
 int IsRunning() { return session.active() ? 1 : 0; }
 int State() { return session.state(); }
+int LastExitReason() {
+  return lastExitReason.load(std::memory_order_acquire);
+}
 
 void SetCallback(NeoKartPadEventFn value, void* context) {
   callback = value;
@@ -1605,6 +1615,7 @@ const NeoKartPadAPI api{
     State,
     SetUIText,
     RuntimeIdentity,
+    LastExitReason,
 };
 }  // namespace
 
