@@ -134,7 +134,7 @@ assert 'KartPadCore.framework' in embedder
 assert 'KartPad-native-identity.json' in embedder
 assert 'KartPad.app/' in ipa_validator
 assert 'passiveLoad' in ipa_validator
-print('PASS: KartPad ABI v1, lazy loader, launch route and session monitor are wired')
+print('PASS: KartPad ABI v2, explicit exit reasons, lazy loader, launch route and session monitor are wired')
 
 # The old string assertions prescribed a Wii system reset and direct UIKit
 # guest writes. The behavioral tests now prove those are the wrong contracts.
@@ -149,11 +149,11 @@ assert 'ApplyLiveLanguageAndRestartGame' not in donor_core
 assert 'finishRetainedReturn' not in donor_core
 assert 'ScheduleAutomaticLanguageRestart' not in donor_core
 assert '[children insertObject:BuildReturnToNeoStationAction() atIndex:1]' in donor_core
-stop = donor_core.split('void ReturnToNeoStation() {', 1)[1].split('int Initialize', 1)[0]
+stop = donor_core.split('void ReturnToNeoStation(int reason) {', 1)[1].split('int Initialize', 1)[0]
 assert 'commands.requestClose()' in stop and 'session.requestStop()' in stop
 assert 'sdlHideWindow' not in stop and 'Emit(' not in stop
 assert 'PrepareReusableGuestMemory();' in donor_core
-runtime = donor_core.split('void RuntimeMainOnUIKitThread() {', 1)[1].split('void ReturnToNeoStation() {', 1)[0]
+runtime = donor_core.split('void RuntimeMainOnUIKitThread() {', 1)[1].split('void ReturnToNeoStation(int reason) {', 1)[0]
 assert runtime.index('runtimeMain(1, argv)') < runtime.index('PrepareReusableGuestMemory()') < runtime.index('session.terminate()')
 assert 'validate_session_bridge(runtime_bytes)' in ipa_validator
 for key in ('restartGame', 'cancel', 'okay', 'languageApplyFailed', 'closeFailed'):
