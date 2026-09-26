@@ -1,0 +1,105 @@
+name: KartPad UIKit lifecycle harness
+run-name: KartPad UIKit lifecycle harness • ${{ github.sha }}
+on:
+  workflow_dispatch:
+  push:
+    branches: [experimental]
+    paths:
+      - .github/workflows/kartpad-simulator-lifecycle.yml
+      - test/kartpad_simulator_probe.mm
+permissions:
+  contents: read
+  actions: read
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - uses: actions/download-artifact@v4
+        with:
+          name: KartPadCore-23361e84215f9c27bbfb53724c45611384c4d6de
+          run-id: 36196257250
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: donor
+      - name: Build isolated simulator test app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p probe/Probe.app/Frameworks evidence
+          APP="$PWD/probe/Probe.app"
+          ditto donor/KartPadRuntime.framework "$APP/Frameworks/KartPadRuntime.framework"
+          RUNTIME="$APP/Frameworks/KartPadRuntime.framework/KartPadRuntime"
+          # Test-only platform adjustment. Production donor is never replaced by this copy.
+          xcrun vtool -set-build-version iossimulator 17.4 18.5 -replace -output "$RUNTIME.sim" "$RUNTIME"
+          mv "$RUNTIME.sim" "$RUNTIME"
+          chmod 755 "$RUNTIME"
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun clang++ -target arm64-apple-ios17.4-simulator -isysroot "$SDK" \
+            -std=c++20 -fobjc-arc -fblocks -framework UIKit -framework Foundation \
+            test/kartpad_simulator_probe.mm -o "$APP/Probe"
+          python3 - "$APP/Info.plist" <<'PY'
+          import plistlib,sys
+          plistlib.dump({'CFBundleIdentifier':'com.neostation.kartpad.lifecycle-probe',
+              'CFBundleExecutable':'Probe','CFBundleName':'KartPad Lifecycle Probe',
+              'CFBundlePackageType':'APPL','CFBundleVersion':'1','CFBundleShortVersionString':'1.0',
+              'LSRequiresIPhoneOS':True,'MinimumOSVersion':'17.4','UIDeviceFamily':[1,2],
+              'UILaunchScreen':{},'UISupportedInterfaceOrientations':['UIInterfaceOrientationLandscapeLeft']},open(sys.argv[1],'wb'))
+          PY
+          codesign --force --sign - "$APP/Frameworks/KartPadRuntime.framework"
+          codesign --force --sign - "$APP"
+      - name: Run real UIKit/native ABI probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available --json > evidence/simulators.json
+          DEVICE="$(python3 - <<'PY'
+          import json
+          d=json.load(open('evidence/simulators.json'))['devices']
+          items=[x for runtime,ds in d.items() if 'iOS-18' in runtime for x in ds if x.get('isAvailable') and 'iPhone' in x['name']]
+          if not items: raise SystemExit('No compatible iOS simulator available')
+          print(items[0]['udid'])
+          PY
+          )"
+          echo "PROBE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$PWD/probe/Probe.app"
+          xcrun simctl launch "$DEVICE" com.neostation.kartpad.lifecycle-probe
+          DATA="$(xcrun simctl get_app_container "$DEVICE" com.neostation.kartpad.lifecycle-probe data)"
+          for i in $(seq 1 90); do
+            if [ -f "$DATA/Documents/probe.json" ]; then break; fi
+            sleep 1
+          done
+          cp "$DATA/Documents/probe.json" evidence/probe.json
+          cat evidence/probe.json
+          python3 - <<'PY'
+          import json
+          result=json.load(open('evidence/probe.json'))
+          assert result.get('success'), result
+          assert result['threadSize']==8 and result['mutexSize']==64, result
+          assert result['vectorSize']==24 and result['mapSize']==24 and result['hashMapSize']==40, result
+          PY
+      - name: Collect simulator diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence
+          cp ~/Library/Logs/DiagnosticReports/Probe* evidence/ 2>/dev/null || true
+          if [ -n "${PROBE_DEVICE:-}" ]; then
+            xcrun simctl spawn "$PROBE_DEVICE" log show --last 3m --style compact \
+              --predicate 'process == "Probe"' > evidence/probe-system.log 2>&1 || true
+            xcrun simctl shutdown "$PROBE_DEVICE" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: KartPad-UIKit-probe-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 7
