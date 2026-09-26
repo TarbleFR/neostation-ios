@@ -21,11 +21,20 @@ static DonorDescribeFn describeMemoryFn = nullptr;
 static uint8_t** flatGuestBase = nullptr;
 static bool frameGateEntered = false;
 static bool orderlyRuntimeReturn = false;
+static bool restartAfterShutdown = false;
+static uint32_t restartLanguage = 0;
+static std::atomic_uint_fast64_t sessionSerial{0};
 static std::atomic_uint languageWrites{0};
 static bool languageWriteFailed = false;
 static UIAlertController* ownedSessionAlert = nil;
 UIWindow* CurrentDonorWindow();
 void ReturnToNeoStation();
+
+void RunOnUIKitRunLoop(dispatch_block_t block) {
+  if (!block) return;
+  CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, block);
+  CFRunLoopWakeUp(CFRunLoopGetMain());
+}
 
 void PresentSessionAlert(UIAlertController* alert, uint64_t generation,
                          unsigned attempt = 0) {
@@ -42,10 +51,12 @@ void PresentSessionAlert(UIAlertController* alert, uint64_t generation,
       NSLog(@"[NeoKartPad/Session] owned alert presentation unavailable after menu transition");
       return;
     }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC),
-                   dispatch_get_main_queue(), ^{
+    [root performSelector:@selector(setNeedsStatusBarAppearanceUpdate)
+               withObject:nil afterDelay:0.05 inModes:@[NSRunLoopCommonModes]];
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
       PresentSessionAlert(alert, generation, attempt + 1);
     });
+    CFRunLoopWakeUp(CFRunLoopGetMain());
     return;
   }
   ownedSessionAlert = alert;
@@ -69,37 +80,62 @@ void ShowSessionFailure(bool closing, const char* diagnostic) {
     ownedSessionAlert = nil;
   }]];
   const auto generation = commands.generation;
-  dispatch_async(dispatch_get_main_queue(), ^{ PresentSessionAlert(alert, generation); });
+  RunOnUIKitRunLoop(^{ PresentSessionAlert(alert, generation); });
 }
 
 void ConfirmGameLanguage(NSInteger value, void (^onChange)(void)) {
   if (!session.active() || session.state() == NEO_KARTPAD_STOPPING) return;
+  const NSInteger applied = CurrentGameLanguage();
+  if (value == applied) {
+    if (onChange) onChange();
+    return;
+  }
   const uint64_t generation = commands.choose(static_cast<uint32_t>(value));
   if (!generation) return;
   bool expected = false;
   if (!kNeoKartPadMenuActionInFlight.compare_exchange_strong(expected, true)) {
-    commands.cancel(generation); return;
+    commands.cancel(generation);
+    return;
   }
+
   UIAlertController* alert = [UIAlertController alertControllerWithTitle:
       UIText(@"Restart game?", "restartRequiredTitle")
-      message:UIText(@"Restart Mario Kart Wii to apply this language? The current race will end. NeoStation stays open.",
+      message:UIText(@"The game must restart to apply this language. Restart now?",
                      "languageRestartMessage") preferredStyle:UIAlertControllerStyleAlert];
   [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Cancel", "cancel")
       style:UIAlertActionStyleCancel handler:^(__kindof UIAlertAction*) {
     ownedSessionAlert = nil;
-    if (commands.cancel(generation))
-      kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+    commands.cancel(generation);
+    kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+    if (onChange) onChange();
   }]];
-  [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Restart game", "restartGame")
+  [alert addAction:[UIAlertAction actionWithTitle:UIText(@"Restart", "restartGame")
       style:UIAlertActionStyleDefault handler:^(__kindof UIAlertAction*) {
     ownedSessionAlert = nil;
     if (!commands.confirm(generation)) return;
-    NSLog(@"[NeoKartPad/Language] confirmed language=%ld transaction=%llu; awaiting frame boundary",
-          (long)value, (unsigned long long)generation);
-    // This refresh changes no guest state. The frame gate owns the transaction.
-    if (onChange) onChange();
+
+    // Persist the desired language before shutdown. The active guest is not
+    // patched in place: the confirmed operation is a full shutdown -> cleanup
+    // -> fresh RuntimeMain session.
+    PersistInteger(kNeoKartPadLanguageKey, value);
+    NSError* persistenceError = nil;
+    if (!WriteGameLanguageSysConf(&persistenceError)) {
+      PersistInteger(kNeoKartPadLanguageKey, applied);
+      commands.failed();
+      kNeoKartPadMenuActionInFlight.store(false, std::memory_order_release);
+      ShowSessionFailure(false, persistenceError.localizedDescription.UTF8String);
+      return;
+    }
+    restartAfterShutdown = true;
+    restartLanguage = static_cast<uint32_t>(value);
+    NSLog(@"[NeoKartPad/Lifecycle] session=%llu language restart requested %ld -> %ld",
+          (unsigned long long)sessionSerial.load(), (long)applied, (long)value);
+    ReturnToNeoStation();
   }]];
-  dispatch_async(dispatch_get_main_queue(), ^{ PresentSessionAlert(alert, generation); });
+
+  // RuntimeMain owns the UIKit thread. GCD main-queue work may not be drained
+  // while SDL pumps its nested event loop, so schedule on the actual CFRunLoop.
+  RunOnUIKitRunLoop(^{ PresentSessionAlert(alert, generation); });
 }
 
 void PersistAcceptedLanguage(uint32_t language) {
