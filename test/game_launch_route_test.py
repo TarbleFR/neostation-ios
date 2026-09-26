@@ -25,6 +25,10 @@ class SystemModel {
   SystemModel([this.folderName = 'test']);
 }
 class FileProvider {}
+class LoggerService {
+  static final instance = LoggerService();
+  void i(String _) {}
+}
 class GameLaunchResult {
   final bool success;
   final String message;
@@ -47,6 +51,7 @@ class GameLaunchManager {
   factory GameLaunchManager() => instance;
   GameLaunchManager._();
   String? phase;
+  bool closeRouteImmediately = false;
   int starts = 0;
   Future<void> beginSession() async { phase = 'launching'; }
   void onGameStarted({String? emulatorExe}) { phase = 'playing'; starts++; }
@@ -82,6 +87,7 @@ void main() {
     GameService.pending = false; GameService.calls = 0;
     GameService.result = Completer<GameLaunchResult>();
     GameLaunchManager().phase = null; GameLaunchManager().starts = 0;
+    GameLaunchManager().closeRouteImmediately = false;
     await tester.pumpWidget(MaterialApp(navigatorKey: navigator,
       home: Builder(builder: (context) {
         launcherContext = context;
@@ -180,6 +186,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('newer-dialog'), findsOneWidget);
     expect(find.text('launch-pending'), findsNothing); expect(closed, 1);
+    navigator.currentState!.pop(); await tester.pumpAndSettle();
+    expect(find.text('library'), findsOneWidget);
+  });
+  testWidgets('embedded iOS return closes its owned route without waiting for a timer', (tester) async {
+    await mount(tester); await start(tester);
+    GameService.result.complete(GameLaunchResult(true));
+    await tester.pump(); await launchFuture;
+    GameLaunchManager().closeRouteImmediately = true;
+    final state = tester.state<_DialogState>(find.byType(GameLaunchDialog));
+    state._closeDialog();
+    showDialog<void>(context: launcherContext, builder: (_) => const Text('newer-dialog'));
+    await tester.pump();
+    expect(find.text('launch-pending'), findsNothing);
+    expect(find.text('newer-dialog'), findsOneWidget);
+    expect(closed, 1);
     navigator.currentState!.pop(); await tester.pumpAndSettle();
     expect(find.text('library'), findsOneWidget);
   });

@@ -11,6 +11,7 @@ import '../models/game_model.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../services/game_service.dart';
 import '../services/game_launch_manager.dart';
+import '../services/logger_service.dart';
 import '../utils/gamepad_nav.dart';
 import '../constants/system_folder_names.dart';
 
@@ -142,13 +143,24 @@ class _GameLaunchDialogState extends State<GameLaunchDialog> {
     final route = ModalRoute.of(context);
     if (route == null) return;
     _closeCalled = true;
-    Timer(const Duration(seconds: 1), () {
+    void removeOwnedRoute() {
       if (mounted && route.isActive) {
+        LoggerService.instance.i('[GameLaunchDialog] removing finished route at '
+            '${DateTime.now().toUtc().toIso8601String()}.');
         _onGameClosedFired = true;
         route.navigator?.removeRoute(route);
         widget.onGameClosed();
       }
-    });
+    }
+
+    // The native iOS session has already fully returned before it emits its
+    // end event. A delayed Dart timer can leave the closing route onscreen
+    // until the app is backgrounded and its event loop wakes again.
+    if (GameLaunchManager().closeRouteImmediately) {
+      scheduleMicrotask(removeOwnedRoute);
+    } else {
+      Timer(const Duration(seconds: 1), removeOwnedRoute);
+    }
   }
 
   // ---------------------------------------------------------------------------

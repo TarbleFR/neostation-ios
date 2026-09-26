@@ -74,6 +74,10 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
       Platform.isIOS &&
       _embeddedIOSSessionExecutables.contains(_activeEmulatorExe);
 
+  /// The native end event arrives after the embedded runtime has released its
+  /// window and resources. Its launch route can close on the next Dart turn.
+  bool get closeRouteImmediately => _isEmbeddedIOSSession;
+
   /// Flag for Android to detect if the app was resumed before monitoring started
   /// (indicating an immediate emulator failure).
   bool _resumedBeforeMonitoring = false;
@@ -154,14 +158,16 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     _monitoringTimer = null;
     _phase = GameLaunchPhase.closing;
     notifyListeners();
-    _log.i('[GameLaunchManager] Close triggered — entering closing phase.');
+    _log.i('[GameLaunchManager] Close triggered — entering closing phase at '
+        '${DateTime.now().toUtc().toIso8601String()}.');
   }
 
   /// Marks the post-game cleanup as finished.
   void completeClose() {
     _phase = GameLaunchPhase.closed;
     notifyListeners();
-    _log.i('[GameLaunchManager] Close complete.');
+    _log.i('[GameLaunchManager] Close complete at '
+        '${DateTime.now().toUtc().toIso8601String()}.');
   }
 
   /// Cleanup hook for when the session dialog is disposed.
@@ -206,7 +212,8 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     _resumedBeforeMonitoring = false;
     notifyListeners();
     _log.i(
-      '[GameLaunchManager] Session finalized — music resumed, SFX re-enabled.',
+      '[GameLaunchManager] Session finalized — music resumed, SFX re-enabled '
+      'at ${DateTime.now().toUtc().toIso8601String()}.',
     );
   }
 
