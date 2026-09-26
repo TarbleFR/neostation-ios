@@ -30,6 +30,7 @@ std::atomic_bool returnRequested{false};
 std::atomic_bool guestSuspended{false};
 std::atomic_bool terminalRequested{false};
 std::atomic_bool guestStarted{false};
+std::atomic_int lastExitReason{NEO_KARTPAD_EXIT_NONE};
 std::mutex uiTextMutex;
 std::unordered_map<std::string, std::string> uiText;
 
@@ -74,6 +75,7 @@ void TerminalEndOnMainThread(const char* reason) {
   guestSuspended.store(false, std::memory_order_release);
   guestCondition.notify_all();
   RestoreHostWindow();
+  lastExitReason.store(NEO_KARTPAD_EXIT_RUNTIME_FAILURE, std::memory_order_release);
   session.terminate();
   Emit(reason ? reason : "KartPad runtime ended.");
 }
@@ -171,6 +173,7 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
 
 void Stop() {
   if (!NSThread.isMainThread || !session.active()) return;
+  lastExitReason.store(NEO_KARTPAD_EXIT_USER_RETURN, std::memory_order_release);
   session.requestStop();
   returnRequested.store(true, std::memory_order_release);
   Emit("Return requested; waiting for KartPad's guest event boundary.");
@@ -178,6 +181,7 @@ void Stop() {
 
 int IsRunning() { return session.active() ? 1 : 0; }
 int State() { return session.state(); }
+int LastExitReason() { return lastExitReason.load(std::memory_order_acquire); }
 
 void SetCallback(NeoKartPadEventFn value, void* context) {
   callback = value;
@@ -205,6 +209,7 @@ const NeoKartPadAPI api{
     State,
     SetUIText,
     RuntimeIdentity,
+    LastExitReason,
 };
 }  // namespace
 
