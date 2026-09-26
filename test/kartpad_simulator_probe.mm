@@ -75,6 +75,21 @@ static void* Required(void* handle,const char* symbol) {
       auto** flatBase=reinterpret_cast<uint8_t**>(
           Required(handle,"_ZN9GuestFlat14gFlatGuestBaseE"));
 
+      using SelectProfileFn=void(*)(const char*);
+      using FinalizeProfileFn=void(*)();
+      auto selectProfile=reinterpret_cast<SelectProfileFn>(
+          Required(handle,"_ZN26TranslatedFunctionRegistry13SelectProfileEPKc"));
+      auto finalizeProfile=reinterpret_cast<FinalizeProfileFn>(
+          Required(handle,"_ZN26TranslatedFunctionRegistry8FinalizeEv"));
+
+      // Reproduce RuntimeMain's registry sequence repeatedly. The stock donor
+      // throws on the second SelectProfile after Finalize; NeoStation's checked
+      // donor patch must make that exact same-profile call idempotent.
+      for (int cycle=0; cycle<4; ++cycle) {
+        selectProfile("base");
+        finalizeProfile();
+      }
+
       RuntimeMemoryConfig config=defaults();
       uintptr_t firstFlat=0;
       bool reused=true;
@@ -100,6 +115,7 @@ static void* Required(void* handle,const char* symbol) {
              @"vectorSize":@(sizeof(std::vector<int>)),@"dequeSize":@(sizeof(std::deque<int>)),
              @"mapSize":@(sizeof(std::map<int,int>)),@"hashMapSize":@(sizeof(std::unordered_map<int,int>)),
              @"ofstreamSize":@(sizeof(std::ofstream)),@"optionalThreadSize":@(sizeof(std::optional<std::thread::id>)),
+             @"profileFinalizeCycles":@4,
              @"guestFlatCycles":@4,@"guestFlatReused":@(reused),@"guestMemoryZeroed":@(zeroed),
              @"guestFlatBase":@(firstFlat)});
     } catch (const std::exception& e) {
