@@ -79,7 +79,7 @@ for token in (
     'ConfirmGameLanguage',
     'BuildReturnToNeoStationAction',
     'com.neostation.kartpad.return-to-neostation',
-    'ReleaseTerminalGuestMemory',
+    'PrepareReusableGuestMemory',
     'g_dynamicAspectRatioEnabled',
     'com.neostation.kartpad.return-to-game',
     '"returnToGame"',
