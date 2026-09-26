@@ -35,6 +35,15 @@ class NeoKartPadSessionState {
     firstFrameSeen_ = false;
   }
 
+  // A normal embedded shutdown must return to a fully reusable idle state.
+  // The next Start() is a brand-new KartPad session, not a resume of stale
+  // guest/runtime state from the previous launch.
+  void finishReusable() {
+    state_ = NEO_KARTPAD_IDLE;
+    runtimeReady_ = false;
+    firstFrameSeen_ = false;
+  }
+
   void terminate() { state_ = NEO_KARTPAD_ENDED; }
 
   bool active() const {
