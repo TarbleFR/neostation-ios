@@ -312,3 +312,22 @@ on both simulated systems; iOS 18 menu/MTC failure and iOS 27 post-suite runner
 timeout remain recorded limitations. These probes execute the shipped SDL/Aurora
 instructions and real ARM64 fiber switch, not full gameplay or the user's
 physical iPhone. Physical-device resolution remains unverified.
+
+## Build 350 delivered artifact
+
+Packaging source: `5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0`.
+IPA workflow 36323843067 / job 108632695296 completes successfully;
+artifact 10932894067 contains
+`NeoStation-iOS-Build-350-KartPad-Relaunch-Candidate.ipa`.
+Downloaded file size is 143538718 bytes; SHA-256:
+`e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46`.
+
+The local packaged-IPA validator passes build number 350, donor identity,
+language ABI, checked session/UIKit gate and lazy loading. ZIP CRC and ARM64
+application executable checks also pass. KartPadCore and KartPadRuntime match
+the exact tested hashes above. DolphinCore, DusklightCore, ARMSX2Core, StikJIT
+and libRPCS3Core.dylib are byte-identical to the delivered Build 349.
+This is an unsigned sideload candidate requiring the user's normal signing
+workflow. The simulator/menu limitations above remain explicit; final
+confirmation of immediate return/relaunch without the iOS app switcher must
+come from the user's physical iPhone.
