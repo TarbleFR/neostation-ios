@@ -142,8 +142,13 @@ outstanding.
   active-time timeout checks. The menu XCTest still aborts in the unchanged
   donor's off-main UIKit reads before its first tap; this is not a passing
   iOS 18 menu test. The iOS 27 automatic step also passed at 12:10:02 UTC
-  in job 108614541846 (all five cycles and readiness assertions); its menu
-  execution and diagnostic artifact remain pending.
+  in job 108614541846 (all five cycles and readiness assertions). Artifact
+  10931770499 records automatic delays 157, 153, 152, 153, 153 ms. The same
+  revision's iOS 27 menu test also passed its assertions in 71.619 s at
+  12:11:52 UTC: five real menu exits, five new launch acknowledgements, five
+  delays of 151, 152, 151, 152, 151 ms, readiness contract passed, final success.
+  As with db7fdff, xcodebuild hung after its passing suite and the step timed
+  out; the entire workflow is not described as green.
 - Native candidate run 36317379227 / artifact 10931063108 records host source
   dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4. Its Core and Runtime binaries are
   byte-for-byte identical to Build 348: Core SHA-256
@@ -164,3 +169,16 @@ the exact dcf58ec automatic/readiness report and binds its presentation sources
 to that tested SHA, in addition to existing language/session, UIKit/CoreAudio
 and canonical-source gates. This does not turn the known iOS 18 menu failure
 into a pass, or establish resolution of the long physical-device wait.
+
+Build 349 packaging source is 5f3bc06f7b9dd4ceeaa914871ca06d1cc145320b,
+workflow run 36318146423. The subsequent documentation update records results
+without changing the packaged application sources.
+
+Build 349 completed successfully at 12:26:44 UTC, artifact 10931114859.
+Verified downloaded IPA: 143538628 bytes, SHA-256
+`efad74783a4260cfa8e07a7c3987bf1684c3adc134cd985564406d361d868181`.
+ZIP CRC, build number 349, ARM64 executable, readiness class and diagnostic
+markers passed. KartPadCore, KartPadRuntime, DolphinCore, DusklightCore,
+ARMSX2Core, StikJIT and libRPCS3Core.dylib are byte-identical to Build 348.
+This unsigned sideload IPA requires the user's usual signing workflow.
+Physical-device resolution of the recorded delay is still unverified.
