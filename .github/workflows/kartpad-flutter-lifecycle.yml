@@ -13,13 +13,24 @@ permissions:
   actions: read
 jobs:
   flutter-sdl:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            ios: iOS-18
+          - runner: xcode-27
+            ios: iOS-27
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
+    env:
+      PROBE_IOS: ${{ matrix.ios }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: maxim-lobanov/setup-xcode@v1
+        if: matrix.runner == 'macos-15'
         with:
           xcode-version: '16.4'
       - uses: subosito/flutter-action@v2
@@ -114,7 +125,9 @@ jobs:
           PY
           codesign --force --sign - "$APP/Frameworks/KartPadRuntime.framework"
           codesign --force --sign - "$APP"
-          DEVICE="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; print(next(d["udid"] for runtime,group in json.load(sys.stdin)["devices"].items() if "iOS-18" in runtime for d in group if "iPhone" in d["name"]))')"
+          xcrun simctl list devices available --json > evidence/simulators.json
+          xcodebuild -version > evidence/xcode.txt
+          DEVICE="$(python3 -c 'import json,os; print(next(d["udid"] for runtime,group in json.load(open("evidence/simulators.json"))["devices"].items() if os.environ["PROBE_IOS"] in runtime for d in group if "iPhone" in d["name"]))')"
           echo "PROBE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
@@ -178,6 +191,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: KartPad-Flutter-probe-${{ github.sha }}
+          name: KartPad-Flutter-probe-${{ matrix.ios }}-${{ github.sha }}
           path: evidence/
           retention-days: 7
