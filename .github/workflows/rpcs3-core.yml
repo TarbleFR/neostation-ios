@@ -17,6 +17,7 @@ on:
       - 'test/rpcs3_embedded_core_validator_test.py'
       - 'test/rpcs3_preprocessor_balance_test.py'
       - 'test/rpcs3_build351_gow3_engine_test.py'
+      - 'test/rpcs3_build352_gow3_memory_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -50,7 +51,7 @@ jobs:
           set -euo pipefail
           git diff --check
           bash -n build-utils/build_rpcs3_embedded_core.sh
-          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py
+          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py test/rpcs3_build352_gow3_memory_test.py
           python3 test/rpcs3_preprocessor_balance_test.py
           python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py

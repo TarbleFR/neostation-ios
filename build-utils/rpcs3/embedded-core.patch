@@ -5291,21 +5291,31 @@ index 3ee5010..2a8b935 100644
  				sink->stencil_init_flags = ref->stencil_init_flags;
  				sink->native_pitch = static_cast<u32>(prev.width) * ref->get_bpp() * ref->samples_x;
 diff --git a/rpcs3/Emu/RSX/VK/VKResourceManager.cpp b/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
-index 95b81bf..c0713aa 100644
+index 95b81bf..5751811 100644
 --- a/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
-@@ -47,6 +47,10 @@ namespace vk
+@@ -5,6 +5,7 @@
+ #include "vkutils/VRAMBudgetPolicy.h"
+ 
+ #ifdef RPCS3_IOS
++#include "Emu/System.h"
+ #include "ios/IOSMemoryPressurePolicy.h"
+ #include "ios/RPCS3IOSPerformance.h"
+ #endif
+@@ -47,6 +48,12 @@ namespace vk
  		rpcs3::ios::process_memory_pressure process_severity = rpcs3::ios::process_memory_pressure::low;
  		rsx::problem_severity combined_severity = rsx::problem_severity::low;
  		std::chrono::steady_clock::time_point next_report{};
 +		// NEOSTATION_BUILD258_RUNTIME_RESILIENCE_V1: expensive cache eviction is scheduled independently from the
 +		// cheap per-frame severity sample. Escalation always bypasses the cooldown.
 +		std::chrono::steady_clock::time_point next_reclaim{};
++		std::chrono::steady_clock::time_point next_aggressive_reclaim{};
 +		rsx::problem_severity last_reclaimed_severity = rsx::problem_severity::low;
++		bool high_footprint_profile = false;
  	} g_ios_process_memory_pressure;
  
  	static rsx::problem_severity to_problem_severity(rpcs3::ios::process_memory_pressure severity)
-@@ -165,6 +169,9 @@ namespace vk
+@@ -165,6 +172,9 @@ namespace vk
  		}
  
  		g_vmm_stats.pool_usage[pool] += memory_size;
@@ -5315,7 +5325,7 @@ index 95b81bf..c0713aa 100644
  
  		auto& vmm_size = g_vmm_stats.memory_usage[memory_type];
  		vmm_size += memory_size;
-@@ -185,6 +192,9 @@ namespace vk
+@@ -185,6 +195,9 @@ namespace vk
  			found != g_vmm_stats.allocations.end())
  		{
  			const auto& info = found->second;
@@ -5325,7 +5335,40 @@ index 95b81bf..c0713aa 100644
  			g_vmm_stats.memory_usage[info.type_index] -= info.size;
  			g_vmm_stats.pool_usage[info.pool] -= info.size;
  			g_vmm_stats.allocations.erase(found);
-@@ -364,13 +374,53 @@ namespace vk
+@@ -251,9 +264,12 @@ namespace vk
+ 
+ #ifdef RPCS3_IOS
+ 		const u64 process_headroom = rpcs3::ios::available_process_memory_headroom();
++		g_ios_process_memory_pressure.high_footprint_profile =
++			rpcs3::ios::is_god_of_war_iii_title(Emu.GetTitleID());
+ 		g_ios_process_memory_pressure.process_severity = rpcs3::ios::get_process_memory_pressure(
+ 			process_headroom,
+-			g_ios_process_memory_pressure.process_severity);
++			g_ios_process_memory_pressure.process_severity,
++			g_ios_process_memory_pressure.high_footprint_profile);
+ 		const auto process_severity = to_problem_severity(g_ios_process_memory_pressure.process_severity);
+ #else
+ 		constexpr auto process_severity = rsx::problem_severity::low;
+@@ -334,12 +350,16 @@ namespace vk
+ 		{
+ 			const auto mem_info = get_current_renderer()->get_memory_mapping();
+ 			const auto local_memory_usage = vmm_get_application_memory_usage_impl(mem_info.device_local);
++			const auto texture_memory_usage = vmm_get_application_pool_usage_impl(VMM_ALLOCATION_POOL_TEXTURE_CACHE);
++			const auto surface_memory_usage = vmm_get_application_pool_usage_impl(VMM_ALLOCATION_POOL_SURFACE_CACHE);
+ 			rsx_log.warning(
+-				"iOS memory pressure is %s: process headroom %llu MiB, Vulkan allocator %d%%, internal allocations %llu MiB; reclaiming caches",
++				"iOS memory pressure is %s: process headroom %llu MiB, Vulkan allocator %d%%, internal allocations %llu MiB (textures %llu MiB, surfaces %llu MiB); reclaiming caches",
+ 				memory_severity_name(load_severity),
+ 				process_headroom / rpcs3::ios::process_memory_mib,
+ 				static_cast<int>(vmm_load),
+-				local_memory_usage / rpcs3::ios::process_memory_mib);
++				local_memory_usage / rpcs3::ios::process_memory_mib,
++				texture_memory_usage / rpcs3::ios::process_memory_mib,
++				surface_memory_usage / rpcs3::ios::process_memory_mib);
+ 			g_ios_process_memory_pressure.next_report = now + std::chrono::seconds(5);
+ 		}
+ 		else if (severity_changed && previous_severity >= rsx::problem_severity::moderate)
+@@ -364,13 +384,76 @@ namespace vk
  		return false;
  	}
  
@@ -5336,26 +5379,46 @@ index 95b81bf..c0713aa 100644
 -			load_severity >= rsx::problem_severity::moderate)
 +		const auto load_severity = vmm_determine_memory_load_severity();
 +		if (load_severity < rsx::problem_severity::moderate)
-+		{
+ 		{
+-			vmm_handle_memory_pressure(load_severity);
 +#ifdef RPCS3_IOS
 +			g_ios_process_memory_pressure.next_reclaim = {};
++			g_ios_process_memory_pressure.next_aggressive_reclaim = {};
 +			g_ios_process_memory_pressure.last_reclaimed_severity = rsx::problem_severity::low;
 +#endif
 +			return load_severity;
-+		}
+ 		}
 +
 +#ifdef RPCS3_IOS
 +		const auto now = std::chrono::steady_clock::now();
 +		const bool escalated = load_severity > g_ios_process_memory_pressure.last_reclaimed_severity;
 +		if (!escalated && now < g_ios_process_memory_pressure.next_reclaim)
- 		{
--			vmm_handle_memory_pressure(load_severity);
++		{
 +			rpcs3::ios::record_memory_pressure_reclaim(static_cast<u32>(load_severity), false, false);
 +			return load_severity;
- 		}
++		}
 +
-+		const bool relieved = vmm_handle_memory_pressure(load_severity);
-+		rpcs3::ios::record_memory_pressure_reclaim(static_cast<u32>(load_severity), true, relieved);
++		// Build 352: the GOW3 trace grows from 1.7 to 5.1 GiB before the standard
++		// threshold reacts.  On first entry (then at most once every eight seconds
++		// while pressure remains) run the already-safe severe cache path.  This
++		// purges unlocked textures and stale RTT chains without using the fatal
++		// hard GPU drain or spilling unified memory back into the same RAM pool.
++		constexpr auto aggressive_reclaim_interval = std::chrono::seconds(8);
++		const bool aggressive_reclaim =
++			g_ios_process_memory_pressure.high_footprint_profile &&
++			load_severity == rsx::problem_severity::moderate &&
++			(escalated || now >= g_ios_process_memory_pressure.next_aggressive_reclaim);
++		const auto reclaim_severity = aggressive_reclaim
++			? rsx::problem_severity::severe
++			: load_severity;
++		if (aggressive_reclaim)
++		{
++			g_ios_process_memory_pressure.next_aggressive_reclaim = now + aggressive_reclaim_interval;
++			rsx_log.notice("Applying bounded God of War III RSX cache reclaim before the iOS jetsam window");
++		}
++
++		const bool relieved = vmm_handle_memory_pressure(reclaim_severity);
++		rpcs3::ios::record_memory_pressure_reclaim(static_cast<u32>(reclaim_severity), true, relieved);
 +		g_ios_process_memory_pressure.last_reclaimed_severity = load_severity;
 +
 +		// Moderate pressure in the diagnostic lasted for more than a minute. The
@@ -5373,8 +5436,11 @@ index 95b81bf..c0713aa 100644
 +		}
 +		else
 +		{
++			const bool high_footprint_profile = g_ios_process_memory_pressure.high_footprint_profile;
 +			g_ios_process_memory_pressure.next_reclaim = now +
-+				(relieved ? std::chrono::milliseconds(750) : std::chrono::milliseconds(1500));
++				(relieved
++					? (high_footprint_profile ? std::chrono::milliseconds(1500) : std::chrono::milliseconds(750))
++					: (high_footprint_profile ? std::chrono::milliseconds(3000) : std::chrono::milliseconds(1500)));
 +		}
 +#else
 +		vmm_handle_memory_pressure(load_severity);
@@ -6234,18 +6300,19 @@ index de1b709..fd07001 100644
  std::optional<installed_game> find_installed_game(std::string_view title_id);
  std::vector<installed_game_patch> installed_game_patches(std::string_view title_id);
 diff --git a/rpcs3/ios/IOSMemoryPressurePolicy.h b/rpcs3/ios/IOSMemoryPressurePolicy.h
-index 6dc9a20..f96effe 100644
+index 6dc9a20..27d005b 100644
 --- a/rpcs3/ios/IOSMemoryPressurePolicy.h
 +++ b/rpcs3/ios/IOSMemoryPressurePolicy.h
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,8 @@
  #pragma once
  
  #include <cstdint>
 +#include <limits>
++#include <string_view>
  
  namespace rpcs3::ios
  {
-@@ -15,6 +16,24 @@ namespace rpcs3::ios
+@@ -15,6 +17,24 @@ namespace rpcs3::ios
  	inline constexpr std::uint64_t process_memory_mib = 0x100000ull;
  	inline constexpr std::uint32_t automatic_llvm_compile_threads = 3;
  	inline constexpr std::uint32_t savestate_compression_threads = 3;
@@ -6270,6 +6337,69 @@ index 6dc9a20..f96effe 100644
  
  	// LLVM compilation has a large transient working set. On iOS, a zero
  	// configuration value means a memory-safe automatic limit instead of every
+@@ -53,14 +73,29 @@ namespace rpcs3::ios
+ 	inline constexpr std::uint64_t process_headroom_severe_exit = 1280 * process_memory_mib;
+ 	inline constexpr std::uint64_t process_headroom_fatal_enter = 512 * process_memory_mib;
+ 	inline constexpr std::uint64_t process_headroom_fatal_exit = 768 * process_memory_mib;
++	// God of War III grows several long-lived RSX pools before the current
++	// 1.5 GiB headroom threshold notices pressure.  Start reclaiming while iOS
++	// still has 2.5 GiB available so a scene transition cannot push the process
++	// directly into its jetsam window.  Severe/fatal thresholds stay unchanged;
++	// only the inexpensive, recoverable pressure stage is entered earlier.
++	inline constexpr std::uint64_t high_footprint_headroom_moderate_enter = 2560 * process_memory_mib;
++	inline constexpr std::uint64_t high_footprint_headroom_moderate_exit = 2816 * process_memory_mib;
+ 	inline constexpr std::uint64_t texture_cache_quota_moderate = 384 * process_memory_mib;
+ 	inline constexpr std::uint64_t texture_cache_quota_severe = 256 * process_memory_mib;
+ 	inline constexpr std::uint64_t texture_cache_quota_fatal = 128 * process_memory_mib;
+ 
+ 	constexpr process_memory_pressure get_process_memory_pressure(
+ 		std::uint64_t available_bytes,
+-		process_memory_pressure current = process_memory_pressure::low)
++		process_memory_pressure current = process_memory_pressure::low,
++		bool high_footprint_profile = false)
+ 	{
++		const std::uint64_t moderate_enter = high_footprint_profile
++			? high_footprint_headroom_moderate_enter
++			: process_headroom_moderate_enter;
++		const std::uint64_t moderate_exit = high_footprint_profile
++			? high_footprint_headroom_moderate_exit
++			: process_headroom_moderate_exit;
++
+ 		process_memory_pressure entered = process_memory_pressure::low;
+ 		if (available_bytes <= process_headroom_fatal_enter)
+ 		{
+@@ -70,7 +105,7 @@ namespace rpcs3::ios
+ 		{
+ 			entered = process_memory_pressure::severe;
+ 		}
+-		else if (available_bytes <= process_headroom_moderate_enter)
++		else if (available_bytes <= moderate_enter)
+ 		{
+ 			entered = process_memory_pressure::moderate;
+ 		}
+@@ -95,7 +130,7 @@ namespace rpcs3::ios
+ 			}
+ 			[[fallthrough]];
+ 		case process_memory_pressure::moderate:
+-			if (available_bytes <= process_headroom_moderate_exit)
++			if (available_bytes <= moderate_exit)
+ 			{
+ 				return process_memory_pressure::moderate;
+ 			}
+@@ -107,6 +142,13 @@ namespace rpcs3::ios
+ 		return entered;
+ 	}
+ 
++	constexpr bool is_god_of_war_iii_title(std::string_view title_id) noexcept
++	{
++		return title_id == "BCES00510" || title_id == "BCES00799" ||
++			title_id == "BCUS98111" || title_id == "BCJS37001" ||
++			title_id == "BCAS25003" || title_id == "BCKS15003";
++	}
++
+ 	constexpr bool has_safe_savestate_headroom(std::uint64_t available_bytes)
+ 	{
+ 		// Streaming compression is bounded, but committing guest/RSX state can
 diff --git a/rpcs3/ios/NeoStationSavestateIO.h b/rpcs3/ios/NeoStationSavestateIO.h
 new file mode 100644
 index 0000000..d6f54a1

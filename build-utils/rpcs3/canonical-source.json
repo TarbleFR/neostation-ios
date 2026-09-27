@@ -47,7 +47,7 @@
     "rpcs3/Emu/RSX/VK/VKPipelineCompiler.h": "2f8f98b5f2d478ac37352321b4634d1276eb36a8f3548ce6d15efae1deb37c8c",
     "rpcs3/Emu/RSX/VK/VKPresent.cpp": "e594e4deee7570f0f6bbc504f1ca5e5c4047b3e884591d00f0730a80ee665045",
     "rpcs3/Emu/RSX/VK/VKRenderTargets.h": "400694bdb4bae2ab8ff6bdeac76f262458136d5e744f0def08807595df8355cc",
-    "rpcs3/Emu/RSX/VK/VKResourceManager.cpp": "9c711007ff897e9550f329994803cf66c930c8280be234b3eb5388ba4c07b83b",
+    "rpcs3/Emu/RSX/VK/VKResourceManager.cpp": "69fc3936b42e5fbc669463fd71ec71b6407989d934b91100c6a073bbe97e7b8d",
     "rpcs3/Emu/RSX/VK/vkutils/device.h": "426a38863cacdae8a03411840ca48d14c649fff3386fe509f239c84dfeaa35f3",
     "rpcs3/Emu/RSX/VK/vkutils/memory.h": "a77e126b55c298401d7b0c537445dee5585d49407856df03a141cb89b64b273d",
     "rpcs3/Emu/RSX/VK/vkutils/sync.cpp": "a5b5a816740d6e3dc11ab9d2b08506b55e697a3e29e76ace74de2bbd1eb9e77e",
@@ -61,7 +61,7 @@
     "rpcs3/Emu/system_progress.cpp": "6d026a5ae7f6d829b170d2bc82f21fe02573bc726936acc84909a94ced90681a",
     "rpcs3/ios/GameLibrary.cpp": "3f4b97f291fd5957b90e1e1b5d9661ba1ca88d45a38e7661a7938bd807075d38",
     "rpcs3/ios/GameLibrary.h": "bbf057e97ac5035dbe73508b367ce0eea85521f62699f8b3e483f6d3bc4a8434",
-    "rpcs3/ios/IOSMemoryPressurePolicy.h": "371e5bc7956e0a2524979fa521376b13690fc40c6093f6e554e338dbb49f42f6",
+    "rpcs3/ios/IOSMemoryPressurePolicy.h": "059fd036ec8f4138ec8653467fabfc294e3cfaa4f91e7d4f7b56fbc8946aa09c",
     "rpcs3/ios/NeoStationSavestateIO.h": "d82e1fae306e025e580954e24f35b3aaa3a782dcfeea2f16722d1dbf9b1dd6e6",
     "rpcs3/ios/NeoStationSavestateStatus.h": "b5d4b1597563ef978433fa0a2f19543d4d51ba32775c4add8bc228de9bbd7692",
     "rpcs3/ios/RPCS3IOS.cpp": "0df5db1b495f6a9444e247783ed84cf8ad8e234e15ab397f48b888dc173f392b",
@@ -78,8 +78,8 @@
     "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577",
     "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded"
   },
-  "patch_sha256": "45818312f3157524b69119cffa628472b2b187a7d5221992e858a5ee2f517a78",
-  "policy": "Build351 experimental; exact-hash God of War III SPU MLAA bypass; unreachable SPU LLVM helper elimination; narrow relaxed PUTLLC atomics; Build350 ARM64/PPU/RSX/JIT baseline retained",
+  "patch_sha256": "8b6c589bd8aedf1283cb6f5734e9612a661418bc35c0a9ba7092eebca9c6f22d",
+  "policy": "Build352 experimental; proactive bounded God of War III RSX memory reclaim; Build351 CELL/MLAA engine pass and Build350 lifecycle baseline retained",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
   "upstream_repository": "XITRIX/rpcs3"
