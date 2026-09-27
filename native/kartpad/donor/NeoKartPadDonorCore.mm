@@ -1601,9 +1601,13 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   ApplyNeoStationKartPadInputPolicy();
 
   UIView* hostView = (__bridge UIView*)host;
-  if (!hostView || !hostView.window)
+  // The bridge passes its retained Flutter UIWindow directly. UIView.window
+  // can be nil while UIKit changes the root controller during a fast return.
+  UIWindow* selectedHostWindow = [hostView isKindOfClass:UIWindow.class]
+      ? (UIWindow*)hostView : hostView.window;
+  if (!selectedHostWindow || !selectedHostWindow.windowScene)
     return Fail(error, errorSize, "NeoStation host window is unavailable.");
-  neoStationWindow = hostView.window;
+  neoStationWindow = selectedHostWindow;
 
   if (runtimeThreadActive.load(std::memory_order_acquire))
     return Fail(error, errorSize, "KartPad cleanup is still in progress.");

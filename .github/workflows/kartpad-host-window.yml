@@ -1,0 +1,75 @@
+name: KartPad foreground host window regression
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/kartpad-host-window.yml'
+      - 'packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindow*.h'
+      - 'test/kartpad_host_window_probe.mm'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  uikit:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Compile real UIKit window selection probe
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/KartPadHostProbe.app"
+          mkdir -p "$APP"
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -Werror \
+            -target arm64-apple-ios17.4-simulator -isysroot "$SDK" \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            test/kartpad_host_window_probe.mm -framework UIKit -framework Foundation \
+            -o "$APP/KartPadHostProbe"
+          python3 - "$APP/Info.plist" <<'PY'
+          import plistlib, sys
+          with open(sys.argv[1], 'wb') as output:
+              plistlib.dump({
+                  'CFBundleIdentifier': 'com.neostation.kartpad.host-window-probe',
+                  'CFBundleExecutable': 'KartPadHostProbe',
+                  'CFBundleName': 'KartPadHostProbe',
+                  'CFBundlePackageType': 'APPL',
+                  'LSRequiresIPhoneOS': True,
+                  'MinimumOSVersion': '17.4',
+                  'UIApplicationSceneManifest': {
+                      'UIApplicationSupportsMultipleScenes': False,
+                      'UISceneConfigurations': {'UIWindowSceneSessionRoleApplication': [{
+                          'UISceneConfigurationName': 'Default Configuration',
+                          'UISceneDelegateClassName': 'HostWindowProbeSceneDelegate',
+                      }]},
+                  },
+              }, output)
+          PY
+      - name: Verify first launch and immediate relaunch in simulator
+        run: |
+          set -euo pipefail
+          DEVICE="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["state"] == "Shutdown" and "iPhone" in d["name"]))')"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$RUNNER_TEMP/KartPadHostProbe.app"
+          DATA="$(xcrun simctl get_app_container "$DEVICE" com.neostation.kartpad.host-window-probe data)"
+          xcrun simctl launch "$DEVICE" com.neostation.kartpad.host-window-probe
+          for attempt in $(seq 1 60); do
+            test ! -f "$DATA/Documents/host-window-probe.json" || break
+            sleep 1
+          done
+          python3 - "$DATA/Documents/host-window-probe.json" <<'PY'
+          import json, sys
+          with open(sys.argv[1]) as input_file:
+              result = json.load(input_file)
+          print(result)
+          assert result['success'], result['reason']
+          PY

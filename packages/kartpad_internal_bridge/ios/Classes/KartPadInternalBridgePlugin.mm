@@ -1,7 +1,7 @@
 #import "KartPadInternalBridgePlugin.h"
 #import "KartPadCoreABI.h"
 #include "KartPadCoreLoader.h"
-#include "KartPadHostWindowPolicy.h"
+#include "KartPadHostWindowSelection.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -24,48 +24,6 @@ NSString* CorePath() {
   if (frameworks.length == 0) return @"";
   return [frameworks stringByAppendingPathComponent:
       @"KartPadCore.framework/KartPadCore"];
-}
-
-UIView* ActiveHostView(UIViewController* flutterController) {
-  NSMutableArray<UIView*>* views = [NSMutableArray array];
-  std::vector<neokartpad::HostWindowCandidate> candidates;
-  auto append = [&](UIViewController* controller, BOOL flutterOwned) {
-    // isViewLoaded avoids creating a view just to decide whether it is ready.
-    UIView* view = controller.isViewLoaded ? controller.view : nil;
-    UIWindow* window = view.window;
-    UIWindowScene* scene = window.windowScene;
-    if (!view || !window || !scene) return;
-    [views addObject:view];
-    candidates.push_back({static_cast<bool>(flutterOwned), true,
-                          !window.hidden && window.alpha > 0.01,
-                          scene.activationState == UISceneActivationStateForegroundActive,
-                          static_cast<bool>(window.isKeyWindow)});
-  };
-
-  // Flutter's registrar identifies its own view even when the donor SDL
-  // window has not relinquished UIKit's key-window designation yet.
-  append(flutterController, flutterController != nil);
-  for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
-    if (![scene isKindOfClass:UIWindowScene.class] ||
-        scene.activationState != UISceneActivationStateForegroundActive) continue;
-    for (UIWindow* window in ((UIWindowScene*)scene).windows) {
-      UIViewController* root = window.rootViewController;
-      if (![root isKindOfClass:FlutterViewController.class] ||
-          (flutterController && root == flutterController)) continue;
-      append(root, YES);
-    }
-  }
-
-  const int selected = neokartpad::SelectHostWindow(candidates);
-  if (selected < 0) {
-    NSLog(@"[NeoStation/KartPad] no attached foreground Flutter view (candidates=%lu)",
-          (unsigned long)views.count);
-    return nil;
-  }
-  UIView* host = views[static_cast<NSUInteger>(selected)];
-  NSLog(@"[NeoStation/KartPad] selected Flutter host view (windowKey=%d, candidates=%lu)",
-        host.window.isKeyWindow, (unsigned long)views.count);
-  return host;
 }
 
 NSString* ExitReasonName(int reason) {
@@ -120,6 +78,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   BOOL _launchCompletionDelivered;
   BOOL _terminationDelivered;
   __weak NSObject<FlutterPluginRegistrar>* _registrar;
+  UIWindow* _hostWindow;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -397,12 +356,18 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     return;
   }
 
-  UIView* hostView = ActiveHostView(_registrar.viewController);
-  if (!hostView) {
+  UIWindow* hostWindow = neokartpad::FindFlutterHostWindow(
+      _registrar.viewController, _hostWindow, FlutterViewController.class);
+  if (!hostWindow) {
+    NSLog(@"[NeoStation/KartPad] no foreground Flutter window (retained=%d registrar=%d)",
+          _hostWindow != nil, _registrar.viewController != nil);
     result(Failure(@"KARTPAD_HOST_VIEW_MISSING", @"presentation",
                    @"NeoStation has no active host view."));
     return;
   }
+  NSLog(@"[NeoStation/KartPad] selected Flutter window (retained=%d key=%d)",
+        _hostWindow == hostWindow, hostWindow.isKeyWindow);
+  _hostWindow = hostWindow;
 
   _pendingLaunch = [result copy];
   _launchCompletionDelivered = NO;
@@ -414,7 +379,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   NSLog(@"[NeoStation/KartPad] transaction=%ld session launch accepted",
         (long)_activeTransaction);
   const int started = _api->start(
-      gamePath.fileSystemRepresentation, (__bridge void*)hostView,
+      gamePath.fileSystemRepresentation, (__bridge void*)hostWindow,
       error, sizeof(error));
   if (started <= 0) {
     NSString* message = error[0]

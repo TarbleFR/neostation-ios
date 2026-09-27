@@ -140,7 +140,9 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
     return Fail(error, errorSize, "A KartPad session is already active.");
 
   UIView* hostView = (__bridge UIView*)host;
-  if (!hostView || !hostView.window || !hostView.window.windowScene)
+  UIWindow* selectedHostWindow = [hostView isKindOfClass:UIWindow.class]
+      ? (UIWindow*)hostView : hostView.window;
+  if (!selectedHostWindow || !selectedHostWindow.windowScene)
     return Fail(error, errorSize, "NeoStation host window is unavailable.");
 
   if (session.runtimeReadyFlag() && gamePath != game)
@@ -149,7 +151,7 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   if (!session.reserve())
     return Fail(error, errorSize, "KartPad could not reserve a session.");
 
-  hostWindow = hostView.window;
+  hostWindow = selectedHostWindow;
   gamePath = game;
   returnRequested.store(false, std::memory_order_release);
   terminalRequested.store(false, std::memory_order_release);

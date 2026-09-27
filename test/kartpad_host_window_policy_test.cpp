@@ -24,6 +24,12 @@ int main() {
   assert(SelectHostWindow({hidden, background, flutter}) == 2);
   assert(SelectHostWindow({detached, hidden, background, donor}) == -1);
 
+  // A previously validated Flutter UIWindow is still the same host after
+  // UIKit replaces/detaches its root view while SDL owns the key window.
+  const HostWindowCandidate retained{true, true, true, true, false};
+  assert(SelectHostWindow({retained, donor}) == 0);
+  assert(SelectHostWindow({donor, retained}) == 1);
+
   // Once Flutter is visible again, repeated launch decisions have no sticky
   // state and select the same host even if the key designation changes.
   for (int cycle = 0; cycle < 100; ++cycle) {
