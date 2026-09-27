@@ -4,7 +4,7 @@ Ces règles expriment les exigences du mainteneur du 18 septembre 2026 et s'appl
 
 ## Une seule référence de travail
 
-- La baseline officielle Build 273, commit `8558dc782b98b114f944514e27722fe1a5faff48`, reste immuable. Ne pas modifier `main`, `backup` ou déplacer une référence de baseline pour résoudre un problème sur `experimental`.
+- La baseline officielle est la Build 350, issue du commit de packaging `5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0`, du workflow `36323843067` et de l’IPA SHA-256 `e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46`. Elle remplace la Build 322 à la demande explicite du mainteneur le 27 septembre 2026. Ne pas modifier `main`, `backup` ou déplacer une référence de baseline pour résoudre un problème sur `experimental` sans une nouvelle demande explicite du mainteneur.
 - Travailler sur une seule version candidate clairement identifiée pendant le cycle de correction. Chaque modification crée naturellement un nouveau SHA : consigner ce SHA exact, ne pas mélanger des binaires ou des résultats de tests provenant de révisions différentes.
 - Ne jamais réutiliser le nom d'un artefact pour faire passer une autre révision pour celle déjà testée. Associer version, SHA, entrées natives et résultats de validation.
 

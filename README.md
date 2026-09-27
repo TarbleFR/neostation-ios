@@ -123,16 +123,16 @@ process. `.env` must never be committed.
 
 ## Stable iOS baseline
 
-The currently documented stable iOS reference is **Build 322**:
+The currently documented stable iOS reference is **Build 350**:
 
-- Commit: `a36a01bc519300369c0d8f9ba9073753c884786f`
+- Packaging source: `5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0`
 - Successful workflow run:
-  [35970470533](https://github.com/TarbleFR/neostation-ios/actions/runs/35970470533)
-- Artifact: `NeoStation-iOS-Build-322-Dusklight-Warm-Resume`
+  [36323843067](https://github.com/TarbleFR/neostation-ios/actions/runs/36323843067)
+- Artifact: `NeoStation-iOS-Build-350-KartPad-Relaunch-Candidate`
 - IPA SHA-256:
-  `beb546f5b98b25f27b1903067f1c46956f57a3d2e92ff7fd79b6b34838e9236c`
+  `e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46`
 
-Build 322 remains the restoration point until a later experimental build is
+Build 350 remains the restoration point until a later experimental build is
 explicitly device-validated and promoted. A successful Actions run by itself
 does not make a build the new stable baseline.
 

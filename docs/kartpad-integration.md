@@ -2,9 +2,9 @@
 
 ## Stable baseline
 
-NeoStation iOS **Build 322** remains the stable restoration point. All KartPad
-work lives after that baseline on `experimental`; the Build 322 native cores
-are not modified by the KartPad integration.
+NeoStation iOS **Build 350** is the stable restoration point promoted by the
+maintainer on 27 September 2026. Further KartPad and RPCS3 work lives after that
+baseline on `experimental`.
 
 ## User model
 
