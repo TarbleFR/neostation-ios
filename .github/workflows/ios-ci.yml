@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 343 KartPad Manual Language Relaunch
-run-name: NeoStation iOS Build 343 KartPad Manual Language Relaunch • ${{ github.sha }}
+name: NeoStation iOS Build 344 KartPad Session Reset and Audio
+run-name: NeoStation iOS Build 344 KartPad Session Reset and Audio • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '343'
+        default: '344'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -30,7 +30,7 @@ permissions:
 # Shared with the full native workflow so a fast build replaces any older
 # experimental full build still consuming a macOS runner.
 concurrency:
-  group: neostation-ios-build-343-kartpad
+  group: neostation-ios-build-344-kartpad
   cancel-in-progress: true
 
 jobs:
@@ -38,17 +38,17 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 343 KartPad Manual Language Relaunch IPA
+    name: Build 344 KartPad Session Reset and Audio IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '343' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Manual-Language-Relaunch', inputs.build_number) || 'NeoStation-iOS-Build-343-KartPad-Manual-Language-Relaunch' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Manual-Language-Relaunch', inputs.build_number) || 'NeoStation-iOS-Build-343-KartPad-Manual-Language-Relaunch' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36277444837' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'b51206dbf50a8fc2520107a6269265e075262362' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '344' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Session-Reset-Audio', inputs.build_number) || 'NeoStation-iOS-Build-344-KartPad-Session-Reset-Audio' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Session-Reset-Audio', inputs.build_number) || 'NeoStation-iOS-Build-344-KartPad-Session-Reset-Audio' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36280134877' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'd2439014f88723e9230a989048c5c843562caaa8' }}
       KARTPAD_CANDIDATE: '1'
-      # Build 343 exits the guest for a manual language relaunch and preserves host audio on close.
+      # Build 344 resets guest session state and recreates frontend audio after KartPad closes.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
@@ -84,6 +84,31 @@ jobs:
             echo "KartPad candidates must not reuse the stable Build 322 number." >&2
             exit 1
           }
+
+      - name: Download validated native session and CoreAudio evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: KartPad-UIKit-probe-eefc266212e1d899c21f075d4b31fbac4e08ad78
+          run-id: 36281016557
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/kartpad-lifecycle-evidence
+
+      - name: Require tested lifecycle and frontend sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTEST'
+          import json
+          from pathlib import Path
+          evidence=Path('build/kartpad-lifecycle-evidence')
+          assert (evidence/'source.txt').read_text().strip() == 'eefc266212e1d899c21f075d4b31fbac4e08ad78'
+          report=json.loads((evidence/'probe.json').read_text())
+          assert report['success'] and report['reproducedStaleCallback'] and report['reproducedStaleTimer'], report
+          assert report['hleResetCycles']==20 and report['rendererAudioCycles']==3 and report['frontendAudioCycles']==3, report
+          PYTEST
+          git diff --exit-code eefc266212e1d899c21f075d4b31fbac4e08ad78 "$GITHUB_SHA" -- \
+            native/kartpad lib/services/game_launch_manager.dart \
+            lib/services/music_player_service.dart lib/services/home_music_service.dart
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
@@ -650,6 +675,9 @@ jobs:
           "$TEST_ENV/bin/python" test/kartpad_system_messages_test.py \
             --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
             2>&1 | tee dist/kartpad-system-messages-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_session_reset_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-session-reset-tests.txt
           c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
             test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
           "$RUNNER_TEMP/kartpad-language-state-test"

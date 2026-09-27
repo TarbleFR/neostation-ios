@@ -53,3 +53,24 @@ A simulator/subsystem test is not physical-iPhone gameplay validation. No new
 Build 343 crash report was attached to the current report; earlier device logs
 were from Builds 341/342. Do not state that every reported crash is definitively
 identified from a nonexistent Build 343 stack trace.
+
+Validated candidate inputs (2026-09-27 UTC):
+
+- Production Core commit: `d2439014f88723e9230a989048c5c843562caaa8`,
+  workflow `36280134877`; native compilation, language/session/ARM64 checks pass.
+- UIKit/Metal/CoreAudio probe commit:
+  `eefc266212e1d899c21f075d4b31fbac4e08ad78`, workflow `36281016557`.
+  Result: success; stale callback/timer reproduced; 20 HLE resets, 4 GuestFlat
+  reuse/zero cycles, 4 registry finalize cycles, 3 renderer/audio shutdown cycles,
+  and 3 real SoLoud CoreAudio playback recoveries pass.
+- Frontend launch/audio regressions: workflow `36280134814` passes, with no
+  subsequent change to the tested production services.
+- The probe's donor is byte-identical to this candidate's runtime:
+  SHA-256 `dd58e226054e6a61d0c83f64256deb48b53ff5989e28c72819fbc2c7c99ec96d`.
+  The production reset header is compiled directly in the probe.
+- The first graphics probe incorrectly waited for DONE immediately after
+  end_frame. The donor's asynchronous producer requires the next begin_frame to
+  grant prepareAllowed, as VI_HLE_PresentFrame does. The corrected test follows
+  that existing contract; no assertion was removed to pass it.
+- Full IPA CI requires this successful probe report and checks that the native
+  reset and frontend production sources match the tested revision.
