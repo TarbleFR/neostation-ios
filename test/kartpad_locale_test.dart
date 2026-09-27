@@ -5,7 +5,19 @@ import 'package:neostation/l10n/ports_locale.dart';
 void main() {
   test('KartPad Ports strings cover all NeoStation locales', () {
     expect(PortsLocale.values, hasLength(12));
+    expect(PortsLocale.graphicsValues.keys.toSet(), PortsLocale.values.keys.toSet());
     for (final entry in PortsLocale.values.entries) {
+      for (final key in <String>['anisotropy']) {
+        final native = PortsLocale.kartPadNativeUI(
+          entry.key == 'zh_Hant'
+              ? const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')
+              : Locale(entry.key),
+        );
+        expect(PortsLocale.graphicsValues[entry.key]![key], isNotEmpty,
+            reason: '${entry.key}: $key');
+        expect(native[key], PortsLocale.graphicsValues[entry.key]![key],
+            reason: '${entry.key}: $key');
+      }
       expect(entry.value['import'], isNotEmpty, reason: entry.key);
       expect(entry.value['kartpad'], isNotEmpty, reason: entry.key);
       expect(entry.value['kartpadLaunchFailed'], isNotEmpty, reason: entry.key);
@@ -87,6 +99,8 @@ void main() {
       PortsLocale.kartPadNativeUI(const Locale('fr'))['advancedGraphics'],
       'Graphismes avancés',
     );
+    expect(PortsLocale.kartPadNativeUI(const Locale('fr'))['anisotropy'],
+        'Filtrage anisotrope');
     expect(
       PortsLocale.kartPadLaunchError(
         const Locale('fr'),

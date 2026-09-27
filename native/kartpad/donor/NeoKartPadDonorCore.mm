@@ -334,6 +334,7 @@ dispatch_queue_t KartPadSettingsIOQueue() {
 }
 
 UIMenu* BuildNeoKartPadSettingsMenu();
+UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void));
 void PatchKartPadRuntimeMenuButton(UIButton* menuButton);
 
 void RefreshSettingsMenu() {
@@ -568,7 +569,8 @@ UIMenu* BuildNeoKartPadSettingsMenu() {
       UIText(@"Graphics", "graphics")
       image:[UIImage systemImageNamed:@"display"]
       identifier:@"com.neostation.kartpad.graphics" options:0
-      children:@[resolutionMenu, aspectMenu, fpsAction]];
+      children:@[resolutionMenu, aspectMenu, fpsAction,
+                 BuildAdvancedGraphicsMenu(^{ RefreshSettingsMenu(); })]];
 
   UIAction* hint = [UIAction actionWithTitle:
       UIText(@"Restart NeoStation to apply language and graphics changes.",
@@ -651,11 +653,35 @@ UIMenu* BuildAdvancedGraphicsMenu(void (^onChange)(void)) {
       identifier:@"com.neostation.kartpad.frame-interpolation"
       options:0 children:interpolationItems];
 
+  NSInteger anisotropy =
+      [NSUserDefaults.standardUserDefaults integerForKey:@"NeoKartPadAnisotropy"];
+  if (anisotropy != 0 && anisotropy != 1 && anisotropy != 2 &&
+      anisotropy != 4 && anisotropy != 8 && anisotropy != 16) anisotropy = 0;
+  NSMutableArray<UIMenuElement*>* anisotropyItems = [NSMutableArray array];
+  for (NSNumber* candidate in @[@1, @2, @4, @8, @16]) {
+    const NSInteger value = candidate.integerValue;
+    NSString* label = [NSString stringWithFormat:@"%ld×", (long)value];
+    UIAction* action = [UIAction actionWithTitle:label image:nil identifier:nil
+        handler:^(__kindof UIAction*) {
+      PersistInteger(@"NeoKartPadAnisotropy", value);
+      if (onChange) onChange();
+    }];
+    action.state = (anisotropy == value || (anisotropy == 0 && value == 16))
+        ? UIMenuElementStateOn : UIMenuElementStateOff;
+    [anisotropyItems addObject:action];
+  }
+  UIMenu* anisotropyMenu = [UIMenu menuWithTitle:
+      UIText(@"Anisotropic filtering", "anisotropy")
+      image:[UIImage systemImageNamed:@"line.3.horizontal.decrease"]
+      identifier:@"com.neostation.kartpad.anisotropy" options:0
+      children:anisotropyItems];
+
   return [UIMenu menuWithTitle:UIText(@"Advanced graphics", "advancedGraphics")
                          image:[UIImage systemImageNamed:@"slider.horizontal.3"]
                     identifier:kNeoKartPadAdvancedGraphicsMenuIdentifier
                        options:0
-                      children:@[sharp, bloom, skip, frameInterpolation]];
+                      children:@[sharp, bloom, skip, frameInterpolation,
+                                 anisotropyMenu]];
 }
 
 UIButton* FindButtonWithAccessibilityLabel(UIView* root, NSString* label) {
@@ -1590,6 +1616,15 @@ int Start(const char* game, void* host, char* error, size_t errorSize) {
   if (!LoadRuntime(error, errorSize)) return 0;
   if (!SetRuntimeLanguageOverride(CurrentGameLanguage()))
     return Fail(error, errorSize, "KartPad language bridge is unavailable.");
+  if (!donorAnisotropySlot)
+    return Fail(error, errorSize, "KartPad anisotropy gate is unavailable.");
+  NSInteger anisotropy =
+      [NSUserDefaults.standardUserDefaults integerForKey:@"NeoKartPadAnisotropy"];
+  if (anisotropy != 0 && anisotropy != 1 && anisotropy != 2 &&
+      anisotropy != 4 && anisotropy != 8 && anisotropy != 16) anisotropy = 0;
+  *donorAnisotropySlot = static_cast<uint16_t>(anisotropy);
+  NSLog(@"[NeoKartPad/Graphics] next Aurora anisotropy=%ld%s", (long)anisotropy,
+        anisotropy == 0 ? " (automatic)" : "x");
   if (!session.reserve())
     return Fail(error, errorSize, "KartPad could not reserve a session.");
 

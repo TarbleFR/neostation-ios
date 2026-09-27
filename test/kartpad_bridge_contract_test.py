@@ -70,6 +70,9 @@ for token in (
     'disabled_post_processing_paths',
     'skip_unready_pipelines',
     'frame_interpolation_fps',
+    'NeoKartPadAnisotropy',
+    'com.neostation.kartpad.anisotropy',
+    'BuildAdvancedGraphicsMenu(^{ RefreshSettingsMenu(); })',
     'dev.kartpad.display',
     'kNeoKartPadPatchedMenuKey',
     'kNeoKartPadMenuActionInFlight',
@@ -115,6 +118,7 @@ for token in (
     "'graphicsRestartMessage'", "'advancedGraphics'",
     "'sharperPicture'", "'disableBloom'", "'skipShaders'",
     "'frameInterpolation'",
+    "'anisotropy'",
 ):
     assert token in ports_locale, token
 assert pins['release'] == 'v0.5.1-experimental.1'

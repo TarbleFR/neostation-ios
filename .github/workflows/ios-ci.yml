@@ -105,8 +105,14 @@ jobs:
           assert report['success'] and report['reproducedStaleCallback'] and report['reproducedStaleTimer'], report
           assert report['hleResetCycles']==20 and report['rendererAudioCycles']==3 and report['frontendAudioCycles']==3, report
           PYTEST
+          # The UIKit probe covers these unchanged lifecycle/audio reset sources.
+          # Donor menu and ARM64 instruction changes are separately bound to
+          # KARTPAD_CORE_HOST_SHA and exercised by the native donor workflow.
           git diff --exit-code eefc266212e1d899c21f075d4b31fbac4e08ad78 "$GITHUB_SHA" -- \
-            native/kartpad lib/services/game_launch_manager.dart \
+            native/kartpad/core/DonorSessionReset.h \
+            native/kartpad/core/DonorAudioSession.h \
+            native/kartpad/core/DonorDataLifecycle.h \
+            lib/services/game_launch_manager.dart \
             lib/services/music_player_service.dart lib/services/home_music_service.dart
 
       - name: Select Xcode 16.4

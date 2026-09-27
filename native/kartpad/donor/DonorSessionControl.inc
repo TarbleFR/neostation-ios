@@ -24,6 +24,7 @@ static DonorSetWaitFn setWaitCallbackFn = nullptr;
 static DonorDescribeFn describeMemoryFn = nullptr;
 static uint8_t** flatGuestBase = nullptr;
 static uint8_t* donorDataInitialized = nullptr;
+static uint16_t* donorAnisotropySlot = nullptr;
 static bool frameGateEntered = false;
 static uint64_t firstFrameLoggedForSession = 0;
 static bool orderlyRuntimeReturn = false;
@@ -270,6 +271,16 @@ bool BindSessionBridge(char* error, size_t errorSize) {
   constexpr char marker[] = "NEOKARTPAD-FRAME-RETURN-v1";
   if (std::memcmp(base + 0x8f00, marker, sizeof(marker)) != 0)
     return Fail(error, errorSize, "KartPad checked frame/return bridge missing");
+  constexpr char anisotropyMarker[] = "NEOKARTPAD-ANISOTROPY-v1";
+  constexpr uint8_t anisotropyGate[] = {
+      0x30, 0x9a, 0x02, 0xd0, 0x11, 0x32, 0x5f, 0x79,
+      0x51, 0x00, 0x00, 0x34, 0x51, 0x50, 0x00, 0x79,
+      0xff, 0x43, 0x03, 0xd1, 0x77, 0x0e, 0xf2, 0x14,
+  };
+  if (std::memcmp(base + 0x9100, anisotropyMarker, sizeof(anisotropyMarker)) != 0 ||
+      std::memcmp(base + 0x9000, anisotropyGate, sizeof(anisotropyGate)) != 0)
+    return Fail(error, errorSize, "KartPad anisotropy initialization gate changed.");
+  donorAnisotropySlot = reinterpret_cast<uint16_t*>(base + 0x534ff80 + 24);
   // InitializeDataSections checks g_dataInitialized before loading the DOL's
   // .sdata, including the switch-thread callback at guest 0x80385AE0. This
   // exact pinned instruction sequence and BSS offset are verified together.

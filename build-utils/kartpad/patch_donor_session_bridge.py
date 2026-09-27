@@ -77,6 +77,27 @@ AUDIO_SESSION_SHA = '25a25f5e43df5b064d68c62f63a4b639354d766e95fa38f6e250179535e
 AUDIO_SESSION_DEACTIVATE = 0x1041C65E4  # mov x0, x20; setActive:NO follows
 AUDIO_SESSION_DEACTIVATE_ORIGINAL = 0xAA1403E0
 AUDIO_SESSION_CLOSE_CONTINUE = 0x1041C65F4  # keep observer removal and epilogue
+# QueueHasCapacityLocked nominally budgets 120 ms, but this donor omits the
+# 16-bit sample width, yielding only 60 ms (7,680 bytes at 32 kHz stereo).
+# Changing one shift restores the upstream 120 ms byte budget. Guard the
+# complete method so this cannot silently apply to another donor revision.
+AUDIO_QUEUE = 0x10010B4A8
+AUDIO_QUEUE_SIZE = 0x1F8
+AUDIO_QUEUE_SHA = 'aa8ec8d80270c18fa2702aa16086a74e159123cb954e11e7b9182cf8c5026f22'
+AUDIO_QUEUE_SHIFT = 0x10010B51C
+AUDIO_QUEUE_ORIGINAL = 0xD343FD08  # lsr x8, x8, #3
+AUDIO_QUEUE_CORRECTED = 0xD342FD08  # lsr x8, x8, #2
+# Set AuroraConfig.maxTextureAnisotropy before aurora_initialize copies it.
+# Its offset 40 is verified against the pinned iOS runtime's aurora.h and the
+# donor's 96-byte prologue. Zero retains Aurora's existing default (16x).
+AURORA_INIT = 0x103C8C9EC
+AURORA_INIT_SIZE = 96
+AURORA_INIT_SHA = 'c7d7ef92464465107d39f99693b261739bf4ac44eedaa9681ba72eea06f6244d'
+AURORA_INIT_ORIGINAL = 0xD10343FF  # sub sp, sp, #208
+AURORA_GATE = BASE + 0x9000
+AURORA_MAGIC_VM = BASE + 0x9100
+AURORA_MAGIC = b'NEOKARTPAD-ANISOTROPY-v1\0'
+AURORA_ANISO_OFFSET = 40
 PROLOGUE = bytes.fromhex('ff0303d1fc6f06a9fa6707a9f85f08a9')
 FRAME_INSTRUCTION = 0x29424666  # ldp w6, w17, [x19, #0x10]
 
@@ -107,6 +128,16 @@ def ldrb_w(rt, rn, offset):
     if not 0 <= offset <= 0xfff:
         raise SystemExit('ERROR: invalid DVD gate byte offset')
     return 0x39400000 | (offset << 10) | (rn << 5) | rt
+
+
+def ldrh_w(rt, rn, offset):
+    if offset % 2 or not 0 <= offset // 2 < 4096:
+        raise SystemExit('ERROR: invalid anisotropy control offset')
+    return 0x79400000 | ((offset // 2) << 10) | (rn << 5) | rt
+
+
+def strh_w(rt, rn, offset):
+    return ldrh_w(rt, rn, offset) & ~0x00400000
 
 
 def cbz_w(rt, pc, target):
@@ -197,6 +228,17 @@ def dvd_directory_gate_bytes():
     ])
 
 
+def aurora_gate_bytes():
+    return words([
+        encode_adrp(16, AURORA_GATE, CONTROL),
+        ldrh_w(17, 16, (CONTROL & 0xfff) + 24),
+        cbz_w(17, AURORA_GATE + 8, AURORA_GATE + 16),
+        strh_w(17, 2, AURORA_ANISO_OFFSET),
+        AURORA_INIT_ORIGINAL,
+        branch(AURORA_GATE + 20, AURORA_INIT + 4),
+    ])
+
+
 def expected_patches():
     entry = words([encode_adrp(16, RUN, CONTROL),
                    ldr_x(16,16,CONTROL & 0xfff),0xD61F0200,0xD503201F])
@@ -210,6 +252,9 @@ def expected_patches():
             DVD_DIRECTORY_LOOP: words([branch(DVD_DIRECTORY_LOOP, DVD_DIRECTORY_GATE)]),
             DVD_DIRECTORY_GATE: dvd_directory_gate_bytes(),
             AUDIO_SESSION_DEACTIVATE: words([branch(AUDIO_SESSION_DEACTIVATE, AUDIO_SESSION_CLOSE_CONTINUE)]),
+            AUDIO_QUEUE_SHIFT: words([AUDIO_QUEUE_CORRECTED]),
+            AURORA_INIT: words([branch(AURORA_INIT, AURORA_GATE)]),
+            AURORA_GATE: aurora_gate_bytes(), AURORA_MAGIC_VM: AURORA_MAGIC,
             TRAMPOLINE:trampoline, GATE:gate_bytes(), MAGIC_VM:MAGIC,
             EXIT_CALL:words([branch(EXIT_CALL,EXIT_GATE,0x94000000)]),
             EXIT_GATE:words([encode_adrp(16,EXIT_GATE,CONTROL),
@@ -229,6 +274,10 @@ def layout(data):
         raise SystemExit('ERROR: DVD RegisterFileEntry symbol drift')
     if symbols.get('_UpdateAudioSession') != AUDIO_SESSION:
         raise SystemExit('ERROR: SDL iOS audio-session symbol drift')
+    if symbols.get('__ZN12AudioBackend22QueueHasCapacityLockedEi') != AUDIO_QUEUE:
+        raise SystemExit('ERROR: donor audio queue method symbol drift')
+    if symbols.get('_aurora_initialize') != AURORA_INIT:
+        raise SystemExit('ERROR: donor Aurora initialization symbol drift')
     text = next((s for s in segments if s[0]==b'__TEXT'),None)
     ds = next((s for s in segments if s[0]==b'__DATA'),None)
     if not text or text[1]!=BASE or not ds or not ds[1]+ds[4] <= CONTROL < CONTROL+64 <= ds[1]+ds[2]:
@@ -247,7 +296,8 @@ def layout(data):
             for i in range(nsects):
                 sect=cursor+72+i*80
                 addr,length=struct.unpack_from('<QQ',data,sect+32)
-                for start,end in ((TRAMPOLINE,MAGIC_VM+len(MAGIC)),(CONTROL,CONTROL+64)):
+                for start,end in ((TRAMPOLINE,AURORA_MAGIC_VM+len(AURORA_MAGIC)),
+                                  (CONTROL,CONTROL+64)):
                     if length and addr < end and start < addr+length:
                         raise SystemExit('ERROR: session bridge overlaps a Mach-O section')
         cursor+=size
@@ -284,6 +334,16 @@ def validate(data):
     struct.pack_into('<I',audio_original,AUDIO_SESSION_DEACTIVATE-AUDIO_SESSION,AUDIO_SESSION_DEACTIVATE_ORIGINAL)
     if hashlib.sha256(audio_original).hexdigest()!=AUDIO_SESSION_SHA:
         raise SystemExit('ERROR: unreviewed SDL audio-session instructions changed')
+    queue_off=vm_to_file(segments,AUDIO_QUEUE)
+    queue_original=bytearray(data[queue_off:queue_off+AUDIO_QUEUE_SIZE])
+    struct.pack_into('<I',queue_original,AUDIO_QUEUE_SHIFT-AUDIO_QUEUE,AUDIO_QUEUE_ORIGINAL)
+    if hashlib.sha256(queue_original).hexdigest()!=AUDIO_QUEUE_SHA:
+        raise SystemExit('ERROR: unreviewed donor audio queue instructions changed')
+    aurora_off=vm_to_file(segments,AURORA_INIT)
+    aurora_original=bytearray(data[aurora_off:aurora_off+AURORA_INIT_SIZE])
+    struct.pack_into('<I',aurora_original,0,AURORA_INIT_ORIGINAL)
+    if hashlib.sha256(aurora_original).hexdigest()!=AURORA_INIT_SHA:
+        raise SystemExit('ERROR: unreviewed Aurora initialization instructions changed')
     entry_off=vm_to_file(segments,ENTRY)
     entry=bytearray(data[entry_off:entry_off+ENTRY_SIZE])
     struct.pack_into('<I',entry,EXIT_CALL-ENTRY,branch(EXIT_CALL,EXIT_ORIGINAL,0x94000000))
@@ -306,7 +366,11 @@ def validate(data):
             'dvdHostIndexReuseGate':hex(DVD_REGISTER_GATE),
             'dvdDirectoryReentryGate':hex(DVD_DIRECTORY_GATE),
             'hostAudioSessionRetainedOnClose':True,
-            'sdlAudioDeactivateBypass':hex(AUDIO_SESSION_DEACTIVATE)}
+            'sdlAudioDeactivateBypass':hex(AUDIO_SESSION_DEACTIVATE),
+            'audioQueueLimitMs':120,
+            'audioQueueShift':hex(AUDIO_QUEUE_SHIFT),
+            'configurableAnisotropy':True,
+            'auroraConfigAnisotropyOffset':AURORA_ANISO_OFFSET}
 
 
 def patch(path):
@@ -339,7 +403,15 @@ def patch(path):
         raise SystemExit('ERROR: SDL audio-session original instruction hash drift')
     if struct.unpack_from('<I',data,vm_to_file(segments,AUDIO_SESSION_DEACTIVATE))[0]!=AUDIO_SESSION_DEACTIVATE_ORIGINAL:
         raise SystemExit('ERROR: SDL audio-session close instruction drift')
-    if any(data[TRAMPOLINE-BASE:MAGIC_VM-BASE+len(MAGIC)]):
+    queue_off=vm_to_file(segments,AUDIO_QUEUE)
+    if hashlib.sha256(data[queue_off:queue_off+AUDIO_QUEUE_SIZE]).hexdigest()!=AUDIO_QUEUE_SHA:
+        raise SystemExit('ERROR: donor audio queue original instruction hash drift')
+    if struct.unpack_from('<I',data,vm_to_file(segments,AUDIO_QUEUE_SHIFT))[0]!=AUDIO_QUEUE_ORIGINAL:
+        raise SystemExit('ERROR: donor audio queue shift instruction drift')
+    aurora_off=vm_to_file(segments,AURORA_INIT)
+    if hashlib.sha256(data[aurora_off:aurora_off+AURORA_INIT_SIZE]).hexdigest()!=AURORA_INIT_SHA:
+        raise SystemExit('ERROR: Aurora initialization original instruction hash drift')
+    if any(data[TRAMPOLINE-BASE:AURORA_MAGIC_VM-BASE+len(AURORA_MAGIC)]):
         raise SystemExit('ERROR: executable header padding is not unused')
     for address, code in expected_patches().items():
         off=vm_to_file(segments,address); data[off:off+len(code)]=code

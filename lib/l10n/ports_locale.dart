@@ -33,6 +33,21 @@ abstract final class PortsLocale {
     'ko': {'import':'가져오기','dusklight':'DuskLight','kartpad':'Mario Kart Pad','kartpadImported':'Mario Kart Wii를 가져왔습니다.','kartpadImportFailed':'Mario Kart Pad 가져오기에 실패했습니다. 파일과 저장 공간을 확인하세요.','kartpadUnsupportedDisc':'게임 ID가 RMCP01인 PAL Mario Kart Wii 디스크를 선택하세요.','kartpadUnsupportedRevision':'Mario Kart Pad는 현재 RMCP01, 디스크 0, 리비전 0이 필요합니다.','kartpadFormatUnsupported':'KartPad는 Mario Kart Wii ISO, WBFS 또는 RVZ를 지원합니다. 추출된 DATA 폴더 가져오기는 별도로 추가됩니다.','kartpadCorePending':'이 NeoStation 설치에는 KartPad 엔진이 포함되어 있지 않습니다.','kartpadLaunchFailed':'Mario Kart Pad를 시작할 수 없습니다. 기술 세부 정보를 확인하세요.','kartpadBusy':'Mario Kart Pad 세션이 이미 실행 중입니다.','kartpadRestartRequired':'이 Mario Kart Pad 세션이 종료되었습니다. 엔진은 같은 프로세스에서 두 번째 세션을 시작할 수 없습니다. Mario Kart Pad를 다시 실행하기 전에 NeoStation을 닫았다가 다시 여세요.','returnToLibrary':'NeoStation으로 돌아가기','returnToGame':'게임으로 돌아가기','kartpadRvzPrepareFailed':'KartPad가 이 RVZ를 준비하지 못했습니다. Mario Kart Wii PAL RMCP01 리비전 0인지 확인하세요.','settings':'KartPad 설정','gameLanguage':'게임 언어','languageRestartHint':'선택한 언어를 적용하기 위해 Mario Kart Wii 재시작을 확인하는 창이 표시됩니다.','restartRequiredTitle':'게임을 다시 시작할까요?','languageRestartMessage':'이 언어를 적용하려면 Mario Kart Wii를 종료할까요? NeoStation에서 다시 실행하세요.','graphicsRestartMessage':'그래픽 설정이 저장되었습니다. 적용하려면 NeoStation을 닫았다가 다시 여세요.','closeNeoStation':'NeoStation 닫기','later':'나중에','advancedGraphics':'고급 그래픽','sharperPicture':'더 선명한 화면','disableBloom':'블룸 비활성화','skipShaders':'셰이더 컴파일 중 그리기 건너뛰기','frameInterpolation':'프레임 보간','frameInterpolationOff':'끔 (60 FPS)','frameInterpolation120':'120 FPS (실험적)','frameInterpolation180':'180 FPS (실험적)','graphics':'그래픽','renderResolution':'렌더링 해상도','aspectRatio':'화면 비율','aspectOriginal':'4:3','aspectWidescreen':'16:9','aspectFill':'화면 채우기','fpsCounter':'FPS 표시','settingsRestartHint':'언어 변경에는 게임 재시작 확인이 필요합니다. 일부 그래픽 설정은 다음 실행 시 적용됩니다.','languageEnglish':'영어','languageGerman':'독일어','languageFrench':'프랑스어','languageSpanish':'스페인어','languageItalian':'이탈리아어','languageDutch':'네덜란드어','restartGame':'게임 다시 시작','closeGameForLanguage':'게임 종료','cancel':'취소','okay':'확인','languageApplyFailed':'언어 변경 또는 저장을 완료하지 못했습니다. 게임 타이틀 화면에서 다시 시도하세요.','closeFailed':'Mario Kart Pad 종료를 완료하지 못했습니다. 타이틀 화면에서 다시 시도하세요. NeoStation은 종료되지 않았습니다.'},
   };
 
+  static const graphicsValues = <String, Map<String, String>>{
+    'en': {'anisotropy': 'Anisotropic filtering'},
+    'fr': {'anisotropy': 'Filtrage anisotrope'},
+    'de': {'anisotropy': 'Anisotrope Filterung'},
+    'es': {'anisotropy': 'Filtrado anisotrópico'},
+    'it': {'anisotropy': 'Filtro anisotropico'},
+    'pt': {'anisotropy': 'Filtragem anisotrópica'},
+    'ru': {'anisotropy': 'Анизотропная фильтрация'},
+    'zh': {'anisotropy': '各向异性过滤'},
+    'zh_Hant': {'anisotropy': '非等向性過濾'},
+    'id': {'anisotropy': 'Penyaringan anisotropik'},
+    'ja': {'anisotropy': '異方性フィルタリング'},
+    'ko': {'anisotropy': '비등방성 필터링'},
+  };
+
   static String localeKey(Locale locale) => locale.languageCode == 'zh' &&
           (locale.scriptCode?.toLowerCase() == 'hant' ||
               ['TW', 'HK', 'MO'].contains(locale.countryCode?.toUpperCase()))
@@ -41,7 +56,8 @@ abstract final class PortsLocale {
 
   static String forLocale(Locale locale, String key) {
     final table = values[localeKey(locale)] ?? values['en']!;
-    return table[key] ?? values['en']![key] ?? key;
+    return table[key] ?? graphicsValues[localeKey(locale)]?[key] ??
+        values['en']![key] ?? graphicsValues['en']?[key] ?? key;
   }
 
   static String text(BuildContext context, String key) =>
@@ -80,6 +96,7 @@ abstract final class PortsLocale {
           'frameInterpolationOff',
           'frameInterpolation120',
           'frameInterpolation180',
+          'anisotropy',
           'graphics',
           'renderResolution',
           'aspectRatio',

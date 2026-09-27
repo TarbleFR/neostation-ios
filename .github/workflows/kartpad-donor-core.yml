@@ -17,6 +17,7 @@ on:
       - 'test/kartpad_native_session_test.cpp'
       - 'test/kartpad_audio_session_test.cpp'
       - 'test/kartpad_audio_donor_test.py'
+      - 'test/kartpad_aurora_config_layout_test.cpp'
       - 'test/kartpad_session_reset_test.py'
       - 'test/kartpad_session_reset_layout.json'
       - 'test/kartpad_main_runloop_test.mm'
@@ -124,6 +125,13 @@ jobs:
         run: |
           set -euo pipefail
           TEST_ENV="$RUNNER_TEMP/kartpad-abi-tests"
+          curl -fL --retry 3 \
+            https://raw.githubusercontent.com/chrissotraidis/wiicompiled/d0b8dec62a8c98dd45736a996ae18327ada8fe3f/aurora-main/include/aurora/aurora.h \
+            -o "$RUNNER_TEMP/aurora.h"
+          echo "3959cc80683a3f674353a77b452219fc7276a2b55b96d5f42e90f5043f12908d  $RUNNER_TEMP/aurora.h" | shasum -a 256 -c -
+          c++ -std=c++20 -Wall -Wextra -Werror -I"$RUNNER_TEMP" \
+            test/kartpad_aurora_config_layout_test.cpp -o "$RUNNER_TEMP/kartpad-aurora-layout"
+          "$RUNNER_TEMP/kartpad-aurora-layout"
           python3 -m venv "$TEST_ENV"
           "$TEST_ENV/bin/pip" install --disable-pip-version-check unicorn==2.1.2
           "$TEST_ENV/bin/python" test/kartpad_language_bridge_test.py \

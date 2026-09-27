@@ -75,6 +75,34 @@ def exercise(patches, slide, stop, seed):
     assert u.reg_read(arm.UC_ARM64_REG_SP)==native_sp+(0xc0 if stop else 0)
 
 class SessionBridgeTest(unittest.TestCase):
+    def test_aurora_anisotropy_gate_preserves_config_and_prologue(self):
+        patches = bridge.expected_patches()
+        for slide in SLIDES:
+            for value in (0, 1, 2, 4, 8, 16):
+                with self.subTest(slide=slide, value=value):
+                    u = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+                    for address in (bridge.AURORA_INIT + slide,
+                                    bridge.AURORA_GATE + slide,
+                                    bridge.CONTROL + slide, 0x200000, 0x300000):
+                        u.mem_map(address & ~4095, 4096)
+                    u.mem_write(bridge.AURORA_INIT + slide, patches[bridge.AURORA_INIT])
+                    u.mem_write(bridge.AURORA_GATE + slide, patches[bridge.AURORA_GATE])
+                    u.mem_write(bridge.CONTROL + slide + 24, struct.pack('<H', value))
+                    config = bytearray(128)
+                    u.mem_write(0x200000, bytes(config))
+                    u.reg_write(arm.UC_ARM64_REG_X2, 0x200000)
+                    u.reg_write(arm.UC_ARM64_REG_X8, 0x12345678)  # hidden result pointer
+                    u.reg_write(arm.UC_ARM64_REG_SP, 0x301000)
+                    u.emu_start(bridge.AURORA_INIT + slide,
+                                bridge.AURORA_INIT + slide + 4, count=12)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_PC),
+                                     bridge.AURORA_INIT + slide + 4)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_SP), 0x301000 - 208)
+                    self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X8), 0x12345678)
+                    self.assertEqual(bytes(u.mem_read(0x200000, 40)), bytes(40))
+                    self.assertEqual(struct.unpack('<H', u.mem_read(0x200028, 2))[0], value)
+                    self.assertEqual(bytes(u.mem_read(0x20002a, 86)), bytes(86))
+
     def test_machine_registers_stack_memory_and_return_all_slides(self):
         for slide in SLIDES:
             for stop in (False,True):
