@@ -134,7 +134,7 @@ static void* Required(void* handle, const char* symbol) {
       [UIAction actionWithTitle:@"Return to NeoStation" image:nil identifier:nil handler:^(__kindof UIAction*) {
         Record(@"menu_exit_requested", WindowState(self->_host));
         self->_closeRequested=YES;
-      }]];
+      }]]];
     [donor.rootViewController.view addSubview:gear];
   }
   const CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent()+1.0;
