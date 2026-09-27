@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 2caa77deb..daac44424 100644
+index 2caa77d..daac444 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -63,6 +63,7 @@ option(USE_SYSTEM_ZLIB "Prefer system ZLIB instead of the builtin one" ON)
@@ -11,7 +11,7 @@ index 2caa77deb..daac44424 100644
  option(RUN_RPCS3_TESTS "Run RPCS3 unit tests. Requires BUILD_RPCS3_TESTS" OFF)
  option(USE_GAMEMODE "Choose whether to enable GameMode features or not." ON)
 diff --git a/Utilities/JIT.h b/Utilities/JIT.h
-index 6e17c582c..09ff972c3 100644
+index 6e17c58..09ff972 100644
 --- a/Utilities/JIT.h
 +++ b/Utilities/JIT.h
 @@ -123,8 +123,11 @@ struct jit_runtime final : jit_runtime_base
@@ -39,7 +39,7 @@ index 6e17c582c..09ff972c3 100644
  	return reinterpret_cast<FT>(uptr(result));
  }
 diff --git a/Utilities/JITASM.cpp b/Utilities/JITASM.cpp
-index f58f04522..abf76ff80 100644
+index f58f045..abf76ff 100644
 --- a/Utilities/JITASM.cpp
 +++ b/Utilities/JITASM.cpp
 @@ -152,11 +152,19 @@ static bool s_snapshot_initialized = false;
@@ -228,8 +228,78 @@ index f58f04522..abf76ff80 100644
  }
  
  asmjit::inline_runtime::inline_runtime(uchar* data, usz size)
+diff --git a/Utilities/JITArenaAllocator.h b/Utilities/JITArenaAllocator.h
+index f6089ea..09d8070 100644
+--- a/Utilities/JITArenaAllocator.h
++++ b/Utilities/JITArenaAllocator.h
+@@ -28,12 +28,14 @@ public:
+ 
+ 	void reset(usz capacity)
+ 	{
+-		m_capacity = capacity;
+-		m_free.clear();
++		std::vector<arena_range> fresh;
+ 		if (capacity)
+ 		{
+-			m_free.push_back({0, capacity});
++			fresh.push_back({0, capacity});
+ 		}
++		m_free.swap(fresh);
++		m_capacity = capacity;
++		m_free_bytes = capacity;
+ 	}
+ 
+ 	bool allocate_lowest(usz size, usz alignment, arena_range& result)
+@@ -115,6 +117,7 @@ public:
+ 		}
+ 
+ 		m_free.insert(next, {offset, size});
++		m_free_bytes += size;
+ 		coalesce(index);
+ 		return true;
+ 	}
+@@ -126,12 +129,7 @@ public:
+ 
+ 	usz free_bytes() const noexcept
+ 	{
+-		usz result = 0;
+-		for (const arena_range& item : m_free)
+-		{
+-			result += item.size;
+-		}
+-		return result;
++		return m_free_bytes;
+ 	}
+ 
+ 	usz largest_free_bytes() const noexcept
+@@ -173,8 +171,8 @@ private:
+ 
+ 		if (prefix && suffix)
+ 		{
+-			m_free[index] = {available.offset, prefix};
+ 			m_free.insert(m_free.begin() + index + 1, {suffix_offset, suffix});
++			m_free[index] = {available.offset, prefix};
+ 		}
+ 		else if (prefix)
+ 		{
+@@ -188,6 +186,7 @@ private:
+ 		{
+ 			m_free.erase(m_free.begin() + index);
+ 		}
++		m_free_bytes -= size;
+ 	}
+ 
+ 	void coalesce(usz index)
+@@ -208,6 +207,7 @@ private:
+ 	}
+ 
+ 	usz m_capacity = 0;
++	usz m_free_bytes = 0;
+ 	std::vector<arena_range> m_free;
+ };
+ }
 diff --git a/Utilities/JITIOS.cpp b/Utilities/JITIOS.cpp
-index 96fcc1369..f374d666f 100644
+index 96fcc13..fefecd8 100644
 --- a/Utilities/JITIOS.cpp
 +++ b/Utilities/JITIOS.cpp
 @@ -7,6 +7,7 @@
@@ -834,7 +904,22 @@ index 96fcc1369..f374d666f 100644
  	{
  		set_error("Attempted to release an address outside the JIT arena");
  		return;
-@@ -637,6 +895,7 @@ arena_statistics get_statistics() noexcept
+@@ -632,11 +890,22 @@ void flush(const void* executable, usz size) noexcept
+ 	::sys_icache_invalidate(const_cast<void*>(executable), size);
+ }
+ 
++arena_usage get_usage(bool executable) noexcept
++{
++	std::lock_guard lock(g_arena_mutex);
++	if (executable)
++	{
++		return {g_arena.capacity, g_arena.code_allocator.free_bytes()};
++	}
++	return {g_arena.data_capacity, g_arena.data_allocator.free_bytes()};
++}
++
+ arena_statistics get_statistics() noexcept
+ {
  	std::lock_guard lock(g_arena_mutex);
  	arena_statistics result;
  	result.capacity = g_arena.capacity;
@@ -843,7 +928,7 @@ index 96fcc1369..f374d666f 100644
  	result.runtime_code_bytes = g_arena.runtime_code_bytes;
  	result.runtime_data_bytes = g_arena.runtime_data_bytes;
 diff --git a/Utilities/JITIOS.h b/Utilities/JITIOS.h
-index 95b965623..9fc6aaa04 100644
+index 95b9656..9c4fc5e 100644
 --- a/Utilities/JITIOS.h
 +++ b/Utilities/JITIOS.h
 @@ -30,6 +30,7 @@ constexpr arena_backend backend_for_ios_major(u32 major_version) noexcept
@@ -854,10 +939,16 @@ index 95b965623..9fc6aaa04 100644
  	u32 preparation_chunks = 0;
  	usz runtime_code_bytes = 0;
  	usz runtime_data_bytes = 0;
-@@ -46,12 +47,16 @@ struct arena_statistics
+@@ -46,12 +47,22 @@ struct arena_statistics
  	bool sealed = false;
  };
  
++struct arena_usage
++{
++	usz capacity = 0;
++	usz free_bytes = 0;
++};
++
 +// NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1: only the explicit iOS API may prepare the arena.
 +using diagnostic_callback = void(*)(const char* message) noexcept;
 +void set_diagnostic_callback(diagnostic_callback callback) noexcept;
@@ -874,8 +965,15 @@ index 95b965623..9fc6aaa04 100644
  bool claim_runtime(bool executable, usz offset, usz size) noexcept;
  void reset_runtime() noexcept;
  void* allocate(bool executable, usz size, usz alignment) noexcept;
+@@ -59,5 +70,6 @@ void release_allocation(bool executable, void* address, usz size) noexcept;
+ void* writable(const void* executable, usz size = 1) noexcept;
+ void flush(const void* executable, usz size) noexcept;
+ arena_statistics get_statistics() noexcept;
++arena_usage get_usage(bool executable) noexcept;
+ const char* last_error() noexcept;
+ }
 diff --git a/Utilities/JITIOSLayoutPolicy.h b/Utilities/JITIOSLayoutPolicy.h
-index 0d19acc22..471782373 100644
+index 0d19acc..4717823 100644
 --- a/Utilities/JITIOSLayoutPolicy.h
 +++ b/Utilities/JITIOSLayoutPolicy.h
 @@ -2,27 +2,49 @@
@@ -958,18 +1056,32 @@ index 0d19acc22..471782373 100644
  static_assert(arena_prepare_chunk_length(17 * mib, 0) == 16 * mib);
  static_assert(arena_prepare_chunk_length(17 * mib, 1) == 1 * mib);
 diff --git a/Utilities/JITLLVM.cpp b/Utilities/JITLLVM.cpp
-index 863624e0a..144920e53 100644
+index 863624e..d8905c7 100644
 --- a/Utilities/JITLLVM.cpp
 +++ b/Utilities/JITLLVM.cpp
-@@ -72,6 +72,7 @@ namespace
+@@ -43,6 +43,7 @@ LOG_CHANNEL(jit_log, "JIT");
+ #pragma GCC diagnostic ignored "-Wmissing-noreturn"
+ #endif
+ #include <llvm/Support/CodeGen.h>
++#include <llvm/Support/CommandLine.h>
+ #include "llvm/Support/TargetSelect.h"
+ #include "llvm/TargetParser/Host.h"
+ #include "llvm/ExecutionEngine/ExecutionEngine.h"
+@@ -71,18 +72,15 @@ namespace
+ 
  	void maybe_log_ios_jit_arena_pressure(bool executable)
  	{
- 		const auto stats = rpcs3::ios::jit::get_statistics();
-+		const usz capacity = executable ? stats.capacity : stats.data_capacity;
- 		const usz free = executable ? stats.free_code_bytes : stats.free_data_bytes;
- 		const usz largest_free = executable ? stats.largest_free_code_bytes : stats.largest_free_data_bytes;
- 		const usz live = executable ? stats.live_code_bytes : stats.live_data_bytes;
-@@ -82,7 +83,7 @@ namespace
+-		const auto stats = rpcs3::ios::jit::get_statistics();
+-		const usz free = executable ? stats.free_code_bytes : stats.free_data_bytes;
+-		const usz largest_free = executable ? stats.largest_free_code_bytes : stats.largest_free_data_bytes;
+-		const usz live = executable ? stats.live_code_bytes : stats.live_data_bytes;
+-		const usz runtime = executable ? stats.runtime_code_bytes : stats.runtime_data_bytes;
+-		const usz peak = executable ? stats.peak_code_bytes : stats.peak_data_bytes;
++		const auto usage = rpcs3::ios::jit::get_usage(executable);
++		const usz capacity = usage.capacity;
++		const usz free = usage.free_bytes;
+ 		auto& next_warning = executable ? g_next_code_arena_warning : g_next_data_arena_warning;
+ 
  		usz threshold = next_warning.load(std::memory_order_relaxed);
  		if (threshold == std::numeric_limits<usz>::max())
  		{
@@ -978,7 +1090,19 @@ index 863624e0a..144920e53 100644
  			if (next_warning.compare_exchange_strong(threshold, initial_threshold,
  				std::memory_order_relaxed, std::memory_order_relaxed))
  			{
-@@ -117,7 +118,7 @@ namespace
+@@ -105,6 +103,11 @@ namespace
+ 
+ 		if (crossed_threshold)
+ 		{
++			const auto stats = rpcs3::ios::jit::get_statistics();
++			const usz largest_free = executable ? stats.largest_free_code_bytes : stats.largest_free_data_bytes;
++			const usz live = executable ? stats.live_code_bytes : stats.live_data_bytes;
++			const usz runtime = executable ? stats.runtime_code_bytes : stats.runtime_data_bytes;
++			const usz peak = executable ? stats.peak_code_bytes : stats.peak_data_bytes;
+ 			constexpr usz mib = 1024 * 1024;
+ 			jit_log.warning(
+ 				"JIT_ARENA_LOW_SPACE: iOS JIT %s arena has live=%u MiB, free=%u MiB (%llu bytes), "
+@@ -117,7 +120,7 @@ namespace
  				static_cast<u64>(largest_free),
  				runtime / mib,
  				peak / mib,
@@ -987,8 +1111,35 @@ index 863624e0a..144920e53 100644
  		}
  	}
  #endif
+@@ -904,6 +907,26 @@ jit_compiler::jit_compiler(const std::unordered_map<std::string, u64>& _link, st
+ 		return true;
+ 	}();
+ 
++#if defined(RPCS3_IOS) && defined(ARCH_ARM64)
++	// ARMSX3 85d074b: this AArch64 codegen pass can spend minutes walking
++	// deep PS3 vector shuffle chains without finding an interleaved load.
++	// The pinned LLVM submodule registers this option before JIT compilation.
++	[[maybe_unused]] static const bool s_disable_interleaved_load_combine = []()
++	{
++		auto& options = llvm::cl::getRegisteredOptions();
++		const auto found = options.find("disable-interleaved-load-combine");
++		if (found == options.end())
++		{
++			jit_log.error("LLVM: disable-interleaved-load-combine option is unavailable");
++			return false;
++		}
++
++		static_cast<llvm::cl::opt<bool>*>(found->second)->setValue(true);
++		jit_log.notice("LLVM: InterleavedLoadCombine disabled for iOS ARM64 JIT");
++		return true;
++	}();
++#endif
++
+ 	std::string result;
+ 
+ 	auto null_mod = std::make_unique<llvm::Module> ("null_", *m_context);
 diff --git a/rpcs3/CMakeLists.txt b/rpcs3/CMakeLists.txt
-index 40104425e..23b8a54f8 100644
+index 4010442..23b8a54 100644
 --- a/rpcs3/CMakeLists.txt
 +++ b/rpcs3/CMakeLists.txt
 @@ -225,6 +225,15 @@ if(RPCS3_FRONTEND STREQUAL "IOS")
@@ -1008,7 +1159,7 @@ index 40104425e..23b8a54f8 100644
  
      set_target_properties(RPCS3Core PROPERTIES
 diff --git a/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp b/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp
-index 322dcffdc..88bc7d8a4 100644
+index 322dcff..88bc7d8 100644
 --- a/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp
 +++ b/rpcs3/Emu/Audio/IOS/IOSAudioBackend.cpp
 @@ -345,9 +345,12 @@ OSStatus IOSAudioBackend::render_callback(
@@ -1027,7 +1178,7 @@ index 322dcffdc..88bc7d8a4 100644
  	return noErr;
  }
 diff --git a/rpcs3/Emu/CMakeLists.txt b/rpcs3/Emu/CMakeLists.txt
-index 9bb3ea11d..505ef60fe 100644
+index 9bb3ea1..505ef60 100644
 --- a/rpcs3/Emu/CMakeLists.txt
 +++ b/rpcs3/Emu/CMakeLists.txt
 @@ -25,6 +25,13 @@ if(USE_LTO)
@@ -1044,8 +1195,27 @@ index 9bb3ea11d..505ef60fe 100644
  if(USE_ASAN)
      set_source_files_properties(../../Utilities/Thread.cpp PROPERTIES COMPILE_DEFINITIONS USE_ASAN)
  endif()
+diff --git a/rpcs3/Emu/CPU/CPUTranslator.h b/rpcs3/Emu/CPU/CPUTranslator.h
+index e11a275..353f459 100644
+--- a/rpcs3/Emu/CPU/CPUTranslator.h
++++ b/rpcs3/Emu/CPU/CPUTranslator.h
+@@ -4468,6 +4468,14 @@ public:
+ 	}
+ 
+ #ifdef ARCH_ARM64
++	template <typename RT, typename T>
++	value_t<RT> uaddlp(T a)
++	{
++		value_t<RT> result;
++		result.value = m_ir->CreateCall(get_intrinsic<RT, llvm_common_t<T>>(llvm::Intrinsic::aarch64_neon_uaddlp), {a.eval(m_ir)});
++		return result;
++	}
++
+ 	template <typename T1, typename T2>
+ 	value_t<u8[16]> tbl(T1 a, T2 b)
+ 	{
 diff --git a/rpcs3/Emu/Cell/Modules/cellVdec.cpp b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-index 1847c8cfe..0c0a0060c 100644
+index 1847c8c..0c0a006 100644
 --- a/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 +++ b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 @@ -197,6 +197,14 @@ struct vdec_context final
@@ -1185,8 +1355,51 @@ index 1847c8cfe..0c0a0060c 100644
  	}
  
  	return CELL_OK;
+diff --git a/rpcs3/Emu/Cell/PPUAnalyser.cpp b/rpcs3/Emu/Cell/PPUAnalyser.cpp
+index 608e213..9c6b016 100644
+--- a/rpcs3/Emu/Cell/PPUAnalyser.cpp
++++ b/rpcs3/Emu/Cell/PPUAnalyser.cpp
+@@ -1,5 +1,6 @@
+ #include "stdafx.h"
+ #include "PPUAnalyser.h"
++#include "PPUNoSizeSplitPolicy.h"
+ 
+ #include "lv2/sys_sync.h"
+ 
+@@ -3243,12 +3244,30 @@ bool ppu_module<lv2_obj>::analyse(u32 lib_toc, u32 entry, const u32 sec_end, con
+ 		}
+ 	}
+ 
++	// ARMSX3 70dbdc8: a large executable with poorly identified functions can
++	// otherwise turn every instruction after the last known function into its
++	// own JIT function and exhaust the iOS JIT arena during compilation.
++	u64 unbounded_bytes = 0;
++	for (const auto& [addr, block] : fmap)
++	{
++		if (block.attr & ppu_attr::no_size && block.size > 4)
++		{
++			unbounded_bytes += block.size;
++		}
++	}
++
++	const bool split_unbounded = ppu_analysis::split_unbounded_blocks(used_fallback, unbounded_bytes);
++	if (!used_fallback && !split_unbounded)
++	{
++		ppu_log.warning("%llu instructions after the last known function: compiling whole blocks", unbounded_bytes / 4);
++	}
++
+ 	// Convert map to vector (destructive)
+ 	for (auto it = fmap.begin(); it != fmap.end(); it = fmap.begin())
+ 	{
+ 		ppu_function_ext block = std::move(fmap.extract(it).mapped());
+ 
+-		if (block.attr & ppu_attr::no_size && block.size > 4 && !used_fallback)
++		if (block.attr & ppu_attr::no_size && block.size > 4 && split_unbounded)
+ 		{
+ 			ppu_log.warning("Block 0x%x will be compiled on per-instruction basis (size=0x%x)", block.addr, block.size);
+ 
 diff --git a/rpcs3/Emu/Cell/PPUFunction.cpp b/rpcs3/Emu/Cell/PPUFunction.cpp
-index 1cc15440c..253f83f14 100644
+index 1cc1544..253f83f 100644
 --- a/rpcs3/Emu/Cell/PPUFunction.cpp
 +++ b/rpcs3/Emu/Cell/PPUFunction.cpp
 @@ -6,6 +6,8 @@
@@ -1264,7 +1477,7 @@ index 1cc15440c..253f83f14 100644
 +		return true;
  }
 diff --git a/rpcs3/Emu/Cell/PPUFunction.h b/rpcs3/Emu/Cell/PPUFunction.h
-index a42ae12d6..de2bea568 100644
+index a42ae12..de2bea5 100644
 --- a/rpcs3/Emu/Cell/PPUFunction.h
 +++ b/rpcs3/Emu/Cell/PPUFunction.h
 @@ -4,6 +4,7 @@
@@ -1287,7 +1500,7 @@ index a42ae12d6..de2bea568 100644
  	static inline const auto& get(bool llvm = false)
  	{
 diff --git a/rpcs3/Emu/Cell/PPUModule.cpp b/rpcs3/Emu/Cell/PPUModule.cpp
-index dc78ddcb8..a68f46fa9 100644
+index dc78ddc..a68f46f 100644
 --- a/rpcs3/Emu/Cell/PPUModule.cpp
 +++ b/rpcs3/Emu/Cell/PPUModule.cpp
 @@ -1311,7 +1311,11 @@ static void ppu_check_patch_spu_images(const ppu_module<lv2_obj>& mod, const ppu
@@ -1303,8 +1516,29 @@ index dc78ddcb8..a68f46fa9 100644
  					{
  						const u32 inst1 = read_from_ptr<be_t<u32>>(ls_segment, it);
  						const u32 inst2 = read_from_ptr<be_t<u32>>(ls_segment, it + 4);
+diff --git a/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h b/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h
+new file mode 100644
+index 0000000..76893b1
+--- /dev/null
++++ b/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h
+@@ -0,0 +1,15 @@
++#pragma once
++
++#include <cstdint>
++
++// Only split small, poorly bounded PPU regions into one JIT function per
++// instruction. Large regions can use the existing whole-block fallback.
++namespace ppu_analysis
++{
++	constexpr std::uint64_t max_unbounded_split_instructions = 65'536;
++
++	constexpr bool split_unbounded_blocks(bool used_fallback, std::uint64_t unbounded_bytes) noexcept
++	{
++		return !used_fallback && unbounded_bytes / 4 <= max_unbounded_split_instructions;
++	}
++}
 diff --git a/rpcs3/Emu/Cell/PPUThread.cpp b/rpcs3/Emu/Cell/PPUThread.cpp
-index b1f1a749b..9b149ae5c 100644
+index b1f1a74..2b28b7a 100644
 --- a/rpcs3/Emu/Cell/PPUThread.cpp
 +++ b/rpcs3/Emu/Cell/PPUThread.cpp
 @@ -62,6 +62,7 @@
@@ -1432,7 +1666,54 @@ index b1f1a749b..9b149ae5c 100644
  // Get pointer to executable cache
  static inline u8* ppu_ptr(u32 addr)
  {
-@@ -5576,7 +5641,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -4315,7 +4380,18 @@ extern void ppu_precompile(std::vector<std::string>& dir_queue, std::vector<ppu_
+ 	// The growth in memory requirements of LLVM is not linear with file size of course
+ 	// But these estimates should hopefully protect RPCS3 in the coming years
+ 	// Especially when thread count is on the rise with each CPU generation
++#ifdef RPCS3_IOS
++	// ARMSX3 d0df12f: installed RAM overstates what a mobile process can use.
++	// Budget concurrent LLVM work from iOS process headroom, with 25% reserved
++	// for guest memory, RSX and the rest of the Core.
++	const u64 process_headroom = rpcs3::ios::available_process_memory_headroom();
++	atomic_t<u32> file_size_limit = rpcs3::ios::get_ppu_module_file_budget(
++		utils::get_total_memory(), process_headroom);
++	ppu_log.notice("iOS PPU module compile budget: %u KiB in flight, process headroom %llu MiB",
++		file_size_limit / 1024, process_headroom >> 20);
++#else
+ 	atomic_t<u32> file_size_limit = static_cast<u32>(std::clamp<u64>(utils::aligned_div<u64>(utils::get_total_memory(), 2000), 65536, u32{umax}));
++#endif
+ 
+ 	const u32 software_thread_limit = std::min<u32>(rpcs3::utils::get_max_threads(), ::size32(file_queue));
+ 	const u32 cpu_thread_limit = utils::get_thread_count() > 8u ? std::max<u32>(utils::get_thread_count(), 2) - 1 : utils::get_thread_count(); // One LLVM thread less
+@@ -5540,6 +5616,10 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+ 				daz_and_ftz,
+ 				arm64_codegen_v2,
+ 				arm64_codegen_v3,
++				arm64_codegen_v4,
++				arm64_codegen_v5,
++				xer_layout_v1,
++				arm64_codegen_v6,
+ 
+ 				__bitset_enum_max
+ 			};
+@@ -5547,6 +5627,7 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+ 			be_t<bs_t<ppu_settings>> settings{};
+ 
+ 			settings += ppu_settings::_reserved_for_backwards_compatibility;
++			settings += ppu_settings::xer_layout_v1;
+ #if !defined(_WIN32) && !defined(__APPLE__)
+ 			settings += ppu_settings::platform_bit;
+ #endif
+@@ -5573,10 +5654,22 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+ #if defined(ARCH_ARM64)
+ 			settings += ppu_settings::arm64_codegen_v2;
+ 			settings += ppu_settings::arm64_codegen_v3;
++#ifdef RPCS3_IOS
++			// Backend GHC spill slot, OE arithmetic and direct vector TBL alter objects.
++			settings += ppu_settings::arm64_codegen_v4;
++			settings += ppu_settings::arm64_codegen_v5;
++			settings += ppu_settings::arm64_codegen_v6;
++#endif
  #endif
  
  			// Write version, hash, CPU, settings
@@ -1446,7 +1727,7 @@ index b1f1a749b..9b149ae5c 100644
  		}
  
  		if (cpu ? cpu->state.all_of(cpu_flag::exit) : Emu.IsStopped())
-@@ -5591,8 +5662,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5591,8 +5684,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  			link_workload.emplace_back(obj_name, false);
  		}
  
@@ -1462,7 +1743,7 @@ index b1f1a749b..9b149ae5c 100644
  		{
  			if (!is_being_used_in_emulation && !check_only)
  			{
-@@ -5824,6 +5900,9 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5824,6 +5922,9 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  				break;
  			}
  
@@ -1472,7 +1753,7 @@ index b1f1a749b..9b149ae5c 100644
  			if (!failed_to_load && !jits[mod_index / c_modules_per_jit]->add(cache_path + obj_name))
  			{
  				ppu_log.error("LLVM: Failed to load module %s", obj_name);
-@@ -5877,7 +5956,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
+@@ -5877,7 +5978,13 @@ bool ppu_initialize(const ppu_module<lv2_obj>& info, bool check_only, u64 file_s
  	{
  		for (auto& jit : jits)
  		{
@@ -1487,7 +1768,7 @@ index b1f1a749b..9b149ae5c 100644
  	}
  
 diff --git a/rpcs3/Emu/Cell/PPUThread.h b/rpcs3/Emu/Cell/PPUThread.h
-index 9a135c00c..618b1e592 100644
+index 9a135c0..618b1e5 100644
 --- a/rpcs3/Emu/Cell/PPUThread.h
 +++ b/rpcs3/Emu/Cell/PPUThread.h
 @@ -8,6 +8,7 @@
@@ -1509,8 +1790,371 @@ index 9a135c00c..618b1e592 100644
  struct ppu_thread_params
  {
  	vm::addr_t stack_addr;
+diff --git a/rpcs3/Emu/Cell/PPUTranslator.cpp b/rpcs3/Emu/Cell/PPUTranslator.cpp
+index 864eb63..c58866c 100644
+--- a/rpcs3/Emu/Cell/PPUTranslator.cpp
++++ b/rpcs3/Emu/Cell/PPUTranslator.cpp
+@@ -113,6 +113,18 @@ PPUTranslator::PPUTranslator(LLVMContext& context, Module* _module, const ppu_mo
+ 	const auto caddr = m_info.segs[0].addr;
+ 	const auto cend = caddr + m_info.segs[0].size;
+ 
++	// Relocation logging is per-module, not per-relocation.
++	//
++	// These three sites each logged once per relocation. One Portal 2 session produced a
++	// 1.26 GB RPCSX.log that was ~100% the "relative relocation" notice alone, and the
++	// volume does not merely waste disk: the log writer falls behind, every thread that
++	// logs blocks behind it, and the emulator parks at 0% CPU looking exactly like a
++	// deadlock. Two of the three were at error level, which no log-level setting filters.
++	// Count them instead and report once per module, keeping the first address so the
++	// message still points somewhere.
++	usz reloc_relative = 0, reloc_64bit = 0, reloc_repeated = 0;
++	u32 first_relative = 0, first_64bit = 0, first_repeated = 0;
++
+ 	for (const auto& rel : m_info.get_relocs())
+ 	{
+ 		if (rel.addr >= caddr && rel.addr < cend)
+@@ -130,7 +142,7 @@ PPUTranslator::PPUTranslator(LLVMContext& context, Module* _module, const ppu_mo
+ 			// case 26:
+ 			// case 28:
+ 			{
+-				ppu_log.notice("Ignoring relative relocation at 0x%x (%u)", rel.addr, rel.type);
++				if (!reloc_relative++) first_relative = rel.addr;
+ 				continue;
+ 			}
+ 
+@@ -147,7 +159,7 @@ PPUTranslator::PPUTranslator(LLVMContext& context, Module* _module, const ppu_mo
+ 			case 73:
+ 			case 78:
+ 			{
+-				ppu_log.error("Ignoring 64-bit relocation at 0x%x (%u)", rel.addr, rel.type);
++				if (!reloc_64bit++) first_64bit = rel.addr;
+ 				continue;
+ 			}
+ 			default: break;
+@@ -156,11 +168,26 @@ PPUTranslator::PPUTranslator(LLVMContext& context, Module* _module, const ppu_mo
+ 			// Align relocation address (TODO)
+ 			if (!m_relocs.emplace(rel.addr & ~3, &rel).second)
+ 			{
+-				ppu_log.error("Relocation repeated at 0x%x (%u)", rel.addr, rel.type);
++				if (!reloc_repeated++) first_repeated = rel.addr;
+ 			}
+ 		}
+ 	}
+ 
++	if (reloc_relative)
++	{
++		ppu_log.notice("Ignored %u relative relocations (first at 0x%x)", reloc_relative, first_relative);
++	}
++
++	if (reloc_64bit)
++	{
++		ppu_log.error("Ignored %u 64-bit relocations (first at 0x%x)", reloc_64bit, first_64bit);
++	}
++
++	if (reloc_repeated)
++	{
++		ppu_log.error("Relocation repeated %u times (first at 0x%x)", reloc_repeated, first_repeated);
++	}
++
+ 	if (m_info.is_relocatable)
+ 	{
+ 		m_reloc = &m_info.segs[0];
+@@ -2800,8 +2827,8 @@ void PPUTranslator::SUBFC(ppu_opcode_t op)
+ 	const auto result = m_ir->CreateSub(b, a);
+ 	SetGpr(op.rd, result);
+ 	SetCarry(m_ir->CreateICmpULE(result, b));
++	if (op.oe) SetOverflow(AddOverflow(m_ir->CreateNot(a), b, result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::ADDC(ppu_opcode_t op)
+@@ -2811,14 +2838,8 @@ void PPUTranslator::ADDC(ppu_opcode_t op)
+ 	const auto result = m_ir->CreateAdd(a, b);
+ 	SetGpr(op.rd, result);
+ 	SetCarry(m_ir->CreateICmpULT(result, b));
++	if (op.oe) SetOverflow(AddOverflow(a, b, result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-
+-	if (op.oe)
+-	{
+-		//const auto s = m_ir->CreateCall(get_intrinsic<u64>(llvm::Intrinsic::sadd_with_overflow), {a, b});
+-		//SetOverflow(m_ir->CreateExtractValue(s, {1}));
+-		SetOverflow(m_ir->CreateICmpSLT(m_ir->CreateAnd(m_ir->CreateXor(a, m_ir->CreateNot(b)), m_ir->CreateXor(a, result)), m_ir->getInt64(0)));
+-	}
+ }
+ 
+ void PPUTranslator::MULHDU(ppu_opcode_t op)
+@@ -2967,14 +2988,8 @@ void PPUTranslator::SUBF(ppu_opcode_t op)
+ 	const auto b = GetGpr(op.rb);
+ 	const auto result = m_ir->CreateSub(b, a);
+ 	SetGpr(op.rd, result);
++	if (op.oe) SetOverflow(AddOverflow(m_ir->CreateNot(a), b, result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-
+-	if (op.oe)
+-	{
+-		//const auto s = m_ir->CreateCall(get_intrinsic<u64>(llvm::Intrinsic::ssub_with_overflow), {b, m_ir->CreateNot(a)});
+-		//SetOverflow(m_ir->CreateExtractValue(s, {1}));
+-		SetOverflow(m_ir->CreateICmpSLT(m_ir->CreateAnd(m_ir->CreateXor(a, b), m_ir->CreateXor(m_ir->CreateNot(a), result)), m_ir->getInt64(0)));
+-	}
+ }
+ 
+ void PPUTranslator::LDUX(ppu_opcode_t op)
+@@ -3075,8 +3090,8 @@ void PPUTranslator::NEG(ppu_opcode_t op)
+ 	const auto reg = GetGpr(op.ra);
+ 	const auto result = m_ir->CreateNeg(reg);
+ 	SetGpr(op.rd, result);
+-	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+ 	if (op.oe) SetOverflow(m_ir->CreateICmpEQ(result, m_ir->getInt64(1ull << 63)));
++	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+ }
+ 
+ void PPUTranslator::LBZUX(ppu_opcode_t op)
+@@ -3108,8 +3123,8 @@ void PPUTranslator::SUBFE(ppu_opcode_t op)
+ 	const auto r2 = m_ir->CreateAdd(r1, ZExt(c, GetType<u64>()));
+ 	SetGpr(op.rd, r2);
+ 	SetCarry(m_ir->CreateOr(m_ir->CreateICmpULT(r1, a), m_ir->CreateICmpULT(r2, r1)));
++	if (op.oe) SetOverflow(AddOverflow(a, b, r2));
+ 	if (op.rc) SetCrFieldSignedCmp(0, r2, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::ADDE(ppu_opcode_t op)
+@@ -3121,8 +3136,8 @@ void PPUTranslator::ADDE(ppu_opcode_t op)
+ 	const auto r2 = m_ir->CreateAdd(r1, ZExt(c, GetType<u64>()));
+ 	SetGpr(op.rd, r2);
+ 	SetCarry(m_ir->CreateOr(m_ir->CreateICmpULT(r1, a), m_ir->CreateICmpULT(r2, r1)));
++	if (op.oe) SetOverflow(AddOverflow(a, b, r2));
+ 	if (op.rc) SetCrFieldSignedCmp(0, r2, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::MTOCRF(ppu_opcode_t op)
+@@ -3236,8 +3251,8 @@ void PPUTranslator::ADDZE(ppu_opcode_t op)
+ 	const auto result = m_ir->CreateAdd(a, ZExt(c, GetType<u64>()));
+ 	SetGpr(op.rd, result);
+ 	SetCarry(m_ir->CreateICmpULT(result, a));
++	if (op.oe) SetOverflow(AddOverflow(a, m_ir->getInt64(0), result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::SUBFZE(ppu_opcode_t op)
+@@ -3247,8 +3262,8 @@ void PPUTranslator::SUBFZE(ppu_opcode_t op)
+ 	const auto result = m_ir->CreateAdd(a, ZExt(c, GetType<u64>()));
+ 	SetGpr(op.rd, result);
+ 	SetCarry(m_ir->CreateICmpULT(result, a));
++	if (op.oe) SetOverflow(AddOverflow(a, m_ir->getInt64(0), result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::STDCX(ppu_opcode_t op)
+@@ -3276,8 +3291,8 @@ void PPUTranslator::SUBFME(ppu_opcode_t op)
+ 	const auto result = m_ir->CreateSub(a, ZExt(m_ir->CreateNot(c), GetType<u64>()));
+ 	SetGpr(op.rd, result);
+ 	SetCarry(m_ir->CreateOr(c, IsNotZero(a)));
++	if (op.oe) SetOverflow(AddOverflow(a, m_ir->getInt64(-1), result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::MULLD(ppu_opcode_t op)
+@@ -3286,8 +3301,13 @@ void PPUTranslator::MULLD(ppu_opcode_t op)
+ 	const auto b = GetGpr(op.rb);
+ 	const auto result = m_ir->CreateMul(a, b);
+ 	SetGpr(op.rd, result);
++	if (op.oe)
++	{
++		const auto i128 = m_ir->getIntNTy(128);
++		const auto wide = m_ir->CreateMul(m_ir->CreateSExt(a, i128), m_ir->CreateSExt(b, i128));
++		SetOverflow(m_ir->CreateICmpNE(wide, m_ir->CreateSExt(result, i128)));
++	}
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::ADDME(ppu_opcode_t op)
+@@ -3297,8 +3317,8 @@ void PPUTranslator::ADDME(ppu_opcode_t op)
+ 	const auto result = m_ir->CreateSub(a, ZExt(m_ir->CreateNot(c), GetType<u64>()));
+ 	SetGpr(op.rd, result);
+ 	SetCarry(m_ir->CreateOr(c, IsNotZero(a)));
++	if (op.oe) SetOverflow(AddOverflow(a, m_ir->getInt64(-1), result));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::MULLW(ppu_opcode_t op)
+@@ -3307,8 +3327,8 @@ void PPUTranslator::MULLW(ppu_opcode_t op)
+ 	const auto b = SExt(GetGpr(op.rb, 32));
+ 	const auto result = m_ir->CreateMul(a, b);
+ 	SetGpr(op.rd, result);
++	if (op.oe) SetOverflow(m_ir->CreateICmpNE(result, SExt(Trunc(result, GetType<s32>()), GetType<s64>())));
+ 	if (op.rc) SetCrFieldSignedCmp(0, result, m_ir->getInt64(0));
+-	if (op.oe) UNK(op);
+ }
+ 
+ void PPUTranslator::DCBTST(ppu_opcode_t)
+@@ -3380,10 +3400,24 @@ void PPUTranslator::MFSPR(ppu_opcode_t op)
+ 	switch (const u32 n = (op.spr >> 5) | ((op.spr & 0x1f) << 5))
+ 	{
+ 	case 0x001: // MFXER
++		// SO is bit 32, OV bit 33, CA bit 34 -- so 31, 30, 29 counting from the LSB. SO and CA
++		// were transposed here, which the interpreter gets right one file over
++		// (PPUInterpreter.cpp: so << 31 | ov << 30 | ca << 29 | cnt).
++		//
++		// Round-tripping hid it: MTXER below had the same two swapped, so a guest that only
++		// wrote and re-read XER saw itself. Internal carry chains were never affected either,
++		// since addc/adde use m_ca directly. What breaks is guest code that computes a carry and
++		// then reads XER to test it -- it gets SO where it expects CA.
++		//
++		// Measured against real hardware with tools/ps3autotests: 22,020 differing lines in
++		// cpu/ppu_gpr and 863 in cpu/ppu_integer_arithmetic, every one of them with the correct
++		// RESULT and only this field wrong, hardware reporting 0x20000000 where we reported
++		// 0x80000000. Present in upstream too, so it is not the cause of any Android-specific
++		// problem -- it is simply wrong, and cheap to correct.
+ 		result = ZExt(RegLoad(m_cnt), GetType<u64>());
+-		result = m_ir->CreateOr(result, m_ir->CreateShl(ZExt(RegLoad(m_so), GetType<u64>()), 29));
++		result = m_ir->CreateOr(result, m_ir->CreateShl(ZExt(RegLoad(m_so), GetType<u64>()), 31));
+ 		result = m_ir->CreateOr(result, m_ir->CreateShl(ZExt(RegLoad(m_ov), GetType<u64>()), 30));
+-		result = m_ir->CreateOr(result, m_ir->CreateShl(ZExt(RegLoad(m_ca), GetType<u64>()), 31));
++		result = m_ir->CreateOr(result, m_ir->CreateShl(ZExt(RegLoad(m_ca), GetType<u64>()), 29));
+ 		break;
+ 	case 0x008: // MFLR
+ 		result = RegLoad(m_lr);
+@@ -3502,8 +3536,8 @@ void PPUTranslator::DIVDU(ppu_opcode_t op)
+ 	const auto o = IsZero(b);
+ 	const auto result = m_ir->CreateUDiv(a, m_ir->CreateSelect(o, m_ir->getInt64(-1), b));
+ 	SetGpr(op.rd, m_ir->CreateSelect(o, m_ir->getInt64(0), result));
+-	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ 	if (op.oe) SetOverflow(o);
++	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ }
+ 
+ void PPUTranslator::DIVWU(ppu_opcode_t op)
+@@ -3513,8 +3547,8 @@ void PPUTranslator::DIVWU(ppu_opcode_t op)
+ 	const auto o = IsZero(b);
+ 	const auto result = m_ir->CreateUDiv(a, m_ir->CreateSelect(o, m_ir->getInt32(0xffffffff), b));
+ 	SetGpr(op.rd, m_ir->CreateSelect(o, m_ir->getInt32(0), result));
+-	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ 	if (op.oe) SetOverflow(o);
++	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ }
+ 
+ void PPUTranslator::MTSPR(ppu_opcode_t op)
+@@ -3524,10 +3558,11 @@ void PPUTranslator::MTSPR(ppu_opcode_t op)
+ 	switch (const u32 n = (op.spr >> 5) | ((op.spr & 0x1f) << 5))
+ 	{
+ 	case 0x001: // MTXER
+-		RegStore(Trunc(m_ir->CreateLShr(value, 31), GetType<bool>()), m_ca);
++		// Same transposition as MFXER above, in the other direction.
++		RegStore(Trunc(m_ir->CreateLShr(value, 31), GetType<bool>()), m_so);
+ 		RegStore(Trunc(m_ir->CreateLShr(value, 30), GetType<bool>()), m_ov);
+-		RegStore(Trunc(m_ir->CreateLShr(value, 29), GetType<bool>()), m_so);
+-		RegStore(Trunc(value, GetType<u8>()), m_cnt);
++		RegStore(Trunc(m_ir->CreateLShr(value, 29), GetType<bool>()), m_ca);
++		RegStore(Trunc(m_ir->CreateAnd(value, 0x7f), GetType<u8>()), m_cnt);
+ 		break;
+ 	case 0x008: // MTLR
+ 		RegStore(value, m_lr);
+@@ -3563,8 +3598,8 @@ void PPUTranslator::DIVD(ppu_opcode_t op)
+ 	const auto o = m_ir->CreateOr(IsZero(b), m_ir->CreateAnd(m_ir->CreateICmpEQ(a, m_ir->getInt64(1ull << 63)), IsOnes(b)));
+ 	const auto result = m_ir->CreateSDiv(a, m_ir->CreateSelect(o, m_ir->getInt64(1ull << 63), b));
+ 	SetGpr(op.rd, m_ir->CreateSelect(o, m_ir->getInt64(0), result));
+-	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ 	if (op.oe) SetOverflow(o);
++	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ }
+ 
+ void PPUTranslator::DIVW(ppu_opcode_t op)
+@@ -3574,15 +3609,18 @@ void PPUTranslator::DIVW(ppu_opcode_t op)
+ 	const auto o = m_ir->CreateOr(IsZero(b), m_ir->CreateAnd(m_ir->CreateICmpEQ(a, m_ir->getInt32(s32{smin})), IsOnes(b)));
+ 	const auto result = m_ir->CreateSDiv(a, m_ir->CreateSelect(o, m_ir->getInt32(s32{smin}), b));
+ 	SetGpr(op.rd, m_ir->CreateSelect(o, m_ir->getInt32(0), result));
+-	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ 	if (op.oe) SetOverflow(o);
++	if (op.rc) SetCrFieldSignedCmp(0, GetGpr(op.rd), m_ir->getInt64(0));
+ }
+ 
+ void PPUTranslator::LVLX(ppu_opcode_t op)
+ {
+ 	const auto addr = op.ra ? m_ir->CreateAdd(GetGpr(op.ra), GetGpr(op.rb)) : GetGpr(op.rb);
+ 	const auto data = ReadMemory(m_ir->CreateAnd(addr, ~0xfull), GetType<u8[16]>(), m_is_be, 16);
+-	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));
++#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
++	set_vr(op.vd, tbl(value<u8[16]>(data), build<u8[16]>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));#else
++	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));#endif
++
+ }
+ 
+ void PPUTranslator::LDBRX(ppu_opcode_t op)
+@@ -3631,7 +3669,10 @@ void PPUTranslator::LVRX(ppu_opcode_t op)
+ 
+ 	// Read from instruction address if offset is 0, this prevents accessing potentially bad memory from addr (because no actual memory is dereferenced)
+ 	const auto data = ReadMemory(m_ir->CreateAnd(m_ir->CreateSelect(m_ir->CreateIsNull(offset.value), m_reloc ? m_seg0 : GetAddr(0), addr), ~0xfull), GetType<u8[16]>(), m_is_be, 16);
+-	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));
++#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
++	set_vr(op.vd, tbl(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));#else
++	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));#endif
++
+ }
+ 
+ void PPUTranslator::LSWI(ppu_opcode_t op)
+@@ -3705,7 +3746,11 @@ void PPUTranslator::LFDUX(ppu_opcode_t op)
+ void PPUTranslator::STVLX(ppu_opcode_t op)
+ {
+ 	const auto addr = op.ra ? m_ir->CreateAdd(GetGpr(op.ra), GetGpr(op.rb)) : GetGpr(op.rb);
++#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
++	const auto data = tbl(get_vr<u8[16]>(op.vs), build<u8[16]>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf)));
++#else
+ 	const auto data = pshufb(get_vr<u8[16]>(op.vs), build<u8[16]>(127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf)));
++#endif
+ 	const auto mask = bitcast<bool[16]>(splat<u16>(0xffff) << trunc<u16>(value<u64>(addr) & 0xf));
+ 	m_ir->CreateMaskedStore(data.eval(m_ir), GetMemory(m_ir->CreateAnd(addr, ~0xfull)), llvm::Align(16), mask.eval(m_ir));
+ }
+@@ -3733,7 +3778,11 @@ void PPUTranslator::STFSX(ppu_opcode_t op)
+ void PPUTranslator::STVRX(ppu_opcode_t op)
+ {
+ 	const auto addr = op.ra ? m_ir->CreateAdd(GetGpr(op.ra), GetGpr(op.rb)) : GetGpr(op.rb);
++#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
++	const auto data = tbl(get_vr<u8[16]>(op.vs), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf)));
++#else
+ 	const auto data = pshufb(get_vr<u8[16]>(op.vs), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf)));
++#endif
+ 	const auto mask = bitcast<bool[16]>(trunc<u16>(splat<u64>(0xffff) << (value<u64>(addr) & 0xf) >> 16));
+ 	m_ir->CreateMaskedStore(data.eval(m_ir), GetMemory(m_ir->CreateAnd(addr, ~0xfull)), llvm::Align(16), mask.eval(m_ir));
+ }
+@@ -5354,6 +5403,13 @@ void PPUTranslator::SetCarry(Value* bit)
+ 	RegStore(bit, m_ca);
+ }
+ 
++// Signed overflow of x + y (+ carry) that produced result, the same test the interpreter makes:
++// both addends share a sign and the result does not. For the subtract forms x is ~RA.
++Value* PPUTranslator::AddOverflow(Value* x, Value* y, Value* result)
++{
++	return m_ir->CreateICmpSLT(m_ir->CreateAnd(m_ir->CreateNot(m_ir->CreateXor(x, y)), m_ir->CreateXor(x, result)), m_ir->getInt64(0));
++}
++
+ void PPUTranslator::SetOverflow(Value* bit)
+ {
+ 	RegStore(bit, m_ov);
+diff --git a/rpcs3/Emu/Cell/PPUTranslator.h b/rpcs3/Emu/Cell/PPUTranslator.h
+index 1d99b27..eb05475 100644
+--- a/rpcs3/Emu/Cell/PPUTranslator.h
++++ b/rpcs3/Emu/Cell/PPUTranslator.h
+@@ -287,6 +287,9 @@ public:
+ 	// Set XER.OV bit, and update XER.SO bit (|=)
+ 	void SetOverflow(llvm::Value*);
+ 
++	// Signed overflow of an add (or ~RA + RB subtract) that produced result
++	llvm::Value* AddOverflow(llvm::Value* x, llvm::Value* y, llvm::Value* result);
++
+ 	// Check condition for trap instructions
+ 	llvm::Value* CheckTrapCondition(u32 to, llvm::Value* left, llvm::Value* right);
+ 
 diff --git a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
-index d451a943a..3049a29e9 100644
+index d451a94..20257d3 100644
 --- a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 @@ -40,6 +40,19 @@ const extern spu_decoder<spu_itype> g_spu_itype;
@@ -1776,7 +2420,7 @@ index d451a943a..3049a29e9 100644
  	std::deque<spu_program> result;
  
  	if (!m_file)
-@@ -852,10 +950,17 @@ std::deque<spu_program> spu_cache::get()
+@@ -852,10 +950,18 @@ std::deque<spu_program> spu_cache::get()
  		return result;
  	}
  
@@ -1786,6 +2430,7 @@ index d451a943a..3049a29e9 100644
 +	const u64 original_size = m_file.size();
 +	const u64 readable_size = std::min(original_size, maximum_cache_bytes);
 +	u64 valid_end = 0;
++	u64 cursor = 0;
 +	u32 rejected = 0;
 +	u32 entries = 0;
 +	bool damaged_tail = original_size > maximum_cache_bytes;
@@ -1793,21 +2438,22 @@ index d451a943a..3049a29e9 100644
 -	// TODO: signal truncated or otherwise broken file
 -	while (true)
 +	m_file.seek(0);
-+	while (m_file.pos() < readable_size && entries < maximum_cache_entries)
++	while (cursor < readable_size && entries < maximum_cache_entries)
  	{
  		struct block_info_t
  		{
-@@ -864,37 +969,46 @@ std::deque<spu_program> spu_cache::get()
+@@ -864,37 +970,48 @@ std::deque<spu_program> spu_cache::get()
  			be_t<u32> addr;
  		} block_info{};
  
 -		if (!m_file.read(block_info))
-+		const u64 entry_start = m_file.pos();
++		const u64 entry_start = cursor;
 +		if (readable_size - entry_start < sizeof(block_info) || !m_file.read(block_info))
  		{
 +			damaged_tail = true;
  			break;
  		}
++		cursor += sizeof(block_info);
  
  		const u32 crc = block_info.crc;
  		const u32 size = block_info.size;
@@ -1817,7 +2463,7 @@ index d451a943a..3049a29e9 100644
 +		entries++;
 +		const u64 payload_bytes = static_cast<u64>(size) * sizeof(u32);
 +		if (utils::add_saturate<u32>(addr, size * 4) > SPU_LS_SIZE ||
-+			payload_bytes > readable_size - m_file.pos())
++			payload_bytes > readable_size - cursor)
  		{
 +			rejected++;
 +			damaged_tail = true;
@@ -1832,7 +2478,8 @@ index d451a943a..3049a29e9 100644
 +			damaged_tail = true;
  			break;
  		}
-+		valid_end = m_file.pos();
++		cursor += payload_bytes;
++		valid_end = cursor;
  
  		if (!size || !func[0])
  		{
@@ -1852,11 +2499,11 @@ index d451a943a..3049a29e9 100644
  			continue;
  		}
  
-@@ -905,11 +1019,39 @@ std::deque<spu_program> spu_cache::get()
+@@ -905,11 +1022,39 @@ std::deque<spu_program> spu_cache::get()
  		result.emplace_front(std::move(res));
  	}
  
-+	if (entries >= maximum_cache_entries && m_file.pos() < original_size)
++	if (entries >= maximum_cache_entries && cursor < original_size)
 +	{
 +		damaged_tail = true;
 +	}
@@ -1892,7 +2539,7 @@ index d451a943a..3049a29e9 100644
  	if (!m_file)
  	{
  		return;
-@@ -917,9 +1059,8 @@ void spu_cache::add(const spu_program& func)
+@@ -917,9 +1062,8 @@ void spu_cache::add(const spu_program& func)
  
  	be_t<u32> size = ::size32(func.data);
  	be_t<u32> addr = func.entry_point;
@@ -1904,7 +2551,7 @@ index d451a943a..3049a29e9 100644
  
  	const fs::iovec_clone gather[3]
  	{
-@@ -927,9 +1068,33 @@ void spu_cache::add(const spu_program& func)
+@@ -927,9 +1071,33 @@ void spu_cache::add(const spu_program& func)
  		{&addr, sizeof(addr)},
  		{func.data.data(), func.data.size() * 4}
  	};
@@ -1940,7 +2587,7 @@ index d451a943a..3049a29e9 100644
  }
  
  void spu_cache::initialize(bool build_existing_cache)
-@@ -974,8 +1139,22 @@ void spu_cache::initialize(bool build_existing_cache)
+@@ -974,8 +1142,22 @@ void spu_cache::initialize(bool build_existing_cache)
  		return;
  	}
  
@@ -1965,7 +2612,25 @@ index d451a943a..3049a29e9 100644
  	atomic_t<usz> fnext{};
  	atomic_t<u8> fail_flag{0};
  
-@@ -1432,7 +1611,7 @@ void spu_cache::initialize(bool build_existing_cache)
+@@ -1302,7 +1484,7 @@ void spu_cache::initialize(bool build_existing_cache)
+ 				{
+ 					if (ls[start_new / 4] && g_spu_itype.decode(ls[start_new / 4]) != spu_itype::UNK)
+ 					{
+-						spu_log.notice("Precompiling fallthrough to 0x%05x", start_new);
++						spu_log.trace("Precompiling fallthrough to 0x%05x", start_new);
+ 						func2 = compiler->analyse(ls.data(), start_new, &targets);
+ 						block_addr = start_new;
+ 						continue;
+@@ -1366,7 +1548,7 @@ void spu_cache::initialize(bool build_existing_cache)
+ 				}
+ 
+ 
+-				spu_log.notice("Precompiling filler space at 0x%05x (next=0x%05x)", new_entry, next_func);
++				spu_log.trace("Precompiling filler space at 0x%05x (next=0x%05x)", new_entry, next_func);
+ 				func2 = compiler->analyse(ls.data(), new_entry, &targets);
+ 				block_addr = new_entry;
+ 			}
+@@ -1432,7 +1614,7 @@ void spu_cache::initialize(bool build_existing_cache)
  	}
  
  	// Initialize global cache instance
@@ -1974,7 +2639,30 @@ index d451a943a..3049a29e9 100644
  	{
  		g_fxo->get<spu_cache>() = std::move(cache);
  	}
-@@ -3401,7 +3580,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -1889,7 +2071,12 @@ spu_function_t spu_runtime::rebuild_ubertrampoline(u32 id_inst)
+ 			if (w.level >= w.beg->first.size() || w.level >= it->first.size())
+ 			{
+ 				// If functions cannot be compared, assume smallest function
+-				spu_log.error("Trampoline simplified at ??? (level=%u)", w.level);
++				// Routine control-flow simplification, not a failure -- it was at error level
++				// and fired ~1500 times in a 15 minute session. Every diagnostic in this
++				// recompiler is per-block or per-instruction, which upstream can afford and a
++				// phone writing to /sdcard cannot: the burst lands exactly while a game is
++				// already stalling to compile. Still reachable by raising the SPU channel.
++				spu_log.trace("Trampoline simplified at ??? (level=%u)", w.level);
+ #if defined(ARCH_X64)
+ 				make_jump(0xe9, w.beg->second); // jmp rel32
+ #elif defined(ARCH_ARM64)
+@@ -1928,7 +2115,7 @@ spu_function_t spu_runtime::rebuild_ubertrampoline(u32 id_inst)
+ 
+ 			if (it == m_flat_list.end())
+ 			{
+-				spu_log.error("Trampoline simplified (II) at ??? (level=%u)", w.level);
++				spu_log.trace("Trampoline simplified (II) at ??? (level=%u)", w.level);
+ #if defined(ARCH_X64)
+ 				make_jump(0xe9, w.beg->second); // jmp rel32
+ #elif defined(ARCH_ARM64)
+@@ -3401,7 +3588,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				const u32 target = spu_branch_target(av);
  
@@ -1989,8 +2677,104 @@ index d451a943a..3049a29e9 100644
  
  				if (type == spu_itype::BI && target == pos + 4 && op.d)
  				{
+@@ -5789,7 +5983,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 				getllar_starts[previous.lsa_pc] = true;
+ 				g_fxo->get<putllc16_statistics_t>().breaking_reason[cause]++;
+ 
+-				if (!spu_log.notice)
++				if (!spu_log.trace)
+ 				{
+ 					return;
+ 				}
+@@ -5829,7 +6023,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 				}
+ 
+ 				fmt::append(tracing, " of %d failures", fail_count);
+-				spu_log.notice("%s\n%s", break_error, tracing);
++				spu_log.trace("%s\n%s", break_error, tracing);
+ 			}
+ 		};
+ 
+@@ -5846,7 +6040,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 
+ 				g_fxo->get<rchcnt_statistics_t>().breaking_reason[cause]++;
+ 
+-				if (!spu_log.notice)
++				if (!spu_log.trace)
+ 				{
+ 					return;
+ 				}
+@@ -5886,7 +6080,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 				}
+ 
+ 				fmt::append(tracing, " of %d failures", fail_count);
+-				spu_log.notice("%s\n%s", break_error, tracing);
++				spu_log.trace("%s\n%s", break_error, tracing);
+ 			}
+ 		};
+ 
+@@ -5896,7 +6090,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 			{
+ 				g_fxo->get<reduced_statistics_t>().breaking_reason[cause]++;
+ 
+-				if (!spu_log.notice)
++				if (!spu_log.trace)
+ 				{
+ 					return;
+ 				}
+@@ -5941,12 +6135,12 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 				}
+ 
+ 				fmt::append(tracing, " of %d failures", fail_count);
+-				spu_log.notice("%s\n%s", break_error, tracing);
++				spu_log.trace("%s\n%s", break_error, tracing);
+ 
+ 				std::string block_dump;
+ 				this->dump(result, block_dump, previous.loop_pc, previous.loop_end + 1);
+ 	
+-				spu_log.notice("SPU Block Dump:\n%s", block_dump);
++				spu_log.trace("SPU Block Dump:\n%s", block_dump);
+ 			}
+ 		};
+ 
+@@ -6157,7 +6351,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 						{
+ 							if (!std::exchange(logged_block[target_pc / 4], true))
+ 							{
+-								spu_log.notice("SPU block is a loop at [0x%05x -> 0x%05x]", state_it->pc, target_pc);
++								spu_log.trace("SPU block is a loop at [0x%05x -> 0x%05x]", state_it->pc, target_pc);
+ 							}
+ 
+ 							state_it->parent_target_index++;
+@@ -7679,7 +7873,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 							if (getllar_starts.emplace(atomic16->lsa_pc, false).second)
+ 							{
+ 								g_fxo->get<putllc16_statistics_t>().all++;
+-								spu_log.notice("[0x%05x] GETLLAR pattern entry point", pos);
++								spu_log.trace("[0x%05x] GETLLAR pattern entry point", pos);
+ 							}
+ 						}
+ 
+@@ -9007,7 +9201,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 			add_pattern(inst_attr::putllc16, pattern.put_pc - result.entry_point, value.data);
+ 		}
+ 
+-		spu_log.success("PUTLLC16 Pattern Detected! (mem_count=%d, put_pc=0x%x, pc_rel=%d, offset=0x%x, const=%u, two_regs=%d, reg=%u, runtime=%d, 0x%x-%s, pattern-hash=%s) (putllc0=%d, putllc16+0=%d, all=%d)"
++		spu_log.trace("PUTLLC16 Pattern Detected! (mem_count=%d, put_pc=0x%x, pc_rel=%d, offset=0x%x, const=%u, two_regs=%d, reg=%u, runtime=%d, 0x%x-%s, pattern-hash=%s) (putllc0=%d, putllc16+0=%d, all=%d)"
+ 			, pattern.mem_count, pattern.put_pc, value.type == v_relative, value.off18, value.type == v_const, value.type == v_reg2, value.reg, value.runtime16_select, entry_point, func_hash, pattern_hash, +stats.nowrite, ++stats.single, +stats.all);
+ 	}
+ 
+@@ -9113,7 +9307,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+ 
+ 	if (likely_putllc_loop && !had_putllc_evaluation)
+ 	{
+-		spu_log.notice("Likely missed PUTLLC16 patterns. (entry=0x%x)", entry_point);
++		spu_log.trace("Likely missed PUTLLC16 patterns. (entry=0x%x)", entry_point);
+ 	}
+ 
+ 	if (result.data.empty())
 diff --git a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
-index 9a1e4c790..91cfebaad 100644
+index 9a1e4c7..a9c277b 100644
 --- a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 @@ -1,4 +1,6 @@
@@ -2080,7 +2864,47 @@ index 9a1e4c790..91cfebaad 100644
  		{
  			sha1_context ctx;
  			u8 output[20];
-@@ -1875,6 +1902,7 @@ public:
+@@ -1764,13 +1791,21 @@ public:
+ 		m_pp_id = 0;
+ 
+ 		std::string function_log;
+-
+-		this->dump(func, function_log);
++		bool function_dump_ready = false;
++		const auto prepare_function_log = [&]
++		{
++			if (!function_dump_ready)
++			{
++				this->dump(func, function_log);
++				function_dump_ready = true;
++			}
++		};
+ 		bool to_log_func = false;
+ 
+-		if (g_cfg.core.spu_debug && !add_loc->logged.exchange(1))
++		if (g_cfg.core.spu_debug)
+ 		{
+-			if (!fs::write_file(m_spurt->get_cache_path() + "spu.log", fs::write + fs::append, function_log))
++			prepare_function_log();
++			if (!add_loc->logged.exchange(1) && !fs::write_file(m_spurt->get_cache_path() + "spu.log", fs::write + fs::append, function_log))
+ 			{
+ 				// Fallback: write to main log
+ 				to_log_func = true;
+@@ -1786,11 +1821,13 @@ public:
+ 			if (itype == spu_itype::RDCH && op.ra == SPU_RdDec)
+ 			{
+ 				to_log_func = true;
++				break;
+ 			}
+ 		}
+ 
+ 		if (to_log_func)
+ 		{
++			prepare_function_log();
+ 			spu_log.notice("Function %s dump:\n%s", m_hash, function_log);
+ 		}
+ 
+@@ -1875,6 +1912,7 @@ public:
  			[[maybe_unused]] u32 elements;
  			[[maybe_unused]] u32 dwords;
  
@@ -2088,7 +2912,7 @@ index 9a1e4c790..91cfebaad 100644
  			if (m_use_avx512)
  			{
  				stride = 64;
-@@ -1888,6 +1916,7 @@ public:
+@@ -1888,6 +1926,7 @@ public:
  				dwords = 4;
  			}
  			else
@@ -2096,7 +2920,41 @@ index 9a1e4c790..91cfebaad 100644
  			{
  				stride = 16;
  				elements = 4;
-@@ -4023,6 +4052,10 @@ public:
+@@ -3904,12 +3943,28 @@ public:
+ 		std::string& llvm_log = function_log;
+ 		raw_string_ostream out(llvm_log);
+ 
+-		fmt::append(llvm_log, "LLVM IR at 0x%x:\n", func.entry_point);
+-		out << *_module; // print IR
+-		out << "\n\n";
+-
+-		if (verifyModule(*_module, &out))
++		bool llvm_ir_logged = false;
++		const auto append_llvm_ir = [&]
+ 		{
++			if (!llvm_ir_logged)
++			{
++				prepare_function_log();
++				fmt::append(llvm_log, "LLVM IR at 0x%x:\n", func.entry_point);
++				out << *_module << "\n\n";
++				llvm_ir_logged = true;
++			}
++		};
++		if (g_cfg.core.spu_debug)
++		{
++			append_llvm_ir();
++		}
++		std::string verification_log;
++		raw_string_ostream verification_out(verification_log);
++		if (verifyModule(*_module, &verification_out))
++		{
++			verification_out.flush();
++			append_llvm_ir();
++			out << verification_log;
+ 			out.flush();
+ 			spu_log.error("LLVM: Verification failed at 0x%x:\n%s", func.entry_point, llvm_log);
+ 
+@@ -4023,6 +4078,10 @@ public:
  
  		// Install unconditionally, possibly replacing existing one from spu_fast
  		add_loc->compiled = fn;
@@ -2107,17 +2965,74 @@ index 9a1e4c790..91cfebaad 100644
  
  		// Rebuild trampoline if necessary
  		if (!m_spurt->rebuild_ubertrampoline(func.data[0]))
-@@ -5403,6 +5436,9 @@ public:
+@@ -4069,7 +4128,7 @@ public:
+ 				cache.add(func);
+ 			}
+ 
+-			spu_log.success("New SPU block compiled successfully (size=%u)", func_size);
++			spu_log.trace("New SPU block compiled successfully (size=%u)", func_size);
+ 		}
+ 
+ 		return fn;
+@@ -4449,12 +4508,26 @@ public:
+ 		std::string llvm_log;
+ 		raw_string_ostream out(llvm_log);
+ 
+-		fmt::append(llvm_log, "LLVM IR (interpreter):\n");
+-		out << *_module; // print IR
+-		out << "\n\n";
+-
+-		if (verifyModule(*_module, &out))
++		const auto append_llvm_ir = [&]
+ 		{
++			fmt::append(llvm_log, "LLVM IR (interpreter):\n");
++			out << *_module << "\n\n";
++		};
++		const bool log_llvm_ir = g_cfg.core.spu_debug;
++		if (log_llvm_ir)
++		{
++			append_llvm_ir();
++		}
++		std::string verification_log;
++		raw_string_ostream verification_out(verification_log);
++		if (verifyModule(*_module, &verification_out))
++		{
++			verification_out.flush();
++			if (!log_llvm_ir)
++			{
++				append_llvm_ir();
++			}
++			out << verification_log;
+ 			out.flush();
+ 			spu_log.error("LLVM: Verification failed:\n%s", llvm_log);
+ 
+@@ -5200,7 +5273,7 @@ public:
+ 				}
+ 			}
+ 
+-			spu_log.warning("[0x%x] MFC_EAH: $%u is not a zero constant", m_pos, +op.rt);
++			spu_log.trace("[0x%x] MFC_EAH: $%u is not a zero constant", m_pos, +op.rt);
+ 			//m_ir->CreateStore(val.value, spu_ptr(&spu_thread::ch_mfc_cmd, &spu_mfc_cmd::eah));
+ 			return;
+ 		}
+@@ -5403,6 +5476,16 @@ public:
  					}
  					}
  
 +					u32 stride = 16;
 +
++#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
++					// A NEON copy has 16-byte granularity, including odd vector counts.
++					constexpr u32 copy_size_granule = 16;
++#else
++					constexpr u32 copy_size_granule = 32;
++#endif
++
 +#ifdef ARCH_X64
  					// Check if the LS address is constant and 256 bit aligned
  					u64 clsa = umax;
  
-@@ -5411,13 +5447,12 @@ public:
+@@ -5411,20 +5494,19 @@ public:
  						clsa = ci->getZExtValue();
  					}
  
@@ -2132,7 +3047,24 @@ index 9a1e4c790..91cfebaad 100644
  
  					if (csize > 0 && csize <= 16)
  					{
-@@ -5702,7 +5737,21 @@ public:
+ 						// Generate single copy operation
+ 						m_ir->CreateStore(m_ir->CreateLoad(vtype, src), dst);
+ 					}
+-					else if (csize <= stride * 16 && !(csize % 32))
++					else if (csize <= stride * 16 && !(csize % copy_size_granule))
+ 					{
+ 						// Generate fixed sequence of copy operations
+ 						for (u32 i = 0; i < csize; i += stride)
+@@ -5558,7 +5640,7 @@ public:
+ 			}
+ 
+ 			// Fallback to unoptimized WRCH implementation (TODO)
+-			spu_log.warning("[0x%x] MFC_Cmd: $%u is not a constant", m_pos, +op.rt);
++			spu_log.trace("[0x%x] MFC_Cmd: $%u is not a constant", m_pos, +op.rt);
+ 			break;
+ 		}
+ 		case MFC_WrListStallAck:
+@@ -5702,7 +5784,21 @@ public:
  
  	void ABSDB(spu_opcode_t op)
  	{
@@ -2154,7 +3086,25 @@ index 9a1e4c790..91cfebaad 100644
  		set_vr(op.rt, absd(a, b));
  	}
  
-@@ -6334,20 +6383,24 @@ public:
+@@ -6273,7 +6369,17 @@ public:
+ 	template <typename TA>
+ 	static auto byteswap(TA&& a)
+ 	{
++#ifdef ARCH_ARM64
++// The byteswap shufflevector is usually transformed into a sequence of rev64 and ext
++// This is nice for saving on constants, but llvm refuses to turn the byteswap into tbl,
++// even when it's being called dozens of times in a loop, where the extra constant needed could easily be justified
++// The easy workaround is to just use tbl ourselves until upstream llvm fixes this issue
++// https://github.com/llvm/llvm-project/issues/223597 - Whatcookie
++		const auto indices = build<u8[16]>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
++		return llvm_calli<u8[16], TA, decltype(indices)>{"llvm.aarch64.neon.tbl1.v16i8", {std::forward<TA>(a), indices}};
++#else
+ 		return zshuffle(std::forward<TA>(a), 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
++#endif
+ 	}
+ 
+ 	static auto rotqby_reverse_base()
+@@ -6334,20 +6440,24 @@ public:
  				const auto sc = rotqby_reverse_base();
  				const auto sh = sc + (splat_scalar(b) >> 3);
  
@@ -2179,7 +3129,7 @@ index 9a1e4c790..91cfebaad 100644
  
  			return eval(pshufb_for_x86_and_tbl_for_aarch64(a, (sh & 0xf)));
  		});
-@@ -6561,11 +6614,13 @@ public:
+@@ -6561,11 +6671,13 @@ public:
  			const auto sc = rotqby_reverse_base();
  			const auto sh = eval(sc + splat_scalar(b));
  
@@ -2193,7 +3143,7 @@ index 9a1e4c790..91cfebaad 100644
  
  			set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(as, (sh & 0xf)));
  			return;
-@@ -6574,11 +6629,13 @@ public:
+@@ -6574,11 +6686,13 @@ public:
  		const auto sc = rotqby_forward_base();
  		const auto sh = eval(sc - splat_scalar(b));
  
@@ -2207,7 +3157,7 @@ index 9a1e4c790..91cfebaad 100644
  
  		set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(a, (sh & 0xf)));
  	}
-@@ -6773,6 +6830,7 @@ public:
+@@ -6773,6 +6887,7 @@ public:
  
  	void SUMB(spu_opcode_t op)
  	{
@@ -2215,7 +3165,7 @@ index 9a1e4c790..91cfebaad 100644
  		if (m_use_avx512)
  		{
  			const auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
-@@ -6789,6 +6847,7 @@ public:
+@@ -6789,6 +6904,7 @@ public:
  			set_vr(op.rt, shuffle2(ax, bx, 0, 9, 2, 11, 4, 13, 6, 15));
  			return;
  		}
@@ -2223,7 +3173,23 @@ index 9a1e4c790..91cfebaad 100644
  
  #ifdef ARCH_ARM64
  		if (m_use_dotprod)
-@@ -7417,6 +7476,32 @@ public:
+@@ -6812,6 +6928,15 @@ public:
+ 			return;
+ 		}
+ 
++#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
++		// Pairwise widening sums work on baseline NEON without dot-product.
++		const auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
++		const auto ax = bitcast<u16[8]>(uaddlp<u32[4]>(uaddlp<u16[8]>(a)));
++		const auto bx = bitcast<u16[8]>(uaddlp<u32[4]>(uaddlp<u16[8]>(b)));
++		set_vr(op.rt, shuffle2(ax, bx, 0, 8, 2, 10, 4, 12, 6, 14));
++		return;
++#endif
++
+ 		const auto [a, b] = get_vrs<u16[8]>(op.ra, op.rb);
+ 		const auto ahs = eval((a >> 8) + (a & 0xff));
+ 		const auto bhs = eval((b >> 8) + (b & 0xff));
+@@ -7417,6 +7542,32 @@ public:
  			case 2:
  			case 1:
  			{
@@ -2256,7 +3222,7 @@ index 9a1e4c790..91cfebaad 100644
  				set_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, get_vr<u8[16]>(op.rb), get_vr<u8[16]>(op.ra)));
  				return;
  			}
-@@ -7461,6 +7546,21 @@ public:
+@@ -7461,6 +7612,21 @@ public:
  			return;
  		}
  
@@ -2278,7 +3244,7 @@ index 9a1e4c790..91cfebaad 100644
  		const auto c = get_vr<u8[16]>(op.rc);
  
  		if (auto [ok, mask] = get_const_vector(c.value, m_pos); ok)
-@@ -7569,6 +7669,18 @@ public:
+@@ -7569,6 +7735,18 @@ public:
  		[[maybe_unused]] const bool consts_never_allones = known_idx.One[5];
  		[[maybe_unused]] const bool idx_selects_single = known_idx.extractBits(1, 4).isConstant();
  
@@ -2297,7 +3263,7 @@ index 9a1e4c790..91cfebaad 100644
  		const auto a = get_vr<u8[16]>(op.ra);
  		const auto b = get_vr<u8[16]>(op.rb);
  
-@@ -7627,12 +7739,12 @@ public:
+@@ -7627,12 +7805,12 @@ public:
  			cv = eval(c ^ 0xf);
  		}
  
@@ -2315,7 +3281,37 @@ index 9a1e4c790..91cfebaad 100644
  #else
  		const std::optional<value_t<u8[16]>> single_src = (idx_selects_single || (op.ra == op.rb && !m_interp_magn))
  #endif
-@@ -7953,6 +8065,7 @@ public:
+@@ -7675,6 +7853,14 @@ public:
+ 				return;
+ 			}
+ 
++#ifdef RPCS3_IOS
++			if (perm_or_zero_only)
++			{
++				set_vr(op.rt4, tbl(only_src, cv & 0x8f));
++				return;
++			}
++#endif
++
+ 			const auto x = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
+ 			const auto xv = perm_or_zero_only ? eval(splat<u8[16]>(0)) : x;
+ 			const auto cm = eval(cv & 0x8f);
+@@ -7701,6 +7887,14 @@ public:
+ 			return;
+ 		}
+ 
++#ifdef RPCS3_IOS
++		if (perm_or_zero_only)
++		{
++			set_vr(op.rt4, tbl2(av, bv, cv & 0x9f));
++			return;
++		}
++#endif
++
+ 		const auto idx_consts = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
+ 		const auto idx_base = perm_or_zero_only ? eval(splat<u8[16]>(0)) : idx_consts;
+ 		const auto cm = eval(cv & 0x9f);
+@@ -7953,6 +8147,7 @@ public:
  	{
  		const auto known = known_opt.value_or(get_known_fp_class<3>(v, llvm::FPClassTest::fcNan | llvm::FPClassTest::fcInf));
  
@@ -2323,7 +3319,7 @@ index 9a1e4c790..91cfebaad 100644
  		// Avoid pessimation when full clamping isn't needed
  		if (m_use_avx512 && !(known.isKnownNeverNaN() && (known.isKnownNeverPosInfinity() || known.isKnownNeverNegInfinity())))
  		{
-@@ -7960,6 +8073,7 @@ public:
+@@ -7960,6 +8155,7 @@ public:
  			// Normally doesn't cause issues as SNaN frequently gets quieted beforehand
  			return eval(vrangeps(v, fsplat<f32[4]>(std::bit_cast<f32, u32>(0x7f7fffff)), 0x2, 0xff));
  		}
@@ -2331,7 +3327,7 @@ index 9a1e4c790..91cfebaad 100644
  
  		return eval(clamp_positive_smax(clamp_negative_smax(v, known), known));
  	}
-@@ -7993,6 +8107,7 @@ public:
+@@ -7993,6 +8189,7 @@ public:
  			const auto a_sign = (a & splat<u32[4]>(0x80000000));
  			value_t<u32[4]> final_result = eval(splat<u32[4]>(0));
  
@@ -2339,7 +3335,7 @@ index 9a1e4c790..91cfebaad 100644
  			if (m_use_avx512)
  			{
  				value_t<u32[16]> lo_lut;
-@@ -8003,6 +8118,7 @@ public:
+@@ -8003,6 +8200,7 @@ public:
  				final_result = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  			}
  			else
@@ -2347,7 +3343,7 @@ index 9a1e4c790..91cfebaad 100644
  			{
  				for (u32 i = 0; i < 4; i++)
  				{
-@@ -8669,6 +8785,7 @@ public:
+@@ -8669,6 +8867,7 @@ public:
  					return eval(select(fcmp_uno(b != fsplat<f32[4]>(0.)), normal_fma, c));
  				}
  
@@ -2355,7 +3351,7 @@ index 9a1e4c790..91cfebaad 100644
  				// Same number of operations well preventing a serial predicate chain pessimization
  				if (m_use_avx512)
  				{
-@@ -8677,6 +8794,7 @@ public:
+@@ -8677,6 +8876,7 @@ public:
  					const auto cb = vfixupimmps(b, a, splat<u32[4]>(0x00000800u), 0, 0xff);
  					return fma32x4(ca, cb, c, a_known, b_known);
  				}
@@ -2363,7 +3359,7 @@ index 9a1e4c790..91cfebaad 100644
  
  				const auto normal_fma = fma32x4(a, b, c, a_known, b_known);
  				const auto a_cmp = fcmp_uno(a != fsplat<f32[4]>(0.));
-@@ -8689,6 +8807,7 @@ public:
+@@ -8689,6 +8889,7 @@ public:
  			}
  		});
  
@@ -2371,7 +3367,7 @@ index 9a1e4c790..91cfebaad 100644
  		if (m_use_avx512)
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
-@@ -8702,6 +8821,7 @@ public:
+@@ -8702,6 +8903,7 @@ public:
  			});
  		}
  		else
@@ -2379,7 +3375,7 @@ index 9a1e4c790..91cfebaad 100644
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
  			{
-@@ -8910,17 +9030,38 @@ public:
+@@ -8910,17 +9112,38 @@ public:
  
  		if (auto [ok_re, mystery] = match_expr(a, spu_re(MT)); ok_re)
  		{
@@ -2418,7 +3414,7 @@ index 9a1e4c790..91cfebaad 100644
  		}
  
  		if (!m_interp_magn && op.ra == op.rb)
-@@ -9046,6 +9187,7 @@ public:
+@@ -9046,6 +9269,7 @@ public:
  				const auto a_sign = (a & splat<u32[4]>(0x80000000));
  				value_t<u32[4]> b = eval(splat<u32[4]>(0));
  
@@ -2426,7 +3422,7 @@ index 9a1e4c790..91cfebaad 100644
  				if (m_use_avx512)
  				{
  					value_t<u32[16]> lo_lut;
-@@ -9056,6 +9198,7 @@ public:
+@@ -9056,6 +9280,7 @@ public:
  					b = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  				}
  				else
@@ -2434,7 +3430,7 @@ index 9a1e4c790..91cfebaad 100644
  				{
  					for (u32 i = 0; i < 4; i++)
  					{
-@@ -9311,6 +9454,7 @@ public:
+@@ -9311,6 +9536,7 @@ public:
  
  			value_t<s32[4]> r;
  
@@ -2442,7 +3438,7 @@ index 9a1e4c790..91cfebaad 100644
  			if (m_use_avx512)
  			{
  				const auto sc = eval(bitcast<f32[4]>(max(bitcast<s32[4]>(a),splat<s32[4]>(0x0))));
-@@ -9318,6 +9462,7 @@ public:
+@@ -9318,6 +9544,7 @@ public:
  				set_vr(op.rt, r);
  				return;
  			}
@@ -2451,7 +3447,7 @@ index 9a1e4c790..91cfebaad 100644
  			r.value = m_ir->CreateFPToUI(a.value, get_type<s32[4]>());
  			set_vr(op.rt, select(bitcast<s32[4]>(a) > splat<s32[4]>(((32 + 127) << 23) - 1), splat<s32[4]>(-1), r & ~(bitcast<s32[4]>(a) >> 31)));
 diff --git a/rpcs3/Emu/Cell/SPURecompiler.h b/rpcs3/Emu/Cell/SPURecompiler.h
-index faf4082dc..384b531bb 100644
+index faf4082..384b531 100644
 --- a/rpcs3/Emu/Cell/SPURecompiler.h
 +++ b/rpcs3/Emu/Cell/SPURecompiler.h
 @@ -8,6 +8,7 @@
@@ -2517,7 +3513,7 @@ index faf4082dc..384b531bb 100644
  	// Interpreter table (spu_itype -> ptr)
  	static std::array<u64, 256> g_interpreter_table;
 diff --git a/rpcs3/Emu/Cell/SPUThread.cpp b/rpcs3/Emu/Cell/SPUThread.cpp
-index bc9ec5e5b..3a986b8df 100644
+index bc9ec5e..3a986b8 100644
 --- a/rpcs3/Emu/Cell/SPUThread.cpp
 +++ b/rpcs3/Emu/Cell/SPUThread.cpp
 @@ -25,6 +25,10 @@
@@ -2607,8 +3603,30 @@ index bc9ec5e5b..3a986b8df 100644
  	}
  }
  
+diff --git a/rpcs3/Emu/Cell/lv2/sys_memory.cpp b/rpcs3/Emu/Cell/lv2/sys_memory.cpp
+index 01b36d8..403436f 100644
+--- a/rpcs3/Emu/Cell/lv2/sys_memory.cpp
++++ b/rpcs3/Emu/Cell/lv2/sys_memory.cpp
+@@ -447,7 +447,16 @@ error_code sys_memory_container_get_size(cpu_thread& cpu, vm::ptr<sys_memory_inf
+ {
+ 	cpu.state += cpu_flag::wait;
+ 
+-	sys_memory.warning("sys_memory_container_get_size(mem_info=*0x%x, cid=0x%x)", mem_info, cid);
++	// A pure query with no side effects, and a game is free to poll it in a loop: Tales of
++	// Xillia 2 (BLUS31397) called it 20,664 times in a 19 minute session, 5,123 of them inside
++	// a single second. At warning level that is thousands of lines a second onto external
++	// storage, which is the same way the SPU recompiler diagnostics stalled the emulator.
++	//
++	// Nothing is lost: a container's size is fixed at creation, and both
++	// sys_memory_container_create and _destroy already log at warning, so the interesting
++	// events are still on the record. Compare sys_memory_get_user_memory_size above, which
++	// upstream already rate-limits by only logging when the reported values change.
++	sys_memory.trace("sys_memory_container_get_size(mem_info=*0x%x, cid=0x%x)", mem_info, cid);
+ 
+ 	const auto ct = idm::get_unlocked<lv2_memory_container>(cid);
+ 
 diff --git a/rpcs3/Emu/Memory/vm.cpp b/rpcs3/Emu/Memory/vm.cpp
-index e7f55d727..93b76530a 100644
+index e7f55d7..8859f38 100644
 --- a/rpcs3/Emu/Memory/vm.cpp
 +++ b/rpcs3/Emu/Memory/vm.cpp
 @@ -13,6 +13,8 @@
@@ -2620,7 +3638,24 @@ index e7f55d727..93b76530a 100644
  #endif
  #include <deque>
  #include <span>
-@@ -429,10 +431,22 @@ namespace vm
+@@ -105,6 +107,16 @@ namespace vm
+ 		}
+ #endif
+ 
++#if defined(RPCS3_IOS) && defined(ARCH_ARM64)
++		// A hardware hint suffices for short PPU reservation waits. Retain
++		// periodic ISB and the existing scheduler fallback for long waits.
++		if ((wait_iteration & 15) != 15)
++		{
++			asm volatile("yield" ::: "memory");
++			return;
++		}
++#endif
++
+ 		utils::pause();
+ 	}
+ 
+@@ -429,10 +441,22 @@ namespace vm
  					return;
  				}
  
@@ -2645,8 +3680,220 @@ index e7f55d727..93b76530a 100644
  
  				if (cpu_flag::wait - cpu.state)
  				{
+@@ -539,7 +563,7 @@ namespace vm
+ 
+ 		if (range_lock)
+ 		{
+-			perf_meter<"SUSPEND"_u64> perf0;
++			perf_meter<"SUSPEND"_u64> perf0{nullptr};
+ 
+ 			for (auto lock = g_locks.cbegin(), end = lock + g_cfg.core.ppu_threads; lock != end; lock++)
+ 			{
+diff --git a/rpcs3/Emu/RSX/Common/BufferUtils.cpp b/rpcs3/Emu/RSX/Common/BufferUtils.cpp
+index 8b2689b..cc49e82 100644
+--- a/rpcs3/Emu/RSX/Common/BufferUtils.cpp
++++ b/rpcs3/Emu/RSX/Common/BufferUtils.cpp
+@@ -6,6 +6,7 @@
+ #include "util/v128.hpp"
+ #include "util/simd.hpp"
+ 
++#include <algorithm>
+ #include <cstring>
+ #include <vector>
+ 
+@@ -453,9 +454,11 @@ namespace
+ 		using upload_u32 = u64(*)(const be_t<u32>*, u32*, u32, u32);
+ 		static inline upload_u16 upload_arm64_u16 = upload_untouched_neon;
+ 		static inline upload_u32 upload_arm64_u32 = upload_untouched_neon;
++		static inline bool skip_restart_neon_enabled = false;
+ 
+ 		static void configure_arm64(bool enabled) noexcept
+ 		{
++			skip_restart_neon_enabled = enabled;
+ 			upload_arm64_u16 = enabled ? static_cast<upload_u16>(upload_untouched_neon) : upload_untouched_naive<u16>;
+ 			upload_arm64_u32 = enabled ? static_cast<upload_u32>(upload_untouched_neon) : upload_untouched_naive<u32>;
+ 		}
+@@ -562,8 +565,66 @@ namespace
+ 		T max_index = 0;
+ 		u32 written = 0;
+ 		u32 length = ::size32(src);
++		u32 i = 0;
++
++#if defined(ARCH_ARM64)
++		// Disjoint primitives drop restart markers. Most full blocks are marker-free:
++		// byte-swap and reduce them with NEON, while preserving the scalar compaction
++		// path for mixed blocks and short tails. The existing profile switch gates this.
++		if (primitive_restart_impl::skip_restart_neon_enabled)
++		{
++			if constexpr (sizeof(T) == 2)
++			{
++				for (; i + 8 <= length; i += 8)
++				{
++					const uint16x8_t values = vreinterpretq_u16_u8(vrev16q_u8(vreinterpretq_u8_u16(
++						vld1q_u16(reinterpret_cast<const u16*>(src.data()) + i))));
++					if (vmaxvq_u16(vceqq_u16(values, vdupq_n_u16(restart_index))) == 0)
++					{
++						vst1q_u16(dst.data() + written, values);
++						min_index = std::min(min_index, vminvq_u16(values));
++						max_index = std::max(max_index, vmaxvq_u16(values));
++						written += 8;
++					}
++					else
++					{
++						for (u32 lane = 0; lane < 8; ++lane)
++						{
++							const T index = src[i + lane];
++							if (index != restart_index)
++								dst[written++] = min_max(min_index, max_index, index);
++						}
++					}
++				}
++			}
++			else
++			{
++				for (; i + 4 <= length; i += 4)
++				{
++					const uint32x4_t values = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(
++						vld1q_u32(reinterpret_cast<const u32*>(src.data()) + i))));
++					if (vmaxvq_u32(vceqq_u32(values, vdupq_n_u32(restart_index))) == 0)
++					{
++						vst1q_u32(dst.data() + written, values);
++						min_index = std::min(min_index, vminvq_u32(values));
++						max_index = std::max(max_index, vmaxvq_u32(values));
++						written += 4;
++					}
++					else
++					{
++						for (u32 lane = 0; lane < 4; ++lane)
++						{
++							const T index = src[i + lane];
++							if (index != restart_index)
++								dst[written++] = min_max(min_index, max_index, index);
++						}
++					}
++				}
++			}
++		}
++#endif
+ 
+-		for (u32 i = written; i < length; ++i)
++		for (; i < length; ++i)
+ 		{
+ 			T index = src[i];
+ 			if (index != restart_index)
+diff --git a/rpcs3/Emu/RSX/Common/surface_store.h b/rpcs3/Emu/RSX/Common/surface_store.h
+index 8171927..9672672 100644
+--- a/rpcs3/Emu/RSX/Common/surface_store.h
++++ b/rpcs3/Emu/RSX/Common/surface_store.h
+@@ -86,6 +86,38 @@ namespace rsx
+ 		surface_store(const surface_store&) = delete;
+ 
+ 	private:
++		surface_storage_type find_reusable_matching_surface(surface_type ref, u16 width, u16 height, surface_type excluded_surface)
++		{
++			const auto [new_w, new_h] = rsx::apply_resolution_scale<true>(
++				ref->resolution_scaling_config, width, height,
++				ref->template get_surface_width<rsx::surface_metrics::pixels>(),
++				ref->template get_surface_height<rsx::surface_metrics::pixels>());
++
++			for (auto it = invalidated_resources.begin(); it != invalidated_resources.end(); ++it)
++			{
++				auto& surface = *it;
++				if (surface.get() == ref || surface.get() == excluded_surface ||
++					surface->has_refs() || !surface->old_contents.empty())
++				{
++					continue;
++				}
++
++				if (surface->width() != new_w || surface->height() != new_h ||
++					surface->samples() != ref->samples() || surface->get_spp() != ref->get_spp() ||
++					surface->format_class() != ref->format_class() ||
++					!Traits::is_reusable_surface(surface.get(), ref))
++				{
++					continue;
++				}
++
++				auto result = std::move(surface);
++				invalidated_resources.erase(it);
++				return result;
++			}
++
++			return {};
++		}
++
+ 		template <bool is_depth_surface>
+ 		void split_surface_region(command_list_type cmd, u32 address, surface_type prev_surface, u16 width, u16 height, u8 bpp, rsx::surface_antialiasing aa)
+ 		{
+@@ -141,6 +173,10 @@ namespace rsx
+ 					// Memory requirements can be altered when cloning
+ 					free_rsx_memory(Traits::get(sink));
+ 				}
++				else
++				{
++					sink = find_reusable_matching_surface(region.source, region.width, region.height, invalidated);
++				}
+ 
+ 				Traits::clone_surface(cmd, sink, region.source, new_address, region, region.source->resolution_scaling_config);
+ 				allocate_rsx_memory(Traits::get(sink));
+diff --git a/rpcs3/Emu/RSX/GL/GLRenderTargets.h b/rpcs3/Emu/RSX/GL/GLRenderTargets.h
+index aa37fd3..703899d 100644
+--- a/rpcs3/Emu/RSX/GL/GLRenderTargets.h
++++ b/rpcs3/Emu/RSX/GL/GLRenderTargets.h
+@@ -240,6 +240,14 @@ struct gl_render_target_traits
+ 		return result;
+ 	}
+ 
++	static bool is_reusable_surface(const gl::render_target* surface, const gl::render_target* ref)
++	{
++		return surface->id() && surface->get_internal_format() == ref->get_internal_format();
++	}
++
++	static void prepare_for_reuse(gl::command_context&, gl::render_target*)
++	{}
++
+ 	static
+ 	void clone_surface(
+ 		gl::command_context& cmd,
+@@ -247,6 +255,12 @@ struct gl_render_target_traits
+ 		u32 address, barrier_descriptor_t& prev,
+ 		const rsx::surface_scaling_config_t& scaling_config)
+ 	{
++		const bool initialize = !sink || !sink->has_refs();
++		if (sink && initialize)
++		{
++			prepare_for_reuse(cmd, sink.get());
++		}
++
+ 		if (!sink)
+ 		{
+ 			auto internal_format = static_cast<GLenum>(ref->get_internal_format());
+@@ -257,6 +271,13 @@ struct gl_render_target_traits
+ 				ref->get_surface_height<rsx::surface_metrics::pixels>());
+ 
+ 			sink = std::make_unique<gl::render_target>(new_w, new_h, ref->samples(), internal_format, ref->format_class());
++		}
++
++		if (initialize)
++		{
++			sink->reset();
++			sink->msaa_flags = rsx::surface_state_flags::ready;
++			sink->stencil_init_flags = ref->stencil_init_flags;
+ 			sink->add_ref();
+ 
+ 			sink->memory_usage_flags = rsx::surface_usage_flags::storage;
+@@ -272,6 +293,10 @@ struct gl_render_target_traits
+ 			sink->set_rsx_pitch(ref->get_rsx_pitch());
+ 			sink->set_surface_dimensions(prev.width, prev.height, ref->get_rsx_pitch());
+ 			sink->set_native_component_layout(ref->get_native_component_layout());
++			if (sink->resolve_surface)
++			{
++				static_cast<gl::viewable_image*>(sink->resolve_surface.get())->set_native_component_layout(ref->get_native_component_layout());
++			}
+ 			sink->queue_tag(address);
+ 		}
+ 
 diff --git a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
-index 3eaebb152..5ddada03f 100644
+index 3eaebb1..5ddada0 100644
 --- a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
 +++ b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
 @@ -1,139 +1,203 @@
@@ -2982,8 +4229,41 @@ index 3eaebb152..5ddada03f 100644
 +		}
 +	}
 +}
+diff --git a/rpcs3/Emu/RSX/RSXFIFO.cpp b/rpcs3/Emu/RSX/RSXFIFO.cpp
+index a36ce52..1332e74 100644
+--- a/rpcs3/Emu/RSX/RSXFIFO.cpp
++++ b/rpcs3/Emu/RSX/RSXFIFO.cpp
+@@ -65,7 +65,17 @@ namespace rsx
+ 
+ 		void FIFO_control::idle_wait()
+ 		{
+-			if (m_fifo_idle_wfe && m_idle_spins++ >= 8)
++			if (m_idle_spins < 8)
++			{
++				++m_idle_spins;
++#if defined(RPCS3_IOS) && defined(ARCH_ARM64)
++				// Keep a bounded short wait for the next guest PUT before yielding.
++				utils::pause();
++#else
++				std::this_thread::yield();
++#endif
++			}
++			else if (m_fifo_idle_wfe)
+ 			{
+ 				utils::wait_for_event();
+ 			}
+@@ -946,7 +956,8 @@ namespace rsx
+ 			{
+ 				method(m_ctx, reg, value);
+ 
+-				if (state & cpu_flag::again)
++				// The handler and this immediate check run on the RSX thread.
++				if (state.observe() & cpu_flag::again)
+ 				{
+ 					m_ctx->register_state->decode(reg, m_ctx->register_state->latch);
+ 					break;
 diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.cpp b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
-index 63cab28e9..aa9f76dfe 100644
+index 63cab28..aa9f76d 100644
 --- a/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 @@ -20,6 +20,9 @@
@@ -3070,7 +4350,7 @@ index 63cab28e9..aa9f76dfe 100644
  			// Notify the user with HUD notification
  			if (g_cfg.misc.show_shader_compilation_hint)
 diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.h b/rpcs3/Emu/RSX/VK/VKGSRender.h
-index e3817d8e6..1c07ddcfa 100644
+index e3817d8..1c07ddc 100644
 --- a/rpcs3/Emu/RSX/VK/VKGSRender.h
 +++ b/rpcs3/Emu/RSX/VK/VKGSRender.h
 @@ -190,6 +190,12 @@ private:
@@ -3087,7 +4367,7 @@ index e3817d8e6..1c07ddcfa 100644
  	// Offloader thread deadlock recovery
  	rsx::atomic_bitmask_t<flush_queue_state> m_queue_status;
 diff --git a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
-index 85e981c4f..e5024e7b2 100644
+index 85e981c..e5024e7 100644
 --- a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
 @@ -1,164 +1,179 @@
@@ -3722,7 +5002,7 @@ index 85e981c4f..e5024e7b2 100644
 +	}
 +}
 diff --git a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h
-index 712505ee2..8f61bf937 100644
+index 712505e..8f61bf9 100644
 --- a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h
 +++ b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.h
 @@ -3,6 +3,7 @@
@@ -3765,7 +5045,7 @@ index 712505ee2..8f61bf937 100644
  		std::unique_ptr<glsl::program> int_compile_compute_pipe(
  			const VkComputePipelineCreateInfo& create_info,
 diff --git a/rpcs3/Emu/RSX/VK/VKPresent.cpp b/rpcs3/Emu/RSX/VK/VKPresent.cpp
-index a604696f1..b4097610a 100644
+index a604696..b409761 100644
 --- a/rpcs3/Emu/RSX/VK/VKPresent.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKPresent.cpp
 @@ -191,10 +191,11 @@ void VKGSRender::advance_queued_frames()
@@ -3783,8 +5063,69 @@ index a604696f1..b4097610a 100644
  
  	// Texture cache is also double buffered to prevent use-after-free
  	m_texture_cache.on_frame_end();
+diff --git a/rpcs3/Emu/RSX/VK/VKRenderTargets.h b/rpcs3/Emu/RSX/VK/VKRenderTargets.h
+index 3ee5010..2a8b935 100644
+--- a/rpcs3/Emu/RSX/VK/VKRenderTargets.h
++++ b/rpcs3/Emu/RSX/VK/VKRenderTargets.h
+@@ -365,12 +365,30 @@ namespace vk
+ 			return ds;
+ 		}
+ 
++		static bool is_reusable_surface(const vk::render_target* surface, const vk::render_target* ref)
++		{
++			return surface->value && surface->format() == ref->format() &&
++				surface->info.usage == ref->info.usage && surface->info.flags == ref->info.flags;
++		}
++
++		static void prepare_for_reuse(vk::command_buffer&, vk::render_target* surface)
++		{
++			surface->reset_surface_counters();
++			surface->last_rw_access_tag = 0;
++		}
++
+ 		static void clone_surface(
+ 			vk::command_buffer& cmd,
+ 			std::unique_ptr<vk::render_target>& sink, vk::render_target* ref,
+ 			u32 address, barrier_descriptor_t& prev,
+ 			const rsx::surface_scaling_config_t& scaling_config)
+ 		{
++			const bool initialize = !sink || !sink->has_refs();
++			if (sink && initialize)
++			{
++				prepare_for_reuse(cmd, sink.get());
++			}
++
+ 			if (!sink)
+ 			{
+ 				const auto [new_w, new_h] = rsx::apply_resolution_scale<true>(
+@@ -392,6 +410,12 @@ namespace vk
+ 					VMM_ALLOCATION_POOL_SURFACE_CACHE,
+ 					ref->format_class());
+ 
++			}
++
++			if (initialize)
++			{
++				sink->reset();
++				sink->msaa_flags = rsx::surface_state_flags::ready;
+ 				sink->add_ref();
+ 
+ 				sink->sample_layout = ref->sample_layout;
+@@ -401,7 +425,11 @@ namespace vk
+ 				sink->format_info = ref->format_info;
+ 				sink->memory_usage_flags = rsx::surface_usage_flags::storage;
+ 				sink->state_flags = rsx::surface_state_flags::erase_bkgnd;
+-				sink->native_component_map = ref->native_component_map;
++				sink->set_native_component_layout(ref->native_component_map);
++				if (sink->resolve_surface)
++				{
++					sink->resolve_surface->set_native_component_layout(ref->native_component_map);
++				}
+ 				sink->sample_layout = ref->sample_layout;
+ 				sink->stencil_init_flags = ref->stencil_init_flags;
+ 				sink->native_pitch = static_cast<u32>(prev.width) * ref->get_bpp() * ref->samples_x;
 diff --git a/rpcs3/Emu/RSX/VK/VKResourceManager.cpp b/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
-index 95b81bf94..c0713aa86 100644
+index 95b81bf..c0713aa 100644
 --- a/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKResourceManager.cpp
 @@ -47,6 +47,10 @@ namespace vk
@@ -3877,7 +5218,7 @@ index 95b81bf94..c0713aa86 100644
  
  	void vmm_notify_object_allocated(vmm_allocation_pool pool)
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/device.h b/rpcs3/Emu/RSX/VK/vkutils/device.h
-index ffafbae16..f7989148e 100644
+index ffafbae..f798914 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/device.h
 +++ b/rpcs3/Emu/RSX/VK/vkutils/device.h
 @@ -171,6 +171,10 @@ namespace vk
@@ -3892,7 +5233,7 @@ index ffafbae16..f7989148e 100644
  		const VkFormatProperties get_format_properties(VkFormat format) const;
  
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/memory.h b/rpcs3/Emu/RSX/VK/vkutils/memory.h
-index 352aaba0b..ded74578b 100644
+index 352aaba..ded7457 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/memory.h
 +++ b/rpcs3/Emu/RSX/VK/vkutils/memory.h
 @@ -208,7 +208,7 @@ namespace vk
@@ -3905,7 +5246,7 @@ index 352aaba0b..ded74578b 100644
  	u64  vmm_get_application_pool_usage(vmm_allocation_pool pool);
  	bool vmm_handle_memory_pressure(rsx::problem_severity severity);
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/sync.cpp b/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
-index 6d36283ca..9bf28b9bc 100644
+index 6d36283..9bf28b9 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
 +++ b/rpcs3/Emu/RSX/VK/vkutils/sync.cpp
 @@ -8,6 +8,12 @@
@@ -3969,7 +5310,7 @@ index 6d36283ca..9bf28b9bc 100644
  
  	VkResult wait_for_event(event* pEvent, u64 timeout)
 diff --git a/rpcs3/Emu/RSX/rsx_cache.h b/rpcs3/Emu/RSX/rsx_cache.h
-index 625311fc1..11c810976 100644
+index 625311f..11c8109 100644
 --- a/rpcs3/Emu/RSX/rsx_cache.h
 +++ b/rpcs3/Emu/RSX/rsx_cache.h
 @@ -74,6 +74,20 @@ namespace rsx
@@ -4136,8 +5477,45 @@ index 625311fc1..11c810976 100644
  			return result;
  		}
  
+diff --git a/rpcs3/Emu/RSX/rsx_methods.cpp b/rpcs3/Emu/RSX/rsx_methods.cpp
+index 8aea1a4..ab99381 100644
+--- a/rpcs3/Emu/RSX/rsx_methods.cpp
++++ b/rpcs3/Emu/RSX/rsx_methods.cpp
+@@ -1198,11 +1198,6 @@ namespace rsx
+ 		registers[NV406E_SEMAPHORE_OFFSET] = 0x10;
+ 	}
+ 
+-	void rsx_state::decode(u32 reg, u32 value)
+-	{
+-		// Store new value and save previous
+-		latch = std::exchange(registers[reg], value);
+-	}
+ 
+ 	bool rsx_state::test(u32 reg, u32 value) const
+ 	{
+diff --git a/rpcs3/Emu/RSX/rsx_methods.h b/rpcs3/Emu/RSX/rsx_methods.h
+index 7cfb22d..88a56d2 100644
+--- a/rpcs3/Emu/RSX/rsx_methods.h
++++ b/rpcs3/Emu/RSX/rsx_methods.h
+@@ -173,7 +173,15 @@ namespace rsx
+ 
+ 		~rsx_state() = default;
+ 
+-		void decode(u32 reg, u32 value);
++		// Inlined deliberately. run_FIFO calls this once per dispatched method and the body
++		// is a single exchange, but with the definition in rsx_methods.cpp and LTO disabled
++		// project-wide it compiled to a real cross-TU call, which also forced the caller to
++		// reload its context pointer afterwards because the call is opaque.
++		void decode(u32 reg, u32 value)
++		{
++			// Store new value and save previous
++			latch = std::exchange(registers[reg], value);
++		}
+ 
+ 		bool test(u32 reg, u32 value) const;
+ 
 diff --git a/rpcs3/Emu/System.cpp b/rpcs3/Emu/System.cpp
-index 1f53c64b0..e1bef5615 100644
+index 1f53c64..e1bef56 100644
 --- a/rpcs3/Emu/System.cpp
 +++ b/rpcs3/Emu/System.cpp
 @@ -10,6 +10,8 @@
@@ -4391,7 +5769,7 @@ index 1f53c64b0..e1bef5615 100644
  
  		if (g_tty && sys_log.notice)
 diff --git a/rpcs3/Emu/savestate_utils.cpp b/rpcs3/Emu/savestate_utils.cpp
-index f43643d22..68d46f828 100644
+index f43643d..68d46f8 100644
 --- a/rpcs3/Emu/savestate_utils.cpp
 +++ b/rpcs3/Emu/savestate_utils.cpp
 @@ -579,6 +579,33 @@ void clean_savestates(std::string_view title_id, std::string_view boot_path, usz
@@ -4429,7 +5807,7 @@ index f43643d22..68d46f828 100644
  {
  	u8 bytes[4096];
 diff --git a/rpcs3/Emu/savestate_utils.hpp b/rpcs3/Emu/savestate_utils.hpp
-index 130f54b02..4c096c903 100644
+index 130f54b..4c096c9 100644
 --- a/rpcs3/Emu/savestate_utils.hpp
 +++ b/rpcs3/Emu/savestate_utils.hpp
 @@ -53,3 +53,4 @@ std::vector<savestate_file_entry> get_savestate_files(std::string_view title_id,
@@ -4438,7 +5816,7 @@ index 130f54b02..4c096c903 100644
  void clean_savestates(std::string_view title_id, std::string_view boot_path, usz max_files, usz max_files_size);
 +void clean_orphaned_savestate_temps();
 diff --git a/rpcs3/Emu/system_config.h b/rpcs3/Emu/system_config.h
-index 7072922d2..271162a5d 100644
+index 7072922..271162a 100644
 --- a/rpcs3/Emu/system_config.h
 +++ b/rpcs3/Emu/system_config.h
 @@ -107,8 +107,16 @@ struct cfg_root : cfg::node
@@ -4459,7 +5837,7 @@ index 7072922d2..271162a5d 100644
  
  	} vfs{ this };
 diff --git a/rpcs3/Emu/system_progress.cpp b/rpcs3/Emu/system_progress.cpp
-index 52e49516f..580947dc0 100644
+index 52e4951..580947d 100644
 --- a/rpcs3/Emu/system_progress.cpp
 +++ b/rpcs3/Emu/system_progress.cpp
 @@ -196,6 +196,21 @@ void progress_dialog_server::operator()()
@@ -4499,7 +5877,7 @@ index 52e49516f..580947dc0 100644
  			wait_no_update_count++;
  		}
 diff --git a/rpcs3/ios/GameLibrary.cpp b/rpcs3/ios/GameLibrary.cpp
-index f9a5950e1..ef2bf6a15 100644
+index f9a5950..ef2bf6a 100644
 --- a/rpcs3/ios/GameLibrary.cpp
 +++ b/rpcs3/ios/GameLibrary.cpp
 @@ -847,8 +847,14 @@ bool copy_file_with_progress(
@@ -4670,7 +6048,7 @@ index f9a5950e1..ef2bf6a15 100644
  	if (progress)
  	{
 diff --git a/rpcs3/ios/GameLibrary.h b/rpcs3/ios/GameLibrary.h
-index de1b709f1..fd07001d1 100644
+index de1b709..fd07001 100644
 --- a/rpcs3/ios/GameLibrary.h
 +++ b/rpcs3/ios/GameLibrary.h
 @@ -189,6 +189,7 @@ game_delete_result delete_installed_game(std::string_view title_id);
@@ -4681,9 +6059,46 @@ index de1b709f1..fd07001d1 100644
  std::vector<installed_game> installed_games();
  std::optional<installed_game> find_installed_game(std::string_view title_id);
  std::vector<installed_game_patch> installed_game_patches(std::string_view title_id);
+diff --git a/rpcs3/ios/IOSMemoryPressurePolicy.h b/rpcs3/ios/IOSMemoryPressurePolicy.h
+index 6dc9a20..f96effe 100644
+--- a/rpcs3/ios/IOSMemoryPressurePolicy.h
++++ b/rpcs3/ios/IOSMemoryPressurePolicy.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <cstdint>
++#include <limits>
+ 
+ namespace rpcs3::ios
+ {
+@@ -15,6 +16,24 @@ namespace rpcs3::ios
+ 	inline constexpr std::uint64_t process_memory_mib = 0x100000ull;
+ 	inline constexpr std::uint32_t automatic_llvm_compile_threads = 3;
+ 	inline constexpr std::uint32_t savestate_compression_threads = 3;
++	inline constexpr std::uint32_t min_ppu_module_file_budget = 65'536;
++
++	// Limit simultaneous PPU module compilation by the process's current iOS
++	// memory allowance. A single larger module still runs because the queue's
++	// token take is saturating; the floor guarantees forward progress.
++	constexpr std::uint32_t get_ppu_module_file_budget(
++		std::uint64_t physical_bytes, std::uint64_t process_headroom_bytes) noexcept
++	{
++		const std::uint64_t available = process_headroom_bytes < physical_bytes
++			? process_headroom_bytes : physical_bytes;
++		const std::uint64_t budget = available / 4 * 3;
++		const std::uint64_t file_bytes = budget / 2000 + (budget % 2000 != 0);
++		return file_bytes < min_ppu_module_file_budget
++			? min_ppu_module_file_budget
++			: file_bytes > std::numeric_limits<std::uint32_t>::max()
++				? std::numeric_limits<std::uint32_t>::max()
++				: static_cast<std::uint32_t>(file_bytes);
++	}
+ 
+ 	// LLVM compilation has a large transient working set. On iOS, a zero
+ 	// configuration value means a memory-safe automatic limit instead of every
 diff --git a/rpcs3/ios/NeoStationSavestateIO.h b/rpcs3/ios/NeoStationSavestateIO.h
 new file mode 100644
-index 000000000..d6f54a1ed
+index 0000000..d6f54a1
 --- /dev/null
 +++ b/rpcs3/ios/NeoStationSavestateIO.h
 @@ -0,0 +1,41 @@
@@ -4730,7 +6145,7 @@ index 000000000..d6f54a1ed
 +}
 diff --git a/rpcs3/ios/NeoStationSavestateStatus.h b/rpcs3/ios/NeoStationSavestateStatus.h
 new file mode 100644
-index 000000000..006640b01
+index 0000000..006640b
 --- /dev/null
 +++ b/rpcs3/ios/NeoStationSavestateStatus.h
 @@ -0,0 +1,72 @@
@@ -4807,29 +6222,10 @@ index 000000000..006640b01
 +inline operation current;
 +}
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc731..c8ac9f3e0 100644
+index 74a6dc7..c8ac9f3 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
-@@ -1,51 +1,56 @@
- #include "RPCS3IOS.h"
- #include "RPCS3IOSBigPicture.h"
- #include "RPCS3IOSBootProgress.h"
- #include "RPCS3IOSCapabilities.h"
- #include "RPCS3IOSConfigDatabase.h"
- #include "RPCS3IOSContract.h"
- #include "RPCS3IOSDisplay.h"
- #include "RPCS3IOSLocalization.h"
- #include "RPCS3IOSOverlayMedia.h"
- #include "RPCS3IOSPath.h"
- #include "RPCS3IOSPlatform.h"
- #include "RPCS3IOSPerformance.h"
- #include "RAPLicenseContract.h"
- #include "RPCS3IOSRuntimePatches.h"
- #include "RPCS3IOSSaveDialog.h"
- #include "RPCS3IOSResolution.h"
- #include "RPCS3IOSSettings.h"
- #include "RPCS3IOSZcullAccuracy.h"
- #include "FirmwareInstaller.h"
+@@ -20,10 +20,15 @@
  #include "GameLibrary.h"
  #include "GameUpdateManifest.h"
  #include "IOSGSFrame.h"
@@ -4845,51 +6241,7 @@ index 74a6dc731..c8ac9f3e0 100644
  #include "Emu/IdManager.h"
  #include "Emu/Audio/IOS/IOSAudioBackend.h"
  #include "Emu/Audio/Null/null_enumerator.h"
- #include "Emu/Cell/Modules/cellMsgDialog.h"
- #include "Emu/Cell/Modules/cellOskDialog.h"
- #include "Emu/Cell/Modules/cellSaveData.h"
- #include "Emu/Cell/Modules/sceNp.h"
- #include "Emu/Cell/Modules/sceNpTrophy.h"
- #include "Emu/Io/Null/NullKeyboardHandler.h"
- #include "Emu/Io/Null/NullMouseHandler.h"
- #include "Emu/Io/Null/null_camera_handler.h"
- #include "Emu/Io/Null/null_music_handler.h"
- #include "Emu/NP/rpcn_countries.h"
- #include "Emu/NP/np_handler.h"
- #include "Emu/NP/rpcn_client.h"
- #include "Emu/NP/rpcn_config.h"
- #ifdef HAVE_VULKAN
- #include "Emu/RSX/VK/VKGSRender.h"
- #endif
- #include "Emu/system_config.h"
- #include "Emu/system_progress.hpp"
- #include "Emu/savestate_utils.hpp"
- #include "Emu/system_utils.hpp"
- #include "Emu/vfs_config.h"
- #include "Input/pad_thread.h"
-@@ -88,50 +93,52 @@
- #include <atomic>
- #include <chrono>
- #include <cctype>
- #include <cstdlib>
- #include <cstring>
- #include <memory>
- #include <mutex>
- #include <optional>
- #include <string>
- #include <string_view>
- #include <thread>
- #include <unordered_map>
- #include <vector>
- 
- namespace
- {
- std::mutex g_api_mutex;
- std::mutex g_progress_mutex;
- rpcs3::ios::lifecycle g_lifecycle;
- rpcs3::ios::error_store g_last_error;
- rpcs3_ios_config g_config{};
- std::string g_application_support_path;
+@@ -110,6 +115,8 @@ std::string g_application_support_path;
  std::string g_cache_path;
  std::string g_preferred_language = "en";
  bool g_emu_started = false;
@@ -4898,51 +6250,7 @@ index 74a6dc731..c8ac9f3e0 100644
  std::atomic_bool g_accept_display_surfaces = false;
  std::atomic_bool g_accept_pad_state = false;
  rpcs3::ios::display_surface_registry g_display_surface;
- std::shared_ptr<rpcn::rpcn_client> g_rpcn_client;
- bool g_rpcn_config_loaded = false;
- 
- struct ios_savestate
- {
- 	std::string identifier;
- 	std::string path;
- 	u64 size = 0;
- 	s64 modified_time = 0;
- 	bool compatible = false;
- };
- 
- std::vector<ios_savestate> enumerate_title_savestates(
- 	std::string_view title_id,
- 	std::string_view boot_path)
- {
- 	std::vector<ios_savestate> savestates;
- 	const std::vector<savestate_file_entry> files = get_savestate_files(title_id, boot_path);
- 	savestates.reserve(files.size());
- 
- 	for (const auto& file : files)
- 	{
-@@ -290,59 +297,61 @@ struct boot_progress_snapshot
- };
- 
- boot_progress_snapshot capture_boot_progress()
- {
- 	// Renderer construction precedes the native compilation dialog. Prefer its
- 	// independently published stage and do not expose stale module percentages.
- 	if (auto stage = rpcs3::ios::boot_stages().snapshot(); !stage.empty())
- 	{
- 		return boot_progress_snapshot{std::move(stage)};
- 	}
- 
- 	auto read = []()
- 	{
- 		return boot_progress_snapshot{
- 			g_progr_text.operator std::string(),
- 			+g_progr_ftotal,
- 			+g_progr_fdone,
- 			+g_progr_ftotal_bits,
- 			+g_progr_fknown_bits,
- 			+g_progr_ptotal,
- 			+g_progr_pdone,
- 		};
+@@ -312,7 +319,8 @@ boot_progress_snapshot capture_boot_progress()
  	};
  
  	boot_progress_snapshot snapshot = read();
@@ -4952,8 +6260,7 @@ index 74a6dc731..c8ac9f3e0 100644
  	{
  		boot_progress_snapshot next = read();
  		if (next == snapshot)
- 		{
- 			return snapshot;
+@@ -321,6 +329,7 @@ boot_progress_snapshot capture_boot_progress()
  		}
  		snapshot = std::move(next);
  	}
@@ -4961,51 +6268,7 @@ index 74a6dc731..c8ac9f3e0 100644
  }
  
  rpcs3_ios_emulation_state current_emulation_state() noexcept
- {
- 	switch (Emu.GetStatus(false))
- 	{
- 	case system_state::stopped:
- 		return RPCS3_IOS_EMULATION_STATE_STOPPED;
- 	case system_state::loading:
- 		return RPCS3_IOS_EMULATION_STATE_LOADING;
- 	case system_state::ready:
- 		return RPCS3_IOS_EMULATION_STATE_READY;
- 	case system_state::starting:
- 		return RPCS3_IOS_EMULATION_STATE_STARTING;
- 	case system_state::running:
- 		return RPCS3_IOS_EMULATION_STATE_RUNNING;
- 	case system_state::paused:
- 	case system_state::frozen:
- 		return RPCS3_IOS_EMULATION_STATE_PAUSED;
- 	case system_state::stopping:
- 		return RPCS3_IOS_EMULATION_STATE_STOPPING;
- 	}
- 
- 	return RPCS3_IOS_EMULATION_STATE_UNKNOWN;
- }
-@@ -356,130 +365,152 @@ bool wait_for_emulation_stop() noexcept
- 		if (Emu.GetStatus(false) == system_state::stopped)
- 		{
- 			return true;
- 		}
- 		std::this_thread::sleep_for(interval);
- 	}
- 	return Emu.GetStatus(false) == system_state::stopped;
- }
- 
- void set_error(std::string message)
- {
- 	g_last_error.set(std::move(message));
- }
- 
- void emit_log(int32_t level, std::string_view message)
- {
- 	if (!g_config.log_callback)
- 	{
- 		return;
- 	}
- 
- 	const std::string terminated{message};
+@@ -378,6 +387,11 @@ void emit_log(int32_t level, std::string_view message)
  	g_config.log_callback(g_config.user_context, level, terminated.c_str());
  }
  
@@ -5017,7 +6280,7 @@ index 74a6dc731..c8ac9f3e0 100644
  void emit_jit_arena_statistics(std::string_view phase)
  {
  	constexpr usz mib = 1024 * 1024;
- 	const auto stats = rpcs3::ios::jit::get_statistics();
+@@ -385,7 +399,7 @@ void emit_jit_arena_statistics(std::string_view phase)
  	emit_log(4, fmt::format(
  		"iOS JIT arena %s: code live=%u MiB, free=%u MiB (%llu bytes), largest_free=%u MiB (%llu bytes), "
  		"runtime=%u MiB, peak=%u MiB; data live=%u MiB, free=%u MiB (%llu bytes), "
@@ -5026,15 +6289,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		phase,
  		stats.live_code_bytes / mib,
  		stats.free_code_bytes / mib,
- 		static_cast<u64>(stats.free_code_bytes),
- 		stats.largest_free_code_bytes / mib,
- 		static_cast<u64>(stats.largest_free_code_bytes),
- 		stats.runtime_code_bytes / mib,
- 		stats.peak_code_bytes / mib,
- 		stats.live_data_bytes / mib,
- 		stats.free_data_bytes / mib,
- 		static_cast<u64>(stats.free_data_bytes),
- 		stats.largest_free_data_bytes / mib,
+@@ -401,7 +415,8 @@ void emit_jit_arena_statistics(std::string_view phase)
  		static_cast<u64>(stats.largest_free_data_bytes),
  		stats.runtime_data_bytes / mib,
  		stats.peak_data_bytes / mib,
@@ -5044,46 +6299,7 @@ index 74a6dc731..c8ac9f3e0 100644
  }
  
  class callback_log_listener final : public logs::listener
- {
- public:
- 	void log(u64, const logs::message& message, std::string_view prefix, std::string_view text) override
- 	{
- 		std::string formatted;
- 		if (!prefix.empty())
- 		{
- 			fmt::append(formatted, "%s: ", prefix);
- 		}
- 		formatted.append(text);
- 		emit_log(static_cast<int32_t>(static_cast<logs::level>(message)), formatted);
- 	}
- };
- 
- std::unique_ptr<callback_log_listener> g_log_listener;
- 
- class settings_state_guard
- {
- public:
- 	settings_state_guard()
- 		: m_settings(g_cfg.to_string())
- 		, m_name(g_cfg.name)
- 	{
- 	}
- 
- 	~settings_state_guard()
- 	{
- 		g_cfg.from_default();
- 		if (!g_cfg.from_string(m_settings))
- 		{
- 			emit_log(1, "Unable to restore the in-memory RPCS3 settings snapshot");
- 		}
- 		g_cfg.name = m_name;
- 	}
- 
- 	settings_state_guard(const settings_state_guard&) = delete;
- 	settings_state_guard& operator=(const settings_state_guard&) = delete;
- 
- private:
- 	std::string m_settings;
+@@ -448,16 +463,32 @@ private:
  	std::string m_name;
  };
  
@@ -5120,51 +6336,7 @@ index 74a6dc731..c8ac9f3e0 100644
  }
  
  bool apply_database_settings_for_api(std::string_view title_id)
- {
- 	const std::string database_config =
- 		rpcs3::ios::shared_config_database().config_for(title_id);
- 	if (database_config.empty())
- 	{
- 		return true;
- 	}
- 	if (g_cfg.from_string(database_config))
- 	{
- 		return true;
- 	}
- 	set_error(fmt::format(
- 		"Unable to apply title configuration database settings for %s",
- 		title_id));
- 	return false;
- }
- 
- rpcs3_ios_status validate_game_settings_target(const char* title_id, rpcs3::ios::installed_game* installed_game = nullptr)
- {
- 	if (!title_id || !title_id[0])
- 	{
- 		set_error("A game title ID is required");
-@@ -1245,106 +1276,169 @@ bool persist_rpcn_profile(std::string_view username, std::string password, std::
- 	if (!g_cfg_rpcn.save())
- 	{
- 		return false;
- 	}
- 	g_cfg_rpcn.set_runtime_credentials(std::move(password), std::move(token));
- 	return true;
- }
- }
- 
- namespace rpcs3::ios
- {
- void prepare_big_picture_game_boot() noexcept
- {
- 	prepare_rpcn_for_guest_boot();
- 	Emu.SetForceBoot(true);
- }
- }
- 
- extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
- {
- 	return RPCS3_IOS_ABI_VERSION;
- }
+@@ -1267,15 +1298,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
  
  extern "C" const char* rpcs3_ios_build_info(void) noexcept
  {
@@ -5183,13 +6355,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		return RPCS3_IOS_INVALID_STATE;
  	}
  
- 	if (const auto result = validate_config(config); result != RPCS3_IOS_OK)
- 	{
- 		return result;
- 	}
- 	if (const auto result = g_lifecycle.begin_initialize(); result != RPCS3_IOS_OK)
- 	{
- 		set_error("RPCS3Core initialization state transition failed");
+@@ -1289,40 +1320,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		return result;
  	}
  
@@ -5316,51 +6482,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		// A developer can request one bounded SPU profile through the injected
  		// cache root. Consume the request so subsequent launches stay unchanged.
  		const std::string profile_request = fs::get_cache_dir() + "jit-profile.once";
- 		if (fs::file request{profile_request, fs::read}; request && request.size() == 1)
- 		{
- 			char enabled = 0;
- 			if (request.read(&enabled, 1) == 1 && enabled == '1' && fs::remove_file(profile_request))
- 			{
- 				const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
- 					std::chrono::system_clock::now().time_since_epoch()).count();
- 				const std::string stem = fs::get_cache_dir() + "spu-jit-profile-" + std::to_string(timestamp);
- 				if (jit_profile::spu_writer().open(stem,
- 					reinterpret_cast<std::uintptr_t>(rpcs3::ios::jit::runtime_memory(true)), rpcs3::ios::jit::arena_capacity()))
- 				{
- 					emit_log(4, "SPU JIT diagnostic capture enabled: " + stem +
- 						".{map,bin} (v1; at most 65536 symbols, 8 MiB map and 32 MiB code; finalized snapshots, later patches not recorded)");
- 				}
- 				else
- 				{
- 					emit_log(3, "SPU JIT diagnostic capture could not create its output files; continuing without capture");
- 				}
- 			}
- 		}
- 
- 		g_preferred_language = rpcs3::ios::preferred_language_identifier();
-@@ -1363,62 +1457,61 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
- 		else
- 		{
- 			emit_log(3, "Ignoring invalid cached title configuration database: " + database_result.detail);
- 		}
- 		rpcs3::ios::shared_pad_states().clear();
- 		rpcs3::ios::shared_pad_feedback().clear();
- 		const auto jit_stats = rpcs3::ios::jit::get_statistics();
- 		if (jit_stats.backend == rpcs3::ios::jit::arena_backend::universal_mirrored)
- 		{
- 			emit_log(4, fmt::format(
- 				"Prepared and sealed a %u MiB Universal JIT arena using the %s capacity policy in %u bounded command-1 chunks; StikDebug may now disconnect",
- 				jit_stats.capacity / (1024 * 1024),
- 				jit_stats.expanded ? "expanded" : "standard",
- 				jit_stats.preparation_chunks));
- 		}
- 		else
- 		{
- 			emit_log(4, fmt::format(
- 				"Prepared and sealed a %u MiB legacy debugger-enabled JIT arena using the %s capacity policy; no Universal commands were required",
- 				jit_stats.capacity / (1024 * 1024),
- 				jit_stats.expanded ? "expanded" : "standard"));
- 		}
+@@ -1385,8 +1479,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		Emu.SetCallbacks(make_callbacks());
  		Emu.SetSupportedRenderers({video_renderer::vulkan});
  		Emu.SetDefaultRenderer(video_renderer::vulkan);
@@ -5369,10 +6491,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		Emu.SetDefaultGraphicsAdapter("iOS Metal GPU");
  		Emu.SetHasGui(false);
  		Emu.SetHeadless(false);
- 		Emu.SetUsr("00000001");
- 		g_emu_started = true;
- 		Emu.Init();
- 		g_lifecycle.finish_initialize(true);
+@@ -1397,6 +1489,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		g_accept_display_surfaces = true;
  		g_accept_pad_state = true;
  		emit_log(4, "RPCS3 Emu.Init completed with the iOS Vulkan/MoltenVK and RemoteIO frontend");
@@ -5380,51 +6499,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		emit_jit_arena_statistics("after core initialization");
  		return RPCS3_IOS_OK;
  	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception during Emu.Init");
- 	}
- 
- 	g_accept_display_surfaces = false;
- 	g_accept_pad_state = false;
- 	rpcs3::ios::shared_pad_states().clear();
- 	rpcs3::ios::shared_pad_feedback().clear();
- 	g_lifecycle.finish_initialize(false);
- 	return RPCS3_IOS_CORE_INIT_FAILED;
- }
- 
- extern "C" rpcs3_ios_status rpcs3_ios_update_config_database(
- 	const void* content,
- 	size_t content_size) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
-@@ -1497,50 +1590,51 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
- 	try
- 	{
- 		jit_compiler compiler({}, "generic");
- 		auto module = std::make_unique<llvm::Module>("rpcs3_ios_self_test", compiler.get_context());
- 		module->setTargetTriple(llvm::Triple(jit_compiler::triple2()));
- 		auto* type = llvm::FunctionType::get(
- 			llvm::Type::getInt64Ty(compiler.get_context()),
- 			{llvm::Type::getInt64Ty(compiler.get_context())},
- 			false);
- 		auto* function = llvm::Function::Create(type, llvm::Function::ExternalLinkage, "rpcs3_ios_test_function", *module);
- 		auto* block = llvm::BasicBlock::Create(compiler.get_context(), "entry", function);
- 		llvm::IRBuilder<> builder(block);
- 		auto* argument = function->getArg(0);
- 		auto* multiplied = builder.CreateMul(argument, llvm::ConstantInt::get(argument->getType(), 3));
- 		builder.CreateRet(builder.CreateAdd(multiplied, llvm::ConstantInt::get(argument->getType(), 7)));
- 
- 		std::string error;
- 		if (!compiler.try_add(std::move(module), error) || !compiler.try_fin(error))
- 		{
- 			set_error("LLVM compilation failed: " + error);
- 			return RPCS3_IOS_SELF_TEST_FAILED;
- 		}
+@@ -1519,6 +1612,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
  
  		using test_function = uint64_t (*)(uint64_t);
  		const auto function_address = compiler.get("rpcs3_ios_test_function");
@@ -5432,51 +6507,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		if (!function_address)
  		{
  			set_error("LLVM did not publish the self-test function");
- 			return RPCS3_IOS_SELF_TEST_FAILED;
- 		}
- 
- 		const uint64_t actual = reinterpret_cast<test_function>(function_address)(input);
- 		const uint64_t expected = input * 3 + 7;
- 		if (actual != expected)
- 		{
- 			set_error(fmt::format("LLVM self-test mismatch: expected %u, received %u", expected, actual));
- 			return RPCS3_IOS_SELF_TEST_FAILED;
- 		}
- 
- 		*output = actual;
- 		emit_log(4, "RPCS3 LLVM JIT self-test passed");
- 		return RPCS3_IOS_OK;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception during the LLVM self-test");
-@@ -3139,51 +3233,51 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
- 	if (const auto result = rpcs3::ios::validate_idle_operation_contract(
- 		g_lifecycle.state(), current_emulation_state()); result != RPCS3_IOS_OK)
- 	{
- 		set_error("Stop emulation before enumerating game settings");
- 		return result;
- 	}
- 	rpcs3::ios::installed_game game;
- 	if (const auto result = validate_game_settings_target(title_id, &game); result != RPCS3_IOS_OK)
- 	{
- 		return result;
- 	}
- 
- 	try
- 	{
- 		settings_state_guard state_guard;
- 		setting_recommendations recommendations;
- 		if (!collect_database_recommendations(title_id, recommendations))
- 		{
- 			set_error(fmt::format(
- 				"Unable to load title configuration database recommendations for %s",
- 				title_id));
- 			return RPCS3_IOS_CONFIG_DATABASE_INVALID;
+@@ -3161,7 +3255,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
  		}
  		bool custom_config = false;
  		const bool loaded = load_settings_for_api(title_id, custom_config);
@@ -5485,51 +6516,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		if (!loaded)
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
- 		}
- 		normalize_current_game_resolution(game.resolution);
- 		enumerate_current_settings(
- 			setting_callback,
- 			option_callback,
- 			user_context,
- 			rpcs3::ios::setting_context::game,
- 			game.resolution,
- 			&recommendations);
- 		return RPCS3_IOS_OK;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while enumerating game settings");
- 	}
- 	return RPCS3_IOS_INTERNAL_ERROR;
- }
- 
-@@ -3211,56 +3305,59 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
- 	}
- 
- 	try
- 	{
- 		settings_state_guard state_guard;
- 		bool has_custom_config = false;
- 		if (!load_settings_for_api(title_id, has_custom_config))
- 		{
- 			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
- 		}
- 		normalize_current_game_resolution(game.resolution);
- 		if (std::string_view{key} == "gpu.resolution")
- 		{
- 			const std::vector<std::string> options = supported_game_resolution_options(game.resolution);
- 			if (std::ranges::find(options, value) == options.end())
- 			{
- 				set_error(fmt::format("The game does not support Default Resolution '%s'", value));
- 				return RPCS3_IOS_SETTING_INVALID;
- 			}
- 		}
- 		if (const auto result = update_current_setting(
- 			key, value, rpcs3::ios::setting_context::game); result != RPCS3_IOS_OK)
+@@ -3233,12 +3327,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
  		{
  			return result;
  		}
@@ -5548,51 +6535,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		return RPCS3_IOS_OK;
  	}
  	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while changing a game setting");
- 	}
- 	return RPCS3_IOS_INTERNAL_ERROR;
- }
- 
- extern "C" rpcs3_ios_status rpcs3_ios_reset_game_settings(const char* title_id) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
- 	if (const auto result = rpcs3::ios::validate_idle_operation_contract(
- 		g_lifecycle.state(), current_emulation_state()); result != RPCS3_IOS_OK)
- 	{
- 		set_error("Stop emulation before resetting game settings");
- 		return result;
- 	}
- 	if (const auto result = validate_game_settings_target(title_id); result != RPCS3_IOS_OK)
- 	{
- 		return result;
-@@ -3288,51 +3385,52 @@ extern "C" rpcs3_ios_status rpcs3_ios_reset_game_settings(const char* title_id)
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while resetting game settings");
- 	}
- 	return RPCS3_IOS_INTERNAL_ERROR;
- }
- 
- extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
- 	if (const auto result = rpcs3::ios::validate_idle_operation_contract(
- 		g_lifecycle.state(), current_emulation_state()); result != RPCS3_IOS_OK)
- 	{
- 		set_error("Stop emulation before removing game settings");
- 		return result;
- 	}
- 	if (const auto result = validate_game_settings_target(title_id); result != RPCS3_IOS_OK)
- 	{
- 		return result;
- 	}
+@@ -3310,7 +3407,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
  
  	try
  	{
@@ -5602,51 +6545,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		{
  			set_error(fmt::format("Unable to remove the custom configuration for %s", title_id));
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
- 		}
- 		emit_log(4, fmt::format("Removed the custom configuration for %s; the game now uses global settings", title_id));
- 		return RPCS3_IOS_OK;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while removing game settings");
- 	}
- 	return RPCS3_IOS_INTERNAL_ERROR;
- }
- 
- extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings_presets(
- 	const char* title_id,
- 	rpcs3_ios_game_settings_preset_callback callback,
- 	void* user_context) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
- 	if (!callback)
-@@ -3366,54 +3464,50 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings_presets(
- extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
- 	const char* title_id,
- 	const char* name) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
- 	if (!name)
- 	{
- 		set_error("A settings preset name is required");
- 		return RPCS3_IOS_INVALID_ARGUMENT;
- 	}
- 	rpcs3::ios::installed_game game;
- 	if (const auto result = validate_game_settings_preset_operation(title_id, "saving", &game);
- 		result != RPCS3_IOS_OK)
- 	{
- 		return result;
- 	}
- 
- 	try
- 	{
- 		settings_state_guard state_guard;
- 		bool has_custom_config = false;
- 		if (!load_settings_for_api(title_id, has_custom_config))
+@@ -3388,10 +3486,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
  		}
@@ -5657,51 +6556,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		normalize_current_game_resolution(game.resolution);
  		const auto result = finish_game_settings_preset_result(
  			rpcs3::ios::save_current_game_settings_preset(title_id, name));
- 		if (result == RPCS3_IOS_OK)
- 		{
- 			emit_log(4, fmt::format("Saved the active settings for %s as preset '%s'", title_id, name));
- 		}
- 		return result;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while saving a game-settings preset");
- 	}
- 	return RPCS3_IOS_INTERNAL_ERROR;
- }
- 
- extern "C" rpcs3_ios_status rpcs3_ios_apply_game_settings_preset(
- 	const char* title_id,
- 	const char* name) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
-@@ -4422,124 +4516,145 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_vsh(void) noexcept
- 			set_error(fmt::format("XMB boot failed: %s", result));
- 			return RPCS3_IOS_BOOT_FAILED;
- 		}
- 
- 		emit_log(4, "PlayStation 3 XMB boot request completed");
- 		return RPCS3_IOS_OK;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while booting the PlayStation 3 XMB");
- 	}
- 
- 	Emu.SetForceBoot(false);
- 	return RPCS3_IOS_BOOT_FAILED;
- }
- 
- extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
- 	const char* title_id,
+@@ -4444,6 +4538,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  	const char* savestate_id) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -5714,42 +6569,7 @@ index 74a6dc731..c8ac9f3e0 100644
  	if (!title_id || !title_id[0])
  	{
  		set_error("An installed title ID is required");
- 		return RPCS3_IOS_INVALID_ARGUMENT;
- 	}
- 	const std::string requested_title_id{title_id};
- 	if (requested_title_id.size() > 32 ||
- 		!std::all_of(requested_title_id.begin(), requested_title_id.end(), [](unsigned char character)
- 		{
- 			return std::isalnum(character) || character == '_' || character == '-';
- 		}))
- 	{
- 		set_error("The installed title ID contains invalid characters");
- 		return RPCS3_IOS_INVALID_ARGUMENT;
- 	}
- 	const std::string requested_savestate_id = savestate_id ? savestate_id : "";
- 	if (requested_savestate_id.size() > 255)
- 	{
- 		set_error("The savestate identifier is invalid");
- 		return RPCS3_IOS_INVALID_ARGUMENT;
- 	}
- 	if (const auto result = rpcs3::ios::validate_idle_operation_contract(
- 		g_lifecycle.state(), current_emulation_state()); result != RPCS3_IOS_OK)
- 	{
- 		set_error("RPCS3Core must be ready and emulation stopped before booting a game");
- 		return result;
- 	}
- 	if (!g_display_surface.snapshot().valid())
- 	{
- 		set_error("Attach a valid iOS Metal display surface before booting a game");
- 		return RPCS3_IOS_INVALID_STATE;
- 	}
- 
- 	try
- 	{
- 		const auto game = rpcs3::ios::find_installed_game(requested_title_id);
- 		if (!game)
- 		{
- 			set_error(fmt::format("Installed game not found: %s", requested_title_id));
+@@ -4486,7 +4586,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  			return RPCS3_IOS_GAME_NOT_FOUND;
  		}
  
@@ -5788,16 +6608,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		if (!requested_savestate_id.empty())
  		{
  			const auto savestates = enumerate_title_savestates(game->title_id, game->path);
- 			const auto selected = std::ranges::find(
- 				savestates, requested_savestate_id, &ios_savestate::identifier);
- 			if (selected == savestates.end())
- 			{
- 				set_error(fmt::format("The selected save state was not found for %s", game->title));
- 				return RPCS3_IOS_BOOT_FAILED;
- 			}
- 			if (!selected->compatible)
- 			{
- 				set_error(fmt::format("The selected save state is not compatible with this RPCS3 build: %s", game->title));
+@@ -4503,21 +4633,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  				return RPCS3_IOS_BOOT_FAILED;
  			}
  			boot_path = selected->path;
@@ -5819,51 +6630,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		}
  
  		if (requested_savestate_id.empty())
- 		{
- 			emit_log(4, fmt::format("Booting installed game %s (%s)", game->title, game->title_id));
- 		}
- 		else
- 		{
- 			emit_log(4, fmt::format("Booting selected save state for %s (%s): %s",
- 				game->title, game->title_id, requested_savestate_id));
- 		}
- 		prepare_rpcn_for_guest_boot();
- 		Emu.DeactivateBigPictureMode();
- 		Emu.SetForceBoot(true);
- 		const game_boot_result result = Emu.BootGame(boot_path, game->title_id);
- 		if (result != game_boot_result::no_errors)
- 		{
- 			Emu.SetForceBoot(false);
- 			set_error(fmt::format("Game boot failed: %s", result));
- 			return RPCS3_IOS_BOOT_FAILED;
- 		}
- 
- 		emit_log(4, requested_savestate_id.empty()
- 			? fmt::format("Installed game boot request completed: %s", game->title_id)
- 			: fmt::format("Save-state boot request completed: %s", game->title_id));
-@@ -4708,53 +4823,223 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
- 	try
- 	{
- 		emit_log(4, "Resuming the current PlayStation 3 emulation session");
- 		Emu.Resume();
- 		if (Emu.GetStatus(false) != system_state::running)
- 		{
- 			set_error("RPCS3 did not return to the running state");
- 			return RPCS3_IOS_INVALID_STATE;
- 		}
- 
- 		emit_log(4, "PlayStation 3 emulation resumed");
- 		return RPCS3_IOS_OK;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while resuming PlayStation 3 emulation");
- 	}
- 
+@@ -4730,9 +4845,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
  	return RPCS3_IOS_INTERNAL_ERROR;
  }
  
@@ -6043,51 +6810,7 @@ index 74a6dc731..c8ac9f3e0 100644
  	if (g_lifecycle.state() != RPCS3_IOS_STATE_READY)
  	{
  		set_error("RPCS3Core must be ready before stopping emulation");
- 		return RPCS3_IOS_INVALID_STATE;
- 	}
- 
- 	try
- 	{
- 		// An explicit wrapper stop leaves the full-screen session. It must not
- 		// trigger upstream's automatic game-to-Big-Picture return callback.
- 		Emu.DeactivateBigPictureMode();
- 		Emu.SetForceBoot(false);
- 		if (Emu.GetStatus(false) == system_state::stopped)
- 		{
- 			return RPCS3_IOS_OK;
- 		}
- 
- 		emit_log(4, "Stopping the current PlayStation 3 emulation session");
- 		Emu.GracefulShutdown(false, false);
- 		if (!wait_for_emulation_stop())
- 		{
- 			set_error("RPCS3 did not reach the stopped state");
- 			return RPCS3_IOS_STOP_FAILED;
- 		}
- 
-@@ -4762,50 +5047,56 @@ extern "C" rpcs3_ios_status rpcs3_ios_stop_emulation(void) noexcept
- 		emit_jit_arena_statistics("after emulation stop");
- 		emit_log(4, "PlayStation 3 emulation stopped; RPCS3Core remains initialized");
- 		return RPCS3_IOS_OK;
- 	}
- 	catch (const std::exception& error)
- 	{
- 		set_error(error.what());
- 	}
- 	catch (...)
- 	{
- 		set_error("Unknown exception while stopping PlayStation 3 emulation");
- 	}
- 
- 	return RPCS3_IOS_STOP_FAILED;
- }
- 
- extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
- {
- 	std::lock_guard lock(g_api_mutex);
- 	return g_lifecycle.state();
- }
- 
+@@ -4784,6 +5069,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
  extern "C" rpcs3_ios_status rpcs3_ios_shutdown(void) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -6100,30 +6823,8 @@ index 74a6dc731..c8ac9f3e0 100644
  	bool should_run = false;
  	if (const auto result = g_lifecycle.begin_shutdown(should_run); result != RPCS3_IOS_OK)
  	{
- 		set_error("RPCS3Core is busy");
- 		return result;
- 	}
- 	if (!should_run)
- 	{
- 		return RPCS3_IOS_OK;
- 	}
- 	g_accept_display_surfaces = false;
- 	g_accept_pad_state = false;
- 	rpcs3::ios::shared_pad_states().clear();
- 	rpcs3::ios::shared_pad_feedback().clear();
- 	try
- 	{
- 		if (g_emu_started)
- 		{
- 			Emu.DeactivateBigPictureMode();
- 			Emu.SetForceBoot(false);
- 			if (Emu.GetStatus(false) != system_state::stopped)
- 			{
- 				Emu.GracefulShutdown(false, false);
- 				if (!wait_for_emulation_stop())
- 				{
 diff --git a/rpcs3/ios/RPCS3IOS.exports b/rpcs3/ios/RPCS3IOS.exports
-index d7529ab6a..0c88612c9 100644
+index d7529ab..0c88612 100644
 --- a/rpcs3/ios/RPCS3IOS.exports
 +++ b/rpcs3/ios/RPCS3IOS.exports
 @@ -72,3 +72,7 @@ _rpcs3_ios_stop_emulation
@@ -6135,7 +6836,7 @@ index d7529ab6a..0c88612c9 100644
 +_neostation_rpcs3_ios_get_savestate_status
 +_neostation_rpcs3_ios_save_state_slot
 diff --git a/rpcs3/ios/RPCS3IOS.h b/rpcs3/ios/RPCS3IOS.h
-index 20526d090..5be3a76bb 100644
+index 20526d0..5be3a76 100644
 --- a/rpcs3/ios/RPCS3IOS.h
 +++ b/rpcs3/ios/RPCS3IOS.h
 @@ -139,6 +139,7 @@ typedef struct rpcs3_ios_config
@@ -6147,7 +6848,7 @@ index 20526d090..5be3a76bb 100644
      uint32_t reserved;
  } rpcs3_ios_config;
 diff --git a/rpcs3/ios/RPCS3IOSContract.h b/rpcs3/ios/RPCS3IOSContract.h
-index b4602fea9..37a708aa6 100644
+index b4602fe..37a708a 100644
 --- a/rpcs3/ios/RPCS3IOSContract.h
 +++ b/rpcs3/ios/RPCS3IOSContract.h
 @@ -34,7 +34,9 @@ inline rpcs3_ios_status validate_config_contract(const rpcs3_ios_config* config)
@@ -6175,7 +6876,7 @@ index b4602fea9..37a708aa6 100644
  
  	rpcs3_ios_status begin_content_install() noexcept
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.cpp b/rpcs3/ios/RPCS3IOSPerformance.cpp
-index d8005424b..8e15f0d56 100644
+index d800542..8e15f0d 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.cpp
 +++ b/rpcs3/ios/RPCS3IOSPerformance.cpp
 @@ -2,12 +2,24 @@
@@ -6852,7 +7553,7 @@ index d8005424b..8e15f0d56 100644
  {
  #ifdef RPCS3_IOS
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.h b/rpcs3/ios/RPCS3IOSPerformance.h
-index 88392e05f..568d03679 100644
+index 88392e0..568d036 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.h
 +++ b/rpcs3/ios/RPCS3IOSPerformance.h
 @@ -15,6 +15,25 @@ void reset_performance_metrics();
@@ -6882,7 +7583,7 @@ index 88392e05f..568d03679 100644
  // limit. The query is intentionally cheap enough for frame-boundary sampling.
  u64 available_process_memory_headroom() noexcept;
 diff --git a/rpcs3/ios/RPCS3IOSSettings.cpp b/rpcs3/ios/RPCS3IOSSettings.cpp
-index b7b047471..0d698bcc8 100644
+index b7b0474..0d698bc 100644
 --- a/rpcs3/ios/RPCS3IOSSettings.cpp
 +++ b/rpcs3/ios/RPCS3IOSSettings.cpp
 @@ -1,5 +1,8 @@
@@ -7069,7 +7770,7 @@ index b7b047471..0d698bcc8 100644
  {
  	switch (error)
 diff --git a/rpcs3/ios/RPCS3IOSSettings.h b/rpcs3/ios/RPCS3IOSSettings.h
-index 74abaa0cb..b00e89473 100644
+index 74abaa0..b00e894 100644
 --- a/rpcs3/ios/RPCS3IOSSettings.h
 +++ b/rpcs3/ios/RPCS3IOSSettings.h
 @@ -75,6 +75,10 @@ bool save_global_settings() noexcept;
@@ -7084,10 +7785,18 @@ index 74abaa0cb..b00e89473 100644
  std::string_view settings_load_error_detail(settings_load_error error) noexcept;
  game_settings_preset_result enumerate_game_settings_presets(
 diff --git a/rpcs3/ios/tests/JITArenaAllocatorTests.cpp b/rpcs3/ios/tests/JITArenaAllocatorTests.cpp
-index 22e57cfff..397cd0e4e 100644
+index 22e57cf..0f73a7a 100644
 --- a/rpcs3/ios/tests/JITArenaAllocatorTests.cpp
 +++ b/rpcs3/ios/tests/JITArenaAllocatorTests.cpp
-@@ -15,6 +15,46 @@ int main()
+@@ -2,6 +2,7 @@
+ #include "../../../Utilities/JITIOSLayoutPolicy.h"
+ 
+ #include <cassert>
++#include <vector>
+ 
+ int main()
+ {
+@@ -15,6 +16,46 @@ int main()
  	static_assert(choose_arena_capacity(8ull * 1024 * mib) == 512 * mib);
  	static_assert(choose_arena_capacity(8'000'000'000ull) == 448 * mib);
  	static_assert(choose_arena_capacity(8'000'000'000ull, true) == 512 * mib);
@@ -7134,9 +7843,66 @@ index 22e57cfff..397cd0e4e 100644
  
  	arena_allocator allocator{1024};
  	arena_range low;
+@@ -45,5 +86,56 @@ int main()
+ 	assert(!allocator.allocate_lowest(1, 1, low));
+ 	assert(allocator.release(whole.offset, whole.size));
+ 	assert(allocator.free_bytes() == 1024);
++
++	// Compare the cached free-byte count with an independent occupancy model
++	// through aligned allocations, split ranges, failed requests and coalescing.
++	arena_allocator churn{4096};
++	std::vector<arena_range> live;
++	std::vector<bool> occupied(4096, false);
++	u32 seed = 0x9e3779b9;
++	for (u32 step = 0; step < 4000; ++step)
++	{
++		seed = seed * 1664525 + 1013904223;
++		if (!live.empty() && (seed & 3) == 0)
++		{
++			const usz slot = (seed >> 8) % live.size();
++			const arena_range range = live[slot];
++			assert(churn.release(range.offset, range.size));
++			for (usz i = range.offset; i < range.offset + range.size; ++i)
++			{
++				assert(occupied[i]);
++				occupied[i] = false;
++			}
++			live.erase(live.begin() + slot);
++		}
++		else
++		{
++			arena_range range;
++			const usz size = 1 + (seed >> 12) % 87;
++			const usz alignment = usz{1} << ((seed >> 24) % 7);
++			if ((seed & 4 ? churn.allocate_highest(size, alignment, range)
++			              : churn.allocate_lowest(size, alignment, range)))
++			{
++				assert(range.offset + range.size <= occupied.size());
++				for (usz i = range.offset; i < range.offset + range.size; ++i)
++				{
++					assert(!occupied[i]);
++					occupied[i] = true;
++				}
++				live.push_back(range);
++			}
++		}
++		usz free = 0;
++		usz longest = 0;
++		usz run = 0;
++		for (const bool used : occupied)
++		{
++			free += !used;
++			run = used ? 0 : run + 1;
++			longest = std::max(longest, run);
++		}
++		assert(churn.free_bytes() == free);
++		assert(churn.largest_free_bytes() == longest);
++	}
+ 	return 0;
+ }
 diff --git a/rpcs3/ios/tests/NativeProgressCompletionTests.cpp b/rpcs3/ios/tests/NativeProgressCompletionTests.cpp
 new file mode 100644
-index 000000000..cc8d484f3
+index 0000000..cc8d484
 --- /dev/null
 +++ b/rpcs3/ios/tests/NativeProgressCompletionTests.cpp
 @@ -0,0 +1,58 @@
@@ -7199,7 +7965,7 @@ index 000000000..cc8d484f3
 +		{"", 0, 0, 0, 0, 9, 9}}, true, 2);
 +}
 diff --git a/rpcs3/util/serialization_ext.cpp b/rpcs3/util/serialization_ext.cpp
-index cd3dfab08..e6901e4f6 100644
+index cd3dfab..e6901e4 100644
 --- a/rpcs3/util/serialization_ext.cpp
 +++ b/rpcs3/util/serialization_ext.cpp
 @@ -14,6 +14,7 @@
