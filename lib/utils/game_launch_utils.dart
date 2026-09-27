@@ -4,6 +4,7 @@ import '../models/system_model.dart';
 import '../providers/file_provider.dart';
 import '../services/game_service.dart';
 import '../services/game_launch_manager.dart';
+import '../services/logger_service.dart';
 import '../widgets/game_launch_dialog.dart';
 
 /// Standardizes the game launch workflow: Session initialization -> Progress Dialog -> Delay -> Execution -> Monitoring.
@@ -86,7 +87,17 @@ Future<void> launchGameWithDialog({
         system.folderName.toLowerCase() == 'ports'
             ? const Duration(milliseconds: 150)
             : const Duration(seconds: 2);
+    final handoffWatch = Stopwatch()..start();
+    if (system.folderName.toLowerCase() == 'ports') {
+      LoggerService.instance.i('[Port launch boundary] presentation_begin '
+          'at ${DateTime.now().toUtc().toIso8601String()}');
+    }
     await Future.delayed(launchPresentationDelay);
+    if (system.folderName.toLowerCase() == 'ports') {
+      LoggerService.instance.i('[Port launch boundary] presentation_ready '
+          'elapsedMs=${handoffWatch.elapsedMilliseconds} '
+          'at ${DateTime.now().toUtc().toIso8601String()}');
+    }
     if (!context.mounted || !dialogRoute.isActive) {
       GameService.clearLaunchPending();
       closeLaunchDialog();

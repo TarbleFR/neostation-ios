@@ -8,6 +8,7 @@
 #import <dlfcn.h>
 
 #include <cstring>
+#include <cstdio>
 
 namespace {
 NSString* const kChannel = @"neostation/kartpad_internal";
@@ -79,6 +80,21 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   BOOL _terminationDelivered;
   __weak NSObject<FlutterPluginRegistrar>* _registrar;
   UIWindow* _hostWindow;
+  NSString* _lifecycleLogPath;
+  NSMutableArray<id>* _lifecycleObservers;
+}
+
+- (NSString*)recordHostBoundary:(NSString*)stage {
+  NSString* state = neokartpad::DescribeFlutterHost(_registrar.viewController, _hostWindow);
+  if (_lifecycleLogPath.length) {
+    if (FILE* log = std::fopen(_lifecycleLogPath.fileSystemRepresentation, "a")) {
+      std::fprintf(log, "time=%.3f hostStage=%s transaction=%ld %s\n",
+          NSDate.date.timeIntervalSince1970, stage.UTF8String,
+          (long)_transaction, state.UTF8String);
+      std::fclose(log);
+    }
+  }
+  return state;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -88,6 +104,26 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   KartPadInternalBridgePlugin* instance = [[KartPadInternalBridgePlugin alloc] init];
   instance->_channel = channel;
   instance->_registrar = registrar;
+  instance->_lifecycleObservers = [NSMutableArray array];
+  __weak KartPadInternalBridgePlugin* weakInstance = instance;
+  for (NSNotificationName name in @[
+      UIApplicationWillResignActiveNotification,
+      UIApplicationDidBecomeActiveNotification,
+      UIApplicationDidEnterBackgroundNotification,
+      UIApplicationWillEnterForegroundNotification,
+      UISceneWillDeactivateNotification, UISceneDidActivateNotification,
+      UISceneDidEnterBackgroundNotification, UISceneWillEnterForegroundNotification,
+      UIWindowDidBecomeVisibleNotification, UIWindowDidBecomeHiddenNotification,
+      UIWindowDidBecomeKeyNotification, UIWindowDidResignKeyNotification]) {
+    id observer = [NSNotificationCenter.defaultCenter addObserverForName:name
+        object:nil queue:nil usingBlock:^(NSNotification* notification) {
+      KartPadInternalBridgePlugin* owner = weakInstance;
+      if (owner && owner->_lifecycleLogPath.length && NSThread.isMainThread) {
+        [owner recordHostBoundary:notification.name];
+      }
+    }];
+    [instance->_lifecycleObservers addObject:observer];
+  }
   [registrar addMethodCallDelegate:instance channel:channel];
 }
 
@@ -168,6 +204,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
                                   message:(NSString*)message
                                   success:(BOOL)success {
   if (_terminationDelivered || transaction <= 0) return;
+  [self recordHostBoundary:@"session_ended"];
   _terminationDelivered = YES;
   NSString* reasonName = ExitReasonName(exitReason);
   NSLog(@"[NeoStation/KartPad] transaction=%ld hostResult=%@ success=%d",
@@ -314,6 +351,9 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   NSString* cachePath =
       [args[@"cachePath"] isKindOfClass:NSString.class] ? args[@"cachePath"] : @"";
 
+  _lifecycleLogPath = [supportPath stringByAppendingPathComponent:@"neostation-kartpad-lifecycle.log"];
+  [self recordHostBoundary:@"launch_received"];
+
   if (!gamePath.length ||
       ![NSFileManager.defaultManager isReadableFileAtPath:gamePath]) {
     result(Failure(@"KARTPAD_GAME_UNREADABLE", @"input",
@@ -359,15 +399,19 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   UIWindow* hostWindow = neokartpad::FindFlutterHostWindow(
       _registrar.viewController, _hostWindow, FlutterViewController.class);
   if (!hostWindow) {
+    NSString* state = [self recordHostBoundary:@"host_unavailable"];
     NSLog(@"[NeoStation/KartPad] no foreground Flutter window (retained=%d registrar=%d)",
           _hostWindow != nil, _registrar.viewController != nil);
-    result(Failure(@"KARTPAD_HOST_VIEW_MISSING", @"presentation",
-                   @"NeoStation has no active host view."));
+    NSMutableDictionary* failure = [Failure(@"KARTPAD_HOST_VIEW_MISSING", @"presentation",
+                   @"NeoStation has no active host view.") mutableCopy];
+    failure[@"hostWindowDiagnostics"] = state;
+    result(failure);
     return;
   }
   NSLog(@"[NeoStation/KartPad] selected Flutter window (retained=%d key=%d)",
         _hostWindow == hostWindow, hostWindow.isKeyWindow);
   _hostWindow = hostWindow;
+  [self recordHostBoundary:@"host_selected"];
 
   _pendingLaunch = [result copy];
   _launchCompletionDelivered = NO;
@@ -404,6 +448,8 @@ static void OnCoreEvent(void* context, int state, const char* message) {
 }
 
 - (void)dealloc {
+  for (id observer in _lifecycleObservers)
+    [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_startupTimer invalidate];
   if (_api) {
     _api->set_event_callback(nullptr, nullptr);

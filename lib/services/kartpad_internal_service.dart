@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:kartpad_internal_bridge/kartpad_internal_bridge.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'logger_service.dart';
 
 class KartPadImportIssue {
   const KartPadImportIssue(this.fileName, this.messageKey, [this.details]);
@@ -389,7 +390,14 @@ class KartPadInternalService {
     String gamePath, {
     Map<String, String> uiText = const <String, String>{},
   }) async {
+    final launchWatch = Stopwatch()..start();
+    void trace(String stage) => LoggerService.instance.i(
+      '[KartPad launch boundary] $stage elapsedMs=${launchWatch.elapsedMilliseconds} '
+      'at ${DateTime.now().toUtc().toIso8601String()}',
+    );
+    trace('layout_begin');
     await ensureLayout();
+    trace('layout_ready');
     final game = File(gamePath);
     if (!await game.exists() || await game.length() < 0x20) {
       return const KartPadLaunchResult(
@@ -400,7 +408,9 @@ class KartPadInternalService {
       );
     }
 
+    trace('identity_begin');
     final identity = await inspectGameFile(game);
+    trace('identity_ready');
     if (identity == null ||
         identity.gameId != supportedDiscId ||
         (identity.hasExactRevisionMetadata &&
@@ -424,12 +434,15 @@ class KartPadInternalService {
     }
 
     final temporary = await getTemporaryDirectory();
+    final supportRoot = await rootDirectory();
+    trace('native_launch_begin');
     final response = await KartPadInternalBridge.launch(
       gamePath: game.path,
-      supportPath: (await rootDirectory()).path,
+      supportPath: supportRoot.path,
       cachePath: path.join(temporary.path, 'KartPad'),
       uiText: uiText,
     );
+    trace('native_launch_result:${response['errorCode'] ?? response['success']}');
     final success = response['success'] == true;
     final startupSnapshot =
         success ? '' : await _embeddedStartupSnapshot(game.path);
@@ -453,6 +466,8 @@ class KartPadInternalService {
       technicalDetails: <String>[
         if (response['buildNumber'] != null) 'Build: ${response['buildNumber']}',
         if (response['corePath'] != null) 'Core: ${response['corePath']}',
+        if (response['hostWindowDiagnostics'] != null)
+          'Host window: ${response['hostWindowDiagnostics']}',
         if (response['runtimeIdentity'] != null)
           'Runtime: ${response['runtimeIdentity']}',
         if (startupSnapshot.isNotEmpty) startupSnapshot,

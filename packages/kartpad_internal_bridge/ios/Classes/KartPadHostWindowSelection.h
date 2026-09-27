@@ -6,6 +6,31 @@
 
 namespace neokartpad {
 
+inline NSDictionary* DescribeHostWindow(UIWindow* window) {
+  return @{@"address":@((uintptr_t)(__bridge void*)window),
+           @"attached":@(window.windowScene != nil),
+           @"hidden":@(window.hidden), @"alpha":@(window.alpha),
+           @"key":@(window.isKeyWindow),
+           @"sceneState":window.windowScene ? @(window.windowScene.activationState) : @99,
+           @"root":window.rootViewController ? NSStringFromClass(window.rootViewController.class) : @"nil"};
+}
+
+inline NSString* DescribeFlutterHost(UIViewController* controller, UIWindow* retained) {
+  NSMutableArray* windows = [NSMutableArray array];
+  for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
+    if (![scene isKindOfClass:UIWindowScene.class]) continue;
+    for (UIWindow* window in ((UIWindowScene*)scene).windows)
+      [windows addObject:DescribeHostWindow(window)];
+  }
+  NSDictionary* state = @{
+      @"applicationState":@(UIApplication.sharedApplication.applicationState),
+      @"runLoopMode":NSRunLoop.currentRunLoop.currentMode ?: @"none",
+      @"registrarWindow":DescribeHostWindow(controller.viewIfLoaded.window),
+      @"retainedWindow":DescribeHostWindow(retained), @"windows":windows};
+  NSData* json = [NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
+  return [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+}
+
 // Return the UIWindow itself: its identity survives transient changes to
 // Flutter's view/controller hierarchy during SDL's window handoff.
 inline UIWindow* FindFlutterHostWindow(UIViewController* flutterController,
