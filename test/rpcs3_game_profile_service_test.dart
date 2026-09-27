@@ -174,6 +174,8 @@ void main() {
       expect(yaml, contains('FPS Optimization Batch: Enabled'));
       expect(yaml, contains('RSX FIFO Read Cache: 4 KiB'));
       expect(yaml, contains('GETLLAR Mobile Backoff: Enabled'));
+      expect(yaml, contains('God of War III MLAA Bypass: Enabled'));
+      expect(yaml, isNot(contains('Accurate SPU Reservations: false')));
       expect(yaml, contains('Shader Precision: Ultra'));
       expect(yaml, contains('Write Color Buffers: true'));
       expect(yaml, isNot(contains('Audio:')));

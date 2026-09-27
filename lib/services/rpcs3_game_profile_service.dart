@@ -76,6 +76,10 @@ class Rpcs3GameProfile {
           'iOS Experimental',
           'GETLLAR Mobile Backoff',
         ],
+        'experimental.gow3_mlaa_bypass' => const <String>[
+          'iOS Experimental',
+          'God of War III MLAA Bypass',
+        ],
         _ => throw StateError(
           'Unsupported managed RPCS3 setting: ${entry.key}',
         ),
@@ -160,6 +164,9 @@ abstract final class Rpcs3GameProfileService {
     'experimental.fps_optimization_batch': 'Enabled',
     'experimental.fifo_cache_size': '4 KiB',
     'experimental.getllar_backoff': 'Enabled',
+    // The Core recognizes only the two official MLAA SPU hashes for God of
+    // War III 01.00/01.03. It cannot affect another SPU module or title.
+    'experimental.gow3_mlaa_bypass': 'Enabled',
   };
 
   static final Set<String> _detectedSerials = <String>{};
