@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 351 RPCS3 engine candidate
-run-name: NeoStation iOS Build 351 RPCS3 engine candidate • ${{ github.sha }}
+name: NeoStation iOS Build 352 RPCS3 GOW3 memory candidate
+run-name: NeoStation iOS Build 352 RPCS3 GOW3 memory candidate • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '351'
+        default: '352'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-ios-build-351-rpcs3-engine
+  group: neostation-ios-build-352-rpcs3-memory
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 351 RPCS3 engine candidate IPA
+    name: Build 352 RPCS3 GOW3 memory candidate IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '351' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-RPCS3-Engine-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-351-RPCS3-Engine-Candidate' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-RPCS3-Engine-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-351-RPCS3-Engine-Candidate' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '352' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-RPCS3-GOW3-Memory-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-352-RPCS3-GOW3-Memory-Candidate' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-RPCS3-GOW3-Memory-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-352-RPCS3-GOW3-Memory-Candidate' }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -51,8 +51,8 @@ jobs:
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
-      RPCS3_CORE_HOST_SHA: af37d32a5fca433b40ca6d3a6b3a8232c865cc82
-      RPCS3_CORE_RUN_ID: '36336534425'
+      RPCS3_CORE_HOST_SHA: 7ecc36bdb9f1206aedff02cb15aa23341c242f91
+      RPCS3_CORE_RUN_ID: '36343065903'
       DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -418,6 +418,7 @@ jobs:
           node test/rpcs3_debugger_handshake_test.js
           python3 test/rpcs3_build306_single_path_test.py
           python3 test/build351_native_donor_test.py
+          python3 test/build352_rpcs3_core_pin_test.py
           flutter test test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart test/rpcs3_embedded_identity_test.dart test/dusklight_ports_stage1_test.dart test/system_info_catalog_coverage_test.dart
 
       - name: Prepare lightweight build tools
@@ -491,6 +492,7 @@ jobs:
             build-utils/rpcs3_core_syntax_gate.py \
             test/rpcs3_core_syntax_gate_test.py \
             test/rpcs3_armsx3_performance_patch_test.py \
+            test/rpcs3_build352_gow3_memory_test.py \
             test/rpcs3_ios_ppu_compile_budget_test.cpp \
             test/rpcs3_ppu_no_size_split_policy_test.cpp \
             test/rpcs3_preprocessor_balance_test.py \
