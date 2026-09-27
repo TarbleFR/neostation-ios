@@ -1,0 +1,75 @@
+name: One-time prune of Actions history
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - .github/workflows/prune-actions-history-once.yml
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: one-time-prune-actions-history
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Keep the 125 newest workflow runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KEEP_RUNS: "125"
+    steps:
+      - name: Delete workflow runs older than the newest 125
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t run_ids < <(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+              --jq '.workflow_runs[].id'
+          )
+
+          total_before=${#run_ids[@]}
+          if (( total_before <= KEEP_RUNS )); then
+            echo "Nothing to delete: ${total_before} runs are present."
+            exit 0
+          fi
+
+          delete_count=$((total_before - KEEP_RUNS))
+          echo "Deleting ${delete_count} runs; preserving the newest ${KEEP_RUNS}."
+
+          deleted=0
+          for run_id in "${run_ids[@]:KEEP_RUNS}"; do
+            succeeded=false
+            for attempt in 1 2 3 4 5; do
+              if gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" \
+                >/dev/null 2>&1; then
+                succeeded=true
+                break
+              fi
+              sleep $((attempt * 2))
+            done
+
+            if [[ "${succeeded}" != true ]]; then
+              echo "Failed to delete workflow run ${run_id} after five attempts." >&2
+              exit 1
+            fi
+
+            deleted=$((deleted + 1))
+            if (( deleted % 100 == 0 )); then
+              echo "Deleted ${deleted}/${delete_count} old runs."
+            fi
+          done
+
+          total_after=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=1" \
+            --jq '.total_count')
+          echo "Deleted ${deleted} old runs; ${total_after} runs remain."
+          test "${total_after}" -eq "${KEEP_RUNS}"
