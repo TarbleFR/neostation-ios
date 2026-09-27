@@ -1500,7 +1500,7 @@ index a42ae12..de2bea5 100644
  	static inline const auto& get(bool llvm = false)
  	{
 diff --git a/rpcs3/Emu/Cell/PPUModule.cpp b/rpcs3/Emu/Cell/PPUModule.cpp
-index dc78ddc..bc8677b 100644
+index dc78ddc..0b89cd5 100644
 --- a/rpcs3/Emu/Cell/PPUModule.cpp
 +++ b/rpcs3/Emu/Cell/PPUModule.cpp
 @@ -10,6 +10,9 @@
@@ -1547,7 +1547,7 @@ index dc78ddc..bc8677b 100644
 +
 +		for (const auto& [address, instruction] : mlaa_patches)
 +		{
-+			auto& target = _main.get_ref<be_t<u32>>(address);
++			auto& target = _main.get_ref<u32>(address);
 +			if (target != instruction)
 +			{
 +				target = instruction;

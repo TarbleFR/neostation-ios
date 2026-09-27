@@ -23,7 +23,7 @@
     "rpcs3/Emu/Cell/PPUAnalyser.cpp": "d1e305c525914ab4c7b15b898c60614c33a8738d2126fc0e25eea18279391d31",
     "rpcs3/Emu/Cell/PPUFunction.cpp": "726178947463764929e175800d4b2d513d33c7b5103b1fd8183bbc22566b72bf",
     "rpcs3/Emu/Cell/PPUFunction.h": "277e970a05dc808c8851aef12fd985d8b35ecf62559cf3ab3751e04cd6264a15",
-    "rpcs3/Emu/Cell/PPUModule.cpp": "0cb59bcc5e7a6590112cd23c1e922931e31f800c3fe6f64ff6237ea4351ec355",
+    "rpcs3/Emu/Cell/PPUModule.cpp": "87e94f54e393689dc1c82f785f8bb2e09a2beb24e50897e091da797c89aca8c5",
     "rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h": "b1b2ec0e276aec3ac8d65c568e577092a4f64d1fd3304e74acb7043180340526",
     "rpcs3/Emu/Cell/PPUThread.cpp": "0fafc693c0371a7199d316aab7f02d207078480c4316474b6c54afb839276b66",
     "rpcs3/Emu/Cell/PPUThread.h": "ebc4928070976a8544fe5862b804a288bb2cf283f20cc4fc2ccdf1d1a91821e3",
@@ -78,7 +78,7 @@
     "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577",
     "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded"
   },
-  "patch_sha256": "28f14c1e1ed4fbc618a0ac20e3c26975473e0a1bae01a99836a73ab4845fe08d",
+  "patch_sha256": "45818312f3157524b69119cffa628472b2b187a7d5221992e858a5ee2f517a78",
   "policy": "Build351 experimental; exact-hash God of War III SPU MLAA bypass; unreachable SPU LLVM helper elimination; narrow relaxed PUTLLC atomics; Build350 ARM64/PPU/RSX/JIT baseline retained",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",

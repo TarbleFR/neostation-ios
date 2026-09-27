@@ -61,7 +61,9 @@ def main() -> None:
             "MLAA engine bypass is not opt-in")
     require("PPU-19724fde16a5b111b7b4d2a065f5dccaf8e01962" in ppu_module and
             "0x0052bf2c" in ppu_module and "0x0023137c" in ppu_module and
-            "0x60000000" in ppu_module,
+            "0x60000000" in ppu_module and
+            "_main.get_ref<u32>(address)" in ppu_module and
+            "_main.get_ref<be_t<u32>>(address)" not in ppu_module,
             "official God of War III 01.03 PPU MLAA bypass is missing")
     require("get_experimental_policy().gow3_mlaa_bypass" in ppu_module and
             "!ar" in ppu_module,
