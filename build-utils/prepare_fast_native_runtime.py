@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Install immutable native binaries from the validated Build 270 donor IPA.
+"""Install immutable native bootstrap assets from the validated Build 350 IPA.
 
-Fast experimental builds do not rebuild RPCS3Core, DolphinCore or StikJIT.
-RPCS3 must retain the embedded NeoStation ABI; a standalone upstream release
-cannot replace it without the required exports and backported host changes.
-The official StikJIT 1.5.0 XCFramework supplies compile-time Swift interfaces;
-the runtime binary and scripts are replaced with the hash-verified donor bytes.
+Fast experimental builds reuse StikJIT and native UI resources from the stable
+baseline. RPCS3Core and DolphinCore are temporary bootstrap inputs here and are
+replaced by separately pinned, hash-verified artifacts before Xcode consumes
+them. The official StikJIT 1.5.0 XCFramework supplies compile-time Swift
+interfaces; the runtime binary and scripts use the hash-verified donor bytes.
 """
 from pathlib import Path
 import argparse
@@ -17,11 +17,14 @@ import tempfile
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-DOLPHIN_SHA='60012e203c927d468cb6d82d21aa8f8e14299fedbf0b2f80ce0ea982d4e173ee'
-RPCS3_SHA='dba1bb3bf8847faf3e378c1815ffe895521d8d6404e468bb6a2eee5fa8cb4ddd'
+DOLPHIN_SHA='7129d9c654fb6d28f2fa92ae1a4c14d1f25a1fc3e87788237676b48a0fb3aa2d'
+RPCS3_SHA='4866265eca27327c3fc9be14190fec082b58a5e1946f541ced34e46c13ceabd9'
+STIKJIT_SHA='4de72ef84a1aef6d6d3b547222c730227b48e91d8d5eb7e59c1f9235961e4efe'
 UNIVERSAL_SHA='22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1'
 LEGACY_SHA='787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'
 OFFICIAL_STIK_ZIP_SHA='444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85'
+DONOR_RUN_ID=36323843067
+DONOR_ARTIFACT_ID=10932894067
 
 
 def sha(path: Path) -> str:
@@ -153,6 +156,7 @@ def main() -> None:
 
         demand(sha(dolphin/'DolphinCore')==DOLPHIN_SHA, 'DolphinCore donor hash mismatch')
         demand(sha(rpcs3)==RPCS3_SHA, 'RPCS3Core donor hash mismatch')
+        demand(sha(stik/'StikJIT')==STIKJIT_SHA, 'StikJIT donor hash mismatch')
         demand(sha(stik/'universal.js')==UNIVERSAL_SHA, 'StikJIT universal.js donor hash mismatch')
         demand(sha(stik/'legacy.js')==LEGACY_SHA, 'StikJIT legacy.js donor hash mismatch')
 
@@ -236,7 +240,8 @@ def main() -> None:
         release={
             'release':'1.5.0',
             'sourceRevision':'640fac91de403fdb85a3778aa0bbb7f30737b74c',
-            'donorRun':35321768668,
+            'donorRun':DONOR_RUN_ID,
+            'donorArtifact':DONOR_ARTIFACT_ID,
             'binarySha256':stik_binary_sha,
             'universalJsSha256':UNIVERSAL_SHA,
             'legacyJsSha256':LEGACY_SHA,
@@ -253,7 +258,8 @@ def main() -> None:
         identity.parent.mkdir(parents=True, exist_ok=True)
         identity.write_text(json.dumps({
             'donorIpa':ipa.name,
-            'donorRun':35321768668,
+            'donorRun':DONOR_RUN_ID,
+            'donorArtifact':DONOR_ARTIFACT_ID,
             'officialInterfaceArchiveSha256':OFFICIAL_STIK_ZIP_SHA,
             'normalizedSwiftInterfaces':normalized_interfaces,
             'stikjitBinarySha256':stik_binary_sha,
