@@ -89,10 +89,13 @@ jobs:
           ui.source_build_phase.add_file_reference(ui_group.new_file('kartpad_menu_probe.swift'))
           ui.build_configurations.each do |c|
             c.build_settings['TEST_TARGET_NAME']='Runner'
+            c.build_settings['PRODUCT_NAME']='MenuProbe'
             c.build_settings['PRODUCT_BUNDLE_IDENTIFIER']='com.neostation.kartpadMenuProbe'
             c.build_settings['GENERATE_INFOPLIST_FILE']='YES'
             c.build_settings['SWIFT_VERSION']='5.0'
+            c.build_settings['TARGETED_DEVICE_FAMILY']='1,2'
           end
+          project.root_object.attributes['TargetAttributes'][ui.uuid]={'TestTargetID'=>target.uuid}
           scheme=Xcodeproj::XCScheme.new
           scheme.add_build_target(target)
           scheme.add_build_target(ui)
@@ -102,6 +105,10 @@ jobs:
           RUBY
           cd "$PROBE"
           flutter build ios --simulator --debug
+          xcodebuild build-for-testing -project ios/Runner.xcodeproj -scheme MenuProbe \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/menuDerivedData" CODE_SIGNING_ALLOWED=NO \
+            > "$GITHUB_WORKSPACE/evidence/menu-build.log" 2>&1
       - name: Embed exact donor instructions and run probe
         timeout-minutes: 10
         shell: bash
@@ -159,8 +166,9 @@ jobs:
         run: |
           set -euo pipefail
           cp evidence/flutter-probe.json evidence/automatic-cycles.json
-          xcodebuild test -project "$RUNNER_TEMP/flutter-probe/ios/Runner.xcodeproj" \
+          xcodebuild test-without-building -project "$RUNNER_TEMP/flutter-probe/ios/Runner.xcodeproj" \
             -scheme MenuProbe -destination "platform=iOS Simulator,id=$PROBE_DEVICE" \
+            -derivedDataPath "$RUNNER_TEMP/menuDerivedData" \
             -resultBundlePath "$PWD/evidence/menu-result.xcresult" \
             CODE_SIGNING_ALLOWED=NO > evidence/menu-xcodebuild.log 2>&1
           DATA="$(xcrun simctl get_app_container "$PROBE_DEVICE" com.neostation.kartpadHostProbe data)"
