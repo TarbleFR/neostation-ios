@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 345 KartPad and RPCS3 ARM64
-run-name: NeoStation iOS Build 345 KartPad and RPCS3 ARM64 • ${{ github.sha }}
+name: NeoStation iOS Build 346 KartPad and RPCS3 ARM64
+run-name: NeoStation iOS Build 346 KartPad and RPCS3 ARM64 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '345'
+        default: '346'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep this RPCS3 candidate's IPA runs from cancelling KartPad's native CI.
 concurrency:
-  group: neostation-ios-build-345-rpcs3
+  group: neostation-ios-build-346-rpcs3
   cancel-in-progress: true
 
 jobs:
@@ -37,17 +37,17 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 345 KartPad and RPCS3 ARM64 IPA
+    name: Build 346 KartPad and RPCS3 ARM64 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '345' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-345-KartPad-RPCS3-ARM64' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-345-KartPad-RPCS3-ARM64' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36280134877' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'd2439014f88723e9230a989048c5c843562caaa8' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '346' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-346-KartPad-RPCS3-ARM64' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-346-KartPad-RPCS3-ARM64' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36307435287' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'fc87526663c17190c44ca71e988bcebcf0bd8b04' }}
       KARTPAD_CANDIDATE: '1'
-      # Preserve Build 344 KartPad session/audio recovery with the new pinned RPCS3 Core.
+      # Preserve the validated KartPad session recovery with the pinned RPCS3 Core.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
