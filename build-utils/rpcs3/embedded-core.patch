@@ -1791,7 +1791,7 @@ index 9a135c0..618b1e5 100644
  {
  	vm::addr_t stack_addr;
 diff --git a/rpcs3/Emu/Cell/PPUTranslator.cpp b/rpcs3/Emu/Cell/PPUTranslator.cpp
-index 864eb63..c58866c 100644
+index 864eb63..0b14859 100644
 --- a/rpcs3/Emu/Cell/PPUTranslator.cpp
 +++ b/rpcs3/Emu/Cell/PPUTranslator.cpp
 @@ -113,6 +113,18 @@ PPUTranslator::PPUTranslator(LLVMContext& context, Module* _module, const ppu_mo
@@ -2068,7 +2068,7 @@ index 864eb63..c58866c 100644
  }
  
  void PPUTranslator::DIVW(ppu_opcode_t op)
-@@ -3574,15 +3609,18 @@ void PPUTranslator::DIVW(ppu_opcode_t op)
+@@ -3574,15 +3609,20 @@ void PPUTranslator::DIVW(ppu_opcode_t op)
  	const auto o = m_ir->CreateOr(IsZero(b), m_ir->CreateAnd(m_ir->CreateICmpEQ(a, m_ir->getInt32(s32{smin})), IsOnes(b)));
  	const auto result = m_ir->CreateSDiv(a, m_ir->CreateSelect(o, m_ir->getInt32(s32{smin}), b));
  	SetGpr(op.rd, m_ir->CreateSelect(o, m_ir->getInt32(0), result));
@@ -2081,27 +2081,29 @@ index 864eb63..c58866c 100644
  {
  	const auto addr = op.ra ? m_ir->CreateAdd(GetGpr(op.ra), GetGpr(op.rb)) : GetGpr(op.rb);
  	const auto data = ReadMemory(m_ir->CreateAnd(addr, ~0xfull), GetType<u8[16]>(), m_is_be, 16);
--	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));
 +#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
-+	set_vr(op.vd, tbl(value<u8[16]>(data), build<u8[16]>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));#else
-+	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));#endif
++	set_vr(op.vd, tbl(value<u8[16]>(data), build<u8[16]>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));
++#else
+ 	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112) + vsplat<u8[16]>(trunc<u8>(value<u64>(addr) & 0xf))));
++#endif
 +
  }
  
  void PPUTranslator::LDBRX(ppu_opcode_t op)
-@@ -3631,7 +3669,10 @@ void PPUTranslator::LVRX(ppu_opcode_t op)
+@@ -3631,7 +3671,12 @@ void PPUTranslator::LVRX(ppu_opcode_t op)
  
  	// Read from instruction address if offset is 0, this prevents accessing potentially bad memory from addr (because no actual memory is dereferenced)
  	const auto data = ReadMemory(m_ir->CreateAnd(m_ir->CreateSelect(m_ir->CreateIsNull(offset.value), m_reloc ? m_seg0 : GetAddr(0), addr), ~0xfull), GetType<u8[16]>(), m_is_be, 16);
--	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));
 +#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
-+	set_vr(op.vd, tbl(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));#else
-+	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));#endif
++	set_vr(op.vd, tbl(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));
++#else
+ 	set_vr(op.vd, pshufb(value<u8[16]>(data), build<u8[16]>(255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240) + vsplat<u8[16]>(offset)));
++#endif
 +
  }
  
  void PPUTranslator::LSWI(ppu_opcode_t op)
-@@ -3705,7 +3746,11 @@ void PPUTranslator::LFDUX(ppu_opcode_t op)
+@@ -3705,7 +3750,11 @@ void PPUTranslator::LFDUX(ppu_opcode_t op)
  void PPUTranslator::STVLX(ppu_opcode_t op)
  {
  	const auto addr = op.ra ? m_ir->CreateAdd(GetGpr(op.ra), GetGpr(op.rb)) : GetGpr(op.rb);
@@ -2113,7 +2115,7 @@ index 864eb63..c58866c 100644
  	const auto mask = bitcast<bool[16]>(splat<u16>(0xffff) << trunc<u16>(value<u64>(addr) & 0xf));
  	m_ir->CreateMaskedStore(data.eval(m_ir), GetMemory(m_ir->CreateAnd(addr, ~0xfull)), llvm::Align(16), mask.eval(m_ir));
  }
-@@ -3733,7 +3778,11 @@ void PPUTranslator::STFSX(ppu_opcode_t op)
+@@ -3733,7 +3782,11 @@ void PPUTranslator::STFSX(ppu_opcode_t op)
  void PPUTranslator::STVRX(ppu_opcode_t op)
  {
  	const auto addr = op.ra ? m_ir->CreateAdd(GetGpr(op.ra), GetGpr(op.rb)) : GetGpr(op.rb);
@@ -2125,7 +2127,7 @@ index 864eb63..c58866c 100644
  	const auto mask = bitcast<bool[16]>(trunc<u16>(splat<u64>(0xffff) << (value<u64>(addr) & 0xf) >> 16));
  	m_ir->CreateMaskedStore(data.eval(m_ir), GetMemory(m_ir->CreateAnd(addr, ~0xfull)), llvm::Align(16), mask.eval(m_ir));
  }
-@@ -5354,6 +5403,13 @@ void PPUTranslator::SetCarry(Value* bit)
+@@ -5354,6 +5407,13 @@ void PPUTranslator::SetCarry(Value* bit)
  	RegStore(bit, m_ca);
  }
  

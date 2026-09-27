@@ -1,6 +1,6 @@
 # RPCS3 ARM64 / God of War III — candidat Build 345
 
-Ce document recense les adaptations du Core intégrées à partir de `XITRIX/rpcs3` `22f1152783cef1f7e04af7b1c895173e28fd5b03`, ainsi que les optimisations conservées de la base expérimentale Build 344. La référence ARMSX3 inspectée est `8290349e5c2184089802e2284c8a11f17416ae6b`. Le patch canonique est contrôlé par 67 hachages de fichiers et son SHA-256 est `9e1c2724627c4f8bd4fde72752c59752cd5b78493f341fdc59cf11b3d11daba7`. Le correctif séparé de la dépendance LLVM, nécessaire au backend AArch64 et verrouillé sur le sous-module `ca7933e47d3a3451d81e72ac174dcb5aa28b59d1`, a pour SHA-256 `8db9dc0e3701069ca3d42c534b2bcd0bba5eea1f21fbd54c466fb454130a9a3f`.
+Ce document recense les adaptations du Core intégrées à partir de `XITRIX/rpcs3` `22f1152783cef1f7e04af7b1c895173e28fd5b03`, ainsi que les optimisations conservées de la base expérimentale Build 344. La référence ARMSX3 inspectée est `8290349e5c2184089802e2284c8a11f17416ae6b`. Le patch canonique est contrôlé par 67 hachages de fichiers et son SHA-256 est `9aec01c79b4bff5ee2d8106184511869fe4166d815d10cd2b064a7dc563a139d`. Le correctif séparé de la dépendance LLVM, nécessaire au backend AArch64 et verrouillé sur le sous-module `ca7933e47d3a3451d81e72ac174dcb5aa28b59d1`, a pour SHA-256 `8db9dc0e3701069ca3d42c534b2bcd0bba5eea1f21fbd54c466fb454130a9a3f`.
 
 | Domaine | Changement effectif | Effet principalement attendu en jeu | Limite de la preuve |
 | --- | --- | --- | --- |

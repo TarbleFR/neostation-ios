@@ -27,7 +27,7 @@
     "rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h": "b1b2ec0e276aec3ac8d65c568e577092a4f64d1fd3304e74acb7043180340526",
     "rpcs3/Emu/Cell/PPUThread.cpp": "0fafc693c0371a7199d316aab7f02d207078480c4316474b6c54afb839276b66",
     "rpcs3/Emu/Cell/PPUThread.h": "ebc4928070976a8544fe5862b804a288bb2cf283f20cc4fc2ccdf1d1a91821e3",
-    "rpcs3/Emu/Cell/PPUTranslator.cpp": "34679ba904912c397368cb85ef9d0c4b74e3b33686d8b165c2fb97d7d340fc34",
+    "rpcs3/Emu/Cell/PPUTranslator.cpp": "9e7da38761c42f59046be09c40a15f7ac75b81701e8f85941b3422387b9633f0",
     "rpcs3/Emu/Cell/PPUTranslator.h": "78c7b817d792de7c3b08abf40502724245736385bd414666a0b2d958e2fdd3c3",
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "c55c79bcbbda0845a4e6a07ee7b25d0e5324dd392061792d47e1e494f4156f16",
     "rpcs3/Emu/Cell/SPULLVMRecompiler.cpp": "d3f79b199f28313f71769a3a872b8d48d53b5cba241f897583a9132aaa19ff2f",
@@ -75,7 +75,7 @@
     "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577",
     "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded"
   },
-  "patch_sha256": "9e1c2724627c4f8bd4fde72752c59752cd5b78493f341fdc59cf11b3d11daba7",
+  "patch_sha256": "9aec01c79b4bff5ee2d8106184511869fe4166d815d10cd2b064a7dc563a139d",
   "policy": "Build344 baseline; ARM64 SPU/PPU arithmetic and LLVM GHC correctness; guarded NEON indices; bounded PPU compile and memory budget; RSX render reuse, cache and FIFO; lazy JIT diagnostics and arena accounting",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",

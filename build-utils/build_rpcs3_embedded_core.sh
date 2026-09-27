@@ -114,6 +114,7 @@ grep -q 'add_library(RPCS3Core SHARED' "$SRC/rpcs3/CMakeLists.txt" || die "ios-p
 log "Apply the single reviewed NeoStation Core source delta"
 python3 "$PWD/build-utils/materialize_rpcs3_core.py" "$SRC"
 python3 "$PWD/build-utils/apply_rpcs3_llvm_patch.py" "$SRC"
+python3 "$PWD/test/rpcs3_preprocessor_balance_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build301_passive_dlopen_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_atomic_startup_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_failed_startup_test.py" "$SRC"
