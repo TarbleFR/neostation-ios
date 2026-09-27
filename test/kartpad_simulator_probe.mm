@@ -12,6 +12,7 @@
 #include "miniaudio.h"
 #include "../native/kartpad/core/DonorAudioSession.h"
 #include "../native/kartpad/core/DonorSessionReset.h"
+#include "../native/kartpad/core/UIKitEventPump.h"
 #include <fcntl.h>
 #include <array>
 #include <atomic>
@@ -104,6 +105,8 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
       NSString* path=[NSBundle.mainBundle.privateFrameworksPath stringByAppendingPathComponent:@"KartPadRuntime.framework/KartPadRuntime"];
       void* handle=dlopen(path.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);
       if (!handle) { Save(@{@"success":@NO,@"error":@(dlerror())}); return; }
+      neokartpad::UIKitEventPump uikitPump;
+      if (!uikitPump.bind(handle)) throw std::runtime_error("UIKit main-stack binding refused");
       void* entry=Required(handle,"_Z11RuntimeMainiPPc");
       Dl_info info{};
       if (!dladdr(entry,&info)) throw std::runtime_error("entry unavailable");
@@ -296,8 +299,11 @@ static void VerifyFrontendAudio(SoLoud::Soloud& frontend) {
         Progress([NSString stringWithFormat:@"renderer/audio cycle %d: CoreAudio playback restored",cycle]);
       }
       frontend.deinit();
+      if (!uikitPump.counts || !uikitPump.counts[1])
+        throw std::runtime_error("UIKit main-stack pump was not exercised");
 
       Save(@{@"success":@YES,@"nativeRuntimeLoaded":@YES,
+             @"uikitStackGuardBound":@YES,@"uikitHostPumps":@(uikitPump.counts[1]),
              @"reproducedStaleCallback":@(reproducedStaleCallback),
              @"reproducedStaleTimer":@(reproducedStaleTimer),@"hleResetCycles":@20,@"rendererAudioCycles":@3,
              @"frontendAudioCycles":@3,@"frontendAudioPackage":@"flutter_soloud 4.0.12",

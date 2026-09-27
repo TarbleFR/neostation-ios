@@ -24,8 +24,8 @@ jobs:
           xcode-version: '16.4'
       - uses: actions/download-artifact@v4
         with:
-          name: KartPadCore-b51206dbf50a8fc2520107a6269265e075262362
-          run-id: 36277444837
+          name: KartPadCore-3934ac9d333247d5374b9fb7d71f8ef49bbcd79e
+          run-id: 36322395443
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: donor
       - name: Build isolated simulator test app
@@ -34,6 +34,12 @@ jobs:
           set -euo pipefail
           mkdir -p probe/Probe.app/Frameworks evidence
           git rev-parse HEAD > evidence/source.txt
+          python3 build-utils/kartpad/validate_donor_artifact.py donor > evidence/donor-validation.json
+          cp donor/identity.json evidence/donor-identity.json
+          python3 - <<'PY'
+          import json
+          assert json.load(open('donor/identity.json'))['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+          PY
           APP="$PWD/probe/Probe.app"
           ditto donor/KartPadRuntime.framework "$APP/Frameworks/KartPadRuntime.framework"
           RUNTIME="$APP/Frameworks/KartPadRuntime.framework/KartPadRuntime"
@@ -116,6 +122,7 @@ jobs:
           assert result['reproducedStaleCallback'] and result['reproducedStaleTimer'], result
           assert result['hleResetCycles']==20 and result['rendererAudioCycles']==3, result
           assert result['frontendAudioCycles']==3, result
+          assert result['uikitStackGuardBound'] and result['uikitHostPumps']>0, result
           assert result['threadSize']==8 and result['mutexSize']==64, result
           assert result['vectorSize']==24 and result['mapSize']==24 and result['hashMapSize']==40, result
           PY
