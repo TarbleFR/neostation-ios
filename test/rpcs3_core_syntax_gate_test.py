@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +39,7 @@ class SyntaxGateTests(unittest.TestCase):
                     self.assertIn('-fsyntax-only', args)
                     self.assertNotIn('-o', args)
                     self.assertNotIn('-c', args)
+                return subprocess.CompletedProcess(args, 0)
             with patch.object(gate.subprocess, 'run', side_effect=run):
                 gate.main(database)
             self.assertEqual(calls[0][0], 'cmake')
@@ -49,6 +51,22 @@ class SyntaxGateTests(unittest.TestCase):
             database.write_text('[]')
             with self.assertRaisesRegex(RuntimeError, 'Missing startup units'):
                 gate.main(database)
+
+    def test_reports_every_failing_translation_unit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / 'compile_commands.json'
+            database.write_text(json.dumps([
+                {'file': name, 'directory': temp, 'arguments': ['clang++', '-c', name]}
+                for name in sorted(gate.UNITS)
+            ]))
+            calls = []
+            def run(args, **kwargs):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, int(args[1] in ('PPUTranslator.cpp', 'SPULLVMRecompiler.cpp')))
+            with patch.object(gate.subprocess, 'run', side_effect=run):
+                with self.assertRaisesRegex(RuntimeError, 'PPUTranslator.cpp.*SPULLVMRecompiler.cpp'):
+                    gate.main(database)
+            self.assertEqual(len(calls), len(gate.UNITS))
 
 if __name__ == '__main__':
     unittest.main()

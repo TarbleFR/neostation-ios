@@ -54,9 +54,14 @@ def main(database: Path) -> None:
         for relative in generated_maps:
             if not (build / relative).is_file():
                 raise RuntimeError(f'CMake did not generate required module map: {relative}')
+    failed = []
     for entry, command in commands:
         print('iOS syntax gate:', Path(entry['file']).name, flush=True)
-        subprocess.run(command, cwd=entry['directory'], check=True)
+        result = subprocess.run(command, cwd=entry['directory'], check=False)
+        if result.returncode:
+            failed.append(Path(entry['file']).name)
+    if failed:
+        raise RuntimeError('iOS syntax errors in: ' + ', '.join(failed))
     print(f'PASS: actual compiler, target, flags and module maps for all {len(UNITS)} startup units')
 
 if __name__ == '__main__':

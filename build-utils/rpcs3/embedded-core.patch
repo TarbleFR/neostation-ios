@@ -2776,7 +2776,7 @@ index d451a94..20257d3 100644
  
  	if (result.data.empty())
 diff --git a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
-index 9a1e4c7..a9c277b 100644
+index 9a1e4c7..0ddd1f5 100644
 --- a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 @@ -1,4 +1,6 @@
@@ -2933,7 +2933,7 @@ index 9a1e4c7..a9c277b 100644
 -		if (verifyModule(*_module, &out))
 +		bool llvm_ir_logged = false;
 +		const auto append_llvm_ir = [&]
- 		{
++		{
 +			if (!llvm_ir_logged)
 +			{
 +				prepare_function_log();
@@ -2943,7 +2943,7 @@ index 9a1e4c7..a9c277b 100644
 +			}
 +		};
 +		if (g_cfg.core.spu_debug)
-+		{
+ 		{
 +			append_llvm_ir();
 +		}
 +		std::string verification_log;
@@ -2986,11 +2986,11 @@ index 9a1e4c7..a9c277b 100644
 -
 -		if (verifyModule(*_module, &out))
 +		const auto append_llvm_ir = [&]
- 		{
++		{
 +			fmt::append(llvm_log, "LLVM IR (interpreter):\n");
 +			out << *_module << "\n\n";
 +		};
-+		const bool log_llvm_ir = g_cfg.core.spu_debug;
++		const bool log_llvm_ir = g_cfg.core.spu_debug.get();
 +		if (log_llvm_ir)
 +		{
 +			append_llvm_ir();
@@ -2998,7 +2998,7 @@ index 9a1e4c7..a9c277b 100644
 +		std::string verification_log;
 +		raw_string_ostream verification_out(verification_log);
 +		if (verifyModule(*_module, &verification_out))
-+		{
+ 		{
 +			verification_out.flush();
 +			if (!log_llvm_ir)
 +			{
@@ -3175,23 +3175,25 @@ index 9a1e4c7..a9c277b 100644
  
  #ifdef ARCH_ARM64
  		if (m_use_dotprod)
-@@ -6812,6 +6928,15 @@ public:
+@@ -6812,6 +6928,17 @@ public:
  			return;
  		}
  
 +#if defined(ARCH_ARM64) && defined(RPCS3_IOS)
-+		// Pairwise widening sums work on baseline NEON without dot-product.
-+		const auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
-+		const auto ax = bitcast<u16[8]>(uaddlp<u32[4]>(uaddlp<u16[8]>(a)));
-+		const auto bx = bitcast<u16[8]>(uaddlp<u32[4]>(uaddlp<u16[8]>(b)));
-+		set_vr(op.rt, shuffle2(ax, bx, 0, 8, 2, 10, 4, 12, 6, 14));
-+		return;
++		{
++			// Pairwise widening sums work on baseline NEON without dot-product.
++			const auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
++			const auto ax = bitcast<u16[8]>(uaddlp<u32[4]>(uaddlp<u16[8]>(a)));
++			const auto bx = bitcast<u16[8]>(uaddlp<u32[4]>(uaddlp<u16[8]>(b)));
++			set_vr(op.rt, shuffle2(ax, bx, 0, 8, 2, 10, 4, 12, 6, 14));
++			return;
++		}
 +#endif
 +
  		const auto [a, b] = get_vrs<u16[8]>(op.ra, op.rb);
  		const auto ahs = eval((a >> 8) + (a & 0xff));
  		const auto bhs = eval((b >> 8) + (b & 0xff));
-@@ -7417,6 +7542,32 @@ public:
+@@ -7417,6 +7544,32 @@ public:
  			case 2:
  			case 1:
  			{
@@ -3224,7 +3226,7 @@ index 9a1e4c7..a9c277b 100644
  				set_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, get_vr<u8[16]>(op.rb), get_vr<u8[16]>(op.ra)));
  				return;
  			}
-@@ -7461,6 +7612,21 @@ public:
+@@ -7461,6 +7614,21 @@ public:
  			return;
  		}
  
@@ -3246,7 +3248,7 @@ index 9a1e4c7..a9c277b 100644
  		const auto c = get_vr<u8[16]>(op.rc);
  
  		if (auto [ok, mask] = get_const_vector(c.value, m_pos); ok)
-@@ -7569,6 +7735,18 @@ public:
+@@ -7569,6 +7737,18 @@ public:
  		[[maybe_unused]] const bool consts_never_allones = known_idx.One[5];
  		[[maybe_unused]] const bool idx_selects_single = known_idx.extractBits(1, 4).isConstant();
  
@@ -3265,7 +3267,7 @@ index 9a1e4c7..a9c277b 100644
  		const auto a = get_vr<u8[16]>(op.ra);
  		const auto b = get_vr<u8[16]>(op.rb);
  
-@@ -7627,12 +7805,12 @@ public:
+@@ -7627,12 +7807,12 @@ public:
  			cv = eval(c ^ 0xf);
  		}
  
@@ -3283,7 +3285,7 @@ index 9a1e4c7..a9c277b 100644
  #else
  		const std::optional<value_t<u8[16]>> single_src = (idx_selects_single || (op.ra == op.rb && !m_interp_magn))
  #endif
-@@ -7675,6 +7853,14 @@ public:
+@@ -7675,6 +7855,14 @@ public:
  				return;
  			}
  
@@ -3298,7 +3300,7 @@ index 9a1e4c7..a9c277b 100644
  			const auto x = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
  			const auto xv = perm_or_zero_only ? eval(splat<u8[16]>(0)) : x;
  			const auto cm = eval(cv & 0x8f);
-@@ -7701,6 +7887,14 @@ public:
+@@ -7701,6 +7889,14 @@ public:
  			return;
  		}
  
@@ -3313,7 +3315,7 @@ index 9a1e4c7..a9c277b 100644
  		const auto idx_consts = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
  		const auto idx_base = perm_or_zero_only ? eval(splat<u8[16]>(0)) : idx_consts;
  		const auto cm = eval(cv & 0x9f);
-@@ -7953,6 +8147,7 @@ public:
+@@ -7953,6 +8149,7 @@ public:
  	{
  		const auto known = known_opt.value_or(get_known_fp_class<3>(v, llvm::FPClassTest::fcNan | llvm::FPClassTest::fcInf));
  
@@ -3321,7 +3323,7 @@ index 9a1e4c7..a9c277b 100644
  		// Avoid pessimation when full clamping isn't needed
  		if (m_use_avx512 && !(known.isKnownNeverNaN() && (known.isKnownNeverPosInfinity() || known.isKnownNeverNegInfinity())))
  		{
-@@ -7960,6 +8155,7 @@ public:
+@@ -7960,6 +8157,7 @@ public:
  			// Normally doesn't cause issues as SNaN frequently gets quieted beforehand
  			return eval(vrangeps(v, fsplat<f32[4]>(std::bit_cast<f32, u32>(0x7f7fffff)), 0x2, 0xff));
  		}
@@ -3329,7 +3331,7 @@ index 9a1e4c7..a9c277b 100644
  
  		return eval(clamp_positive_smax(clamp_negative_smax(v, known), known));
  	}
-@@ -7993,6 +8189,7 @@ public:
+@@ -7993,6 +8191,7 @@ public:
  			const auto a_sign = (a & splat<u32[4]>(0x80000000));
  			value_t<u32[4]> final_result = eval(splat<u32[4]>(0));
  
@@ -3337,7 +3339,7 @@ index 9a1e4c7..a9c277b 100644
  			if (m_use_avx512)
  			{
  				value_t<u32[16]> lo_lut;
-@@ -8003,6 +8200,7 @@ public:
+@@ -8003,6 +8202,7 @@ public:
  				final_result = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  			}
  			else
@@ -3345,7 +3347,7 @@ index 9a1e4c7..a9c277b 100644
  			{
  				for (u32 i = 0; i < 4; i++)
  				{
-@@ -8669,6 +8867,7 @@ public:
+@@ -8669,6 +8869,7 @@ public:
  					return eval(select(fcmp_uno(b != fsplat<f32[4]>(0.)), normal_fma, c));
  				}
  
@@ -3353,7 +3355,7 @@ index 9a1e4c7..a9c277b 100644
  				// Same number of operations well preventing a serial predicate chain pessimization
  				if (m_use_avx512)
  				{
-@@ -8677,6 +8876,7 @@ public:
+@@ -8677,6 +8878,7 @@ public:
  					const auto cb = vfixupimmps(b, a, splat<u32[4]>(0x00000800u), 0, 0xff);
  					return fma32x4(ca, cb, c, a_known, b_known);
  				}
@@ -3361,7 +3363,7 @@ index 9a1e4c7..a9c277b 100644
  
  				const auto normal_fma = fma32x4(a, b, c, a_known, b_known);
  				const auto a_cmp = fcmp_uno(a != fsplat<f32[4]>(0.));
-@@ -8689,6 +8889,7 @@ public:
+@@ -8689,6 +8891,7 @@ public:
  			}
  		});
  
@@ -3369,7 +3371,7 @@ index 9a1e4c7..a9c277b 100644
  		if (m_use_avx512)
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
-@@ -8702,6 +8903,7 @@ public:
+@@ -8702,6 +8905,7 @@ public:
  			});
  		}
  		else
@@ -3377,7 +3379,7 @@ index 9a1e4c7..a9c277b 100644
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
  			{
-@@ -8910,17 +9112,38 @@ public:
+@@ -8910,17 +9114,38 @@ public:
  
  		if (auto [ok_re, mystery] = match_expr(a, spu_re(MT)); ok_re)
  		{
@@ -3416,7 +3418,7 @@ index 9a1e4c7..a9c277b 100644
  		}
  
  		if (!m_interp_magn && op.ra == op.rb)
-@@ -9046,6 +9269,7 @@ public:
+@@ -9046,6 +9271,7 @@ public:
  				const auto a_sign = (a & splat<u32[4]>(0x80000000));
  				value_t<u32[4]> b = eval(splat<u32[4]>(0));
  
@@ -3424,7 +3426,7 @@ index 9a1e4c7..a9c277b 100644
  				if (m_use_avx512)
  				{
  					value_t<u32[16]> lo_lut;
-@@ -9056,6 +9280,7 @@ public:
+@@ -9056,6 +9282,7 @@ public:
  					b = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  				}
  				else
@@ -3432,7 +3434,7 @@ index 9a1e4c7..a9c277b 100644
  				{
  					for (u32 i = 0; i < 4; i++)
  					{
-@@ -9311,6 +9536,7 @@ public:
+@@ -9311,6 +9538,7 @@ public:
  
  			value_t<s32[4]> r;
  
@@ -3440,7 +3442,7 @@ index 9a1e4c7..a9c277b 100644
  			if (m_use_avx512)
  			{
  				const auto sc = eval(bitcast<f32[4]>(max(bitcast<s32[4]>(a),splat<s32[4]>(0x0))));
-@@ -9318,6 +9544,7 @@ public:
+@@ -9318,6 +9546,7 @@ public:
  				set_vr(op.rt, r);
  				return;
  			}
