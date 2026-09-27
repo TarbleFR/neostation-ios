@@ -23,6 +23,7 @@ Future<void> runProbe() async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
     for (var cycle = 0; cycle < 5; cycle++) {
       await channel.invokeMethod('before', {'cycle': cycle, 'frames': frames});
+      await channel.invokeMethod('async_identity', {'cycle': cycle});
       await channel.invokeMethod('cycle', {'cycle': cycle});
       final watch = Stopwatch()..start();
       final previousFrames = frames;

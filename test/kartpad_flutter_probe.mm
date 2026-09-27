@@ -40,6 +40,8 @@ static void* Required(void* handle, const char* symbol) {
   UIWindow* _host;
   void* _runtime;
   BOOL _running;
+  BOOL _closeRequested;
+  NSInteger _cycle;
 }
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   ProbePlugin* instance = [ProbePlugin new];
@@ -50,11 +52,24 @@ static void* Required(void* handle, const char* symbol) {
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   Record(call.method, @{@"arguments":call.arguments ?: @{}, @"host":WindowState(_host)});
+  if ([call.method isEqualToString:@"async_identity"]) {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
+      dispatch_async(dispatch_get_main_queue(), ^{ result(@YES); });
+    });
+    return;
+  }
+  if ([call.method isEqualToString:@"success"] || [call.method isEqualToString:@"failure"]) {
+    UILabel* label = [[UILabel alloc] initWithFrame:CGRectMake(20,80,350,80)];
+    label.text = call.method;
+    label.accessibilityIdentifier = call.method;
+    [_host addSubview:label];
+  }
   if (![call.method isEqualToString:@"cycle"]) { result(WindowState(_host)); return; }
   if (_running) { result([FlutterError errorWithCode:@"double_launch" message:nil details:nil]); return; }
   _host = neokartpad::FindFlutterHostWindow(_registrar.viewController, _host, FlutterViewController.class);
   if (!_host) { result([FlutterError errorWithCode:@"host_missing" message:nil details:nil]); return; }
   _running = YES;
+  _cycle = [call.arguments[@"cycle"] integerValue];
   NeoKartPadScheduleRunLoop(0.001, ^{
     try {
       [self runDonor];
@@ -106,14 +121,34 @@ static void* Required(void* handle, const char* symbol) {
   for (UIWindow* window in _host.windowScene.windows)
     if (window != _host && !window.hidden && window.keyWindow) donor=window;
   Record(@"running", @{@"host":WindowState(_host), @"donor":WindowState(donor)});
+  BOOL menuMode = [NSProcessInfo.processInfo.arguments containsObject:@"--menu-probe"];
+  _closeRequested=NO;
+  UIButton* gear=nil;
+  if (menuMode) {
+    gear=[UIButton buttonWithType:UIButtonTypeSystem];
+    gear.frame=CGRectMake(40,60,200,60);
+    [gear setTitle:@"Settings" forState:UIControlStateNormal];
+    gear.accessibilityIdentifier=[NSString stringWithFormat:@"probe.settings.%ld",(long)_cycle];
+    gear.showsMenuAsPrimaryAction=YES;
+    gear.menu=[UIMenu menuWithTitle:@"" children:@[
+      [UIAction actionWithTitle:@"Return to NeoStation" image:nil identifier:nil handler:^(__kindof UIAction*) {
+        Record(@"menu_exit_requested", WindowState(self->_host));
+        self->_closeRequested=YES;
+      }]];
+    [donor.rootViewController.view addSubview:gear];
+  }
   const CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent()+1.0;
+  const CFAbsoluteTime menuDeadline = CFAbsoluteTimeGetCurrent()+60.0;
   do {
     if (beginFrame()) endFrame();
-  } while (CFAbsoluteTimeGetCurrent() < deadline);
+  } while (menuMode ? (!_closeRequested && CFAbsoluteTimeGetCurrent()<menuDeadline)
+                    : CFAbsoluteTimeGetCurrent()<deadline);
+  if (menuMode && !_closeRequested) throw std::runtime_error("Menu action not received");
   // Aurora's drain waits for EncoderReady, requested by begin_frame. Match
   // the production guest boundary and the native lifecycle regression.
   if (!beginFrame()) throw std::runtime_error("Drain frame preparation failed");
   waitFrame(); uninstall(); stop(); pump(false);
+  [gear removeFromSuperview];
   if (donor != _host) donor.hidden=YES;
   [_host makeKeyAndVisible];
   Record(@"restored", WindowState(_host));
