@@ -110,6 +110,9 @@ static void* Required(void* handle, const char* symbol) {
   do {
     if (beginFrame()) endFrame();
   } while (CFAbsoluteTimeGetCurrent() < deadline);
+  // Aurora's drain waits for EncoderReady, requested by begin_frame. Match
+  // the production guest boundary and the native lifecycle regression.
+  if (!beginFrame()) throw std::runtime_error("Drain frame preparation failed");
   waitFrame(); uninstall(); stop(); pump(false);
   if (donor != _host) donor.hidden=YES;
   [_host makeKeyAndVisible];

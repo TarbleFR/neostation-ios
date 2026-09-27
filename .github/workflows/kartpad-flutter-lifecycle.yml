@@ -70,6 +70,7 @@ jobs:
           cd "$PROBE"
           flutter build ios --simulator --debug
       - name: Embed exact donor instructions and run probe
+        timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail
