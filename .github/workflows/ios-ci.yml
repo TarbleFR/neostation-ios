@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 344 KartPad Session Reset and Audio
-run-name: NeoStation iOS Build 344 KartPad Session Reset and Audio • ${{ github.sha }}
+name: NeoStation iOS Build 345 KartPad and RPCS3 ARM64
+run-name: NeoStation iOS Build 345 KartPad and RPCS3 ARM64 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '344'
+        default: '345'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -27,10 +27,9 @@ permissions:
   contents: read
   actions: read
 
-# Shared with the full native workflow so a fast build replaces any older
-# experimental full build still consuming a macOS runner.
+# Keep this RPCS3 candidate's IPA runs from cancelling KartPad's native CI.
 concurrency:
-  group: neostation-ios-build-344-kartpad
+  group: neostation-ios-build-345-rpcs3
   cancel-in-progress: true
 
 jobs:
@@ -38,24 +37,24 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 344 KartPad Session Reset and Audio IPA
+    name: Build 345 KartPad and RPCS3 ARM64 IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '344' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Session-Reset-Audio', inputs.build_number) || 'NeoStation-iOS-Build-344-KartPad-Session-Reset-Audio' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Session-Reset-Audio', inputs.build_number) || 'NeoStation-iOS-Build-344-KartPad-Session-Reset-Audio' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '345' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-345-KartPad-RPCS3-ARM64' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-345-KartPad-RPCS3-ARM64' }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36280134877' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'd2439014f88723e9230a989048c5c843562caaa8' }}
       KARTPAD_CANDIDATE: '1'
-      # Build 344 resets guest session state and recreates frontend audio after KartPad closes.
+      # Preserve Build 344 KartPad session/audio recovery with the new pinned RPCS3 Core.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       DOLPHIN_CORE_RUN_ID: '35850858213'
       ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
       ARMSX2_CORE_RUN_ID: '35805854967'
-      RPCS3_CORE_HOST_SHA: be4f8f3abbf478b18ae782dcdaf290181e92b7a2
-      RPCS3_CORE_RUN_ID: '35885420615'
+      RPCS3_CORE_HOST_SHA: f59dcf95c41e2493e20f67986416785dc990710b
+      RPCS3_CORE_RUN_ID: '36295683019'
       DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
       DUSKLIGHT_CORE_RUN_ID: '35969089056'
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -394,8 +393,16 @@ jobs:
           git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             build-utils/build_rpcs3_embedded_core.sh \
             build-utils/materialize_rpcs3_core.py \
+            build-utils/apply_rpcs3_llvm_patch.py \
             build-utils/rpcs3/canonical-source.json \
             build-utils/rpcs3/embedded-core.patch \
+            build-utils/rpcs3/llvm-aarch64-ghc-emergency-spill.patch \
+            build-utils/rpcs3_core_syntax_gate.py \
+            test/rpcs3_core_syntax_gate_test.py \
+            test/rpcs3_armsx3_performance_patch_test.py \
+            test/rpcs3_ios_ppu_compile_budget_test.cpp \
+            test/rpcs3_ppu_no_size_split_policy_test.cpp \
+            test/rpcs3_preprocessor_balance_test.py \
             build-utils/validate_rpcs3_embedded_core.py \
             build-utils/validate_rpcs3_passive_dlopen.py \
             packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h
