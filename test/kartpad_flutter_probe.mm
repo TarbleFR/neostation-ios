@@ -9,6 +9,42 @@
 #include "SessionRunLoop.h"
 #include <stdexcept>
 #include <string>
+#include <array>
+#include <exception>
+#include <memory>
+
+// The former probe never left the UIKit stack. The real guest can pump SDL
+// from a 256 KiB ARM64 fiber. Exercise the donor's actual context switch, not
+// a replacement ucontext implementation, while keeping the game assets out.
+class ProbeGuestStack {
+ public:
+  struct Context { uint64_t registers[22]{}; };
+  static_assert(sizeof(Context) == 176);
+  using Switch = void (*)(Context*, const Context*);
+  explicit ProbeGuestStack(Switch swap) : swap_(swap), stack_(new uint8_t[256 * 1024]) {}
+  void run(void (^work)(void)) {
+    work_ = work;
+    error_ = nullptr;
+    guest_ = {};
+    guest_.registers[0] = reinterpret_cast<uintptr_t>(this); // x19 -> x0
+    guest_.registers[11] = reinterpret_cast<uintptr_t>(&entry); // lr
+    guest_.registers[12] = (reinterpret_cast<uintptr_t>(stack_.get()) + 256 * 1024) & ~uintptr_t(15);
+    swap_(&host_, &guest_);
+    work_ = nil;
+    if (error_) std::rethrow_exception(error_);
+  }
+ private:
+  static void entry(ProbeGuestStack* self) {
+    try { self->work_(); } catch (...) { self->error_ = std::current_exception(); }
+    self->swap_(&self->guest_, &self->host_);
+    std::abort();
+  }
+  Switch swap_;
+  Context host_, guest_;
+  std::unique_ptr<uint8_t[]> stack_;
+  void (^work_)(void) = nil;
+  std::exception_ptr error_;
+};
 
 @interface ProbePlugin : NSObject <FlutterPlugin>
 @end
@@ -206,10 +242,22 @@ static void* Required(void* handle, const char* symbol) {
   }
   const CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent()+1.0;
   const CFAbsoluteTime menuDeadline = CFAbsoluteTimeGetCurrent()+60.0;
+  const BOOL fiberMode = [NSProcessInfo.processInfo.arguments containsObject:@"--fiber-probe"];
+  std::unique_ptr<ProbeGuestStack> guestStack;
+  if (fiberMode) {
+    guestStack = std::make_unique<ProbeGuestStack>(reinterpret_cast<ProbeGuestStack::Switch>(
+        Required(_runtime,"KartPadSwitchIOSFiber")));
+    Record(@"guest_stack_begin", @{@"bytes":@(256 * 1024)});
+  }
   do {
-    if (beginFrame()) endFrame();
+    if (guestStack) {
+      guestStack->run(^{ if (beginFrame()) endFrame(); });
+    } else {
+      if (beginFrame()) endFrame();
+    }
   } while (menuMode ? (!_closeRequested && CFAbsoluteTimeGetCurrent()<menuDeadline)
                     : CFAbsoluteTimeGetCurrent()<deadline);
+  if (guestStack) Record(@"guest_stack_end");
   if (menuMode && !_closeRequested) throw std::runtime_error("Menu action not received");
   // Aurora's drain waits for EncoderReady, requested by begin_frame. Match
   // the production guest boundary and the native lifecycle regression.

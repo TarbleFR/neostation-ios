@@ -165,11 +165,39 @@ jobs:
           assert len(after)==5
           assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)
           PY
+      - name: Exercise SDL event pumping on the donor ARM64 guest stack
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          cp evidence/flutter-probe.json evidence/automatic-cycles.json
+          BUNDLE=com.neostation.kartpadHostProbe
+          xcrun simctl terminate "$PROBE_DEVICE" "$BUNDLE"
+          xcrun simctl launch --console "$PROBE_DEVICE" "$BUNDLE" --fiber-probe > evidence/fiber-console.log 2>&1 &
+          for i in $(seq 1 90); do
+            if [ -f "$PROBE_DATA/Documents/flutter-probe.json" ] && python3 - "$PROBE_DATA/Documents/flutter-probe.json" <<'PY'
+          import json,sys
+          rows=json.load(open(sys.argv[1]))
+          is_fiber=any(r['stage']=='guest_stack_begin' for r in rows)
+          sys.exit(0 if is_fiber and rows[-1]['stage'] in ('success','failure','native_failure') else 1)
+          PY
+            then break; fi
+            sleep 1
+          done
+          cp "$PROBE_DATA/Documents/flutter-probe.json" evidence/fiber-probe.json
+          python3 - <<'PY'
+          import json
+          rows=json.load(open('evidence/fiber-probe.json'))
+          assert rows[-1]['stage']=='success', rows[-1]
+          assert len([r for r in rows if r['stage']=='guest_stack_begin'])==5
+          assert len([r for r in rows if r['stage']=='guest_stack_end'])==5
+          after=[r for r in rows if r['stage']=='after']
+          assert len(after)==5
+          assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)
+          PY
       - name: Exercise the real settings menu with XCTest
         timeout-minutes: 10
         run: |
           set -euo pipefail
-          cp evidence/flutter-probe.json evidence/automatic-cycles.json
           xcodebuild test-without-building -project "$RUNNER_TEMP/flutter-probe/ios/Runner.xcodeproj" \
             -scheme MenuProbe -destination "platform=iOS Simulator,id=$PROBE_DEVICE" \
             -parallel-testing-enabled NO \
