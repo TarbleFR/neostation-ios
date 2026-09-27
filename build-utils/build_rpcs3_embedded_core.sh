@@ -120,13 +120,14 @@ python3 "$PWD/test/rpcs3_failed_startup_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_build264_gow3_core_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
 HOST_CXX="$(xcrun --sdk macosx --find clang++)"
-"$HOST_CXX" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
+HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)"
+env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
   "$PWD/test/rpcs3_ppu_no_size_split_policy_test.cpp" -o "$WORK_ROOT/ppu-no-size-split-test"
 "$WORK_ROOT/ppu-no-size-split-test"
-"$HOST_CXX" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
+env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
   "$PWD/test/rpcs3_ios_ppu_compile_budget_test.cpp" -o "$WORK_ROOT/ppu-compile-budget-test"
 "$WORK_ROOT/ppu-compile-budget-test"
-"$HOST_CXX" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" -I "$SRC/rpcs3" \
+env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" -I "$SRC/rpcs3" \
   "$SRC/rpcs3/ios/tests/JITArenaAllocatorTests.cpp" -o "$WORK_ROOT/jit-arena-allocator-test"
 "$WORK_ROOT/jit-arena-allocator-test"
 
