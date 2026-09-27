@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 348 KartPad and RPCS3 ARM64
-run-name: NeoStation iOS Build 348 KartPad and RPCS3 ARM64 • ${{ github.sha }}
+name: NeoStation iOS Build 349 KartPad relaunch candidate
+run-name: NeoStation iOS Build 349 KartPad relaunch candidate • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '348'
+        default: '349'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -27,9 +27,9 @@ permissions:
   contents: read
   actions: read
 
-# Keep this RPCS3 candidate's IPA runs from cancelling KartPad's native CI.
+# Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-ios-build-348-rpcs3
+  group: neostation-ios-build-349-kartpad-relaunch
   cancel-in-progress: true
 
 jobs:
@@ -37,15 +37,15 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 348 KartPad and RPCS3 ARM64 IPA
+    name: Build 349 KartPad relaunch candidate IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '348' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-348-KartPad-RPCS3-ARM64' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-RPCS3-ARM64', inputs.build_number) || 'NeoStation-iOS-Build-348-KartPad-RPCS3-ARM64' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36312123689' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'fdb938b87ad10f6549096ebc39cf7caee86fcb54' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '349' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Relaunch-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-349-KartPad-Relaunch-Candidate' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Relaunch-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-349-KartPad-Relaunch-Candidate' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36317379227' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4' }}
       KARTPAD_CANDIDATE: '1'
       # Preserve the validated KartPad session recovery with the pinned RPCS3 Core.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
@@ -114,6 +114,38 @@ jobs:
             native/kartpad/core/DonorDataLifecycle.h \
             lib/services/game_launch_manager.dart \
             lib/services/music_player_service.dart lib/services/home_music_service.dart
+
+      - name: Download exact Flutter readiness evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: KartPad-Flutter-probe-iOS-18-dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4
+          run-id: 36317379071
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/kartpad-readiness-evidence
+
+      - name: Require tested presentation readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          evidence=Path('build/kartpad-readiness-evidence')
+          assert (evidence/'source.txt').read_text().strip() == 'dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4'
+          # This gate asserts the automatic cycles and readiness behavior.
+          # The iOS 18 menu XCTest failed in the pre-existing donor MTC check;
+          # it is recorded in the investigation and is not counted as passing.
+          rows=json.loads((evidence/'automatic-cycles.json').read_text())
+          assert rows[-1]['stage']=='success', rows[-1]
+          assert sum(r['stage']=='launch_acknowledged' for r in rows)==5
+          assert sum(r['stage']=='waiter_contract_passed' for r in rows)==1
+          after=[r['values']['arguments'] for r in rows if r['stage']=='after']
+          assert len(after)==5 and all(r['frames']>0 and r['delayMs']<2000 for r in after), after
+          PY
+          git diff --exit-code dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4 "$GITHUB_SHA" -- \
+            packages/kartpad_internal_bridge/ios/Classes \
+            lib/services/kartpad_internal_service.dart lib/utils/game_launch_utils.dart \
+            test/kartpad_flutter_probe.dart test/kartpad_flutter_probe.mm
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
@@ -277,6 +309,8 @@ jobs:
           xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
             -Ipackages/kartpad_internal_bridge/ios/Classes \
             packages/kartpad_internal_bridge/ios/Classes/KartPadInternalBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindowAwaiter.mm
 
       - name: Resolve Flutter and analyze
         shell: bash

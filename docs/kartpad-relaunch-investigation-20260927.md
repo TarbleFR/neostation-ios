@@ -125,3 +125,42 @@ cancellation without late completion, active-window timeout, and delayed
 readiness. Candidate build/relaunch results must be recorded before packaging;
 physical-device validation and the source of the long post-game wait remain
 outstanding.
+
+## Behavioral evidence after readiness change
+
+- db7fdff783f288182318a57ee1eec7d0b74951dd / run 36316823615 /
+  artifact 10930399540: iOS 27 XCTest executed five real UIKit menu returns
+  and passed its assertions (81.620 s). The independent native report records
+  five menu exit requests, five relaunch acknowledgements, and final success;
+  resumed Dart delays were 154, 153, 152, 152, 151 ms. xcodebuild did not finish
+  after the passing suite, so the job hit its 10-minute step timeout. The job
+  itself is **not** reported as green. This revision predates readiness waiting.
+- dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4 / run 36317379071 /
+  iOS 18 artifact 10931367004: five automatic Flutter/SDL cycles passed
+  (153, 153, 152, 153, 152 ms; two resumed Flutter frames each), and the shared
+  production readiness helper passed delayed availability, cancellation and
+  active-time timeout checks. The menu XCTest still aborts in the unchanged
+  donor's off-main UIKit reads before its first tap; this is not a passing
+  iOS 18 menu test. The iOS 27 automatic step also passed at 12:10:02 UTC
+  in job 108614541846 (all five cycles and readiness assertions); its menu
+  execution and diagnostic artifact remain pending.
+- Native candidate run 36317379227 / artifact 10931063108 records host source
+  dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4. Its Core and Runtime binaries are
+  byte-for-byte identical to Build 348: Core SHA-256
+  38774d9c4c20d21998235d493f5d73699cd4c6f6a2bacd1273fc9ea5793fc8b5; Runtime
+  SHA-256 c16134c93328dd7b5aeb17e0c660b767f614b760e11d36065f6aaaa00a510229.
+  Renderer/audio instructions therefore have not changed in this candidate.
+
+These probes run the shipped SDL/Aurora instructions in a real Flutter host,
+without the game's copyrighted assets or full gameplay. They cannot certify
+the user's physical-device reproduction. The production logs are necessary
+to locate any remaining delay before/inside host-window selection.
+
+## Build 349 packaging decision
+
+Package the verified readiness change as an explicitly labelled relaunch
+candidate, preserving the native binaries above. The IPA workflow now requires
+the exact dcf58ec automatic/readiness report and binds its presentation sources
+to that tested SHA, in addition to existing language/session, UIKit/CoreAudio
+and canonical-source gates. This does not turn the known iOS 18 menu failure
+into a pass, or establish resolution of the long physical-device wait.
