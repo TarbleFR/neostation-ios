@@ -1500,10 +1500,20 @@ index a42ae12..de2bea5 100644
  	static inline const auto& get(bool llvm = false)
  	{
 diff --git a/rpcs3/Emu/Cell/PPUModule.cpp b/rpcs3/Emu/Cell/PPUModule.cpp
-index dc78ddc..a68f46f 100644
+index dc78ddc..bc8677b 100644
 --- a/rpcs3/Emu/Cell/PPUModule.cpp
 +++ b/rpcs3/Emu/Cell/PPUModule.cpp
-@@ -1311,7 +1311,11 @@ static void ppu_check_patch_spu_images(const ppu_module<lv2_obj>& mod, const ppu
+@@ -10,6 +10,9 @@
+ #include "Loader/ELF.h"
+ #include "Emu/System.h"
+ #include "Emu/system_config.h"
++#ifdef RPCS3_IOS
++#include "ios/RPCS3IOSExperimentalPolicy.h"
++#endif
+ #include "Emu/VFS.h"
+ 
+ #include "Emu/Cell/PPUOpcodes.h"
+@@ -1311,7 +1314,11 @@ static void ppu_check_patch_spu_images(const ppu_module<lv2_obj>& mod, const ppu
  					// ILA R2, PC + 8
  					// BIE/BID R2
  
@@ -1516,6 +1526,42 @@ index dc78ddc..a68f46f 100644
  					{
  						const u32 inst1 = read_from_ptr<be_t<u32>>(ls_segment, it);
  						const u32 inst2 = read_from_ptr<be_t<u32>>(ls_segment, it + 4);
+@@ -2335,6 +2342,35 @@ bool ppu_load_exec(const ppu_exec_object& elf, bool virtual_load, const std::str
+ 		g_fxo->get<patch_engine>().apply(applied, Emu.GetTitleID() + '-' + hash, [&](u32 addr, u32 size) { return _main.get_ptr<u8>(addr, size); });
+ 	}
+ 
++#ifdef RPCS3_IOS
++	// The official 1.03 PPU patch prevents the game from scheduling MLAA in
++	// the first place. Pair it with the exact-hash SPU fallback in sys_spu.cpp;
++	// neither half can affect another title or executable revision.
++	const std::string_view title_id = Emu.GetTitleID();
++	if (!ar && rpcs3::ios::get_experimental_policy().gow3_mlaa_bypass &&
++		hash == "PPU-19724fde16a5b111b7b4d2a065f5dccaf8e01962" &&
++		(title_id == "BCES00510" || title_id == "BCES00799" || title_id == "BCUS98111" ||
++			title_id == "BCJS37001" || title_id == "BCAS25003" || title_id == "BCKS15003"))
++	{
++		constexpr std::array<std::pair<u32, u32>, 2> mlaa_patches{{
++			{0x0052bf2c, 0x00000000},
++			{0x0023137c, 0x60000000}, // nop
++		}};
++
++		for (const auto& [address, instruction] : mlaa_patches)
++		{
++			auto& target = _main.get_ref<be_t<u32>>(address);
++			if (target != instruction)
++			{
++				target = instruction;
++				applied.push_back(address);
++			}
++		}
++
++		ppu_loader.notice("Applied iOS God of War III PPU MLAA bypass to %s", hash);
++	}
++#endif
++
+ 	if (!applied.empty() || ar)
+ 	{
+ 		// Compare memory changes in memory after executable code sections end
 diff --git a/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h b/rpcs3/Emu/Cell/PPUNoSizeSplitPolicy.h
 new file mode 100644
 index 0000000..76893b1
@@ -3671,7 +3717,7 @@ index 01b36d8..403436f 100644
  	const auto ct = idm::get_unlocked<lv2_memory_container>(cid);
  
 diff --git a/rpcs3/Emu/Cell/lv2/sys_spu.cpp b/rpcs3/Emu/Cell/lv2/sys_spu.cpp
-index ee0e070..0ee274b 100644
+index ee0e070..5de917b 100644
 --- a/rpcs3/Emu/Cell/lv2/sys_spu.cpp
 +++ b/rpcs3/Emu/Cell/lv2/sys_spu.cpp
 @@ -13,6 +13,9 @@
@@ -3691,9 +3737,9 @@ index ee0e070..0ee274b 100644
 +#ifdef RPCS3_IOS
 +namespace
 +{
-+bool apply_gow3_spu_mlaa_bypass(u8* loc, std::string_view hash, std::vector<u32>& applied)
++bool apply_gow3_mlaa_spu_bypass(u8* loc, std::string_view hash, std::vector<u32>& applied)
 +{
-+	if (!rpcs3::ios::get_experimental_policy().gow3_spu_mlaa_bypass)
++	if (!rpcs3::ios::get_experimental_policy().gow3_mlaa_bypass)
 +	{
 +		return false;
 +	}
@@ -3743,7 +3789,7 @@ index ee0e070..0ee274b 100644
  	}
  
 +#ifdef RPCS3_IOS
-+	apply_gow3_spu_mlaa_bypass(loc, hash, applied);
++	apply_gow3_mlaa_spu_bypass(loc, hash, applied);
 +#endif
 +
  	(is_verbose ? spu_log.notice : sys_spu.trace)("Loaded SPU image: %s (<- %u)%s", hash, applied.size(), dump);
@@ -5936,7 +5982,7 @@ index 130f54b..4c096c9 100644
  void clean_savestates(std::string_view title_id, std::string_view boot_path, usz max_files, usz max_files_size);
 +void clean_orphaned_savestate_temps();
 diff --git a/rpcs3/Emu/system_config.h b/rpcs3/Emu/system_config.h
-index 7072922..440a68d 100644
+index 7072922..a9d1a8f 100644
 --- a/rpcs3/Emu/system_config.h
 +++ b/rpcs3/Emu/system_config.h
 @@ -107,8 +107,16 @@ struct cfg_root : cfg::node
@@ -5960,7 +6006,7 @@ index 7072922..440a68d 100644
  		cfg::_enum<ios_experimental_mode> vulkan_command_buffer_reclamation{ this, "Vulkan Command-Buffer Reclamation", ios_experimental_mode::automatic };
  		cfg::_enum<ios_experimental_mode> expanded_spu_scratch{ this, "Expanded ARM64 SPU Scratch", ios_experimental_mode::automatic };
  		cfg::_enum<ios_experimental_mode> persistent_spu_object_cache{ this, "Persistent SPU Object Cache", ios_experimental_mode::automatic };
-+		cfg::_enum<ios_experimental_mode> gow3_spu_mlaa_bypass{ this, "God of War III SPU MLAA Bypass", ios_experimental_mode::automatic };
++		cfg::_enum<ios_experimental_mode> gow3_mlaa_bypass{ this, "God of War III MLAA Bypass", ios_experimental_mode::automatic };
  	} ios_experimental{ this };
  #endif
  
@@ -7004,14 +7050,14 @@ index b4602fe..37a708a 100644
  
  	rpcs3_ios_status begin_content_install() noexcept
 diff --git a/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp b/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp
-index 7c3389b..9736cf8 100644
+index 7c3389b..753fc50 100644
 --- a/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp
 +++ b/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp
 @@ -58,6 +58,7 @@ void resolve_experimental_policy() noexcept
  	resolved.rsx_dma_wait_parking = resolve_mode(g_cfg.ios_experimental.rsx_dma_wait_parking, arm64_default);
  	resolved.vulkan_command_buffer_reclamation = resolve_mode(g_cfg.ios_experimental.vulkan_command_buffer_reclamation, arm64_default);
  	resolved.expanded_spu_scratch = resolve_mode(g_cfg.ios_experimental.expanded_spu_scratch, arm64_default);
-+	resolved.gow3_spu_mlaa_bypass = resolve_mode(g_cfg.ios_experimental.gow3_spu_mlaa_bypass, false);
++	resolved.gow3_mlaa_bypass = resolve_mode(g_cfg.ios_experimental.gow3_mlaa_bypass, false);
  
  	// ARM64 SPU objects currently contain process-specific absolute host
  	// addresses without relocations. Reusing them after ASLR moves those
@@ -7020,25 +7066,25 @@ index 7c3389b..9736cf8 100644
  
  	ios_experimental_log.notice(
 -		"Resolved boot policy: swap=%d restart=%d precomputed=%d mobile_spu=%d fifo=%u wfe=%d deferred_get=%d getllar=%d rsx_park=%d vk_cb_reclaim=%d spu_scratch=%u spu_object_cache=%d",
-+		"Resolved boot policy: swap=%d restart=%d precomputed=%d mobile_spu=%d fifo=%u wfe=%d deferred_get=%d getllar=%d rsx_park=%d vk_cb_reclaim=%d spu_scratch=%u spu_object_cache=%d gow3_spu_mlaa=%d",
++		"Resolved boot policy: swap=%d restart=%d precomputed=%d mobile_spu=%d fifo=%u wfe=%d deferred_get=%d getllar=%d rsx_park=%d vk_cb_reclaim=%d spu_scratch=%u spu_object_cache=%d gow3_mlaa=%d",
  		resolved.neon_byte_swap, resolved.neon_primitive_restart, resolved.precomputed_indices,
  		resolved.mobile_spu_scheduling, resolved.fifo_cache_bytes, resolved.fifo_idle_wfe,
  		resolved.deferred_get_publishing, resolved.getllar_backoff, resolved.rsx_dma_wait_parking,
 -		resolved.vulkan_command_buffer_reclamation, get_spu_gateway_scratch_size(), resolved.persistent_spu_object_cache);
 +		resolved.vulkan_command_buffer_reclamation, get_spu_gateway_scratch_size(), resolved.persistent_spu_object_cache,
-+		resolved.gow3_spu_mlaa_bypass);
++		resolved.gow3_mlaa_bypass);
  }
  
  u32 get_spu_gateway_scratch_size() noexcept
 diff --git a/rpcs3/ios/RPCS3IOSExperimentalPolicy.h b/rpcs3/ios/RPCS3IOSExperimentalPolicy.h
-index 8fba197..bf0553a 100644
+index 8fba197..8aa46a0 100644
 --- a/rpcs3/ios/RPCS3IOSExperimentalPolicy.h
 +++ b/rpcs3/ios/RPCS3IOSExperimentalPolicy.h
 @@ -20,6 +20,7 @@ struct experimental_policy
  	bool vulkan_command_buffer_reclamation = false;
  	bool expanded_spu_scratch = false;
  	bool persistent_spu_object_cache = false;
-+	bool gow3_spu_mlaa_bypass = false;
++	bool gow3_mlaa_bypass = false;
  };
  
  // Replaced only while boot is serialized and before emulation workers exist.
@@ -7750,7 +7796,7 @@ index 88392e0..568d036 100644
  // limit. The query is intentionally cheap enough for frame-boundary sampling.
  u64 available_process_memory_headroom() noexcept;
 diff --git a/rpcs3/ios/RPCS3IOSSettings.cpp b/rpcs3/ios/RPCS3IOSSettings.cpp
-index b7b0474..cf46c1d 100644
+index b7b0474..90853b9 100644
 --- a/rpcs3/ios/RPCS3IOSSettings.cpp
 +++ b/rpcs3/ios/RPCS3IOSSettings.cpp
 @@ -1,5 +1,8 @@
@@ -7774,7 +7820,7 @@ index b7b0474..cf46c1d 100644
  	SETTING("experimental.vulkan_command_buffer_reclamation", "Experimental", "Vulkan Memory", "Per-command-buffer ring reclamation", "Returns completed Vulkan ring allocations after each command buffer, including loads with no presentation. Disable to restore frame-only reclamation. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.vulkan_command_buffer_reclamation, 0, 0, 0),
  	SETTING("experimental.expanded_spu_scratch", "Experimental", "SPU", "Expanded ARM64 SPU scratch", "Reserves 256 KiB instead of RPCS3's 8 KiB for generated ARM64 SPU spills. Disable to restore the original reservation. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.expanded_spu_scratch, 0, 0, 0),
  	GLOBAL_SETTING("experimental.persistent_spu_object_cache", "Experimental", "SPU", "Persistent SPU object cache", "Unavailable on ARM64 because cached objects contain process-specific addresses. The setting is retained only for configuration compatibility.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.persistent_spu_object_cache, 0, 0, 0),
-+	GAME_SETTING("experimental.gow3_spu_mlaa_bypass", "Experimental", "SPU", "God of War III SPU MLAA bypass", "Skips the exact official MLAA SPU modules for supported God of War III versions, freeing CELL time and allowing resolution scaling. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.gow3_spu_mlaa_bypass, 0, 0, 0),
++	GAME_SETTING("experimental.gow3_mlaa_bypass", "Experimental", "SPU", "God of War III MLAA bypass", "Applies the exact official PPU/SPU MLAA bypasses for supported God of War III versions, freeing CELL time and allowing resolution scaling. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.gow3_mlaa_bypass, 0, 0, 0),
  
  	// Emulator
  	SETTING("emulator.max_llvm_threads", "Emulator", "Compilation", "Max LLVM Compile Threads", "Limits concurrent LLVM compilation threads; zero uses the iOS memory-safe automatic limit.", kind::RPCS3_IOS_SETTING_INTEGER, g_cfg.core.llvm_threads, 0, 64, 1),

@@ -36,6 +36,7 @@ def main() -> None:
     spu_llvm = read("rpcs3/Emu/Cell/SPULLVMRecompiler.cpp")
     spu_thread = read("rpcs3/Emu/Cell/SPUThread.cpp")
     sys_spu = read("rpcs3/Emu/Cell/lv2/sys_spu.cpp")
+    ppu_module = read("rpcs3/Emu/Cell/PPUModule.cpp")
     policy = read("rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp")
     config = read("rpcs3/Emu/system_config.h")
     settings = read("rpcs3/ios/RPCS3IOSSettings.cpp")
@@ -56,12 +57,19 @@ def main() -> None:
         "0x00005948", "0x40800094", "0x0000690c", "0x40800027",
     }:
         require(token in sys_spu, f"missing guarded MLAA token: {token}")
-    require("get_experimental_policy().gow3_spu_mlaa_bypass" in sys_spu,
+    require("get_experimental_policy().gow3_mlaa_bypass" in sys_spu,
             "MLAA engine bypass is not opt-in")
-    require("God of War III SPU MLAA Bypass" in config and
-            "God of War III SPU MLAA bypass" in settings,
+    require("PPU-19724fde16a5b111b7b4d2a065f5dccaf8e01962" in ppu_module and
+            "0x0052bf2c" in ppu_module and "0x0023137c" in ppu_module and
+            "0x60000000" in ppu_module,
+            "official God of War III 01.03 PPU MLAA bypass is missing")
+    require("get_experimental_policy().gow3_mlaa_bypass" in ppu_module and
+            "!ar" in ppu_module,
+            "PPU MLAA bypass is not guarded from savestate/disabled paths")
+    require("God of War III MLAA Bypass" in config and
+            "God of War III MLAA bypass" in settings,
             "MLAA engine policy is not represented in iOS configuration")
-    require("resolve_mode(g_cfg.ios_experimental.gow3_spu_mlaa_bypass, false)" in policy,
+    require("resolve_mode(g_cfg.ios_experimental.gow3_mlaa_bypass, false)" in policy,
             "MLAA bypass must remain disabled by default outside a title profile")
 
     for serial in GOW3_SERIALS:
