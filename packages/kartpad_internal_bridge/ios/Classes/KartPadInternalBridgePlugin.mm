@@ -2,6 +2,7 @@
 #import "KartPadCoreABI.h"
 #include "KartPadCoreLoader.h"
 #include "KartPadHostWindowSelection.h"
+#import "KartPadHostWindowAwaiter.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -52,6 +53,7 @@ NSDictionary* Failure(NSString* code, NSString* stage, NSString* message) {
 }
 
 @interface KartPadInternalBridgePlugin ()
+- (void)beginSessionForGamePath:(NSString*)gamePath hostWindow:(UIWindow*)hostWindow;
 - (void)coreState:(int)state message:(NSString*)message;
 - (void)deliverSessionEndedForTransaction:(NSInteger)transaction
                                exitReason:(int)exitReason
@@ -82,6 +84,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   UIWindow* _hostWindow;
   NSString* _lifecycleLogPath;
   NSMutableArray<id>* _lifecycleObservers;
+  NeoKartPadHostWindowAwaiter* _hostAwaiter;
 }
 
 - (NSString*)recordHostBoundary:(NSString*)stage {
@@ -275,6 +278,13 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     return;
   }
   if ([call.method isEqualToString:@"stop"]) {
+    if (_hostAwaiter) {
+      [_hostAwaiter cancel];
+      _hostAwaiter = nil;
+      _activeTransaction = 0;
+      [self resolveLaunch:Failure(@"KARTPAD_HOST_VIEW_MISSING", @"presentation",
+          @"KartPad launch was cancelled before host presentation.")];
+    }
     if (_api && _api->is_running()) _api->stop();
     result(@YES);
     return;
@@ -299,7 +309,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
       result(loadFailure);
       return;
     }
-    if (_sessionActive || _api->is_running()) {
+    if (_pendingLaunch || _sessionActive || _api->is_running()) {
       result(Failure(@"KARTPAD_SESSION_ACTIVE", @"prepare_session",
                      @"KartPad cannot prepare game data while a session is active."));
       return;
@@ -364,7 +374,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   NSDictionary* loadFailure = [self loadCore];
   if (loadFailure) { result(loadFailure); return; }
 
-  if (_sessionActive || _api->is_running()) {
+  if (_pendingLaunch || _sessionActive || _api->is_running()) {
     result(Failure(@"KARTPAD_SESSION_ACTIVE", @"session",
                    @"A KartPad session is already active."));
     return;
@@ -396,8 +406,29 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     return;
   }
 
-  UIWindow* hostWindow = neokartpad::FindFlutterHostWindow(
-      _registrar.viewController, _hostWindow, FlutterViewController.class);
+  _pendingLaunch = [result copy];
+  _launchCompletionDelivered = NO;
+  _terminationDelivered = NO;
+  _transaction = [args[@"transaction"] isKindOfClass:NSNumber.class]
+      ? [args[@"transaction"] integerValue] : _transaction + 1;
+  _activeTransaction = _transaction;
+  [self recordHostBoundary:@"host_wait_begin"];
+  __weak KartPadInternalBridgePlugin* weakSelf = self;
+  _hostAwaiter = [[NeoKartPadHostWindowAwaiter alloc] initWithSelection:^UIWindow* {
+    KartPadInternalBridgePlugin* owner = weakSelf;
+    if (!owner) return nil;
+    return neokartpad::FindFlutterHostWindow(
+        owner->_registrar.viewController, owner->_hostWindow, FlutterViewController.class);
+  } completion:^(UIWindow* window) {
+    KartPadInternalBridgePlugin* owner = weakSelf;
+    if (!owner || !owner->_pendingLaunch) return;
+    owner->_hostAwaiter = nil;
+    [owner beginSessionForGamePath:gamePath hostWindow:window];
+  }];
+  [_hostAwaiter start];
+}
+
+- (void)beginSessionForGamePath:(NSString*)gamePath hostWindow:(UIWindow*)hostWindow {
   if (!hostWindow) {
     NSString* state = [self recordHostBoundary:@"host_unavailable"];
     NSLog(@"[NeoStation/KartPad] no foreground Flutter window (retained=%d registrar=%d)",
@@ -405,7 +436,8 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     NSMutableDictionary* failure = [Failure(@"KARTPAD_HOST_VIEW_MISSING", @"presentation",
                    @"NeoStation has no active host view.") mutableCopy];
     failure[@"hostWindowDiagnostics"] = state;
-    result(failure);
+    _activeTransaction = 0;
+    [self resolveLaunch:failure];
     return;
   }
   NSLog(@"[NeoStation/KartPad] selected Flutter window (retained=%d key=%d)",
@@ -413,15 +445,10 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   _hostWindow = hostWindow;
   [self recordHostBoundary:@"host_selected"];
 
-  _pendingLaunch = [result copy];
-  _launchCompletionDelivered = NO;
-  _terminationDelivered = NO;
-  _transaction = [args[@"transaction"] isKindOfClass:NSNumber.class]
-      ? [args[@"transaction"] integerValue] : _transaction + 1;
-  _activeTransaction = _transaction;
   _sessionActive = YES;
   NSLog(@"[NeoStation/KartPad] transaction=%ld session launch accepted",
         (long)_activeTransaction);
+  char error[1024] = {};
   const int started = _api->start(
       gamePath.fileSystemRepresentation, (__bridge void*)hostWindow,
       error, sizeof(error));
@@ -448,6 +475,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
 }
 
 - (void)dealloc {
+  [_hostAwaiter cancel];
   for (id observer in _lifecycleObservers)
     [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_startupTimer invalidate];

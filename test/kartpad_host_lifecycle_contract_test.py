@@ -55,7 +55,9 @@ for token in (
 assert 'restartFreshSessionForTransaction' not in plugin
 assert 'sessionRestarted' not in plugin
 assert 'FindFlutterHostWindow(' in plugin
-assert '_registrar.viewController, _hostWindow, FlutterViewController.class' in plugin
+assert 'owner->_registrar.viewController, owner->_hostWindow, FlutterViewController.class' in plugin
+assert 'NeoKartPadHostWindowAwaiter' in plugin
+assert 'if (_pendingLaunch || _sessionActive || _api->is_running())' in plugin
 assert '_hostWindow = hostWindow;' in plugin
 assert 'appendWindow(retainedWindow);' in host_selection
 assert host_selection.index('appendController(flutterController);') < host_selection.index('appendWindow(retainedWindow);')

@@ -57,6 +57,7 @@ jobs:
           mkdir -p "$PROBE/ios/MenuProbe"
           cp test/kartpad_menu_probe.swift "$PROBE/ios/MenuProbe/"
           cp packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindow*.h "$PROBE/ios/Runner/"
+          cp packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindowAwaiter.mm "$PROBE/ios/Runner/"
           cp native/kartpad/core/SessionRunLoop.h "$PROBE/ios/Runner/"
           curl -fL --retry 3 https://raw.githubusercontent.com/chrissotraidis/wiicompiled/d0b8dec62a8c98dd45736a996ae18327ada8fe3f/aurora-main/include/aurora/aurora.h -o "$PROBE/ios/Runner/aurora-probe-api.h"
           echo "3959cc80683a3f674353a77b452219fc7276a2b55b96d5f42e90f5043f12908d  $PROBE/ios/Runner/aurora-probe-api.h" | shasum -a 256 -c -
@@ -79,6 +80,7 @@ jobs:
           ref=group.new_file('ProbePlugin.mm')
           target=project.targets.find {|t| t.name=='Runner'}
           target.source_build_phase.add_file_reference(ref)
+          target.source_build_phase.add_file_reference(group.new_file('KartPadHostWindowAwaiter.mm'))
           target.build_configurations.each {|c| c.build_settings['CLANG_CXX_LANGUAGE_STANDARD']='c++20'}
           phase=target.new_shell_script_build_phase('Embed simulator donor fixture')
           phase.shell_script='python3 "$GITHUB_WORKSPACE/test/embed_kartpad_probe.py"'
@@ -158,6 +160,7 @@ jobs:
           rows=json.load(open('evidence/flutter-probe.json'))
           assert rows[-1]['stage']=='success', rows[-1]
           assert len([r for r in rows if r['stage']=='launch_acknowledged'])==5
+          assert len([r for r in rows if r['stage']=='waiter_contract_passed'])==1
           after=[r for r in rows if r['stage']=='after']
           assert len(after)==5
           assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)
@@ -181,6 +184,7 @@ jobs:
           rows=json.load(open('evidence/menu-probe.json'))
           assert rows[-1]['stage']=='success', rows[-1]
           assert len([r for r in rows if r['stage']=='launch_acknowledged'])==5
+          assert len([r for r in rows if r['stage']=='waiter_contract_passed'])==1
           assert len([r for r in rows if r['stage']=='menu_exit_requested'])==5
           PY
       - name: Collect diagnostics

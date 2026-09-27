@@ -5,6 +5,7 @@
 #import <dlfcn.h>
 #include "aurora-probe-api.h"
 #include "KartPadHostWindowSelection.h"
+#import "KartPadHostWindowAwaiter.h"
 #include "SessionRunLoop.h"
 #include <stdexcept>
 #include <string>
@@ -43,6 +44,7 @@ static void* Required(void* handle, const char* symbol) {
   BOOL _running;
   BOOL _closeRequested;
   NSInteger _cycle;
+  NeoKartPadHostWindowAwaiter* _waiter;
 }
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   ProbePlugin* instance = [ProbePlugin new];
@@ -54,6 +56,39 @@ static void* Required(void* handle, const char* symbol) {
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   Record(call.method, @{@"arguments":call.arguments ?: @{}, @"host":WindowState(_host)});
+  if ([call.method isEqualToString:@"waiter_contract"]) {
+    __block BOOL cancelledCompletion=NO;
+    NeoKartPadHostWindowAwaiter* cancelled = [[NeoKartPadHostWindowAwaiter alloc]
+        initWithSelection:^UIWindow* { return nil; }
+        completion:^(UIWindow*) { cancelledCompletion=YES; }];
+    [cancelled start];
+    [cancelled cancel];
+    const CFTimeInterval began=NSProcessInfo.processInfo.systemUptime;
+    _waiter=[[NeoKartPadHostWindowAwaiter alloc]
+        initWithSelection:^UIWindow* { return nil; }
+        completion:^(UIWindow* timedOut) {
+      if (timedOut || cancelledCompletion || NSProcessInfo.processInfo.systemUptime-began<2.9) {
+        result([FlutterError errorWithCode:@"waiter_contract" message:@"Cancellation/timeout failed" details:nil]);
+        return;
+      }
+      __block BOOL ready=NO;
+      self->_waiter=[[NeoKartPadHostWindowAwaiter alloc]
+          initWithSelection:^UIWindow* { return ready ? self->_host : nil; }
+          completion:^(UIWindow* window) {
+        self->_waiter=nil;
+        if (window!=self->_host || cancelledCompletion) {
+          result([FlutterError errorWithCode:@"waiter_contract" message:@"Late readiness failed" details:nil]);
+          return;
+        }
+        Record(@"waiter_contract_passed");
+        result(@YES);
+      }];
+      [self->_waiter start];
+      NeoKartPadScheduleRunLoop(0.1, ^{ ready=YES; });
+    }];
+    [_waiter start];
+    return;
+  }
   if ([call.method isEqualToString:@"async_identity"]) {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
       dispatch_async(dispatch_get_main_queue(), ^{ result(@YES); });
@@ -68,10 +103,31 @@ static void* Required(void* handle, const char* symbol) {
   }
   if (![call.method isEqualToString:@"cycle"]) { result(WindowState(_host)); return; }
   if (_running) { result([FlutterError errorWithCode:@"double_launch" message:nil details:nil]); return; }
-  _host = neokartpad::FindFlutterHostWindow(_registrar.viewController, _host, FlutterViewController.class);
-  if (!_host) { result([FlutterError errorWithCode:@"host_missing" message:nil details:nil]); return; }
   _running = YES;
   _cycle = [call.arguments[@"cycle"] integerValue];
+  Record(@"host_wait", @{@"snapshot":neokartpad::DescribeFlutterHost(_registrar.viewController,_host)});
+  __weak ProbePlugin* weakSelf = self;
+  _waiter = [[NeoKartPadHostWindowAwaiter alloc] initWithSelection:^UIWindow* {
+    ProbePlugin* owner=weakSelf;
+    if (!owner) return nil;
+    return neokartpad::FindFlutterHostWindow(owner->_registrar.viewController,
+        owner->_host, FlutterViewController.class);
+  } completion:^(UIWindow* window) {
+    ProbePlugin* owner=weakSelf;
+    if (!owner) return;
+    owner->_waiter=nil;
+    if (!window) {
+      owner->_running=NO;
+      result([FlutterError errorWithCode:@"host_missing" message:nil details:nil]);
+      return;
+    }
+    owner->_host=window;
+    Record(@"host_ready",WindowState(window));
+    [owner enterDonor:result];
+  }];
+  [_waiter start];
+}
+- (void)enterDonor:(FlutterResult)result {
   NeoKartPadScheduleRunLoop(0.001, ^{
     __block BOOL acknowledged = NO;
     try {

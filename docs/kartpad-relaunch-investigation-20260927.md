@@ -101,3 +101,27 @@ host rejection preceded or followed the user's app-switcher gesture. The
 existing reports cannot determine that ordering. No host-selection predicate,
 shutdown sequence, audio behavior, renderer instruction or game data changes
 are included in these diagnostic changes.
+
+## Confirmed premature presentation rejection
+
+The iOS 27 automatic probe at 7f173db (run 36316639900, artifact 10930224018)
+failed with `host_missing` on its first launch, before loading SDL. The system
+trace places the rejection at 11:49:31.507 UTC and the removal of UIKit's
+application deactivation reasons at 11:49:32.087–32.093. Thus a usable Flutter
+scene was still completing activation when the snapshot-based selector rejected
+it. This is a confirmed presentation precondition race; it is not a reproduction
+of the user's post-game freeze or proof of the failed device predicate.
+
+The candidate now keeps one launch pending while UIKit makes the validated host
+window available. It never starts SDL in an inactive scene, reserves the pending
+transaction against a second launch, and cancels readiness waiting on stop.
+After three seconds of active application time without a valid host, it returns
+the original presentation error with the window snapshot. Inactive/background
+time does not consume that foreground budget. No unsafe window fallback or
+manual UIScene lifecycle notification is introduced.
+
+The real Flutter fixture uses the identical readiness helper. It also checks
+cancellation without late completion, active-window timeout, and delayed
+readiness. Candidate build/relaunch results must be recorded before packaging;
+physical-device validation and the source of the long post-game wait remain
+outstanding.

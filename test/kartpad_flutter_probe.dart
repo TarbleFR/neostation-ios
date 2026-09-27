@@ -65,6 +65,7 @@ Future<void> runProbe() async {
         throw StateError('Flutter did not resume timers and frames after donor shutdown');
       }
     }
+    await channel.invokeMethod('waiter_contract');
     await channel.invokeMethod('success', {'cycles': 5});
   } catch (error, stack) {
     await channel.invokeMethod('failure', {'error': '$error', 'stack': '$stack'});
