@@ -221,7 +221,7 @@ jobs:
           python3 test/dolphin_account_267_test.py
           ruby -c build-utils/add_ios_icon_fallback_resources.rb
 
-      - name: Syntax-check RPCS3 Objective-C++ bridge
+      - name: Syntax-check embedded Objective-C++ bridges
         shell: bash
         run: |
           set -euo pipefail
@@ -230,6 +230,7 @@ jobs:
           mkdir -p "$STUB/Flutter"
           cat > "$STUB/Flutter/Flutter.h" <<'EOF'
           #import <Foundation/Foundation.h>
+          #import <UIKit/UIKit.h>
           typedef void (^FlutterResult)(id _Nullable result);
           FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
           @protocol FlutterBinaryMessenger <NSObject>
@@ -238,10 +239,13 @@ jobs:
           @class FlutterMethodChannel;
           @protocol FlutterPluginRegistrar <NSObject>
           @property(nonatomic, readonly) NSObject<FlutterBinaryMessenger>* messenger;
+          @property(nonatomic, readonly, nullable) UIViewController* viewController;
           - (void)addMethodCallDelegate:(id)delegate channel:(FlutterMethodChannel*)channel;
           @end
           @protocol FlutterPlugin <NSObject>
           + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar;
+          @end
+          @interface FlutterViewController : UIViewController
           @end
           @interface FlutterMethodCall : NSObject
           @property(nonatomic, readonly) NSString* method;
@@ -306,6 +310,12 @@ jobs:
           python3 test/dusklight_menu_test.py
           python3 test/dusklight_language_test.py
           python3 test/kartpad_bridge_contract_test.py
+          python3 test/kartpad_host_lifecycle_contract_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            test/kartpad_host_window_policy_test.cpp \
+            -o "$RUNNER_TEMP/kartpad-host-window-test"
+          "$RUNNER_TEMP/kartpad-host-window-test"
           python3 test/kartpad_ipa_validation_test.py
           flutter test test/kartpad_locale_test.dart
           flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
