@@ -157,6 +157,7 @@ jobs:
           import json
           rows=json.load(open('evidence/flutter-probe.json'))
           assert rows[-1]['stage']=='success', rows[-1]
+          assert len([r for r in rows if r['stage']=='launch_acknowledged'])==5
           after=[r for r in rows if r['stage']=='after']
           assert len(after)==5
           assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)
@@ -179,6 +180,7 @@ jobs:
           import json
           rows=json.load(open('evidence/menu-probe.json'))
           assert rows[-1]['stage']=='success', rows[-1]
+          assert len([r for r in rows if r['stage']=='launch_acknowledged'])==5
           assert len([r for r in rows if r['stage']=='menu_exit_requested'])==5
           PY
       - name: Collect diagnostics

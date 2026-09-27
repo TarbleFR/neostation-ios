@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 
 const channel = MethodChannel('probe');
 int frames = 0;
+final navigatorKey = GlobalKey<NavigatorState>();
+Completer<void>? ended;
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky, overlays: []);
@@ -11,7 +13,17 @@ void main() {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-  runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('KartPad Flutter lifecycle probe')))));
+  channel.setMethodCallHandler((call) async {
+    if (call.method == 'sessionEnded') {
+      if (call.arguments['success'] != true) {
+        ended?.completeError(StateError('${call.arguments}'));
+      } else {
+        ended?.complete();
+      }
+    }
+  });
+  runApp(MaterialApp(navigatorKey: navigatorKey,
+      home: const Scaffold(body: Center(child: Text('KartPad Flutter lifecycle probe')))));
   WidgetsBinding.instance.addPostFrameCallback((_) => runProbe());
 }
 
@@ -27,8 +39,18 @@ Future<void> runProbe() async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
     for (var cycle = 0; cycle < 5; cycle++) {
       await channel.invokeMethod('before', {'cycle': cycle, 'frames': frames});
+      final route = DialogRoute<void>(
+        context: navigatorKey.currentContext!,
+        builder: (_) => const AlertDialog(content: Text('Launching game')),
+      );
+      navigatorKey.currentState!.push(route);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
       await channel.invokeMethod('async_identity', {'cycle': cycle});
+      ended = Completer<void>();
       await channel.invokeMethod('cycle', {'cycle': cycle});
+      await channel.invokeMethod('launch_acknowledged', {'cycle': cycle});
+      await ended!.future;
+      navigatorKey.currentState!.removeRoute(route);
       final watch = Stopwatch()..start();
       final previousFrames = frames;
       // NeoStation's menus are static: request a repaint after the native

@@ -37,6 +37,7 @@ static void* Required(void* handle, const char* symbol) {
 }
 @implementation ProbePlugin {
   NSObject<FlutterPluginRegistrar>* _registrar;
+  FlutterMethodChannel* _channel;
   UIWindow* _host;
   void* _runtime;
   BOOL _running;
@@ -46,8 +47,9 @@ static void* Required(void* handle, const char* symbol) {
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   ProbePlugin* instance = [ProbePlugin new];
   instance->_registrar = registrar;
-  [registrar addMethodCallDelegate:instance channel:[FlutterMethodChannel
-      methodChannelWithName:@"probe" binaryMessenger:registrar.messenger]];
+  instance->_channel = [FlutterMethodChannel methodChannelWithName:@"probe"
+      binaryMessenger:registrar.messenger];
+  [registrar addMethodCallDelegate:instance channel:instance->_channel];
   Record(@"registered");
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -71,19 +73,25 @@ static void* Required(void* handle, const char* symbol) {
   _running = YES;
   _cycle = [call.arguments[@"cycle"] integerValue];
   NeoKartPadScheduleRunLoop(0.001, ^{
+    __block BOOL acknowledged = NO;
     try {
-      [self runDonor];
+      [self runDonor:^(id value) { acknowledged=YES; result(value); }];
       self->_running = NO;
       Record(@"returned", WindowState(self->_host));
-      result(@YES);
+      [self->_channel invokeMethod:@"sessionEnded" arguments:@{@"success":@YES}];
     } catch (const std::exception& e) {
       self->_running = NO;
       Record(@"native_failure", @{@"error":@(e.what())});
-      result([FlutterError errorWithCode:@"native_failure" message:@(e.what()) details:nil]);
+      if (!acknowledged) {
+        result([FlutterError errorWithCode:@"native_failure" message:@(e.what()) details:nil]);
+      } else {
+        [self->_channel invokeMethod:@"sessionEnded"
+            arguments:@{@"success":@NO, @"error":@(e.what())}];
+      }
     }
   });
 }
-- (void)runDonor {
+- (void)runDonor:(FlutterResult)started {
   if (!_runtime) {
     NSString* path = [NSBundle.mainBundle.privateFrameworksPath
         stringByAppendingPathComponent:@"KartPadRuntime.framework/KartPadRuntime"];
@@ -121,6 +129,9 @@ static void* Required(void* handle, const char* symbol) {
   for (UIWindow* window in _host.windowScene.windows)
     if (window != _host && !window.hidden && window.keyWindow) donor=window;
   Record(@"running", @{@"host":WindowState(_host), @"donor":WindowState(donor)});
+  // Production acknowledges launch while RuntimeMain still owns the nested
+  // SDL run loop, then sends a separate sessionEnded event after restoration.
+  started(@YES);
   BOOL menuMode = [NSProcessInfo.processInfo.arguments containsObject:@"--menu-probe"];
   _closeRequested=NO;
   UIButton* gear=nil;
