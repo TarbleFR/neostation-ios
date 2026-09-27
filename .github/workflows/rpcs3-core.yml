@@ -52,7 +52,8 @@ jobs:
           python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
           python3 test/rpcs3_atomic_startup_test.py
-          python3 test/rpcs3_failed_startup_test.py
+          # The native failure-path test compiles extracted functions from the
+          # materialized Core and runs in build_rpcs3_embedded_core.sh below.
           python3 test/rpcs3_jit_handshake_test.py
           node test/rpcs3_debugger_handshake_test.js
           for formula in ccache ninja cmake llvm@22; do
