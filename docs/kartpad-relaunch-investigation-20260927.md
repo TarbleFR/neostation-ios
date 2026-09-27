@@ -182,3 +182,82 @@ markers passed. KartPadCore, KartPadRuntime, DolphinCore, DusklightCore,
 ARMSX2Core, StikJIT and libRPCS3Core.dylib are byte-identical to Build 348.
 This unsigned sideload IPA requires the user's usual signing workflow.
 Physical-device resolution of the recorded delay is still unverified.
+
+## Build 349 device follow-up: the presentation error is gone, the stall remains
+
+The user's next video is `ScreenRecording_09-27-2026 14-40-14_1.mp4`,
+with `neostation-kartpad-lifecycle(4).log`, `console(4).log`, and subsequently
+`app(20260927-125230).log`. Match process/session boundaries, not just filenames:
+the app log contains earlier builds and does not cover all four recorded exits.
+
+- Recorded process PID 71368: the first quit is requested at 12:40:31.387 UTC.
+  Full native cleanup and `session_ended` occur at 12:40:32.029 (642 ms later).
+  The host snapshot already shows the attached, visible, key Flutter window,
+  an active scene/application and the default run-loop mode. Scene deactivation
+  from the user's gesture does not occur until 12:40:39.913.
+- All four native sessions in that process end cleanly in approximately
+  0.62–0.64 s. The second relaunch does not require an intervening activation
+  notification, so the evidence does not support a permanently stopped engine.
+- The same app log's immediately preceding process has a fully traced return:
+  native end 12:39:49.843; Dart closing 49.846308; closed 49.846682; route removal
+  49.846724; audio/session finalization 12:39:50.067473.
+- Its next Dart `presentation_begin` is 12:39:50.779667, but the 150 ms
+  `Future.delayed` completes at 12:40:05.974898, reporting **15,194 ms**.
+  This follows scene deactivation at 12:40:05.965. Storage, identity and native
+  launch then take only 9 ms. This stall precedes the native relaunch call;
+  changing native window selection or adding a longer launch timeout cannot
+  correct its cause.
+- For the recorded PID 71368, app.log stops after the initial launch reply at
+  12:40:21.968453 and `Game started — monitoring active`. It has no matching
+  Dart end-event/route-removal trace for that process's four native exits.
+  Do not assert that the recording's first route was removed promptly based on
+  the preceding process's successful removal, or treat a missing log tail as
+  proof that Dart stopped executing.
+
+The prior Flutter probe uses a regular UIKit stack and an Aurora frame loop,
+not the game's guest fibers. Commit 698bfbf4a7cf852a499ac9d727bd764c2f363413
+adds a separate five-cycle probe that uses the pinned donor's exported
+`KartPadSwitchIOSFiber` and exact 176-byte context/256 KiB stack ABI to execute
+the same SDL/Aurora frame calls from a guest stack. It preserves the original
+normal-stack probe and menu tests. Workflow run 36321081068 compares iOS 18 and
+iOS 27. On both systems the normal five cycles pass, but the guest-stack test
+stalls after native `returned`, with no Dart launch acknowledgement or end-event
+handling. Both jobs deliberately fail; their later menu steps are skipped.
+The iOS 27 artifact 10932572974 records normal delays 155, 153, 153, 157, 153 ms,
+then guest-stack begin 13:11:05.555, end 13:11:06.559, native return 13:11:07.122
+and no further Dart progress. The host window is attached, visible, key and
+active. The sampled main thread is idle in UIApplication's CFRunLoop rather
+than stuck in donor cleanup. The iOS 18 job 108624904305 ends identically at
+`returned`. This is a controlled integration reproduction, not proof of the
+precise Flutter internal failure or physical-device resolution.
+
+DuskLight is architecturally different at this boundary: its host CADisplayLink
+calls `NeoDusklight_TickGame`, returns to UIKit between frames, and leaves SDL's
+nested iOS pump disabled. KartPad calls a long-lived RuntimeMain from an NSTimer
+and lets SDL pump nested UIKit loops, potentially from a guest fiber. The new
+negative control establishes that changing only the event-pump stack can cause
+the same class of Flutter stall.
+
+## Candidate: keep UIKit event processing on the original pthread stack
+
+The canonical donor session patcher now guards the pinned `UIKit_PumpEvents`
+entry. The host binds the main pthread stack bounds before starting RuntimeMain;
+calls on a guest stack return without entering CFRunLoop. The existing
+RKSystem frame boundary pumps SDL from the startup/scheduler stack. No private
+Flutter lifecycle method, fake background/foreground event, forced cancellation,
+audio policy change or delayed-close workaround is introduced.
+
+The entire original UIKit pump is hash-checked. A host binding verifies the
+exact branch, gate bytes and marker, and fails closed on an incompatible donor.
+Counters record accepted host-stack and skipped guest-stack pumps. ARM64 tests
+execute both bound and unbound paths at five ASLR slides and boundary stack
+addresses, preserving ABI registers/SP/LR. All nine bridge tests pass against
+a freshly converted official IPA (SHA-256
+1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58); the language BMG
+and stale-callback reset tests also pass on that candidate runtime.
+
+The Flutter workflow must now consume the donor built from its exact SHA.
+It retains normal-stack cycles, explicitly verifies the unbound guest-stack
+negative control, then requires five guarded guest-stack cycles with live Dart
+timers/frames and both pump counters exercised. Real menu tests also use guest
+stacks. These candidate integration results are pending; no new IPA is ready.

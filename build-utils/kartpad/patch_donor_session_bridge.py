@@ -98,6 +98,16 @@ AURORA_GATE = BASE + 0x9000
 AURORA_MAGIC_VM = BASE + 0x9100
 AURORA_MAGIC = b'NEOKARTPAD-ANISOTROPY-v1\0'
 AURORA_ANISO_OFFSET = 40
+# UIKit's run loop must never execute Flutter callbacks on a guest fiber.
+# The ordinary pthread main stack is bound by the host before RuntimeMain.
+UIKIT_PUMP = 0x1042E2F20
+UIKIT_PUMP_SIZE = 0x84
+UIKIT_PUMP_SHA = '916cfdaddee3b355de1170fb589388683c92ecc6c289665cf073fc7fe7c220cf'
+UIKIT_PUMP_ORIGINAL = 0x90007608
+UIKIT_ENABLED_PAGE = 0x1051A2000
+UIKIT_GATE = BASE + 0x9200
+UIKIT_MAGIC_VM = BASE + 0x9300
+UIKIT_MAGIC = b'NEOKARTPAD-UIKIT-STACK-v1\0'
 PROLOGUE = bytes.fromhex('ff0303d1fc6f06a9fa6707a9f85f08a9')
 FRAME_INSTRUCTION = 0x29424666  # ldp w6, w17, [x19, #0x10]
 
@@ -239,6 +249,37 @@ def aurora_gate_bytes():
     ])
 
 
+def uikit_gate_bytes():
+    # x0..x7 (arguments), LR, SP, callee saves and SIMD remain unchanged.
+    # The zero/unbound case is retained only for the negative-control probe.
+    # A production host refuses to start unless valid stack bounds are bound.
+    code = [encode_adrp(16, UIKIT_GATE, CONTROL),
+            ldr_x(17, 16, (CONTROL & 0xfff) + 32),
+            0,  # cbz x17, original
+            0x910003E8,  # mov x8, sp
+            0xEB11011F,  # cmp x8, x17
+            0,  # b.lo skip
+            ldr_x(17, 16, (CONTROL & 0xfff) + 40),
+            0xEB11011F,  # cmp x8, x17
+            0]  # b.hs skip
+    for offset in (56,):
+        code += [ldr_x(17, 16, (CONTROL & 0xfff) + offset),
+                 0x91000631,  # add x17, x17, #1
+                 ldr_x(17, 16, (CONTROL & 0xfff) + offset) & ~0x00400000]
+    original = UIKIT_GATE + len(code) * 4
+    code += [encode_adrp(8, original, UIKIT_ENABLED_PAGE),
+             branch(original + 4, UIKIT_PUMP + 4)]
+    skip = UIKIT_GATE + len(code) * 4
+    code += [ldr_x(17, 16, (CONTROL & 0xfff) + 48),
+             0x91000631,
+             ldr_x(17, 16, (CONTROL & 0xfff) + 48) & ~0x00400000,
+             0xD65F03C0]
+    code[2] = 0xB4000011 | (((original - (UIKIT_GATE + 8)) // 4) << 5)
+    code[5] = cond_branch(UIKIT_GATE + 20, skip, 3)  # unsigned lower
+    code[8] = cond_branch(UIKIT_GATE + 32, skip, 2)  # unsigned >=
+    return words(code)
+
+
 def expected_patches():
     entry = words([encode_adrp(16, RUN, CONTROL),
                    ldr_x(16,16,CONTROL & 0xfff),0xD61F0200,0xD503201F])
@@ -255,6 +296,8 @@ def expected_patches():
             AUDIO_QUEUE_SHIFT: words([AUDIO_QUEUE_CORRECTED]),
             AURORA_INIT: words([branch(AURORA_INIT, AURORA_GATE)]),
             AURORA_GATE: aurora_gate_bytes(), AURORA_MAGIC_VM: AURORA_MAGIC,
+            UIKIT_PUMP: words([branch(UIKIT_PUMP, UIKIT_GATE)]),
+            UIKIT_GATE: uikit_gate_bytes(), UIKIT_MAGIC_VM: UIKIT_MAGIC,
             TRAMPOLINE:trampoline, GATE:gate_bytes(), MAGIC_VM:MAGIC,
             EXIT_CALL:words([branch(EXIT_CALL,EXIT_GATE,0x94000000)]),
             EXIT_GATE:words([encode_adrp(16,EXIT_GATE,CONTROL),
@@ -278,6 +321,8 @@ def layout(data):
         raise SystemExit('ERROR: donor audio queue method symbol drift')
     if symbols.get('_aurora_initialize') != AURORA_INIT:
         raise SystemExit('ERROR: donor Aurora initialization symbol drift')
+    if symbols.get('_UIKit_PumpEvents') != UIKIT_PUMP:
+        raise SystemExit('ERROR: donor UIKit event pump symbol drift')
     text = next((s for s in segments if s[0]==b'__TEXT'),None)
     ds = next((s for s in segments if s[0]==b'__DATA'),None)
     if not text or text[1]!=BASE or not ds or not ds[1]+ds[4] <= CONTROL < CONTROL+64 <= ds[1]+ds[2]:
@@ -296,7 +341,7 @@ def layout(data):
             for i in range(nsects):
                 sect=cursor+72+i*80
                 addr,length=struct.unpack_from('<QQ',data,sect+32)
-                for start,end in ((TRAMPOLINE,AURORA_MAGIC_VM+len(AURORA_MAGIC)),
+                for start,end in ((TRAMPOLINE,UIKIT_MAGIC_VM+len(UIKIT_MAGIC)),
                                   (CONTROL,CONTROL+64)):
                     if length and addr < end and start < addr+length:
                         raise SystemExit('ERROR: session bridge overlaps a Mach-O section')
@@ -344,6 +389,11 @@ def validate(data):
     struct.pack_into('<I',aurora_original,0,AURORA_INIT_ORIGINAL)
     if hashlib.sha256(aurora_original).hexdigest()!=AURORA_INIT_SHA:
         raise SystemExit('ERROR: unreviewed Aurora initialization instructions changed')
+    uikit_off=vm_to_file(segments,UIKIT_PUMP)
+    uikit_original=bytearray(data[uikit_off:uikit_off+UIKIT_PUMP_SIZE])
+    struct.pack_into('<I',uikit_original,0,UIKIT_PUMP_ORIGINAL)
+    if hashlib.sha256(uikit_original).hexdigest()!=UIKIT_PUMP_SHA:
+        raise SystemExit('ERROR: unreviewed UIKit event pump instructions changed')
     entry_off=vm_to_file(segments,ENTRY)
     entry=bytearray(data[entry_off:entry_off+ENTRY_SIZE])
     struct.pack_into('<I',entry,EXIT_CALL-ENTRY,branch(EXIT_CALL,EXIT_ORIGINAL,0x94000000))
@@ -370,13 +420,18 @@ def validate(data):
             'audioQueueLimitMs':120,
             'audioQueueShift':hex(AUDIO_QUEUE_SHIFT),
             'configurableAnisotropy':True,
-            'auroraConfigAnisotropyOffset':AURORA_ANISO_OFFSET}
+            'auroraConfigAnisotropyOffset':AURORA_ANISO_OFFSET,
+            'uikitMainStackOnly':True,
+            'uikitStackGateSha256':hashlib.sha256(uikit_gate_bytes()).hexdigest()}
 
 
 def patch(path):
     data=bytearray(path.read_bytes())
     validate_bridge(data)
     segments=layout(data)
+    uikit_off=vm_to_file(segments,UIKIT_PUMP)
+    if hashlib.sha256(data[uikit_off:uikit_off+UIKIT_PUMP_SIZE]).hexdigest()!=UIKIT_PUMP_SHA:
+        raise SystemExit('ERROR: UIKit event pump original instruction hash drift')
     off=vm_to_file(segments,ENTRY)
     if hashlib.sha256(data[off:off+ENTRY_SIZE]).hexdigest()!=EXPECTED_ENTRY_SHA:
         raise SystemExit('ERROR: guest startup original instruction hash drift')
@@ -411,7 +466,7 @@ def patch(path):
     aurora_off=vm_to_file(segments,AURORA_INIT)
     if hashlib.sha256(data[aurora_off:aurora_off+AURORA_INIT_SIZE]).hexdigest()!=AURORA_INIT_SHA:
         raise SystemExit('ERROR: Aurora initialization original instruction hash drift')
-    if any(data[TRAMPOLINE-BASE:AURORA_MAGIC_VM-BASE+len(AURORA_MAGIC)]):
+    if any(data[TRAMPOLINE-BASE:UIKIT_MAGIC_VM-BASE+len(UIKIT_MAGIC)]):
         raise SystemExit('ERROR: executable header padding is not unused')
     for address, code in expected_patches().items():
         off=vm_to_file(segments,address); data[off:off+len(code)]=code

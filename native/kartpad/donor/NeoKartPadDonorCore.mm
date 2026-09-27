@@ -7,6 +7,7 @@
 #include "KartPadCoreABI.h"
 #include "../core/SessionState.h"
 #include "../core/SessionRunLoop.h"
+#include "../core/UIKitEventPump.h"
 #include "../core/GuestLanguageState.h"
 #include "../core/DonorAudioSession.h"
 #include "../core/DonorDataLifecycle.h"
@@ -1480,6 +1481,9 @@ void RuntimeMainOnUIKitThread() {
   }
 
   LogLifecycleBoundary("RuntimeMain returned; donor transcript already closed");
+  NSLog(@"[NeoKartPad/Lifecycle] UIKit pump hostStack=%llu guestStackSkipped=%llu",
+        (unsigned long long)(uikitEventPump.counts ? uikitEventPump.counts[1] : 0),
+        (unsigned long long)(uikitEventPump.counts ? uikitEventPump.counts[0] : 0));
   const char* rawError = sdlGetError ? sdlGetError() : nullptr;
   if (runtimeError.empty() && rawError && *rawError) runtimeError = rawError;
   sdlSetiOSEventPump(false);

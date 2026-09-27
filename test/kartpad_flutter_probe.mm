@@ -7,6 +7,7 @@
 #include "KartPadHostWindowSelection.h"
 #import "KartPadHostWindowAwaiter.h"
 #include "SessionRunLoop.h"
+#include "UIKitEventPump.h"
 #include <stdexcept>
 #include <string>
 #include <array>
@@ -201,6 +202,11 @@ static void* Required(void* handle, const char* symbol) {
   auto uninstall = reinterpret_cast<void(*)()>(Required(_runtime,"KartPadMobileRuntimeHostUninstall"));
   auto windows = reinterpret_cast<void**(*)(int*)>(Required(_runtime,"SDL_GetWindows"));
   auto freeSDL = reinterpret_cast<void(*)(void*)>(Required(_runtime,"SDL_free"));
+  const BOOL unsafeFiber = [NSProcessInfo.processInfo.arguments containsObject:@"--unsafe-fiber-probe"];
+  const BOOL fiberMode = unsafeFiber || [NSProcessInfo.processInfo.arguments containsObject:@"--fiber-probe"];
+  neokartpad::UIKitEventPump hostPump;
+  if (!unsafeFiber && !hostPump.bind(_runtime))
+    throw std::runtime_error("Production UIKit stack gate binding failed");
   ready(); pump(true);
   const std::string path = NSTemporaryDirectory().UTF8String;
   AuroraConfig config{};
@@ -242,7 +248,6 @@ static void* Required(void* handle, const char* symbol) {
   }
   const CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent()+1.0;
   const CFAbsoluteTime menuDeadline = CFAbsoluteTimeGetCurrent()+60.0;
-  const BOOL fiberMode = [NSProcessInfo.processInfo.arguments containsObject:@"--fiber-probe"];
   std::unique_ptr<ProbeGuestStack> guestStack;
   if (fiberMode) {
     guestStack = std::make_unique<ProbeGuestStack>(reinterpret_cast<ProbeGuestStack::Switch>(
@@ -252,12 +257,21 @@ static void* Required(void* handle, const char* symbol) {
   do {
     if (guestStack) {
       guestStack->run(^{ if (beginFrame()) endFrame(); });
+      // Match KartPadFrameBoundary: UIKit executes only after returning to
+      // the startup/scheduler stack, never while a guest stack is active.
+      if (!unsafeFiber) hostPump.pumpFromHostStack();
     } else {
       if (beginFrame()) endFrame();
     }
   } while (menuMode ? (!_closeRequested && CFAbsoluteTimeGetCurrent()<menuDeadline)
                     : CFAbsoluteTimeGetCurrent()<deadline);
-  if (guestStack) Record(@"guest_stack_end");
+  if (guestStack) {
+    Record(@"guest_stack_end", @{@"guardBound":@(!unsafeFiber),
+        @"skipped":@(hostPump.counts ? hostPump.counts[0] : 0),
+        @"hostPumps":@(hostPump.counts ? hostPump.counts[1] : 0)});
+    if (!unsafeFiber && (!hostPump.counts[0] || !hostPump.counts[1]))
+      throw std::runtime_error("Guest/host pump paths were not both exercised");
+  }
   if (menuMode && !_closeRequested) throw std::runtime_error("Menu action not received");
   // Aurora's drain waits for EncoderReady, requested by begin_frame. Match
   // the production guest boundary and the native lifecycle regression.

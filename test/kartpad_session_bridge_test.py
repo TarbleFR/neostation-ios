@@ -75,6 +75,38 @@ def exercise(patches, slide, stop, seed):
     assert u.reg_read(arm.UC_ARM64_REG_SP)==native_sp+(0xc0 if stop else 0)
 
 class SessionBridgeTest(unittest.TestCase):
+    def test_uikit_gate_confines_run_loop_to_pthread_stack(self):
+        patches = bridge.expected_patches()
+        for slide in SLIDES:
+            for bound in (False, True):
+                for stack in (0x200000, 0x300000, 0x380000, 0x400000, 0x500000):
+                    with self.subTest(slide=slide, bound=bound, stack=stack):
+                        u = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+                        for address in {bridge.UIKIT_PUMP + slide, bridge.UIKIT_GATE + slide,
+                                        bridge.CONTROL + slide, 0x600000}:
+                            u.mem_map(address & ~4095, 4096)
+                        u.mem_write(bridge.UIKIT_PUMP + slide, patches[bridge.UIKIT_PUMP])
+                        u.mem_write(bridge.UIKIT_GATE + slide, patches[bridge.UIKIT_GATE])
+                        u.mem_write(bridge.CONTROL + slide, bytes(64))
+                        if bound:
+                            u.mem_write(bridge.CONTROL + slide + 32, struct.pack('<QQ', 0x300000, 0x400000))
+                        for reg in range(31):
+                            u.reg_write(getattr(arm, f'UC_ARM64_REG_X{reg}'), 0x10000 + reg)
+                        u.reg_write(arm.UC_ARM64_REG_X30, 0x600000)
+                        u.reg_write(arm.UC_ARM64_REG_SP, stack)
+                        allowed = not bound or 0x300000 <= stack < 0x400000
+                        finish = bridge.UIKIT_PUMP + slide + 4 if allowed else 0x600000
+                        u.emu_start(bridge.UIKIT_PUMP + slide, finish, count=100)
+                        self.assertEqual(u.reg_read(arm.UC_ARM64_REG_PC), finish)
+                        self.assertEqual(u.reg_read(arm.UC_ARM64_REG_SP), stack)
+                        self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X30), 0x600000)
+                        for reg in list(range(8)) + list(range(19, 30)):
+                            self.assertEqual(u.reg_read(getattr(arm, f'UC_ARM64_REG_X{reg}')), 0x10000 + reg)
+                        skipped, entered = struct.unpack('<QQ', bytes(u.mem_read(bridge.CONTROL + slide + 48, 16)))
+                        self.assertEqual((skipped, entered), (int(not allowed), int(allowed and bound)))
+                        if allowed:
+                            self.assertEqual(u.reg_read(arm.UC_ARM64_REG_X8), bridge.UIKIT_ENABLED_PAGE + slide)
+
     def test_aurora_anisotropy_gate_preserves_config_and_prologue(self):
         patches = bridge.expected_patches()
         for slide in SLIDES:

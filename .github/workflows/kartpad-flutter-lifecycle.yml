@@ -8,6 +8,9 @@ on:
       - test/kartpad_flutter_probe.*
       - test/kartpad_menu_probe.swift
       - test/embed_kartpad_probe.py
+      - native/kartpad/core/UIKitEventPump.h
+      - native/kartpad/donor/DonorSessionControl.inc
+      - build-utils/kartpad/patch_donor_session_bridge.py
 permissions:
   contents: read
   actions: read
@@ -22,7 +25,7 @@ jobs:
           - runner: xcode-27
             ios: iOS-27
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       PROBE_IOS: ${{ matrix.ios }}
     steps:
@@ -38,12 +41,34 @@ jobs:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
-      - uses: actions/download-artifact@v4
-        with:
-          name: KartPadCore-fdb938b87ad10f6549096ebc39cf7caee86fcb54
-          run-id: 36312123689
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: donor
+      - name: Fetch the validated donor built from this exact revision
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          for attempt in $(seq 1 55); do
+            RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/kartpad-donor-core.yml/runs?head_sha=$GITHUB_SHA&per_page=5" --jq '.workflow_runs[0].id // empty')"
+            if [ -n "$RUN_ID" ]; then
+              STATUS="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.status')"
+              if [ "$STATUS" = completed ]; then
+                CONCLUSION="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.conclusion')"
+                test "$CONCLUSION" = success
+                gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "KartPadCore-$GITHUB_SHA" --dir donor
+                echo "$RUN_ID" > evidence/donor-run.txt
+                break
+              fi
+            fi
+            sleep 15
+          done
+          test -f donor/identity.json
+          python3 build-utils/kartpad/validate_donor_artifact.py donor > evidence/donor-validation.json
+          cp donor/identity.json evidence/donor-identity.json
+          python3 - <<'PY'
+          import json,os
+          assert json.load(open('donor/identity.json'))['host_commit']==os.environ['GITHUB_SHA']
+          PY
       - name: Build real Flutter host probe
         shell: bash
         run: |
@@ -59,6 +84,7 @@ jobs:
           cp packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindow*.h "$PROBE/ios/Runner/"
           cp packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindowAwaiter.mm "$PROBE/ios/Runner/"
           cp native/kartpad/core/SessionRunLoop.h "$PROBE/ios/Runner/"
+          cp native/kartpad/core/UIKitEventPump.h "$PROBE/ios/Runner/"
           curl -fL --retry 3 https://raw.githubusercontent.com/chrissotraidis/wiicompiled/d0b8dec62a8c98dd45736a996ae18327ada8fe3f/aurora-main/include/aurora/aurora.h -o "$PROBE/ios/Runner/aurora-probe-api.h"
           echo "3959cc80683a3f674353a77b452219fc7276a2b55b96d5f42e90f5043f12908d  $PROBE/ios/Runner/aurora-probe-api.h" | shasum -a 256 -c -
           python3 - "$PROBE" <<'PY'
@@ -165,11 +191,37 @@ jobs:
           assert len(after)==5
           assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)
           PY
-      - name: Exercise SDL event pumping on the donor ARM64 guest stack
+      - name: Negative control - unbound guest-stack pump stalls Flutter
         timeout-minutes: 3
         run: |
           set -euo pipefail
           cp evidence/flutter-probe.json evidence/automatic-cycles.json
+          BUNDLE=com.neostation.kartpadHostProbe
+          xcrun simctl terminate "$PROBE_DEVICE" "$BUNDLE"
+          xcrun simctl launch --console "$PROBE_DEVICE" "$BUNDLE" --unsafe-fiber-probe > evidence/unsafe-fiber-console.log 2>&1 &
+          for i in $(seq 1 60); do
+            if python3 - "$PROBE_DATA/Documents/flutter-probe.json" <<'PY'
+          import json,sys,time
+          rows=json.load(open(sys.argv[1]))
+          returned=[r for r in rows if r['stage']=='returned']
+          is_fiber=any(r['stage']=='guest_stack_begin' for r in rows)
+          sys.exit(0 if is_fiber and returned and time.time()-returned[-1]['time']>2 else 1)
+          PY
+            then break; fi
+            sleep 1
+          done
+          cp "$PROBE_DATA/Documents/flutter-probe.json" evidence/unsafe-fiber-probe.json
+          python3 - <<'PY'
+          import json
+          rows=json.load(open('evidence/unsafe-fiber-probe.json'))
+          assert rows[-1]['stage']=='returned', rows[-1]
+          assert len([r for r in rows if r['stage']=='guest_stack_end'])==1
+          assert not any(r['stage'] in ('launch_acknowledged','after','success') for r in rows)
+          PY
+      - name: Exercise SDL event pumping on the donor ARM64 guest stack
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
           BUNDLE=com.neostation.kartpadHostProbe
           xcrun simctl terminate "$PROBE_DEVICE" "$BUNDLE"
           xcrun simctl launch --console "$PROBE_DEVICE" "$BUNDLE" --fiber-probe > evidence/fiber-console.log 2>&1 &
@@ -190,6 +242,7 @@ jobs:
           assert rows[-1]['stage']=='success', rows[-1]
           assert len([r for r in rows if r['stage']=='guest_stack_begin'])==5
           assert len([r for r in rows if r['stage']=='guest_stack_end'])==5
+          assert all(r['values']['guardBound'] and r['values']['skipped']>0 and r['values']['hostPumps']>0 for r in rows if r['stage']=='guest_stack_end')
           after=[r for r in rows if r['stage']=='after']
           assert len(after)==5
           assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)

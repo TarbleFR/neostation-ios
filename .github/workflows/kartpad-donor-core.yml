@@ -6,6 +6,10 @@ on:
     branches: [experimental]
     paths:
       - '.github/workflows/kartpad-donor-core.yml'
+      - '.github/workflows/kartpad-flutter-lifecycle.yml'
+      - 'test/kartpad_flutter_probe.*'
+      - 'test/kartpad_menu_probe.swift'
+      - 'test/embed_kartpad_probe.py'
       - 'build-utils/kartpad/convert_official_runtime.py'
       - 'build-utils/kartpad/patch_donor_language_bridge.py'
       - 'test/kartpad_language_bridge_test.py'

@@ -31,7 +31,7 @@ final class KartPadMenuProbe: XCTestCase {
       return XCTFail("XCTest quiescence API changed; cannot test immediate taps")
     }
     let app = XCUIApplication()
-    app.launchArguments = ["--menu-probe"]
+    app.launchArguments = ["--menu-probe", "--fiber-probe"]
     // Keep Main Thread Checker reports, but let this observational lifecycle
     // probe reach its menu assertions. The shipped renderer reads SDL window
     // size on its frame worker; XCTest otherwise aborts before the first tap.

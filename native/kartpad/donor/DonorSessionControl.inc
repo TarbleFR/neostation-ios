@@ -14,6 +14,7 @@ static KartPadGuestCpuFn changeSectionFn = nullptr;
 static DonorVoidFn stopMixWorkerFn = nullptr;
 static DonorVoidFn stopGuestAudioFn = nullptr;
 static neokartpad::DonorSessionReset donorSessionReset;
+static neokartpad::UIKitEventPump uikitEventPump;
 static void* (*audioBackendInstanceFn)() = nullptr;
 static void (*destroyAudioStreamFn)(void*) = nullptr;
 static void (*quitAudioSubsystemFn)(uint32_t) = nullptr;
@@ -163,6 +164,10 @@ bool BeginExitTransition(void* cpu) {
 // Called only after RKSystem::onEndFrame has returned. The gate preserves all
 // native registers; any translated helper gets a complete guest CPU snapshot.
 uint32_t KartPadFrameBoundary(void* cpu) {
+  // RKSystem::run belongs to the startup/scheduler stack. Service UIKit here
+  // even when a worker guest fiber supplied Aurora's other event polls. The
+  // native stack guard refuses to run Flutter on any alternate guest stack.
+  uikitEventPump.pumpFromHostStack();
   if (cpu && session.active()) {
     const uint64_t serial = sessionSerial.load(std::memory_order_acquire);
     if (firstFrameLoggedForSession != serial) {
@@ -247,6 +252,8 @@ void KartPadExitAfterMain(void* cpu) {
 }
 
 bool BindSessionBridge(char* error, size_t errorSize) {
+  if (!uikitEventPump.bind(runtimeHandle))
+    return Fail(error, errorSize, "KartPad UIKit stack gate or host stack is invalid.");
   audioBackendInstanceFn = reinterpret_cast<void* (*)()>(
       dlsym(runtimeHandle, "_ZN12AudioBackend8InstanceEv"));
   destroyAudioStreamFn = reinterpret_cast<void (*)(void*)>(
