@@ -1,0 +1,142 @@
+name: KartPad real Flutter and SDL lifecycle
+on:
+  workflow_dispatch:
+  push:
+    branches: [experimental]
+    paths:
+      - .github/workflows/kartpad-flutter-lifecycle.yml
+      - test/kartpad_flutter_probe.*
+permissions:
+  contents: read
+  actions: read
+jobs:
+  flutter-sdl:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: KartPadCore-fdb938b87ad10f6549096ebc39cf7caee86fcb54
+          run-id: 36312123689
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: donor
+      - name: Build real Flutter host probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/source.txt
+          flutter create --platforms=ios --org com.neostation --project-name kartpad_host_probe "$RUNNER_TEMP/flutter-probe"
+          PROBE="$RUNNER_TEMP/flutter-probe"
+          cp test/kartpad_flutter_probe.dart "$PROBE/lib/main.dart"
+          cp test/kartpad_flutter_probe.mm "$PROBE/ios/Runner/ProbePlugin.mm"
+          cp packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindow*.h "$PROBE/ios/Runner/"
+          cp native/kartpad/core/SessionRunLoop.h "$PROBE/ios/Runner/"
+          curl -fL --retry 3 https://raw.githubusercontent.com/chrissotraidis/wiicompiled/d0b8dec62a8c98dd45736a996ae18327ada8fe3f/aurora-main/include/aurora/aurora.h -o "$PROBE/ios/Runner/aurora-probe-api.h"
+          echo "3959cc80683a3f674353a77b452219fc7276a2b55b96d5f42e90f5043f12908d  $PROBE/ios/Runner/aurora-probe-api.h" | shasum -a 256 -c -
+          python3 - "$PROBE" <<'PY'
+          from pathlib import Path
+          import sys
+          root=Path(sys.argv[1])/'ios/Runner'
+          header=root/'Runner-Bridging-Header.h'
+          header.write_text(header.read_text()+'\n#import <Flutter/Flutter.h>\n@interface ProbePlugin : NSObject <FlutterPlugin>\n@end\n')
+          app=root/'AppDelegate.swift'
+          text=app.read_text()
+          marker='GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)'
+          assert marker in text, text
+          app.write_text(text.replace(marker,marker+'\n    ProbePlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "ProbePlugin")!)'))
+          PY
+          ruby - "$PROBE" <<'RUBY'
+          require 'xcodeproj'
+          project=Xcodeproj::Project.open(File.join(ARGV[0],'ios/Runner.xcodeproj'))
+          group=project.main_group['Runner']
+          ref=group.new_file('ProbePlugin.mm')
+          target=project.targets.find {|t| t.name=='Runner'}
+          target.source_build_phase.add_file_reference(ref)
+          target.build_configurations.each {|c| c.build_settings['CLANG_CXX_LANGUAGE_STANDARD']='c++20'}
+          project.save
+          RUBY
+          cd "$PROBE"
+          flutter build ios --simulator --debug
+      - name: Embed exact donor instructions and run probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/flutter-probe/build/ios/iphonesimulator/Runner.app"
+          ditto donor/KartPadRuntime.framework "$APP/Frameworks/KartPadRuntime.framework"
+          ditto donor/runtime-resources "$APP"
+          python3 - "$APP/Frameworks/KartPadRuntime.framework/KartPadRuntime" <<'PY'
+          from pathlib import Path
+          import struct,sys
+          p=Path(sys.argv[1]); b=bytearray(p.read_bytes()); cursor=32; count=0
+          for _ in range(struct.unpack_from('<I',b,16)[0]):
+              cmd,size=struct.unpack_from('<II',b,cursor)
+              if cmd==0x32:
+                  assert struct.unpack_from('<I',b,cursor+8)[0]==2
+                  struct.pack_into('<I',b,cursor+8,7); count+=1
+              cursor+=size
+          assert count==1
+          p.write_bytes(b)
+          PY
+          codesign --force --sign - "$APP/Frameworks/KartPadRuntime.framework"
+          codesign --force --sign - "$APP"
+          DEVICE="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; print(next(d["udid"] for runtime,group in json.load(sys.stdin)["devices"].items() if "iOS-18" in runtime for d in group if "iPhone" in d["name"]))')"
+          echo "PROBE_DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")"
+          DATA="$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE" data)"
+          echo "PROBE_DATA=$DATA" >> "$GITHUB_ENV"
+          xcrun simctl launch --console "$DEVICE" "$BUNDLE" > evidence/flutter-console.log 2>&1 &
+          for i in $(seq 1 90); do
+            if [ -f "$DATA/Documents/flutter-probe.json" ] && python3 - "$DATA/Documents/flutter-probe.json" <<'PY'
+          import json,sys
+          rows=json.load(open(sys.argv[1])); sys.exit(0 if rows[-1]['stage'] in ('success','failure','native_failure') else 1)
+          PY
+            then break; fi
+            sleep 1
+          done
+          cp "$DATA/Documents/flutter-probe.json" evidence/flutter-probe.json
+          cat evidence/flutter-probe.json
+          python3 - <<'PY'
+          import json
+          rows=json.load(open('evidence/flutter-probe.json'))
+          assert rows[-1]['stage']=='success', rows[-1]
+          after=[r for r in rows if r['stage']=='after']
+          assert len(after)==5
+          assert all(r['values']['arguments']['frames']>0 and r['values']['arguments']['delayMs']<2000 for r in after)
+          PY
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p evidence
+          if [ -n "${PROBE_DATA:-}" ]; then
+            cp "$PROBE_DATA/Documents/flutter-probe.json" evidence/ || true
+          fi
+          PROBE_PID="$(pgrep -x Runner | head -1 || true)"
+          if [ -n "$PROBE_PID" ]; then
+            sample "$PROBE_PID" 2 -file evidence/threads.txt || true
+          fi
+          cp ~/Library/Logs/DiagnosticReports/Runner* evidence/ 2>/dev/null || true
+          if [ -n "${PROBE_DEVICE:-}" ]; then
+            xcrun simctl spawn "$PROBE_DEVICE" log show --last 3m --style compact --predicate 'process == "Runner"' > evidence/system.log 2>&1 || true
+            xcrun simctl shutdown "$PROBE_DEVICE" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: KartPad-Flutter-probe-${{ github.sha }}
+          path: evidence/
+          retention-days: 7
