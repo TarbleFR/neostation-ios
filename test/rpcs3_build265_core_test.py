@@ -104,12 +104,14 @@ int main() {
  // 2. A delayed producer releases the actual label.
  reset(); context delayed; step=[&]{ if(now>=300) label.value=11; };
  semaphore_acquire(&delayed,0,11); assert(now>=300 && delayed.wakes==1);
- // 3. An expired driver deadline must not advance the guest FIFO.
- reset(); context late; step=[&]{ if(now>=5000) label.value=11; };
+ // 3. After one hard sync and a second full deadline, the upstream liveness
+ // fallback resumes without forging the missing guest label.
+ reset(); context late;
  semaphore_acquire(&late,0,11);
- assert(now>=5000 && label.value==11 && late.syncs==1 && rsx_log.errors>0);
- // 4. Permanently stalled producer remains cancellable.
- reset(); context cancelled; step=[&]{ if(now>=5000) cancelled.stopped=true; };
+ assert(now>=2000 && now<5000 && label.value==10 && late.syncs==1 &&
+        late.wakes==1 && rsx_log.errors==1);
+ // 4. A producer remains cancellable before the bounded fallback expires.
+ reset(); context cancelled; step=[&]{ if(now>=1500) cancelled.stopped=true; };
  semaphore_acquire(&cancelled,0,11);
  assert(label.value==10 && (cancelled.state & cpu_flag::again) && cancelled.wakes==0);
  // 5. External pause keeps progress and resumes without forging labels.
@@ -147,7 +149,7 @@ def main() -> None:
     spu = read('rpcs3/Emu/Cell/SPULLVMRecompiler.cpp')
     info = read('rpcs3/ios/RPCS3IOS.cpp')
     assert 'NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1' in info
-    assert 'FIFO preserved' in sem and 'atomic_sema.store' not in sem
+    assert 'recovery exhausted; resuming FIFO' in sem and 'atomic_sema.store' not in sem
     assert 'out_queue.size() < out_max' in vdec
     assert 'out_queue.size() + 1 >= vdec->out_max' in vdec
     assert 'std::lock_guard conversion_lock{vdec->conversion_mutex}' in vdec

@@ -38,7 +38,7 @@
     "rpcs3/Emu/RSX/Common/BufferUtils.cpp": "c2f2f5ad09c543af26d5ed633e6ea1aa1f225cc4d3ff5cf98e057ae62a7c1b65",
     "rpcs3/Emu/RSX/Common/surface_store.h": "663ce011d1b06631b965ba323e49fda59c3280d6aa61ef5b56a7623f9ed68500",
     "rpcs3/Emu/RSX/GL/GLRenderTargets.h": "c86b211fe016e64b6097bbc33e850398e3d2c86b6f620ecdd81c47a7e13927ed",
-    "rpcs3/Emu/RSX/NV47/HW/nv406e.cpp": "03a7e79f99d4432315113f13a812865c22fead4595a9a60e4cfa51f256e72dc8",
+    "rpcs3/Emu/RSX/NV47/HW/nv406e.cpp": "f08223797abd965347b0098a0da6012b792357f908746937ff608af67f674ec6",
     "rpcs3/Emu/RSX/RSXFIFO.cpp": "65d113ad219b5ff47e71fb0ef103989201cf3d83641ac1456d2530e91a422342",
     "rpcs3/Emu/RSX/VK/VKGSRender.cpp": "0cbc68b4244d4bbf81e16d24e7ba843ca20a33666a337f2d38b4c8ce72ebff6f",
     "rpcs3/Emu/RSX/VK/VKGSRender.h": "9adbb68a75b48b6f836d4a0c9a6d03250f7b7522b851e3c0a818b521fa81d255",
@@ -75,8 +75,8 @@
     "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577",
     "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded"
   },
-  "patch_sha256": "065a6151b4563e9fbc3c9869ff589d75af1ca0406fbf4c870066c052ea8def4c",
-  "policy": "Build344 baseline; ARM64 SPU/PPU arithmetic and LLVM GHC correctness; guarded NEON indices; bounded PPU compile and memory budget; RSX render reuse, cache and FIFO; lazy JIT diagnostics and arena accounting",
+  "patch_sha256": "00706ae643d271b2e6b26392d5a25e0fb95093ceb909c78821586dc5c362f3b0",
+  "policy": "Build350 baseline; ARM64 SPU/PPU arithmetic and LLVM GHC correctness; guarded NEON indices; bounded PPU compile and memory budget; RSX render reuse, cache and FIFO with bounded acquire recovery; lazy JIT diagnostics and arena accounting",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
   "upstream_repository": "XITRIX/rpcs3"

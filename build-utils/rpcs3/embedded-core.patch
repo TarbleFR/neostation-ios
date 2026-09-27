@@ -3897,10 +3897,10 @@ index aa37fd3..703899d 100644
  		}
  
 diff --git a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
-index 3eaebb1..5ddada0 100644
+index 3eaebb1..fb855bb 100644
 --- a/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
 +++ b/rpcs3/Emu/RSX/NV47/HW/nv406e.cpp
-@@ -1,139 +1,203 @@
+@@ -1,139 +1,199 @@
 -#include "stdafx.h"
 -#include "nv406e.h"
 -#include "nv47_sync.hpp"
@@ -4045,7 +4045,6 @@ index 3eaebb1..5ddada0 100644
 +			u64 last_check_val = wait_started;
 +			bool recovery_attempted = false;
 +			bool timed_out = false;
-+			u64 last_stall_report = 0;
 +
 +			while (observed != arg)
 +			{
@@ -4100,18 +4099,15 @@ index 3eaebb1..5ddada0 100644
 +#endif
 +						timed_out = true;
 +#ifdef RPCS3_IOS
-+						// A timeout is NOT a guest release. Advancing GET here loses
-+						// ordering (GOW3: expected N, observed N-1 on successive waits).
-+						// Keep servicing real GPU/CPU dependencies; Stop/pause and
-+						// savestate cancellation still use test_stopped()/cpu_wait().
-+						if (!last_stall_report || current - last_stall_report >= 5'000'000)
-+						{
-+							rsx_log.error(
-+								"RSX acquire still pending (FIFO preserved): address=0x%X expected=0x%X observed=0x%X waited_us=%llu",
-+								addr, arg, static_cast<u32>(observed), current - wait_started);
-+							last_stall_report = current;
-+						}
-+						progress_started = current;
++						// The producer did not publish the guest label even after one
++						// explicit RSX synchronization and a second complete recovery
++						// window. Never forge the label, but restore upstream's bounded
++						// liveness fallback so one lost producer cannot park the FIFO
++						// forever (GOW3: expected N, observed N-1 at 0x60300510).
++						rsx_log.error(
++							"RSX acquire recovery exhausted; resuming FIFO: address=0x%X expected=0x%X observed=0x%X waited_us=%llu",
++							addr, arg, static_cast<u32>(observed), current - wait_started);
++						break;
 +#else
 +						rsx_log.error(
 +							"nv406e::semaphore_acquire timed out: address=0x%X expected=0x%X observed=0x%X waited_us=%llu",
