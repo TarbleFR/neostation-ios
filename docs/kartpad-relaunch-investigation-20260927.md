@@ -260,4 +260,55 @@ The Flutter workflow must now consume the donor built from its exact SHA.
 It retains normal-stack cycles, explicitly verifies the unbound guest-stack
 negative control, then requires five guarded guest-stack cycles with live Dart
 timers/frames and both pump counters exercised. Real menu tests also use guest
-stacks. These candidate integration results are pending; no new IPA is ready.
+stacks.
+
+Candidate source is `3934ac9d333247d5374b9fb7d71f8ef49bbcd79e`.
+Native run 36322395443 passes all mandatory donor tests and builds artifact
+10932614137. Core SHA-256 is
+`995e876715b98be8fde897a88f7b93fb2357b6c47826d99c1df0a0b05a98930c`;
+Runtime SHA-256 is
+`ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0`.
+Byte comparison to the Build 349 runtime proves that only the UIKit entry
+branch, 72-byte gate and marker differ. All other runtime instructions,
+including audio, renderer and language code, are byte-identical.
+
+Flutter run 36322395458 passes normal-stack cycles, the unbound negative
+control and all five guarded guest-stack cycles on both iOS 18 and iOS 27.
+The iOS 18 artifact 10932119768 records guarded return delays
+154, 153, 153, 153, 152 ms, with two resumed Flutter frames per interval.
+Each cycle exercises both paths: skipped guest pumps / accepted host pumps
+152/152, 149/149, 161/161, 177/177, 168/168. The unbound control stops at native
+`returned` with no Dart acknowledgement or post-return frame/timer progress.
+
+The iOS 18 menu XCTest still fails before the first tap. Its crash report
+`Runner-2026-09-27-133558.ips` identifies the same existing MTC abort as before:
+`UIKit_GetWindowSizeInPixels -> SDL_GetWindowSizeInPixels ->
+aurora::window::get_window_size -> frame_worker_main`, specifically an off-main
+`UIViewController.view` access. No menu success is claimed for iOS 18, and the
+whole Flutter workflow must not be described as green.
+
+iOS 27 artifact 10933147219 confirms five guarded automatic return delays of
+151, 152, 153, 152, 152 ms, with two resumed frames each. The real menu XCTest
+passes all assertions in 101.814 s at 13:41:21 UTC: five menu exit actions, five
+new launch acknowledgements, five guarded guest-stack sessions and five return
+delays of 153, 152, 153, 159, 152 ms. All cycles record both accepted and skipped
+pumps. As in the earlier baseline probes, xcodebuild remains open after its
+passing suite and the step times out at ten minutes. Packaging requires the
+actual complete menu event report, not an invented green workflow status.
+
+Native UIKit/CoreAudio run 36322565781 uses the same 3934ac9 donor, with probe
+source `d3e558fad05feeb0838b4d3d80fc854546eaf0a4`. Attempt 1 never starts the app:
+simctl reports Mach error -308 (server died), with no probe events or report.
+The identical job's attempt 2 succeeds (job 108630122929, artifact 10932827839):
+20 HLE reset cycles, three SDL/Metal/audio sessions, three actual frontend
+CoreAudio playback recoveries, stack guard bound and six accepted host pumps.
+Because both attempts have artifacts of the same name, packaging must select
+the successful artifact by numeric ID, not its ambiguous name.
+
+Build 350 packaging now binds the exact successful native/CoreAudio artifact
+and both Flutter artifacts by numeric ID, verifies positive/negative controls,
+the iOS 27 menu flow, and exact Core/Runtime hashes. Guarded timers/frames pass
+on both simulated systems; iOS 18 menu/MTC failure and iOS 27 post-suite runner
+timeout remain recorded limitations. These probes execute the shipped SDL/Aurora
+instructions and real ARM64 fiber switch, not full gameplay or the user's
+physical iPhone. Physical-device resolution remains unverified.

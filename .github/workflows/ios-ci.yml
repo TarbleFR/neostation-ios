@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 349 KartPad relaunch candidate
-run-name: NeoStation iOS Build 349 KartPad relaunch candidate • ${{ github.sha }}
+name: NeoStation iOS Build 350 KartPad relaunch candidate
+run-name: NeoStation iOS Build 350 KartPad relaunch candidate • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '349'
+        default: '350'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-ios-build-349-kartpad-relaunch
+  group: neostation-ios-build-350-kartpad-relaunch
   cancel-in-progress: true
 
 jobs:
@@ -37,15 +37,15 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 349 KartPad relaunch candidate IPA
+    name: Build 350 KartPad relaunch candidate IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '349' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Relaunch-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-349-KartPad-Relaunch-Candidate' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Relaunch-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-349-KartPad-Relaunch-Candidate' }}
-      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36317379227' }}
-      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || 'dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '350' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Relaunch-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-350-KartPad-Relaunch-Candidate' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-KartPad-Relaunch-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-350-KartPad-Relaunch-Candidate' }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
       # Preserve the validated KartPad session recovery with the pinned RPCS3 Core.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
@@ -87,8 +87,10 @@ jobs:
       - name: Download validated native session and CoreAudio evidence
         uses: actions/download-artifact@v4
         with:
-          name: KartPad-UIKit-probe-eefc266212e1d899c21f075d4b31fbac4e08ad78
-          run-id: 36281016557
+          # Pin successful attempt 2; attempt 1 never launched the simulator app.
+          artifact-ids: 10932827839
+          merge-multiple: true
+          run-id: 36322565781
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: build/kartpad-lifecycle-evidence
 
@@ -100,52 +102,89 @@ jobs:
           import json
           from pathlib import Path
           evidence=Path('build/kartpad-lifecycle-evidence')
-          assert (evidence/'source.txt').read_text().strip() == 'eefc266212e1d899c21f075d4b31fbac4e08ad78'
+          assert (evidence/'source.txt').read_text().strip() == 'd3e558fad05feeb0838b4d3d80fc854546eaf0a4'
+          identity=json.loads((evidence/'donor-identity.json').read_text())
+          assert identity['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+          assert identity['runtime_sha256']=='ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0'
           report=json.loads((evidence/'probe.json').read_text())
           assert report['success'] and report['reproducedStaleCallback'] and report['reproducedStaleTimer'], report
           assert report['hleResetCycles']==20 and report['rendererAudioCycles']==3 and report['frontendAudioCycles']==3, report
+          assert report['uikitStackGuardBound'] and report['uikitHostPumps']>0, report
           PYTEST
           # The UIKit probe covers these unchanged lifecycle/audio reset sources.
           # Donor menu and ARM64 instruction changes are separately bound to
           # KARTPAD_CORE_HOST_SHA and exercised by the native donor workflow.
-          git diff --exit-code eefc266212e1d899c21f075d4b31fbac4e08ad78 "$GITHUB_SHA" -- \
+          git diff --exit-code d3e558fad05feeb0838b4d3d80fc854546eaf0a4 "$GITHUB_SHA" -- \
             native/kartpad/core/DonorSessionReset.h \
             native/kartpad/core/DonorAudioSession.h \
             native/kartpad/core/DonorDataLifecycle.h \
+            native/kartpad/core/UIKitEventPump.h test/kartpad_simulator_probe.mm \
             lib/services/game_launch_manager.dart \
             lib/services/music_player_service.dart lib/services/home_music_service.dart
 
-      - name: Download exact Flutter readiness evidence
+      - name: Download exact iOS 18 Flutter guest-stack evidence
         uses: actions/download-artifact@v4
         with:
-          name: KartPad-Flutter-probe-iOS-18-dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4
-          run-id: 36317379071
+          artifact-ids: 10932119768
+          merge-multiple: true
+          run-id: 36322395458
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: build/kartpad-readiness-evidence
+          path: build/kartpad-readiness-evidence/iOS-18
 
-      - name: Require tested presentation readiness
+      - name: Download exact iOS 27 Flutter guest-stack evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 10933147219
+          merge-multiple: true
+          run-id: 36322395458
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/kartpad-readiness-evidence/iOS-27
+
+      - name: Require tested readiness, guest-stack recovery and iOS 27 menu exits
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json
           from pathlib import Path
-          evidence=Path('build/kartpad-readiness-evidence')
-          assert (evidence/'source.txt').read_text().strip() == 'dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4'
-          # This gate asserts the automatic cycles and readiness behavior.
-          # The iOS 18 menu XCTest failed in the pre-existing donor MTC check;
-          # it is recorded in the investigation and is not counted as passing.
-          rows=json.loads((evidence/'automatic-cycles.json').read_text())
-          assert rows[-1]['stage']=='success', rows[-1]
-          assert sum(r['stage']=='launch_acknowledged' for r in rows)==5
-          assert sum(r['stage']=='waiter_contract_passed' for r in rows)==1
-          after=[r['values']['arguments'] for r in rows if r['stage']=='after']
-          assert len(after)==5 and all(r['frames']>0 and r['delayMs']<2000 for r in after), after
+          def cycles(rows, fiber=False):
+              assert rows[-1]['stage']=='success', rows[-1]
+              for stage in ('launch_acknowledged','returned','after'):
+                  assert sum(r['stage']==stage for r in rows)==5, stage
+              assert sum(r['stage']=='waiter_contract_passed' for r in rows)==1
+              after=[r['values']['arguments'] for r in rows if r['stage']=='after']
+              assert all(r['frames']>0 and r['delayMs']<2000 for r in after), after
+              if fiber:
+                  guest=[r['values'] for r in rows if r['stage']=='guest_stack_end']
+                  assert len(guest)==5
+                  assert all(r['guardBound'] and r['skipped']>0 and r['hostPumps']>0 for r in guest)
+          for system in ('iOS-18','iOS-27'):
+              evidence=Path('build/kartpad-readiness-evidence')/system
+              assert (evidence/'source.txt').read_text().strip()=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+              identity=json.loads((evidence/'donor-identity.json').read_text())
+              assert identity['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+              assert identity['runtime_sha256']=='ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0'
+              cycles(json.loads((evidence/'automatic-cycles.json').read_text()))
+              cycles(json.loads((evidence/'fiber-probe.json').read_text()),True)
+              unsafe=json.loads((evidence/'unsafe-fiber-probe.json').read_text())
+              assert unsafe[-1]['stage']=='returned'
+              assert sum(r['stage']=='guest_stack_end' for r in unsafe)==1
+              assert not any(r['stage'] in ('launch_acknowledged','after','success') for r in unsafe)
+              if system=='iOS-27':
+                  # Final probe.json is collected even when xcodebuild hangs
+                  # after its suite. Require the actual five menu exit events.
+                  menu=json.loads((evidence/'flutter-probe.json').read_text())
+                  cycles(menu,True)
+                  assert sum(r['stage']=='menu_exit_requested' for r in menu)==5
+          # iOS 18's menu XCTest still aborts in the pre-existing donor
+          # worker-thread UIKit size read. It is not counted as passing here.
           PY
-          git diff --exit-code dcf58ecb8e2115ba679da4789dbb7b5b7c46d8f4 "$GITHUB_SHA" -- \
+          git diff --exit-code 3934ac9d333247d5374b9fb7d71f8ef49bbcd79e "$GITHUB_SHA" -- \
             packages/kartpad_internal_bridge/ios/Classes \
             lib/services/kartpad_internal_service.dart lib/utils/game_launch_utils.dart \
-            test/kartpad_flutter_probe.dart test/kartpad_flutter_probe.mm
+            native/kartpad/core/UIKitEventPump.h native/kartpad/donor \
+            build-utils/kartpad/patch_donor_session_bridge.py \
+            test/kartpad_flutter_probe.dart test/kartpad_flutter_probe.mm test/kartpad_menu_probe.swift
 
       - name: Select Xcode 16.4
         uses: maxim-lobanov/setup-xcode@v1
@@ -713,6 +752,8 @@ jobs:
           from pathlib import Path
           identity=json.loads(Path('dist/kartpad-native/identity.json').read_text())
           assert identity['host_commit'] == os.environ['KARTPAD_CORE_HOST_SHA'], identity
+          assert identity['sha256'] == '995e876715b98be8fde897a88f7b93fb2357b6c47826d99c1df0a0b05a98930c', identity
+          assert identity['runtime_sha256'] == 'ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0', identity
           PY
           git diff --exit-code "$KARTPAD_CORE_HOST_SHA" "$GITHUB_SHA" --             native/kartpad             build-utils/kartpad             packages/kartpad_internal_bridge
 
