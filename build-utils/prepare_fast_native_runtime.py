@@ -19,6 +19,8 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 DOLPHIN_SHA='7129d9c654fb6d28f2fa92ae1a4c14d1f25a1fc3e87788237676b48a0fb3aa2d'
 RPCS3_SHA='4866265eca27327c3fc9be14190fec082b58a5e1946f541ced34e46c13ceabd9'
+ARMSX2_SHA='cadb6cd56c4b5d01b623bf9696800d48ba504eef8129a8de468c11381de8d162'
+DUSKLIGHT_SHA='5a64e2fd48c47831fd07306c90e28036535a125bd887149d92ba4567ac9af8a7'
 STIKJIT_SHA='4de72ef84a1aef6d6d3b547222c730227b48e91d8d5eb7e59c1f9235961e4efe'
 UNIVERSAL_SHA='22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1'
 LEGACY_SHA='787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'
@@ -149,13 +151,24 @@ def main() -> None:
         stik=app/'Frameworks/StikJIT.framework'
         dolphin=app/'Frameworks/DolphinCore.framework'
         rpcs3=app/'Frameworks/libRPCS3Core.dylib'
+        armsx2=app/'Frameworks/ARMSX2Core.framework'
+        dusklight=app/'Frameworks/DusklightCore.framework'
+        dusklight_identity=app/'Dusklight-native-identity.json'
+        dusklight_licenses=app/'Dusklight-Licenses'
         dolphin_bridge=app/'Frameworks/dolphin_internal_bridge.framework'
 
-        for required in (stik/'StikJIT', dolphin/'DolphinCore', rpcs3):
+        for required in (
+            stik/'StikJIT', dolphin/'DolphinCore', rpcs3,
+            armsx2/'ARMSX2Core', dusklight/'DusklightCore',
+            dusklight_identity, app/'cacert.pem',
+        ):
             demand(required.is_file(), f'Missing donor runtime: {required}')
+        demand(dusklight_licenses.is_dir(), 'Donor Dusklight notices are missing')
 
         demand(sha(dolphin/'DolphinCore')==DOLPHIN_SHA, 'DolphinCore donor hash mismatch')
         demand(sha(rpcs3)==RPCS3_SHA, 'RPCS3Core donor hash mismatch')
+        demand(sha(armsx2/'ARMSX2Core')==ARMSX2_SHA, 'ARMSX2Core donor hash mismatch')
+        demand(sha(dusklight/'DusklightCore')==DUSKLIGHT_SHA, 'DusklightCore donor hash mismatch')
         demand(sha(stik/'StikJIT')==STIKJIT_SHA, 'StikJIT donor hash mismatch')
         demand(sha(stik/'universal.js')==UNIVERSAL_SHA, 'StikJIT universal.js donor hash mismatch')
         demand(sha(stik/'legacy.js')==LEGACY_SHA, 'StikJIT legacy.js donor hash mismatch')
@@ -213,10 +226,45 @@ def main() -> None:
         shutil.copy2(rpcs3, core_dst)
         core_dst.chmod(0o755)
 
+        armsx2_root=ROOT/'dist/armsx2'
+        if armsx2_root.exists():
+            shutil.rmtree(armsx2_root)
+        copytree(armsx2, armsx2_root/'ARMSX2Core.framework')
+        (armsx2_root/'ARMSX2Core.framework/ARMSX2Core').chmod(0o755)
+        armsx2_source=json.loads((ROOT/'build-utils/armsx2/source.json').read_text())
+        (armsx2_root/'identity.json').write_text(json.dumps({
+            'host_commit':'82351b75114df5fb33387f2157745bccaf1c872d',
+            'revision':armsx2_source['revision'],
+            'abi_version':armsx2_source['abi_version'],
+            'architectures':['arm64'],
+            'sha256':ARMSX2_SHA,
+            'donor_run':DONOR_RUN_ID,
+            'donor_artifact':DONOR_ARTIFACT_ID,
+        }, indent=2)+'\n')
+
+        dusklight_root=ROOT/'dist/dusklight'
+        if dusklight_root.exists():
+            shutil.rmtree(dusklight_root)
+        copytree(dusklight, dusklight_root/'DusklightCore.framework')
+        (dusklight_root/'DusklightCore.framework/DusklightCore').chmod(0o755)
+        copytree(dusklight_licenses, dusklight_root/'licenses')
+        shutil.copy2(dusklight_identity, dusklight_root/'identity.json')
+        donor_dusklight=json.loads(dusklight_identity.read_text())
+        demand(
+            donor_dusklight.get('host_commit') ==
+            '4de572747e794d69756fda5db761a7650e98e9f6',
+            'Dusklight donor host commit mismatch',
+        )
+        demand(donor_dusklight.get('abi_version') == 7,
+               'Dusklight donor ABI mismatch')
+        demand(donor_dusklight.get('sha256') == DUSKLIGHT_SHA,
+               'Dusklight donor identity hash mismatch')
+
         sys_src=app/'Sys'
         sys_dst=ROOT/'ios/Runner/Sys'
         demand(sys_src.is_dir(), 'Donor Dolphin Sys resources missing')
         copytree(sys_src, sys_dst)
+        shutil.copy2(app/'cacert.pem', ROOT/'ios/Runner/cacert.pem')
 
         touch_dst=ROOT/'packages/dolphin_internal_bridge/ios/TouchResources'
         if touch_dst.exists():
@@ -266,6 +314,8 @@ def main() -> None:
             'universalJsSha256':sha(stik/'universal.js'),
             'legacyJsSha256':sha(stik/'legacy.js'),
             'dolphinCoreSha256':sha(dolphin/'DolphinCore'),
+            'armsx2CoreSha256':sha(armsx2/'ARMSX2Core'),
+            'dusklightCoreSha256':sha(dusklight/'DusklightCore'),
             'rpcs3CoreSha256':sha(rpcs3),
             'touchResourcesCopied':copied,
         }, indent=2)+'\n')
