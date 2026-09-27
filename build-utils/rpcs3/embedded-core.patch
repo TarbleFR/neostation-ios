@@ -2776,7 +2776,7 @@ index d451a94..20257d3 100644
  
  	if (result.data.empty())
 diff --git a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
-index 9a1e4c7..0ddd1f5 100644
+index 9a1e4c7..63f6605 100644
 --- a/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPULLVMRecompiler.cpp
 @@ -1,4 +1,6 @@
@@ -2922,7 +2922,30 @@ index 9a1e4c7..0ddd1f5 100644
  			{
  				stride = 16;
  				elements = 4;
-@@ -3904,12 +3943,28 @@ public:
+@@ -3893,6 +3932,22 @@ public:
+ 			fpm.run(*f, fam);
+ 		}
+ 
++		// Upstream e826098: remove helpers that became unreachable after the
++		// per-function optimization passes. Besides shrinking the generated
++		// module this lets LLVM omit the corresponding SPU state/dispatch paths
++		// from hot blocks entirely.
++		if (m_test_state->use_empty())
++		{
++			m_test_state->eraseFromParent();
++			m_test_state = nullptr;
++		}
++
++		if (m_dispatch->use_empty())
++		{
++			m_dispatch->eraseFromParent();
++			m_dispatch = nullptr;
++		}
++
+ 		// Clear context (TODO)
+ 		m_blocks.clear();
+ 		m_block_queue.clear();
+@@ -3904,12 +3959,28 @@ public:
  		std::string& llvm_log = function_log;
  		raw_string_ostream out(llvm_log);
  
@@ -2933,7 +2956,7 @@ index 9a1e4c7..0ddd1f5 100644
 -		if (verifyModule(*_module, &out))
 +		bool llvm_ir_logged = false;
 +		const auto append_llvm_ir = [&]
-+		{
+ 		{
 +			if (!llvm_ir_logged)
 +			{
 +				prepare_function_log();
@@ -2943,7 +2966,7 @@ index 9a1e4c7..0ddd1f5 100644
 +			}
 +		};
 +		if (g_cfg.core.spu_debug)
- 		{
++		{
 +			append_llvm_ir();
 +		}
 +		std::string verification_log;
@@ -2956,7 +2979,7 @@ index 9a1e4c7..0ddd1f5 100644
  			out.flush();
  			spu_log.error("LLVM: Verification failed at 0x%x:\n%s", func.entry_point, llvm_log);
  
-@@ -4023,6 +4078,10 @@ public:
+@@ -4023,6 +4094,10 @@ public:
  
  		// Install unconditionally, possibly replacing existing one from spu_fast
  		add_loc->compiled = fn;
@@ -2967,7 +2990,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  		// Rebuild trampoline if necessary
  		if (!m_spurt->rebuild_ubertrampoline(func.data[0]))
-@@ -4069,7 +4128,7 @@ public:
+@@ -4069,7 +4144,7 @@ public:
  				cache.add(func);
  			}
  
@@ -2976,7 +2999,7 @@ index 9a1e4c7..0ddd1f5 100644
  		}
  
  		return fn;
-@@ -4449,12 +4508,26 @@ public:
+@@ -4449,12 +4524,26 @@ public:
  		std::string llvm_log;
  		raw_string_ostream out(llvm_log);
  
@@ -2992,13 +3015,13 @@ index 9a1e4c7..0ddd1f5 100644
 +		};
 +		const bool log_llvm_ir = g_cfg.core.spu_debug.get();
 +		if (log_llvm_ir)
-+		{
+ 		{
 +			append_llvm_ir();
 +		}
 +		std::string verification_log;
 +		raw_string_ostream verification_out(verification_log);
 +		if (verifyModule(*_module, &verification_out))
- 		{
++		{
 +			verification_out.flush();
 +			if (!log_llvm_ir)
 +			{
@@ -3008,7 +3031,7 @@ index 9a1e4c7..0ddd1f5 100644
  			out.flush();
  			spu_log.error("LLVM: Verification failed:\n%s", llvm_log);
  
-@@ -5200,7 +5273,7 @@ public:
+@@ -5200,7 +5289,7 @@ public:
  				}
  			}
  
@@ -3017,7 +3040,7 @@ index 9a1e4c7..0ddd1f5 100644
  			//m_ir->CreateStore(val.value, spu_ptr(&spu_thread::ch_mfc_cmd, &spu_mfc_cmd::eah));
  			return;
  		}
-@@ -5403,6 +5476,16 @@ public:
+@@ -5403,6 +5492,16 @@ public:
  					}
  					}
  
@@ -3034,7 +3057,7 @@ index 9a1e4c7..0ddd1f5 100644
  					// Check if the LS address is constant and 256 bit aligned
  					u64 clsa = umax;
  
-@@ -5411,20 +5494,19 @@ public:
+@@ -5411,20 +5510,19 @@ public:
  						clsa = ci->getZExtValue();
  					}
  
@@ -3057,7 +3080,7 @@ index 9a1e4c7..0ddd1f5 100644
  					{
  						// Generate fixed sequence of copy operations
  						for (u32 i = 0; i < csize; i += stride)
-@@ -5558,7 +5640,7 @@ public:
+@@ -5558,7 +5656,7 @@ public:
  			}
  
  			// Fallback to unoptimized WRCH implementation (TODO)
@@ -3066,7 +3089,7 @@ index 9a1e4c7..0ddd1f5 100644
  			break;
  		}
  		case MFC_WrListStallAck:
-@@ -5702,7 +5784,21 @@ public:
+@@ -5702,7 +5800,21 @@ public:
  
  	void ABSDB(spu_opcode_t op)
  	{
@@ -3088,7 +3111,7 @@ index 9a1e4c7..0ddd1f5 100644
  		set_vr(op.rt, absd(a, b));
  	}
  
-@@ -6273,7 +6369,17 @@ public:
+@@ -6273,7 +6385,17 @@ public:
  	template <typename TA>
  	static auto byteswap(TA&& a)
  	{
@@ -3106,7 +3129,7 @@ index 9a1e4c7..0ddd1f5 100644
  	}
  
  	static auto rotqby_reverse_base()
-@@ -6334,20 +6440,24 @@ public:
+@@ -6334,20 +6456,24 @@ public:
  				const auto sc = rotqby_reverse_base();
  				const auto sh = sc + (splat_scalar(b) >> 3);
  
@@ -3131,7 +3154,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  			return eval(pshufb_for_x86_and_tbl_for_aarch64(a, (sh & 0xf)));
  		});
-@@ -6561,11 +6671,13 @@ public:
+@@ -6561,11 +6687,13 @@ public:
  			const auto sc = rotqby_reverse_base();
  			const auto sh = eval(sc + splat_scalar(b));
  
@@ -3145,7 +3168,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  			set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(as, (sh & 0xf)));
  			return;
-@@ -6574,11 +6686,13 @@ public:
+@@ -6574,11 +6702,13 @@ public:
  		const auto sc = rotqby_forward_base();
  		const auto sh = eval(sc - splat_scalar(b));
  
@@ -3159,7 +3182,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  		set_vr(op.rt, pshufb_for_x86_and_tbl_for_aarch64(a, (sh & 0xf)));
  	}
-@@ -6773,6 +6887,7 @@ public:
+@@ -6773,6 +6903,7 @@ public:
  
  	void SUMB(spu_opcode_t op)
  	{
@@ -3167,7 +3190,7 @@ index 9a1e4c7..0ddd1f5 100644
  		if (m_use_avx512)
  		{
  			const auto [a, b] = get_vrs<u8[16]>(op.ra, op.rb);
-@@ -6789,6 +6904,7 @@ public:
+@@ -6789,6 +6920,7 @@ public:
  			set_vr(op.rt, shuffle2(ax, bx, 0, 9, 2, 11, 4, 13, 6, 15));
  			return;
  		}
@@ -3175,7 +3198,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  #ifdef ARCH_ARM64
  		if (m_use_dotprod)
-@@ -6812,6 +6928,17 @@ public:
+@@ -6812,6 +6944,17 @@ public:
  			return;
  		}
  
@@ -3193,7 +3216,7 @@ index 9a1e4c7..0ddd1f5 100644
  		const auto [a, b] = get_vrs<u16[8]>(op.ra, op.rb);
  		const auto ahs = eval((a >> 8) + (a & 0xff));
  		const auto bhs = eval((b >> 8) + (b & 0xff));
-@@ -7417,6 +7544,32 @@ public:
+@@ -7417,6 +7560,32 @@ public:
  			case 2:
  			case 1:
  			{
@@ -3226,7 +3249,7 @@ index 9a1e4c7..0ddd1f5 100644
  				set_vr(op.rt4, select(bitcast<s8[16]>(c) != 0, get_vr<u8[16]>(op.rb), get_vr<u8[16]>(op.ra)));
  				return;
  			}
-@@ -7461,6 +7614,21 @@ public:
+@@ -7461,6 +7630,21 @@ public:
  			return;
  		}
  
@@ -3248,7 +3271,7 @@ index 9a1e4c7..0ddd1f5 100644
  		const auto c = get_vr<u8[16]>(op.rc);
  
  		if (auto [ok, mask] = get_const_vector(c.value, m_pos); ok)
-@@ -7569,6 +7737,18 @@ public:
+@@ -7569,6 +7753,18 @@ public:
  		[[maybe_unused]] const bool consts_never_allones = known_idx.One[5];
  		[[maybe_unused]] const bool idx_selects_single = known_idx.extractBits(1, 4).isConstant();
  
@@ -3267,7 +3290,7 @@ index 9a1e4c7..0ddd1f5 100644
  		const auto a = get_vr<u8[16]>(op.ra);
  		const auto b = get_vr<u8[16]>(op.rb);
  
-@@ -7627,12 +7807,12 @@ public:
+@@ -7627,12 +7823,12 @@ public:
  			cv = eval(c ^ 0xf);
  		}
  
@@ -3285,7 +3308,7 @@ index 9a1e4c7..0ddd1f5 100644
  #else
  		const std::optional<value_t<u8[16]>> single_src = (idx_selects_single || (op.ra == op.rb && !m_interp_magn))
  #endif
-@@ -7675,6 +7855,14 @@ public:
+@@ -7675,6 +7871,14 @@ public:
  				return;
  			}
  
@@ -3300,7 +3323,7 @@ index 9a1e4c7..0ddd1f5 100644
  			const auto x = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
  			const auto xv = perm_or_zero_only ? eval(splat<u8[16]>(0)) : x;
  			const auto cm = eval(cv & 0x8f);
-@@ -7701,6 +7889,14 @@ public:
+@@ -7701,6 +7905,14 @@ public:
  			return;
  		}
  
@@ -3315,7 +3338,7 @@ index 9a1e4c7..0ddd1f5 100644
  		const auto idx_consts = tbl(build<u8[16]>(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0x80), (c >> 4));
  		const auto idx_base = perm_or_zero_only ? eval(splat<u8[16]>(0)) : idx_consts;
  		const auto cm = eval(cv & 0x9f);
-@@ -7953,6 +8149,7 @@ public:
+@@ -7953,6 +8165,7 @@ public:
  	{
  		const auto known = known_opt.value_or(get_known_fp_class<3>(v, llvm::FPClassTest::fcNan | llvm::FPClassTest::fcInf));
  
@@ -3323,7 +3346,7 @@ index 9a1e4c7..0ddd1f5 100644
  		// Avoid pessimation when full clamping isn't needed
  		if (m_use_avx512 && !(known.isKnownNeverNaN() && (known.isKnownNeverPosInfinity() || known.isKnownNeverNegInfinity())))
  		{
-@@ -7960,6 +8157,7 @@ public:
+@@ -7960,6 +8173,7 @@ public:
  			// Normally doesn't cause issues as SNaN frequently gets quieted beforehand
  			return eval(vrangeps(v, fsplat<f32[4]>(std::bit_cast<f32, u32>(0x7f7fffff)), 0x2, 0xff));
  		}
@@ -3331,7 +3354,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  		return eval(clamp_positive_smax(clamp_negative_smax(v, known), known));
  	}
-@@ -7993,6 +8191,7 @@ public:
+@@ -7993,6 +8207,7 @@ public:
  			const auto a_sign = (a & splat<u32[4]>(0x80000000));
  			value_t<u32[4]> final_result = eval(splat<u32[4]>(0));
  
@@ -3339,7 +3362,7 @@ index 9a1e4c7..0ddd1f5 100644
  			if (m_use_avx512)
  			{
  				value_t<u32[16]> lo_lut;
-@@ -8003,6 +8202,7 @@ public:
+@@ -8003,6 +8218,7 @@ public:
  				final_result = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  			}
  			else
@@ -3347,7 +3370,7 @@ index 9a1e4c7..0ddd1f5 100644
  			{
  				for (u32 i = 0; i < 4; i++)
  				{
-@@ -8669,6 +8869,7 @@ public:
+@@ -8669,6 +8885,7 @@ public:
  					return eval(select(fcmp_uno(b != fsplat<f32[4]>(0.)), normal_fma, c));
  				}
  
@@ -3355,7 +3378,7 @@ index 9a1e4c7..0ddd1f5 100644
  				// Same number of operations well preventing a serial predicate chain pessimization
  				if (m_use_avx512)
  				{
-@@ -8677,6 +8878,7 @@ public:
+@@ -8677,6 +8894,7 @@ public:
  					const auto cb = vfixupimmps(b, a, splat<u32[4]>(0x00000800u), 0, 0xff);
  					return fma32x4(ca, cb, c, a_known, b_known);
  				}
@@ -3363,7 +3386,7 @@ index 9a1e4c7..0ddd1f5 100644
  
  				const auto normal_fma = fma32x4(a, b, c, a_known, b_known);
  				const auto a_cmp = fcmp_uno(a != fsplat<f32[4]>(0.));
-@@ -8689,6 +8891,7 @@ public:
+@@ -8689,6 +8907,7 @@ public:
  			}
  		});
  
@@ -3371,7 +3394,7 @@ index 9a1e4c7..0ddd1f5 100644
  		if (m_use_avx512)
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
-@@ -8702,6 +8905,7 @@ public:
+@@ -8702,6 +8921,7 @@ public:
  			});
  		}
  		else
@@ -3379,7 +3402,7 @@ index 9a1e4c7..0ddd1f5 100644
  		{
  			register_intrinsic("spu_re_acc", [&](llvm::CallInst* ci)
  			{
-@@ -8910,17 +9114,38 @@ public:
+@@ -8910,17 +9130,38 @@ public:
  
  		if (auto [ok_re, mystery] = match_expr(a, spu_re(MT)); ok_re)
  		{
@@ -3418,7 +3441,7 @@ index 9a1e4c7..0ddd1f5 100644
  		}
  
  		if (!m_interp_magn && op.ra == op.rb)
-@@ -9046,6 +9271,7 @@ public:
+@@ -9046,6 +9287,7 @@ public:
  				const auto a_sign = (a & splat<u32[4]>(0x80000000));
  				value_t<u32[4]> b = eval(splat<u32[4]>(0));
  
@@ -3426,7 +3449,7 @@ index 9a1e4c7..0ddd1f5 100644
  				if (m_use_avx512)
  				{
  					value_t<u32[16]> lo_lut;
-@@ -9056,6 +9282,7 @@ public:
+@@ -9056,6 +9298,7 @@ public:
  					b = vperm2d128From512(lo_lut, a_fraction, hi_lut);
  				}
  				else
@@ -3434,7 +3457,7 @@ index 9a1e4c7..0ddd1f5 100644
  				{
  					for (u32 i = 0; i < 4; i++)
  					{
-@@ -9311,6 +9538,7 @@ public:
+@@ -9311,6 +9554,7 @@ public:
  
  			value_t<s32[4]> r;
  
@@ -3442,7 +3465,7 @@ index 9a1e4c7..0ddd1f5 100644
  			if (m_use_avx512)
  			{
  				const auto sc = eval(bitcast<f32[4]>(max(bitcast<s32[4]>(a),splat<s32[4]>(0x0))));
-@@ -9318,6 +9546,7 @@ public:
+@@ -9318,6 +9562,7 @@ public:
  				set_vr(op.rt, r);
  				return;
  			}
@@ -3517,7 +3540,7 @@ index faf4082..384b531 100644
  	// Interpreter table (spu_itype -> ptr)
  	static std::array<u64, 256> g_interpreter_table;
 diff --git a/rpcs3/Emu/Cell/SPUThread.cpp b/rpcs3/Emu/Cell/SPUThread.cpp
-index bc9ec5e..3a986b8 100644
+index bc9ec5e..af082ec 100644
 --- a/rpcs3/Emu/Cell/SPUThread.cpp
 +++ b/rpcs3/Emu/Cell/SPUThread.cpp
 @@ -25,6 +25,10 @@
@@ -3607,6 +3630,24 @@ index bc9ec5e..3a986b8 100644
  	}
  }
  
+@@ -3524,6 +3574,17 @@ bool spu_thread::do_putllc(const spu_mfc_cmd& args)
+ 		auto& super_data = *vm::get_super_ptr<spu_rdata_t>(addr);
+ 		const bool success = [&]()
+ 		{
++			// Upstream 083859b: when relaxed reservation emulation is selected
++			// and PUTLLC changes a single 16-byte lane, avoid the heavyweight
++			// writer lock while preserving the reservation/range lock protocol.
++			if (!g_cfg.core.spu_accurate_reservations && diff16_pos != umax)
++			{
++				vm::range_lock<128>(range_lock, addr, 128);
++				const bool ok = cmp_rdata(rdata, super_data) && atomic_storage<u128>::compare_exchange(*cast_as(super_data, diff16_pos), *cast_as(rdata, diff16_pos), *cast_as_const(to_write, diff16_pos));
++				range_lock->release(0);
++				return ok;
++			}
++
+ 			// Full lock (heavyweight)
+ 			// TODO: vm::check_addr
+ 			vm::writer_lock lock(addr, range_lock);
 diff --git a/rpcs3/Emu/Cell/lv2/sys_memory.cpp b/rpcs3/Emu/Cell/lv2/sys_memory.cpp
 index 01b36d8..403436f 100644
 --- a/rpcs3/Emu/Cell/lv2/sys_memory.cpp
@@ -3628,6 +3669,85 @@ index 01b36d8..403436f 100644
 +	sys_memory.trace("sys_memory_container_get_size(mem_info=*0x%x, cid=0x%x)", mem_info, cid);
  
  	const auto ct = idm::get_unlocked<lv2_memory_container>(cid);
+ 
+diff --git a/rpcs3/Emu/Cell/lv2/sys_spu.cpp b/rpcs3/Emu/Cell/lv2/sys_spu.cpp
+index ee0e070..0ee274b 100644
+--- a/rpcs3/Emu/Cell/lv2/sys_spu.cpp
++++ b/rpcs3/Emu/Cell/lv2/sys_spu.cpp
+@@ -13,6 +13,9 @@
+ #include "Emu/Cell/PPUThread.h"
+ #include "Emu/Cell/timers.hpp"
+ #include "Emu/Memory/vm_reservation.h"
++#ifdef RPCS3_IOS
++#include "ios/RPCS3IOSExperimentalPolicy.h"
++#endif
+ #include "sys_interrupt.h"
+ #include "sys_process.h"
+ #include "sys_memory.h"
+@@ -24,6 +27,53 @@
+ 
+ LOG_CHANNEL(sys_spu);
+ 
++#ifdef RPCS3_IOS
++namespace
++{
++bool apply_gow3_spu_mlaa_bypass(u8* loc, std::string_view hash, std::vector<u32>& applied)
++{
++	if (!rpcs3::ios::get_experimental_policy().gow3_spu_mlaa_bypass)
++	{
++		return false;
++	}
++
++	const std::string_view title_id = Emu.GetTitleID();
++	if (title_id != "BCES00510" && title_id != "BCES00799" && title_id != "BCUS98111" &&
++		title_id != "BCJS37001" && title_id != "BCAS25003" && title_id != "BCKS15003")
++	{
++		return false;
++	}
++
++	// RPCS3's official patch repository identifies these exact MLAA modules
++	// for God of War III 01.00 and 01.03 respectively. Never patch a merely
++	// similar program or another title.
++	if (hash != "SPU-530c255936b07b25467a58e24ceff5fd4e2960b7" &&
++		hash != "SPU-2239af4827b17317522bd6323c646b45b34ebf14")
++	{
++		return false;
++	}
++
++	constexpr std::array<std::pair<u32, u32>, 2> patches{{
++		{0x00005948, 0x40800094}, // il r20, 1
++		{0x0000690c, 0x40800027}, // il r39, 0
++	}};
++
++	for (const auto& [offset, instruction] : patches)
++	{
++		auto& target = *reinterpret_cast<be_t<u32>*>(loc + offset);
++		if (target != instruction)
++		{
++			target = instruction;
++			applied.push_back(offset);
++		}
++	}
++
++	sys_spu.notice("Applied iOS God of War III SPU MLAA bypass to %s", hash);
++	return true;
++}
++}
++#endif
++
+ template <>
+ void fmt_class_string<spu_group_status>::format(std::string& out, u64 arg)
+ {
+@@ -224,6 +274,10 @@ void sys_spu_image::deploy(u8* loc, std::span<const sys_spu_segment> segs, bool
+ 		g_fxo->get<patch_engine>().apply(applied, Emu.GetTitleID() + '-' + hash, mem_translate);
+ 	}
+ 
++#ifdef RPCS3_IOS
++	apply_gow3_spu_mlaa_bypass(loc, hash, applied);
++#endif
++
+ 	(is_verbose ? spu_log.notice : sys_spu.trace)("Loaded SPU image: %s (<- %u)%s", hash, applied.size(), dump);
+ }
  
 diff --git a/rpcs3/Emu/Memory/vm.cpp b/rpcs3/Emu/Memory/vm.cpp
 index e7f55d7..8859f38 100644
@@ -5816,7 +5936,7 @@ index 130f54b..4c096c9 100644
  void clean_savestates(std::string_view title_id, std::string_view boot_path, usz max_files, usz max_files_size);
 +void clean_orphaned_savestate_temps();
 diff --git a/rpcs3/Emu/system_config.h b/rpcs3/Emu/system_config.h
-index 7072922..271162a 100644
+index 7072922..440a68d 100644
 --- a/rpcs3/Emu/system_config.h
 +++ b/rpcs3/Emu/system_config.h
 @@ -107,8 +107,16 @@ struct cfg_root : cfg::node
@@ -5836,6 +5956,14 @@ index 7072922..271162a 100644
  		cfg::_bool empty_hdd0_tmp{ this, "Empty /dev_hdd0/tmp/", true };
  
  	} vfs{ this };
+@@ -134,6 +142,7 @@ struct cfg_root : cfg::node
+ 		cfg::_enum<ios_experimental_mode> vulkan_command_buffer_reclamation{ this, "Vulkan Command-Buffer Reclamation", ios_experimental_mode::automatic };
+ 		cfg::_enum<ios_experimental_mode> expanded_spu_scratch{ this, "Expanded ARM64 SPU Scratch", ios_experimental_mode::automatic };
+ 		cfg::_enum<ios_experimental_mode> persistent_spu_object_cache{ this, "Persistent SPU Object Cache", ios_experimental_mode::automatic };
++		cfg::_enum<ios_experimental_mode> gow3_spu_mlaa_bypass{ this, "God of War III SPU MLAA Bypass", ios_experimental_mode::automatic };
+ 	} ios_experimental{ this };
+ #endif
+ 
 diff --git a/rpcs3/Emu/system_progress.cpp b/rpcs3/Emu/system_progress.cpp
 index 52e4951..580947d 100644
 --- a/rpcs3/Emu/system_progress.cpp
@@ -6875,6 +7003,45 @@ index b4602fe..37a708a 100644
  	}
  
  	rpcs3_ios_status begin_content_install() noexcept
+diff --git a/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp b/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp
+index 7c3389b..9736cf8 100644
+--- a/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp
++++ b/rpcs3/ios/RPCS3IOSExperimentalPolicy.cpp
+@@ -58,6 +58,7 @@ void resolve_experimental_policy() noexcept
+ 	resolved.rsx_dma_wait_parking = resolve_mode(g_cfg.ios_experimental.rsx_dma_wait_parking, arm64_default);
+ 	resolved.vulkan_command_buffer_reclamation = resolve_mode(g_cfg.ios_experimental.vulkan_command_buffer_reclamation, arm64_default);
+ 	resolved.expanded_spu_scratch = resolve_mode(g_cfg.ios_experimental.expanded_spu_scratch, arm64_default);
++	resolved.gow3_spu_mlaa_bypass = resolve_mode(g_cfg.ios_experimental.gow3_spu_mlaa_bypass, false);
+ 
+ 	// ARM64 SPU objects currently contain process-specific absolute host
+ 	// addresses without relocations. Reusing them after ASLR moves those
+@@ -74,11 +75,12 @@ void resolve_experimental_policy() noexcept
+ 	configure_buffer_optimizations(resolved.neon_byte_swap, resolved.neon_primitive_restart, resolved.precomputed_indices);
+ 
+ 	ios_experimental_log.notice(
+-		"Resolved boot policy: swap=%d restart=%d precomputed=%d mobile_spu=%d fifo=%u wfe=%d deferred_get=%d getllar=%d rsx_park=%d vk_cb_reclaim=%d spu_scratch=%u spu_object_cache=%d",
++		"Resolved boot policy: swap=%d restart=%d precomputed=%d mobile_spu=%d fifo=%u wfe=%d deferred_get=%d getllar=%d rsx_park=%d vk_cb_reclaim=%d spu_scratch=%u spu_object_cache=%d gow3_spu_mlaa=%d",
+ 		resolved.neon_byte_swap, resolved.neon_primitive_restart, resolved.precomputed_indices,
+ 		resolved.mobile_spu_scheduling, resolved.fifo_cache_bytes, resolved.fifo_idle_wfe,
+ 		resolved.deferred_get_publishing, resolved.getllar_backoff, resolved.rsx_dma_wait_parking,
+-		resolved.vulkan_command_buffer_reclamation, get_spu_gateway_scratch_size(), resolved.persistent_spu_object_cache);
++		resolved.vulkan_command_buffer_reclamation, get_spu_gateway_scratch_size(), resolved.persistent_spu_object_cache,
++		resolved.gow3_spu_mlaa_bypass);
+ }
+ 
+ u32 get_spu_gateway_scratch_size() noexcept
+diff --git a/rpcs3/ios/RPCS3IOSExperimentalPolicy.h b/rpcs3/ios/RPCS3IOSExperimentalPolicy.h
+index 8fba197..bf0553a 100644
+--- a/rpcs3/ios/RPCS3IOSExperimentalPolicy.h
++++ b/rpcs3/ios/RPCS3IOSExperimentalPolicy.h
+@@ -20,6 +20,7 @@ struct experimental_policy
+ 	bool vulkan_command_buffer_reclamation = false;
+ 	bool expanded_spu_scratch = false;
+ 	bool persistent_spu_object_cache = false;
++	bool gow3_spu_mlaa_bypass = false;
+ };
+ 
+ // Replaced only while boot is serialized and before emulation workers exist.
 diff --git a/rpcs3/ios/RPCS3IOSPerformance.cpp b/rpcs3/ios/RPCS3IOSPerformance.cpp
 index d800542..8e15f0d 100644
 --- a/rpcs3/ios/RPCS3IOSPerformance.cpp
@@ -7583,7 +7750,7 @@ index 88392e0..568d036 100644
  // limit. The query is intentionally cheap enough for frame-boundary sampling.
  u64 available_process_memory_headroom() noexcept;
 diff --git a/rpcs3/ios/RPCS3IOSSettings.cpp b/rpcs3/ios/RPCS3IOSSettings.cpp
-index b7b0474..0d698bc 100644
+index b7b0474..cf46c1d 100644
 --- a/rpcs3/ios/RPCS3IOSSettings.cpp
 +++ b/rpcs3/ios/RPCS3IOSSettings.cpp
 @@ -1,5 +1,8 @@
@@ -7595,7 +7762,23 @@ index b7b0474..0d698bc 100644
  
  #include "Emu/system_config.h"
  #include "Emu/system_utils.hpp"
-@@ -205,6 +208,89 @@ const std::array catalog{
+@@ -93,6 +96,7 @@ const std::array catalog{
+ 	// Advanced
+ 	SETTING("advanced.debug_console_mode", "Advanced", "CPU Compatibility", "Debug console mode", "Emulates additional debug-console behavior required by some software.", kind::RPCS3_IOS_SETTING_BOOLEAN, g_cfg.core.debug_console_mode, 0, 1, 1),
+ 	SETTING("advanced.accurate_spu_dma", "Advanced", "CPU Compatibility", "Accurate SPU DMA", "Uses stricter ordering for SPU DMA operations.", kind::RPCS3_IOS_SETTING_BOOLEAN, g_cfg.core.spu_accurate_dma, 0, 1, 1),
++	SETTING("advanced.accurate_spu_reservations", "Advanced", "CPU Compatibility", "Accurate SPU Reservations", "Accurately emulates SPU reservations. Disabling can improve PUTLLC performance but may reduce game stability.", kind::RPCS3_IOS_SETTING_BOOLEAN, g_cfg.core.spu_accurate_reservations, 0, 1, 1),
+ 	SETTING("advanced.accurate_rsx_access", "Advanced", "CPU Compatibility", "Accurate RSX reservation access", "Uses stricter reservation behavior for CPU access shared with RSX.", kind::RPCS3_IOS_SETTING_BOOLEAN, g_cfg.core.rsx_accurate_res_access, 0, 1, 1),
+ 	SETTING("advanced.ppu_vnan_fixup", "Advanced", "CPU Compatibility", "Approximate PPU Vector NaN Handling", "Enables partial correction of PPU vector NaN behavior.", kind::RPCS3_IOS_SETTING_BOOLEAN, g_cfg.core.ppu_fix_vnan, 0, 1, 1),
+ 	SETTING("advanced.llvm_precompilation", "Advanced", "CPU Compatibility", "PPU/SPU LLVM Precompilation", "Precompiles PPU modules before starting a title.", kind::RPCS3_IOS_SETTING_BOOLEAN, g_cfg.core.llvm_precompilation, 0, 1, 1),
+@@ -134,6 +138,7 @@ const std::array catalog{
+ 	SETTING("experimental.vulkan_command_buffer_reclamation", "Experimental", "Vulkan Memory", "Per-command-buffer ring reclamation", "Returns completed Vulkan ring allocations after each command buffer, including loads with no presentation. Disable to restore frame-only reclamation. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.vulkan_command_buffer_reclamation, 0, 0, 0),
+ 	SETTING("experimental.expanded_spu_scratch", "Experimental", "SPU", "Expanded ARM64 SPU scratch", "Reserves 256 KiB instead of RPCS3's 8 KiB for generated ARM64 SPU spills. Disable to restore the original reservation. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.expanded_spu_scratch, 0, 0, 0),
+ 	GLOBAL_SETTING("experimental.persistent_spu_object_cache", "Experimental", "SPU", "Persistent SPU object cache", "Unavailable on ARM64 because cached objects contain process-specific addresses. The setting is retained only for configuration compatibility.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.persistent_spu_object_cache, 0, 0, 0),
++	GAME_SETTING("experimental.gow3_spu_mlaa_bypass", "Experimental", "SPU", "God of War III SPU MLAA bypass", "Skips the exact official MLAA SPU modules for supported God of War III versions, freeing CELL time and allowing resolution scaling. Takes effect on the next boot.", kind::RPCS3_IOS_SETTING_CHOICE, g_cfg.ios_experimental.gow3_spu_mlaa_bypass, 0, 0, 0),
+ 
+ 	// Emulator
+ 	SETTING("emulator.max_llvm_threads", "Emulator", "Compilation", "Max LLVM Compile Threads", "Limits concurrent LLVM compilation threads; zero uses the iOS memory-safe automatic limit.", kind::RPCS3_IOS_SETTING_INTEGER, g_cfg.core.llvm_threads, 0, 64, 1),
+@@ -205,6 +210,89 @@ const std::array catalog{
  #undef GAME_SETTING
  #undef GLOBAL_SETTING
  
@@ -7685,7 +7868,7 @@ index b7b0474..0d698bc 100644
  constexpr std::size_t maximum_preset_name_size = 80;
  constexpr std::size_t maximum_preset_config_size = 1024 * 1024;
  constexpr std::size_t maximum_presets_per_title = 128;
-@@ -573,6 +659,83 @@ bool remove_game_settings(std::string_view title_id) noexcept
+@@ -573,6 +661,83 @@ bool remove_game_settings(std::string_view title_id) noexcept
  	return fs::remove_file(path) || fs::g_tls_error == fs::error::noent;
  }
  

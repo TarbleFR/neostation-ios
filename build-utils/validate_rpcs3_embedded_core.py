@@ -19,6 +19,7 @@ REQUIRED_MARKERS = (
     ('Build 266 JIT', JIT_MARKER.encode('ascii')),
     ('Build 264 ARM64/ThinLTO', b'NEOSTATION_BUILD264_GOW3_ARM64_LTO_V1'),
     ('Build 265 RSX/SPU/video', b'NEOSTATION_BUILD265_RSX_SPU_VIDEO_V1'),
+    ('God of War III SPU MLAA engine bypass', b'Applied iOS God of War III SPU MLAA bypass'),
     ('selective ThinLTO', b'thin-rpcs3-core-only'),
     ('SPU on-demand policy', b'NeoStation: SPU cache warmup deferred; LLVM compiles blocks on demand;'),
     ('LLVM JIT self-test', b'RPCS3 LLVM JIT self-test entry=%p'),
