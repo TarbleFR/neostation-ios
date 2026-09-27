@@ -315,7 +315,8 @@ jobs:
             test/rpcs3_early_address_space_escrow_test.cpp \
             -o "$RUNNER_TEMP/rpcs3-early-address-space-escrow-test"
           "$RUNNER_TEMP/rpcs3-early-address-space-escrow-test"
-          python3 test/rpcs3_failed_startup_test.py
+          # The pinned RPCS3 Core run compiles this native failure-path test
+          # against its materialized source before publishing its identity.
           python3 test/game_launch_route_test.py
           python3 test/game_audio_handoff_test.py
           flutter test test/audio_policy_service_test.dart
