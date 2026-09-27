@@ -168,6 +168,7 @@ jobs:
           cp evidence/flutter-probe.json evidence/automatic-cycles.json
           xcodebuild test-without-building -project "$RUNNER_TEMP/flutter-probe/ios/Runner.xcodeproj" \
             -scheme MenuProbe -destination "platform=iOS Simulator,id=$PROBE_DEVICE" \
+            -parallel-testing-enabled NO \
             -derivedDataPath "$RUNNER_TEMP/menuDerivedData" \
             -resultBundlePath "$PWD/evidence/menu-result.xcresult" \
             CODE_SIGNING_ALLOWED=NO > evidence/menu-xcodebuild.log 2>&1
@@ -185,6 +186,7 @@ jobs:
         run: |
           mkdir -p evidence
           if [ -n "${PROBE_DATA:-}" ]; then
+            PROBE_DATA="$(xcrun simctl get_app_container "$PROBE_DEVICE" com.neostation.kartpadHostProbe data)"
             cp "$PROBE_DATA/Documents/flutter-probe.json" evidence/ || true
           fi
           PROBE_PID="$(pgrep -x Runner | head -1 || true)"

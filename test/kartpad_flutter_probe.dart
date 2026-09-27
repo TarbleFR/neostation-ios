@@ -6,6 +6,11 @@ const channel = MethodChannel('probe');
 int frames = 0;
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky, overlays: []);
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
   runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('KartPad Flutter lifecycle probe')))));
   WidgetsBinding.instance.addPostFrameCallback((_) => runProbe());
 }
@@ -15,7 +20,6 @@ Future<void> runProbe() async {
   void count(Duration _) {
     frames++;
     ticker.addPostFrameCallback(count);
-    ticker.scheduleFrame();
   }
   ticker.addPostFrameCallback(count);
   ticker.scheduleFrame();
@@ -27,6 +31,9 @@ Future<void> runProbe() async {
       await channel.invokeMethod('cycle', {'cycle': cycle});
       final watch = Stopwatch()..start();
       final previousFrames = frames;
+      // NeoStation's menus are static: request a repaint after the native
+      // return, without continuously waking Flutter throughout the game.
+      ticker.scheduleFrame();
       await Future<void>.delayed(const Duration(milliseconds: 150));
       await channel.invokeMethod('after', {
         'cycle': cycle, 'delayMs': watch.elapsedMilliseconds,

@@ -5,6 +5,10 @@ final class KartPadMenuProbe: XCTestCase {
     continueAfterFailure = false
     let app = XCUIApplication()
     app.launchArguments = ["--menu-probe"]
+    // Keep Main Thread Checker reports, but let this observational lifecycle
+    // probe reach its menu assertions. The shipped renderer reads SDL window
+    // size on its frame worker; XCTest otherwise aborts before the first tap.
+    app.launchEnvironment["MTC_CRASH_ON_REPORT"] = "0"
     app.launch()
     for cycle in 0..<5 {
       let gear = app.buttons["probe.settings.\(cycle)"]
