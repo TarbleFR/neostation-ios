@@ -6,6 +6,7 @@ core = (ROOT / "native/kartpad/donor/NeoKartPadDonorCore.mm").read_text()
 control = (ROOT / "native/kartpad/donor/DonorSessionControl.inc").read_text()
 abi = (ROOT / "packages/kartpad_internal_bridge/ios/Classes/KartPadCoreABI.h").read_text()
 plugin = (ROOT / "packages/kartpad_internal_bridge/ios/Classes/KartPadInternalBridgePlugin.mm").read_text()
+host_policy = (ROOT / "packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindowPolicy.h").read_text()
 manager = (ROOT / "lib/services/game_launch_manager.dart").read_text()
 patcher = (ROOT / "build-utils/kartpad/patch_donor_session_bridge.py").read_text()
 
@@ -52,6 +53,10 @@ for token in (
 # player relaunches it from NeoStation after the terminal event.
 assert 'restartFreshSessionForTransaction' not in plugin
 assert 'sessionRestarted' not in plugin
+assert 'ActiveHostView(_registrar.viewController)' in plugin
+assert 'SelectHostWindow(candidates)' in plugin
+assert 'window.isKeyWindow) { keyWindow' not in plugin
+assert 'candidate.flutterOwned && candidate.attached && candidate.visible &&' in host_policy
 assert "exitReason == 'languageRestart' ||" in manager
 assert "exitReason == 'userReturn'" in manager
 assert "exitReason == 'runtimeFailure'" in manager

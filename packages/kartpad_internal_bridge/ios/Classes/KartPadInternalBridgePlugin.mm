@@ -1,6 +1,7 @@
 #import "KartPadInternalBridgePlugin.h"
 #import "KartPadCoreABI.h"
 #include "KartPadCoreLoader.h"
+#include "KartPadHostWindowPolicy.h"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -25,21 +26,46 @@ NSString* CorePath() {
       @"KartPadCore.framework/KartPadCore"];
 }
 
-UIViewController* ActiveViewController() {
-  UIWindow* keyWindow = nil;
+UIView* ActiveHostView(UIViewController* flutterController) {
+  NSMutableArray<UIView*>* views = [NSMutableArray array];
+  std::vector<neokartpad::HostWindowCandidate> candidates;
+  auto append = [&](UIViewController* controller, BOOL flutterOwned) {
+    // isViewLoaded avoids creating a view just to decide whether it is ready.
+    UIView* view = controller.isViewLoaded ? controller.view : nil;
+    UIWindow* window = view.window;
+    UIWindowScene* scene = window.windowScene;
+    if (!view || !window || !scene) return;
+    [views addObject:view];
+    candidates.push_back({static_cast<bool>(flutterOwned), true,
+                          !window.hidden && window.alpha > 0.01,
+                          scene.activationState == UISceneActivationStateForegroundActive,
+                          static_cast<bool>(window.isKeyWindow)});
+  };
+
+  // Flutter's registrar identifies its own view even when the donor SDL
+  // window has not relinquished UIKit's key-window designation yet.
+  append(flutterController, flutterController != nil);
   for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
     if (![scene isKindOfClass:UIWindowScene.class] ||
         scene.activationState != UISceneActivationStateForegroundActive) continue;
     for (UIWindow* window in ((UIWindowScene*)scene).windows) {
-      if (window.isKeyWindow) { keyWindow = window; break; }
+      UIViewController* root = window.rootViewController;
+      if (![root isKindOfClass:FlutterViewController.class] ||
+          (flutterController && root == flutterController)) continue;
+      append(root, YES);
     }
-    if (keyWindow) break;
   }
-  UIViewController* controller = keyWindow.rootViewController;
-  while (controller.presentedViewController) {
-    controller = controller.presentedViewController;
+
+  const int selected = neokartpad::SelectHostWindow(candidates);
+  if (selected < 0) {
+    NSLog(@"[NeoStation/KartPad] no attached foreground Flutter view (candidates=%lu)",
+          (unsigned long)views.count);
+    return nil;
   }
-  return controller;
+  UIView* host = views[static_cast<NSUInteger>(selected)];
+  NSLog(@"[NeoStation/KartPad] selected Flutter host view (windowKey=%d, candidates=%lu)",
+        host.window.isKeyWindow, (unsigned long)views.count);
+  return host;
 }
 
 NSString* ExitReasonName(int reason) {
@@ -93,6 +119,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   NSInteger _activeTransaction;
   BOOL _launchCompletionDelivered;
   BOOL _terminationDelivered;
+  __weak NSObject<FlutterPluginRegistrar>* _registrar;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -101,6 +128,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
                                   binaryMessenger:registrar.messenger];
   KartPadInternalBridgePlugin* instance = [[KartPadInternalBridgePlugin alloc] init];
   instance->_channel = channel;
+  instance->_registrar = registrar;
   [registrar addMethodCallDelegate:instance channel:channel];
 }
 
@@ -369,8 +397,8 @@ static void OnCoreEvent(void* context, int state, const char* message) {
     return;
   }
 
-  UIViewController* controller = ActiveViewController();
-  if (!controller || !controller.view) {
+  UIView* hostView = ActiveHostView(_registrar.viewController);
+  if (!hostView) {
     result(Failure(@"KARTPAD_HOST_VIEW_MISSING", @"presentation",
                    @"NeoStation has no active host view."));
     return;
@@ -386,7 +414,7 @@ static void OnCoreEvent(void* context, int state, const char* message) {
   NSLog(@"[NeoStation/KartPad] transaction=%ld session launch accepted",
         (long)_activeTransaction);
   const int started = _api->start(
-      gamePath.fileSystemRepresentation, (__bridge void*)controller.view,
+      gamePath.fileSystemRepresentation, (__bridge void*)hostView,
       error, sizeof(error));
   if (started <= 0) {
     NSString* message = error[0]
