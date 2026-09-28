@@ -1,5 +1,5 @@
-name: RPCS3 passive startup core
-run-name: RPCS3 passive startup Core • ${{ github.sha }}
+name: RPCS3 Build 353 XITRIX v0.10 core
+run-name: RPCS3 Build 353 XITRIX v0.10 Core • ${{ github.sha }}
 on:
   push:
     branches: [experimental]
@@ -18,6 +18,7 @@ on:
       - 'test/rpcs3_preprocessor_balance_test.py'
       - 'test/rpcs3_build351_gow3_engine_test.py'
       - 'test/rpcs3_build352_gow3_memory_test.py'
+      - 'test/rpcs3_build353_xitrix_v010_test.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,7 +30,7 @@ jobs:
     # The host integration reuses the already built, provenance-checked Core;
     # ios-ci validates its unchanged source, recipe, ABI, and binary identity.
     if: ${{ !contains(github.event.head_commit.message, '[rpcs3-host-integration]') }}
-    name: Build passive RPCS3 Core arm64
+    name: Build 353 RPCS3 Core arm64
     runs-on: macos-15
     timeout-minutes: 180
     env:
@@ -51,7 +52,7 @@ jobs:
           set -euo pipefail
           git diff --check
           bash -n build-utils/build_rpcs3_embedded_core.sh
-          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py test/rpcs3_build352_gow3_memory_test.py
+          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py test/rpcs3_build352_gow3_memory_test.py test/rpcs3_build353_xitrix_v010_test.py
           python3 test/rpcs3_preprocessor_balance_test.py
           python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
