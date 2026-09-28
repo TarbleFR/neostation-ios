@@ -107,6 +107,7 @@ flutter:
     - assets/data/
     - assets/systems/
     - assets/sounds/
+    - assets/videos/neostation_ios_intro.mp4
   shaders:
     - assets/shaders/stripes.frag
     - assets/shaders/fluid.frag
