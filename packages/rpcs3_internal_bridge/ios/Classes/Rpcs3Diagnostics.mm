@@ -48,8 +48,15 @@ static const unsigned long long kRPCS3MilestoneLimit = 512 * 1024;
 #if defined(RPCS3_DIAGNOSTICS_TESTING)
   if (_testDirectory.length > 0) return _testDirectory;
 #endif
-  return NSSearchPathForDirectoriesInDomains(
+  NSString* documents = NSSearchPathForDirectoriesInDomains(
       NSDocumentDirectory, NSUserDomainMask, YES).firstObject ?: @"";
+  if (documents.length == 0) return @"";
+  NSString* diagnostics = [documents stringByAppendingPathComponent:@"Diagnostics"];
+  [NSFileManager.defaultManager createDirectoryAtPath:diagnostics
+                           withIntermediateDirectories:YES
+                                            attributes:nil
+                                                 error:nil];
+  return diagnostics;
 }
 
 - (NSString*)diagnosticPath {

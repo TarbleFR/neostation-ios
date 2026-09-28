@@ -166,6 +166,114 @@ class Rpcs3InternalService {
     return directory;
   }
 
+  static Future<Directory> filesWorkspaceDirectory() async {
+    final documents = await getApplicationDocumentsDirectory();
+    final root = Directory(path.join(documents.path, 'RPCS3'));
+    await root.create(recursive: true);
+    for (final relative in const <String>[
+      'Import/Game Saves',
+      'Import/Savestates',
+      'Export/Game Saves',
+      'Export/Savestates',
+    ]) {
+      await Directory(path.join(root.path, relative)).create(recursive: true);
+    }
+    final readme = File(path.join(root.path, 'README.txt'));
+    if (!await readme.exists()) {
+      await readme.writeAsString(
+        'NeoStation RPCS3 manual save exchange\n\n'
+        'Import/Game Saves     : place PS3 savedata folders here.\n'
+        'Import/Savestates     : place .SAVESTAT/.zst/.gz states here.\n'
+        'Export/Game Saves     : current savedata snapshot from RPCS3.\n'
+        'Export/Savestates     : current RPCS3 savestate snapshot.\n\n'
+        'Import is consumed automatically when NeoStation starts.\n'
+        'Export is refreshed automatically at startup.\n',
+        flush: true,
+      );
+    }
+    return root;
+  }
+
+  static bool _allowedSavestateFile(String filePath) {
+    final lower = filePath.toLowerCase();
+    return lower.endsWith('.savestat') ||
+        lower.endsWith('.savestat.zst') ||
+        lower.endsWith('.savestat.gz');
+  }
+
+  static Future<void> _copyReplacing(File source, File target) async {
+    await target.parent.create(recursive: true);
+    final temp = File('${target.path}.neostation-sync-tmp');
+    if (await temp.exists()) await temp.delete();
+    await source.copy(temp.path);
+    if (await target.exists()) await target.delete();
+    await temp.rename(target.path);
+  }
+
+  static Future<int> _copyTree({
+    required Directory source,
+    required Directory destination,
+    required bool savestates,
+    required bool consumeSource,
+  }) async {
+    if (!await source.exists()) return 0;
+    await destination.create(recursive: true);
+    var copied = 0;
+    await for (final entity in source.list(recursive: true, followLinks: false)) {
+      final relative = path.relative(entity.path, from: source.path);
+      if (relative == '.' || relative == '..' || relative.startsWith('../')) continue;
+      final targetPath = path.join(destination.path, relative);
+      if (entity is Directory) {
+        await Directory(targetPath).create(recursive: true);
+        continue;
+      }
+      if (entity is! File || path.basename(entity.path) == '.DS_Store') continue;
+      if (savestates && !_allowedSavestateFile(entity.path)) continue;
+      await _copyReplacing(entity, File(targetPath));
+      copied++;
+      if (consumeSource) {
+        try { await entity.delete(); } catch (_) {}
+      }
+    }
+    return copied;
+  }
+
+  /// Physical Files workspace: consumes Import then refreshes Export.
+  static Future<({int imported, int exported})> synchronizeFilesWorkspace() async {
+    if (!supported) return (imported: 0, exported: 0);
+    final workspace = await filesWorkspaceDirectory();
+    final data = await dataDirectory();
+
+    var imported = 0;
+    imported += await _copyTree(
+      source: Directory(path.join(workspace.path, 'Import', 'Game Saves')),
+      destination: Directory(path.join(data.path, 'dev_hdd0', 'home', '00000001', 'savedata')),
+      savestates: false,
+      consumeSource: true,
+    );
+    imported += await _copyTree(
+      source: Directory(path.join(workspace.path, 'Import', 'Savestates')),
+      destination: Directory(path.join(data.path, 'savestates')),
+      savestates: true,
+      consumeSource: true,
+    );
+
+    var exported = 0;
+    exported += await _copyTree(
+      source: Directory(path.join(data.path, 'dev_hdd0', 'home', '00000001', 'savedata')),
+      destination: Directory(path.join(workspace.path, 'Export', 'Game Saves')),
+      savestates: false,
+      consumeSource: false,
+    );
+    exported += await _copyTree(
+      source: Directory(path.join(data.path, 'savestates')),
+      destination: Directory(path.join(workspace.path, 'Export', 'Savestates')),
+      savestates: true,
+      consumeSource: false,
+    );
+    return (imported: imported, exported: exported);
+  }
+
   static Future<Map<String, dynamic>> _jitStatus() => _bounded(
     Rpcs3InternalBridge.jitStatus(),
     _statusTimeout,
@@ -455,10 +563,8 @@ class Rpcs3InternalService {
       'Savestates': Directory(path.join(data.path, 'savestates')),
     };
 
-    final documents = await getApplicationDocumentsDirectory();
-    final exportRoot = Directory(path.join(documents.path, 'RPCS3'));
-    await exportRoot.create(recursive: true);
-    final destination = Directory(path.join(exportRoot.path, 'Saves'));
+    final exportRoot = await filesWorkspaceDirectory();
+    final destination = Directory(path.join(exportRoot.path, 'Export'));
     final staging = Directory(
       path.join(
         exportRoot.path,
@@ -548,8 +654,8 @@ class Rpcs3InternalService {
   /// exchange folder created by [exportSaveData].
   ///
   /// Users may edit/copy files in:
-  /// On My iPhone/NeoStation/RPCS3/Saves/Game Saves
-  /// On My iPhone/NeoStation/RPCS3/Saves/Savestates
+  /// On My iPhone/NeoStation/RPCS3/Import/Game Saves
+  /// On My iPhone/NeoStation/RPCS3/Import/Savestates
   /// and then call this method to copy them back into RPCS3's private live tree.
   static Future<int> importSaveDataFromFiles() async {
     if (!supported) {
@@ -568,16 +674,14 @@ class Rpcs3InternalService {
       );
     }
 
-    final documents = await getApplicationDocumentsDirectory();
-    final exchangeRoot = Directory(
-      path.join(documents.path, 'RPCS3', 'Saves'),
-    );
+    final workspace = await filesWorkspaceDirectory();
+    final exchangeRoot = Directory(path.join(workspace.path, 'Import'));
     if (!await exchangeRoot.exists()) {
       await Directory(path.join(exchangeRoot.path, 'Game Saves')).create(recursive: true);
       await Directory(path.join(exchangeRoot.path, 'Savestates')).create(recursive: true);
       throw const Rpcs3InternalException(
         'saveImportFolderMissing',
-        'Le dossier RPCS3/Saves vient d’être créé dans Fichiers. Ajoutez vos fichiers dans Game Saves ou Savestates, puis relancez Importer.',
+        'Le dossier RPCS3/Import vient d’être créé dans Fichiers. Ajoutez vos fichiers dans Game Saves ou Savestates, puis relancez Importer.',
       );
     }
     await Directory(path.join(exchangeRoot.path, 'Game Saves')).create(recursive: true);
@@ -656,7 +760,7 @@ class Rpcs3InternalService {
       if (copiedFiles == 0) {
         throw const Rpcs3InternalException(
           'saveImportEmpty',
-          'Aucun fichier de sauvegarde RPCS3 valide n’a été trouvé dans RPCS3/Saves.',
+          'Aucun fichier de sauvegarde RPCS3 valide n’a été trouvé dans RPCS3/Import.',
         );
       }
       _log.i('RPCS3 save import completed: $copiedFiles file(s).');
@@ -945,5 +1049,15 @@ class Rpcs3InternalService {
     return true;
   }
 
-  static Future<bool> stop() => Rpcs3InternalBridge.stop();
+  static Future<bool> stop() async {
+    final stopped = await Rpcs3InternalBridge.stop();
+    if (stopped) {
+      try {
+        await synchronizeFilesWorkspace();
+      } catch (error) {
+        _log.w('RPCS3 Files workspace refresh after stop failed: $error');
+      }
+    }
+    return stopped;
+  }
 }

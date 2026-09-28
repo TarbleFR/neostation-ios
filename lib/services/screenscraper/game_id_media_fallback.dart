@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../diagnostics_directory.dart';
 import '../logger_service.dart';
 import 'media_downloader.dart';
 import 'media_resolver.dart';
@@ -328,8 +329,8 @@ class ScreenscraperGameIdMediaFallback {
 
   static Future<void> _writeDebug(String fileName, String content) async {
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      await File(path.join(docs.path, fileName))
+      final file = await DiagnosticsDirectory.file(fileName);
+      await file
           .writeAsString('--- ${DateTime.now()} ---\n$content');
     } catch (e) {
       _log.e('Game-id media fallback: failed writing debug file: $e');
@@ -338,8 +339,8 @@ class ScreenscraperGameIdMediaFallback {
 
   static Future<void> _appendDebug(String fileName, String content) async {
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      await File(path.join(docs.path, fileName))
+      final file = await DiagnosticsDirectory.file(fileName);
+      await file
           .writeAsString(content, mode: FileMode.append);
     } catch (e) {
       _log.e('Game-id media fallback: failed appending debug file: $e');

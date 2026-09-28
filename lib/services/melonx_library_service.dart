@@ -9,6 +9,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
@@ -761,8 +762,7 @@ class MelonxLibraryService {
   /// console is not available.
   static Future<void> _writeDebugFile(String name, String content) async {
     try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docsDir.path, name));
+      final file = await DiagnosticsDirectory.file(name);
       await file.writeAsString('--- ${DateTime.now()} ---\n$content');
     } catch (e) {
       _log.e('MelonxLibraryService: failed writing debug file $name: $e');
@@ -771,8 +771,7 @@ class MelonxLibraryService {
 
   static Future<void> _appendDebugFile(String name, String content) async {
     try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docsDir.path, name));
+      final file = await DiagnosticsDirectory.file(name);
       await file.writeAsString(content, mode: FileMode.append);
     } catch (e) {
       _log.e('MelonxLibraryService: failed appending debug file $name: $e');

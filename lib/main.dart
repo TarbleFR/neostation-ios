@@ -20,6 +20,7 @@ import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:flutter/material.dart';
@@ -298,6 +299,15 @@ void main() async {
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
+
+  if (Platform.isIOS) {
+    final movedDiagnostics = await DiagnosticsDirectory.migrateLegacyRootFiles();
+    final workspace = await Rpcs3InternalService.synchronizeFilesWorkspace();
+    if (movedDiagnostics > 0) {
+      log.i('Moved $movedDiagnostics legacy diagnostic file(s) into Documents/Diagnostics.');
+    }
+    log.i('RPCS3 Files workspace ready: imported=${workspace.imported} exported=${workspace.exported}.');
+  }
 
   await AudioPolicyService().initialize();
 

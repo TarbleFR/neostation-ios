@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -209,8 +210,7 @@ class StikJitMeloNxService {
   }
 
   static Future<File> _diagnosticFile() async {
-    final documents = await getApplicationDocumentsDirectory();
-    return File(path.join(documents.path, 'stikjit_melonx_debug.txt'));
+    return DiagnosticsDirectory.file('stikjit_melonx_debug.txt');
   }
 
   static Future<void> _writeDiagnostic(String content) async {

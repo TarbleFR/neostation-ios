@@ -9,6 +9,7 @@ import 'package:neostation/widgets/armsx2_bios_picker.dart';
 import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/armsx2_internal_service.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
@@ -230,8 +231,7 @@ class StikJitArmsx2Service {
   }
 
   static Future<File> _diagnosticFile() async {
-    final documents = await getApplicationDocumentsDirectory();
-    return File(path.join(documents.path, 'armsx2_internal_debug.txt'));
+    return DiagnosticsDirectory.file('armsx2_internal_debug.txt');
   }
 
   static Future<void> _writeDiagnostic(String content) async {

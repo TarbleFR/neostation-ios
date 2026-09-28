@@ -590,7 +590,15 @@ public class ExternalFolderAccessPlugin: NSObject, FlutterPlugin, UIDocumentPick
             in: .userDomainMask
         ).first else { return }
 
-        let fileURL = documents.appendingPathComponent(fileName)
+        let diagnostics = documents.appendingPathComponent(
+            "Diagnostics",
+            isDirectory: true
+        )
+        try? FileManager.default.createDirectory(
+            at: diagnostics,
+            withIntermediateDirectories: true
+        )
+        let fileURL = diagnostics.appendingPathComponent(fileName)
         let line = "--- \(ISO8601DateFormatter().string(from: Date())) ---\n\(message)\n"
         guard let data = line.data(using: .utf8) else { return }
 

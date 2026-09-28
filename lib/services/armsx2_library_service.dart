@@ -4,6 +4,7 @@ import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/armsx2_folder_service.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/stikjit_armsx2_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:path/path.dart' as path;
@@ -155,8 +156,7 @@ class Armsx2LibraryService {
   /// console is not available.
   static Future<void> _writeDebugFile(String name, String content) async {
     try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docsDir.path, name));
+      final file = await DiagnosticsDirectory.file(name);
       await file.writeAsString('--- ${DateTime.now()} ---\n$content');
     } catch (e) {
       _log.e('Armsx2LibraryService: failed writing debug file $name: $e');

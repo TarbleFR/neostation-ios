@@ -27,7 +27,7 @@ void main() {
       "'Game Saves'",
       'getApplicationDocumentsDirectory()',
       "path.join(documents.path, 'RPCS3')",
-      "path.join(exportRoot.path, 'Saves')",
+      "path.join(exportRoot.path, 'Export')",
       'followLinks: false',
       'importSaveDataFromFiles',
       "path.join(exchangeRoot.path, 'Game Saves')",
@@ -46,7 +46,7 @@ void main() {
     expect(menu, contains("value: 'restoreSaves'"));
     expect(menu, contains('Rpcs3InternalService.importSaveDataFromFiles()'));
     expect(menu, contains('Exporter les sauvegardes'));
-    expect(menu, contains('On My iPhone → NeoStation → RPCS3 → Saves'));
+    expect(menu, contains('On My iPhone → NeoStation → RPCS3 → Export'));
     expect(manager, contains('rpcs3-manager-export-saves'));
     expect(manager, contains('Rpcs3InternalService.exportSaveData()'));
     expect(manager, contains('rpcs3-manager-import-saves'));

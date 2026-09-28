@@ -11,6 +11,7 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/config_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/rpcs3_game_profile_service.dart';
 import 'package:neostation/services/rpcs3_title_catalog_service.dart';
@@ -694,8 +695,7 @@ class Rpcs3LibraryService {
     String? error,
   }) async {
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docs.path, 'rpcs3_startup_debug.txt'));
+      final file = await DiagnosticsDirectory.file('rpcs3_startup_debug.txt');
       await file.writeAsString(
         'Timestamp: ${DateTime.now().toIso8601String()}\n'
         'Mode: $mode\n'
@@ -1482,8 +1482,7 @@ class Rpcs3LibraryService {
     required Rpcs3SyncResult result,
   }) async {
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docs.path, 'rpcs3_sync_debug.txt'));
+      final file = await DiagnosticsDirectory.file('rpcs3_sync_debug.txt');
       final payload = games.map((game) => game.toJson()).toList();
       await file.writeAsString(
         'STATE: IMPORTED\n'

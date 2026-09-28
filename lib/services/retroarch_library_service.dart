@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:neostation/main.dart' show rootNavigatorKey;
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/diagnostics_directory.dart';
 
 /// Talks to RetroArch's real, confirmed URL-scheme protocol for library
 /// export and direct game launching, on the TestFlight build.
@@ -340,8 +341,7 @@ class RetroArchLibraryService {
   /// <name>") — there's no Xcode console access to check this otherwise.
   static Future<void> _writeDebugFile(String name, String content) async {
     try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final file = File(path.join(docsDir.path, name));
+      final file = await DiagnosticsDirectory.file(name);
       await file.writeAsString('--- ${DateTime.now()} ---\n$content');
     } catch (e) {
       _log.e('RetroArchLibraryService: failed writing debug file $name: $e');
