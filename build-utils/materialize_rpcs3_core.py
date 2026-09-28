@@ -11,8 +11,16 @@ head=subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=Tr
 assert head==manifest['upstream_commit'], 'RPCS3 source revision mismatch'
 subprocess.run(['git','-C',str(source),'apply','--check',str(patch)],check=True)
 subprocess.run(['git','-C',str(source),'apply',str(patch)],check=True)
+
+def canonical_source_sha256(path: Path) -> str:
+    # Git may materialize text with CRLF on Windows and LF on macOS. The
+    # canonical manifest is keyed to Git's LF representation; normalize only
+    # line endings so every byte of actual source code remains hash-checked.
+    return hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+
 for relative,expected in manifest['files_sha256'].items():
-    assert hashlib.sha256((source/relative).read_bytes()).hexdigest()==expected, f'Canonical source mismatch: {relative}'
+    actual=canonical_source_sha256(source/relative)
+    assert actual==expected, f'Canonical source mismatch: {relative} ({actual} != {expected})'
 print('PASS: single canonical RPCS3 delta, all postimage hashes verified')
 
 import re
