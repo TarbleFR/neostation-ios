@@ -22,6 +22,7 @@ static void RPCS3MenuOnMain(dispatch_block_t block) {
 @property(nonatomic, copy) NSString* choiceCommand;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* stateSnapshot;
 @property(nonatomic, assign) BOOL loading;
+@property(nonatomic, assign) BOOL suppressNextStateReload;
 @property(nonatomic, weak) Rpcs3SessionMenu* returnPage;
 @property(nonatomic, copy) NSString* statusMessage;
 @end
@@ -74,8 +75,17 @@ static void RPCS3MenuOnMain(dispatch_block_t block) {
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  if (self.page == RPCS3MenuSaveStates || self.page == RPCS3MenuLoadStates)
-    [self reloadStates];
+  if (self.page == RPCS3MenuSaveStates || self.page == RPCS3MenuLoadStates) {
+    // UIAlertController dismissal can make this page appear again before its
+    // action handler runs. A refresh would set `loading` and make the confirmed
+    // overwrite silently return from operateState(). Suppress exactly that
+    // modal-dismiss refresh; operateState reloads the slots after completion.
+    if (self.suppressNextStateReload) {
+      self.suppressNextStateReload = NO;
+    } else {
+      [self reloadStates];
+    }
+  }
 }
 
 - (NSArray<NSString*>*)rootKeys {
@@ -301,9 +311,9 @@ static void RPCS3MenuOnMain(dispatch_block_t block) {
       alertControllerWithTitle:[self text:@"quitGame"]
                        message:[self text:@"quitConfirm"]
                 preferredStyle:UIAlertControllerStyleAlert];
+  __weak Rpcs3SessionMenu* weakSelf = self;
   [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"]
                                            style:UIAlertActionStyleCancel handler:nil]];
-  __weak Rpcs3SessionMenu* weakSelf = self;
   [alert addAction:[UIAlertAction actionWithTitle:[self text:@"quitGame"]
                                            style:UIAlertActionStyleDestructive
                                          handler:^(__unused UIAlertAction* action) {
@@ -420,18 +430,32 @@ static void RPCS3MenuOnMain(dispatch_block_t block) {
     return;
   }
 
+  // Prevent the confirmation alert's dismissal from racing a state refresh
+  // against the destructive action handler (NEOSTATION_RPC3_OVERWRITE_V2).
+  self.suppressNextStateReload = YES;
   UIAlertController* alert = [UIAlertController
       alertControllerWithTitle:[self text:@"overwriteTitle"]
                        message:[NSString stringWithFormat:[self text:@"overwriteMessage"],
                                                      (long)[slot[@"slot"] integerValue]]
                 preferredStyle:UIAlertControllerStyleAlert];
-  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"]
-                                           style:UIAlertActionStyleCancel handler:nil]];
   __weak Rpcs3SessionMenu* weakSelf = self;
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"]
+                                           style:UIAlertActionStyleCancel
+                                         handler:^(__unused UIAlertAction* action) {
+    weakSelf.suppressNextStateReload = NO;
+  }]];
   [alert addAction:[UIAlertAction actionWithTitle:[self text:@"overwrite"]
                                            style:UIAlertActionStyleDestructive
                                          handler:^(__unused UIAlertAction* action) {
-    [weakSelf operateState:slot load:NO];
+    Rpcs3SessionMenu* menu = weakSelf;
+    if (!menu) return;
+    [menu operateState:slot load:NO];
+    // If UIKit did not re-enter viewWillAppear during alert dismissal, do not
+    // leave the one-shot suppression armed for a later navigation.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      menu.suppressNextStateReload = NO;
+    });
   }]];
   [self presentViewController:alert animated:YES completion:nil];
 }

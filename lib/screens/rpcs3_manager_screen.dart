@@ -273,6 +273,41 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     }
   }
 
+  Future<void> _importSaves() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _contentProgress = null;
+      _statusMessage = _fr
+          ? 'Import des sauvegardes RPCS3 depuis Fichiers…'
+          : 'Importing RPCS3 saves from Files…';
+    });
+    try {
+      final imported = await Rpcs3InternalService.importSaveDataFromFiles();
+      if (mounted) {
+        _notice(
+          _fr
+              ? '$imported fichier(s) importé(s) dans RPCS3.'
+              : '$imported RPCS3 save file(s) imported.',
+        );
+      }
+    } on Rpcs3InternalException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+      _notice(error.message);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+      _notice(error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _statusMessage = _fr ? 'RPCS3 prêt.' : 'RPCS3 ready.';
+        });
+      }
+    }
+  }
+
   Widget _statusRow({
     required IconData icon,
     required String label,
@@ -517,8 +552,19 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                   icon: const Icon(Icons.drive_folder_upload_outlined),
                   label: Text(
                     _fr
-                        ? 'Exporter les sauvegardes RPCS3'
-                        : 'Export RPCS3 saves',
+                        ? 'Exporter sauvegardes + save states'
+                        : 'Export saves + savestates',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const ValueKey('rpcs3-manager-import-saves'),
+                  onPressed: _busy ? null : _importSaves,
+                  icon: const Icon(Icons.restore_page_outlined),
+                  label: Text(
+                    _fr
+                        ? 'Importer sauvegardes + save states'
+                        : 'Import saves + savestates',
                   ),
                 ),
               ],

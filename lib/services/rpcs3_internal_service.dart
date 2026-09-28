@@ -472,6 +472,7 @@ class Rpcs3InternalService {
       await staging.create(recursive: true);
       for (final entry in sources.entries) {
         final source = entry.value;
+        await Directory(path.join(staging.path, entry.key)).create(recursive: true);
         if (!await source.exists()) continue;
         await for (final entity in source.list(
           recursive: true,
@@ -540,6 +541,135 @@ class Rpcs3InternalService {
           await previous.rename(destination.path);
         } catch (_) {}
       }
+    }
+  }
+
+  /// Restores user-managed PS3 saves and RPCS3 savestates from the Files-visible
+  /// exchange folder created by [exportSaveData].
+  ///
+  /// Users may edit/copy files in:
+  /// On My iPhone/NeoStation/RPCS3/Saves/Game Saves
+  /// On My iPhone/NeoStation/RPCS3/Saves/Savestates
+  /// and then call this method to copy them back into RPCS3's private live tree.
+  static Future<int> importSaveDataFromFiles() async {
+    if (!supported) {
+      throw const Rpcs3InternalException(
+        'unsupported',
+        'RPCS3 save import is available on iOS only.',
+      );
+    }
+    if (_libraryMutationInProgress ||
+        _runtimePreparation != null ||
+        GameLaunchManager().isActive ||
+        _state.phase == Rpcs3RuntimePhase.importingContent) {
+      throw const Rpcs3InternalException(
+        'saveImportBusy',
+        'Stop the current game or RPCS3 operation before importing saves.',
+      );
+    }
+
+    final documents = await getApplicationDocumentsDirectory();
+    final exchangeRoot = Directory(
+      path.join(documents.path, 'RPCS3', 'Saves'),
+    );
+    if (!await exchangeRoot.exists()) {
+      await Directory(path.join(exchangeRoot.path, 'Game Saves')).create(recursive: true);
+      await Directory(path.join(exchangeRoot.path, 'Savestates')).create(recursive: true);
+      throw const Rpcs3InternalException(
+        'saveImportFolderMissing',
+        'Le dossier RPCS3/Saves vient d’être créé dans Fichiers. Ajoutez vos fichiers dans Game Saves ou Savestates, puis relancez Importer.',
+      );
+    }
+    await Directory(path.join(exchangeRoot.path, 'Game Saves')).create(recursive: true);
+    await Directory(path.join(exchangeRoot.path, 'Savestates')).create(recursive: true);
+
+    final data = await dataDirectory();
+    final mappings = <({String sourceName, Directory destination, bool savestate})>[
+      (
+        sourceName: 'Game Saves',
+        destination: Directory(
+          path.join(data.path, 'dev_hdd0', 'home', '00000001', 'savedata'),
+        ),
+        savestate: false,
+      ),
+      (
+        sourceName: 'Savestates',
+        destination: Directory(path.join(data.path, 'savestates')),
+        savestate: true,
+      ),
+    ];
+
+    _libraryMutationInProgress = true;
+    var copiedFiles = 0;
+    try {
+      for (final mapping in mappings) {
+        final source = Directory(path.join(exchangeRoot.path, mapping.sourceName));
+        if (!await source.exists()) continue;
+        await mapping.destination.create(recursive: true);
+
+        await for (final entity in source.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          final relative = path.relative(entity.path, from: source.path);
+          if (relative == '.' ||
+              relative == '..' ||
+              relative.startsWith('../')) {
+            continue;
+          }
+          final targetPath = path.join(mapping.destination.path, relative);
+
+          if (entity is Directory) {
+            await Directory(targetPath).create(recursive: true);
+            continue;
+          }
+          if (entity is! File) continue;
+
+          if (mapping.savestate) {
+            final name = entity.path.toLowerCase();
+            final valid =
+                name.endsWith('.savestat') ||
+                name.endsWith('.savestat.zst') ||
+                name.endsWith('.savestat.gz');
+            if (!valid) continue;
+          } else if (path.basename(entity.path) == '.DS_Store') {
+            continue;
+          }
+
+          await Directory(path.dirname(targetPath)).create(recursive: true);
+          final target = File(targetPath);
+          final backup = File('$targetPath.neostation-import-backup');
+          if (await backup.exists()) await backup.delete();
+          if (await target.exists()) await target.rename(backup.path);
+          try {
+            await entity.copy(target.path);
+            if (await backup.exists()) await backup.delete();
+            copiedFiles++;
+          } catch (_) {
+            if (await target.exists()) await target.delete();
+            if (await backup.exists()) await backup.rename(target.path);
+            rethrow;
+          }
+        }
+      }
+
+      if (copiedFiles == 0) {
+        throw const Rpcs3InternalException(
+          'saveImportEmpty',
+          'Aucun fichier de sauvegarde RPCS3 valide n’a été trouvé dans RPCS3/Saves.',
+        );
+      }
+      _log.i('RPCS3 save import completed: $copiedFiles file(s).');
+      return copiedFiles;
+    } on Rpcs3InternalException {
+      rethrow;
+    } catch (error) {
+      throw Rpcs3InternalException(
+        'saveImportFailed',
+        'Impossible d’importer les sauvegardes RPCS3 : $error',
+      );
+    } finally {
+      _libraryMutationInProgress = false;
     }
   }
 

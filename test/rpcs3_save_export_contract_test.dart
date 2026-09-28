@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('RPCS3 export exposes detached savedata and savestate snapshots', () {
+  test('RPCS3 exposes bidirectional Files save exchange for savedata and savestates', () {
     final service = File(
       'lib/services/rpcs3_internal_service.dart',
     ).readAsStringSync();
@@ -29,17 +29,28 @@ void main() {
       "path.join(documents.path, 'RPCS3')",
       "path.join(exportRoot.path, 'Saves')",
       'followLinks: false',
+      'importSaveDataFromFiles',
+      "path.join(exchangeRoot.path, 'Game Saves')",
+      "path.join(exchangeRoot.path, 'Savestates')",
+      "name.endsWith('.savestat.zst')",
+      "name.endsWith('.savestat.gz')",
+      "name.endsWith('.savestat')",
+      'neostation-import-backup',
     ]) {
       expect(service, contains(token), reason: token);
     }
     expect(service, isNot(contains("path.join(documents.path, 'Data')")));
     expect(service, contains('Firmware, games, caches, trophies'));
     expect(menu, contains("value: 'saves'"));
-    expect(menu, contains("action != 'saves'"));
+    expect(menu, contains("action != 'saves' && action != 'restoreSaves'"));
+    expect(menu, contains("value: 'restoreSaves'"));
+    expect(menu, contains('Rpcs3InternalService.importSaveDataFromFiles()'));
     expect(menu, contains('Exporter les sauvegardes'));
     expect(menu, contains('On My iPhone → NeoStation → RPCS3 → Saves'));
     expect(manager, contains('rpcs3-manager-export-saves'));
     expect(manager, contains('Rpcs3InternalService.exportSaveData()'));
+    expect(manager, contains('rpcs3-manager-import-saves'));
+    expect(manager, contains('Rpcs3InternalService.importSaveDataFromFiles()'));
     expect(iosConfiguration, contains("payload['UIFileSharingEnabled'] = True"));
     expect(
       iosConfiguration,

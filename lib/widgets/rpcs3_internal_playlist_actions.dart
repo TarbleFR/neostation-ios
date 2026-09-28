@@ -190,7 +190,7 @@ class _Rpcs3InternalPlaylistActionsState
       await _installFirmware();
       return;
     }
-    if (!_firmwareInstalled && action != 'saves') {
+    if (!_firmwareInstalled && action != 'saves' && action != 'restoreSaves') {
       _interaction(true);
       return;
     }
@@ -204,6 +204,9 @@ class _Rpcs3InternalPlaylistActionsState
           _fr ? 'Ouverture du dossier PS3…' : 'Opening PS3 game folder…',
         'saves' =>
           _fr ? 'Préparation des sauvegardes RPCS3…' : 'Preparing RPCS3 saves…',
+        'restoreSaves' => _fr
+            ? 'Import des sauvegardes RPCS3 depuis Fichiers…'
+            : 'Importing RPCS3 saves from Files…',
         _ => _fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…',
       };
     });
@@ -226,6 +229,13 @@ class _Rpcs3InternalPlaylistActionsState
           _fr
               ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Saves.'
               : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Saves.',
+        );
+      } else if (action == 'restoreSaves') {
+        final imported = await Rpcs3InternalService.importSaveDataFromFiles();
+        _notice(
+          _fr
+              ? '$imported fichier(s) de sauvegarde importé(s) dans RPCS3.'
+              : '$imported RPCS3 save file(s) imported.',
         );
       }
     } on Rpcs3InternalException catch (error) {
@@ -328,6 +338,7 @@ class _Rpcs3InternalPlaylistActionsState
 
   Widget _buildOperationOverlay(ColorScheme scheme) {
     final exportingSaves = _activeAction == 'saves';
+    final importingSaves = _activeAction == 'restoreSaves';
     final progress = _contentProgress;
     final fraction = progress?.fraction;
     final itemLabel = progress == null || progress.itemName.isEmpty
@@ -358,6 +369,8 @@ class _Rpcs3InternalPlaylistActionsState
                     Icon(
                       exportingSaves
                           ? Icons.folder_copy_outlined
+                          : importingSaves
+                          ? Icons.restore_page_outlined
                           : Icons.downloading_rounded,
                       size: 42.r,
                     ),
@@ -367,6 +380,10 @@ class _Rpcs3InternalPlaylistActionsState
                           ? (_fr
                                 ? 'Export des sauvegardes RPCS3'
                                 : 'Exporting RPCS3 saves')
+                          : importingSaves
+                          ? (_fr
+                                ? 'Import des sauvegardes RPCS3'
+                                : 'Importing RPCS3 saves')
                           : (_fr
                                 ? 'Importation du jeu PS3'
                                 : 'Importing PS3 game'),
@@ -403,6 +420,10 @@ class _Rpcs3InternalPlaylistActionsState
                           ? (_fr
                                 ? 'Le dossier sera accessible dans l’app Fichiers.'
                                 : 'The folder will be available in the Files app.')
+                          : importingSaves
+                          ? (_fr
+                                ? 'Lecture de Sur mon iPhone → NeoStation → RPCS3 → Saves.'
+                                : 'Reading On My iPhone → NeoStation → RPCS3 → Saves.')
                           : (_fr
                                 ? 'Laissez NeoStation ouvert pendant l’importation.'
                                 : 'Keep NeoStation open while the import completes.'),
@@ -512,6 +533,10 @@ class _Rpcs3InternalPlaylistActionsState
     PopupMenuItem(
       value: 'saves',
       child: Text(_fr ? 'Exporter les sauvegardes' : 'Export save data'),
+    ),
+    PopupMenuItem(
+      value: 'restoreSaves',
+      child: Text(_fr ? 'Importer les sauvegardes' : 'Import save data'),
     ),
     PopupMenuItem(
       value: 'open',
