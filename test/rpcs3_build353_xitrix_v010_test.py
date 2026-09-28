@@ -29,7 +29,7 @@ require("rpcs3/Emu/Cell/SPUThread.cpp",
         "check_state_with_interrupts",
         "aarch64::spu_scan16_rdata")
 require("rpcs3/Emu/CPU/Backends/AArch64/SPUReservationHash.h",
-        "spu_reservation_hash")
+        "spu_rdata_hash32")
 
 # PPU fixes must coexist with NeoStation's memory-safe compile budget.
 require("rpcs3/Emu/Cell/PPUThread.cpp",
@@ -47,7 +47,7 @@ require("rpcs3/Emu/Memory/VMReservationRange.h",
 
 # RSX / MoltenVK / Metal paths.
 require("rpcs3/Emu/CMakeLists.txt", "RSX/VK/vkutils/metal_event.mm")
-require("rpcs3/ios/IOSGPUEventWait.h", "wait_for_value")
+require("rpcs3/ios/IOSGPUEventWait.h", "wait_for_gpu_event")
 require("rpcs3/Emu/RSX/VK/VKQueryPool.h", "query_slot_queue")
 require("rpcs3/Emu/RSX/Common/sampler_invalidation.h", "invalidate_sampler_context")
 require("rpcs3/Emu/RSX/VK/upscalers/fsr1/fsr_pass.cpp",
