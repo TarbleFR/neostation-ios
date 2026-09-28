@@ -42,7 +42,13 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
     _runtimeSubscription = Rpcs3InternalService.runtimeStates.listen((state) {
       if (!mounted) return;
       setState(() {
-        _jitReady = state.jitReady;
+        // Once enabled in this process, CS_DEBUGGED persists after the StikJIT
+        // helper detaches. Do not regress the UI to Inactive on a later state
+        // event that only describes the Core handshake phase.
+        _jitReady =
+            _jitReady ||
+            state.jitReady ||
+            Rpcs3InternalService.jitPrepared;
         _coreReady = state.coreReady;
         _statusMessage = state.message;
         _error = state.error;
@@ -80,12 +86,10 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (!mounted) return;
       setState(() {
         _jitReady =
+            diagnostics['jitEnabled'] == true ||
             diagnostics['jitPrepared'] == true ||
             Rpcs3InternalService.jitPrepared ||
-            (jit is Map &&
-                jit['debugged'] == true &&
-                (jit['requiresCoreHandshake'] != true ||
-                    diagnostics['initialized'] == true));
+            (jit is Map && jit['debugged'] == true);
         _coreReady = diagnostics['initialized'] == true;
         _build = diagnostics['build']?.toString() ?? '';
         _abi = (diagnostics['abi'] as num?)?.toInt() ?? 0;

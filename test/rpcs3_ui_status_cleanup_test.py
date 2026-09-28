@@ -27,9 +27,11 @@ require("await synchronizeFilesWorkspace();" in service,
 require("static bool get jitPrepared => _jitPrepared;" in service,
         "authoritative JIT prepared state is not exposed")
 
-require("diagnostics['jitPrepared'] == true" in manager and
-        "Rpcs3InternalService.jitPrepared" in manager,
-        "RPCS3 manager still ignores authoritative JIT state")
+require("diagnostics['jitEnabled'] == true" in manager and
+        "jit['debugged'] == true" in manager,
+        "RPCS3 manager does not use the native CS_DEBUGGED UI state")
+require("jit['requiresCoreHandshake'] != true" not in manager,
+        "RPCS3 manager still gates the UI indicator on the Core handshake")
 require("JIT activé • RPCS3 Core prêt." in manager and
         "JIT activé • RPCS3 Core à la demande." in manager,
         "RPCS3 manager active-state labels are missing")
@@ -42,8 +44,12 @@ require("value: 'restoreSaves'" not in playlist,
 require("header-jit-active-dot" in header,
         "main header JIT active dot is missing")
 require("Rpcs3InternalService.runtimeStates.listen" in header and
-        "state.jitReady || Rpcs3InternalService.jitPrepared" in header,
-        "main header JIT dot is not driven by authoritative runtime state")
+        "Rpcs3InternalService.jitEnabledForUi()" in header and
+        "Duration(seconds: 2)" in header,
+        "main header JIT dot does not poll the native integrated-StikJIT state")
+require("status['debugged'] == true" in service and
+        "static Future<bool> jitEnabledForUi()" in service,
+        "UI JIT state is not backed by the native CS_DEBUGGED result")
 require("Color(0xFF22C55E)" in header and "JIT activé" in header,
         "main header JIT dot is not green/labeled")
 

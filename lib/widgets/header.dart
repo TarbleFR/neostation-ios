@@ -47,6 +47,7 @@ class HeaderState extends State<Header> {
   BatteryState? _batteryState;
   StreamSubscription<BatteryState>? _batteryStateSubscription;
   StreamSubscription<Rpcs3RuntimeState>? _rpcs3RuntimeSubscription;
+  Timer? _jitStatusTimer;
   bool _jitActive =
       Rpcs3InternalService.jitPrepared ||
       Rpcs3InternalService.runtimeState.jitReady;
@@ -68,9 +69,15 @@ class HeaderState extends State<Header> {
       state,
     ) {
       final active = state.jitReady || Rpcs3InternalService.jitPrepared;
-      if (mounted && active != _jitActive) {
-        setState(() => _jitActive = active);
+      if (mounted && active && !_jitActive) {
+        setState(() => _jitActive = true);
+        _jitStatusTimer?.cancel();
+        _jitStatusTimer = null;
       }
+    });
+    unawaited(_refreshJitStatus());
+    _jitStatusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_refreshJitStatus());
     });
     _updateTime();
     _startTimeUpdateTimer();
@@ -86,10 +93,20 @@ class HeaderState extends State<Header> {
     _timeUpdateTimer?.cancel();
     _batteryStateSubscription?.cancel();
     _rpcs3RuntimeSubscription?.cancel();
+    _jitStatusTimer?.cancel();
     for (final node in _tabFocusNodes) {
       node.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _refreshJitStatus() async {
+    if (!Platform.isIOS || _jitActive) return;
+    final active = await Rpcs3InternalService.jitEnabledForUi();
+    if (!mounted || !active) return;
+    setState(() => _jitActive = true);
+    _jitStatusTimer?.cancel();
+    _jitStatusTimer = null;
   }
 
   /// Subscribes to real-time battery state changes (charging/discharging/full).

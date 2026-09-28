@@ -287,6 +287,21 @@ class Rpcs3InternalService {
     'RPCS3 could not read the current JIT state.',
   );
 
+  /// UI-level JIT state. Unlike the RPCS3 Core launch gate, this intentionally
+  /// accepts the kernel CS_DEBUGGED bit as proof that integrated StikJIT has
+  /// enabled JIT for the current NeoStation process. The stricter live
+  /// debugger/nonce handshake remains mandatory for Core loading.
+  static Future<bool> jitEnabledForUi() async {
+    if (!supported) return false;
+    if (_jitPrepared || _state.jitReady) return true;
+    try {
+      final status = await _jitStatus();
+      return status['debugged'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<Map<String, dynamic>> diagnostics() async {
     final core = await _bounded(
       Rpcs3InternalBridge.diagnostics(),
@@ -295,10 +310,13 @@ class Rpcs3InternalService {
       'RPCS3 diagnostics did not respond.',
     );
     final jit = await _jitStatus();
+    final jitEnabled =
+        _jitPrepared || _state.jitReady || jit['debugged'] == true;
     return <String, dynamic>{
       ...core,
       'jit': jit,
       'jitPrepared': _jitPrepared,
+      'jitEnabled': jitEnabled,
       'runtimeMode': _initialized ? 'ready' : 'stopped',
     };
   }
