@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 356 Files workspace cleanup candidate
-run-name: NeoStation iOS Build 356 Files workspace cleanup candidate • ${{ github.sha }}
+name: NeoStation iOS Build 357 RPCS3 UI status cleanup candidate
+run-name: NeoStation iOS Build 357 RPCS3 UI status cleanup candidate • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '356'
+        default: '357'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-ios-build-356-files-workspace
+  group: neostation-ios-build-357-rpcs3-ui-status
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 356 Files workspace cleanup candidate IPA
+    name: Build 357 RPCS3 UI status cleanup candidate IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '356' }}
-      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-Files-Workspace-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-356-Files-Workspace-Candidate' }}
-      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-Files-Workspace-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-356-Files-Workspace-Candidate' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '357' }}
+      IPA_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-RPCS3-UI-Status-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-357-RPCS3-UI-Status-Candidate' }}
+      ARTIFACT_NAME: ${{ github.event_name == 'workflow_dispatch' && format('NeoStation-iOS-Build-{0}-RPCS3-UI-Status-Candidate', inputs.build_number) || 'NeoStation-iOS-Build-357-RPCS3-UI-Status-Candidate' }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -415,6 +415,7 @@ jobs:
           python3 test/rpcs3_savestate_overwrite_regression_test.py
           flutter test test/rpcs3_save_export_contract_test.dart
           python3 test/diagnostics_files_workspace_test.py
+          python3 test/rpcs3_ui_status_cleanup_test.py
           python3 test/dolphin_ipa_validator_test.py
           python3 test/local_dev_vpn_route_contract_test.py
           python3 test/armsx2_vm_shutdown_test.py

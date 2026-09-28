@@ -111,6 +111,7 @@ class Rpcs3InternalService {
 
   static bool get supported => Platform.isIOS;
   static bool get initialized => _initialized;
+  static bool get jitPrepared => _jitPrepared;
   static bool get gameplayMode => _initialized;
   static Rpcs3RuntimeState get runtimeState => _state;
   static Stream<Rpcs3RuntimeState> get runtimeStates => _stateController.stream;
@@ -337,6 +338,15 @@ class Rpcs3InternalService {
       );
     }
     if (_initialized) return;
+
+    // Manual Files imports belong to the explicit RPCS3 launch path, never
+    // NeoStation cold startup. This keeps the physical Import folder useful
+    // without delaying the app's first real frame.
+    try {
+      await synchronizeFilesWorkspace();
+    } catch (error) {
+      _log.w('RPCS3 Files workspace preflight failed: $error');
+    }
 
     var completionPending = false;
     try {

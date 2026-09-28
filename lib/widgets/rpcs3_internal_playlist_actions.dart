@@ -531,14 +531,6 @@ class _Rpcs3InternalPlaylistActionsState
     ),
     const PopupMenuDivider(),
     PopupMenuItem(
-      value: 'saves',
-      child: Text(_fr ? 'Exporter les sauvegardes' : 'Export save data'),
-    ),
-    PopupMenuItem(
-      value: 'restoreSaves',
-      child: Text(_fr ? 'Importer les sauvegardes' : 'Import save data'),
-    ),
-    PopupMenuItem(
       value: 'open',
       child: Text(_fr ? 'Ouvrir RPCS3' : 'Open RPCS3'),
     ),

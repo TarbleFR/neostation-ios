@@ -46,12 +46,8 @@ void main() {
     }
     expect(service, isNot(contains("path.join(documents.path, 'Data')")));
     expect(service, contains('Firmware, games, caches, trophies'));
-    expect(menu, contains("value: 'saves'"));
-    expect(menu, contains("action != 'saves' && action != 'restoreSaves'"));
-    expect(menu, contains("value: 'restoreSaves'"));
-    expect(menu, contains('Rpcs3InternalService.importSaveDataFromFiles()'));
-    expect(menu, contains('Exporter les sauvegardes'));
-    expect(menu, contains('On My iPhone → NeoStation → RPCS3 → Export'));
+    expect(menu, isNot(contains("value: 'saves'")));
+    expect(menu, isNot(contains("value: 'restoreSaves'")));
     expect(manager, contains('rpcs3-manager-export-saves'));
     expect(manager, contains('Rpcs3InternalService.exportSaveData()'));
     expect(manager, contains('rpcs3-manager-import-saves'));

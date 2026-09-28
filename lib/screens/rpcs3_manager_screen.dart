@@ -23,8 +23,10 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
   StreamSubscription<Rpcs3ContentImportProgress>? _contentProgressSubscription;
   bool _busy = false;
   bool _preparing = false;
-  bool _jitReady = false;
-  bool _coreReady = false;
+  bool _jitReady =
+      Rpcs3InternalService.jitPrepared ||
+      Rpcs3InternalService.runtimeState.jitReady;
+  bool _coreReady = Rpcs3InternalService.initialized;
   String? _firmwareVersion;
   String _build = '';
   int _abi = 0;
@@ -78,10 +80,12 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (!mounted) return;
       setState(() {
         _jitReady =
-            jit is Map &&
-            jit['debugged'] == true &&
-            (jit['requiresCoreHandshake'] != true ||
-                diagnostics['initialized'] == true);
+            diagnostics['jitPrepared'] == true ||
+            Rpcs3InternalService.jitPrepared ||
+            (jit is Map &&
+                jit['debugged'] == true &&
+                (jit['requiresCoreHandshake'] != true ||
+                    diagnostics['initialized'] == true));
         _coreReady = diagnostics['initialized'] == true;
         _build = diagnostics['build']?.toString() ?? '';
         _abi = (diagnostics['abi'] as num?)?.toInt() ?? 0;
@@ -108,9 +112,19 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       await _readDiagnostics();
       if (!mounted) return;
       setState(() {
-        _statusMessage = _fr
-            ? 'Le JIT et RPCS3 Core seront préparés lors de l’importation ou du lancement.'
-            : 'JIT and RPCS3 Core will be prepared when importing or launching.';
+        if (_jitReady && _coreReady) {
+          _statusMessage = _fr
+              ? 'JIT activé • RPCS3 Core prêt.'
+              : 'JIT enabled • RPCS3 Core ready.';
+        } else if (_jitReady) {
+          _statusMessage = _fr
+              ? 'JIT activé • RPCS3 Core à la demande.'
+              : 'JIT enabled • RPCS3 Core on demand.';
+        } else {
+          _statusMessage = _fr
+              ? 'Le JIT et RPCS3 Core seront préparés lors de l’importation ou du lancement.'
+              : 'JIT and RPCS3 Core will be prepared when importing or launching.';
+        }
       });
     } on Rpcs3InternalException catch (error) {
       if (mounted) setState(() => _error = error.message);

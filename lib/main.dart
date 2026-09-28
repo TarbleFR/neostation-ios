@@ -286,6 +286,27 @@ Future<void> _cleanupRemovedIflyIntegration({
   }
 }
 
+Future<void> _prepareIosFilesWorkspaceAfterStartup() async {
+  if (!Platform.isIOS) return;
+  final log = LoggerService.instance;
+  try {
+    final movedDiagnostics = await DiagnosticsDirectory.migrateLegacyRootFiles();
+    final workspace = await Rpcs3InternalService.synchronizeFilesWorkspace();
+    if (movedDiagnostics > 0) {
+      log.i(
+        'Moved $movedDiagnostics legacy diagnostic file(s) into '
+        'Documents/Diagnostics.',
+      );
+    }
+    log.i(
+      'RPCS3 Files workspace ready in background: '
+      'imported=${workspace.imported} exported=${workspace.exported}.',
+    );
+  } catch (error) {
+    log.w('Deferred iOS Files housekeeping failed: $error');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -300,15 +321,6 @@ void main() async {
   final log = LoggerService.instance;
   await log.init();
   log.i('Starting NeoStation...');
-
-  if (Platform.isIOS) {
-    final movedDiagnostics = await DiagnosticsDirectory.migrateLegacyRootFiles();
-    final workspace = await Rpcs3InternalService.synchronizeFilesWorkspace();
-    if (movedDiagnostics > 0) {
-      log.i('Moved $movedDiagnostics legacy diagnostic file(s) into Documents/Diagnostics.');
-    }
-    log.i('RPCS3 Files workspace ready: imported=${workspace.imported} exported=${workspace.exported}.');
-  }
 
   await AudioPolicyService().initialize();
 
@@ -536,6 +548,20 @@ void main() async {
       themeProvider: themeProvider,
     ),
   );
+
+  // Files-visible diagnostics and RPCS3 save mirrors are maintenance work, not
+  // launch prerequisites. Run them only after the real NeoStation UI has
+  // rendered, so they never make StartupLoadingApp linger on iOS.
+  if (Platform.isIOS) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        Future<void>.delayed(
+          const Duration(milliseconds: 750),
+          _prepareIosFilesWorkspaceAfterStartup,
+        ),
+      );
+    });
+  }
 
   // Background music initialization removed
 

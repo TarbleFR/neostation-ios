@@ -12,6 +12,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/themes/app_themes.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/services/rpcs3_internal_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
 import 'package:neostation/widgets/bumper_glyph.dart';
@@ -45,6 +46,10 @@ class HeaderState extends State<Header> {
   int _batteryLevel = 100;
   BatteryState? _batteryState;
   StreamSubscription<BatteryState>? _batteryStateSubscription;
+  StreamSubscription<Rpcs3RuntimeState>? _rpcs3RuntimeSubscription;
+  bool _jitActive =
+      Rpcs3InternalService.jitPrepared ||
+      Rpcs3InternalService.runtimeState.jitReady;
   bool _isTelevision = false;
   DateTime _now = DateTime.now();
   Timer? _timeUpdateTimer;
@@ -59,6 +64,14 @@ class HeaderState extends State<Header> {
     );
     _getBatteryLevel();
     _listenToBatteryState();
+    _rpcs3RuntimeSubscription = Rpcs3InternalService.runtimeStates.listen((
+      state,
+    ) {
+      final active = state.jitReady || Rpcs3InternalService.jitPrepared;
+      if (mounted && active != _jitActive) {
+        setState(() => _jitActive = active);
+      }
+    });
     _updateTime();
     _startTimeUpdateTimer();
     if (Platform.isAndroid) {
@@ -72,6 +85,7 @@ class HeaderState extends State<Header> {
   void dispose() {
     _timeUpdateTimer?.cancel();
     _batteryStateSubscription?.cancel();
+    _rpcs3RuntimeSubscription?.cancel();
     for (final node in _tabFocusNodes) {
       node.dispose();
     }
@@ -365,6 +379,24 @@ class HeaderState extends State<Header> {
                               fontSize: 12.r,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 0.3.r,
+                            ),
+                          ),
+                        ],
+                        if (Platform.isIOS && _jitActive) ...[
+                          SizedBox(width: 8.r),
+                          Tooltip(
+                            message: 'JIT activé',
+                            child: Semantics(
+                              label: 'JIT activé',
+                              child: Container(
+                                key: const ValueKey('header-jit-active-dot'),
+                                width: 8.r,
+                                height: 8.r,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF22C55E),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
                             ),
                           ),
                         ],
