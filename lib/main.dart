@@ -15,7 +15,6 @@ import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
 import 'package:neostation/services/startup_theme_cache.dart';
 import 'package:neostation/widgets/shimmering_logo.dart';
-import 'package:neostation/widgets/startup_intro_video.dart';
 import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -285,26 +284,6 @@ Future<void> _cleanupRemovedIflyIntegration({
   }
 }
 
-const _startupIntroAsset = 'assets/videos/neostation_ios_intro.mp4';
-const _startupIntroSafetyTimeout = Duration(milliseconds: 3800);
-final Completer<void> _startupIntroFinished = Completer<void>();
-
-void _markStartupIntroFinished() {
-  if (!_startupIntroFinished.isCompleted) {
-    _startupIntroFinished.complete();
-  }
-}
-
-Future<void> _waitForStartupIntro() async {
-  if (!Platform.isIOS || _startupIntroFinished.isCompleted) return;
-  try {
-    await _startupIntroFinished.future.timeout(_startupIntroSafetyTimeout);
-  } on TimeoutException {
-    // Startup must never be held hostage by the presentation layer. The video
-    // itself is 2.8 s; this extra second is only a decoder/plugin safety net.
-  }
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -538,11 +517,6 @@ void main() async {
   // light brightness (the Steam Deck does) for a user on a dark theme.
   final themeProvider = await ThemeProvider.create();
 
-  // On iOS the branded intro is part of the launch contract: if startup work
-  // finishes faster than the 2.8 s movie, keep the lightweight root mounted
-  // until playback completes. Slower initialization is never delayed further.
-  await _waitForStartupIntro();
-
   runApp(
     MyApp(
       fileProvider: fileProvider,
@@ -734,11 +708,9 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
   @override
   void initState() {
     super.initState();
-    if (!Platform.isIOS) {
-      _textTimer = Timer(_textDelay, () {
-        if (mounted) setState(() => _showText = true);
-      });
-    }
+    _textTimer = Timer(_textDelay, () {
+      if (mounted) setState(() => _showText = true);
+    });
   }
 
   @override
@@ -749,19 +721,6 @@ class _StartupLoadingAppState extends State<StartupLoadingApp> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isIOS) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: const Color(0xFF01050D),
-          body: StartupIntroVideo(
-            assetPath: _startupIntroAsset,
-            onFinished: _markStartupIntroFinished,
-          ),
-        ),
-      );
-    }
-
     return _StartupScaffold(
       animatedLogo: true,
       childrenBuilder: (colors) => [
