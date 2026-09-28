@@ -48,7 +48,17 @@ def main() -> None:
     require(helper_cleanup < spu_llvm.index("m_blocks.clear();", helper_cleanup),
             "SPU LLVM helpers must be removed before compiler context cleanup")
 
-    fast = spu_thread.index("if (!g_cfg.core.spu_accurate_reservations && diff16_pos != umax)")
+    # Build 353 caches spu_accurate_reservations in the local `accurate` flag, while
+    # Build 351/352 spelled the same condition directly from g_cfg. Accept both source
+    # shapes but keep asserting the protected behavior: the narrow range-lock/CAS path
+    # must precede the heavyweight writer lock.
+    fast_tokens = (
+        "if (!g_cfg.core.spu_accurate_reservations && diff16_pos != umax)",
+        "if (!accurate && diff16_pos != umax)",
+    )
+    fast_token = next((token for token in fast_tokens if token in spu_thread), None)
+    require(fast_token is not None, "relaxed PUTLLC fast path is missing")
+    fast = spu_thread.index(fast_token)
     heavy = spu_thread.index("vm::writer_lock lock(addr, range_lock);", fast)
     require(fast < heavy and "vm::range_lock<128>(range_lock, addr, 128);" in spu_thread[fast:heavy],
             "relaxed PUTLLC does not take the upstream narrow atomic path")
