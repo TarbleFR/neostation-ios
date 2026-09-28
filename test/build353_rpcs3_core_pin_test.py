@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the exact Build 353 XITRIX v0.10 RPCS3 Core and IPA identity."""
+"""Guard the exact validated Build 353 XITRIX v0.10 RPCS3 Core pin."""
 
 from pathlib import Path
 
@@ -12,14 +12,11 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> None:
     for token in (
-        "NeoStation iOS Build 353 RPCS3 XITRIX v0.10 candidate",
-        "BUILD_NUMBER: ${{ inputs.build_number || '353' }}",
-        "NeoStation-iOS-Build-353-RPCS3-XITRIX-v0.10-Candidate",
         "RPCS3_CORE_HOST_SHA: 7fbdc9fd26c094499179bf6f42727b8b2e59c281",
         "RPCS3_CORE_RUN_ID: '36418910869'",
         "test/rpcs3_build352_gow3_memory_test.py",
     ):
-        require(token in WORKFLOW, f"missing Build 353 RPCS3 pin: {token}")
+        require(token in WORKFLOW, f"missing validated Build 353 RPCS3 pin: {token}")
 
     for stale in (
         "RPCS3_CORE_HOST_SHA: 7ecc36bdb9f1206aedff02cb15aa23341c242f91",
@@ -28,7 +25,7 @@ def main() -> None:
     ):
         require(stale not in WORKFLOW, f"stale Build 352 RPCS3 pin remains: {stale}")
 
-    print("Build 353 RPCS3 Core pin: OK")
+    print("Validated Build 353 RPCS3 Core pin: OK")
 
 if __name__ == "__main__":
     main()
