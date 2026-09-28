@@ -227,8 +227,8 @@ class _Rpcs3InternalPlaylistActionsState
         await Rpcs3InternalService.exportSaveData();
         _notice(
           _fr
-              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Saves.'
-              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Saves.',
+              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Export.'
+              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Export.',
         );
       } else if (action == 'restoreSaves') {
         final imported = await Rpcs3InternalService.importSaveDataFromFiles();
@@ -422,8 +422,8 @@ class _Rpcs3InternalPlaylistActionsState
                                 : 'The folder will be available in the Files app.')
                           : importingSaves
                           ? (_fr
-                                ? 'Lecture de Sur mon iPhone → NeoStation → RPCS3 → Saves.'
-                                : 'Reading On My iPhone → NeoStation → RPCS3 → Saves.')
+                                ? 'Lecture de Sur mon iPhone → NeoStation → RPCS3 → Export.'
+                                : 'Reading On My iPhone → NeoStation → RPCS3 → Export.')
                           : (_fr
                                 ? 'Laissez NeoStation ouvert pendant l’importation.'
                                 : 'Keep NeoStation open while the import completes.'),

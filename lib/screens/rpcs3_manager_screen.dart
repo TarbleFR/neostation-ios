@@ -253,8 +253,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (mounted) {
         _notice(
           _fr
-              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Saves.'
-              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Saves.',
+              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Export.'
+              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Export.',
         );
       }
     } on Rpcs3InternalException catch (error) {

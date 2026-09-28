@@ -36,6 +36,11 @@ void main() {
       "name.endsWith('.savestat.gz')",
       "name.endsWith('.savestat')",
       'neostation-import-backup',
+      "'Import/Game Saves'",
+      "'Import/Savestates'",
+      "'Export/Game Saves'",
+      "'Export/Savestates'",
+      'synchronizeFilesWorkspace',
     ]) {
       expect(service, contains(token), reason: token);
     }

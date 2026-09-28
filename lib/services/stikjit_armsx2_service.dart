@@ -13,7 +13,6 @@ import 'package:neostation/services/diagnostics_directory.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:stikjit_bridge/stikjit_bridge.dart';
 
 /// Native ARMSX2 launch transaction.

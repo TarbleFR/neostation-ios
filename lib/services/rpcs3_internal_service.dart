@@ -258,6 +258,11 @@ class Rpcs3InternalService {
       consumeSource: true,
     );
 
+    final exportRoot = Directory(path.join(workspace.path, 'Export'));
+    if (await exportRoot.exists()) await exportRoot.delete(recursive: true);
+    await Directory(path.join(exportRoot.path, 'Game Saves')).create(recursive: true);
+    await Directory(path.join(exportRoot.path, 'Savestates')).create(recursive: true);
+
     var exported = 0;
     exported += await _copyTree(
       source: Directory(path.join(data.path, 'dev_hdd0', 'home', '00000001', 'savedata')),

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 
 import '../diagnostics_directory.dart';
 import '../logger_service.dart';

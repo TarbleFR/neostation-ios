@@ -35,6 +35,7 @@ for token in (
     "synchronizeFilesWorkspace",
     "consumeSource: true",
     "README.txt",
+    "delete(recursive: true)",
 ):
     require(token in service, f"RPCS3 Files workspace contract missing: {token}")
 
