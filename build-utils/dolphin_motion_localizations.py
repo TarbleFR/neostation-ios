@@ -14,7 +14,7 @@ def stage(runner: Path) -> None:
         target.parent.mkdir(parents=True,exist_ok=True)
         text=target.read_text(encoding='utf-8') if target.exists() else ''
         entry='"NSMotionUsageDescription" = '+json.dumps(strings['usage'],ensure_ascii=False)+';'
-        pattern=r'(?m)^\s*"?NSMotionUsageDescription"?\s*=\s*"(?:\\.|[^"\\])*"\s*;'
+        pattern=r'(?m)^[ \t]*"?NSMotionUsageDescription"?\s*=\s*"(?:\\.|[^"\\])*"\s*;'
         if re.search(pattern,text):
             text=re.sub(pattern,lambda _:entry,text)
         else:

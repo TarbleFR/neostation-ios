@@ -26,7 +26,9 @@ jobs:
         with:
           xcode-version: '16.4'
       - name: Execute production detector and lifecycle with controlled sensor
-        run: python3 test/dolphin_phone_shake_test.py
+        run: |
+          python3 test/dolphin_phone_shake_test.py
+          python3 test/dolphin_motion_localizations_test.py
       - name: Type-check real CoreMotion and all production touch controls for iOS
         run: |
           set -euo pipefail
