@@ -1,0 +1,81 @@
+name: Legal compliance checks
+
+on:
+  push:
+    branches:
+      - main
+      - experimental
+    paths:
+      - 'NOTICE.md'
+      - 'README.md'
+      - 'assets/legal/**'
+      - 'docs/LEGAL_AND_CREDITS.md'
+      - 'docs/RELEASE_0.0.1_SOURCE_MANIFEST.md'
+      - 'lib/l10n/legal_credits_locale.dart'
+      - 'lib/screens/settings_screen/legal_credits_dialog.dart'
+      - 'lib/screens/settings_screen/new_settings_options/about_settings_content.dart'
+      - 'build-utils/embed_legal_bundle.py'
+      - 'build-utils/validate_legal_bundle_ipa.py'
+      - 'pubspec.yaml'
+      - '.github/workflows/legal-compliance-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate legal bundle and UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Resolve packages
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze legal UI changes
+        run: flutter analyze --no-fatal-infos
+
+      - name: Validate legal scripts and source pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile             build-utils/embed_legal_bundle.py             build-utils/validate_legal_bundle_ipa.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('lib/l10n/legal_credits_locale.dart').read_text()
+          for locale in (
+              'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt',
+              'fr', 'de', 'it', 'id', 'ja', 'ko',
+          ):
+              count = text.count("'" + locale + "':")
+              assert count == 5, (locale, count)
+          PY
+
+      - name: Exercise future app legal embedding
+        shell: bash
+        env:
+          TEST_SHA: 0000000000000000000000000000000000000350
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/legal-test/Payload/Runner.app"
+          mkdir -p "$APP"
+
+          GITHUB_SHA="$TEST_SHA" python3 build-utils/embed_legal_bundle.py             --app "$APP"             --build-number 350             --dolphin-sha 7cac54161659421ed95c2cd1c0b0746539a4cd38
+
+          (
+            cd "$RUNNER_TEMP/legal-test"
+            zip -qr legal-test.ipa Payload
+          )
+
+          python3 build-utils/validate_legal_bundle_ipa.py             "$RUNNER_TEMP/legal-test/legal-test.ipa"             --build-number 350             --commit "$TEST_SHA"
