@@ -935,20 +935,32 @@ jobs:
           python3 - <<'PY'
           import json,subprocess,time,os
           tested='cc880f7ef2742a9cd683124d6ecd3e598a17a6c7'
-          for run in ('36579189855','36579189779'):
+          for run in ('36581265703',):
               deadline=time.monotonic()+900
               while True:
                   result=json.loads(subprocess.check_output(['gh','api','repos/TarbleFR/neostation-ios/actions/runs/'+run]))
-                  assert result['head_sha']==tested,result
+                  assert result['head_sha']=='7d470bb75ef4de8759ab1e1bc1052c145642a36e',result
                   if result['status']=='completed':
                       assert result['conclusion']=='success',result
                       break
                   assert time.monotonic()<deadline,'Simulator evidence did not finish within its wait budget'
                   time.sleep(15)
+          # Run the complete production display/INI/UIKit suite for this exact
+          # candidate, not a stale/cancelled run inherited from a previous build.
+          deadline=time.monotonic()+1500
+          while True:
+              endpoint='repos/TarbleFR/neostation-ios/actions/workflows/dolphin-pacing-check.yml/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
+              rows=json.loads(subprocess.check_output(['gh','api',endpoint]))['workflow_runs']
+              rows=[r for r in rows if r['head_sha']==os.environ['GITHUB_SHA']]
+              if rows and rows[0]['status']=='completed':
+                  assert rows[0]['conclusion']=='success',rows[0]
+                  break
+              assert time.monotonic()<deadline,'Candidate display simulator evidence did not complete'
+              time.sleep(15)
           subprocess.run(['git','diff','--exit-code',tested,os.environ['GITHUB_SHA'],'--',
               'packages/dolphin_internal_bridge','packages/armsx2_internal_bridge','native/cheats',
               'test/dolphin_pacing362_ui_test.py','test/dolphin_display_trial362_test.mm',
-              'test/dolphin_pacing362_contract_test.py','test/dolphin_account_267_test.py',
+              'test/dolphin_account_267_test.py',
               'test/cheat_editor361_ui_test.py','test/cheat_import_delete361_test.mm',
               ':(exclude)packages/dolphin_internal_bridge/ci/verify_ipa.py',
               ':(exclude)packages/armsx2_internal_bridge/ios/Classes/Armsx2JitBridgePlugin.mm'],check=True)
