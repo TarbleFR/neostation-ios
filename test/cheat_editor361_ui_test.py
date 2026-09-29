@@ -13,6 +13,7 @@ ns['TESTS']=r'''
 #import <XCTest/XCTest.h>
 #import <UIKit/UIKit.h>
 #include "NeoCheatStore.h"
+#include "NeoCheatLabels.h"
 @interface DOLManualCheatEditor : UIViewController
 @property(nonatomic,copy) NSString* localeIdentifier;
 @property(nonatomic,copy) NSDictionary* identity;
