@@ -19,7 +19,12 @@ def require_locales(path):
     require(not missing, str(path.relative_to(ROOT)) + " missing locales: " + ",".join(missing))
 
 def main():
-    files = {p.stem.replace("app_locale_",""): p for p in L10N.glob("app_locale_*.dart")}
+    files = {}
+    for p in L10N.glob("app_locale_*.dart"):
+        locale = p.stem.replace("app_locale_", "")
+        if locale == "zh_hant":
+            locale = "zh_Hant"
+        files[locale] = p
     require(set(files) == set(LOCALES), "unexpected AppLocale files: " + str(sorted(files)))
     expected = app_keys(files["en"])
     require(len(expected) >= 900, "English AppLocale unexpectedly small")
