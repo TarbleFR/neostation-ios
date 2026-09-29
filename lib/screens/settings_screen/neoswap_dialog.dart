@@ -15,6 +15,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
   Timer? _timer;
   bool _busy = false;
   bool _polling = false;
+  int _revision = 0;
   String? _messageKey;
   int? _code;
   @override
@@ -33,11 +34,19 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
   Future<void> _refresh() async {
     if (_polling || _busy) return;
     _polling = true;
+    final requestedRevision = _revision;
     try {
       final stats = await NeoSwap.snapshot();
-      if (mounted && !_busy) setState(() => _stats = stats);
+      if (mounted && !_busy && requestedRevision == _revision) {
+        setState(() {
+          _stats = stats;
+          if (_messageKey == 'unavailable') _messageKey = null;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _messageKey = 'unavailable');
+      if (mounted && !_busy && requestedRevision == _revision) {
+        setState(() => _messageKey = 'unavailable');
+      }
     } finally {
       _polling = false;
     }
@@ -45,6 +54,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
 
   Future<void> _run({int? capacity}) async {
     if (_busy) return;
+    ++_revision; // An earlier diagnostic response cannot undo a newer command.
     setState(() {
       _busy = true;
       _messageKey = null;
@@ -84,7 +94,15 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     for (final owner in (_stats?['owners'] as List? ?? const [])) {
       if (owner is Map && owner['owner'] == 'rpcs3') rpc = owner;
     }
-    final capacity = (_stats?['capacityMiB'] as num?)?.toInt() ?? 0;
+    // Display the active broker budget, not merely the saved preference.
+    final activeBytes = _stats?['capacityBytes'] as num?;
+    final capacity = activeBytes == null
+        ? ((_stats?['capacityMiB'] as num?)?.toInt() ?? 0)
+        : activeBytes ~/ (1024 * 1024);
+    final configurationCode = (_stats?['configResult'] as num?)?.toInt() ?? 0;
+    final messageKey =
+        _messageKey ?? (configurationCode != 0 ? 'failed' : null);
+    final resultCode = _code ?? configurationCode;
     return Dialog(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -148,9 +166,9 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
               ],
               const SizedBox(height: 12),
               if (_busy) const LinearProgressIndicator(),
-              if (_messageKey != null) Text(t(_messageKey!)),
-              if (_code != null && _code != 0)
-                SelectableText('NeoSwap result: $_code'),
+              if (messageKey != null) Text(t(messageKey)),
+              if (resultCode != 0)
+                SelectableText('NeoSwap result: $resultCode'),
               OutlinedButton(
                 onPressed: _busy || _stats == null ? null : () => _run(),
                 child: Text(t('probe')),

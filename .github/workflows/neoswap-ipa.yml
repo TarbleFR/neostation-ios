@@ -30,7 +30,7 @@ permissions:
 # Keep candidate IPA runs separate from native validation.
 concurrency:
   group: neostation-neoswap-private-366
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -351,6 +351,7 @@ jobs:
           xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
             packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindowAwaiter.mm
 
+      # The UI suite covers failed restored configuration and stale polling replies.
       - name: Resolve Flutter and analyze
         shell: bash
         run: |

@@ -19,7 +19,9 @@ is a valid measurement; no synthetic data is charged to the game's counter.
 
 Settings > Tools > NeoSwap. Default: Off. Select 512, 1024 or 2048 MiB before
 launching RPCS3. The native method channel saves a choice only after successful
-configuration. Reconfiguration refuses while any broker block is live; quit the
+configuration. The panel displays the actual broker budget, reports a failed
+restored configuration and ignores diagnostic replies older than a setting
+change. Reconfiguration refuses while any broker block is live; quit the
 game, or restart NeoStation if the core retains a persistent CPU cache. The
 module never frees game-owned pointers just to make a setting change succeed.
 

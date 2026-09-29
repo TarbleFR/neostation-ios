@@ -12,6 +12,8 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   Map<String, dynamic> sample({int capacity = 0, int result = 0}) => {
     'capacityMiB': capacity,
+    'capacityBytes': capacity * 1024 * 1024,
+    'configResult': 0,
     'result': result,
     'allocatedDiskBytes': 0,
     'processFootprintBytes': 65536,
@@ -99,4 +101,63 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.binding.setSurfaceSize(null);
   });
+  testWidgets(
+    'failed restored configuration is visible and never shown as an active budget',
+    (tester) async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          ...sample(capacity: 512),
+          'capacityBytes': 0,
+          'configResult': -4,
+        },
+      );
+      await open(tester);
+      expect(
+        tester
+            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .value,
+        0,
+      );
+      expect(find.text(NeoSwapLocale.values['en']!['failed']!), findsOneWidget);
+      expect(find.text('NeoSwap result: -4'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets(
+    'old periodic snapshot cannot revert a successfully changed budget',
+    (tester) async {
+      final pending = Completer<Map<String, dynamic>>();
+      var snapshots = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'configure') return sample(capacity: 1024);
+        snapshots++;
+        return snapshots == 1 ? sample(capacity: 512) : pending.future;
+      });
+      await open(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(snapshots, 2);
+      tester
+          .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+          .onChanged!(1024);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .value,
+        1024,
+      );
+      pending.complete(sample(capacity: 512));
+      await tester.pump();
+      expect(
+        tester
+            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .value,
+        1024,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
 }
