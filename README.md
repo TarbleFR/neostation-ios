@@ -175,6 +175,8 @@ components, and preserve their license/notices.
 | **ScreenScraper** | [ScreenScraper.fr](https://www.screenscraper.fr/) metadata and media service. |
 | **RetroAchievements** | [RetroAchievements](https://retroachievements.org/) project, API and community. |
 | **GameDB / GameDB-PS3** | **Niema / [@niemasd](https://github.com/niemasd)**, creator of [GameDB](https://github.com/niemasd/GameDB) and [GameDB-PS3](https://github.com/niemasd/GameDB-PS3). NeoStation uses `PS3.titles.json` as a fallback title catalog. GameDB asks downstream projects to credit GameDB and its source datasets; GameDB-PS3 lists **MiSTer Addons** and **Redump** as sources. |
+| **NeoStation Assets** | Optional runtime-downloaded System Art from [misobadev/neostation-assets](https://github.com/misobadev/neostation-assets). Original creative assets are CC BY-NC-SA 4.0; trademarks remain with their owners. |
+| **RiiSU / iiSU** | [RiiSU](https://github.com/mult1v4c/RiiSU) credits [iiSU Interpreted for ES-DE](https://github.com/VictorUnlocked/iisu-interpreted-es-de) for system art icons and [iiSU Network](https://iisu.network/) for the original inspiration. RiiSU remains remotely hosted and is downloaded only when selected. |
 
 For lower-level dependencies, pinned revisions and additional license details,
 see [NOTICE.md](NOTICE.md), [the complete legal/credits record](docs/LEGAL_AND_CREDITS.md),
@@ -268,6 +270,20 @@ The GameDB-PS3 repository is distributed under **GPL-3.0**. NeoStation downloads
 its title mapping at runtime rather than claiming it as original NeoStation
 data. Preserve GameDB and source-dataset attribution when redistributing a
 cached or bundled copy.
+
+### NeoStation Assets / RiiSU System Art
+
+Optional System Art from **NeoStation Assets** is downloaded at runtime.
+NeoStation Assets states that its original creative backgrounds and custom icons
+are licensed under **CC BY-NC-SA 4.0**. Attribution, NonCommercial and
+ShareAlike conditions apply to that creative material; console trademarks
+remain with their owners.
+
+**RiiSU** remains hosted by its original project and is downloaded/cached only
+when selected. RiiSU credits iiSU Interpreted for ES-DE for its system art icons
+and iiSU Network for the original inspiration. No standalone RiiSU license file
+was visible when the integration was added, so NeoStation does not assert
+general redistribution rights over that artwork.
 
 ### Future binary packaging
 
