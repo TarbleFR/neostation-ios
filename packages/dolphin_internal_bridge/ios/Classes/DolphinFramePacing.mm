@@ -139,7 +139,7 @@ NSInteger DOLRequestedRefresh(NSInteger requested,NSInteger maximum,BOOL lowPowe
   self.tableView.rowHeight=UITableViewAutomaticDimension;self.tableView.estimatedRowHeight=64;
   self.navigationItem.largeTitleDisplayMode=UINavigationItemLargeTitleDisplayModeNever;
 }
-- (NSInteger)tableView:(UITableView*)table numberOfRowsInSection:(NSInteger)section {return 6;}
+- (NSInteger)tableView:(UITableView*)table numberOfRowsInSection:(NSInteger)section {return 5;}
 - (UITableViewCell*)tableView:(UITableView*)table cellForRowAtIndexPath:(NSIndexPath*)path {
   UITableViewCell* cell=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
   cell.backgroundColor=UIColor.secondarySystemGroupedBackgroundColor;cell.textLabel.textColor=UIColor.labelColor;
@@ -157,7 +157,6 @@ NSInteger DOLRequestedRefresh(NSInteger requested,NSInteger maximum,BOOL lowPowe
     case 3:cell.textLabel.text=[self text:@"trace"];
       cell.detailTextLabel.text=[self text:self.pacing.traceEnabled?@"on":@"off"];break;
     case 4:cell.textLabel.text=[self text:@"export"];cell.detailTextLabel.text=[self text:@"traceHelp"];break;
-    case 5:cell.textLabel.text=[self text:@"restore"];cell.detailTextLabel.text=[self text:@"restartHelp"];break;
   }
   return cell;
 }
@@ -204,16 +203,6 @@ NSInteger DOLRequestedRefresh(NSInteger requested,NSInteger maximum,BOOL lowPowe
     UIActivityViewController* share=[[UIActivityViewController alloc] initWithActivityItems:@[url] applicationActivities:nil];
     share.popoverPresentationController.sourceView=cell;share.popoverPresentationController.sourceRect=cell.bounds;
     [self presentViewController:share animated:YES completion:nil];
-  } else if(path.row==5) {
-    UIAlertController* alert=[UIAlertController alertControllerWithTitle:[self text:@"restore"] message:[self text:@"restartHelp"] preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:[self text:@"restore"] style:UIAlertActionStyleDestructive handler:^(UIAlertAction* a){
-      [NSUserDefaults.standardUserDefaults setInteger:0 forKey:DOLProfileKey];
-      [NSUserDefaults.standardUserDefaults setInteger:0 forKey:DOLRefreshKey];
-      [NSUserDefaults.standardUserDefaults setBool:NO forKey:DOLTraceKey];
-      [self.pacing refreshPreference];[table reloadData];self.navigationItem.prompt=[self text:@"restartHelp"];
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
   }
 }
 @end

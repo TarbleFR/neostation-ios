@@ -22,6 +22,8 @@ def write_plist(path: Path, payload: dict) -> None:
 def configure_info_plist() -> None:
     path = RUNNER / 'Info.plist'
     payload = plistlib.loads(path.read_bytes())
+    from dolphin_motion_localizations import STRINGS
+    payload['NSMotionUsageDescription'] = STRINGS['en']['usage']
     payload['UIFileSharingEnabled'] = True
     payload['LSSupportsOpeningDocumentsInPlace'] = True
     # The share sheet can offer Save Video. Add-only access is requested by iOS
@@ -279,6 +281,20 @@ end
 puts "runner.build_phases=#{runner.build_phases.map(&:display_name).join(' -> ')}"
 runner_group = project.main_group.find_subpath('Runner', false)
 raise 'Runner group not found' unless runner_group
+# A single variant group gives iOS the correct motion permission in all 12 languages.
+localizations = runner_group.children.find { |r| r.isa == 'PBXVariantGroup' && r.name == 'InfoPlist.strings' }
+localizations ||= runner_group.new_variant_group('InfoPlist.strings')
+%w[en fr de es it pt ru id ja ko zh-Hans zh-Hant].each do |language|
+  ref = localizations.files.find { |file| file.name == language }
+  ref ||= localizations.new_file("#{language}.lproj/InfoPlist.strings")
+  ref.name = language
+  ref.last_known_file_type = 'text.plist.strings'
+  project.known_regions << language unless project.known_regions.include?(language)
+  raise "Missing localized privacy string #{ref.real_path}" unless File.file?(ref.real_path)
+end
+unless runner.resources_build_phase.files.any? { |file| file.file_ref == localizations }
+  runner.resources_build_phase.add_file_reference(localizations, true)
+end
 sys_ref = runner_group.files.find { |file| file.path == 'Sys' }
 sys_ref ||= runner_group.new_file('Sys')
 sys_ref.last_known_file_type = 'folder'
@@ -330,6 +346,8 @@ def main() -> None:
         raise SystemExit(f'StikJIT device framework missing: {framework}')
     configure_helper_files()
     configure_info_plist()
+    from dolphin_motion_localizations import stage
+    stage(RUNNER)
     configure_entitlements()
     configure_podfile()
     configure_flutter_xcconfigs()

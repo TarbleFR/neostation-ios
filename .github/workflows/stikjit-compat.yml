@@ -4,6 +4,8 @@ on:
     branches: [experimental]
     paths:
       - 'build-utils/stikjit/**'
+      - 'build-utils/build_patched_stikjit.py'
+      - 'test/stikjit_unified_build_test.py'
       - 'build-utils/patch_stikjit_compat.py'
       - 'build-utils/install_patched_stikjit.py'
       - 'test/stikjit_compat_test.py'
@@ -25,65 +27,29 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/checkout@v4
-        with:
-          repository: StikDebug/StikJIT
-          ref: 32287268fa5824f9edce4cb359f5833ce0cf7b00
-          path: .native-sources/StikJIT
-          persist-credentials: false
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-      - name: Rebase transport patch and verify upstream pin
-        run: |
-          set -euo pipefail
-          test "$(git -C .native-sources/StikJIT rev-parse HEAD)" = 32287268fa5824f9edce4cb359f5833ce0cf7b00
-          git diff --check
-          python3 build-utils/patch_stikjit_compat.py .native-sources/StikJIT
-          # The patch must be idempotent, not a blind text replacement.
-          python3 build-utils/patch_stikjit_compat.py .native-sources/StikJIT
-          python3 test/stikjit_rpcs3_patch_test.py .native-sources/StikJIT
-          python3 test/stikjit_compat_test.py .native-sources/StikJIT
-          node test/rpcs3_debugger_handshake_test.js
-          python3 test/stikjit_modern_baseline_test.py
-          python3 test/rpcs3_jit_handshake_test.py
-          python3 test/rpcs3_reporter_send_order_test.py
-          python3 test/local_dev_vpn_route_contract_test.py
-      - name: Build the patched framework from source
+      - name: Build and validate canonical StikJIT source
         run: |
           set -euo pipefail
           command -v xcodegen || brew install xcodegen
-          cd .native-sources/StikJIT
-          xcodegen generate
-          xcodebuild archive -project StikJIT.xcodeproj -scheme StikJIT \
-            -destination 'generic/platform=iOS' -archivePath build/StikJIT-iOS \
-            SKIP_INSTALL=NO BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
-          xcodebuild -create-xcframework \
-            -framework build/StikJIT-iOS.xcarchive/Products/Library/Frameworks/StikJIT.framework \
-            -output StikJIT.xcframework
-      - name: Verify interfaces, dynamic exports, markers and binary identity
-        run: |
-          set -euo pipefail
-          python3 build-utils/install_patched_stikjit.py .native-sources/StikJIT/StikJIT.xcframework
-          mkdir -p dist/stikjit
-          cd .native-sources/StikJIT
-          zip -qry ../../dist/stikjit/StikJIT.xcframework.zip StikJIT.xcframework
-          cd ../..
-          cp build/dolphin-ci/stikjit-release.json dist/stikjit/identity.json
-          cp build/stikjit-tests/modern-baseline.json dist/stikjit/modern-baseline.json
-          printf '%s\n' "${{ github.sha }}" > dist/stikjit/host-commit.txt
-          shasum -a 256 dist/stikjit/StikJIT.xcframework.zip > dist/stikjit/archive.sha256
+          python3 build-utils/build_patched_stikjit.py
+          python3 test/stikjit_unified_build_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: StikJIT-1.9.0-${{ github.sha }}
-          path: dist/stikjit/
+          name: StikJIT-source-validated-${{ github.sha }}
+          path: |
+            build/stikjit-current/*.json
+            build/stikjit-current/*.zip
+            build/stikjit-current/*.sha256
+            build/stikjit-current/host-commit.txt
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: StikJIT-1.9-failed-${{ github.sha }}
-          path: .native-sources/StikJIT/build.log
+          name: StikJIT-source-build-failure-${{ github.sha }}
+          path: build/stikjit-current/build.log
           if-no-files-found: ignore
           retention-days: 3

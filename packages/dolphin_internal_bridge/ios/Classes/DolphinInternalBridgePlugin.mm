@@ -297,6 +297,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
 }
 
 - (void)suspendTouchInput {
+  self.touchOverlay.sessionInputActive = NO;
   self.touchOverlay.userInteractionEnabled = NO;
   [self releaseTouchInput];
   self.acceptsTouchInput = NO;
@@ -1133,7 +1134,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     DOLAppendJSONLog(logPath, @"launch.authorized",
                      @"All Dolphin readiness gates passed; launch authorized.",
                      @{ @"system" : system, @"pid" : @(getpid()) });
-    dispatch_sync(dispatch_get_main_queue(),^{[controller.framePacing startWithView:controller.view];});
+    dispatch_sync(dispatch_get_main_queue(),^{
+      [controller.framePacing startWithView:controller.view];
+      controller.touchOverlay.sessionInputActive = YES;
+    });
     [self startRunningMonitor];
     @synchronized(self) { self.launchInProgress = NO; }
     return state;

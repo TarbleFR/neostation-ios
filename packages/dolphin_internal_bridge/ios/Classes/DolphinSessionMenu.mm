@@ -2,6 +2,12 @@
 #import "DolphinRetroAchievementsAccount.h"
 #include "DOLManualCheatEditor.h"
 #import "DolphinFramePacing.h"
+#include "DolphinPhoneShakeLabels.h"
+static NSString* const DOLPhoneShakeKey=@"NeoStation.Dolphin.PhoneShake.Enabled";
+static BOOL DOLPhoneShakeEnabled(void) {
+  id value=[NSUserDefaults.standardUserDefaults objectForKey:DOLPhoneShakeKey];
+  return value == nil || [value boolValue];
+}
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
   DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuCheats, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
@@ -332,7 +338,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
           [self.cheatsSnapshot[@"actionReplay"] count] : 0;
     case DOLMenuAchievements: return self.snapshot ? 3 : 0;
     case DOLMenuControls:
-      return section == 0 ? (self.wii ? 4 : 3) : [self.snapshot[@"controls"] count];
+      return section == 0 ? (self.wii ? 5 : 3) : [self.snapshot[@"controls"] count];
     case DOLMenuDevices: return [self.snapshot[@"devices"] count] + 1;
     default: return self.choices.count;
   }
@@ -368,6 +374,8 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     return self.stateMessage ? [NSString stringWithFormat:@"%@\n\n%@", [self text:self.stateMessage], help] : help;
   }
   if (self.page == DOLMenuConsole) return [self text:@"languageHelp"];
+  if (self.page == DOLMenuControls && section == 0 && self.wii)
+    return DOLPhoneShakeText(@"help",self.labels[@"__locale"]);
   if (self.page == DOLMenuControls && section == 1) return [self text:@"bindingsHelp"];
   return nil;
 }
@@ -561,6 +569,12 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         [achievements[@"hardcore"] respondsToSelector:@selector(boolValue)] && [achievements[@"hardcore"] boolValue]
           ? @"hardcore" : @"standard"];
   } else if (self.page == DOLMenuControls) {
+    if (indexPath.section == 0 && self.wii && row == 4) {
+      cell.textLabel.text=DOLPhoneShakeText(@"title",self.labels[@"__locale"]);
+      cell.detailTextLabel.text=DOLPacingText(DOLPhoneShakeEnabled()?@"on":@"off",self.labels[@"__locale"]);
+      cell.accessoryType=DOLPhoneShakeEnabled()?UITableViewCellAccessoryCheckmark:UITableViewCellAccessoryNone;
+      return cell;
+    }
     if (indexPath.section == 0) {
       cell.textLabel.text = [self text:(self.wii ? @[@"controllerType", @"player", @"physicalController", @"extension"] : @[@"controllerType", @"player", @"physicalController"])[row]];
       if (row == 0) cell.detailTextLabel.text = self.wii ? [self text:@"wiimote"] : @"GameCube";
@@ -617,6 +631,12 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   NSInteger row = indexPath.row;
   if (indexPath.section < 0 || indexPath.section >= [self numberOfSectionsInTableView:tableView] ||
       row < 0 || row >= [self tableView:tableView numberOfRowsInSection:indexPath.section]) return;
+  if (self.page == DOLMenuControls && self.wii && indexPath.section == 0 && row == 4) {
+    [NSUserDefaults.standardUserDefaults setBool:!DOLPhoneShakeEnabled() forKey:DOLPhoneShakeKey];
+    [NSNotificationCenter.defaultCenter postNotificationName:@"NeoStation.Dolphin.PhoneShakeChanged" object:nil];
+    [tableView reloadData];
+    return;
+  }
   // Account is navigation, never a core-setting request. Status/mode are read-only.
   if (self.page == DOLMenuAchievements) {
     if (row == 0 && self.navigationController.topViewController == self) {

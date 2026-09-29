@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Install immutable native bootstrap assets from the validated Build 350 IPA.
 
-Fast experimental builds reuse StikJIT and native UI resources from the stable
-baseline. RPCS3Core and DolphinCore are temporary bootstrap inputs here and are
+Fast experimental builds reuse native Core and UI resources from the stable
+baseline, never its JIT framework. RPCS3Core and DolphinCore are temporary bootstrap inputs here and are
 replaced by separately pinned, hash-verified artifacts before Xcode consumes
-them. The official StikJIT 1.5.0 XCFramework supplies compile-time Swift
-interfaces; the runtime binary and scripts use the hash-verified donor bytes.
+them. StikJIT is built separately from the canonical source pin; neither its
+binary, scripts nor Swift interfaces are transplanted from a donor.
 """
 from pathlib import Path
 import argparse
@@ -21,10 +21,6 @@ DOLPHIN_SHA='7129d9c654fb6d28f2fa92ae1a4c14d1f25a1fc3e87788237676b48a0fb3aa2d'
 RPCS3_SHA='4866265eca27327c3fc9be14190fec082b58a5e1946f541ced34e46c13ceabd9'
 ARMSX2_SHA='cadb6cd56c4b5d01b623bf9696800d48ba504eef8129a8de468c11381de8d162'
 DUSKLIGHT_SHA='5a64e2fd48c47831fd07306c90e28036535a125bd887149d92ba4567ac9af8a7'
-STIKJIT_SHA='4de72ef84a1aef6d6d3b547222c730227b48e91d8d5eb7e59c1f9235961e4efe'
-UNIVERSAL_SHA='22b0146b14ac230b3e04f1cbcaadbfddd898cbe6bb96c554981bef9cff311ba1'
-LEGACY_SHA='787df4678ca17fd100a1d002203bfac8771fae062175aa510da8d6af9f8167ec'
-OFFICIAL_STIK_ZIP_SHA='444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85'
 DONOR_RUN_ID=36323843067
 DONOR_ARTIFACT_ID=10932894067
 
@@ -55,71 +51,13 @@ def copytree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, symlinks=True)
 
 
-def normalize_swift_interfaces(xcframework: Path) -> int:
-    """Normalize known Swift qualification issues in StikJIT 1.5.0 interfaces."""
-    interfaces = sorted(xcframework.rglob('*.swiftinterface'))
-    demand(bool(interfaces), 'StikJIT XCFramework contains no textual Swift interfaces')
-    changed = 0
-    for interface in interfaces:
-        text = interface.read_text(encoding='utf-8')
-        patched = text
-        for type_name in ('DDIPaths', 'DeveloperDiskImageService', 'StikJITError'):
-            patched = patched.replace(f'StikJIT.{type_name}', type_name)
-        patched = patched.replace('StikJIT.StikJIT.', 'StikJIT.')
-        if patched != text:
-            interface.write_text(patched, encoding='utf-8')
-            changed += 1
-    for interface in interfaces:
-        text = interface.read_text(encoding='utf-8')
-        demand(
-            all(
-                ref not in text
-                for ref in (
-                    'StikJIT.DDIPaths',
-                    'StikJIT.DeveloperDiskImageService',
-                    'StikJIT.StikJITError',
-                    'StikJIT.StikJIT.',
-                )
-            ),
-            f'Invalid StikJIT textual-interface qualification remains: {interface}',
-        )
-    return changed
-
-
-def device_framework(xcframework: Path) -> Path:
-    info=plistlib.loads((xcframework/'Info.plist').read_bytes())
-    matches=[]
-    for library in info.get('AvailableLibraries', []):
-        if library.get('SupportedPlatform') != 'ios':
-            continue
-        if library.get('SupportedPlatformVariant'):
-            continue
-        identifier=library.get('LibraryIdentifier')
-        library_path=library.get('LibraryPath')
-        if not identifier or not library_path:
-            continue
-        candidate=xcframework/identifier/library_path
-        if candidate.name == 'StikJIT.framework' and candidate.is_dir():
-            matches.append(candidate)
-    demand(len(matches)==1, f'Expected one device StikJIT framework, found: {matches}')
-    return matches[0]
-
-
 def main() -> None:
     parser=argparse.ArgumentParser()
     parser.add_argument('artifact', type=Path)
     parser.add_argument('--build-number', required=True)
-    parser.add_argument('--stik-xcframework-zip', type=Path, required=True)
     args=parser.parse_args()
 
     donor=args.artifact.resolve()
-    official_stik=args.stik_xcframework_zip.resolve()
-    demand(official_stik.is_file(), 'Official StikJIT XCFramework ZIP is missing')
-    demand(
-        sha(official_stik)==OFFICIAL_STIK_ZIP_SHA,
-        'Official StikJIT 1.5.0 archive hash mismatch',
-    )
-
     with tempfile.TemporaryDirectory(prefix='neostation-fast-native-') as temp:
         work=Path(temp)
         if donor.is_dir():
@@ -148,7 +86,6 @@ def main() -> None:
             archive.extractall(work/'ipa')
 
         app=work/'ipa'/'Payload'/apps[0]
-        stik=app/'Frameworks/StikJIT.framework'
         dolphin=app/'Frameworks/DolphinCore.framework'
         rpcs3=app/'Frameworks/libRPCS3Core.dylib'
         armsx2=app/'Frameworks/ARMSX2Core.framework'
@@ -158,7 +95,7 @@ def main() -> None:
         dolphin_bridge=app/'Frameworks/dolphin_internal_bridge.framework'
 
         for required in (
-            stik/'StikJIT', dolphin/'DolphinCore', rpcs3,
+            dolphin/'DolphinCore', rpcs3,
             armsx2/'ARMSX2Core', dusklight/'DusklightCore',
             dusklight_identity, app/'cacert.pem',
         ):
@@ -169,45 +106,6 @@ def main() -> None:
         demand(sha(rpcs3)==RPCS3_SHA, 'RPCS3Core donor hash mismatch')
         demand(sha(armsx2/'ARMSX2Core')==ARMSX2_SHA, 'ARMSX2Core donor hash mismatch')
         demand(sha(dusklight/'DusklightCore')==DUSKLIGHT_SHA, 'DusklightCore donor hash mismatch')
-        demand(sha(stik/'StikJIT')==STIKJIT_SHA, 'StikJIT donor hash mismatch')
-        demand(sha(stik/'universal.js')==UNIVERSAL_SHA, 'StikJIT universal.js donor hash mismatch')
-        demand(sha(stik/'legacy.js')==LEGACY_SHA, 'StikJIT legacy.js donor hash mismatch')
-
-        official_root=work/'official-stik'
-        with zipfile.ZipFile(official_stik) as archive:
-            demand(archive.testzip() is None, 'Official StikJIT archive is corrupt')
-            archive.extractall(official_root)
-        official_items=list(official_root.rglob('StikJIT.xcframework'))
-        demand(
-            len(official_items)==1,
-            f'Expected one official StikJIT XCFramework, found {official_items}',
-        )
-        xcframework=work/'StikJIT.xcframework'
-        copytree(official_items[0], xcframework)
-        normalized_interfaces=normalize_swift_interfaces(xcframework)
-        device=device_framework(xcframework)
-        demand((device/'Modules').is_dir(), 'Official StikJIT Swift module is missing')
-
-        # Keep the official compile-time module shell but execute the exact
-        # runtime bytes validated in the donor IPA.
-        shutil.copy2(stik/'StikJIT', device/'StikJIT')
-        (device/'StikJIT').chmod(0o755)
-        for script_name, expected in (
-            ('universal.js', UNIVERSAL_SHA),
-            ('legacy.js', LEGACY_SHA),
-        ):
-            shutil.copy2(stik/script_name, device/script_name)
-            demand(sha(device/script_name)==expected, f'Patched {script_name} hash mismatch')
-        if (stik/'Info.plist').is_file():
-            shutil.copy2(stik/'Info.plist', device/'Info.plist')
-
-        # Keep one verified compile-time StikJIT XCFramework. Both helper
-        # targets resolve this same module instead of compiling duplicate copies.
-        copytree(
-            xcframework,
-            ROOT/'packages/stikjit_bridge/ios/Frameworks/StikJIT.xcframework',
-        )
-
         dolphin_dst=ROOT/'packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework'
         copytree(dolphin, dolphin_dst)
         # zipfile extraction does not reliably restore POSIX executable bits.
@@ -282,37 +180,12 @@ def main() -> None:
                 copied+=1
         demand(copied>0, 'No Dolphin touchscreen resources found in donor framework')
 
-        logs=ROOT/'build/dolphin-ci'
-        logs.mkdir(parents=True, exist_ok=True)
-        stik_binary_sha=sha(stik/'StikJIT')
-        release={
-            'release':'1.5.0',
-            'sourceRevision':'640fac91de403fdb85a3778aa0bbb7f30737b74c',
-            'donorRun':DONOR_RUN_ID,
-            'donorArtifact':DONOR_ARTIFACT_ID,
-            'binarySha256':stik_binary_sha,
-            'universalJsSha256':UNIVERSAL_SHA,
-            'legacyJsSha256':LEGACY_SHA,
-            'platform':'ios-arm64',
-            'officialInterfaceArchiveSha256':OFFICIAL_STIK_ZIP_SHA,
-            'normalizedSwiftInterfaces':normalized_interfaces,
-            'fastReuse':True,
-        }
-        (logs/'stikjit-release.json').write_text(
-            json.dumps(release, indent=2)+'\n'
-        )
-
         identity=ROOT/'build/fast-native/identity.json'
         identity.parent.mkdir(parents=True, exist_ok=True)
         identity.write_text(json.dumps({
             'donorIpa':ipa.name,
             'donorRun':DONOR_RUN_ID,
             'donorArtifact':DONOR_ARTIFACT_ID,
-            'officialInterfaceArchiveSha256':OFFICIAL_STIK_ZIP_SHA,
-            'normalizedSwiftInterfaces':normalized_interfaces,
-            'stikjitBinarySha256':stik_binary_sha,
-            'universalJsSha256':sha(stik/'universal.js'),
-            'legacyJsSha256':sha(stik/'legacy.js'),
             'dolphinCoreSha256':sha(dolphin/'DolphinCore'),
             'armsx2CoreSha256':sha(armsx2/'ARMSX2Core'),
             'dusklightCoreSha256':sha(dusklight/'DusklightCore'),

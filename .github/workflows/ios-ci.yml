@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 363 private StikJIT 1.9 iOS18 compatibility
-run-name: NeoStation iOS Build 363 private StikJIT 1.9 iOS18 compatibility • ${{ github.sha }}
+name: Neostation iOS 0.0.2 private • Build 364
+run-name: Neostation iOS 0.0.2 private • Build 364 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '363'
+        default: '364'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: ${{ contains(github.event.head_commit.message, '[rpcs3-host-only]') && format('neostation-host-check-{0}', github.sha) || 'neostation-ios-private-jit-363' }}
+  group: ${{ contains(github.event.head_commit.message, '[rpcs3-host-only]') && format('neostation-host-check-{0}', github.sha) || 'neostation-ios-private-364' }}
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 363 private StikJIT 1.9 compatibility IPA
+    name: Neostation iOS 0.0.2 private IPA (364)
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '363' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '364' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Private-Test-363-Encrypted
+      ARTIFACT_NAME: Neostation-iOS-0.0.2-Build-364-Private
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -456,7 +456,7 @@ jobs:
         with:
           # Build 270 was pruned from Actions history after the stable Build
           # 350 baseline was accepted. Pin the exact retained Build 350 IPA;
-          # only its StikJIT shell and UI resources survive this bootstrap.
+          # only its native Core and UI resources are used, never its JIT framework.
           artifact-ids: 10932894067
           run-id: 36323843067
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -466,62 +466,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fL --retry 3 --retry-delay 2 \
-            https://github.com/StikDebug/StikJIT/releases/download/1.5.0/StikJIT.xcframework.zip \
-            -o build/StikJIT-1.5.0.xcframework.zip
-          # The donor supplies StikJIT and native UI resources. Its embedded
-          # RPCS3 and Dolphin binaries are verified as Build 350 inputs, then
-          # replaced by the separately hash-verified pinned Cores below.
+          # Core/resource bootstrap only. JIT comes exclusively from source below.
           python3 build-utils/prepare_fast_native_runtime.py \
-            build/native-donor --build-number "$BUILD_NUMBER" \
-            --stik-xcframework-zip build/StikJIT-1.5.0.xcframework.zip
+            build/native-donor --build-number "$BUILD_NUMBER"
 
-      - name: Download tested StikJIT 1.9 source-built framework
-        uses: actions/download-artifact@v4
-        with:
-          artifact-ids: 11039092572
-          merge-multiple: true
-          run-id: 36580127867
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: build/stikjit-190-artifact
-
-      - name: Require exact tested StikJIT sources and replace bootstrap framework
+      - name: Build canonical StikJIT from pinned sources for iOS 18 26 and 27
         shell: bash
         run: |
           set -euo pipefail
-          STIK_HOST=489b6a1a4f8a6761fe0f548a891971f727e7dd73
-          test "$(cat build/stikjit-190-artifact/host-commit.txt)" = "$STIK_HOST"
-          git diff --exit-code "$STIK_HOST" "$GITHUB_SHA" -- \
-            build-utils/stikjit/source.json build-utils/patch_stikjit_compat.py \
-            build-utils/patch_stikjit_rpcs3.py build-utils/install_patched_stikjit.py \
-            test/stikjit_compat_test.py test/stikjit_modern_baseline_test.py \
-            packages/rpcs3_jit_helper/ios/Classes packages/armsx2_jit_helper/ios/Classes
-          python3 test/stikjit_scoped_host_test.py
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib,json,zipfile
-          root=Path('build/stikjit-190-artifact')
-          archive=root/'StikJIT.xcframework.zip'
-          assert hashlib.sha256(archive.read_bytes()).hexdigest()==(root/'archive.sha256').read_text().split()[0]
-          identity=json.loads((root/'identity.json').read_text())
-          assert identity['binarySha256']=='9694393afdad28b63104330764b748ff37a64a03da2f13314a7aee7e97d0e590'
-          assert identity['release']=='1.9.0'
-          assert identity['sourceRevision']=='32287268fa5824f9edce4cb359f5833ce0cf7b00'
-          with zipfile.ZipFile(archive) as z:
-              assert all(not n.startswith('/') and '..' not in n.split('/') for n in z.namelist())
-              z.extractall(root)
-          PY
-          python3 build-utils/install_patched_stikjit.py build/stikjit-190-artifact/StikJIT.xcframework
-          python3 - <<'PY'
-          import json,hashlib
-          from pathlib import Path
-          path=Path('build/fast-native/identity.json')
-          info=json.loads(path.read_text())
-          info['bootstrapOfficialInterfaceArchiveSha256']=info.pop('officialInterfaceArchiveSha256')
-          info['stikjitNativeArchiveSha256']=hashlib.sha256(Path('build/stikjit-190-artifact/StikJIT.xcframework.zip').read_bytes()).hexdigest()
-          info['stikjitNativeRunId']=36580127867
-          path.write_text(json.dumps(info,indent=2)+'\n')
-          PY
+          command -v xcodegen || brew install xcodegen
+          python3 build-utils/build_patched_stikjit.py
+          python3 test/stikjit_unified_build_test.py
 
       - name: Download pinned passive RPCS3 Core
         uses: actions/download-artifact@v4
@@ -865,6 +820,9 @@ jobs:
           PY
           git diff --exit-code -- pubspec.yaml pubspec.lock
 
+      - name: Align application and extension versions to 0.0.2
+        run: python3 build-utils/stamp_host_version.py
+
       - name: Compile only NeoStation and extensions
         shell: bash
         run: |
@@ -926,7 +884,7 @@ jobs:
             --build-number "$BUILD_NUMBER" \
             --dolphin-sha "$DOLPHIN_SHA"
 
-      - name: Require exact pacing and retained-cheat simulator evidence
+      - name: Require exact candidate display, motion and cheat simulator evidence
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -934,38 +892,20 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json,subprocess,time,os
-          tested='cc880f7ef2742a9cd683124d6ecd3e598a17a6c7'
-          for run in ('36581265703',):
-              deadline=time.monotonic()+900
+          for workflow in ('dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
+              deadline=time.monotonic()+1800
               while True:
-                  result=json.loads(subprocess.check_output(['gh','api','repos/TarbleFR/neostation-ios/actions/runs/'+run]))
-                  assert result['head_sha']=='7d470bb75ef4de8759ab1e1bc1052c145642a36e',result
-                  if result['status']=='completed':
-                      assert result['conclusion']=='success',result
+                  endpoint='repos/TarbleFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
+                  rows=json.loads(subprocess.check_output(['gh','api',endpoint]))['workflow_runs']
+                  rows=[r for r in rows if r['head_sha']==os.environ['GITHUB_SHA']]
+                  if rows and rows[0]['status']=='completed':
+                      assert rows[0]['conclusion']=='success',rows[0]
+                      print('Verified exact candidate',workflow,rows[0]['id'])
                       break
-                  assert time.monotonic()<deadline,'Simulator evidence did not finish within its wait budget'
+                  assert time.monotonic()<deadline,'Candidate evidence did not complete: '+workflow
                   time.sleep(15)
-          # Run the complete production display/INI/UIKit suite for this exact
-          # candidate, not a stale/cancelled run inherited from a previous build.
-          deadline=time.monotonic()+1500
-          while True:
-              endpoint='repos/TarbleFR/neostation-ios/actions/workflows/dolphin-pacing-check.yml/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
-              rows=json.loads(subprocess.check_output(['gh','api',endpoint]))['workflow_runs']
-              rows=[r for r in rows if r['head_sha']==os.environ['GITHUB_SHA']]
-              if rows and rows[0]['status']=='completed':
-                  assert rows[0]['conclusion']=='success',rows[0]
-                  break
-              assert time.monotonic()<deadline,'Candidate display simulator evidence did not complete'
-              time.sleep(15)
-          subprocess.run(['git','diff','--exit-code',tested,os.environ['GITHUB_SHA'],'--',
-              'packages/dolphin_internal_bridge','packages/armsx2_internal_bridge','native/cheats',
-              'test/dolphin_pacing362_ui_test.py','test/dolphin_display_trial362_test.mm',
-              'test/dolphin_account_267_test.py',
-              'test/cheat_editor361_ui_test.py','test/cheat_import_delete361_test.mm',
-              ':(exclude)packages/dolphin_internal_bridge/ci/verify_ipa.py',
-              ':(exclude)packages/armsx2_internal_bridge/ios/Classes/Armsx2JitBridgePlugin.mm'],check=True)
-          # Both exclusions are separately constrained to version/diagnostic-only changes.
           subprocess.run(['python3','test/stikjit_scoped_host_test.py'],check=True)
+          subprocess.run(['python3','test/dolphin_phone_shake_test.py'],check=True)
           PY
 
       - name: Package and validate NeoStation IPA
@@ -984,8 +924,10 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          python3 build-utils/validate_release002_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --report dist/0.0.2-validation.json
           python3 build-utils/validate_stikjit_ipa.py "dist/$IPA_NAME.ipa" \
-            --identity build/stikjit-190-artifact/identity.json \
+            --identity build/stikjit-current/identity.json \
             --report dist/stikjit-compatibility.json
           python3 - <<'PY'
           import zipfile,plistlib,os
@@ -1026,10 +968,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-363-recipient.pem
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-364-recipient.pem
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           cp dist/stikjit-compatibility.json build/private-test/
-          cp build/stikjit-190-artifact/modern-baseline.json build/private-test/
+          cp dist/0.0.2-validation.json build/private-test/
+          cp build/dolphin-motion/tests.json build/private-test/phone-shake-tests.json
+          cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
+          printf '%s\n' 'Neostation iOS 0.0.2.ipa' > build/private-test/delivery-name.txt
+          cp build/stikjit-current/modern-baseline.json build/private-test/
           cp build/fast-native/identity.json build/private-test/native-identity.json
           printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt
           # Only ciphertext leaves the build runner. The matching private key

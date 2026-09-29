@@ -17,7 +17,6 @@ from device_info_sdk_compat import install as install_device_info_sdk_compat
 
 ROOT = Path(__file__).resolve().parents[3]
 LOGS = ROOT / 'build/dolphin-ci'
-STIK_SHA = '444b8d439df8455c34afbb51e279fd225265279195475f9b3fdbcf3a71a27e85'
 
 
 def run(*args: str, cwd: Path = ROOT) -> None:
@@ -118,49 +117,21 @@ end
 
 
 def restore_stik(archive: Path) -> None:
-    demand(file_sha256(archive) == STIK_SHA, 'StikJIT release SHA-256 mismatch')
-    with tempfile.TemporaryDirectory(prefix='stikjit-1.5.0-') as temp:
+    """Only install the canonical source-built framework; no legacy download path."""
+    import sys
+    installer = ROOT / 'build-utils/install_patched_stikjit.py'
+    if archive.is_dir():
+        run(sys.executable, str(installer), str(archive.resolve()))
+        return
+    with tempfile.TemporaryDirectory(prefix='stikjit-source-') as temp:
         with zipfile.ZipFile(archive) as z:
-            demand(z.testzip() is None, 'Corrupt StikJIT ZIP')
-            for name in z.namelist():
-                demand(not name.startswith('/') and '..' not in name.split('/'), 'Unsafe framework ZIP member')
+            demand(z.testzip() is None, 'Corrupt source-built StikJIT archive')
+            demand(all(not n.startswith('/') and '..' not in n.split('/') for n in z.namelist()),
+                   'Unsafe StikJIT archive path')
             z.extractall(temp)
         roots = list(Path(temp).rglob('StikJIT.xcframework'))
-        demand(len(roots) == 1, 'Expected exactly one StikJIT XCFramework')
-        original = roots[0]
-        for interface in original.rglob('*.swiftinterface'):
-            text = interface.read_text()
-            # StikJIT is both the module and enum name in the distributed 1.5.0
-            # interface. Keep the established qualification repair, not its API.
-            for name in ('DDIPaths', 'DeveloperDiskImageService', 'StikJITError'):
-                text = text.replace('StikJIT.' + name, name)
-            text = text.replace('StikJIT.StikJIT.', 'StikJIT.')
-            interface.write_text(text)
-        device = original / 'ios-arm64/StikJIT.framework'
-        binary = device / 'StikJIT'
-        demand(binary.is_file(), 'Device slice of StikJIT is missing')
-        image = macho(binary.read_bytes())
-        demand(image['platform'] == 2, 'StikJIT slice is not iOS arm64')
-        info_path = device / 'Info.plist'
-        info = plist(info_path) if info_path.is_file() else {}
-        info.update({'CFBundleExecutable': 'StikJIT', 'CFBundleIdentifier': 'com.stik.StikJIT',
-                     'CFBundleInfoDictionaryVersion': '6.0', 'CFBundleName': 'StikJIT',
-                     'CFBundlePackageType': 'FMWK', 'CFBundleShortVersionString': '1.5.0',
-                     'CFBundleVersion': '1', 'CFBundleSupportedPlatforms': ['iPhoneOS'],
-                     'MinimumOSVersion': '17.4', 'UIDeviceFamily': [1, 2]})
-        write_plist(info_path, info)
-        for package in ('stikjit_bridge', 'dolphin_jit_helper'):
-            dest = ROOT / 'packages' / package / 'ios/Frameworks/StikJIT.xcframework'
-            if dest.exists():
-                shutil.rmtree(dest)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(original, dest)
-            (dest / 'ios-arm64/StikJIT.framework/StikJIT').chmod(0o755)
-        (LOGS / 'stikjit-release.json').write_text(json.dumps({
-            'release': '1.5.0', 'archiveSha256': STIK_SHA, 'binarySha256': file_sha256(binary),
-            'dependencies': image['dependencies'], 'platform': image['platform'],
-        }, indent=2) + '\n')
-
+        demand(len(roots) == 1, 'Expected one source-built StikJIT XCFramework')
+        run(sys.executable, str(installer), str(roots[0]))
 
 def core_framework(source: Path) -> None:
     binary = source / 'build-iphoneos-Release/Source/iOS/Library/libdolphin.dylib'

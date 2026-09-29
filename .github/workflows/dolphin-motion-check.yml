@@ -1,0 +1,42 @@
+name: Dolphin Wii phone shake and touchscreen lifecycle
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - 'packages/dolphin_internal_bridge/**'
+      - 'native/dolphin_motion/**'
+      - 'test/dolphin_phone_shake*'
+      - '.github/workflows/dolphin-motion-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dolphin-phone-shake-tests
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Execute production detector and lifecycle with controlled sensor
+        run: python3 test/dolphin_phone_shake_test.py
+      - name: Type-check real CoreMotion and all production touch controls for iOS
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          TOUCH=packages/dolphin_internal_bridge/ios/Classes/TouchController
+          xcrun swiftc -typecheck -swift-version 5 -sdk "$SDK" -target arm64-apple-ios17.4 \
+            -module-name dolphin_internal_bridge -import-objc-header "$TOUCH/TCManagerInterface.h" "$TOUCH/"*.swift
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dolphin-Phone-Shake-Tests-${{ github.sha }}
+          path: build/dolphin-motion/
+          if-no-files-found: error
+          retention-days: 7

@@ -143,6 +143,8 @@ for framework in frameworks:
         except Exception:
             payload = {}
 
+    if payload.get('CFBundleShortVersionString') != required_plist['CFBundleShortVersionString']:
+        raise SystemExit('Refusing to relabel a stale StikJIT framework before compilation')
     changed = False
     for key, value in required_plist.items():
         if payload.get(key) != value:

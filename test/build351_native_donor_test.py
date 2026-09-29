@@ -30,12 +30,13 @@ def main() -> None:
         "4866265eca27327c3fc9be14190fec082b58a5e1946f541ced34e46c13ceabd9",
         "cadb6cd56c4b5d01b623bf9696800d48ba504eef8129a8de468c11381de8d162",
         "5a64e2fd48c47831fd07306c90e28036535a125bd887149d92ba4567ac9af8a7",
-        "4de72ef84a1aef6d6d3b547222c730227b48e91d8d5eb7e59c1f9235961e4efe",
         "DONOR_RUN_ID=36323843067",
         "DONOR_ARTIFACT_ID=10932894067",
-        "StikJIT donor hash mismatch",
     ):
         require(token in PREPARE, f"missing Build 350 donor contract: {token}")
+
+    require("STIKJIT_SHA" not in PREPARE and "official_stik" not in PREPARE,
+            "the native donor must never install a legacy JIT runtime or module")
 
     donor = WORKFLOW.index("Download validated Build 350 native donor")
     rpcs3 = WORKFLOW.index("Download pinned passive RPCS3 Core", donor)

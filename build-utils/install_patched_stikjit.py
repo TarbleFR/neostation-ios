@@ -16,8 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LOGS = ROOT / 'build/dolphin-ci'
-STIK_VERSION = '1.9.0'
-STIK_SOURCE_REVISION = '32287268fa5824f9edce4cb359f5833ce0cf7b00'
+PIN = json.loads((ROOT / 'build-utils/stikjit/source.json').read_text())
+STIK_VERSION = PIN['version']
+STIK_SOURCE_REVISION = PIN['revision']
 SWIFT_MARKER = b'NEOSTATION_STIKJIT_RPCS3_V1'
 JS_MARKER = b'NEOSTATION_STIKJIT_UNIVERSAL_V1'
 
@@ -49,6 +50,15 @@ def install(xcframework: Path) -> None:
     if not xcframework.is_dir() or xcframework.name != 'StikJIT.xcframework':
         raise SystemExit(f'Expected StikJIT.xcframework directory, got {xcframework}')
 
+    origin_path = xcframework / 'neostation-source.json'
+    if not origin_path.is_file():
+        raise SystemExit('StikJIT provenance missing: run build-utils/build_patched_stikjit.py')
+    origin = json.loads(origin_path.read_text())
+    if origin.get('version') != STIK_VERSION or origin.get('revision') != STIK_SOURCE_REVISION:
+        raise SystemExit('StikJIT source provenance does not match the canonical pin')
+    from build_patched_stikjit import input_fingerprint
+    if origin.get('verifiedCheckout') != STIK_SOURCE_REVISION or origin.get('sourceInputsSha256') != input_fingerprint():
+        raise SystemExit('StikJIT source/patch fingerprint is stale or unverified')
     repair_swift_interfaces(xcframework)
     device = xcframework / 'ios-arm64/StikJIT.framework'
     binary = device / 'StikJIT'
@@ -65,6 +75,7 @@ def install(xcframework: Path) -> None:
     # Existing dynamic MeloNX bridge API must survive upstream 1.9 dead stripping.
     bridge = (ROOT/'packages/stikjit_bridge/ios/Classes/StikjitBridgePlugin.swift').read_text()
     import re
+    bridge += (ROOT/'packages/stikjit_bridge/ios/Classes/StikjitBridgePluginV2.swift').read_text()
     required = set(re.findall(r'Self.resolve\(\s*"([a-z][a-z0-9_]+)"', bridge))
     if not required or any('_'+name not in exports for name in required):
         raise SystemExit('Missing dynamic idevice exports: '+repr(sorted(name for name in required if '_'+name not in exports)))
@@ -76,6 +87,8 @@ def install(xcframework: Path) -> None:
 
     info_path = device / 'Info.plist'
     info = plistlib.loads(info_path.read_bytes()) if info_path.is_file() else {}
+    if info.get('CFBundleShortVersionString') != STIK_VERSION:
+        raise SystemExit('Refusing to relabel a different StikJIT runtime version')
     info.update({
         'CFBundleExecutable': 'StikJIT',
         'CFBundleIdentifier': 'com.stik.StikJIT',
@@ -89,6 +102,7 @@ def install(xcframework: Path) -> None:
         'UIDeviceFamily': [1, 2],
     })
     write_plist(info_path, info)
+    (device/'NeoStation-StikJIT-source.json').write_text(json.dumps(origin,indent=2)+'\n')
 
     for package in ('stikjit_bridge', 'dolphin_jit_helper'):
         destination = ROOT / 'packages' / package / 'ios/Frameworks/StikJIT.xcframework'
@@ -106,6 +120,8 @@ def install(xcframework: Path) -> None:
         'universalScriptPatch': JS_MARKER.decode('ascii'),
         'binarySha256': sha256(binary),
         'platform': 'ios-arm64',
+        'builtFromSource': True,
+        'sourceInputsSha256': origin['sourceInputsSha256'],
         'classicAttachPatch': 'NEOSTATION_STIKJIT_IOS18_CLASSIC_V1',
         'dynamicFFIExports': sorted(required),
         'universalJsSha256': sha256(universal_scripts[0]),
@@ -115,7 +131,6 @@ def install(xcframework: Path) -> None:
     fast_path = ROOT/'build/fast-native/identity.json'
     if fast_path.is_file():
         fast=json.loads(fast_path.read_text())
-        fast['bootstrapStikjitBinarySha256']=fast.get('stikjitBinarySha256')
         fast.update({'stikjitBinarySha256':report['binarySha256'],
                      'stikjitVersion':STIK_VERSION,'stikjitSourceRevision':STIK_SOURCE_REVISION,
                      'universalJsSha256':report['universalJsSha256'],

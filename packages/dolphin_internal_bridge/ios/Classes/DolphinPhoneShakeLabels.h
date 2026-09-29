@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+#import <Foundation/Foundation.h>
+static inline NSString* DOLPhoneShakeText(NSString* key,NSString* locale) {
+ static NSDictionary* labels;static dispatch_once_t once;dispatch_once(&once,^{labels=@{
+@"en": @{@"title": @"Shake device — Wii Remote",@"help": @"First touchscreen Wii Remote, with or without Nunchuk. Disabled in menus, with Classic Controller, and when a physical controller is connected.",@"usage": @"NeoStation uses device motion to simulate Wii Remote shakes while you play."},
+@"fr": @{@"title": @"Secouer l’appareil — Wiimote",@"help": @"Première Wiimote tactile, avec ou sans Nunchuk. Désactivé dans les menus, avec la manette classique et lorsqu’une manette physique est connectée.",@"usage": @"NeoStation utilise les mouvements de l’appareil pour simuler les secousses de la Wiimote pendant le jeu."},
+@"de": @{@"title": @"Gerät schütteln — Wii-Fernbedienung",@"help": @"Erste Touchscreen-Wii-Fernbedienung, mit oder ohne Nunchuk. In Menüs, mit Classic Controller und bei verbundenem physischem Controller deaktiviert.",@"usage": @"NeoStation nutzt Gerätebewegungen, um beim Spielen das Schütteln der Wii-Fernbedienung zu simulieren."},
+@"es": @{@"title": @"Agitar el dispositivo — mando de Wii",@"help": @"Primer mando de Wii táctil, con o sin Nunchuk. Desactivado en menús, con el mando clásico y al conectar un mando físico.",@"usage": @"NeoStation usa el movimiento del dispositivo para simular sacudidas del mando de Wii durante el juego."},
+@"it": @{@"title": @"Scuoti il dispositivo — telecomando Wii",@"help": @"Primo telecomando Wii touch, con o senza Nunchuk. Disattivato nei menu, con il controller classico e quando è collegato un controller fisico.",@"usage": @"NeoStation usa il movimento del dispositivo per simulare le scosse del telecomando Wii durante il gioco."},
+@"pt": @{@"title": @"Sacudir o aparelho — Wii Remote",@"help": @"Primeiro Wii Remote por toque, com ou sem Nunchuk. Desativado nos menus, com o controle clássico e quando um controle físico está conectado.",@"usage": @"O NeoStation usa os movimentos do aparelho para simular sacudidas do Wii Remote durante o jogo."},
+@"ru": @{@"title": @"Встряхивание устройства — Wii Remote",@"help": @"Первый сенсорный Wii Remote, с Nunchuk или без него. Отключено в меню, с Classic Controller и при подключении физического контроллера.",@"usage": @"NeoStation использует движение устройства для имитации встряхивания Wii Remote во время игры."},
+@"id": @{@"title": @"Goyangkan perangkat — Wii Remote",@"help": @"Wii Remote layar sentuh pertama, dengan atau tanpa Nunchuk. Nonaktif di menu, dengan Classic Controller, dan saat pengontrol fisik terhubung.",@"usage": @"NeoStation memakai gerakan perangkat untuk menyimulasikan goyangan Wii Remote saat bermain."},
+@"ja": @{@"title": @"本体を振る — Wiiリモコン",@"help": @"1番目のタッチ操作Wiiリモコン用です。ヌンチャクの有無は問いません。メニュー、クラシックコントローラ使用時、外部コントローラ接続時は無効です。",@"usage": @"NeoStationは本体の動きを使用して、プレイ中にWiiリモコンを振る操作を再現します。"},
+@"ko": @{@"title": @"기기 흔들기 — Wii 리모컨",@"help": @"첫 번째 터치 Wii 리모컨에서 사용하며 눈차크는 선택 사항입니다. 메뉴, 클래식 컨트롤러 사용 중, 물리 컨트롤러 연결 시에는 비활성화됩니다.",@"usage": @"NeoStation은 기기의 움직임으로 게임 중 Wii 리모컨을 흔드는 동작을 재현합니다."},
+@"zh": @{@"title": @"摇动设备 — Wii遥控器",@"help": @"用于第一个触屏Wii遥控器，可搭配或不搭配双截棍。菜单中、使用经典手柄或连接实体手柄时禁用。",@"usage": @"NeoStation使用设备运动来模拟游戏中的Wii遥控器摇动操作。"},
+@"zh_Hant": @{@"title": @"搖動裝置 — Wii遙控器",@"help": @"適用於第一個觸控Wii遙控器，可搭配或不搭配雙節棍。在選單中、使用傳統控制器或連接實體控制器時停用。",@"usage": @"NeoStation使用裝置動作來模擬遊戲中的Wii遙控器搖動操作。"},
+};});
+ NSString* s=[locale.lowercaseString stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+ NSString* lang=[s componentsSeparatedByString:@"_"].firstObject;
+ if([lang isEqual:@"zh"] && ([s containsString:@"hant"] || [s hasSuffix:@"_tw"] || [s hasSuffix:@"_hk"]))lang=@"zh_Hant";
+ return labels[lang][key]?:labels[@"en"][key]?:key;
+}

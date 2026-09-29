@@ -9,6 +9,7 @@ ns['TESTS']=r'''
 #import <XCTest/XCTest.h>
 #import "DolphinFramePacing.h"
 #import "DolphinSessionMenu.h"
+#import "DolphinPhoneShakeLabels.h"
 @interface DolphinFramePacing (TestAccess)
 - (void)tick:(CADisplayLink*)link;
 @end
@@ -57,11 +58,33 @@ ns['TESTS']=r'''
 - (void)testNativeSettingsAndTwelveLanguages {
  DolphinFramePacing* tracker=[DolphinFramePacing new];tracker.locale=@"fr";
  UITableViewController* page=(id)[tracker settingsController];[page loadViewIfNeeded];
- XCTAssertEqual([page.tableView.dataSource tableView:page.tableView numberOfRowsInSection:0],6);
+ XCTAssertEqual([page.tableView.dataSource tableView:page.tableView numberOfRowsInSection:0],5);
  XCTAssertEqualObjects(page.title,@"Affichage et fluidité");XCTAssertEqual(DOLFrameProfile(),2);
  for(NSString* lang in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"])
-  for(NSString* key in @[@"title",@"hzHelp",@"profileHelp",@"restore"])
+  for(NSString* key in @[@"title",@"hzHelp",@"profileHelp",@"export"])
    XCTAssertNotEqualObjects(DOLPacingText(key,lang),key);
+}
+- (void)testRemovedRestoreActionCannotResetPreferencesInAnyLocale {
+ NSUserDefaults* settings=NSUserDefaults.standardUserDefaults;
+ [settings setInteger:1 forKey:@"NeoStation.Dolphin.DisplayTrial.Profile"];
+ [settings setInteger:120 forKey:@"NeoStation.Dolphin.DisplayTrial.Refresh"];
+ [settings setBool:YES forKey:@"NeoStation.Dolphin.DisplayTrial.Trace"];
+ for(NSString* lang in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"]) {
+  DolphinFramePacing* tracker=[DolphinFramePacing new];tracker.locale=lang;
+  UITableViewController* page=(id)[tracker settingsController];[page loadViewIfNeeded];
+  XCTAssertEqual([page.tableView.dataSource tableView:page.tableView numberOfRowsInSection:0],5);
+  for(NSInteger i=0;i<5;i++) {
+   UITableViewCell* cell=[page.tableView.dataSource tableView:page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:i inSection:0]];
+   XCTAssertFalse([cell.textLabel.text containsString:@"361"]);
+  }
+  XCTAssertEqualObjects(DOLPacingText(@"restore",lang),@"restore");
+  // Even a stale selection delivered to the old row must do nothing.
+  [page.tableView.delegate tableView:page.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:5 inSection:0]];
+  XCTAssertNil(page.presentedViewController);
+  XCTAssertEqual(DOLFrameProfile(),1);
+  XCTAssertEqual([settings integerForKey:@"NeoStation.Dolphin.DisplayTrial.Refresh"],120);
+  XCTAssertTrue([settings boolForKey:@"NeoStation.Dolphin.DisplayTrial.Trace"]);
+ }
 }
 - (void)testGraphicsMenuOpensDisplayPanelWithoutChangingTheEmulator {
  DolphinSessionMenu* menu=[DolphinSessionMenu new];menu.labels=@{@"__locale":@"fr"};
@@ -71,6 +94,31 @@ ns['TESTS']=r'''
  XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0],5);
  XCTAssertEqualObjects([menu tableView:menu.tableView cellForRowAtIndexPath:row].textLabel.text,@"Affichage et fluidité");
  [menu tableView:menu.tableView didSelectRowAtIndexPath:row];XCTAssertTrue(opened);
+}
+
+- (void)testWiiPhoneShakeOptionIsLocalizedPersistentAndDoesNotApplyCoreSettings {
+ NSString* key=@"NeoStation.Dolphin.PhoneShake.Enabled";
+ [NSUserDefaults.standardUserDefaults removeObjectForKey:key];
+ DolphinSessionMenu* menu=[DolphinSessionMenu new];menu.wii=YES;
+ menu.labels=@{@"__locale":@"fr"};[menu setValue:@5 forKey:@"page"];
+ [menu setValue:@{@"controls":@[]} forKey:@"snapshot"];
+ __block NSUInteger writes=0;
+ menu.applySettings=^(NSDictionary* request,void(^done)(BOOL)){++writes;done(YES);};
+ [menu loadViewIfNeeded];
+ XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0],5);
+ NSIndexPath* row=[NSIndexPath indexPathForRow:4 inSection:0];
+ UITableViewCell* cell=[menu tableView:menu.tableView cellForRowAtIndexPath:row];
+ XCTAssertEqualObjects(cell.textLabel.text,@"Secouer l’appareil — Wiimote");
+ XCTAssertEqual(cell.accessoryType,UITableViewCellAccessoryCheckmark);
+ [menu tableView:menu.tableView didSelectRowAtIndexPath:row];
+ XCTAssertFalse([NSUserDefaults.standardUserDefaults boolForKey:key]);
+ [menu tableView:menu.tableView didSelectRowAtIndexPath:row];
+ XCTAssertTrue([NSUserDefaults.standardUserDefaults boolForKey:key]);XCTAssertEqual(writes,0U);
+ menu.wii=NO;XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0],3);
+ for(NSString* lang in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"])
+  for(NSString* name in @[@"title",@"help",@"usage"])
+   XCTAssertNotEqualObjects(DOLPhoneShakeText(name,lang),name);
+ [NSUserDefaults.standardUserDefaults removeObjectForKey:key];
 }
 @end
 '''
