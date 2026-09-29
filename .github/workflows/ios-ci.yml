@@ -907,12 +907,24 @@ jobs:
           APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
           python3 build-utils/kartpad/embed_core.py             --app "$APP"             --artifact dist/kartpad-native
 
+      - name: Embed legal, license and source notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          python3 build-utils/embed_legal_bundle.py \
+            --app "$APP" \
+            --build-number "$BUILD_NUMBER" \
+            --dolphin-sha "$DOLPHIN_SHA"
+
       - name: Package and validate NeoStation IPA
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/validate_legal_bundle_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
           python3 build-utils/validate_rpcs3_ipa.py \
             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" \
             --core-identity build/fast-native/rpcs3-core-identity.json \
