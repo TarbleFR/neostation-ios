@@ -39,7 +39,7 @@ void main() {
       expect(dialog, contains('GameRepository.deleteGame'));
       expect(dialog, contains('refreshDolphinInternalLibrary'));
       expect(dialog, contains('SqliteDatabaseProvider'));
-      expect(dialog, contains('Select all'));
+      expect(dialog, contains("_t('selectAll')"));
     });
   });
 }
