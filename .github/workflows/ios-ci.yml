@@ -580,7 +580,6 @@ jobs:
           git diff --exit-code "$DOLPHIN_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             build-utils/patch_dolphin_internal_core_v2.py \
             packages/dolphin_internal_bridge/core \
-            packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h \
             test/dolphin_cheat_manager_test.py \
             test/dolphin_cheats_menu_test.py \
             .github/workflows/dolphin-core.yml
@@ -590,6 +589,16 @@ jobs:
           import json
           import os
           from pathlib import Path
+
+          # This is a recompiled UIKit host API, not the retained core's C ABI.
+          # Permit exactly the added navigation callback, preserving every other declaration.
+          import subprocess
+          menu_path='packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h'
+          original=subprocess.check_output(['git','show',os.environ['DOLPHIN_CORE_HOST_SHA']+':'+menu_path],text=True)
+          current=Path(menu_path).read_text()
+          addition='@property(nonatomic, copy, nullable) dispatch_block_t openDisplaySettings;\n'
+          assert current.count(addition)==1
+          assert current.replace(addition,'')==original, 'Unexpected UIKit menu interface change'
 
           core = Path(
               "packages/dolphin_internal_bridge/ios/Frameworks/"
