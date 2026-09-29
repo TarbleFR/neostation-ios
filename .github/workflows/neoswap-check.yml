@@ -27,6 +27,7 @@ jobs:
           mkdir -p build/neoswap
           git diff --check
           python3 test/check_neo_swap_scope.py
+          python3 test/neoswap_evidence_lifecycle_test.py
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING \
             -fsanitize=address,undefined -Ipackages/neo_swap/ios/Classes \
             packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_test.cpp -o "$RUNNER_TEMP/neoswap-asan"

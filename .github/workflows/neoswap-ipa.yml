@@ -86,7 +86,8 @@ jobs:
                       assert rows[0]['conclusion']=='success',rows[0]
                       print('Verified exact candidate',workflow,rows[0]['id'])
                       if workflow=='neoswap-check.yml':
-                          evidence=Path('build/neoswap-evidence');evidence.mkdir(parents=True,exist_ok=True)
+                          # Flutter clean removes build/ after this gate.
+                          evidence=Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence';evidence.mkdir(parents=True,exist_ok=True)
                           subprocess.run(['gh','run','download',str(rows[0]['id']),'-n','NeoSwap-checks-'+os.environ['GITHUB_SHA'],'-D',str(evidence)],check=True)
                           logs=list(evidence.rglob('capacity-8GiB-macOS.txt'));assert len(logs)==1
                           reports=[json.loads(line) for line in logs[0].read_text().splitlines() if line.startswith('{')]
@@ -1027,7 +1028,7 @@ jobs:
           cp dist/cheat-bulk-validation.json build/private-test/
           cp docs/import-memory-build367.md build/private-test/Notes-NeoSwap-Build367.md
           cp dist/neoswap-validation.json build/private-test/
-          cp build/neoswap-evidence/capacity-8GiB-macOS.json build/private-test/
+          cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
           cp build/dolphin-motion/tests.json build/private-test/phone-shake-tests.json
