@@ -1,6 +1,7 @@
 #import "DolphinSessionMenu.h"
 #import "DolphinRetroAchievementsAccount.h"
 #include "DOLManualCheatEditor.h"
+#import "DolphinFramePacing.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
   DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuCheats, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
@@ -295,6 +296,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   child.snapshot = self.snapshot;
   child.readSettings = self.readSettings;
   child.applySettings = self.applySettings;
+  child.openDisplaySettings = self.openDisplaySettings;
   child.readStates = self.readStates;
   child.performStateOperation = self.performStateOperation;
   child.readCheats = self.readCheats;
@@ -322,7 +324,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     case DOLMenuSaveStates:
     case DOLMenuLoadStates: return [self.snapshot[@"slots"] count];
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
-    case DOLMenuGraphics: return self.snapshot ? 4 : 0;
+    case DOLMenuGraphics: return self.snapshot ? (self.openDisplaySettings ? 5 : 4) : 0;
     case DOLMenuHacks: return self.snapshot ? 8 : 0;
     case DOLMenuCheats:
       return self.cheatsSnapshot ? 4 +
@@ -522,6 +524,11 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       cell.detailTextLabel.text = [self text:@"restartRequired"];
     }
   } else if (self.page == DOLMenuGraphics) {
+    if(row==4 && self.openDisplaySettings){
+      cell.textLabel.text=DOLPacingText(@"title",self.labels[@"__locale"]?:@"en");
+      cell.detailTextLabel.text=@"60 / 120 Hz · Metal";
+      return cell;
+    }
     NSString* key = @[@"resolution", @"aspect", @"anisotropy", @"vsync"][row];
     cell.textLabel.text = [self text:key];
     cell.detailTextLabel.text = [self graphicsValue:key];
@@ -746,6 +753,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     child.choices = choices;
     [self.navigationController pushViewController:child animated:YES];
   } else if (self.page == DOLMenuGraphics) {
+    if(row==4 && self.openDisplaySettings){self.openDisplaySettings();return;}
     NSString* key = @[@"resolution", @"aspect", @"anisotropy", @"vsync"][row];
     NSArray* values;
     NSArray* titles;

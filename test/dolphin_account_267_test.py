@@ -182,7 +182,7 @@ def native():
         directory = Path(folder)
         (directory / 'main.m').write_text(APP)
         (directory / 'DolphinAccountTests.mm').write_text(TESTS)
-        sdk_dependencies = [{'sdk': 'UIKit.framework'}, {'sdk': 'Foundation.framework'}, {'sdk': 'Security.framework'}]
+        sdk_dependencies = [{'sdk': 'UIKit.framework'}, {'sdk': 'QuartzCore.framework'}, {'sdk': 'Foundation.framework'}, {'sdk': 'Security.framework'}]
         project = {
             'name': 'DolphinAccount267',
             'options': {'deploymentTarget': {'iOS': '17.4'}},
@@ -192,7 +192,7 @@ def native():
             'targets': {
                 'DolphinAccountHost': {'type': 'application', 'platform': 'iOS',
                     'sources': [str(directory / 'main.m'), str(CLASSES / 'DolphinSessionMenu.mm'),
-                                str(CLASSES / 'DolphinRetroAchievementsAccount.mm')],
+                                str(CLASSES / 'DolphinRetroAchievementsAccount.mm'), str(CLASSES / 'DolphinFramePacing.mm')],
                     'dependencies': sdk_dependencies,
                     'settings': {'base': {'PRODUCT_BUNDLE_IDENTIFIER': 'org.neostation.accounttests.host',
                         'INFOPLIST_KEY_UILaunchScreen_Generation': 'YES'}}},

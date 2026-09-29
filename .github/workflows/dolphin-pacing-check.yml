@@ -1,0 +1,51 @@
+name: Dolphin display 120Hz and pacing regression tests
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - 'packages/dolphin_internal_bridge/**'
+      - 'test/dolphin*362*'
+      - 'test/dolphin_account_267_test.py'
+      - '.github/workflows/dolphin-pacing-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dolphin-pacing-tests
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Check core bindings and compile production display policy
+        run: |
+          set -euo pipefail
+          python3 test/dolphin_pacing362_contract_test.py
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ -isysroot "$SDK" -target arm64-apple-ios17.4 packages/dolphin_internal_bridge/ios/Classes/DolphinFramePacing.mm
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ -isysroot "$SDK" -target arm64-apple-ios17.4 packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.mm
+      - name: Exercise real INI rollback and interrupted-launch recovery
+        run: |
+          clang++ -std=c++20 -fobjc-arc -fblocks -Ipackages/dolphin_internal_bridge/ios/Classes test/dolphin_display_trial362_test.mm -framework Foundation -o /tmp/display-trial
+          /tmp/display-trial
+      - name: Exercise actual UIKit settings and CADisplayLink lifecycle
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          python3 test/dolphin_pacing362_ui_test.py > /tmp/pacing.log 2>&1 || { tail -n 100 /tmp/pacing.log; exit 1; }
+          tail -n 38 /tmp/pacing.log
+      - name: Upload simulator diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dolphin-Pacing-Tests-Diagnostics-${{ github.run_id }}
+          path: /tmp/pacing.log
+          retention-days: 3
