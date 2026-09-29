@@ -7,6 +7,7 @@ manager = (ROOT / "lib/screens/rpcs3_manager_screen.dart").read_text()
 playlist = (ROOT / "lib/widgets/rpcs3_internal_playlist_actions.dart").read_text()
 service = (ROOT / "lib/services/rpcs3_internal_service.dart").read_text()
 header = (ROOT / "lib/widgets/header.dart").read_text()
+rpcs3_locale = (ROOT / "lib/l10n/rpcs3_ui_locale.dart").read_text()
 
 def require(value, message):
     if not value:
@@ -32,9 +33,15 @@ require("diagnostics['jitEnabled'] == true" in manager and
         "RPCS3 manager does not use the native CS_DEBUGGED UI state")
 require("jit['requiresCoreHandshake'] != true" not in manager,
         "RPCS3 manager still gates the UI indicator on the Core handshake")
-require("JIT activé • RPCS3 Core prêt." in manager and
-        "JIT activé • RPCS3 Core à la demande." in manager,
-        "RPCS3 manager active-state labels are missing")
+require("_t('jitCoreReady')" in manager and
+        "_t('jitCoreOnDemand')" in manager,
+        "RPCS3 manager active-state localization keys are missing")
+for locale in ("en","fr","de","es","it","pt","ru","id","ja","ko","zh","zh_Hant"):
+    require("'" + locale + "':" in rpcs3_locale,
+            "RPCS3 UI locale table missing " + locale)
+require("'jitCoreReady':" in rpcs3_locale and
+        "'jitCoreOnDemand':" in rpcs3_locale,
+        "RPCS3 UI active-state translations are missing")
 
 require("value: 'saves'" not in playlist,
         "playlist popup still exposes Export save data")
@@ -50,7 +57,8 @@ require("Rpcs3InternalService.runtimeStates.listen" in header and
 require("status['debugged'] == true" in service and
         "static Future<bool> jitEnabledForUi()" in service,
         "UI JIT state is not backed by the native CS_DEBUGGED result")
-require("Color(0xFF22C55E)" in header and "JIT activé" in header,
+require("Color(0xFF22C55E)" in header and
+        "header-jit-active-dot" in header,
         "main header JIT dot is not green/labeled")
 
 print("PASS: startup non-blocking, popup clean, JIT status and green header dot authoritative")
