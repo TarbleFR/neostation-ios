@@ -56,7 +56,10 @@ def main():
     archive = SOURCE/'build/StikJIT-iOS.xcarchive'
     command = ['xcodebuild','archive','-project','StikJIT.xcodeproj','-scheme','StikJIT',
                '-destination','generic/platform=iOS','-archivePath',str(archive),
-               'SKIP_INSTALL=NO','BUILD_LIBRARY_FOR_DISTRIBUTION=YES','CODE_SIGNING_ALLOWED=NO']
+               'SKIP_INSTALL=NO','BUILD_LIBRARY_FOR_DISTRIBUTION=YES','CODE_SIGNING_ALLOWED=NO',
+               'GENERATE_INFOPLIST_FILE=YES','MARKETING_VERSION='+PIN['version'],
+               'CURRENT_PROJECT_VERSION=10','INFOPLIST_KEY_CFBundleShortVersionString='+PIN['version'],
+               'INFOPLIST_KEY_CFBundleVersion=10']
     with (OUTPUT/'build.log').open('w') as log:
         result = subprocess.run(command,cwd=SOURCE,stdout=log,stderr=subprocess.STDOUT)
     if result.returncode:

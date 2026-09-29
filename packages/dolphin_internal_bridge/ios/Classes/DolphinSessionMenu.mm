@@ -631,12 +631,6 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   NSInteger row = indexPath.row;
   if (indexPath.section < 0 || indexPath.section >= [self numberOfSectionsInTableView:tableView] ||
       row < 0 || row >= [self tableView:tableView numberOfRowsInSection:indexPath.section]) return;
-  if (self.page == DOLMenuControls && self.wii && indexPath.section == 0 && row == 4) {
-    [NSUserDefaults.standardUserDefaults setBool:!DOLPhoneShakeEnabled() forKey:DOLPhoneShakeKey];
-    [NSNotificationCenter.defaultCenter postNotificationName:@"NeoStation.Dolphin.PhoneShakeChanged" object:nil];
-    [tableView reloadData];
-    return;
-  }
   // Account is navigation, never a core-setting request. Status/mode are read-only.
   if (self.page == DOLMenuAchievements) {
     if (row == 0 && self.navigationController.topViewController == self) {
@@ -802,6 +796,12 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     ];
     [self.navigationController pushViewController:child animated:YES];
   } else if (self.page == DOLMenuControls) {
+  if (self.wii && indexPath.section == 0 && row == 4) {
+    [NSUserDefaults.standardUserDefaults setBool:!DOLPhoneShakeEnabled() forKey:DOLPhoneShakeKey];
+    [NSNotificationCenter.defaultCenter postNotificationName:@"NeoStation.Dolphin.PhoneShakeChanged" object:nil];
+    [tableView reloadData];
+    return;
+  }
     if (indexPath.section == 1) {
       DolphinSessionMenu* child = [self child:DOLMenuDevices title:[self text:@"chooseInput"]];
       child.binding = self.snapshot[@"controls"][row];
