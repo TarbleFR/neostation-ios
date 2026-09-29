@@ -71,7 +71,10 @@ void main() {
     tester.widget<OutlinedButton>(button).onPressed!();
     await tester.pumpAndSettle();
     expect(find.text(result), findsNothing);
-    await tester.tap(find.widgetWithText(TextButton, NeoSwapLocale.values['en']!['close']!));
+    final close = find.widgetWithText(TextButton, NeoSwapLocale.values['en']!['close']!);
+    await tester.ensureVisible(close);
+    await tester.pumpAndSettle();
+    await tester.tap(close);
     await tester.pumpAndSettle();
     expect(find.byType(NeoSwapDialog), findsNothing);
     await tester.pumpWidget(const SizedBox());
