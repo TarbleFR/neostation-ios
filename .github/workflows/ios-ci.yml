@@ -887,8 +887,8 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json,subprocess,time,os
-          tested='70f2f2cbf129880194ff600a7491a0e4821440cf'
-          for run in ('36577028087','36577028095'):
+          tested='cc880f7ef2742a9cd683124d6ecd3e598a17a6c7'
+          for run in ('36579189855','36579189779'):
               deadline=time.monotonic()+900
               while True:
                   result=json.loads(subprocess.check_output(['gh','api','repos/TarbleFR/neostation-ios/actions/runs/'+run]))
