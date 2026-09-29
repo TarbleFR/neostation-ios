@@ -979,7 +979,9 @@ jobs:
         run: |
           set -euo pipefail
           git diff --exit-code "$RELEASE_SOURCE_SHA" "$GITHUB_SHA" -- \
-            . ':(exclude).github/workflows/ios-ci.yml'
+            . \
+            ':(exclude).github/workflows/ios-ci.yml' \
+            ':(exclude).github/workflows/cheats-media-check.yml'
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; refusing to replace it." >&2
