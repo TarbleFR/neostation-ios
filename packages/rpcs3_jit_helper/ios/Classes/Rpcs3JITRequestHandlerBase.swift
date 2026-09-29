@@ -116,8 +116,21 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
       )
       try reporter?.send(
         event: "log",
-        message: "Preparing StikJIT 1.5.0 universal.js for NeoStation PID \(targetPID)."
+        message: "Preparing StikJIT 1.9.0 for NeoStation PID \(targetPID)."
       )
+
+      // Validate binary plists structurally too. A readable file or a string
+      // scan does not prove the RemotePairing credentials can be decoded.
+      guard let plist = try PropertyListSerialization.propertyList(
+        from: pairingData, options: [], format: nil) as? [String: Any],
+        let identifier = plist["identifier"] as? String, !identifier.isEmpty,
+        let publicKey = plist["public_key"] as? Data, publicKey.count == 32,
+        let privateKey = plist["private_key"] as? Data, privateKey.count == 32 else {
+        throw Rpcs3HelperError.invalidRequest("PAIRING_FORMAT_INVALID: import a RemotePairing file generated for this device.")
+      }
+      try reporter?.send(event: "log", message:
+        "StikJIT 1.9.0; iOS \(ProcessInfo.processInfo.operatingSystemVersionString); " +
+        "Core protocol: \(requiresCoreHandshake ? "universal-handshake" : "classic-attach-detach").")
 
       let temporaryDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("NeoStationRPCS3JIT", isDirectory: true)
@@ -151,7 +164,8 @@ open class Rpcs3JITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
 
       let configuration = StikJIT.Configuration(
         deviceAddress: "10.7.0.1",
-        rsdPort: 49152
+        rsdPort: 49152,
+        neoStationClassicAttach: !requiresCoreHandshake
       )
       let ddiPaths = DDIPaths.default(in: stikRoot)
       try reporter?.send(

@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-ios-private-cheats-media
+  group: ${{ contains(github.event.head_commit.message, '[rpcs3-host-only]') && format('neostation-host-check-{0}', github.sha) || 'neostation-ios-private-cheats-media' }}
   cancel-in-progress: true
 
 jobs:

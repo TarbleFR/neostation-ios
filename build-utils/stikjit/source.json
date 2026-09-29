@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/StikDebug/StikJIT.git",
+  "version": "1.9.0",
+  "revision": "32287268fa5824f9edce4cb359f5833ce0cf7b00",
+  "minimum_ios": "17.4",
+  "classic_attach_marker": "NEOSTATION_STIKJIT_IOS18_CLASSIC_V1",
+  "transport_marker": "NEOSTATION_STIKJIT_RPCS3_V1"
+}
