@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_locale.dart';
+import '../../l10n/ra_ui_locale.dart';
 import '../../models/retro_achievements_dashboard_models.dart';
 import '../../models/retro_achievements_user_awards.dart';
 import '../../providers/file_provider.dart';
@@ -251,7 +252,7 @@ class _RADashboardHubState extends State<RADashboardHub> {
                     _buildPill(
                       context,
                       icon: Symbols.sports_esports_rounded,
-                      label: '$trackedGames games played',
+                      label: RaUiLocale.gamesPlayed(context, trackedGames),
                       color: theme.colorScheme.primary,
                     ),
                     _buildPill(

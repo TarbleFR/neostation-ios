@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
 import 'package:neostation/services/sfx_service.dart';

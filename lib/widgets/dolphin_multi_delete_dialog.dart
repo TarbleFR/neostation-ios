@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/dolphin_import_locale.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
 import '../providers/sqlite_config_provider.dart';
@@ -62,7 +63,14 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
   int _targetCount = 0;
   String? _error;
 
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
+  String _t(String key) => DolphinImportLocale.text(context, key);
+  String _tf(String key, Map<String, Object?> values) {
+    var value = _t(key);
+    for (final item in values.entries) {
+      value = value.replaceAll('{${item.key}}', '${item.value ?? ''}');
+    }
+    return value;
+  }
 
   String _key(GameModel game) =>
       game.romPath ?? '${game.systemId ?? widget.system.id}:${game.romname}';
@@ -131,9 +139,7 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = _fr
-            ? 'La suppression a échoué : $error'
-            : 'Deletion failed: $error';
+        _error = _tf('deleteFailed', {'error': error});
         _deleting = false;
       });
     }
@@ -146,7 +152,7 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
         widget.games.isNotEmpty && _selected.length == widget.games.length;
 
     return AlertDialog(
-      title: Text(_fr ? 'Supprimer des jeux' : 'Delete games'),
+      title: Text(_t('deleteGames')),
       content: SizedBox(
         width: 520,
         height: 420,
@@ -156,9 +162,7 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    _fr
-                        ? '${_selected.length} jeu(x) sélectionné(s)'
-                        : '${_selected.length} game(s) selected',
+                    _tf('selectedCount', {'count': _selected.length}),
                   ),
                 ),
                 TextButton.icon(
@@ -169,9 +173,7 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
                         : Icons.select_all_rounded,
                   ),
                   label: Text(
-                    allSelected
-                        ? (_fr ? 'Tout désélectionner' : 'Deselect all')
-                        : (_fr ? 'Tout sélectionner' : 'Select all'),
+                    allSelected ? _t('deselectAll') : _t('selectAll'),
                   ),
                 ),
               ],
@@ -211,9 +213,7 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
               ),
               const SizedBox(height: 6),
               Text(
-                _fr
-                    ? 'Suppression $_deletedCount / $_targetCount…'
-                    : 'Deleting $_deletedCount / $_targetCount…',
+                _tf('deleting', {'done': _deletedCount, 'total': _targetCount}),
               ),
             ],
             if (_error != null) ...[
@@ -229,16 +229,12 @@ class _DolphinMultiDeleteDialogState extends State<DolphinMultiDeleteDialog> {
       actions: [
         TextButton(
           onPressed: _deleting ? null : () => Navigator.of(context).pop(false),
-          child: Text(_fr ? 'Annuler' : 'Cancel'),
+          child: Text(_t('cancel')),
         ),
         FilledButton.icon(
           onPressed: _deleting || _selected.isEmpty ? null : _deleteSelected,
           icon: const Icon(Icons.delete_forever_rounded),
-          label: Text(
-            _fr
-                ? 'Supprimer (${_selected.length})'
-                : 'Delete (${_selected.length})',
-          ),
+          label: Text(_tf('deleteCount', {'count': _selected.length})),
         ),
       ],
     );

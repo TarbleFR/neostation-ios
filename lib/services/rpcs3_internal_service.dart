@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import '../data/datasources/sqlite_service.dart';
+import '../l10n/rpcs3_ui_locale.dart';
 import 'rpcs3_game_deletion.dart';
 import 'game_launch_manager.dart';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:rpcs3_internal_bridge/rpcs3_internal_bridge.dart';
@@ -90,6 +92,11 @@ class Rpcs3InternalException implements Exception {
 /// while the debugger prepares its arena, then confirm the helper detached.
 class Rpcs3InternalService {
   Rpcs3InternalService._();
+
+  static String get _localeTag =>
+      FlutterLocalization.instance.currentLocale?.toLanguageTag() ?? 'en';
+  static String _ui(String key) =>
+      Rpcs3UiLocale.textForLocale(_localeTag, key);
 
   static final _log = LoggerService.instance;
   static final _stateController = StreamController<Rpcs3RuntimeState>.broadcast(
@@ -329,10 +336,7 @@ class Rpcs3InternalService {
   /// JIT status polling, memory preflight, watchdog, fallback, or second attach.
   static Future<void> _ensureRuntime() {
     if (_libraryMutationInProgress) {
-      throw const Rpcs3InternalException(
-        'libraryBusy',
-        'A game deletion is still running.',
-      );
+      throw Rpcs3InternalException('libraryBusy', _ui('operationFailed'));
     }
     if (_initialized) return Future<void>.value();
 
@@ -350,10 +354,7 @@ class Rpcs3InternalService {
 
   static Future<void> _initializeRuntime() async {
     if (!supported) {
-      throw const Rpcs3InternalException(
-        'unsupported',
-        'RPCS3 internal is available on iOS only.',
-      );
+      throw Rpcs3InternalException('unsupported', _ui('operationFailed'));
     }
     if (_initialized) return;
 
@@ -370,24 +371,19 @@ class Rpcs3InternalService {
     try {
       _emit(
         Rpcs3RuntimePhase.checkingJit,
-        'Vérification de la route LocalDevVPN…',
+        _ui('enabling'),
         jitReady: false,
         coreReady: false,
       );
       try {
         await LocalDevVpnRouteService.ensureReachable();
       } on LocalDevVpnRouteException catch (error) {
-        throw Rpcs3InternalException(
-          'RPCS3_ROUTE_UNAVAILABLE',
-          '${error.message} (nativeRouteCode=${error.code})',
-        );
+        _log.w('RPCS3 route unavailable: ${error.message} (nativeRouteCode=${error.code})');
+        throw Rpcs3InternalException('RPCS3_ROUTE_UNAVAILABLE', _ui('operationFailed'));
       }
 
       if (!await PairingFileService.hasStoredPairingFile()) {
-        throw const Rpcs3InternalException(
-          'RPCS3_PAIRING_FILE_INVALID',
-          'Import the NeoStation Pairing File before starting RPCS3 JIT.',
-        );
+        throw Rpcs3InternalException('RPCS3_PAIRING_FILE_INVALID', _ui('operationFailed'));
       }
 
       final data = await dataDirectory();
@@ -396,7 +392,7 @@ class Rpcs3InternalService {
 
       _emit(
         Rpcs3RuntimePhase.enablingJit,
-        'Activation du JIT RPCS3 avec StikJIT…',
+        _ui('enabling'),
         jitReady: false,
         coreReady: false,
       );
@@ -404,20 +400,19 @@ class Rpcs3InternalService {
         Rpcs3InternalBridge.prepareJit(pairingFilePath: pairing.path),
         _jitTimeout,
         'RPCS3_JIT_PREPARATION_TIMEOUT',
-        'La préparation StikJIT/DDI ne répond plus.',
+        _ui('operationFailed'),
       );
       if (jit['success'] != true) {
         throw Rpcs3InternalException(
           jit['code']?.toString() ?? 'RPCS3_JIT_ATTACH_FAILED',
-          jit['message']?.toString() ??
-              'StikJIT could not attach NeoStation.',
+          jit['message']?.toString() ?? _ui('operationFailed'),
         );
       }
       completionPending = jit['requiresCompletion'] == true;
 
       _emit(
         Rpcs3RuntimePhase.initializingCore,
-        'Initialisation du Core RPCS3…',
+        _ui('jitCoreWillPrepare'),
         jitReady: false,
         coreReady: false,
       );
@@ -429,12 +424,12 @@ class Rpcs3InternalService {
         ),
         _coreTimeout,
         'RPCS3_CORE_INITIALIZE_TIMEOUT',
-        'Le Core RPCS3 ne répond pas à initialize.',
+        _ui('operationFailed'),
       );
       if (core['success'] != true) {
         throw Rpcs3InternalException(
           core['code']?.toString() ?? 'RPCS3_CORE_INITIALIZE_FAILED',
-          core['message']?.toString() ?? 'RPCS3 Core could not initialize.',
+          core['message']?.toString() ?? _ui('operationFailed'),
         );
       }
 
@@ -443,13 +438,12 @@ class Rpcs3InternalService {
           Rpcs3InternalBridge.completeJit(),
           _jitCompletionTimeout,
           'RPCS3_JIT_DETACH_TIMEOUT',
-          'La fermeture de la transaction JIT n’est pas confirmée.',
+          _ui('operationFailed'),
         );
         if (completion['success'] != true) {
           throw Rpcs3InternalException(
             completion['code']?.toString() ?? 'RPCS3_JIT_DETACH_FAILED',
-            completion['message']?.toString() ??
-                'RPCS3 JIT helper did not detach cleanly.',
+            completion['message']?.toString() ?? _ui('operationFailed'),
           );
         }
         completionPending = false;
@@ -459,7 +453,7 @@ class Rpcs3InternalService {
       _initialized = true;
       _emit(
         Rpcs3RuntimePhase.ready,
-        'RPCS3 prêt.',
+        _ui('ready'),
         jitReady: true,
         coreReady: true,
       );
@@ -502,10 +496,7 @@ class Rpcs3InternalService {
         _runtimePreparation != null ||
         GameLaunchManager().isActive ||
         _state.phase == Rpcs3RuntimePhase.importingContent) {
-      throw const Rpcs3InternalException(
-        'libraryBusy',
-        'Stop the current launch or import before deleting a game.',
-      );
+      throw Rpcs3InternalException('libraryBusy', _ui('operationFailed'));
     }
     _libraryMutationInProgress = true;
     final id = titleId.trim().toUpperCase();
@@ -514,10 +505,7 @@ class Rpcs3InternalService {
       if (_initialized) {
         final emulation = await Rpcs3InternalBridge.emulationState();
         if (emulation != 0 && emulation != 1) {
-          throw const Rpcs3InternalException(
-            'gameRunning',
-            'Stop emulation before deleting a game.',
-          );
+          throw Rpcs3InternalException('gameRunning', _ui('operationFailed'));
         }
       }
       final root = await dataDirectory();
@@ -582,10 +570,7 @@ class Rpcs3InternalService {
   /// Firmware, games, caches, trophies and configuration stay private.
   static Future<Directory> exportSaveData() async {
     if (!supported) {
-      throw const Rpcs3InternalException(
-        'unsupported',
-        'RPCS3 save export is available on iOS only.',
-      );
+      throw Rpcs3InternalException('unsupported', _ui('operationFailed'));
     }
 
     final data = await dataDirectory();
@@ -635,10 +620,7 @@ class Rpcs3InternalService {
       }
 
       if (copiedFiles == 0) {
-        throw const Rpcs3InternalException(
-          'saveDataEmpty',
-          'Aucune sauvegarde RPCS3 n’est encore disponible à exporter.',
-        );
+        throw Rpcs3InternalException('saveDataEmpty', _ui('operationFailed'));
       }
 
       // Prepare the full snapshot before swapping it into place. If the final
@@ -665,10 +647,8 @@ class Rpcs3InternalService {
     } on Rpcs3InternalException {
       rethrow;
     } catch (error) {
-      throw Rpcs3InternalException(
-        'saveExportFailed',
-        'Impossible de préparer les sauvegardes RPCS3 : $error',
-      );
+      _log.e('RPCS3 save export failed: $error');
+      throw Rpcs3InternalException('saveExportFailed', _ui('operationFailed'));
     } finally {
       if (await staging.exists()) {
         try {
@@ -692,19 +672,13 @@ class Rpcs3InternalService {
   /// and then call this method to copy them back into RPCS3's private live tree.
   static Future<int> importSaveDataFromFiles() async {
     if (!supported) {
-      throw const Rpcs3InternalException(
-        'unsupported',
-        'RPCS3 save import is available on iOS only.',
-      );
+      throw Rpcs3InternalException('unsupported', _ui('operationFailed'));
     }
     if (_libraryMutationInProgress ||
         _runtimePreparation != null ||
         GameLaunchManager().isActive ||
         _state.phase == Rpcs3RuntimePhase.importingContent) {
-      throw const Rpcs3InternalException(
-        'saveImportBusy',
-        'Stop the current game or RPCS3 operation before importing saves.',
-      );
+      throw Rpcs3InternalException('saveImportBusy', _ui('operationFailed'));
     }
 
     final workspace = await filesWorkspaceDirectory();
@@ -712,10 +686,7 @@ class Rpcs3InternalService {
     if (!await exchangeRoot.exists()) {
       await Directory(path.join(exchangeRoot.path, 'Game Saves')).create(recursive: true);
       await Directory(path.join(exchangeRoot.path, 'Savestates')).create(recursive: true);
-      throw const Rpcs3InternalException(
-        'saveImportFolderMissing',
-        'Le dossier RPCS3/Import vient d’être créé dans Fichiers. Ajoutez vos fichiers dans Game Saves ou Savestates, puis relancez Importer.',
-      );
+      throw Rpcs3InternalException('saveImportFolderMissing', _ui('operationFailed'));
     }
     await Directory(path.join(exchangeRoot.path, 'Game Saves')).create(recursive: true);
     await Directory(path.join(exchangeRoot.path, 'Savestates')).create(recursive: true);
@@ -791,20 +762,15 @@ class Rpcs3InternalService {
       }
 
       if (copiedFiles == 0) {
-        throw const Rpcs3InternalException(
-          'saveImportEmpty',
-          'Aucun fichier de sauvegarde RPCS3 valide n’a été trouvé dans RPCS3/Import.',
-        );
+        throw Rpcs3InternalException('saveImportEmpty', _ui('operationFailed'));
       }
       _log.i('RPCS3 save import completed: $copiedFiles file(s).');
       return copiedFiles;
     } on Rpcs3InternalException {
       rethrow;
     } catch (error) {
-      throw Rpcs3InternalException(
-        'saveImportFailed',
-        'Impossible d’importer les sauvegardes RPCS3 : $error',
-      );
+      _log.e('RPCS3 save import failed: $error');
+      throw Rpcs3InternalException('saveImportFailed', _ui('operationFailed'));
     } finally {
       _libraryMutationInProgress = false;
     }
@@ -828,7 +794,7 @@ class Rpcs3InternalService {
     // Present the picker immediately. JIT/Core preparation happens only after
     // the user has actually selected a firmware file.
     final picked = await FilePicker.pickFiles(
-      dialogTitle: 'Select official PS3UPDAT.PUP firmware',
+      dialogTitle: _ui('firmwarePicker'),
       allowMultiple: false,
       type: FileType.custom,
       allowedExtensions: const ['pup'],
@@ -838,9 +804,9 @@ class Rpcs3InternalService {
 
     final sourcePath = picked.files.single.path;
     if (sourcePath == null || !await File(sourcePath).exists()) {
-      throw const Rpcs3InternalException(
+      throw Rpcs3InternalException(
         'firmwareUnreadable',
-        'The selected PS3 firmware is unreadable.',
+        _ui('firmwareUnreadable'),
       );
     }
 
@@ -850,7 +816,7 @@ class Rpcs3InternalService {
       await ensureManagementInitialized();
       _emit(
         Rpcs3RuntimePhase.installingFirmware,
-        'Installation du firmware PS3…',
+        _ui('installingFirmware'),
         jitReady: true,
         coreReady: true,
       );
@@ -858,12 +824,12 @@ class Rpcs3InternalService {
         Rpcs3InternalBridge.installFirmware(stagedPath),
         _firmwareInstallTimeout,
         'firmwareInstallTimeout',
-        'L’installation du firmware RPCS3 a dépassé 10 minutes.',
+        _ui('firmwareTimeout'),
       );
       if (report['success'] != true) {
         throw Rpcs3InternalException(
           'firmwareInstallFailed',
-          report['message']?.toString() ?? 'RPCS3 rejected the PS3 firmware.',
+          report['message']?.toString() ?? _ui('firmwareRejected'),
         );
       }
 
@@ -871,17 +837,17 @@ class Rpcs3InternalService {
         Rpcs3InternalBridge.firmwareVersion(),
         _statusTimeout,
         'firmwareStatusTimeout',
-        'RPCS3 did not confirm the installed firmware.',
+        _ui('firmwareNotConfirmed'),
       )).trim();
       if (version.isEmpty) {
-        throw const Rpcs3InternalException(
+        throw Rpcs3InternalException(
           'firmwareVerificationFailed',
-          'RPCS3 did not report an installed firmware after import.',
+          _ui('firmwareVerifyFailed'),
         );
       }
       _emit(
         Rpcs3RuntimePhase.ready,
-        'Firmware PS3 installé. RPCS3 est prêt.',
+        _ui('firmwareReady'),
         jitReady: true,
         coreReady: true,
       );
@@ -898,7 +864,7 @@ class Rpcs3InternalService {
 
   static Future<Rpcs3ImportResult> importGames() async {
     final picked = await FilePicker.pickFiles(
-      dialogTitle: 'Import PlayStation 3 games',
+      dialogTitle: _ui('importGames'),
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: const ['pkg', 'iso', 'zip'],
@@ -911,7 +877,7 @@ class Rpcs3InternalService {
     await ensureManagementInitialized();
     _emit(
       Rpcs3RuntimePhase.importingContent,
-      'Import des jeux PS3…',
+      _ui('selectingGames'),
       jitReady: true,
       coreReady: true,
     );
@@ -923,7 +889,7 @@ class Rpcs3InternalService {
       final sourcePath = item.path;
       if (sourcePath == null || !await File(sourcePath).exists()) {
         rejected++;
-        errors.add('${item.name}: unreadable file.');
+        errors.add('${item.name}: ${_ui('operationFailed')}');
         continue;
       }
 
@@ -934,14 +900,14 @@ class Rpcs3InternalService {
           Rpcs3InternalBridge.installPackage(sourcePath),
           _contentInstallTimeout,
           'gameImportTimeout',
-          '${item.name}: RPCS3 import timed out.',
+          '${item.name}: ${_ui('operationFailed')}',
         );
       } else if (extension == '.zip') {
         report = await _bounded(
           Rpcs3InternalBridge.installZip(sourcePath),
           _contentInstallTimeout,
           'gameImportTimeout',
-          '${item.name}: RPCS3 import timed out.',
+          '${item.name}: ${_ui('operationFailed')}',
         );
       } else if (extension == '.iso') {
         final key = File(path.setExtension(sourcePath, '.key'));
@@ -952,12 +918,12 @@ class Rpcs3InternalService {
           ),
           _contentInstallTimeout,
           'gameImportTimeout',
-          '${item.name}: RPCS3 import timed out.',
+          '${item.name}: ${_ui('operationFailed')}',
         );
       } else {
-        report = const <String, dynamic>{
+        report = <String, dynamic>{
           'success': false,
-          'message': 'Unsupported game format.',
+          'message': _ui('unsupportedGameFormat'),
         };
       }
 
@@ -966,7 +932,7 @@ class Rpcs3InternalService {
       } else {
         rejected++;
         errors.add(
-          '${item.name}: ${report['message'] ?? 'RPCS3 import failed.'}',
+          '${item.name}: ${report['message'] ?? _ui('importFailedShort')}',
         );
       }
     }
@@ -974,7 +940,7 @@ class Rpcs3InternalService {
     await Rpcs3LibraryService.syncInternalLibrary();
     _emit(
       Rpcs3RuntimePhase.ready,
-      'RPCS3 prêt.',
+      _ui('ready'),
       jitReady: true,
       coreReady: true,
     );
@@ -987,14 +953,14 @@ class Rpcs3InternalService {
 
   static Future<bool> importExtractedGameFolder() async {
     final folder = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Import extracted PlayStation 3 game folder',
+      dialogTitle: _ui('importDecryptedFolder'),
     );
     if (folder == null) return false;
 
     await ensureManagementInitialized();
     _emit(
       Rpcs3RuntimePhase.importingContent,
-      'Import du dossier PS3…',
+      _ui('selectingFolder'),
       jitReady: true,
       coreReady: true,
     );
@@ -1002,18 +968,18 @@ class Rpcs3InternalService {
       Rpcs3InternalBridge.installFolder(folder),
       _contentInstallTimeout,
       'gameImportTimeout',
-      'RPCS3 folder import timed out.',
+      _ui('folderRejected'),
     );
     if (report['success'] != true) {
       throw Rpcs3InternalException(
         'gameImportFailed',
-        report['message']?.toString() ?? 'RPCS3 rejected the selected folder.',
+        report['message']?.toString() ?? _ui('folderRejected'),
       );
     }
     await Rpcs3LibraryService.syncInternalLibrary();
     _emit(
       Rpcs3RuntimePhase.ready,
-      'RPCS3 prêt.',
+      _ui('ready'),
       jitReady: true,
       coreReady: true,
     );
@@ -1029,9 +995,9 @@ class Rpcs3InternalService {
     if (normalized.isEmpty) return false;
 
     if (!_initialized) {
-      throw const Rpcs3InternalException(
+      throw Rpcs3InternalException(
         'RPCS3_RUNTIME_NOT_READY',
-        'RPCS3 runtime was not initialized before boot.',
+        Rpcs3UiLocale.textForLocale(uiLocale, 'operationFailed'),
       );
     }
     final launchTimer = Stopwatch()..start();
@@ -1039,18 +1005,18 @@ class Rpcs3InternalService {
       Rpcs3InternalBridge.firmwareVersion(),
       _statusTimeout,
       'firmwareStatusTimeout',
-      'RPCS3 did not return the firmware state.',
+      Rpcs3UiLocale.textForLocale(uiLocale, 'operationFailed'),
     )).trim();
     if (firmware.isEmpty) {
-      throw const Rpcs3InternalException(
+      throw Rpcs3InternalException(
         'firmwareRequired',
-        'PlayStation 3 firmware is required before launching a game.',
+        Rpcs3UiLocale.textForLocale(uiLocale, 'firmwareRequired'),
       );
     }
 
     _emit(
       Rpcs3RuntimePhase.launching,
-      'Lancement du jeu PS3…',
+      Rpcs3UiLocale.textForLocale(uiLocale, 'importingGame'),
       jitReady: true,
       coreReady: true,
     );
@@ -1064,7 +1030,8 @@ class Rpcs3InternalService {
     if (report['success'] != true) {
       throw Rpcs3InternalException(
         report['code']?.toString() ?? 'RPCS3_GAME_BOOT_FAILED',
-        report['message']?.toString() ?? 'RPCS3 could not boot this game.',
+        report['message']?.toString() ??
+            Rpcs3UiLocale.textForLocale(uiLocale, 'operationFailed'),
       );
     }
     _log.i(
@@ -1075,7 +1042,7 @@ class Rpcs3InternalService {
 
     _emit(
       Rpcs3RuntimePhase.ready,
-      'RPCS3 en cours d’exécution.',
+      Rpcs3UiLocale.textForLocale(uiLocale, 'ready'),
       jitReady: true,
       coreReady: true,
     );

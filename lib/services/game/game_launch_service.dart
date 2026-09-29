@@ -4,6 +4,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/l10n/dusklight_locale.dart';
+import 'package:neostation/l10n/dolphin_import_locale.dart';
 import 'package:neostation/l10n/ports_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
@@ -163,7 +164,7 @@ class GameLaunchService {
         final gamePath = game.romPath;
         if (gamePath == null || gamePath.isEmpty) {
           return GameLaunchResult.failure(
-            'Dolphin launch refused: the game path is missing.',
+            DolphinImportLocale.text(context, 'launchFailed'),
             system.folderName,
           );
         }
@@ -175,8 +176,9 @@ class GameLaunchService {
         if (!context.mounted) return GameLaunchResult.failure('', '');
         if (!report.ready) {
           return GameLaunchResult.failure(
-            report.message,
+            DolphinImportLocale.text(context, 'launchFailed'),
             'Dolphin stage: ${report.failedStage ?? "unknown"}\n'
+            'Runtime message: ${report.message}\n'
             'Log: ${report.logPath}',
           );
         }
@@ -225,14 +227,11 @@ class GameLaunchService {
                 '${report.technicalDetails}\n'
                 'Runtime message: ${runtimeMessage.isEmpty ? "none" : runtimeMessage}';
             _log.e('[KartPad launch]\n$details');
-            // Keep the localized fallback only when the native runtime supplied
-            // no useful text. Otherwise put its exact failure in the primary
-            // error box so the next physical-device run cannot hide the real
-            // cause behind the generic KartPad message.
+            // User-facing copy always follows NeoStation's selected locale.
+            // Keep the exact native runtime message in the technical details so
+            // diagnostics remain lossless without leaking English into the UI.
             return GameLaunchResult.failure(
-              runtimeMessage.isNotEmpty
-                  ? runtimeMessage
-                  : PortsLocale.kartPadLaunchError(locale, report.errorCode),
+              PortsLocale.kartPadLaunchError(locale, report.errorCode),
               details,
             );
           }

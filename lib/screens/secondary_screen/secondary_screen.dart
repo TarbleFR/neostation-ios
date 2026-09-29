@@ -8,6 +8,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../l10n/app_locale.dart';
+import '../../l10n/secondary_ui_locale.dart';
 
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/secondary_apps_service.dart';
@@ -1408,6 +1409,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   /// SETTINGS jumps straight to the accessibility page.
   Widget _buildAccessibilityDialog(SecondaryDisplayStateData value) {
     final scheme = panelScheme(value);
+    final ctx = _l10nContext ?? context;
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -1449,7 +1451,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                         SizedBox(width: 12.r),
                         Expanded(
                           child: Text(
-                            'Enable Screen Return',
+                            AppLocale.screenReturnAccess.getString(ctx),
                             style: TextStyle(
                               color: scheme.onSurface,
                               fontSize: 20.r,
@@ -1461,12 +1463,8 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                     ),
                     SizedBox(height: 18.r),
                     Text(
-                      'To launch apps from the dock, NeoStation needs the '
-                      'Screen Return accessibility service. It lets NeoStation '
-                      'bring you back here after you close the app you opened. '
-                      "Without it you could be left with no way back.\n\n"
-                      'On the next screen, find NeoStation in the list of '
-                      'services and switch it on.',
+                      '${AppLocale.screenReturnAccessDesc.getString(ctx)}\n\n'
+                      '${AppLocale.screenReturnAccessHint.getString(ctx)}',
                       style: TextStyle(
                         color: scheme.onSurface.withValues(alpha: 0.8),
                         fontSize: 14.r,
@@ -1478,14 +1476,14 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         _buildDialogButton(
-                          label: 'CANCEL',
+                          label: AppLocale.cancel.getString(ctx).toUpperCase(),
                           onTap: _dismissAccessibilityDialog,
                           scheme: scheme,
                           filled: false,
                         ),
                         SizedBox(width: 12.r),
                         _buildDialogButton(
-                          label: 'OPEN SETTINGS',
+                          label: SecondaryUiLocale.text(ctx, 'openSettings').toUpperCase(),
                           onTap: _confirmAccessibilityDialog,
                           scheme: scheme,
                           filled: true,

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/rpcs3_ui_locale.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
@@ -1051,9 +1052,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
             SizedBox(height: 4.r),
             Text(
               isRpcs3Library
-                  ? (Localizations.localeOf(context).languageCode == 'fr'
-                        ? 'Utilisez le menu d’import pour ajouter des jeux PS3.'
-                        : 'Use the import menu to add PS3 games.')
+                  ? Rpcs3UiLocale.text(context, 'emptyLibrary')
                   : AppLocale.checkRomFiles.getString(context),
               style: TextStyle(
                 fontSize: 11.r,

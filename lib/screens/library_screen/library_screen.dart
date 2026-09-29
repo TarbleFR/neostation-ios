@@ -11,6 +11,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/library_feature_locale.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/services/library_addon_service.dart';
 import 'package:neostation/services/library_aidoku_native_service.dart';
@@ -62,6 +63,9 @@ class _NativeLibraryEntry {
 }
 
 class LibraryScreenState extends State<LibraryScreen> {
+  String _lt(String key) => LibraryFeatureLocale.text(context, key);
+  String _ltf(String key, Map<String, Object?> values) =>
+      LibraryFeatureLocale.format(context, key, values);
   final LibraryAddonService _addonService = LibraryAddonService.instance;
   final LibraryAidokuNativeService _aidokuNativeService =
       LibraryAidokuNativeService.instance;
@@ -200,9 +204,7 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   String _sourceLabel(String id) {
     if (id == 'all') {
-      return Localizations.localeOf(context).languageCode == 'fr'
-          ? 'Toutes les sources'
-          : 'All sources';
+      return LibraryFeatureLocale.text(context, 'allSources');
     }
     return _sourceOptions[id] ?? id;
   }
@@ -657,11 +659,10 @@ class LibraryScreenState extends State<LibraryScreen> {
   );
 
   String _contentFilterLabel() {
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
     if (_hideAdultContent) {
-      return fr ? 'Sans Hentai/Doujinshi' : 'Hide Hentai/Doujinshi';
+      return LibraryFeatureLocale.text(context, 'hideAdultShort');
     }
-    return fr ? 'Tout afficher' : 'Show all';
+    return LibraryFeatureLocale.text(context, 'showAll');
   }
 
   Set<String> _itemLanguageCodes(_NativeLibraryEntry entry) {
@@ -710,9 +711,7 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   String _languageLabel(String code) {
     if (code == 'all') {
-      return Localizations.localeOf(context).languageCode == 'fr'
-          ? 'Toutes'
-          : 'All';
+      return LibraryFeatureLocale.text(context, 'all');
     }
     const labels = <String, String>{
       'fr': 'Français',
@@ -1191,9 +1190,7 @@ class LibraryScreenState extends State<LibraryScreen> {
               ),
               Flexible(
                 child: Text(
-                  Localizations.localeOf(context).languageCode == 'fr'
-                      ? 'Masquer Hentai / Doujinshi'
-                      : 'Hide Hentai / Doujinshi',
+                  LibraryFeatureLocale.text(context, 'hideAdult'),
                 ),
               ),
             ],
@@ -1210,9 +1207,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                     : null,
               ),
               Text(
-                Localizations.localeOf(context).languageCode == 'fr'
-                    ? 'Tout afficher'
-                    : 'Show all',
+                LibraryFeatureLocale.text(context, 'showAll'),
               ),
             ],
           ),
@@ -1469,11 +1464,12 @@ class LibraryScreenState extends State<LibraryScreen> {
           _sourceFilter = 'all';
           _librarySelectedIndex = 0;
         });
-        final fr = Localizations.localeOf(context).languageCode == 'fr';
         _showMessage(
-          fr
-              ? '$providerCount source(s) Manga Provider intégrée(s).'
-              : '$providerCount Manga Provider source(s) imported.',
+          LibraryFeatureLocale.format(
+            context,
+            'providersImported',
+            {'count': providerCount},
+          ),
         );
         if (_titleQuery.trim().isNotEmpty) {
           unawaited(_runTitleSearch(_titleQuery));
@@ -1634,16 +1630,12 @@ class LibraryScreenState extends State<LibraryScreen> {
         await _readProviderItem(item);
         return;
       }
-      final fr = Localizations.localeOf(context).languageCode == 'fr';
       _showMessage(
-        fr
-            ? 'Cette source ne fournit pas de pages lisibles pour ce titre.'
-            : 'This source does not provide readable pages for this title.',
+        LibraryFeatureLocale.text(context, 'unreadableSource'),
       );
       return;
     }
 
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
     const layerId = 'library_provider_acquisition_dialog';
     GamepadNavigationManager.pushLayer(
       layerId,
@@ -1658,20 +1650,18 @@ class LibraryScreenState extends State<LibraryScreen> {
         builder: (dialogContext) => AlertDialog(
           title: Text(item.title),
           content: Text(
-            fr
-                ? 'Choisis une action proposée directement par la source.'
-                : 'Choose an action supplied directly by the source.',
+            LibraryFeatureLocale.text(context, 'chooseSourceAction'),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(fr ? 'Fermer' : 'Close'),
+              child: Text(_lt('close')),
             ),
             if (hasReadable)
               FilledButton.icon(
                 onPressed: () => Navigator.of(dialogContext).pop('read'),
                 icon: const Icon(Symbols.menu_book_rounded),
-                label: Text(fr ? 'Lire maintenant' : 'Read now'),
+                label: Text(_lt('readNow')),
               ),
             for (var i = 0; i < acquisitions.length; i++)
               if (acquisitions[i].isExternalReader)
@@ -1680,9 +1670,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                       Navigator.of(dialogContext).pop('external:$i'),
                   icon: const Icon(Symbols.open_in_new_rounded),
                   label: Text(
-                    fr
-                        ? 'Lire sur ${acquisitions[i].label}'
-                        : 'Read on ${acquisitions[i].label}',
+                    _ltf('readOn', {'label': acquisitions[i].label}),
                   ),
                 )
               else if (acquisitions[i].canDownload)
@@ -1691,7 +1679,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                       Navigator.of(dialogContext).pop('download:$i'),
                   icon: const Icon(Symbols.download_rounded),
                   label: Text(
-                    '${fr ? 'Télécharger' : 'Download'} ${acquisitions[i].label}',
+                    '${_lt('download')} ${acquisitions[i].label}',
                   ),
                 ),
           ],
@@ -1741,8 +1729,7 @@ class LibraryScreenState extends State<LibraryScreen> {
     LibraryCatalogItem item,
     LibraryAcquisitionLink acquisition,
   ) async {
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
-    _showMessage(fr ? 'Téléchargement en cours…' : 'Downloading…');
+    _showMessage(_lt('downloading'));
     try {
       final result = await LibraryDownloadService.download(
         acquisition: acquisition,
@@ -1758,9 +1745,10 @@ class LibraryScreenState extends State<LibraryScreen> {
           return;
         } on LibraryAddonException catch (error) {
           _showMessage(
-            fr
-                ? '${result.fileName} téléchargé. ${error.message}'
-                : '${result.fileName} downloaded. ${error.message}',
+            _ltf('downloadedWithError', {
+              'file': result.fileName,
+              'error': error.message,
+            }),
           );
           return;
         }
@@ -1778,16 +1766,10 @@ class LibraryScreenState extends State<LibraryScreen> {
         return;
       }
 
-      _showMessage(
-        fr
-            ? '${result.fileName} téléchargé dans Library/Downloads.'
-            : '${result.fileName} downloaded to Library/Downloads.',
-      );
+      _showMessage(_ltf('downloadSaved', {'file': result.fileName}));
     } catch (error) {
       if (!mounted) return;
-      _showMessage(
-        fr ? 'Téléchargement impossible : $error' : 'Download failed: $error',
-      );
+      _showMessage(_ltf('downloadFailed', {'error': error}));
     }
   }
 
@@ -1810,11 +1792,7 @@ class LibraryScreenState extends State<LibraryScreen> {
 
     String text;
     try {
-      _showMessage(
-        Localizations.localeOf(context).languageCode == 'fr'
-            ? 'Chargement du livre…'
-            : 'Loading book…',
-      );
+      _showMessage(_lt('loadingBook'));
       text = await _catalogService.loadReadableText(item);
     } on LibraryAddonException catch (error) {
       if (item.description.isNotEmpty) {
@@ -1863,12 +1841,9 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _openAidokuTitle(_NativeLibraryEntry entry) async {
     final addon = entry.source!;
-    final locale = Localizations.localeOf(context).languageCode;
     var item = entry.item;
 
-    _showMessage(
-      locale == 'fr' ? 'Chargement des chapitres…' : 'Loading chapters…',
-    );
+    _showMessage(_lt('loadingChapters'));
 
     try {
       item = await _aidokuNativeService.loadDetails(addon, item);
@@ -1886,11 +1861,7 @@ class LibraryScreenState extends State<LibraryScreen> {
 
     if (!mounted || chapters.isEmpty) {
       if (mounted) {
-        _showMessage(
-          locale == 'fr'
-              ? 'Aucun chapitre disponible pour ce manga.'
-              : 'No chapters are available for this manga.',
-        );
+        _showMessage(_lt('noChapters'));
       }
       return;
     }
@@ -2005,7 +1976,7 @@ class LibraryScreenState extends State<LibraryScreen> {
     }
 
     if (!mounted || selectedChapter == null) return;
-    _showMessage(locale == 'fr' ? 'Chargement des pages…' : 'Loading pages…');
+    _showMessage(_lt('loadingPages'));
     List<String> pages;
     try {
       pages = await _aidokuNativeService.loadPages(
@@ -2027,7 +1998,6 @@ class LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _chooseRemoveSourceOrRepository(LibraryAddon addon) async {
-    final locale = Localizations.localeOf(context).languageCode;
     final repositoryCount = _addons
         .where(
           (item) =>
@@ -2038,11 +2008,9 @@ class LibraryScreenState extends State<LibraryScreen> {
     final choice = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(locale == 'fr' ? 'Supprimer' : 'Remove'),
+        title: Text(_lt('remove')),
         content: Text(
-          locale == 'fr'
-              ? 'Cette source appartient à un dépôt contenant $repositoryCount source(s).'
-              : 'This source belongs to a repository containing $repositoryCount source(s).',
+          _ltf('sourceBelongsRepo', {'count': repositoryCount}),
         ),
         actions: [
           TextButton(
@@ -2051,11 +2019,11 @@ class LibraryScreenState extends State<LibraryScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop('source'),
-            child: Text(locale == 'fr' ? 'Cette source' : 'This source'),
+            child: Text(_lt('thisSource')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop('repository'),
-            child: Text(locale == 'fr' ? 'Tout le dépôt' : 'Entire repository'),
+            child: Text(_lt('entireRepository')),
           ),
         ],
       ),
@@ -2069,7 +2037,6 @@ class LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _confirmRemoveRepository(LibraryAddon addon) async {
-    final locale = Localizations.localeOf(context).languageCode;
     final origin = addon.repositoryOrigin;
     final count = _addons
         .where(
@@ -2081,13 +2048,9 @@ class LibraryScreenState extends State<LibraryScreen> {
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
-            title: Text(
-              locale == 'fr' ? 'Supprimer le dépôt ?' : 'Remove repository?',
-            ),
+            title: Text(_lt('removeRepositoryQuestion')),
             content: Text(
-              locale == 'fr'
-                  ? 'Les $count sources importées depuis ce dépôt seront supprimées. Les autres dépôts ne seront pas modifiés.'
-                  : 'All $count sources imported from this repository will be removed. Other repositories will not be changed.',
+              _ltf('removeRepositoryBody', {'count': count}),
             ),
             actions: [
               TextButton(
@@ -2112,11 +2075,7 @@ class LibraryScreenState extends State<LibraryScreen> {
           : (_addonSelectionCount - 1).clamp(0, 9999);
       _addonSelectedIndex = _addonSelectedIndex.clamp(0, maxIndex);
     });
-    _showMessage(
-      locale == 'fr'
-          ? '$removed source(s) supprimée(s) avec le dépôt.'
-          : '$removed source(s) removed with the repository.',
-    );
+    _showMessage(_ltf('repositoryRemoved', {'count': removed}));
   }
 
   Future<void> _confirmRemoveAddon(LibraryAddon addon) async {
@@ -2278,12 +2237,8 @@ class LibraryScreenState extends State<LibraryScreen> {
                       _hubFocus == _HubFocus.shortcuts &&
                       _hubSelectedIndex == 2,
                   icon: Symbols.manage_accounts_rounded,
-                  title: Localizations.localeOf(context).languageCode == 'fr'
-                      ? 'Gérer les sources'
-                      : 'Manage sources',
-                  subtitle: Localizations.localeOf(context).languageCode == 'fr'
-                      ? 'Supprimer une source ou un dépôt installé.'
-                      : 'Remove an installed source or repository.',
+                  title: _lt('manageSources'),
+                  subtitle: _lt('manageSourcesSubtitle'),
                   onTap: () => _tapHubCard(2),
                 ),
               ),
@@ -2333,11 +2288,8 @@ class LibraryScreenState extends State<LibraryScreen> {
   }
 
   Widget _buildInlineTitleSearchRow(BuildContext context, ThemeData theme) {
-    final locale = Localizations.localeOf(context).languageCode;
     final visible = _visibleLibraryItems;
-    final countLabel = locale == 'fr'
-        ? '${visible.length} résultat${visible.length > 1 ? 's' : ''}'
-        : '${visible.length} result${visible.length == 1 ? '' : 's'}';
+    final countLabel = _ltf('resultsCount', {'count': visible.length});
     final activeFilters = <bool>[
       _languageFilter != 'all',
       _sourceFilter != 'all',
@@ -2369,12 +2321,12 @@ class LibraryScreenState extends State<LibraryScreen> {
               onChanged: _scheduleInlineTitleSearch,
               onSubmitted: _submitInlineTitleSearch,
               decoration: InputDecoration(
-                hintText: locale == 'fr' ? 'Rechercher…' : 'Search…',
+                hintText: _lt('searchHint'),
                 prefixIcon: const Icon(Symbols.search_rounded),
                 suffixIcon: _titleSearchController.text.isEmpty
                     ? null
                     : IconButton(
-                        tooltip: locale == 'fr' ? 'Effacer' : 'Clear',
+                        tooltip: _lt('clear'),
                         onPressed: _clearInlineTitleSearch,
                         icon: const Icon(Symbols.close_rounded),
                       ),
@@ -2439,7 +2391,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                 Icon(Symbols.tune_rounded, size: 18.r),
                 SizedBox(width: 6.r),
                 Text(
-                  locale == 'fr' ? 'Filtres' : 'Filters',
+                  _lt('filters'),
                   style: TextStyle(fontSize: 13.r, fontWeight: FontWeight.w700),
                 ),
                 if (activeFilters > 0) ...[
@@ -2476,7 +2428,7 @@ class LibraryScreenState extends State<LibraryScreen> {
         ),
         SizedBox(width: 6.r),
         IconButton(
-          tooltip: locale == 'fr' ? 'Fermer la recherche' : 'Close search',
+          tooltip: _lt('closeSearch'),
           onPressed: _leaveTitleSearchMode,
           icon: const Icon(Symbols.close_rounded),
         ),
@@ -2485,15 +2437,10 @@ class LibraryScreenState extends State<LibraryScreen> {
   }
 
   Widget _buildFilters(BuildContext context, {bool includeSearch = true}) {
-    final locale = Localizations.localeOf(context).languageCode;
     final visible = _visibleLibraryItems;
     final countLabel = _titleQuery.isNotEmpty
-        ? (locale == 'fr'
-              ? '${visible.length} résultat${visible.length > 1 ? 's' : ''}'
-              : '${visible.length} result${visible.length == 1 ? '' : 's'}')
-        : (locale == 'fr'
-              ? '${visible.length} titre${visible.length > 1 ? 's' : ''}'
-              : '${visible.length} title${visible.length == 1 ? '' : 's'}');
+        ? _ltf('resultsCount', {'count': visible.length})
+        : _ltf('titlesCount', {'count': visible.length});
 
     Widget control({
       required int index,
@@ -2531,7 +2478,7 @@ class LibraryScreenState extends State<LibraryScreen> {
             control(
               index: 0,
               icon: Symbols.translate_rounded,
-              label: locale == 'fr' ? 'Langue' : 'Language',
+              label: _lt('language'),
               value: _languageLabel(_languageFilter),
               action: _openLanguageMenu,
             ),
@@ -2539,7 +2486,7 @@ class LibraryScreenState extends State<LibraryScreen> {
             control(
               index: 1,
               icon: Symbols.sort_by_alpha_rounded,
-              label: locale == 'fr' ? 'Tri' : 'Sort',
+              label: _lt('sort'),
               value: _sortAscending ? 'A → Z' : 'Z → A',
               action: _openSortMenu,
             ),
@@ -2547,7 +2494,7 @@ class LibraryScreenState extends State<LibraryScreen> {
             control(
               index: 2,
               icon: Symbols.abc_rounded,
-              label: 'Index',
+              label: _lt('index'),
               value: _alphabetAnchor == null ? 'A–Z' : _alphabetAnchor!,
               action: _openIndexMenu,
             ),
@@ -2555,7 +2502,7 @@ class LibraryScreenState extends State<LibraryScreen> {
             control(
               index: 3,
               icon: Symbols.source_rounded,
-              label: 'Source',
+              label: _lt('source'),
               value: _sourceLabel(_sourceFilter),
               action: _openSourceMenu,
             ),
@@ -2563,7 +2510,7 @@ class LibraryScreenState extends State<LibraryScreen> {
             control(
               index: 4,
               icon: Symbols.visibility_off_rounded,
-              label: locale == 'fr' ? 'Contenu' : 'Content',
+              label: _lt('content'),
               value: _contentFilterLabel(),
               action: _openContentMenu,
             ),
@@ -2572,10 +2519,8 @@ class LibraryScreenState extends State<LibraryScreen> {
               control(
                 index: 5,
                 icon: Symbols.search_rounded,
-                label: locale == 'fr' ? 'Recherche' : 'Search',
-                value: _titleQuery.isEmpty
-                    ? (locale == 'fr' ? 'Titre' : 'Title')
-                    : _titleQuery,
+                label: _lt('search'),
+                value: _titleQuery.isEmpty ? _lt('title') : _titleQuery,
                 action: _enterTitleSearchMode,
               ),
             ],
@@ -2593,9 +2538,7 @@ class LibraryScreenState extends State<LibraryScreen> {
               ),
               SizedBox(width: 7.r),
               Text(
-                locale == 'fr'
-                    ? 'Recherche dans les sources…'
-                    : 'Searching sources…',
+                _lt('searchingSources'),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               SizedBox(width: 12.r),
@@ -2646,13 +2589,9 @@ class LibraryScreenState extends State<LibraryScreen> {
                 SizedBox(height: 8.r),
                 Text(
                   _searchingTitles
-                      ? (Localizations.localeOf(context).languageCode == 'fr'
-                            ? 'Recherche dans les catalogues…'
-                            : 'Searching catalogs…')
+                      ? _lt('searchingCatalogs')
                       : hasContent
-                      ? (Localizations.localeOf(context).languageCode == 'fr'
-                            ? 'Aucun livre pour ce filtre'
-                            : 'No books match this filter')
+                      ? _lt('noBooksFilter')
                       : AppLocale.libraryEmptyTitle.getString(context),
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
@@ -2661,7 +2600,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                 if (_catalogFailures > 0) ...[
                   SizedBox(height: 5.r),
                   Text(
-                    '$_catalogFailures catalogue(s) n’ont pas pu être chargés.',
+                    _ltf('catalogFailures', {'count': _catalogFailures}),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.error.withValues(alpha: 0.85),
                     ),
@@ -2770,11 +2709,7 @@ class LibraryScreenState extends State<LibraryScreen> {
               child: const CircularProgressIndicator(strokeWidth: 2.2),
             ),
             SizedBox(width: 10.r),
-            Text(
-              Localizations.localeOf(context).languageCode == 'fr'
-                  ? 'Chargement de la suite du catalogue…'
-                  : 'Loading more catalog titles…',
-            ),
+            Text(_lt('loadingMore')),
           ],
         ),
       ),
@@ -2811,9 +2746,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                 selected: _addonSelectedIndex == 0,
                 icon: Symbols.arrow_back_rounded,
                 title: AppLocale.back.getString(context),
-                subtitle: locale == 'fr'
-                    ? 'Revenir à la Bibliothèque et choisir une autre section.'
-                    : 'Return to the Library and choose another section.',
+                subtitle: _lt('backToLibrary'),
                 onTap: () => _tapAddonSelection(0),
               ),
             ),
@@ -2862,9 +2795,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                             ),
                             SizedBox(width: 7.r),
                             Text(
-                              locale == 'fr'
-                                  ? 'Dépôts installés'
-                                  : 'Installed repositories',
+                              _lt('installedRepositories'),
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
@@ -2873,9 +2804,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                         ),
                         SizedBox(height: 5.r),
                         Text(
-                          locale == 'fr'
-                              ? 'Un dépôt peut être supprimé entièrement, avec toutes les sources qu’il a ajoutées.'
-                              : 'A repository can be removed entirely together with every source it installed.',
+                          _lt('repositoriesHelp'),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface.withValues(
                               alpha: 0.62,
@@ -2915,9 +2844,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                       ),
                       SizedBox(height: 5.r),
                       Text(
-                        locale == 'fr'
-                            ? 'Chaque source affichée ici a été ajoutée par l’utilisateur et peut être retirée individuellement.'
-                            : 'Every source shown here was added by the user and can be removed individually.',
+                        _lt('userSourcesHelp'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurface.withValues(
                             alpha: 0.62,
@@ -2965,7 +2892,6 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildManageSources(BuildContext context) {
     final theme = Theme.of(context);
-    final locale = Localizations.localeOf(context).languageCode;
     final repositoryGroups = _installedRepositoryGroups;
 
     return Column(
@@ -2989,7 +2915,7 @@ class LibraryScreenState extends State<LibraryScreen> {
             ),
             SizedBox(width: 9.r),
             Text(
-              locale == 'fr' ? 'Gérer les sources' : 'Manage sources',
+              _lt('manageSources'),
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -2998,9 +2924,7 @@ class LibraryScreenState extends State<LibraryScreen> {
         ),
         SizedBox(height: 5.r),
         Text(
-          locale == 'fr'
-              ? 'Retirez à tout moment une source devenue inutile ou un dépôt complet devenu indisponible.'
-              : 'Remove an unused source or an unavailable repository at any time.',
+          _lt('manageSourcesHelp'),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.64),
           ),
@@ -3016,9 +2940,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                     children: [
                       if (repositoryGroups.isNotEmpty) ...[
                         Text(
-                          locale == 'fr'
-                              ? 'Dépôts installés'
-                              : 'Installed repositories',
+                          _lt('installedRepositories'),
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -3531,7 +3453,6 @@ class _RepositoryManagementRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
     final radius = BorderRadius.circular(10.r);
     return NeoGlass(
       role: GlassSurfaceRole.card,
@@ -3570,9 +3491,11 @@ class _RepositoryManagementRow extends StatelessWidget {
                   ),
                   SizedBox(height: 2.r),
                   Text(
-                    fr
-                        ? '$sourceCount source${sourceCount > 1 ? 's' : ''} • $origin'
-                        : '$sourceCount source${sourceCount == 1 ? '' : 's'} • $origin',
+                    LibraryFeatureLocale.format(
+                      context,
+                      'sourceCount',
+                      {'count': sourceCount, 'origin': origin},
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -3588,7 +3511,9 @@ class _RepositoryManagementRow extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onDelete,
               icon: const Icon(Symbols.delete_forever_rounded),
-              label: Text(fr ? 'Supprimer le dépôt' : 'Remove repository'),
+              label: Text(
+                LibraryFeatureLocale.text(context, 'removeRepository'),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: theme.colorScheme.error,
                 side: BorderSide(
@@ -3620,7 +3545,6 @@ class _AddonRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fr = Localizations.localeOf(context).languageCode == 'fr';
     final radius = BorderRadius.circular(10.r);
     final location = addon.baseUrl == null
         ? 'local'
@@ -3690,7 +3614,7 @@ class _AddonRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8.r),
                   ),
                   child: Text(
-                    fr ? 'Native' : 'Built-in',
+                    LibraryFeatureLocale.text(context, 'builtIn'),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w700,
@@ -3700,7 +3624,9 @@ class _AddonRow extends StatelessWidget {
               : OutlinedButton.icon(
                   onPressed: onDelete,
                   icon: const Icon(Symbols.delete_outline_rounded),
-                  label: Text(fr ? 'Supprimer la source' : 'Remove source'),
+                  label: Text(
+                    LibraryFeatureLocale.text(context, 'removeSource'),
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: theme.colorScheme.error,
                     side: BorderSide(

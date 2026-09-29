@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/armsx2_ui_locale.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
 import '../providers/file_provider.dart';
@@ -62,7 +63,9 @@ class _Armsx2MultiDeleteDialogState
   int _targetCount = 0;
   String? _error;
 
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
+  String _t(String key) => Armsx2UiLocale.text(context, key);
+  String _tf(String key, Map<String, Object?> values) =>
+      Armsx2UiLocale.format(context, key, values);
 
   String _key(GameModel game) =>
       game.romPath ?? '${game.systemId ?? widget.system.id}:${game.romname}';
@@ -125,11 +128,7 @@ class _Armsx2MultiDeleteDialogState
         // Re-check ownership at the destructive boundary. This guarantees the
         // dialog cannot ever remove ARMSX2/BIOS or ARMSX2/Saves.
         if (!_isOwnedGame(game)) {
-          throw StateError(
-            _fr
-                ? 'Le jeu PS2 n’appartient pas au dossier ARMSX2/Games.'
-                : 'The PS2 game is outside ARMSX2/Games.',
-          );
+          throw StateError(_t('outsideRoot'));
         }
         await GameRepository.deleteGame(
           appSystemId: game.systemId ?? widget.system.id,
@@ -156,9 +155,7 @@ class _Armsx2MultiDeleteDialogState
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = _fr
-            ? 'La suppression ARMSX2 a échoué : $error'
-            : 'ARMSX2 deletion failed: $error';
+        _error = _tf('deleteFailed', {'error': error});
         _deleting = false;
       });
     }
@@ -172,7 +169,7 @@ class _Armsx2MultiDeleteDialogState
 
     return AlertDialog(
       key: const ValueKey('armsx2-multi-delete-dialog'),
-      title: Text(_fr ? 'Supprimer des jeux PS2' : 'Delete PS2 games'),
+      title: Text(_t('deleteGames')),
       content: SizedBox(
         width: 520,
         height: 420,
@@ -182,9 +179,7 @@ class _Armsx2MultiDeleteDialogState
               children: [
                 Expanded(
                   child: Text(
-                    _fr
-                        ? '${_selected.length} jeu(x) sélectionné(s)'
-                        : '${_selected.length} game(s) selected',
+                    _tf('selectedCount', {'count': _selected.length}),
                   ),
                 ),
                 TextButton.icon(
@@ -196,8 +191,8 @@ class _Armsx2MultiDeleteDialogState
                   ),
                   label: Text(
                     allSelected
-                        ? (_fr ? 'Tout désélectionner' : 'Deselect all')
-                        : (_fr ? 'Tout sélectionner' : 'Select all'),
+                        ? _t('deselectAll')
+                        : _t('selectAll'),
                   ),
                 ),
               ],
@@ -237,9 +232,7 @@ class _Armsx2MultiDeleteDialogState
               ),
               const SizedBox(height: 6),
               Text(
-                _fr
-                    ? 'Suppression $_deletedCount / $_targetCount…'
-                    : 'Deleting $_deletedCount / $_targetCount…',
+                _tf('deleting', {'done': _deletedCount, 'total': _targetCount}),
               ),
             ],
             if (_error != null) ...[
@@ -252,16 +245,12 @@ class _Armsx2MultiDeleteDialogState
       actions: [
         TextButton(
           onPressed: _deleting ? null : () => Navigator.of(context).pop(false),
-          child: Text(_fr ? 'Annuler' : 'Cancel'),
+          child: Text(_t('cancel')),
         ),
         FilledButton.icon(
           onPressed: _deleting || _selected.isEmpty ? null : _deleteSelected,
           icon: const Icon(Icons.delete_forever_rounded),
-          label: Text(
-            _fr
-                ? 'Supprimer (${_selected.length})'
-                : 'Delete (${_selected.length})',
-          ),
+          label: Text(_tf('deleteCount', {'count': _selected.length})),
         ),
       ],
     );

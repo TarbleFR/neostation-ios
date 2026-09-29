@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import '../l10n/rpcs3_ui_locale.dart';
 import '../screens/rpcs3_manager_screen.dart';
 import '../services/rpcs3_content_import_service.dart';
 import '../services/rpcs3_internal_service.dart';
@@ -45,9 +46,10 @@ class _Rpcs3InternalPlaylistActionsState
   OverlayEntry? _operationOverlayEntry;
 
   bool get _firmwareInstalled => _firmwareVersion.isNotEmpty;
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
-  String get _failed =>
-      _fr ? 'Échec de l’opération RPCS3.' : 'RPCS3 operation failed.';
+  String _t(String key) => Rpcs3UiLocale.text(context, key);
+  String _tf(String key, Map<String, Object?> values) =>
+      Rpcs3UiLocale.format(context, key, values);
+  String get _failed => _t('operationFailed');
 
   @override
   void initState() {
@@ -56,7 +58,15 @@ class _Rpcs3InternalPlaylistActionsState
       if (mounted && _busy) {
         setState(() {
           _phase = state.phase;
-          _progressMessage = state.message;
+          _progressMessage = switch (state.phase) {
+            Rpcs3RuntimePhase.checkingJit ||
+            Rpcs3RuntimePhase.enablingJit => _t('enabling'),
+            Rpcs3RuntimePhase.initializingCore => _t('jitCoreWillPrepare'),
+            Rpcs3RuntimePhase.installingFirmware => _t('installingFirmware'),
+            Rpcs3RuntimePhase.importingContent => _t('importProgress'),
+            Rpcs3RuntimePhase.ready => _t('ready'),
+            _ => _progressMessage,
+          };
         });
         _operationOverlayEntry?.markNeedsBuild();
       }
@@ -153,7 +163,7 @@ class _Rpcs3InternalPlaylistActionsState
         await _checkFirmware();
         if (!mounted) return;
         if (_firmwareInstalled) {
-          _notice(_fr ? 'Firmware PS3 installé.' : 'PS3 firmware installed.');
+          _notice(_t('firmwareInstalled'));
         }
       }
     } on Rpcs3InternalException catch (error) {
@@ -200,14 +210,10 @@ class _Rpcs3InternalPlaylistActionsState
       _activeAction = action;
       _contentProgress = null;
       _progressMessage = switch (action) {
-        'folder' =>
-          _fr ? 'Ouverture du dossier PS3…' : 'Opening PS3 game folder…',
-        'saves' =>
-          _fr ? 'Préparation des sauvegardes RPCS3…' : 'Preparing RPCS3 saves…',
-        'restoreSaves' => _fr
-            ? 'Import des sauvegardes RPCS3 depuis Fichiers…'
-            : 'Importing RPCS3 saves from Files…',
-        _ => _fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…',
+        'folder' => _t('openingFolder'),
+        'saves' => _t('preparingSaves'),
+        'restoreSaves' => _t('importingSaves'),
+        _ => _t('selectingGames'),
       };
     });
     _showOperationOverlay();
@@ -225,18 +231,10 @@ class _Rpcs3InternalPlaylistActionsState
         }
       } else if (action == 'saves') {
         await Rpcs3InternalService.exportSaveData();
-        _notice(
-          _fr
-              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Export.'
-              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Export.',
-        );
+        _notice(_t('savesAvailable'));
       } else if (action == 'restoreSaves') {
         final imported = await Rpcs3InternalService.importSaveDataFromFiles();
-        _notice(
-          _fr
-              ? '$imported fichier(s) de sauvegarde importé(s) dans RPCS3.'
-              : '$imported RPCS3 save file(s) imported.',
-        );
+        _notice(_tf('savesImported', {'count': imported}));
       }
     } on Rpcs3InternalException catch (error) {
       _notice(error.message);
@@ -256,14 +254,12 @@ class _Rpcs3InternalPlaylistActionsState
   }
 
   Widget _buildFirmwareGate() {
-    final checkingLabel = _fr
-        ? 'Vérification du firmware PS3…'
-        : 'Checking PS3 firmware…';
+    final checkingLabel = _t('checkingFirmware');
     final progressLabel = _progressMessage.isNotEmpty
         ? _progressMessage
         : _phase == Rpcs3RuntimePhase.installingFirmware
-        ? (_fr ? 'Installation du firmware PS3…' : 'Installing PS3 firmware…')
-        : (_fr ? 'Préparation de l’installation…' : 'Preparing installation…');
+        ? _t('installingFirmware')
+        : _t('preparingInstallation');
 
     return Material(
       key: const ValueKey('rpcs3-library-firmware-gate'),
@@ -282,9 +278,7 @@ class _Rpcs3InternalPlaylistActionsState
                   Text(
                     _checking
                         ? checkingLabel
-                        : (_fr
-                              ? 'Firmware PS3 requis'
-                              : 'PS3 firmware required'),
+                        : _t('firmwareRequired'),
                     style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
@@ -297,9 +291,7 @@ class _Rpcs3InternalPlaylistActionsState
                     ],
                   ] else ...[
                     Text(
-                      _fr
-                          ? 'Installez le firmware officiel PS3 pour ouvrir votre bibliothèque. Sélectionnez votre fichier PS3UPDAT.PUP.'
-                          : 'Install the official PS3 firmware to open your library. Select your PS3UPDAT.PUP file.',
+                      _t('firmwareHelp'),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
@@ -307,11 +299,7 @@ class _Rpcs3InternalPlaylistActionsState
                       key: const ValueKey('rpcs3-library-install-firmware'),
                       onPressed: _installFirmware,
                       icon: const Icon(Icons.file_upload_outlined),
-                      label: Text(
-                        _fr
-                            ? 'Installer le firmware PS3'
-                            : 'Install PS3 firmware',
-                      ),
+                      label: Text(_t('installFirmware')),
                     ),
                   ],
                   if (_error != null) ...[
@@ -319,13 +307,13 @@ class _Rpcs3InternalPlaylistActionsState
                     Text(_error!, textAlign: TextAlign.center),
                     TextButton(
                       onPressed: _busy ? null : _checkFirmware,
-                      child: Text(_fr ? 'Réessayer' : 'Retry'),
+                      child: Text(_t('retry')),
                     ),
                   ],
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _busy ? null : widget.onBack,
-                    child: Text(_fr ? 'Retour' : 'Back'),
+                    child: Text(_t('back')),
                   ),
                 ],
               ),
@@ -344,9 +332,9 @@ class _Rpcs3InternalPlaylistActionsState
     final itemLabel = progress == null || progress.itemName.isEmpty
         ? (_progressMessage.isNotEmpty
               ? _progressMessage
-              : (_fr ? 'Import RPCS3 en cours…' : 'RPCS3 import in progress…'))
+              : _t('importProgress'))
         : progress.itemCount > 1
-        ? '${_fr ? 'Import' : 'Import'} ${progress.itemIndex}/${progress.itemCount} • ${progress.itemName}'
+        ? '${_t('import')} ${progress.itemIndex}/${progress.itemCount} • ${progress.itemName}'
         : progress.itemName;
     final detail = progress?.detail.trim() ?? '';
     final percent = fraction == null ? null : (fraction * 100).round();
@@ -377,16 +365,10 @@ class _Rpcs3InternalPlaylistActionsState
                     SizedBox(height: 14.r),
                     Text(
                       exportingSaves
-                          ? (_fr
-                                ? 'Export des sauvegardes RPCS3'
-                                : 'Exporting RPCS3 saves')
+                          ? _t('exportingSaves')
                           : importingSaves
-                          ? (_fr
-                                ? 'Import des sauvegardes RPCS3'
-                                : 'Importing RPCS3 saves')
-                          : (_fr
-                                ? 'Importation du jeu PS3'
-                                : 'Importing PS3 game'),
+                          ? _t('importingSaveFiles')
+                          : _t('importingGame'),
                       style: Theme.of(context).textTheme.titleLarge,
                       textAlign: TextAlign.center,
                     ),
@@ -417,16 +399,10 @@ class _Rpcs3InternalPlaylistActionsState
                     SizedBox(height: 10.r),
                     Text(
                       exportingSaves
-                          ? (_fr
-                                ? 'Le dossier sera accessible dans l’app Fichiers.'
-                                : 'The folder will be available in the Files app.')
+                          ? _t('filesFolderAvailable')
                           : importingSaves
-                          ? (_fr
-                                ? 'Lecture de Sur mon iPhone → NeoStation → RPCS3 → Export.'
-                                : 'Reading On My iPhone → NeoStation → RPCS3 → Export.')
-                          : (_fr
-                                ? 'Laissez NeoStation ouvert pendant l’importation.'
-                                : 'Keep NeoStation open while the import completes.'),
+                          ? _t('readingImport')
+                          : _t('keepOpen'),
                       style: Theme.of(context).textTheme.bodySmall,
                       textAlign: TextAlign.center,
                     ),
@@ -451,7 +427,7 @@ class _Rpcs3InternalPlaylistActionsState
       height: 36.r,
       child: PopupMenuButton<String>(
         key: const ValueKey('rpcs3-internal-import-menu'),
-        tooltip: _fr ? 'RPCS3 / Importer' : 'RPCS3 / Import',
+        tooltip: _t('importMenu'),
         enabled: !_busy && !_checking && _firmwareInstalled,
         padding: EdgeInsets.zero,
         onOpened: _opened,
@@ -509,30 +485,26 @@ class _Rpcs3InternalPlaylistActionsState
     PopupMenuItem(
       enabled: false,
       child: Text(
-        '${_fr ? 'Firmware installé' : 'Firmware installed'} : $_firmwareVersion',
+        '${_t('firmwareInstalledShort')} : $_firmwareVersion',
       ),
     ),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: 'games',
-      child: Text(_fr ? 'Importer des jeux' : 'Import games'),
+      child: Text(_t('importGames')),
     ),
     PopupMenuItem(
       value: 'folder',
-      child: Text(
-        _fr
-            ? 'Importer un dossier de jeu décrypté'
-            : 'Import decrypted game folder',
-      ),
+      child: Text(_t('importDecryptedFolder')),
     ),
     PopupMenuItem(
       value: 'firmware',
-      child: Text(_fr ? 'Importer le firmware PS3' : 'Import PS3 firmware'),
+      child: Text(_t('installFirmware')),
     ),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: 'open',
-      child: Text(_fr ? 'Ouvrir RPCS3' : 'Open RPCS3'),
+      child: Text(_t('openRpcs3')),
     ),
   ];
 }

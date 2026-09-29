@@ -600,6 +600,104 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2Translations
   });
   return values;
 }
+
+NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* ARMSX2SupplementalTranslations() {
+  static NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* values;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    values = @{
+      @"fr": @{
+        @"%@ unlabelled commands": @"%@ commandes sans nom",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nActifs : %@ patches, %@ cheats.",
+        @"Loading…": @"Chargement…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"Les entrées nommées peuvent être sélectionnées individuellement. Les commandes PNACH sans nom sont gérées automatiquement par ARMSX2. Les codes appliqués uniquement au démarrage nécessitent de relancer le jeu. Le mode Hardcore peut bloquer leur activation.",
+        @"Open to scan patches and imported cheats": @"Ouvrir pour analyser les patches et cheats importés",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"Impossible de lire le catalogue de patches. Rouvrez ce menu pour réessayer."
+      },
+      @"de": @{
+        @"%@ unlabelled commands": @"%@ unbenannte Befehle",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nAktiv: %@ Patches, %@ Cheats.",
+        @"Loading…": @"Wird geladen…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"Benannte Einträge können einzeln ausgewählt werden. Unbenannte PNACH-Befehle verwaltet ARMSX2 automatisch. Nur beim Start angewendete Codes erfordern einen Neustart des Spiels. Hardcore kann die Aktivierung blockieren.",
+        @"Open to scan patches and imported cheats": @"Öffnen, um Patches und importierte Cheats zu prüfen",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"Der Patchkatalog konnte nicht gelesen werden. Öffne dieses Menü erneut, um es noch einmal zu versuchen."
+      },
+      @"es": @{
+        @"%@ unlabelled commands": @"%@ comandos sin nombre",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nActivos: %@ parches, %@ trucos.",
+        @"Loading…": @"Cargando…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"Las entradas con nombre se pueden seleccionar individualmente. ARMSX2 gestiona automáticamente los comandos PNACH sin nombre. Los códigos aplicados solo al inicio requieren reiniciar el juego. Hardcore puede bloquear su activación.",
+        @"Open to scan patches and imported cheats": @"Abrir para buscar parches y trucos importados",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"No se pudo leer el catálogo de parches. Vuelve a abrir este menú para reintentarlo."
+      },
+      @"it": @{
+        @"%@ unlabelled commands": @"%@ comandi senza nome",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nAttivi: %@ patch, %@ trucchi.",
+        @"Loading…": @"Caricamento…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"Le voci con nome possono essere selezionate singolarmente. ARMSX2 gestisce automaticamente i comandi PNACH senza nome. I codici applicati solo all’avvio richiedono il riavvio del gioco. Hardcore può impedirne l’attivazione.",
+        @"Open to scan patches and imported cheats": @"Apri per cercare patch e trucchi importati",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"Impossibile leggere il catalogo delle patch. Riapri questo menu per riprovare."
+      },
+      @"pt": @{
+        @"%@ unlabelled commands": @"%@ comandos sem nome",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nAtivos: %@ patches, %@ cheats.",
+        @"Loading…": @"A carregar…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"As entradas com nome podem ser selecionadas individualmente. O ARMSX2 gere automaticamente comandos PNACH sem nome. Códigos aplicados apenas no arranque exigem reiniciar o jogo. Hardcore pode bloquear a ativação.",
+        @"Open to scan patches and imported cheats": @"Abrir para procurar patches e cheats importados",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"Não foi possível ler o catálogo de patches. Reabra este menu para tentar novamente."
+      },
+      @"ru": @{
+        @"%@ unlabelled commands": @"%@ команд без названия",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nАктивно: патчей %@, читов %@.",
+        @"Loading…": @"Загрузка…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"Именованные записи можно выбирать отдельно. Команды PNACH без названия ARMSX2 обрабатывает автоматически. Коды, применяемые только при запуске, требуют перезапуска игры. Hardcore может блокировать активацию.",
+        @"Open to scan patches and imported cheats": @"Открыть для поиска патчей и импортированных читов",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"Не удалось прочитать каталог патчей. Откройте это меню снова, чтобы повторить попытку."
+      },
+      @"id": @{
+        @"%@ unlabelled commands": @"%@ perintah tanpa nama",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\nAktif: %@ patch, %@ cheat.",
+        @"Loading…": @"Memuat…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"Entri bernama dapat dipilih satu per satu. Perintah PNACH tanpa nama ditangani otomatis oleh ARMSX2. Kode yang hanya diterapkan saat mulai memerlukan game dimulai ulang. Hardcore dapat memblokir aktivasi.",
+        @"Open to scan patches and imported cheats": @"Buka untuk memindai patch dan cheat yang diimpor",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"Katalog patch tidak dapat dibaca. Buka kembali menu ini untuk mencoba lagi."
+      },
+      @"ja": @{
+        @"%@ unlabelled commands": @"名前なしコマンド %@ 件",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\n有効: パッチ %@ 件、チート %@ 件。",
+        @"Loading…": @"読み込み中…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"名前付き項目は個別に選択できます。名前のない PNACH コマンドは ARMSX2 が自動処理します。起動時のみ適用されるコードはゲームの再起動が必要です。Hardcore では有効化が制限される場合があります。",
+        @"Open to scan patches and imported cheats": @"パッチとインポート済みチートを検索",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"パッチカタログを読み込めませんでした。このメニューを開き直して再試行してください。"
+      },
+      @"ko": @{
+        @"%@ unlabelled commands": @"이름 없는 명령 %@개",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\n활성: 패치 %@개, 치트 %@개.",
+        @"Loading…": @"불러오는 중…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"이름이 있는 항목은 개별 선택할 수 있습니다. 이름 없는 PNACH 명령은 ARMSX2가 자동 처리합니다. 시작 시에만 적용되는 코드는 게임을 다시 시작해야 합니다. Hardcore 모드에서는 활성화가 제한될 수 있습니다.",
+        @"Open to scan patches and imported cheats": @"패치와 가져온 치트 검색",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"패치 카탈로그를 읽을 수 없습니다. 이 메뉴를 다시 열어 재시도하세요."
+      },
+      @"zh": @{
+        @"%@ unlabelled commands": @"%@ 条未命名命令",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\n已启用：%@ 个补丁，%@ 个作弊项。",
+        @"Loading…": @"正在加载…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"带名称的条目可单独选择。未命名的 PNACH 命令由 ARMSX2 自动处理。仅启动时生效的代码需要重启游戏。Hardcore 模式可能会阻止启用。",
+        @"Open to scan patches and imported cheats": @"打开以扫描补丁和已导入的作弊项",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"无法读取补丁目录。请重新打开此菜单再试。"
+      },
+      @"zh_Hant": @{
+        @"%@ unlabelled commands": @"%@ 條未命名指令",
+        @"%@ · CRC %@\nActive: %@ patches, %@ cheats.": @"%@ · CRC %@\n已啟用：%@ 個補丁，%@ 個作弊項目。",
+        @"Loading…": @"載入中…",
+        @"Named entries can be selected individually. Unlabelled PNACH commands are handled automatically by ARMSX2. Startup-only codes require restarting the game. Hardcore may block activation.": @"具名項目可以個別選擇。未命名的 PNACH 指令由 ARMSX2 自動處理。僅在啟動時套用的代碼需要重新啟動遊戲。Hardcore 模式可能會阻止啟用。",
+        @"Open to scan patches and imported cheats": @"開啟以掃描補丁與已匯入的作弊項目",
+        @"The patch catalogue could not be read. Reopen this menu to retry.": @"無法讀取補丁目錄。請重新開啟此選單再試。"
+      }
+    };
+  });
+  return values;
+}
 }
 
 NSString* ARMSX2CanonicalLocale(NSString* identifier) {
@@ -624,6 +722,7 @@ NSString* ARMSX2LocalizedText(NSString* english, NSString* french, NSString* loc
   if ([locale isEqualToString:@"en"]) return english ?: @"";
   NSDictionary* translations = ARMSX2Translations()[locale];
   NSString* translated = translations[english ?: @""];
+  if (!translated.length) translated = ARMSX2SupplementalTranslations()[locale][english ?: @""];
   if (translated.length) return translated;
   if ([locale isEqualToString:@"fr"] && french.length) return french;
   return english ?: @"";

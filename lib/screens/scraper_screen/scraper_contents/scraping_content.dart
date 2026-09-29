@@ -62,6 +62,7 @@ class ScrapingContentState extends State<ScrapingContent> {
       context,
     );
     final localeMetadataError = AppLocale.metadataError.getString(context);
+    final localeError = AppLocale.error.getString(context);
     final localeScrapeQuotaExceeded = AppLocale.scrapeQuotaExceeded.getString(
       context,
     );
@@ -156,7 +157,7 @@ class ScrapingContentState extends State<ScrapingContent> {
     } catch (e) {
       GlobalNotificationService().update(
         id: notificationId,
-        message: 'Error: ${e.toString()}',
+        message: '$localeError: ${e.toString()}',
         type: GlobalNotificationType.error,
         progress: null,
       );

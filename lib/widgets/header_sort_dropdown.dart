@@ -40,7 +40,7 @@ class HeaderSortDropdownState extends State<HeaderSortDropdown> {
     final result = await showGeneralDialog<String>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: "Sort Dropdown",
+      barrierLabel: AppLocale.sortByGroup.getString(context),
       barrierColor: Colors.transparent,
       pageBuilder: (context, animation, secondaryAnimation) {
         return FadeTransition(

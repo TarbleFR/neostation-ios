@@ -654,7 +654,7 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     final result = await showGeneralDialog<String>(
       context: ctx,
       barrierDismissible: true,
-      barrierLabel: 'Language Picker',
+      barrierLabel: AppLocale.language.getString(ctx),
       barrierColor: Colors.transparent,
       pageBuilder: (context, animation, _) {
         return FadeTransition(

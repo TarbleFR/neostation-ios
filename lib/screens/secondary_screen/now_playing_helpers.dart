@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/secondary_ui_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/providers/theme_provider.dart';
@@ -113,24 +116,32 @@ Widget buildNowPlayingStat({
   );
 }
 
-String formatPlayTime(int? seconds) {
+String formatPlayTime(BuildContext context, int? seconds) {
   if (seconds == null || seconds <= 0) return '—';
   final h = seconds ~/ 3600;
   final m = (seconds % 3600) ~/ 60;
-  if (h > 0) return '${h}h ${m}m';
-  if (m > 0) return '${m}m';
-  return '<1m';
+  final hLabel = AppLocale.hoursShort.getString(context);
+  final mLabel = AppLocale.minutesShort.getString(context);
+  if (h > 0) return '$h$hLabel $m$mLabel';
+  if (m > 0) return '$m$mLabel';
+  return '<1$mLabel';
 }
 
-String formatLastPlayed(int? millis) {
-  if (millis == null) return 'Never';
+String formatLastPlayed(BuildContext context, int? millis) {
+  if (millis == null) return SecondaryUiLocale.text(context, 'never');
   final then = DateTime.fromMillisecondsSinceEpoch(millis);
   final diff = DateTime.now().difference(then);
   if (diff.inDays >= 1) {
     final d = diff.inDays;
-    return d == 1 ? 'Yesterday' : '$d days ago';
+    return d == 1
+        ? SecondaryUiLocale.text(context, 'yesterday')
+        : SecondaryUiLocale.format(context, 'daysAgo', {'count': d});
   }
-  if (diff.inHours >= 1) return '${diff.inHours}h ago';
-  if (diff.inMinutes >= 1) return '${diff.inMinutes}m ago';
-  return 'Just now';
+  if (diff.inHours >= 1) {
+    return SecondaryUiLocale.format(context, 'hoursAgo', {'count': diff.inHours});
+  }
+  if (diff.inMinutes >= 1) {
+    return SecondaryUiLocale.format(context, 'minutesAgo', {'count': diff.inMinutes});
+  }
+  return SecondaryUiLocale.text(context, 'justNow');
 }

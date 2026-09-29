@@ -195,7 +195,7 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
         final result = await FilePicker.pickFiles(
           type: FileType.custom,
           allowedExtensions: ImageUtils.backgroundExtensions,
-          dialogTitle: 'Select Background Media',
+          dialogTitle: AppLocale.backgroundImage.getString(context),
           lockParentWindow: true,
         );
         pickedPath = result?.files.single.path;
@@ -330,7 +330,7 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
         final result = await FilePicker.pickFiles(
           type: FileType.custom,
           allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
-          dialogTitle: 'Select Logo Image',
+          dialogTitle: AppLocale.logoImage.getString(context),
           lockParentWindow: true,
         );
         pickedPath = result?.files.single.path;

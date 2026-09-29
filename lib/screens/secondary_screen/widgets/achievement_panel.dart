@@ -3,6 +3,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../../l10n/app_locale.dart';
+import '../../../l10n/secondary_ui_locale.dart';
 import '../../../models/secondary_achievement_item.dart';
 import '../../../models/secondary_display_state.dart';
 
@@ -204,7 +205,11 @@ class AchievementPanel extends StatelessWidget {
                     ),
                     SizedBox(width: 8.r),
                     Text(
-                      '+${newlyEarned.length} this session',
+                      SecondaryUiLocale.format(
+                        l10nContext,
+                        'thisSession',
+                        {'count': newlyEarned.length},
+                      ),
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 16.r,

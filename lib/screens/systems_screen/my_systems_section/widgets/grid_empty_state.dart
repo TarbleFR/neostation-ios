@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/ios_roms_help_locale.dart';
 import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import '../../../../providers/sqlite_config_provider.dart';
@@ -36,24 +37,14 @@ class GridEmptyState extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Add your ROMs'),
+        title: Text(AppLocale.addRomFolder.getString(dialogContext)),
         content: SingleChildScrollView(
-          child: Text(
-            'NeoStation looks for games in its own folder:\n\n'
-            '$romsFolder\n\n'
-            'To add games: open the Files app on this iPhone, go to '
-            '"On My iPhone" (or "On My iPad") > "NeoStation" > "roms", and '
-            'copy your game files in there — organized into subfolders per '
-            'system (e.g. "snes", "gba", "psx"). You can also drag files in '
-            'from a computer via Finder or iTunes file sharing.\n\n'
-            'Once your files are in place, tap this button again to scan '
-            'for them.',
-          ),
+          child: Text(IosRomsHelpLocale.body(dialogContext, romsFolder)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('OK'),
+            child: Text(AppLocale.ok.getString(dialogContext)),
           ),
         ],
       ),

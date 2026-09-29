@@ -933,7 +933,9 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       } else {
         // Desktop: Use standard file picker
         result = await FilePicker.getDirectoryPath(
-          dialogTitle: 'Select ROM Folder',
+          dialogTitle: context != null && context.mounted
+              ? AppLocale.selectRomFolder.getString(context)
+              : 'Select ROM Folder',
         );
       }
 

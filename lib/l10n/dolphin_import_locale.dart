@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'dolphin_extended_locale.dart';
+
 abstract final class DolphinImportLocale {
   static const values = <String, Map<String, String>>{
     "en": {
@@ -1744,6 +1746,7 @@ abstract final class DolphinImportLocale {
       ...?values[key],
       ..._modernMenuEn,
       if (key == 'fr') ..._modernMenuFr,
+      ...DolphinExtendedLocale.labels(key),
       ..._accountMenu['en']!,
       ...?_accountMenu[key],
     };
@@ -1758,12 +1761,13 @@ abstract final class DolphinImportLocale {
     return locale.languageCode;
   }
 
-  static String text(BuildContext context, String key) =>
-      values[localeKey(Localizations.localeOf(context))]?[key] ??
-      (localeKey(Localizations.localeOf(context)) == 'fr'
-          ? _modernMenuFr[key]
-          : null) ??
-      _modernMenuEn[key] ??
-      values['en']![key] ??
-      key;
+  static String text(BuildContext context, String key) {
+    final locale = localeKey(Localizations.localeOf(context));
+    return DolphinExtendedLocale.value(locale, key) ??
+        values[locale]?[key] ??
+        (locale == 'fr' ? _modernMenuFr[key] : null) ??
+        _modernMenuEn[key] ??
+        values['en']![key] ??
+        key;
+  }
 }

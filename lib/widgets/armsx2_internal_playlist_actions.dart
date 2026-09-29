@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import '../l10n/armsx2_ui_locale.dart';
 import '../services/armsx2_internal_service.dart';
 import 'armsx2_bios_picker.dart';
 import '../services/stikjit_armsx2_service.dart';
@@ -28,7 +29,9 @@ class _Armsx2InternalPlaylistActionsState
     extends State<Armsx2InternalPlaylistActions> {
   bool _busy = false;
 
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
+  String _t(String key) => Armsx2UiLocale.text(context, key);
+  String _tf(String key, Map<String, Object?> values) =>
+      Armsx2UiLocale.format(context, key, values);
 
   void _interaction(bool active) => widget.onInteractionChanged?.call(active);
 
@@ -41,23 +44,18 @@ class _Armsx2InternalPlaylistActionsState
     if (_busy) return;
     setState(() => _busy = true);
     _interaction(true);
-    final fr = _fr;
     try {
       if (action == 'games') {
         final result = await Armsx2InternalService.importGames();
         if (result.imported > 0) {
           await widget.onLibraryChanged();
-          _notice(
-            fr
-                ? '${result.imported} jeu(x) PS2 importé(s).'
-                : '${result.imported} PS2 game(s) imported.',
-          );
+          _notice(_tf('gamesImported', {'count': result.imported}));
         }
         if (result.rejected > 0) {
           _notice(
             result.errors.isNotEmpty
                 ? result.errors.first
-                : (fr ? 'Certains jeux ont été rejetés.' : 'Some games were rejected.'),
+                : _t('gamesRejected'),
           );
         }
       } else if (action == 'choose_bios') {
@@ -71,24 +69,20 @@ class _Armsx2InternalPlaylistActionsState
         if (!launched) {
           _notice(
             StikJitArmsx2Service.lastError ??
-                (fr ? 'Impossible de démarrer le BIOS PS2.' : 'Could not boot the PS2 BIOS.'),
+                _t('bootBiosFailed'),
           );
         }
       } else if (action == 'bios') {
         final result = await Armsx2InternalService.importBios();
         if (result.imported > 0) {
-          _notice(
-            fr
-                ? '${result.imported} BIOS importé(s). Choisissez le BIOS à utiliser.'
-                : '${result.imported} BIOS file(s) imported. Choose the BIOS to use.',
-          );
+          _notice(_tf('biosImported', {'count': result.imported}));
           if (mounted) await showArmsx2BiosPicker(context);
         } else if (result.rejected > 0) {
-          _notice(result.errors.isNotEmpty ? result.errors.first : 'BIOS import failed.');
+          _notice(result.errors.isNotEmpty ? result.errors.first : _t('biosImportFailed'));
         }
       }
     } catch (error) {
-      _notice(fr ? 'Échec de l’import ARMSX2 : $error' : 'ARMSX2 import failed: $error');
+      _notice(_tf('importFailed', {'error': error}));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -106,7 +100,7 @@ class _Armsx2InternalPlaylistActionsState
       height: 36.r,
       child: PopupMenuButton<String>(
         key: const ValueKey('armsx2-internal-import-menu'),
-        tooltip: _fr ? 'ARMSX2 / Importer' : 'ARMSX2 / Import',
+        tooltip: _t('importMenu'),
         enabled: !_busy,
         padding: EdgeInsets.zero,
         onOpened: () => _interaction(true),
@@ -126,21 +120,19 @@ class _Armsx2InternalPlaylistActionsState
         itemBuilder: (context) => [
           PopupMenuItem(
             value: 'games',
-            child: Text(_fr ? 'Importer des jeux' : 'Import games'),
+            child: Text(_t('importGames')),
           ),
           PopupMenuItem(
             value: 'bios',
-            child: Text(_fr ? 'Importer un ou plusieurs BIOS' : 'Import one or more BIOS files'),
+            child: Text(_t('importBios')),
           ),
           PopupMenuItem(
             value: 'choose_bios',
-            child: Text(_fr ? 'Choisir le BIOS PS2' : 'Choose PS2 BIOS'),
+            child: Text(_t('chooseBios')),
           ),
           PopupMenuItem(
             value: 'boot_bios',
-            child: Text(
-              _fr ? 'Démarrer le BIOS PS2' : 'Boot PS2 BIOS',
-            ),
+            child: Text(_t('bootBios')),
           ),
         ],
       ),

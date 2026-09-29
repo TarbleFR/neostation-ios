@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io';
 
+import 'package:neostation/l10n/rpcs3_ui_locale.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/responsive.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -402,9 +403,9 @@ class HeaderState extends State<Header> {
                         if (Platform.isIOS && _jitActive) ...[
                           SizedBox(width: 8.r),
                           Tooltip(
-                            message: 'JIT activé',
+                            message: 'JIT ${Rpcs3UiLocale.text(context, 'enabled')}',
                             child: Semantics(
-                              label: 'JIT activé',
+                              label: 'JIT ${Rpcs3UiLocale.text(context, 'enabled')}',
                               child: Container(
                                 key: const ValueKey('header-jit-active-dot'),
                                 width: 8.r,

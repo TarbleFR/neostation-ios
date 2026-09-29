@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/rpcs3_ui_locale.dart';
 import '../services/rpcs3_content_import_service.dart';
 import '../services/rpcs3_internal_service.dart';
 
@@ -34,7 +35,9 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
   String? _error;
   Rpcs3ContentImportProgress? _contentProgress;
 
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
+  String _t(String key) => Rpcs3UiLocale.text(context, key);
+  String _tf(String key, Map<String, Object?> values) =>
+      Rpcs3UiLocale.format(context, key, values);
 
   @override
   void initState() {
@@ -50,8 +53,18 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
             state.jitReady ||
             Rpcs3InternalService.jitPrepared;
         _coreReady = state.coreReady;
-        _statusMessage = state.message;
-        _error = state.error;
+        _statusMessage = switch (state.phase) {
+          Rpcs3RuntimePhase.checkingJit ||
+          Rpcs3RuntimePhase.enablingJit => _t('enabling'),
+          Rpcs3RuntimePhase.initializingCore => _t('jitCoreWillPrepare'),
+          Rpcs3RuntimePhase.installingFirmware => _t('installingFirmware'),
+          Rpcs3RuntimePhase.importingContent => _t('importProgress'),
+          Rpcs3RuntimePhase.ready => _t('ready'),
+          _ => _statusMessage,
+        };
+        _error = state.phase == Rpcs3RuntimePhase.error
+            ? _t('operationFailed')
+            : state.error;
         _preparing =
             state.phase == Rpcs3RuntimePhase.checkingJit ||
             state.phase == Rpcs3RuntimePhase.enablingJit ||
@@ -117,17 +130,11 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (!mounted) return;
       setState(() {
         if (_jitReady && _coreReady) {
-          _statusMessage = _fr
-              ? 'JIT activé • RPCS3 Core prêt.'
-              : 'JIT enabled • RPCS3 Core ready.';
+          _statusMessage = _t('jitCoreReady');
         } else if (_jitReady) {
-          _statusMessage = _fr
-              ? 'JIT activé • RPCS3 Core à la demande.'
-              : 'JIT enabled • RPCS3 Core on demand.';
+          _statusMessage = _t('jitCoreOnDemand');
         } else {
-          _statusMessage = _fr
-              ? 'Le JIT et RPCS3 Core seront préparés lors de l’importation ou du lancement.'
-              : 'JIT and RPCS3 Core will be prepared when importing or launching.';
+          _statusMessage = _t('jitCoreWillPrepare');
         }
       });
     } on Rpcs3InternalException catch (error) {
@@ -161,9 +168,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (await Rpcs3InternalService.importFirmware()) {
         await _refreshFirmwareVersion();
         _notice(
-          _fr
-              ? 'Firmware PS3 installé : ${_firmwareVersion ?? ''}'
-              : 'PS3 firmware installed: ${_firmwareVersion ?? ''}',
+          _tf('firmwareInstalledNotice', {'version': _firmwareVersion ?? ''}),
         );
       }
       await _readDiagnostics();
@@ -184,23 +189,21 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       _busy = true;
       _error = null;
       _contentProgress = null;
-      _statusMessage = _fr ? 'Sélection des jeux PS3…' : 'Selecting PS3 games…';
+      _statusMessage = _t('selectingGames');
     });
     try {
       final result = await Rpcs3ContentImportService.importGames();
       if (result.imported > 0) {
         await widget.onLibraryChanged();
         _notice(
-          _fr
-              ? '${result.imported} jeu(x) PS3 importé(s).'
-              : '${result.imported} PS3 game(s) imported.',
+          _tf('gamesImported', {'count': result.imported}),
         );
       }
       if (result.rejected > 0) {
         _notice(
           result.errors.isNotEmpty
               ? result.errors.first
-              : (_fr ? 'Import RPCS3 refusé.' : 'RPCS3 import rejected.'),
+              : _t('importRejected'),
         );
       }
       await _readDiagnostics();
@@ -226,17 +229,13 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       _busy = true;
       _error = null;
       _contentProgress = null;
-      _statusMessage = _fr
-          ? 'Sélection du dossier PS3 décrypté…'
-          : 'Selecting decrypted PS3 game folder…';
+      _statusMessage = _t('selectingFolder');
     });
     try {
       if (await Rpcs3ContentImportService.importExtractedGameFolder()) {
         await widget.onLibraryChanged();
         _notice(
-          _fr
-              ? 'Dossier de jeu PS3 décrypté importé.'
-              : 'Decrypted PS3 game folder imported.',
+          _t('folderImported'),
         );
       }
       await _readDiagnostics();
@@ -262,17 +261,13 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       _busy = true;
       _error = null;
       _contentProgress = null;
-      _statusMessage = _fr
-          ? 'Préparation des sauvegardes RPCS3…'
-          : 'Preparing RPCS3 saves…';
+      _statusMessage = _t('preparingSaves');
     });
     try {
       await Rpcs3InternalService.exportSaveData();
       if (mounted) {
         _notice(
-          _fr
-              ? 'Sauvegardes disponibles dans Sur mon iPhone → NeoStation → RPCS3 → Export.'
-              : 'Saves are available in On My iPhone → NeoStation → RPCS3 → Export.',
+          _t('savesAvailable'),
         );
       }
     } on Rpcs3InternalException catch (error) {
@@ -297,17 +292,13 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       _busy = true;
       _error = null;
       _contentProgress = null;
-      _statusMessage = _fr
-          ? 'Import des sauvegardes RPCS3 depuis Fichiers…'
-          : 'Importing RPCS3 saves from Files…';
+      _statusMessage = _t('importingSaves');
     });
     try {
       final imported = await Rpcs3InternalService.importSaveDataFromFiles();
       if (mounted) {
         _notice(
-          _fr
-              ? '$imported fichier(s) importé(s) dans RPCS3.'
-              : '$imported RPCS3 save file(s) imported.',
+          _tf('savesImported', {'count': imported}),
         );
       }
     } on Rpcs3InternalException catch (error) {
@@ -360,7 +351,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
         title: const Text('RPCS3'),
         actions: [
           IconButton(
-            tooltip: _fr ? 'Actualiser' : 'Refresh',
+            tooltip: _t('refresh'),
             onPressed: _busy ? null : _refresh,
             icon: const Icon(Icons.refresh),
           ),
@@ -385,9 +376,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                _fr
-                                    ? 'Émulateur RPCS3 intégré'
-                                    : 'Embedded RPCS3 emulator',
+                                _t('embeddedTitle'),
                                 style: Theme.of(context).textTheme.titleLarge,
                               ),
                             ),
@@ -395,9 +384,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          _fr
-                              ? 'Le JIT est vérifié automatiquement à l’ouverture. Le Core RPCS3 reste dormant jusqu’à l’installation du firmware, l’import d’un jeu ou le lancement d’un titre.'
-                              : 'JIT is checked automatically when this screen opens. RPCS3 Core stays dormant until firmware installation, game import or title launch.',
+                          _t('embeddedDesc'),
                         ),
                         const SizedBox(height: 16),
                         _statusRow(
@@ -408,10 +395,10 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                               : Icons.radio_button_unchecked,
                           label: 'JIT',
                           value: _jitReady
-                              ? (_fr ? 'Activé' : 'Enabled')
+                              ? _t('enabled')
                               : _preparing
-                              ? (_fr ? 'Activation…' : 'Enabling…')
-                              : (_fr ? 'Inactif' : 'Inactive'),
+                              ? _t('enabling')
+                              : _t('inactive'),
                           color: _jitReady
                               ? scheme.primary
                               : _preparing
@@ -424,8 +411,8 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                               : Icons.pause_circle_outline,
                           label: 'RPCS3 Core',
                           value: _coreReady
-                              ? (_fr ? 'Prêt' : 'Ready')
-                              : (_fr ? 'À la demande' : 'On demand'),
+                              ? _t('coreReady')
+                              : _t('onDemand'),
                           color: _coreReady
                               ? scheme.primary
                               : scheme.onSurfaceVariant,
@@ -488,27 +475,17 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                     ),
                     title: Text(
                       !firmwareChecked
-                          ? (_fr
-                                ? 'Firmware PS3 non vérifié'
-                                : 'PS3 firmware not checked')
+                          ? _t('firmwareNotChecked')
                           : firmwareInstalled
-                          ? (_fr
-                                ? 'Firmware PS3 installé'
-                                : 'PS3 firmware installed')
-                          : (_fr
-                                ? 'Firmware PS3 requis'
-                                : 'PS3 firmware required'),
+                          ? _t('firmwareInstalled')
+                          : _t('firmwareRequired'),
                     ),
                     subtitle: Text(
                       !firmwareChecked
-                          ? (_fr
-                                ? 'Vérification des fichiers du firmware…'
-                                : 'Checking the installed firmware files…')
+                          ? _t('checkingFirmware')
                           : firmwareInstalled
                           ? _firmwareVersion!
-                          : (_fr
-                                ? 'Installez le fichier officiel PS3UPDAT.PUP.'
-                                : 'Install the official PS3UPDAT.PUP file.'),
+                          : _t('installOfficialPup'),
                     ),
                   ),
                 ),
@@ -529,7 +506,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                           TextButton.icon(
                             onPressed: _busy ? null : _bootstrap,
                             icon: const Icon(Icons.refresh),
-                            label: Text(_fr ? 'Réessayer' : 'Retry'),
+                            label: Text(_t('retry')),
                           ),
                         ],
                       ),
@@ -541,49 +518,35 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
                   key: const ValueKey('rpcs3-manager-firmware'),
                   onPressed: _busy ? null : _installFirmware,
                   icon: const Icon(Icons.system_update_alt),
-                  label: Text(
-                    _fr ? 'Installer le firmware PS3' : 'Install PS3 firmware',
-                  ),
+                  label: Text(_t('installFirmware')),
                 ),
                 const SizedBox(height: 12),
                 FilledButton.tonalIcon(
                   key: const ValueKey('rpcs3-manager-games'),
                   onPressed: _busy ? null : _importGames,
                   icon: const Icon(Icons.file_upload_outlined),
-                  label: Text(_fr ? 'Importer des jeux' : 'Import games'),
+                  label: Text(_t('importGames')),
                 ),
                 const SizedBox(height: 12),
                 FilledButton.tonalIcon(
                   key: const ValueKey('rpcs3-manager-folder'),
                   onPressed: _busy ? null : _importFolder,
                   icon: const Icon(Icons.folder_open),
-                  label: Text(
-                    _fr
-                        ? 'Importer un dossier de jeu décrypté'
-                        : 'Import a decrypted game folder',
-                  ),
+                  label: Text(_t('importDecryptedFolder')),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   key: const ValueKey('rpcs3-manager-export-saves'),
                   onPressed: _busy ? null : _exportSaves,
                   icon: const Icon(Icons.drive_folder_upload_outlined),
-                  label: Text(
-                    _fr
-                        ? 'Exporter sauvegardes + save states'
-                        : 'Export saves + savestates',
-                  ),
+                  label: Text(_t('exportSaves')),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   key: const ValueKey('rpcs3-manager-import-saves'),
                   onPressed: _busy ? null : _importSaves,
                   icon: const Icon(Icons.restore_page_outlined),
-                  label: Text(
-                    _fr
-                        ? 'Importer sauvegardes + save states'
-                        : 'Import saves + savestates',
-                  ),
+                  label: Text(_t('importSaves')),
                 ),
               ],
             ),

@@ -8,6 +8,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../l10n/app_locale.dart';
+import '../../l10n/library_feature_locale.dart';
 import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../themes/chrome_surface.dart';
 import '../../utils/gamepad_nav.dart';
@@ -69,8 +70,7 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
     return 'library_reader_bookmark_$digest';
   }
 
-  bool get _isFrench =>
-      mounted && Localizations.localeOf(context).languageCode == 'fr';
+  String _lt(String key) => LibraryFeatureLocale.text(context, key);
 
   @override
   void initState() {
@@ -195,7 +195,7 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
     if (!mounted) return;
     setState(() => _hasBookmark = true);
     _showReaderMessage(
-      _isFrench ? 'Marque-page enregistré.' : 'Bookmark saved.',
+      _lt('bookmarkSaved'),
     );
   }
 
@@ -418,8 +418,8 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
               ),
             IconButton(
               tooltip: _pageByPage
-                  ? (_isFrench ? 'Défilement continu' : 'Continuous scroll')
-                  : (_isFrench ? 'Page par page' : 'Page by page'),
+                  ? _lt('continuousScroll')
+                  : _lt('pageByPage'),
               onPressed: _togglePageMode,
               icon: Icon(
                 _pageByPage
@@ -430,11 +430,9 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
             ),
           ],
           IconButton(
-            tooltip: _isFrench
-                ? (_hasBookmark
-                      ? 'Mettre à jour le marque-page'
-                      : 'Ajouter un marque-page')
-                : (_hasBookmark ? 'Update bookmark' : 'Add bookmark'),
+            tooltip: _hasBookmark
+                ? _lt('updateBookmark')
+                : _lt('addBookmark'),
             onPressed: _saveBookmark,
             icon: Icon(
               _hasBookmark ? Icons.bookmark_rounded : Icons.bookmark_add_rounded,
@@ -445,7 +443,7 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
             ),
           ),
           IconButton(
-            tooltip: _isFrench ? 'Adapter à l’écran' : 'Fit to screen',
+            tooltip: _lt('fitToScreen'),
             onPressed: _fitToScreen,
             icon: Icon(Symbols.fit_screen_rounded, size: 18.r),
           ),
@@ -518,7 +516,7 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
                 left: 5.r,
                 top: constraints.maxHeight * 0.48,
                 child: IconButton(
-                  tooltip: _isFrench ? 'Page précédente' : 'Previous page',
+                  tooltip: _lt('previousPage'),
                   onPressed: _previousPage,
                   icon: Icon(
                     Symbols.chevron_left_rounded,
@@ -532,7 +530,7 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
                 right: 5.r,
                 top: constraints.maxHeight * 0.48,
                 child: IconButton(
-                  tooltip: _isFrench ? 'Page suivante' : 'Next page',
+                  tooltip: _lt('nextPage'),
                   onPressed: _nextPage,
                   icon: Icon(
                     Symbols.chevron_right_rounded,
@@ -558,7 +556,7 @@ class _LibraryReaderScreenState extends State<LibraryReaderScreen> {
                     ),
                     child: Text(
                       _currentPageIsLong
-                          ? '${_pageIndex + 1} / ${widget.pages.length} • ${_isFrench ? 'défilement vertical' : 'vertical scroll'}'
+                          ? '${_pageIndex + 1} / ${widget.pages.length} • ${_lt('verticalScroll')}'
                           : '${_pageIndex + 1} / ${widget.pages.length}',
                       style: TextStyle(
                         fontSize: 9.r,

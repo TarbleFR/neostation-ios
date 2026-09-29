@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/rpcs3_ui_locale.dart';
 import '../models/game_model.dart';
 import '../models/system_model.dart';
 import '../providers/file_provider.dart';
@@ -59,7 +60,9 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
   int _targetCount = 0;
   String? _error;
 
-  bool get _fr => Localizations.localeOf(context).languageCode == 'fr';
+  String _t(String key) => Rpcs3UiLocale.text(context, key);
+  String _tf(String key, Map<String, Object?> values) =>
+      Rpcs3UiLocale.format(context, key, values);
 
   String? _titleId(GameModel game) {
     final direct = Rpcs3LaunchService.normalizeTitleId(game.titleId);
@@ -153,9 +156,7 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = _fr
-            ? 'La suppression RPCS3 a échoué : $error'
-            : 'RPCS3 deletion failed: $error';
+        _error = _tf('deleteFailed', {'error': error});
         _deleting = false;
       });
     }
@@ -169,7 +170,7 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
 
     return AlertDialog(
       key: const ValueKey('rpcs3-multi-delete-dialog'),
-      title: Text(_fr ? 'Supprimer des jeux PS3' : 'Delete PS3 games'),
+      title: Text(_t('deleteGames')),
       content: SizedBox(
         width: 520,
         height: 420,
@@ -179,9 +180,7 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    _fr
-                        ? '${_selected.length} jeu(x) sélectionné(s)'
-                        : '${_selected.length} game(s) selected',
+                    _tf('selectedCount', {'count': _selected.length}),
                   ),
                 ),
                 TextButton.icon(
@@ -193,8 +192,8 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
                   ),
                   label: Text(
                     allSelected
-                        ? (_fr ? 'Tout désélectionner' : 'Deselect all')
-                        : (_fr ? 'Tout sélectionner' : 'Select all'),
+                        ? _t('deselectAll')
+                        : _t('selectAll'),
                   ),
                 ),
               ],
@@ -233,9 +232,7 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
               ),
               const SizedBox(height: 6),
               Text(
-                _fr
-                    ? 'Suppression $_deletedCount / $_targetCount…'
-                    : 'Deleting $_deletedCount / $_targetCount…',
+                _tf('deleting', {'done': _deletedCount, 'total': _targetCount}),
               ),
             ],
             if (_error != null) ...[
@@ -248,16 +245,12 @@ class _Rpcs3MultiDeleteDialogState extends State<Rpcs3MultiDeleteDialog> {
       actions: [
         TextButton(
           onPressed: _deleting ? null : () => Navigator.of(context).pop(false),
-          child: Text(_fr ? 'Annuler' : 'Cancel'),
+          child: Text(_t('cancel')),
         ),
         FilledButton.icon(
           onPressed: _deleting || _selected.isEmpty ? null : _deleteSelected,
           icon: const Icon(Icons.delete_forever_rounded),
-          label: Text(
-            _fr
-                ? 'Supprimer (${_selected.length})'
-                : 'Delete (${_selected.length})',
-          ),
+          label: Text(_tf('deleteCount', {'count': _selected.length})),
         ),
       ],
     );

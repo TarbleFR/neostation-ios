@@ -41,7 +41,7 @@ class GameViewModeDropdownState extends State<GameViewModeDropdown> {
     final result = await showGeneralDialog<String>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: "Game View Mode Dropdown",
+      barrierLabel: AppLocale.viewMode.getString(context),
       barrierColor: Colors.transparent,
       pageBuilder: (context, animation, secondaryAnimation) {
         return FadeTransition(
