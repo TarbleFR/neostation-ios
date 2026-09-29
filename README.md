@@ -177,8 +177,12 @@ components, and preserve their license/notices.
 | **GameDB / GameDB-PS3** | **Niema / [@niemasd](https://github.com/niemasd)**, creator of [GameDB](https://github.com/niemasd/GameDB) and [GameDB-PS3](https://github.com/niemasd/GameDB-PS3). NeoStation uses `PS3.titles.json` as a fallback title catalog. GameDB asks downstream projects to credit GameDB and its source datasets; GameDB-PS3 lists **MiSTer Addons** and **Redump** as sources. |
 
 For lower-level dependencies, pinned revisions and additional license details,
-see [NOTICE.md](NOTICE.md), package-specific license files and the upstream
-repositories.
+see [NOTICE.md](NOTICE.md), [the complete legal/credits record](docs/LEGAL_AND_CREDITS.md),
+package-specific license files and the upstream repositories.
+
+For the first public GitHub release, the exact Build 350 binary/source identity
+is recorded in
+[RELEASE_0.0.1_SOURCE_MANIFEST.md](docs/RELEASE_0.0.1_SOURCE_MANIFEST.md).
 
 ## GameDB attribution
 
@@ -200,9 +204,11 @@ NeoStation does not claim authorship of that dataset.
 
 ### NeoStation iOS
 
-NeoStation and this modified iOS fork are distributed under the **GNU General
-Public License v3.0 (GPL-3.0)**. See [LICENSE.md](LICENSE.md) and
-[NOTICE.md](NOTICE.md).
+NeoStation iOS is a modified version of the upstream NeoStation frontend. The
+upstream project is GPL-3.0-or-later and its authorship remains preserved.
+NeoStation's iOS-specific code and distribution notices do not relicense
+third-party components. See [LICENSE.md](LICENSE.md), [NOTICE.md](NOTICE.md) and
+[the complete legal/credits record](docs/LEGAL_AND_CREDITS.md).
 
 ### StikJIT
 
@@ -210,16 +216,51 @@ NeoStation iOS integrates
 **[StikJIT](https://github.com/StikDebug/StikJIT)** for supported JIT
 workflows. StikJIT is licensed under **Mozilla Public License 2.0 (MPL-2.0)**.
 Bundled or referenced third-party components inside StikJIT retain their own
-licenses.
+licenses. Executable redistribution must preserve the MPL notices and inform
+recipients how to obtain the covered source.
 
 ### DolphiniOS / Dolphin
 
 The embedded GameCube/Wii engine uses code from
 **[DolphiniOS](https://github.com/OatmealDome/dolphin-ios)** and Dolphin
-Emulator. The DolphiniOS repository states that most original Dolphin source is
-licensed under **GPL-2.0-or-later**, with individual files/components carrying
-their own compatible notices. Preserve the upstream COPYING, LICENSES and SPDX
-notices.
+Emulator. The pinned DolphiniOS source states that most original Dolphin source
+is licensed under **GPL-2.0-or-later** and that the repository aggregate is
+GPLv3-compatible. Individual file/component SPDX notices and upstream
+`LICENSES/` remain authoritative.
+
+### RPCS3 / XITRIX
+
+The embedded PS3 core is materialized from the exact XITRIX/rpcs3 revision
+recorded in `build-utils/rpcs3/canonical-source.json`. That source carries
+RPCS3's GNU GPL version 2 license; its README states that most files are
+**GPL-2.0-only**, with some files licensed differently. NeoStation does not
+claim to relicense RPCS3. Exact per-file notices and third-party terms must be
+preserved.
+
+### ARMSX2 / PCSX2
+
+The embedded PS2 core is based on **ARMSX2**, which distributes GPLv3 material
+and in turn builds on PCSX2. Preserve ARMSX2/PCSX2 attribution, copyright
+history and component-specific notices.
+
+### KartPad / WiiCompiled
+
+KartPad's own `RIGHTS_AND_LICENSES.md` states that KartPad-owned software and
+its WiiCompiled modifications are **GPL-3.0-only** where covered. The same
+document separately notes that the software license does not grant rights in
+Nintendo-owned game content or automatically clear rights in ahead-of-time
+translated game logic.
+
+NeoStation's pinned KartPad manifest also records that generated
+translation/profile inputs required for a full KartPadCore are excluded from
+the public source delivery. Do not describe the available public source as
+complete Corresponding Source for that translated runtime unless the exact
+required source for the distributed binary is actually available.
+
+### Dusklight
+
+Dusklight's root project is published under **CC0-1.0**. Aurora, Borealis, SDL
+and other embedded dependencies retain their own licenses and notices.
 
 ### GameDB-PS3
 
@@ -228,9 +269,21 @@ its title mapping at runtime rather than claiming it as original NeoStation
 data. Preserve GameDB and source-dataset attribution when redistributing a
 cached or bundled copy.
 
+### Future binary packaging
+
+Future NeoStation iOS builds are required by CI to include a `Legal/` directory
+inside the application bundle with the NeoStation license/notice, third-party
+credits, exact build/source identity and pinned license texts for the principal
+embedded components. The build fails when those legal files are missing or
+stale relative to the source pins.
+
+This policy does **not** modify the already-published `NeoStation.ipa` asset in
+GitHub release 0.0.1.
+
 All other third-party packages, artwork, trademarks and emulator projects retain
-their own copyrights, licenses and terms. See [NOTICE.md](NOTICE.md) for the
-expanded attribution record.
+their own copyrights, licenses and terms. See [NOTICE.md](NOTICE.md) and
+[docs/LEGAL_AND_CREDITS.md](docs/LEGAL_AND_CREDITS.md) for the expanded
+attribution record.
 
 ## Trademark notice
 
