@@ -5,7 +5,7 @@
 #include "NeoCheatLabels.h"
 #include "NeoCheatStore.h"
 
-@interface NEO_EDITOR_CLASS : UIViewController <UIDocumentPickerDelegate, UITextViewDelegate>
+@interface NEO_EDITOR_CLASS : UIViewController <UIDocumentPickerDelegate, UITextViewDelegate, UITableViewDataSource, UITableViewDelegate>
 @property(nonatomic,copy) NSString* localeIdentifier;
 @property(nonatomic,copy) NSDictionary* identity;
 @property(nonatomic,assign) BOOL ps2;
@@ -19,6 +19,15 @@
 @property(nonatomic,copy) NSString* importedType;
 @property(nonatomic,copy) NSString* filename;
 @property(nonatomic,assign) BOOL busy;
+@property(nonatomic,assign) BOOL openDocumentOnAppear;
+@property(nonatomic,assign) BOOL documentImported;
+@property(nonatomic,assign) BOOL documentHasTitles;
+@property(nonatomic,copy) NSArray<NSDictionary*>* previewEntries;
+@property(nonatomic,strong) UILabel* previewSummary;
+@property(nonatomic,strong) UILabel* codeTitleLabel;
+@property(nonatomic,strong) UITableView* previewTable;
+@property(nonatomic,copy) void (^savedResult)(NSDictionary*);
+
 @end
 @implementation NEO_EDITOR_CLASS
 - (NSString*)text:(NSString*)key {return NeoCheatText(key,self.localeIdentifier);}
@@ -72,7 +81,8 @@
     [self.formatControl addTarget:self action:@selector(formatChanged) forControlEvents:UIControlEventValueChanged];
     [stack addArrangedSubview:self.formatControl];
   } else [stack addArrangedSubview:[self label:@"PNACH · patch=1,EE,XXXXXXXX,extended,YYYYYYYY"]];
-  [stack addArrangedSubview:[self label:[self text:@"code"]]];
+  self.codeTitleLabel=[self label:[self text:@"code"]];
+  [stack addArrangedSubview:self.codeTitleLabel];
   self.codeField=[UITextView new];self.codeField.backgroundColor=UIColor.secondarySystemGroupedBackgroundColor;
   self.codeField.textColor=UIColor.labelColor;self.codeField.font=[UIFont monospacedSystemFontOfSize:15 weight:UIFontWeightRegular];
   self.codeField.autocorrectionType=UITextAutocorrectionTypeNo;self.codeField.autocapitalizationType=UITextAutocapitalizationTypeNone;
@@ -80,16 +90,68 @@
   self.codeField.accessibilityIdentifier=@"manualCheatCode";self.codeField.delegate=self;
   [self.codeField.heightAnchor constraintEqualToConstant:180].active=YES;
   [stack addArrangedSubview:self.codeField];
+  self.previewSummary=[self label:@""];self.previewSummary.hidden=YES;
+  self.previewSummary.accessibilityIdentifier=@"cheatImportSummary";
+  [stack addArrangedSubview:self.previewSummary];
+  self.previewTable=[[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+  self.previewTable.backgroundColor=UIColor.secondarySystemGroupedBackgroundColor;
+  self.previewTable.dataSource=self;self.previewTable.delegate=self;
+  self.previewTable.rowHeight=UITableViewAutomaticDimension;self.previewTable.estimatedRowHeight=64;
+  self.previewTable.accessibilityIdentifier=@"cheatImportPreview";self.previewTable.hidden=YES;
+  [self.previewTable.heightAnchor constraintEqualToConstant:280].active=YES;
+  [stack addArrangedSubview:self.previewTable];
   UIButton* import=[UIButton buttonWithType:UIButtonTypeSystem];
   [import setTitle:[self text:@"importFile"] forState:UIControlStateNormal];
+  import.accessibilityIdentifier=@"cheatImportFile";
   [import addTarget:self action:@selector(importPressed) forControlEvents:UIControlEventTouchUpInside];
   [stack addArrangedSubview:import];
   self.errorLabel=[self label:@""];self.errorLabel.textColor=UIColor.systemOrangeColor;
   self.errorLabel.accessibilityIdentifier=@"manualCheatResult";
   [stack addArrangedSubview:self.errorLabel];
 }
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  if(self.openDocumentOnAppear) {self.openDocumentOnAppear=NO;[self importPressed];}
+}
+- (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {return self.previewEntries.count;}
+- (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)path {
+  UITableViewCell* cell=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+  NSDictionary* entry=self.previewEntries[path.row];
+  cell.textLabel.text=NeoField(entry,@"name");cell.textLabel.numberOfLines=0;
+  NSString* detail=[[self text:@"batchLineCount"] stringByReplacingOccurrencesOfString:@"{count}" withString:[entry[@"lineCount"] stringValue]];
+  NSString* type=[entry[@"type"] isEqual:@"actionReplay"]?@"Action Replay":[entry[@"type"] isEqual:@"pnach"]?@"PNACH":@"Gecko";
+  cell.detailTextLabel.text=[NSString stringWithFormat:@"%@ · %@%@%@",type,detail,
+      NeoField(entry,@"creator").length?@" · ":@"",NeoField(entry,@"creator")];
+  cell.detailTextLabel.numberOfLines=0;cell.backgroundColor=UIColor.secondarySystemGroupedBackgroundColor;
+  cell.textLabel.textColor=UIColor.labelColor;cell.detailTextLabel.textColor=UIColor.secondaryLabelColor;
+  cell.accessoryType=UITableViewCellAccessoryDisclosureIndicator;return cell;
+}
+- (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)path {
+  [tableView deselectRowAtIndexPath:path animated:YES];
+  if(self.busy || self.presentedViewController || path.row>=self.previewEntries.count)return;
+  NSDictionary* entry=self.previewEntries[path.row];
+  UIAlertController* alert=[UIAlertController alertControllerWithTitle:entry[@"name"]
+      message:[entry[@"lines"] componentsJoinedByString:@"\n"] preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:[self text:@"closePreview"] style:UIAlertActionStyleCancel handler:nil]];
+  [self presentViewController:alert animated:YES completion:nil];
+}
+- (void)displayDocument:(NSDictionary*)result {
+  self.documentImported=YES;self.documentHasTitles=[result[@"hasTitles"] boolValue];
+  self.previewEntries=result[@"entries"];
+  NSString* count=[@(self.previewEntries.count) stringValue];
+  self.previewSummary.text=[[self text:@"batchPreview"] stringByReplacingOccurrencesOfString:@"{count}" withString:count];
+  NSString* warning=NeoField(result,@"warningKey");
+  if(warning.length)self.previewSummary.text=[self.previewSummary.text stringByAppendingFormat:@"\n%@",[self text:warning]];
+  self.previewSummary.hidden=NO;self.previewTable.hidden=!self.documentHasTitles;
+  [self.previewTable reloadData];
+  self.nameField.hidden=self.documentHasTitles;self.creatorField.hidden=self.documentHasTitles;
+  self.codeTitleLabel.hidden=self.documentHasTitles;self.codeField.hidden=self.documentHasTitles;
+  self.formatControl.hidden=self.documentHasTitles;
+  self.navigationItem.rightBarButtonItem.title=[[self text:@"batchSave"] stringByReplacingOccurrencesOfString:@"{count}" withString:count];
+}
 - (void)textViewDidChange:(UITextView*)textView {
-  if(self.ps2)return;
+  self.navigationItem.rightBarButtonItem.enabled=YES;
+  if(self.ps2){self.errorLabel.text=@"";return;}
   NSString* chosen=@[@"gecko",@"actionReplay",@"ini"][self.formatControl.selectedSegmentIndex];
   NSString* type=NeoString(NeoCheat::detectedFormat(textView.text.UTF8String,chosen.UTF8String));
   if([type isEqual:@"actionReplay"]) self.formatControl.selectedSegmentIndex=1;
@@ -98,9 +160,10 @@
   self.navigationItem.prompt=[NeoCheatText(@"detectedFormat",self.localeIdentifier) stringByReplacingOccurrencesOfString:@"{format}" withString:[type isEqual:@"actionReplay"]?@"Action Replay":[type isEqual:@"ini"]?@"Dolphin INI":@"Gecko"];
   self.errorLabel.text=@"";
 }
-- (void)formatChanged {self.importedType=nil;self.errorLabel.text=@"";}
+- (void)formatChanged {if(self.documentHasTitles)return;self.importedType=nil;self.errorLabel.text=@"";}
 - (void)showResultError:(NSDictionary*)result {
   [self fail:NeoField(result,@"errorKey").length?result[@"errorKey"]:@"writeFailed"];
+  if(NeoField(result,@"entryName").length)self.errorLabel.text=[self.errorLabel.text stringByAppendingFormat:@" — %@",result[@"entryName"]];
   if([result[@"errorLine"] unsignedIntegerValue]) {
     NSString* suffix=[[self text:@"errorAtLine"] stringByReplacingOccurrencesOfString:@"{line}" withString:[result[@"errorLine"] stringValue]];
     self.errorLabel.text=[NSString stringWithFormat:@"%@ %@",self.errorLabel.text,suffix];
@@ -143,7 +206,14 @@
     dispatch_async(dispatch_get_main_queue(),^{
       NEO_EDITOR_CLASS* editor=weakSelf;if(!editor)return;
       editor.busy=NO;editor.navigationItem.rightBarButtonItem.enabled=YES;
-      if(![result[@"success"] boolValue]){[editor showResultError:result];return;}
+      if(![result[@"success"] boolValue]){
+        editor.documentImported=NO;editor.documentHasTitles=NO;editor.previewEntries=@[];
+        editor.previewSummary.hidden=YES;editor.previewTable.hidden=YES;
+        editor.nameField.hidden=NO;editor.creatorField.hidden=NO;editor.codeField.hidden=NO;
+        editor.codeTitleLabel.hidden=NO;editor.formatControl.hidden=NO;editor.codeField.text=@"";
+        editor.filename=nil;editor.navigationItem.rightBarButtonItem.enabled=NO;
+        [editor showResultError:result];return;
+      }
       editor.filename=result[@"filename"];editor.codeField.text=result[@"content"];
       editor.importedType=result[@"type"];
       if(!editor.nameField.text.length) {
@@ -152,6 +222,7 @@
       }
       if(!ps2)editor.formatControl.selectedSegmentIndex=[result[@"type"] isEqual:@"ini"]?2:[result[@"type"] isEqual:@"actionReplay"]?1:0;
       [editor textViewDidChange:editor.codeField];editor.errorLabel.text=@"";
+      [editor displayDocument:result];
     });
   });
 }
@@ -168,6 +239,7 @@
   NSMutableDictionary* request=[self.identity mutableCopy];
   request[@"type"]=type;request[@"name"]=name;request[@"creator"]=creator;
   request[@"content"]=normalized;request[@"filename"]=self.filename?:@"";
+  request[@"batchImport"]=@(self.documentImported);
   self.busy=YES;self.navigationController.view.userInteractionEnabled=NO;
   self.navigationItem.rightBarButtonItem.enabled=NO;
   __weak NEO_EDITOR_CLASS* weakSelf=self;
@@ -176,7 +248,8 @@
     editor.busy=NO;editor.navigationController.view.userInteractionEnabled=YES;
     editor.navigationItem.rightBarButtonItem.enabled=YES;
     if([result[@"success"] boolValue]) {
-      if(editor.saved)editor.saved();
+      if(editor.savedResult)editor.savedResult(result);
+      else if(editor.saved)editor.saved();
       [editor.navigationController popViewControllerAnimated:YES];
     } else [editor showResultError:result];
   });});

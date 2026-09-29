@@ -1,5 +1,5 @@
-name: Neostation iOS 0.0.2 private • Build 364
-run-name: Neostation iOS 0.0.2 private • Build 364 • ${{ github.sha }}
+name: Neostation iOS 0.0.2 private • Build 365
+run-name: Neostation iOS 0.0.2 private • Build 365 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '364'
+        default: '365'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: ${{ contains(github.event.head_commit.message, '[rpcs3-host-only]') && format('neostation-host-check-{0}', github.sha) || 'neostation-ios-private-364' }}
+  group: ${{ contains(github.event.head_commit.message, '[rpcs3-host-only]') && format('neostation-host-check-{0}', github.sha) || 'neostation-ios-private-365' }}
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Neostation iOS 0.0.2 private IPA (364)
+    name: Neostation iOS 0.0.2 private IPA (365)
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '364' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '365' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: Neostation-iOS-0.0.2-Build-364-Private
+      ARTIFACT_NAME: Neostation-iOS-0.0.2-Build-365-Private
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -391,6 +391,11 @@ jobs:
           flutter test test/frontend_media_gate_test.dart test/video_preview_lifecycle_test.dart
           clang++ -std=c++20 -Wall -Wextra -Werror -Inative/cheats test/cheat_parser_test.cpp -o "$RUNNER_TEMP/cheat-parser"
           "$RUNNER_TEMP/cheat-parser"
+          clang++ -std=c++20 -Wall -Wextra -Werror -Inative/cheats test/cheat_bulk_parser_test.cpp -o "$RUNNER_TEMP/cheat-bulk-parser"
+          "$RUNNER_TEMP/cheat-bulk-parser"
+          clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_bulk_store_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-bulk-store"
+          "$RUNNER_TEMP/cheat-bulk-store"
+          python3 test/cheat_bulk_scope_test.py
           clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_store_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-store"
           "$RUNNER_TEMP/cheat-store"
           clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_import_delete361_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-import-delete"
@@ -924,6 +929,7 @@ jobs:
           python3 build-utils/validate_single_ipa_distribution.py \
             "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          python3 build-utils/validate_cheat_bulk_ipa.py "dist/$IPA_NAME.ipa" --report dist/cheat-bulk-validation.json
           python3 build-utils/validate_release002_ipa.py "dist/$IPA_NAME.ipa" \
             --build-number "$BUILD_NUMBER" --report dist/0.0.2-validation.json
           python3 build-utils/validate_stikjit_ipa.py "dist/$IPA_NAME.ipa" \
@@ -968,9 +974,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-364-recipient.pem
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-365-recipient.pem
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           cp dist/stikjit-compatibility.json build/private-test/
+          cp dist/cheat-bulk-validation.json build/private-test/
+          cp docs/cheats-bulk365.md build/private-test/Notes-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
           cp build/dolphin-motion/tests.json build/private-test/phone-shake-tests.json
           cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md

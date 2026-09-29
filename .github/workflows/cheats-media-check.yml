@@ -33,6 +33,11 @@ jobs:
           set -euo pipefail
           clang++ -std=c++20 -Wall -Wextra -Werror -Inative/cheats test/cheat_parser_test.cpp -o /tmp/cheat-parser
           /tmp/cheat-parser
+          clang++ -std=c++20 -Wall -Wextra -Werror -fsanitize=address,undefined -Inative/cheats test/cheat_bulk_parser_test.cpp -o /tmp/cheat-bulk-parser
+          /tmp/cheat-bulk-parser
+          clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_bulk_store_test.mm -framework Foundation -o /tmp/cheat-bulk-store
+          /tmp/cheat-bulk-store
+          python3 test/cheat_bulk_scope_test.py
           clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_store_test.mm -framework Foundation -o /tmp/cheat-store
           /tmp/cheat-store
           clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_import_delete361_test.mm -framework Foundation -o /tmp/cheat-import-delete

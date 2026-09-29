@@ -3,6 +3,9 @@
 #import <Foundation/Foundation.h>
 #import <CommonCrypto/CommonDigest.h>
 #include "NeoCheatParser.h"
+#include "NeoCheatDocument.h"
+#include <map>
+#include <set>
 #include <cstring>
 
 static NSString* NeoString(const std::string& s) { return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding] ?: @""; }
@@ -62,6 +65,28 @@ static NSString* NeoEntriesINI(const std::vector<NeoCheat::Entry>& entries) {
   }
   return out;
 }
+// The same immutable parsed list drives the preview and the final single write.
+static NSArray* NeoCheatEntryPreview(const std::vector<NeoCheat::Entry>& entries) {
+  NSMutableArray* result=[NSMutableArray arrayWithCapacity:entries.size()];
+  for(const auto& entry:entries) {
+    NSMutableArray* lines=[NSMutableArray arrayWithCapacity:entry.lines.size()];
+    for(const auto& line:entry.lines)[lines addObject:NeoString(line)];
+    [result addObject:@{@"name":NeoString(entry.name),@"creator":NeoString(entry.creator),
+        @"type":NeoString(entry.type),@"lines":lines,@"lineCount":@(entry.lines.size())}];
+  }
+  return result;
+}
+static NSString* NeoEntriesPNACH(const std::vector<NeoCheat::Entry>& entries) {
+  NSMutableString* text=[NSMutableString string];
+  for(const auto& entry:entries) {
+    [text appendFormat:@"\n[%@]\n",NeoString(entry.name)];
+    if(!entry.creator.empty())[text appendFormat:@"author=%@\n",NeoString(entry.creator)];
+    for(const auto& note:entry.notes)[text appendFormat:@"// %@\n",NeoString(note)];
+    for(const auto& line:entry.lines)[text appendFormat:@"%@\n",NeoString(line)];
+  }
+  return text;
+}
+static NSDictionary* NeoParserFailure(const NeoCheat::Result& parsed);
 // Shared by document picker tests and both native editors. File read failures,
 // encodings and unsupported binary formats must not look like invalid code.
 static NSDictionary* NeoDecodeCheatDocument(NSData* data,NSString* filename,NSDictionary* identity,BOOL ps2,NSString* fallback) {
@@ -90,21 +115,41 @@ static NSDictionary* NeoDecodeCheatDocument(NSData* data,NSString* filename,NSDi
     text=NeoString(NeoCheat::normalizeText(NeoUTF8(text)));
     if([text rangeOfString:@"<!doctype" options:NSCaseInsensitiveSearch].location!=NSNotFound ||
         [text rangeOfString:@"<html" options:NSCaseInsensitiveSearch].location!=NSNotFound) return NeoCheatFailure(@"unsupportedFile");
-    type=ps2?@"pnach":NeoString(NeoCheat::detectedFormat(text.UTF8String,fallback.UTF8String?:"gecko"));
-    // WiiRD/Ocarina TXT exports start with the six-character GameID and title.
-    NSString* first=[text componentsSeparatedByString:@"\n"].firstObject;
-    if(!ps2 && NeoRegex(first,@"^[A-Z0-9]{6}$")) {
-      if(![first isEqual:identity[@"gameId"]])return NeoCheatFailure(@"wrongGame");
-      const auto parsed=NeoCheat::geckoDownload(text.UTF8String,first.UTF8String);
-      if(!parsed)return NeoCheatFailure(@"invalidCode");
-      text=NeoEntriesINI(parsed.entries);type=@"ini";
-    }
+    type=ps2?@"pnach":[ext isEqual:@"ar"]?@"actionReplay":fallback?:@"gecko";
+    if([ext isEqual:@"ini"] || [ext isEqual:@"dolphin"])type=@"ini";
   }
   if(![text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length)return NeoCheatFailure(@"emptyFile");
-  return @{@"success":@YES,@"content":text,@"type":type,@"filename":filename?:@""};
+  NSString* stem=filename.lastPathComponent.stringByDeletingPathExtension;
+  if(!NeoCheat::safeName(NeoUTF8(stem)))stem=@"Imported cheat";
+  const auto parsed=NeoCheat::parseDocument(NeoUTF8(text),NeoUTF8(type),NeoUTF8(stem),{},
+      ps2?std::string{}:NeoUTF8(NeoField(identity,@"gameId")));
+  if(!parsed)return NeoParserFailure(parsed);
+  // Keep the existing single raw-code editor (including encrypted AR imports).
+  // A titled file instead becomes a canonical list, not one giant pasted cheat.
+  BOOL rawOnly=parsed.entries.size()==1;
+  for(NSString* row in [text componentsSeparatedByString:@"\n"]) {
+    const auto line=NeoCheat::trim(NeoUTF8(row));if(line.empty())continue;
+    std::string normalized;
+    const bool valid=ps2?NeoCheat::pnachLine(line,&normalized):
+        NeoCheat::rawLine(line,&normalized) ||
+        (NeoCheat::documentEncryptedShape(line) && NeoCheat::encryptedLine(line,&normalized));
+    if(!valid){rawOnly=NO;break;}
+  }
+  if(rawOnly)type=NeoString(parsed.entries[0].type);
+  else {text=ps2?NeoEntriesPNACH(parsed.entries):NeoEntriesINI(parsed.entries);type=ps2?@"pnach":@"ini";}
+  // Prove the canonical file preserves all parsed titles and every code line.
+  const auto canonical=NeoCheat::parse(NeoUTF8(text),NeoUTF8(type),NeoUTF8(stem));
+  if(!canonical)return NeoParserFailure(canonical);
+  if(canonical.entries.size()!=parsed.entries.size())return NeoCheatFailure(@"invalidCode");
+  for(size_t i=0;i<parsed.entries.size();++i)
+    if(canonical.entries[i].lines!=parsed.entries[i].lines || canonical.entries[i].type!=parsed.entries[i].type ||
+        (!rawOnly && canonical.entries[i].name!=parsed.entries[i].name))return NeoCheatFailure(@"invalidCode");
+  return @{@"success":@YES,@"content":text,@"type":type,@"filename":filename?:@"",
+      @"entries":NeoCheatEntryPreview(parsed.entries),@"count":@(parsed.entries.size()),
+      @"hasTitles":@(!rawOnly),@"warningKey":[ext isEqual:@"gct"]?@"gctCombined":@""};
 }
 static NSDictionary* NeoParserFailure(const NeoCheat::Result& parsed) {
-  NSString* key=parsed.error=="name"?@"nameRequired":parsed.error=="size"?@"fileTooLarge":parsed.error=="empty"?@"emptyFile":parsed.error=="mixedFormat"?@"mixedFormat":@"invalidCode";
+  NSString* key=parsed.error=="identity"?@"wrongGame":parsed.error=="emptyBlock"?@"emptyBlock":parsed.error=="name"?@"nameRequired":parsed.error=="size"?@"fileTooLarge":parsed.error=="empty"?@"emptyFile":parsed.error=="mixedFormat"?@"mixedFormat":@"invalidCode";
   return @{@"success":@NO,@"errorKey":key,@"errorLine":@(parsed.line),@"added":@0};
 }
 
@@ -172,26 +217,103 @@ static BOOL NeoCommitCheatRemoval(NSDictionary* plan) {
   }
   return [plan[@"replacement"] writeToFile:path options:NSDataWritingAtomic error:nil];
 }
+// File imports de-duplicate by complete code, never silently replace a namesake.
+static std::string NeoEntryKey(const NeoCheat::Entry& entry,BOOL ps2) {
+  std::string name=entry.name;
+  if(ps2)name=NeoUTF8(NeoCheatDisplayName(NeoString(name)));
+  else if(entry.type=="actionReplay" && !entry.creator.empty())name+=" ["+entry.creator+"]";
+  return (ps2?"pnach":entry.type)+":"+name;
+}
+struct NeoBatchSelection {
+  std::vector<NeoCheat::Entry> entries;NSUInteger skipped=0;NSString* conflict=nil;
+};
+static NeoBatchSelection NeoSelectBatch(NSString* root,NSDictionary* snapshot,BOOL ps2,
+                                       const std::vector<NeoCheat::Entry>& entries) {
+  NeoBatchSelection selection;std::set<std::string> reserved,ambiguous;
+  std::map<std::string,NeoCheat::Entry> known;
+  if(ps2) {
+    for(NSDictionary* item in snapshot[@"items"])if([item[@"cheat"] boolValue])
+      reserved.insert("pnach:"+NeoUTF8(NeoCheatDisplayName(NeoField(item,@"name"))));
+  } else {
+    for(NSString* type in @[@"gecko",@"actionReplay"])
+      for(NSDictionary* item in snapshot[type])reserved.insert(NeoUTF8(type)+":"+NeoUTF8(NeoField(item,@"name")));
+  }
+  NSString* folder=[root stringByAppendingPathComponent:ps2?@"cheats":@"GameSettings"];
+  NSMutableArray<NSString*>* files=[NSMutableArray array];
+  if(ps2) {
+    NSString* prefix=[NeoField(snapshot,@"crc").uppercaseString stringByAppendingString:@"-NeoStation-"];
+    for(NSString* name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:folder error:nil])
+      if([name hasPrefix:prefix] && [name.pathExtension isEqual:@"pnach"])[files addObject:name];
+  } else {
+    [files addObject:[NSString stringWithFormat:@"%@.ini",snapshot[@"gameId"]]];
+    [files addObject:[NSString stringWithFormat:@"%@r%@.ini",snapshot[@"gameId"],snapshot[@"revision"]]];
+  }
+  for(NSString* name in files) {
+    NSString* file=[folder stringByAppendingPathComponent:name];
+    NSDictionary* attributes=[NSFileManager.defaultManager attributesOfItemAtPath:file error:nil];
+    if(![attributes[NSFileType] isEqual:NSFileTypeRegular] || [attributes[NSFileSize] unsignedLongLongValue]>1048576)continue;
+    NSString* text=[NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil];
+    if(!text)continue;
+    if(ps2) {
+      NSMutableArray* normalized=[NSMutableArray array];
+      for(NSString* row in [text componentsSeparatedByString:@"\n"]) {
+        NSString* line=[row stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if([line hasPrefix:@"[NeoStation/"] && [line hasSuffix:@"]"])
+          [normalized addObject:[NSString stringWithFormat:@"[%@]",NeoCheatDisplayName([line substringWithRange:NSMakeRange(1,line.length-2)])]];
+        else [normalized addObject:row];
+      }
+      text=[normalized componentsJoinedByString:@"\n"];
+    }
+    const auto parsed=NeoCheat::parse(NeoUTF8(text),ps2?"pnach":"ini","Stored");
+    if(!parsed)continue; // Unknown existing data is never treated as an exact match.
+    for(const auto& entry:parsed.entries) {
+      const auto key=NeoEntryKey(entry,ps2);reserved.insert(key);
+      const auto found=known.find(key);
+      if(found!=known.end() && (found->second.lines!=entry.lines || found->second.encrypted!=entry.encrypted))ambiguous.insert(key);
+      else known[key]=entry;
+    }
+  }
+  for(const auto& entry:entries) {
+    const auto key=NeoEntryKey(entry,ps2);const auto found=known.find(key);
+    if(reserved.count(key)) {
+      if(!ambiguous.count(key) && found!=known.end() && found->second.lines==entry.lines && found->second.encrypted==entry.encrypted) {
+        ++selection.skipped;continue;
+      }
+      selection.conflict=NeoString(entry.name);selection.entries.clear();return selection;
+    }
+    reserved.insert(key);known[key]=entry;selection.entries.push_back(entry);
+  }
+  return selection;
+}
+static NSDictionary* NeoBatchConflict(NSString* name) {
+  return @{@"success":@NO,@"errorKey":@"batchConflict",@"entryName":name?:@"",@"added":@0};
+}
 static NSDictionary* NeoDolphinImport(NSString* userDirectory,NSDictionary* request,NSDictionary* snapshot,BOOL skipDuplicates) {
   if(!userDirectory.length || !NeoIdentityMatches(request,snapshot,NO)) return NeoCheatFailure(@"sessionChanged");
   if([snapshot[@"hardcore"] boolValue]) return NeoCheatFailure(@"hardcore");
   if(!NeoFilenameMatches(NeoField(request,@"filename"),snapshot,NO)) return NeoCheatFailure(@"wrongGame");
   const auto parsed=NeoCheat::parse(NeoUTF8(NeoField(request,@"content")),[NeoField(request,@"type") UTF8String],[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
   if(!parsed) return NeoParserFailure(parsed);
+  for(const auto& entry:parsed.entries)
+    if(entry.type!="gecko" && entry.type!="actionReplay")return NeoCheatFailure(@"invalidCode");
   NSMutableSet* known=[NSMutableSet set];
   for(NSString* key in @[@"gecko",@"actionReplay"]) {
     for(NSDictionary* item in snapshot[key]) [known addObject:[NSString stringWithFormat:@"%@:%@",key,NeoField(item,@"name")]];
   }
-  std::vector<NeoCheat::Entry> incoming;
-  for(const auto& e:parsed.entries) {
+  std::vector<NeoCheat::Entry> incoming;NSUInteger skipped=0;
+  if([request[@"batchImport"] boolValue]) {
+    const auto selection=NeoSelectBatch(userDirectory,snapshot,NO,parsed.entries);
+    if(selection.conflict)return NeoBatchConflict(selection.conflict);
+    incoming=selection.entries;skipped=selection.skipped;
+  } else for(const auto& e:parsed.entries) {
     if(e.type!="gecko" && e.type!="actionReplay") return NeoCheatFailure(@"invalidCode");
     NSString* name=NeoString(e.name);
     if(e.type=="actionReplay" && !e.creator.empty()) name=[name stringByAppendingFormat:@" [%@]",NeoString(e.creator)];
     NSString* key=[NSString stringWithFormat:@"%@:%@",NeoString(e.type),name];
-    if([known containsObject:key]) {if(skipDuplicates)continue;return NeoCheatFailure(@"duplicateName");}
+    if([known containsObject:key]) {if(skipDuplicates){++skipped;continue;}return NeoCheatFailure(@"duplicateName");}
     [known addObject:key];incoming.push_back(e);
   }
-  if(incoming.empty()) return @{@"success":@YES,@"added":@0};
+  if(incoming.empty()) return @{@"success":@YES,@"added":@0,@"skipped":@(skipped)};
   NSString* folder=[userDirectory stringByAppendingPathComponent:@"GameSettings"];
   NSString* target=[folder stringByAppendingPathComponent:[NSString stringWithFormat:@"%@r%@.ini",snapshot[@"gameId"],snapshot[@"revision"]]];
   NSFileManager* fm=NSFileManager.defaultManager; NSError* error=nil;
@@ -214,7 +336,7 @@ static NSDictionary* NeoDolphinImport(NSString* userDirectory,NSDictionary* requ
   // code, enabled state or unrelated per-game graphics setting is replaced.
   if(previous && ![previous writeToFile:[target stringByAppendingString:@".before-import.bak"] options:NSDataWritingAtomic error:&error]) return NeoCheatFailure(@"writeFailed");
   if(![[result dataUsingEncoding:NSUTF8StringEncoding] writeToFile:target options:NSDataWritingAtomic error:&error]) return NeoCheatFailure(@"writeFailed");
-  return @{@"success":@YES,@"added":@(incoming.size()),@"file":target};
+  return @{@"success":@YES,@"added":@(incoming.size()),@"skipped":@(skipped),@"file":target};
 }
 static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* request,NSDictionary* snapshot) {
   if(!dataDirectory.length || !NeoIdentityMatches(request,snapshot,YES)) return NeoCheatFailure(@"sessionChanged");
@@ -222,10 +344,17 @@ static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* reques
   if(!NeoFilenameMatches(NeoField(request,@"filename"),snapshot,YES)) return NeoCheatFailure(@"wrongGame");
   const auto parsed=NeoCheat::parse(NeoUTF8(NeoField(request,@"content")),"pnach",[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
   if(!parsed) return NeoParserFailure(parsed);
+  std::vector<NeoCheat::Entry> incoming=parsed.entries;NSUInteger skipped=0;
+  if([request[@"batchImport"] boolValue]) {
+    const auto selection=NeoSelectBatch(dataDirectory,snapshot,YES,incoming);
+    if(selection.conflict)return NeoBatchConflict(selection.conflict);
+    incoming=selection.entries;skipped=selection.skipped;
+    if(incoming.empty())return @{@"success":@YES,@"added":@0,@"skipped":@(skipped)};
+  }
   NSString* crc=NeoField(snapshot,@"crc").uppercaseString;
   NSMutableString* content=[NSMutableString stringWithFormat:@"// NeoStation manual cheats; serial %@; CRC %@. Disabled until selected.\n",NeoField(snapshot,@"serial"),crc];
   NSMutableSet* names=[NSMutableSet set];
-  for(const auto& entry:parsed.entries) {
+  for(const auto& entry:incoming) {
     NSString* name=[NSString stringWithFormat:@"NeoStation/%@/%@",crc,NeoString(entry.name)];
     if([names containsObject:name]) return NeoCheatFailure(@"duplicateName");
     [names addObject:name];
@@ -241,7 +370,10 @@ static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* reques
   // (which also loads other revisions). Never use the 00000000 wildcard.
   NSString* target=[folder stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-NeoStation-%@.pnach",crc,digest]];
   NSFileManager* fm=NSFileManager.defaultManager;NSError* error=nil;
-  if([fm fileExistsAtPath:target]) return @{@"success":@YES,@"added":@0};
+  if([fm fileExistsAtPath:target]) {
+    if([request[@"batchImport"] boolValue])return NeoCheatFailure(@"writeFailed");
+    return @{@"success":@YES,@"added":@0};
+  }
   for(NSDictionary* item in snapshot[@"items"]) {
     NSString* comparable=[NSString stringWithFormat:@"NeoStation/%@/%@",crc,NeoCheatDisplayName(NeoField(item,@"name"))];
     if([item[@"cheat"] boolValue] && [names containsObject:comparable]) return NeoCheatFailure(@"duplicateName");
@@ -254,5 +386,5 @@ static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* reques
   NSString* unique=[NSString stringWithFormat:@"[NeoStation/%@/%@/",crc,token];
   bytes=[[content stringByReplacingOccurrencesOfString:prefix withString:unique] dataUsingEncoding:NSUTF8StringEncoding];
   if(![fm createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:&error] || ![bytes writeToFile:target options:NSDataWritingAtomic error:&error]) return NeoCheatFailure(@"writeFailed");
-  return @{@"success":@YES,@"added":@(parsed.entries.size()),@"file":target};
+  return @{@"success":@YES,@"added":@(incoming.size()),@"skipped":@(skipped),@"file":target};
 }

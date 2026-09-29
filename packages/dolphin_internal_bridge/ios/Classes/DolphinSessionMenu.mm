@@ -60,6 +60,30 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   return [translated componentsJoinedByString:@" / "];
 }
 
+- (void)importCheatFilePressed {[self openManualCheatEditor:YES];}
+- (void)openManualCheatEditor:(BOOL)importFile {
+  if(self.loading || !self.performCheatCommand || !self.cheatsSnapshot || self.navigationController.topViewController!=self)return;
+      if([self.cheatsSnapshot[@"hardcore"] boolValue]) {
+        self.navigationItem.prompt=NeoCheatText(@"hardcore",self.labels[@"__locale"]);return;
+      }
+      DOLManualCheatEditor* editor=[DOLManualCheatEditor new];
+      editor.localeIdentifier=self.labels[@"__locale"]?:@"en";
+      editor.identity=self.cheatsSnapshot;editor.ps2=NO;editor.openDocumentOnAppear=importFile;
+      __weak DolphinSessionMenu* weakMenu=self;
+      editor.saveCheat=^(NSDictionary* value,void (^completion)(NSDictionary*)) {
+        DolphinSessionMenu* menu=weakMenu;
+        if(!menu){completion(NeoCheatFailure(@"sessionChanged"));return;}
+        NSMutableDictionary* request=[value mutableCopy];request[@"kind"]=@"import";
+        menu.performCheatCommand(request,^(BOOL success,NSDictionary* result){completion(result?:NeoCheatFailure(@"writeFailed"));});
+      };
+      editor.savedResult=^(NSDictionary* result){
+        weakMenu.stateMessage=NeoCheatBatchResult(result,weakMenu.labels[@"__locale"]);
+        weakMenu.navigationItem.prompt=weakMenu.stateMessage;
+        [weakMenu reloadCheats];
+      };
+      [self.navigationController pushViewController:editor animated:YES];return;
+}
+
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
@@ -83,6 +107,12 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
       initWithTitle:[self text:@"resume"] style:UIBarButtonItemStyleDone
       target:self action:@selector(resumePressed)];
+  if(self.page==DOLMenuCheats) {
+    UIBarButtonItem* file=[[UIBarButtonItem alloc] initWithTitle:NeoCheatText(@"importFile",self.labels[@"__locale"])
+        style:UIBarButtonItemStylePlain target:self action:@selector(importCheatFilePressed)];
+    file.accessibilityIdentifier=@"cheatImportFromMenu";
+    self.navigationItem.rightBarButtonItems=@[self.navigationItem.rightBarButtonItem,file];
+  }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -666,27 +696,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         title:[self text:key]] animated:YES];
   } else if (self.page == DOLMenuCheats) {
     if (!self.performCheatCommand || !self.cheatsSnapshot) return;
-    if (row == 2) {
-      if([self.cheatsSnapshot[@"hardcore"] boolValue]) {
-        self.navigationItem.prompt=NeoCheatText(@"hardcore",self.labels[@"__locale"]);return;
-      }
-      DOLManualCheatEditor* editor=[DOLManualCheatEditor new];
-      editor.localeIdentifier=self.labels[@"__locale"]?:@"en";
-      editor.identity=self.cheatsSnapshot;editor.ps2=NO;
-      __weak DolphinSessionMenu* weakMenu=self;
-      editor.saveCheat=^(NSDictionary* value,void (^completion)(NSDictionary*)) {
-        DolphinSessionMenu* menu=weakMenu;
-        if(!menu){completion(NeoCheatFailure(@"sessionChanged"));return;}
-        NSMutableDictionary* request=[value mutableCopy];request[@"kind"]=@"import";
-        menu.performCheatCommand(request,^(BOOL success,NSDictionary* result){completion(result?:NeoCheatFailure(@"writeFailed"));});
-      };
-      editor.saved=^{
-        weakMenu.stateMessage=NeoCheatText(@"savedDisabled",weakMenu.labels[@"__locale"]);
-        weakMenu.navigationItem.prompt=weakMenu.stateMessage;
-        [weakMenu reloadCheats];
-      };
-      [self.navigationController pushViewController:editor animated:YES];return;
-    }
+    if (row == 2) {[self openManualCheatEditor:NO];return;}
     if (row == 3) {
       NSString* id=NeoField(self.cheatsSnapshot,@"gameId");
       NSString* query=[id stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];

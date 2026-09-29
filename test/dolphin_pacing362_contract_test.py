@@ -8,7 +8,15 @@ subprocess.run(['git','diff','--exit-code',base,'HEAD','--',
  'lib/services/frontend_media_gate.dart','lib/services/game/game_launch_service.dart',
  'lib/screens/game_screen/my_games_list','lib/screens/secondary_screen','lib/widgets/shaders',
  ':(exclude)packages/armsx2_internal_bridge/ios/Classes/Armsx2JitBridgePlugin.mm',
- ':(exclude)packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm'],cwd=root,check=True)
+ ':(exclude)packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm',
+ ':(exclude)packages/armsx2_internal_bridge/ios/Classes/NeoCheatParser.h',
+ ':(exclude)packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h',
+ ':(exclude)packages/armsx2_internal_bridge/ios/Classes/NeoCheatStore.h',
+ ':(exclude)packages/armsx2_internal_bridge/ios/Classes/NeoCheatLabels.h',
+ ':(exclude)packages/armsx2_internal_bridge/ios/Classes/ARMSX2ManualCheatEditor.h',
+ ':(exclude)packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm'],cwd=root,check=True)
+# Intentional import UI/shared-header changes are separately constrained and tested.
+subprocess.run(['python3',str(root/'test/cheat_bulk_scope_test.py')],cwd=root,check=True)
 # These two exceptions are verified against their complete baseline text after
 # removing only the legacy diagnostic additions; no JIT behavior is exempted.
 subprocess.run(['python3',str(root/'test/stikjit_scoped_host_test.py')],cwd=root,check=True)

@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 root=Path(__file__).resolve().parents[1]
 for pkg, cls in [('dolphin_internal_bridge','DOLManualCheatEditor'),('armsx2_internal_bridge','ARMSX2ManualCheatEditor')]:
-    for name in ('NeoCheatParser.h','NeoCheatStore.h','NeoCheatLabels.h'):
+    for name in ('NeoCheatParser.h','NeoCheatDocument.h','NeoCheatStore.h','NeoCheatLabels.h'):
         assert (root/'native/cheats'/name).read_bytes()==(root/'packages'/pkg/'ios/Classes'/name).read_bytes(),name
     expected=(root/'native/cheats/NeoManualCheatEditor.template.h').read_text().replace('NEO_EDITOR_CLASS',cls)
     assert expected==(root/'packages'/pkg/'ios/Classes'/f'{cls}.h').read_text()

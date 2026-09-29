@@ -148,6 +148,29 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
            @"save", @"load", @"resume", @"quit"];
 }
 
+- (void)importCheatFilePressed {[self openManualCheatEditor:YES];}
+- (void)openManualCheatEditor:(BOOL)importFile {
+  if(self.navigationController.topViewController!=self)return;
+      if(!self.readPatches || !self.importCheats || self.loading)return;
+      self.loading=YES;
+      __weak Armsx2SessionMenu* weakSelf=self;
+      self.readPatches(^(NSDictionary* identity){ARMSX2MenuOnMain(^{
+        Armsx2SessionMenu* menu=weakSelf;if(!menu)return;menu.loading=NO;
+        if(![identity[@"available"] boolValue] || [identity[@"hardcore"] boolValue]) {
+          menu.navigationItem.prompt=NeoCheatText([identity[@"hardcore"] boolValue]?@"hardcore":@"sessionChanged",menu.localeIdentifier);return;
+        }
+        ARMSX2ManualCheatEditor* editor=[ARMSX2ManualCheatEditor new];
+        editor.ps2=YES;editor.localeIdentifier=menu.localeIdentifier;editor.identity=identity;
+        editor.openDocumentOnAppear=importFile;
+        editor.saveCheat=menu.importCheats;
+        editor.savedResult=^(NSDictionary* result){
+          weakSelf.navigationItem.prompt=NeoCheatBatchResult(result,weakSelf.localeIdentifier);
+          [weakSelf reloadPatches];
+        };
+        if(menu.navigationController.topViewController==menu)[menu.navigationController pushViewController:editor animated:YES];
+      });});return;
+}
+
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.overrideUserInterfaceStyle=UIUserInterfaceStyleDark;
@@ -170,6 +193,12 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
       initWithTitle:ARMSX2MenuText(@"Resume Game", @"Reprendre le jeu")
       style:UIBarButtonItemStyleDone target:self action:@selector(resumePressed)];
+  if(self.page==ARMSX2MenuCheats) {
+    UIBarButtonItem* file=[[UIBarButtonItem alloc] initWithTitle:NeoCheatText(@"importFile",self.localeIdentifier)
+        style:UIBarButtonItemStylePlain target:self action:@selector(importCheatFilePressed)];
+    file.accessibilityIdentifier=@"cheatImportFromMenu";
+    self.navigationItem.rightBarButtonItems=self.navigationItem.rightBarButtonItem?@[self.navigationItem.rightBarButtonItem,file]:@[file];
+  }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -593,25 +622,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     }
     [self presentViewController:sheet animated:YES completion:nil];
   } else if (self.page == ARMSX2MenuCheats) {
-    if (row == 3) {
-      if(!self.readPatches || !self.importCheats || self.loading)return;
-      self.loading=YES;
-      __weak Armsx2SessionMenu* weakSelf=self;
-      self.readPatches(^(NSDictionary* identity){ARMSX2MenuOnMain(^{
-        Armsx2SessionMenu* menu=weakSelf;if(!menu)return;menu.loading=NO;
-        if(![identity[@"available"] boolValue] || [identity[@"hardcore"] boolValue]) {
-          menu.navigationItem.prompt=NeoCheatText([identity[@"hardcore"] boolValue]?@"hardcore":@"sessionChanged",menu.localeIdentifier);return;
-        }
-        ARMSX2ManualCheatEditor* editor=[ARMSX2ManualCheatEditor new];
-        editor.ps2=YES;editor.localeIdentifier=menu.localeIdentifier;editor.identity=identity;
-        editor.saveCheat=menu.importCheats;
-        editor.saved=^{
-          weakSelf.navigationItem.prompt=NeoCheatText(@"savedDisabled",weakSelf.localeIdentifier);
-          [weakSelf reloadPatches];
-        };
-        if(menu.navigationController.topViewController==menu)[menu.navigationController pushViewController:editor animated:YES];
-      });});return;
-    }
+    if (row == 3) {[self openManualCheatEditor:NO];return;}
     if (row == 0) {
       const BOOL enabled = [self.snapshot[@"cheats"] boolValue];
       [self pushChoice:ARMSX2MenuText(@"Enable Cheats", @"Activer les cheats")
