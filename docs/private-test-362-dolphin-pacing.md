@@ -53,7 +53,10 @@ and unrelated settings edited during the session are retained. A following Build
 Restore Build 361 behavior, then quit and relaunch, compares the original rendering
 and polling behavior inside this build. Quit Dolphin normally before installing the
 old IPA. If iOS killed the process, reopen Build 362 first to recover its journal.
-Shader caches are not deleted on rollback.
+Shader caches are not deleted on rollback. Original/hybrid-off startup also temporarily
+seeds any absent GFX keys with their upstream defaults: BaseConfigLoader only updates
+present keys on Config::Load and otherwise retains values in a warm process. These
+default keys are removed again after shutdown if they were originally absent.
 
 ## Diagnostics and tests
 

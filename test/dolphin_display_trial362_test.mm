@@ -37,7 +37,23 @@ int main(){@autoreleasepool {
  after=[NSString stringWithContentsOfFile:gfx encoding:NSUTF8StringEncoding error:nil];
  assert([DOLIniValue(after,@"Settings",@"MSAA") isEqual:@"8"]);
  assert([DOLIniValue(after,@"Settings",@"ShaderCompilationMode") isEqual:@"0"]);
- assert(DOLBeginDisplayTrial(root,@"G4BP08",0));assert(![fm fileExistsAtPath:DOLTrialJournal(root)]);
+ assert(DOLBeginDisplayTrial(root,@"G4BP08",0));assert([fm fileExistsAtPath:DOLTrialJournal(root)]);
+ assert(DOLRestoreDisplayTrial(root));assert(![fm fileExistsAtPath:DOLTrialJournal(root)]);
+ // Absent-on-disk keys still need explicit values at startup: the upstream
+ // Base layer retains old keys across Config::Load in a warm app session.
+ NSString* minimal=@"[Hardware]\nVSync = False\n";
+ [minimal writeToFile:gfx atomically:YES encoding:NSUTF8StringEncoding error:nil];
+ assert(DOLBeginDisplayTrial(root,@"",2));assert(DOLRestoreDisplayTrial(root));
+ assert(DOLBeginDisplayTrial(root,@"",1));
+ after=[NSString stringWithContentsOfFile:gfx encoding:NSUTF8StringEncoding error:nil];
+ assert([DOLIniValue(after,@"Settings",@"ShaderCompilationMode") isEqual:@"0"]);
+ assert([DOLIniValue(after,@"Settings",@"MTLUsePresentDrawable") isEqual:@"1"]);
+ assert(DOLRestoreDisplayTrial(root));assert(DOLBeginDisplayTrial(root,@"",0));
+ after=[NSString stringWithContentsOfFile:gfx encoding:NSUTF8StringEncoding error:nil];
+ assert([DOLIniValue(after,@"Settings",@"ShaderCompilationMode") isEqual:@"0"]);
+ assert([DOLIniValue(after,@"Settings",@"MTLUsePresentDrawable") isEqual:@"2"]);
+ assert(DOLRestoreDisplayTrial(root));
+ assert([[NSString stringWithContentsOfFile:gfx encoding:NSUTF8StringEncoding error:nil] isEqual:minimal]);
  assert(!DOLBeginDisplayTrial(root,@"../../other",2));assert(!DOLBeginDisplayTrial(root,@"G4BP08",3));
  [@"{\"schema\":1,\"files\":[{\"path\":\"../../outside\"}]}" writeToFile:DOLTrialJournal(root) atomically:YES encoding:NSUTF8StringEncoding error:nil];
  NSString* unchanged=[NSString stringWithContentsOfFile:gfx encoding:NSUTF8StringEncoding error:nil];

@@ -82,11 +82,10 @@ static BOOL DOLRestoreDisplayTrial(NSString* user) {
 }
 static BOOL DOLBeginDisplayTrial(NSString* user,NSString* gameId,NSInteger profile) {
   if(!user.length || !DOLRestoreDisplayTrial(user))return NO;
-  if(profile==0)return YES;
-  if(profile!=1 && profile!=2)return NO;
+  if(profile<0 || profile>2)return NO;
   NSFileManager* fm=NSFileManager.defaultManager;
   NSMutableArray<NSString*>* paths=[NSMutableArray arrayWithObject:@"Config/GFX.ini"];
-  if(gameId.length) {
+  if(profile!=0 && gameId.length) {
     if([gameId rangeOfString:@"^[A-Z0-9]{4,6}$" options:NSRegularExpressionSearch].location==NSNotFound)return NO;
     NSString* folder=[user stringByAppendingPathComponent:@"GameSettings"];
     if(![fm createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil])return NO;
@@ -108,7 +107,19 @@ static BOOL DOLBeginDisplayTrial(NSString* user,NSString* gameId,NSInteger profi
     if(!before)return NO;
     NSString* patched=before;NSMutableArray* keys=[NSMutableArray array];
     NSString* section=[relative hasPrefix:@"Config/"]?@"Settings":@"Video_Settings";
-    NSDictionary* requested=profile==2?@{@"MTLUsePresentDrawable":@"1",@"ShaderCompilationMode":@"2"}:@{@"MTLUsePresentDrawable":@"1"};
+    NSMutableDictionary* requested=[NSMutableDictionary dictionary];
+    if([relative hasPrefix:@"Config/"]) {
+      // The pinned BaseConfigLoader::Load updates present keys but does not clear
+      // keys omitted from disk. Seed original defaults too, or a previous hybrid
+      // run could survive a rollback in the same NeoStation process.
+      id originalMetal=DOLIniValue(before,section,@"MTLUsePresentDrawable");
+      id originalShaders=DOLIniValue(before,section,@"ShaderCompilationMode");
+      requested[@"MTLUsePresentDrawable"]=profile==0?(originalMetal==NSNull.null?@"2":originalMetal):@"1";
+      requested[@"ShaderCompilationMode"]=profile==2?@"2":(originalShaders==NSNull.null?@"0":originalShaders);
+    } else {
+      requested[@"MTLUsePresentDrawable"]=@"1";
+      if(profile==2)requested[@"ShaderCompilationMode"]=@"2";
+    }
     for(NSString* key in [[requested allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
       [keys addObject:@{@"section":section,@"key":key,@"old":DOLIniValue(before,section,key),@"trial":requested[key]}];
       patched=DOLIniSet(patched,section,key,requested[key]);
