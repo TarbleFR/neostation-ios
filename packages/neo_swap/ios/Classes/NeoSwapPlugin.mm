@@ -2,6 +2,7 @@
 #import "NeoSwap.h"
 #include "NeoSwapCapacityProbe.h"
 #import <Foundation/Foundation.h>
+#include <TargetConditionals.h>
 #include <mach/mach.h>
 #include <os/proc.h>
 #include <fcntl.h>
@@ -122,6 +123,7 @@ static const uint64_t kMiB = 1024 * 1024;
         @"processFootprintBytes":kr == KERN_SUCCESS ? @(memory.phys_footprint) : NSNull.null,
         @"processResidentBytes":kr == KERN_SUCCESS ? @(memory.resident_size) : NSNull.null,
         @"processAvailableBytes":@(os_proc_available_memory()),
+        @"memoryHeadroomPolicy":TARGET_OS_SIMULATOR ? @"macOS-hosted simulator; iOS process limit unavailable" : @"iOS process headroom above256MiB required for capacity test",
         @"physicalMemoryBytes":@(NSProcessInfo.processInfo.physicalMemory),
         @"osVersion":NSProcessInfo.processInfo.operatingSystemVersionString,
         @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"",
@@ -186,7 +188,7 @@ static const uint64_t kMiB = 1024 * 1024;
                         NSMutableDictionary* row=[[self snapshot:@"capacity_probe"] mutableCopy];
                         row[@"phase"]=[NSString stringWithUTF8String:phase];row[@"testedBytes"]=@(bytes);
                         [samples addObject:row];[self appendRecord:row];
-                      },[]{return os_proc_available_memory()>256*kMiB;});
+                      },[]{return NeoSwapCapacityHeadroom(os_proc_available_memory(),TARGET_OS_SIMULATOR!=0);});
                     self.lastCapacityProbe=@{@"requestedBytes":@(uint64_t(amount)*kMiB),@"result":@(code),
                       @"dataVerified":@(code==NEOSWAP_OK),@"samples":samples,
                       @"kind":@"file-backed data capacity; not physical RAM or a donation test"};

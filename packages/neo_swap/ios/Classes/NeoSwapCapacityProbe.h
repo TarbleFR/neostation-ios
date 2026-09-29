@@ -6,6 +6,13 @@
 #include <cstring>
 #include <sys/mman.h>
 
+// A Simulator process is hosted by macOS and may have no managed iOS memory
+// limit. Its zero os_proc_available_memory result is not device headroom.
+// Device zero stays a refusal; the Simulator exercises file integrity only.
+inline bool NeoSwapCapacityHeadroom(uint64_t available,bool simulator) {
+  return simulator || available>256ULL*1024*1024;
+}
+
 // A real file-backed capacity exercise, separate from game allocations. Each
 // block is synced before asking the OS to discard its clean resident pages.
 // MADV_DONTNEED is only a hint; never report it as bytes physically saved.

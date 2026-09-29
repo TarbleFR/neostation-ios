@@ -52,6 +52,13 @@ then reloads and verifies all requested bytes before releasing every block.
 The discard operation is a hint and is not reported as proven RAM savings.
 On iOS, testing aborts if reported process headroom drops below256MiB.
 Diagnostics record before/write/sync/verify/release and physical footprint.
+The iOS18 Simulator returned zero process headroom under its macOS host; it
+therefore exercises file integrity with the Simulator policy, clearly labelled
+in diagnostics. Device zero still aborts, as does headroom at/below256MiB.
+These boundaries are tested, with the injected pressure/cleanup tests retained.
+Apple’s XNU tests explain that macOS reports zero without both memory-managed
+process status and a hard limit: https://github.com/apple-oss-distributions/xnu/blob/main/tests/os_proc.c
+API reference: https://developer.apple.com/documentation/os/os_proc_available_memory
 The test needs more than10GiB of available storage for an8GiB run.
 
 The production client still covers only CPU-side RSX arrays/cache allocations
