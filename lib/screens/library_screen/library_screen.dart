@@ -2718,7 +2718,6 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildAddons(BuildContext context) {
     final theme = Theme.of(context);
-    final locale = Localizations.localeOf(context).languageCode;
     final repositoryGroups = _installedRepositoryGroups;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

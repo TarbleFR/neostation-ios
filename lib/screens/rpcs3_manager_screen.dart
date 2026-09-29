@@ -280,7 +280,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _statusMessage = _fr ? 'RPCS3 prêt.' : 'RPCS3 ready.';
+          _statusMessage = _t('ready');
         });
       }
     }
@@ -311,7 +311,7 @@ class _Rpcs3ManagerScreenState extends State<Rpcs3ManagerScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _statusMessage = _fr ? 'RPCS3 prêt.' : 'RPCS3 ready.';
+          _statusMessage = _t('ready');
         });
       }
     }

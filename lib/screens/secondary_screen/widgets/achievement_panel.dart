@@ -206,7 +206,7 @@ class AchievementPanel extends StatelessWidget {
                     SizedBox(width: 8.r),
                     Text(
                       SecondaryUiLocale.format(
-                        l10nContext,
+                        l10nContext ?? context,
                         'thisSession',
                         {'count': newlyEarned.length},
                       ),
