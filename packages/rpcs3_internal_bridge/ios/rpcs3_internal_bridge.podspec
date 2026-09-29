@@ -28,6 +28,7 @@ The standalone RPCS3 SwiftUI application is not embedded.
   # the host, and Rpcs3InternalBridgePlugin opens it later with dlopen().
   s.preserve_paths   = 'Frameworks/libRPCS3Core.dylib'
   s.dependency 'Flutter'
+  s.dependency 'neo_swap'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
   s.frameworks = 'UIKit', 'GameController', 'Metal', 'QuartzCore', 'Security', 'CoreFoundation', 'AudioToolbox', 'AVFAudio', 'CoreGraphics', 'IOSurface', 'CoreServices', 'CoreAudio', 'CoreMIDI', 'Foundation', 'MetalFX'

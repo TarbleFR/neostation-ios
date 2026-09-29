@@ -1,0 +1,16 @@
+name: neo_swap
+resolution: workspace
+description: Shared file-backed CPU data broker for embedded NeoStation cores.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.9.2'
+  flutter: '>=3.35.0'
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: NeoSwapPlugin

@@ -2,6 +2,7 @@
 #import "Rpcs3InternalBridgePlugin.h"
 #import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
+#import <neo_swap/NeoSwap.h>
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3EarlyLoaderDiagnostics.h"
 #import "Rpcs3EarlyAddressSpaceEscrow.h"
@@ -431,6 +432,14 @@ static void RPCS3Progress(void* context,
     self.coreLoadedWithExpandedJit = NO;
     return NO;
   }
+  // NeoSwap is a separately versioned, optional HOST service, never another
+  // allocator instance linked into this Core. Bind before initialize/boot.
+  using NeoSwapBinder = int32_t (*)(const NeoSwapAPI*);
+  auto bindSwap = reinterpret_cast<NeoSwapBinder>(dlsym(handle, "rpcs3_ios_set_neoswap_api"));
+  const int swapResult = bindSwap ? bindSwap(NeoSwap_GetAPI(NEOSWAP_ABI)) : NEOSWAP_INVALID;
+  if (swapResult == NEOSWAP_OK) NeoSwap_RegisterClient(NEOSWAP_RPCS3);
+  RPCS3Diagnostic(@"neoswap_client", [NSString stringWithFormat:
+      @"abi=1 result=%d scope=RSX_CPU_DATA min=1MiB all_titles=1", swapResult]);
   return YES;
 }
 

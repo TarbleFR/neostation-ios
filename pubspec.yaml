@@ -10,6 +10,7 @@ workspace:
   - packages/gamepads_darwin
   - packages/gamepads_platform_interface
   - packages/stikjit_bridge
+  - packages/neo_swap
   - packages/armsx2_internal_bridge
   - packages/dolphin_internal_bridge
   - packages/rpcs3_internal_bridge
@@ -32,6 +33,8 @@ dependencies:
     path: packages/flutter_7zip
   external_folder_access:
     path: packages/external_folder_access
+  neo_swap:
+    path: packages/neo_swap
   stikjit_bridge:
     path: packages/stikjit_bridge
   armsx2_internal_bridge:

@@ -12,7 +12,12 @@ for package,editor in [('dolphin_internal_bridge','DOLManualCheatEditor'),('arms
     for name in ('NeoCheatParser.h','NeoCheatDocument.h','NeoCheatStore.h','NeoCheatLabels.h'):
         assert (ROOT/base/name).read_text()==(ROOT/'native/cheats'/name).read_text()
     assert (ROOT/base/(editor+'.h')).read_text()==(ROOT/'native/cheats/NeoManualCheatEditor.template.h').read_text().replace('NEO_EDITOR_CLASS',editor)
-changed=subprocess.check_output(['git','diff','--name-only',BASE,'--','packages','lib','native','build-utils'],cwd=ROOT,text=True).splitlines()
+# Audit the completed bulk-cheat feature against its own immutable endpoint.
+# Subsequent NeoSwap runtime changes have a separate strict scope test; they
+# must not masquerade as cheat changes or alter any of the accepted cheat code.
+FEATURE_END='f4583c6a3083b8aed358da28b2f8f849256e0e8b'
+changed=subprocess.check_output(['git','diff','--name-only',BASE,FEATURE_END,'--','packages','lib','native','build-utils'],cwd=ROOT,text=True).splitlines()
+subprocess.run(['git','diff','--exit-code',FEATURE_END,'--','native/cheats',*sorted(allowed)],cwd=ROOT,check=True)
 for path in changed:
     assert path in allowed or path.startswith('native/cheats/') or path in (
         'build-utils/private-test-365-recipient.pem','build-utils/validate_cheat_bulk_ipa.py'), 'Out-of-scope runtime change: '+path
@@ -30,4 +35,4 @@ for language,values in labels.items():
 for package in ('dolphin_internal_bridge','armsx2_internal_bridge'):
     menu=ROOT/f'packages/{package}/ios/Classes'/('DolphinSessionMenu.mm' if package.startswith('dolphin') else 'Armsx2SessionMenu.mm')
     assert 'cheatImportFromMenu' in menu.read_text()
-print('PASS: bulk-import-only runtime scope; JIT, core, loaders, display policy and original manual parser unchanged; exact generated editors and 12 locales')
+print('PASS: immutable bulk-import feature scope; current cheat sources unchanged from accepted feature endpoint; exact generated editors and 12 locales')

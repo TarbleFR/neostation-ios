@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
+#import <neo_swap/NeoSwap.h>
 
 #include <array>
 #include <cmath>
@@ -125,6 +126,12 @@ NSString* MemoryText(uint64_t value) {
   } else {
     self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
         RPCS3LocalizedString(@"memory", self.localeIdentifier)];
+  }
+
+  // Lock-free mapped-byte counter: never enumerate files on the render/UI path.
+  if (NeoSwap_GetAPI(NEOSWAP_ABI)->enabled(NEOSWAP_RPCS3)) {
+    self.memoryLabel.text = [self.memoryLabel.text stringByAppendingFormat:@" · NeoSwap %@",
+        MemoryText(NeoSwap_LiveBytes(NEOSWAP_RPCS3))];
   }
 
   if ((validFields & kFPSValid) && std::isfinite(fps) && fps > 0) {

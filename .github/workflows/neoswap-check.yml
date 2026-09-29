@@ -1,0 +1,68 @@
+name: NeoSwap native and host checks
+on:
+  push:
+    branches: [experimental]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoswap-check-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Check scope and native allocation behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap
+          git diff --check
+          python3 test/check_neo_swap_scope.py
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING \
+            -fsanitize=address,undefined -Ipackages/neo_swap/ios/Classes \
+            packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_test.cpp -o "$RUNNER_TEMP/neoswap-asan"
+          "$RUNNER_TEMP/neoswap-asan" | tee build/neoswap/native-tests.txt
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun clang++ -x objective-c++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only \
+            -arch arm64 -isysroot "$SDK" -miphoneos-version-min=17.4 \
+            -Itest/neoswap -Ipackages/neo_swap/ios/Classes \
+            packages/neo_swap/ios/Classes/NeoSwap.cpp packages/neo_swap/ios/Classes/NeoSwapPlugin.mm
+      - name: Exercise production plugin on iOS 18 Simulator
+        run: python3 test/check_neo_swap_simulator.py
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Check UI channel 12 locales and retained RPCS3 host contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart
+          python3 test/rpcs3_pod_header_visibility_test.py
+          python3 test/rpcs3_atomic_startup_test.py
+          python3 test/rpcs3_jit_handshake_test.py
+          python3 test/cheat_bulk_scope_test.py
+          printf '%s\n' "$GITHUB_SHA" > build/neoswap/source.txt
+      - name: Upload exact native test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoSwap-checks-${{ github.sha }}
+          path: |
+            build/neoswap/*.json
+            build/neoswap/*.jsonl
+            build/neoswap/*.txt
+          if-no-files-found: warn
+          retention-days: 14

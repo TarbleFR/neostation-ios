@@ -4,6 +4,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/l10n/neoswap_locale.dart';
+import 'package:neostation/screens/settings_screen/neoswap_dialog.dart';
 import 'package:neostation/l10n/jit_fallback_locale.dart';
 import 'package:neostation/l10n/pairing_file_locale.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
@@ -48,11 +50,19 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     _refreshJitFallbackState();
   }
 
-  int getItemCount() => 2;
+  int getItemCount() => 3;
+
+  void _openNeoSwap() {
+    showDialog<void>(context: context, builder: (_) => const NeoSwapDialog());
+  }
 
   void scrollToIndex(int index) {}
 
   void selectItem(int index) {
+    if (index == 2) {
+      _openNeoSwap();
+      return;
+    }
     if (index == 0) {
       _importOrReplacePairingFile();
       return;
@@ -310,6 +320,16 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                           activeColor: theme.colorScheme.primary,
                         ),
                       ),
+              ),
+              SettingsCardRow(
+                icon: Icons.memory,
+                title: NeoSwapLocale.get(context, 'title'),
+                subtitle: NeoSwapLocale.get(context, 'scope'),
+                subtitleMaxLines: 4,
+                selected:
+                    widget.isContentFocused && widget.selectedContentIndex == 2,
+                onTap: _openNeoSwap,
+                trailing: const Icon(Icons.chevron_right),
               ),
             ],
           ),
