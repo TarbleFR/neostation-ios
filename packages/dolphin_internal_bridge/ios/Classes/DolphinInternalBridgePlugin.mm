@@ -1268,6 +1268,23 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
               success = type.length && index >= 0 &&
                   neostation_dolphin_set_cheat_enabled(type.UTF8String,(int32_t)index,
                       [request[@"enabled"] boolValue] ? 1 : 0) != 0;
+            } else if ([kind isEqual:@"delete"]) {
+              NSDictionary* current=DOLReadCheatSnapshot();
+              NSString* type=NeoField(request,@"type");NSInteger index=[request[@"index"] integerValue];
+              NSArray* items=[current[type] isKindOfClass:NSArray.class]?current[type]:@[];
+              NSDictionary* item=index>=0 && index<(NSInteger)items.count?items[index]:nil;
+              if(![item[@"userDefined"] boolValue] || ![NeoField(item,@"name") isEqual:NeoField(request,@"name")]) payload=NeoCheatFailure(@"notRemovable");
+              else {
+                NSDictionary* plan=NeoCheatRemovalPlan(bridge.activeUserDirectory,request,current,NO);
+                if(![plan[@"success"] boolValue])payload=plan;
+                else if(!NeoCommitCheatRemoval(plan))payload=NeoCheatFailure(@"writeFailed");
+                else {
+                  BOOL reloaded=neostation_dolphin_set_cheats_enabled([current[@"masterEnabled"] boolValue])!=0;
+                  if(!reloaded)[plan[@"previous"] writeToFile:plan[@"file"] options:NSDataWritingAtomic error:nil];
+                  payload=reloaded?@{@"success":@YES}:NeoCheatFailure(@"writeFailed");
+                }
+              }
+              success=[payload[@"success"] boolValue];
             } else if ([kind isEqual:@"import"]) {
               payload=NeoDolphinImport(bridge.activeUserDirectory,request,DOLReadCheatSnapshot(),NO);
               success=[payload[@"success"] boolValue];

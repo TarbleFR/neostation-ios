@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <CommonCrypto/CommonDigest.h>
 #include "NeoCheatParser.h"
+#include <cstring>
 
 static NSString* NeoString(const std::string& s) { return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding] ?: @""; }
 static NSString* NeoField(NSDictionary* d,NSString* key) { return [d[key] isKindOfClass:NSString.class]?d[key]:@""; }
@@ -57,12 +58,122 @@ static NSString* NeoEntriesINI(const std::vector<NeoCheat::Entry>& entries) {
   }
   return out;
 }
+// Shared by document picker tests and both native editors. File read failures,
+// encodings and unsupported binary formats must not look like invalid code.
+static NSDictionary* NeoDecodeCheatDocument(NSData* data,NSString* filename,NSDictionary* identity,BOOL ps2,NSString* fallback) {
+  if(!data.length)return NeoCheatFailure(@"emptyFile");
+  if(data.length>262144)return NeoCheatFailure(@"fileTooLarge");
+  if(!NeoFilenameMatches(filename,identity,ps2))return NeoCheatFailure(@"wrongGame");
+  NSString* ext=filename.pathExtension.lowercaseString;
+  NSString* text=nil;NSString* type=nil;
+  const auto* bytes=static_cast<const unsigned char*>(data.bytes);
+  if([ext isEqual:@"gct"] && !ps2) {
+    const unsigned char header[]={0x00,0xD0,0xC0,0xDE,0x00,0xD0,0xC0,0xDE};
+    const unsigned char ending[]={0xF0,0,0,0,0,0,0,0};
+    if(data.length<24 || data.length%8 || memcmp(bytes,header,8) || memcmp(bytes+data.length-8,ending,8))return NeoCheatFailure(@"invalidGct");
+    NSMutableString* lines=[NSMutableString string];
+    for(NSUInteger i=8;i<data.length-8;i+=8) {
+      [lines appendFormat:@"%02X%02X%02X%02X %02X%02X%02X%02X\n",bytes[i],bytes[i+1],bytes[i+2],bytes[i+3],bytes[i+4],bytes[i+5],bytes[i+6],bytes[i+7]];
+    }
+    text=lines;type=@"gecko";
+  } else {
+    NSArray* allowed=ps2?@[@"pnach",@"txt"]:@[@"ini",@"txt",@"ar",@"gecko",@"dolphin",@""];
+    if(![allowed containsObject:ext])return NeoCheatFailure(@"unsupportedFile");
+    if(data.length>=2 && bytes[0]==0xFF && bytes[1]==0xFE)text=[[NSString alloc] initWithData:data encoding:NSUTF16LittleEndianStringEncoding];
+    else if(data.length>=2 && bytes[0]==0xFE && bytes[1]==0xFF)text=[[NSString alloc] initWithData:data encoding:NSUTF16BigEndianStringEncoding];
+    else text=[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if(!text)return NeoCheatFailure(@"fileEncoding");
+    text=NeoString(NeoCheat::normalizeText(text.UTF8String?:""));
+    if([text rangeOfString:@"<!doctype" options:NSCaseInsensitiveSearch].location!=NSNotFound ||
+        [text rangeOfString:@"<html" options:NSCaseInsensitiveSearch].location!=NSNotFound) return NeoCheatFailure(@"unsupportedFile");
+    type=ps2?@"pnach":NeoString(NeoCheat::detectedFormat(text.UTF8String,fallback.UTF8String?:"gecko"));
+    // WiiRD/Ocarina TXT exports start with the six-character GameID and title.
+    NSString* first=[text componentsSeparatedByString:@"\n"].firstObject;
+    if(!ps2 && NeoRegex(first,@"^[A-Z0-9]{6}$")) {
+      if(![first isEqual:identity[@"gameId"]])return NeoCheatFailure(@"wrongGame");
+      const auto parsed=NeoCheat::geckoDownload(text.UTF8String,first.UTF8String);
+      if(!parsed)return NeoCheatFailure(@"invalidCode");
+      text=NeoEntriesINI(parsed.entries);type=@"ini";
+    }
+  }
+  if(![text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length)return NeoCheatFailure(@"emptyFile");
+  return @{@"success":@YES,@"content":text,@"type":type,@"filename":filename?:@""};
+}
+static NSDictionary* NeoParserFailure(const NeoCheat::Result& parsed) {
+  NSString* key=parsed.error=="name"?@"nameRequired":parsed.error=="size"?@"fileTooLarge":parsed.error=="empty"?@"emptyFile":parsed.error=="mixedFormat"?@"mixedFormat":@"invalidCode";
+  return @{@"success":@NO,@"errorKey":key,@"errorLine":@(parsed.line),@"added":@0};
+}
+
+// Preserve every unrelated byte/section. Empty sections are harmless to Dolphin
+// and PCSX2; retaining their headers avoids rewriting unrelated preferences.
+static NSString* NeoRemoveCheatBlock(NSString* source,NSString* type,NSString* name,BOOL ps2,BOOL* removed) {
+  NSArray* lines=[source componentsSeparatedByString:@"\n"];
+  NSMutableArray* keep=[NSMutableArray array];NSString* section=@"";BOOL deleting=NO;
+  *removed=NO;
+  NSString* wanted=[type isEqual:@"gecko"]?@"Gecko":@"ActionReplay";
+  for(NSString* raw in lines) {
+    NSString* line=[raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if([line hasPrefix:@"["] && [line containsString:@"]"]) {
+      section=[line substringWithRange:NSMakeRange(1,[line rangeOfString:@"]"].location-1)];
+      deleting=ps2 && [section isEqual:name];
+      if(deleting){*removed=YES;continue;}
+      [keep addObject:raw];continue;
+    }
+    if(!ps2 && [section isEqual:wanted] && [line hasPrefix:@"$"]) {
+      NSString* title=[line substringFromIndex:1];
+      if([type isEqual:@"gecko"] && [title containsString:@"["]) title=[[title componentsSeparatedByString:@"["].firstObject stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+      deleting=[title isEqual:name];if(deleting)*removed=YES;
+    }
+    if(!ps2 && ([section isEqual:[wanted stringByAppendingString:@"_Enabled"]] || [section isEqual:[wanted stringByAppendingString:@"_Disabled"]]) && [line isEqual:[@"$" stringByAppendingString:name]])continue;
+    if(!deleting)[keep addObject:raw];
+  }
+  return [keep componentsJoinedByString:@"\n"];
+}
+static NSDictionary* NeoCheatRemovalPlan(NSString* root,NSDictionary* request,NSDictionary* snapshot,BOOL ps2) {
+  if(!NeoIdentityMatches(request,snapshot,ps2))return NeoCheatFailure(@"sessionChanged");
+  NSString* name=NeoField(request,@"name");NSString* type=NeoField(request,@"type");
+  if(!name.length || (!ps2 && ![@[@"gecko",@"actionReplay"] containsObject:type]))return NeoCheatFailure(@"notRemovable");
+  NSString* folder=[root stringByAppendingPathComponent:ps2?@"cheats":@"GameSettings"];
+  NSMutableArray<NSString*>* candidates=[NSMutableArray array];
+  if(ps2) {
+    NSString* prefix=[NeoField(snapshot,@"crc").uppercaseString stringByAppendingString:@"-NeoStation-"];
+    if(![name hasPrefix:[NSString stringWithFormat:@"NeoStation/%@/",NeoField(snapshot,@"crc").uppercaseString]])return NeoCheatFailure(@"notRemovable");
+    for(NSString* file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:folder error:nil])
+      if([file hasPrefix:prefix] && [file.pathExtension isEqual:@"pnach"])[candidates addObject:[folder stringByAppendingPathComponent:file]];
+  } else {
+    [candidates addObject:[folder stringByAppendingPathComponent:[NSString stringWithFormat:@"%@r%@.ini",snapshot[@"gameId"],snapshot[@"revision"]]]];
+  }
+  NSDictionary* selected=nil;
+  for(NSString* path in candidates) {
+    if([[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil][NSFileType] isEqual:NSFileTypeSymbolicLink])return NeoCheatFailure(@"notRemovable");
+    NSData* previous=[NSData dataWithContentsOfFile:path];
+    if(previous.length>1048576)continue;
+    NSString* old=previous?[[NSString alloc] initWithData:previous encoding:NSUTF8StringEncoding]:nil;
+    if(!old)continue;BOOL removed=NO;
+    NSString* updated=NeoRemoveCheatBlock(old,type,name,ps2,&removed);
+    if(!removed)continue;
+    if(selected)return NeoCheatFailure(@"notRemovable"); // ambiguous duplicate: never guess a file.
+    selected=@{@"success":@YES,@"file":path,@"previous":previous,@"replacement":[updated dataUsingEncoding:NSUTF8StringEncoding]};
+  }
+  return selected?:NeoCheatFailure(@"notRemovable");
+}
+static BOOL NeoCommitCheatRemoval(NSDictionary* plan) {
+  if(![plan[@"success"] boolValue])return NO;
+  NSString* path=plan[@"file"];NSData* previous=plan[@"previous"];
+  if(![[NSData dataWithContentsOfFile:path] isEqual:previous])return NO;
+  if(![previous writeToFile:[path stringByAppendingString:@".before-delete.bak"] options:NSDataWritingAtomic error:nil])return NO;
+  if([path.pathExtension isEqual:@"pnach"]) {
+    NSString* next=[[NSString alloc] initWithData:plan[@"replacement"] encoding:NSUTF8StringEncoding];
+    if([next rangeOfString:@"(?m)^\\s*patch\\s*=" options:NSRegularExpressionSearch].location==NSNotFound) return [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+  }
+  return [plan[@"replacement"] writeToFile:path options:NSDataWritingAtomic error:nil];
+}
 static NSDictionary* NeoDolphinImport(NSString* userDirectory,NSDictionary* request,NSDictionary* snapshot,BOOL skipDuplicates) {
   if(!userDirectory.length || !NeoIdentityMatches(request,snapshot,NO)) return NeoCheatFailure(@"sessionChanged");
   if([snapshot[@"hardcore"] boolValue]) return NeoCheatFailure(@"hardcore");
   if(!NeoFilenameMatches(NeoField(request,@"filename"),snapshot,NO)) return NeoCheatFailure(@"wrongGame");
   const auto parsed=NeoCheat::parse([NeoField(request,@"content") UTF8String],[NeoField(request,@"type") UTF8String],[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
-  if(!parsed) return NeoCheatFailure(@"invalidCode");
+  if(!parsed) return NeoParserFailure(parsed);
   NSMutableSet* known=[NSMutableSet set];
   for(NSString* key in @[@"gecko",@"actionReplay"]) {
     for(NSDictionary* item in snapshot[key]) [known addObject:[NSString stringWithFormat:@"%@:%@",key,NeoField(item,@"name")]];
@@ -106,7 +217,7 @@ static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* reques
   if([snapshot[@"hardcore"] boolValue]) return NeoCheatFailure(@"hardcore");
   if(!NeoFilenameMatches(NeoField(request,@"filename"),snapshot,YES)) return NeoCheatFailure(@"wrongGame");
   const auto parsed=NeoCheat::parse([NeoField(request,@"content") UTF8String],"pnach",[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
-  if(!parsed) return NeoCheatFailure(@"invalidCode");
+  if(!parsed) return NeoParserFailure(parsed);
   NSString* crc=NeoField(snapshot,@"crc").uppercaseString;
   NSMutableString* content=[NSMutableString stringWithFormat:@"// NeoStation manual cheats; serial %@; CRC %@. Disabled until selected.\n",NeoField(snapshot,@"serial"),crc];
   NSMutableSet* names=[NSMutableSet set];

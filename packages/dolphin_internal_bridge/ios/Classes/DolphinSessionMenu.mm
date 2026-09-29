@@ -345,7 +345,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
   if (self.page == DOLMenuHacks) return [self text:@"hacksHelp"];
   if (self.page == DOLMenuCheats) {
-    NSString* help=NeoCheatText(@"helpExact",self.labels[@"__locale"]);
+    NSString* help=[NSString stringWithFormat:@"%@\n%@",NeoCheatText(@"helpExact",self.labels[@"__locale"]),NeoCheatText(@"helpDelete",self.labels[@"__locale"])];
     if(self.stateMessage.length) help=[NSString stringWithFormat:@"%@\n\n%@",self.stateMessage,help];
     if (self.cheatsSnapshot && ![self.cheatsSnapshot[@"gecko"] count] &&
         ![self.cheatsSnapshot[@"actionReplay"] count]) {
@@ -718,6 +718,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
             menu.stateMessage = [[menu text:@"downloadedCodes"]
                 stringByReplacingOccurrencesOfString:@"{count}"
                 withString:[NSString stringWithFormat:@"%ld",(long)added]];
+            if([result[@"sources"] containsObject:@"https://www.gc-forever.com/forums/viewtopic.php?t=2145"]) menu.stateMessage=[menu.stateMessage stringByAppendingFormat:@"\nRalf · gc-forever. %@",NeoCheatText(@"catalogueScope",menu.labels[@"__locale"])];
           } else menu.stateMessage = NeoCheatText(NeoField(result,@"errorKey").length?result[@"errorKey"]:@"networkError",menu.labels[@"__locale"]);
         } else menu.stateMessage = success ? [menu text:@"cheatUpdated"] : [menu text:@"settingsFailed"];
         menu.navigationItem.prompt = menu.stateMessage;
@@ -837,4 +838,51 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
+- (NSDictionary*)removableCheatAt:(NSIndexPath*)path {
+  if(self.loading)return nil;
+  if(self.page!=DOLMenuCheats || path.row<4)return nil;
+  NSArray* items=[(self.cheatsSnapshot[@"gecko"]?:@[]) arrayByAddingObjectsFromArray:self.cheatsSnapshot[@"actionReplay"]?:@[]];
+  NSInteger index=path.row-4;NSDictionary* item=index<(NSInteger)items.count?items[index]:nil;
+  return [item[@"userDefined"] boolValue] ? item:nil;
+}
+- (void)confirmDeleteCheatAt:(NSIndexPath*)path {
+  NSDictionary* item=[self removableCheatAt:path];if(!item)return;
+  NSString* locale=self.labels[@"__locale"];
+  NSString* message=[NeoCheatText(@"deleteConfirm",locale) stringByReplacingOccurrencesOfString:@"{name}" withString:NeoCheatDisplayName(NeoField(item,@"name"))];
+  UIAlertController* alert=[UIAlertController alertControllerWithTitle:NeoCheatText(@"deleteCheat",locale) message:message preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:NeoCheatText(@"cancel",locale) style:UIAlertActionStyleCancel handler:nil]];
+  NSMutableDictionary* request=[self.cheatsSnapshot mutableCopy];
+  [request addEntriesFromDictionary:item];request[@"kind"]=@"delete";
+  __weak DolphinSessionMenu* weakSelf=self;
+  [alert addAction:[UIAlertAction actionWithTitle:NeoCheatText(@"deleteCheat",locale) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action){
+    DolphinSessionMenu* menu=weakSelf;if(!menu || menu.loading)return;
+    menu.loading=YES;menu.navigationItem.rightBarButtonItem.enabled=NO;
+    void (^finished)(NSDictionary*)=^(NSDictionary* result){dispatch_async(dispatch_get_main_queue(),^{
+      DolphinSessionMenu* screen=weakSelf;if(!screen)return;
+      screen.loading=NO;screen.navigationItem.rightBarButtonItem.enabled=YES;
+      NSString* message=NeoCheatText([result[@"success"] boolValue]?@"deleted":NeoField(result,@"errorKey"),locale);
+      screen.stateMessage=message;screen.navigationItem.prompt=message;
+      [screen reloadCheats];
+    });};
+    menu.performCheatCommand(request,^(BOOL success,NSDictionary* result){finished(result?:NeoCheatFailure(@"writeFailed"));});
+  }]];
+  [self presentViewController:alert animated:YES completion:nil];
+}
+- (UISwipeActionsConfiguration*)tableView:(UITableView*)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath*)path {
+  if(![self removableCheatAt:path])return nil;
+  __weak DolphinSessionMenu* weakSelf=self;
+  UIContextualAction* action=[UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:NeoCheatText(@"deleteCheat",self.labels[@"__locale"]) handler:^(__unused UIContextualAction* action,__unused UIView* view,void (^completion)(BOOL)){
+    completion(NO);[weakSelf confirmDeleteCheatAt:path];
+  }];
+  UISwipeActionsConfiguration* config=[UISwipeActionsConfiguration configurationWithActions:@[action]];config.performsFirstActionWithFullSwipe=NO;return config;
+}
+- (UIContextMenuConfiguration*)tableView:(UITableView*)tableView contextMenuConfigurationForRowAtIndexPath:(NSIndexPath*)path point:(CGPoint)point {
+  if(![self removableCheatAt:path])return nil;
+  __weak DolphinSessionMenu* weakSelf=self;
+  return [UIContextMenuConfiguration configurationWithIdentifier:nil previewProvider:nil actionProvider:^UIMenu*(NSArray<UIMenuElement*>* suggested){
+    UIAction* action=[UIAction actionWithTitle:NeoCheatText(@"deleteCheat",self.labels[@"__locale"]) image:[UIImage systemImageNamed:@"trash"] identifier:nil handler:^(__unused UIAction* selected){[weakSelf confirmDeleteCheatAt:path];}];
+    action.attributes=UIMenuElementAttributesDestructive;return [UIMenu menuWithTitle:@"" children:@[action]];
+  }];
+}
+
 @end

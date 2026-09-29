@@ -5,7 +5,7 @@
 #include "NeoCheatLabels.h"
 #include "NeoCheatStore.h"
 
-@interface DOLManualCheatEditor : UIViewController <UIDocumentPickerDelegate>
+@interface DOLManualCheatEditor : UIViewController <UIDocumentPickerDelegate, UITextViewDelegate>
 @property(nonatomic,copy) NSString* localeIdentifier;
 @property(nonatomic,copy) NSDictionary* identity;
 @property(nonatomic,assign) BOOL ps2;
@@ -77,7 +77,7 @@
   self.codeField.textColor=UIColor.labelColor;self.codeField.font=[UIFont monospacedSystemFontOfSize:15 weight:UIFontWeightRegular];
   self.codeField.autocorrectionType=UITextAutocorrectionTypeNo;self.codeField.autocapitalizationType=UITextAutocapitalizationTypeNone;
   self.codeField.smartQuotesType=UITextSmartQuotesTypeNo;self.codeField.smartDashesType=UITextSmartDashesTypeNo;
-  self.codeField.accessibilityIdentifier=@"manualCheatCode";
+  self.codeField.accessibilityIdentifier=@"manualCheatCode";self.codeField.delegate=self;
   [self.codeField.heightAnchor constraintEqualToConstant:180].active=YES;
   [stack addArrangedSubview:self.codeField];
   UIButton* import=[UIButton buttonWithType:UIButtonTypeSystem];
@@ -88,7 +88,24 @@
   self.errorLabel.accessibilityIdentifier=@"manualCheatResult";
   [stack addArrangedSubview:self.errorLabel];
 }
-- (void)formatChanged {self.importedType=nil;}
+- (void)textViewDidChange:(UITextView*)textView {
+  if(self.ps2)return;
+  NSString* chosen=@[@"gecko",@"actionReplay",@"ini"][self.formatControl.selectedSegmentIndex];
+  NSString* type=NeoString(NeoCheat::detectedFormat(textView.text.UTF8String,chosen.UTF8String));
+  if([type isEqual:@"actionReplay"]) self.formatControl.selectedSegmentIndex=1;
+  else if([type isEqual:@"ini"]) self.formatControl.selectedSegmentIndex=2;
+  self.importedType=type;
+  self.navigationItem.prompt=[NeoCheatText(@"detectedFormat",self.localeIdentifier) stringByReplacingOccurrencesOfString:@"{format}" withString:[type isEqual:@"actionReplay"]?@"Action Replay":[type isEqual:@"ini"]?@"Dolphin INI":@"Gecko"];
+  self.errorLabel.text=@"";
+}
+- (void)formatChanged {self.importedType=nil;self.errorLabel.text=@"";}
+- (void)showResultError:(NSDictionary*)result {
+  [self fail:NeoField(result,@"errorKey").length?result[@"errorKey"]:@"writeFailed"];
+  if([result[@"errorLine"] unsignedIntegerValue]) {
+    NSString* suffix=[[self text:@"errorAtLine"] stringByReplacingOccurrencesOfString:@"{line}" withString:[result[@"errorLine"] stringValue]];
+    self.errorLabel.text=[NSString stringWithFormat:@"%@ %@",self.errorLabel.text,suffix];
+  }
+}
 - (void)cancelPressed {if(!self.busy)[self.navigationController popViewControllerAnimated:YES];}
 - (void)fail:(NSString*)key {
   self.errorLabel.text=[self text:key];
@@ -102,35 +119,55 @@
 }
 - (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
   NSURL* url=urls.firstObject;if(!url || self.busy)return;
-  NSString* ext=url.pathExtension.lowercaseString;
-  if(self.ps2 ? ![ext isEqual:@"pnach"] : ![@[@"ini",@"txt"] containsObject:ext]) {[self fail:@"invalidCode"];return;}
-  if(!NeoFilenameMatches(url.lastPathComponent,self.identity,self.ps2)) {[self fail:@"wrongGame"];return;}
-  BOOL scoped=[url startAccessingSecurityScopedResource];
-  __block NSData* data=nil;__block NSError* readError=nil;
-  NSFileCoordinator* coordinator=[[NSFileCoordinator alloc] initWithFilePresenter:nil];
-  [coordinator coordinateReadingItemAtURL:url options:0 error:&readError byAccessor:^(NSURL* readable){
-    NSNumber* bytes=nil;
-    if(![readable getResourceValue:&bytes forKey:NSURLFileSizeKey error:&readError] || bytes.unsignedLongLongValue>262144)return;
-    data=[NSData dataWithContentsOfURL:readable options:NSDataReadingMappedIfSafe error:&readError];
-  }];
-  if(scoped)[url stopAccessingSecurityScopedResource];
-  NSString* text=data.length && data.length<=262144?[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]:nil;
-  if(!text){[self fail:@"invalidCode"];return;}
-  self.filename=url.lastPathComponent;
-  self.codeField.text=text;self.errorLabel.text=@"";
-  if(!self.nameField.text.length)self.nameField.text=url.lastPathComponent.stringByDeletingPathExtension;
-  if([ext isEqual:@"ini"]){self.importedType=@"ini";self.formatControl.selectedSegmentIndex=2;}
+  self.busy=YES;self.navigationItem.rightBarButtonItem.enabled=NO;
+  NSString* fallback=self.ps2?@"pnach":@[@"gecko",@"actionReplay",@"ini"][self.formatControl.selectedSegmentIndex];
+  NSDictionary* identity=self.identity;BOOL ps2=self.ps2;
+  __weak DOLManualCheatEditor* weakSelf=self;
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+    BOOL scoped=[url startAccessingSecurityScopedResource];
+    __block NSData* data=nil;__block NSError* readError=nil;
+    NSFileCoordinator* coordinator=[[NSFileCoordinator alloc] initWithFilePresenter:nil];
+    [coordinator coordinateReadingItemAtURL:url options:0 error:&readError byAccessor:^(NSURL* readable){
+      NSFileHandle* handle=[NSFileHandle fileHandleForReadingFromURL:readable error:&readError];
+      if(!handle)return;
+      NSMutableData* collected=[NSMutableData data];
+      while(collected.length<=262144) {
+        NSData* chunk=[handle readDataUpToLength:MIN((NSUInteger)16384,262145-collected.length) error:&readError];
+        if(!chunk.length)break;
+        [collected appendData:chunk];
+      }
+      [handle closeAndReturnError:nil];data=collected;
+    }];
+    if(scoped)[url stopAccessingSecurityScopedResource];
+    NSDictionary* result=readError||!data?NeoCheatFailure(@"fileRead"):NeoDecodeCheatDocument(data,url.lastPathComponent,identity,ps2,fallback);
+    dispatch_async(dispatch_get_main_queue(),^{
+      DOLManualCheatEditor* editor=weakSelf;if(!editor)return;
+      editor.busy=NO;editor.navigationItem.rightBarButtonItem.enabled=YES;
+      if(![result[@"success"] boolValue]){[editor showResultError:result];return;}
+      editor.filename=result[@"filename"];editor.codeField.text=result[@"content"];
+      editor.importedType=result[@"type"];
+      if(!editor.nameField.text.length) {
+        NSString* stem=url.lastPathComponent.stringByDeletingPathExtension;
+        editor.nameField.text=NeoCheat::safeName(stem.UTF8String)?stem:@"";
+      }
+      if(!ps2)editor.formatControl.selectedSegmentIndex=[result[@"type"] isEqual:@"ini"]?2:[result[@"type"] isEqual:@"actionReplay"]?1:0;
+      [editor textViewDidChange:editor.codeField];editor.errorLabel.text=@"";
+    });
+  });
 }
 - (void)savePressed {
   if(self.busy || !self.saveCheat)return;
   NSString* type=self.ps2?@"pnach":self.importedType?:@[@"gecko",@"actionReplay",@"ini"][self.formatControl.selectedSegmentIndex];
   NSString* name=[self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
   NSString* creator=[self.creatorField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-  const auto parsed=NeoCheat::parse(self.codeField.text.UTF8String?:"",type.UTF8String,name.UTF8String?:"",creator.UTF8String?:"");
-  if(!parsed){[self fail:@"invalidCode"];return;}
+  NSString* normalized=NeoString(NeoCheat::normalizeText(self.codeField.text.UTF8String?:""));
+  type=self.ps2?@"pnach":NeoString(NeoCheat::detectedFormat(normalized.UTF8String,type.UTF8String));
+  if(!name.length) name=[NSString stringWithFormat:@"%@ - %@",[type isEqual:@"actionReplay"]?@"Action Replay":self.ps2?@"PNACH":@"Gecko",NeoField(self.identity,self.ps2?@"crc":@"gameId")];
+  const auto parsed=NeoCheat::parse(normalized.UTF8String,type.UTF8String,name.UTF8String,creator.UTF8String?:"");
+  if(!parsed){[self showResultError:NeoParserFailure(parsed)];return;}
   NSMutableDictionary* request=[self.identity mutableCopy];
   request[@"type"]=type;request[@"name"]=name;request[@"creator"]=creator;
-  request[@"content"]=self.codeField.text;request[@"filename"]=self.filename?:@"";
+  request[@"content"]=normalized;request[@"filename"]=self.filename?:@"";
   self.busy=YES;self.navigationController.view.userInteractionEnabled=NO;
   self.navigationItem.rightBarButtonItem.enabled=NO;
   __weak DOLManualCheatEditor* weakSelf=self;
@@ -141,7 +178,7 @@
     if([result[@"success"] boolValue]) {
       if(editor.saved)editor.saved();
       [editor.navigationController popViewControllerAnimated:YES];
-    } else [editor fail:NeoField(result,@"errorKey").length?result[@"errorKey"]:@"writeFailed"];
+    } else [editor showResultError:result];
   });});
 }
 @end

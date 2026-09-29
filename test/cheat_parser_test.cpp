@@ -25,5 +25,14 @@ int main(){using namespace NeoCheat;
  assert(parse("patch=3,EE,00000000,extended,00000001", "pnach", "On enable"));
  assert(!parse("patch=1,EE,00000000,extended,00000001,", "pnach", "Trailing comma"));
  assert(!parse("\xEF\xBB\xBF\n", "ini", "BOM only"));
+ const std::string screenshot="6HUF-YY22-P0Y4N\nYP3X-W34H-8N8PU\n7663-4G9D-1BPQZ\n0WGZ-DYX8-MXNED\nGPPV-ZN8B-UVPUX";
+ auto five=parse(screenshot,"gecko","Auto Aim");
+ assert(five && five.entries.size()==1 && five.entries[0].type=="actionReplay" && five.entries[0].lines.size()==5);
+ auto copied=parse("6HUF–YY22–P0Y4N\rYP3X–W34H–8N8PU\r7663–4G9D–1BPQZ\r0WGZ–DYX8–MXNED\rGPPV–ZN8B–UVPUX","gecko","");
+ assert(copied && copied.entries.size()==1 && copied.entries[0].lines==five.entries[0].lines);
+ assert(parse("6HUF-YY22-P0Y4N\n\nYP3X-W34H-8N8PU\n\n7663-4G9D-1BPQZ\n\n0WGZ-DYX8-MXNED\n\nGPPV-ZN8B-UVPUX","gecko","Aim").entries[0].lines.size()==5);
+ auto broken=parse("6HUF-YY22-P0Y4N\nYP3X-W34H-8N8PU\n7663-4G9D-1BPQZ\n0WGZ-DYX8-MXNE!\nGPPV-ZN8B-UVPUX","gecko","Aim");
+ assert(!broken && broken.line==4 && broken.entries.empty());
+ assert(parse("[ActionReplay] Comment\n$Aim [Nikra]\n"+screenshot,"ini","").entries[0].lines.size()==5);
  std::cout<<"PASS: strict Gecko/AR/INI/PNACH parsing, region headers, placeholders, bounds, no activation input\n";
 }

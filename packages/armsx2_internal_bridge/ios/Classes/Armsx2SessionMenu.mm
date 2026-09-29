@@ -687,4 +687,50 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   return UIInterfaceOrientationMaskLandscape;
 }
 
+- (NSDictionary*)removableCheatAt:(NSIndexPath*)path {
+  if(self.loading)return nil;
+  if(self.page!=ARMSX2MenuPatches || path.row<0)return nil;
+  NSArray* items=self.patches[@"items"]?:@[];NSDictionary* item=path.row<(NSInteger)items.count?items[path.row]:nil;
+  return [item[@"cheat"] boolValue] && [NeoField(item,@"name") hasPrefix:@"NeoStation/"] ? item:nil;
+}
+- (void)confirmDeleteCheatAt:(NSIndexPath*)path {
+  NSDictionary* item=[self removableCheatAt:path];if(!item)return;
+  NSString* locale=self.localeIdentifier;
+  NSString* message=[NeoCheatText(@"deleteConfirm",locale) stringByReplacingOccurrencesOfString:@"{name}" withString:NeoCheatDisplayName(NeoField(item,@"name"))];
+  UIAlertController* alert=[UIAlertController alertControllerWithTitle:NeoCheatText(@"deleteCheat",locale) message:message preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:NeoCheatText(@"cancel",locale) style:UIAlertActionStyleCancel handler:nil]];
+  NSMutableDictionary* request=[self.patches mutableCopy];
+  [request addEntriesFromDictionary:item];request[@"kind"]=@"delete";
+  __weak Armsx2SessionMenu* weakSelf=self;
+  [alert addAction:[UIAlertAction actionWithTitle:NeoCheatText(@"deleteCheat",locale) style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction* action){
+    Armsx2SessionMenu* menu=weakSelf;if(!menu || menu.loading)return;
+    menu.loading=YES;menu.navigationItem.rightBarButtonItem.enabled=NO;
+    void (^finished)(NSDictionary*)=^(NSDictionary* result){dispatch_async(dispatch_get_main_queue(),^{
+      Armsx2SessionMenu* screen=weakSelf;if(!screen)return;
+      screen.loading=NO;screen.navigationItem.rightBarButtonItem.enabled=YES;
+      NSString* message=NeoCheatText([result[@"success"] boolValue]?@"deleted":NeoField(result,@"errorKey"),locale);
+      screen.stateMessage=message;screen.navigationItem.prompt=message;
+      [screen reloadPatches];
+    });};
+    menu.importCheats(request,finished);
+  }]];
+  [self presentViewController:alert animated:YES completion:nil];
+}
+- (UISwipeActionsConfiguration*)tableView:(UITableView*)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath*)path {
+  if(![self removableCheatAt:path])return nil;
+  __weak Armsx2SessionMenu* weakSelf=self;
+  UIContextualAction* action=[UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:NeoCheatText(@"deleteCheat",self.localeIdentifier) handler:^(__unused UIContextualAction* action,__unused UIView* view,void (^completion)(BOOL)){
+    completion(NO);[weakSelf confirmDeleteCheatAt:path];
+  }];
+  UISwipeActionsConfiguration* config=[UISwipeActionsConfiguration configurationWithActions:@[action]];config.performsFirstActionWithFullSwipe=NO;return config;
+}
+- (UIContextMenuConfiguration*)tableView:(UITableView*)tableView contextMenuConfigurationForRowAtIndexPath:(NSIndexPath*)path point:(CGPoint)point {
+  if(![self removableCheatAt:path])return nil;
+  __weak Armsx2SessionMenu* weakSelf=self;
+  return [UIContextMenuConfiguration configurationWithIdentifier:nil previewProvider:nil actionProvider:^UIMenu*(NSArray<UIMenuElement*>* suggested){
+    UIAction* action=[UIAction actionWithTitle:NeoCheatText(@"deleteCheat",self.localeIdentifier) image:[UIImage systemImageNamed:@"trash"] identifier:nil handler:^(__unused UIAction* selected){[weakSelf confirmDeleteCheatAt:path];}];
+    action.attributes=UIMenuElementAttributesDestructive;return [UIMenu menuWithTitle:@"" children:@[action]];
+  }];
+}
+
 @end

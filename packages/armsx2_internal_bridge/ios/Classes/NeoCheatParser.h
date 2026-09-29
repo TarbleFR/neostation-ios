@@ -24,16 +24,56 @@ inline bool safeName(const std::string& s) {
   return !trim(s).empty() && s.size()<=160 && s.find_first_of("\r\n[]$\0",0,6)==std::string::npos;
 }
 inline bool validId(const std::string& s) { return (s.size()==6 || s.size()==4) && std::all_of(s.begin(),s.end(),[](unsigned char c){return (c>='A' && c<='Z') || (c>='0' && c<='9');}); }
+// Only normalize formatting, never hexadecimal values or memory addresses.
+inline std::string normalizeText(std::string text) {
+  const std::pair<std::string,std::string> changes[] = {
+    {"\r\n","\n"},{"\r","\n"},{"\xE2\x80\xA8","\n"},{"\xE2\x80\xA9","\n"},
+    {"\xC2\xA0"," "},{"\xE2\x80\xAF"," "},{"\xE2\x80\x87"," "},
+    {"\xE2\x80\x8B",""},{"\xEF\xBB\xBF",""},
+    {"\xE2\x80\x90","-"},{"\xE2\x80\x91","-"},{"\xE2\x80\x92","-"},
+    {"\xE2\x80\x93","-"},{"\xE2\x80\x94","-"},{"\xE2\x88\x92","-"},{"\xEF\xBC\x8D","-"}
+  };
+  for(const auto& [from,to]:changes) {
+    size_t pos=0;
+    while((pos=text.find(from,pos))!=std::string::npos){text.replace(pos,from.size(),to);pos+=to.size();}
+  }
+  return text;
+}
 inline bool rawLine(const std::string& s, std::string* normalized) {
   std::istringstream in(s); std::string a,b,extra;
   if(!(in>>a>>b) || (in>>extra) || !hex(a,8,8) || !hex(b,8,8)) return false;
   *normalized=upper(a)+" "+upper(b); return true;
 }
-inline bool encryptedLine(const std::string& s, std::string* normalized) {
+inline bool encryptedLine(const std::string& input, std::string* normalized) {
+  std::string s=upper(trim(normalizeText(input)));
+  s.erase(std::remove_if(s.begin(),s.end(),[](char c){return c==' '||c=='\t';}),s.end());
+  if(s.size()==13 && s.find('-')==std::string::npos) s=s.substr(0,4)+"-"+s.substr(4,4)+"-"+s.substr(8);
   if(s.size()!=15 || s[4]!='-' || s[9]!='-') return false;
-  std::string t=upper(s);
-  for(size_t i=0;i<t.size();++i) if(i!=4 && i!=9 && std::string("0123456789ABCDEFGHJKMNPQRTUVWXYZ").find(t[i])==std::string::npos) return false;
-  *normalized=t; return true;
+  // Same ambiguous glyph aliases as Dolphin's ARDecrypt.cpp GetVal.
+  for(size_t i=0;i<s.size();++i) {
+    if(i==4 || i==9)continue;
+    if(s[i]=='I'||s[i]=='L')s[i]='1';else if(s[i]=='O')s[i]='0';else if(s[i]=='S')s[i]='5';
+    if(std::string("0123456789ABCDEFGHJKMNPQRTUVWXYZ").find(s[i])==std::string::npos) return false;
+  }
+  *normalized=s;return true;
+}
+inline std::string detectedFormat(const std::string& input,const std::string& fallback) {
+  const auto text=normalizeText(input);
+  // Never reinterpret PS2 syntax as GameCube/Wii cheats.
+  if(fallback=="pnach") return fallback;
+  std::istringstream stream(text);std::string line,normalized;
+  while(std::getline(stream,line)) {
+    line=trim(line);
+    if(line.rfind("[Gecko]",0)==0 || line.rfind("[ActionReplay]",0)==0 ||
+        line.rfind("[Action Replay]",0)==0) return "ini";
+  }
+  stream.clear();stream.str(text);
+  while(std::getline(stream,line)) {
+    line=trim(line);
+    if(encryptedLine(line,&normalized))return "actionReplay";
+    if(rawLine(line,&normalized))return fallback=="ini"?"gecko":fallback;
+  }
+  return fallback;
 }
 inline bool pnachLine(const std::string& s, std::string* normalized) {
   if(s.rfind("patch=",0)!=0 || s.back()==',') return false;
@@ -44,27 +84,31 @@ inline bool pnachLine(const std::string& s, std::string* normalized) {
   if(!width || !hex(v[4],1,width)) return false;
   *normalized="patch="+v[0]+","+v[1]+","+upper(v[2])+","+v[3]+","+upper(v[4]); return true;
 }
-inline Result parse(const std::string& input, const std::string& type, const std::string& name, const std::string& creator={}) {
+inline Result parse(const std::string& input, const std::string& requestedType, const std::string& name, const std::string& creator={}) {
   Result r;
   if(input.empty() || input.size()>262144 || input.find('\0')!=std::string::npos) {r.error="size";return r;}
+  const std::string normalizedInput=normalizeText(input);
+  const std::string type=detectedFormat(normalizedInput,requestedType);
   if(type!="gecko" && type!="actionReplay" && type!="pnach" && type!="ini") {r.error="format";return r;}
-  if(!safeName(name) || (!creator.empty() && !safeName(creator))) {r.error="name";return r;}
-  Entry entry{name,creator,type,{}, {},false};
+  if((!name.empty() && !safeName(name)) || (!creator.empty() && !safeName(creator))) {r.error="name";return r;}
+  Entry entry{name.empty()?"Imported cheat":name,creator,type,{}, {},false};
   bool selected=type!="ini", hasMode=false; size_t total=0;
   auto flush=[&](){if(!entry.lines.empty()) {r.entries.push_back(entry);entry.lines.clear();entry.notes.clear();hasMode=false;}};
-  std::istringstream in(input); std::string line; size_t number=0;
+  std::istringstream in(normalizedInput); std::string line; size_t number=0;
   while(std::getline(in,line)) {
     ++number; line=trim(line); if(number==1 && line.rfind("\xEF\xBB\xBF",0)==0) line.erase(0,3);
     if(line.empty()) continue;
     if(line.empty() || line[0]=='#' || line[0]==';' || line.rfind("//",0)==0) continue;
     if(line.front()=='[') {
-      if(line.back()!=']') {r.error="format";break;}
-      if(type=="ini") {flush(); std::string section=line.substr(1,line.size()-2);selected=section=="Gecko" || section=="ActionReplay";entry=Entry{};entry.type=section=="Gecko"?"gecko":"actionReplay";continue;}
+      const auto close=line.find(']');
+      if(close==std::string::npos) {r.error="format";break;}
+      line.resize(close+1);
+      if(type=="ini") {flush(); std::string section=line.substr(1,line.size()-2);selected=section=="Gecko" || section=="ActionReplay" || section=="Action Replay";entry=Entry{};entry.type=section=="Gecko"?"gecko":"actionReplay";continue;}
       if(type=="pnach") {flush();entry=Entry{};entry.type="pnach";entry.name=line.substr(1,line.size()-2);entry.creator=creator;if(!safeName(entry.name)){r.error="name";break;}continue;}
       r.error="format";break;
     }
     if(!selected) continue; // Never import enabled lists or unrelated game settings.
-    if(type=="ini" && (line.front()=='$' || line.rfind("+$",0)==0)) {
+    if(type!="pnach" && (line.front()=='$' || line.rfind("+$",0)==0)) {
       flush(); entry.lines.clear(); entry.notes.clear(); entry.encrypted=false;hasMode=false;
       std::string title=line.substr(line.front()=='+'?2:1);const auto bracket=title.find('[');
       entry.creator.clear();
@@ -76,15 +120,25 @@ inline Result parse(const std::string& input, const std::string& type, const std
     if(type=="pnach" && (line.rfind("gametitle=",0)==0 || line.rfind("comment=",0)==0 || line.rfind("description=",0)==0 || line.rfind("author=",0)==0)) {
       if(line.rfind("author=",0)==0) entry.creator=trim(line.substr(7)); else entry.notes.push_back(line);continue;
     }
-    if(line[0]=='*' && entry.type=="gecko") {entry.notes.push_back(line.substr(1));continue;}
+    if(line[0]=='*' && (entry.type=="gecko" || entry.type=="actionReplay")) {entry.notes.push_back(line.substr(1));continue;}
     if(entry.name.empty()) {r.error="name";break;}
     const auto comment=line.find("//");
     if(comment!=std::string::npos) line=trim(line.substr(0,comment));
     std::string normalized; bool encrypted=false;
     bool ok=entry.type=="pnach"?pnachLine(line,&normalized):rawLine(line,&normalized);
     if(!ok && entry.type=="actionReplay") ok=encrypted=encryptedLine(line,&normalized);
-    if(!ok || (hasMode && encrypted!=entry.encrypted)) {r.error="code";break;}
+    if(!ok || (hasMode && encrypted!=entry.encrypted)) {
+      // A text export may prefix its first block with a human-readable title.
+      // Do not treat an invalid address/code line as a title or discard it.
+      const bool titleCandidate=entry.lines.empty() && !hasMode && line.size()>2 &&
+          std::isalpha(static_cast<unsigned char>(line[0])) && line.find(' ')!=std::string::npos &&
+          !hex(line.substr(0,line.find(' ')),1,8) && line.find('=')==std::string::npos &&
+          line.find('<')==std::string::npos && line.find('>')==std::string::npos;
+      if(type!="ini" && type!="pnach" && titleCandidate && safeName(line)) {entry.name=line;continue;}
+      r.error=(hasMode && encrypted!=entry.encrypted)?"mixedFormat":"code";break;
+    }
     hasMode=true;entry.encrypted=encrypted;entry.lines.push_back(normalized);
+    if(encrypted && entry.lines.size()>127){r.error="size";break;}
     if(++total>8192 || r.entries.size()>512) {r.error="size";break;}
   }
   if(!r.error.empty()) {r.line=number;r.entries.clear();return r;}

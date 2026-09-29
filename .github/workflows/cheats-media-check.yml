@@ -18,7 +18,7 @@ concurrency:
 jobs:
   test:
     runs-on: macos-15
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +35,11 @@ jobs:
           /tmp/cheat-parser
           clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_store_test.mm -framework Foundation -o /tmp/cheat-store
           /tmp/cheat-store
+          clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_import_delete361_test.mm -framework Foundation -o /tmp/cheat-import-delete
+          /tmp/cheat-import-delete
+          python3 test/ar_block361_upstream_test.py
+          clang++ -std=c++20 -fobjc-arc -fblocks -Ipackages/dolphin_internal_bridge/ios/Classes test/cheat_catalog361_test.mm -framework Foundation -o /tmp/cheat-catalog
+          /tmp/cheat-catalog
           python3 test/cheats_media_source_contract_test.py
       - name: Compile actual native menus for iOS arm64
         shell: bash
@@ -43,6 +48,16 @@ jobs:
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           xcrun clang++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ -isysroot "$SDK" -target arm64-apple-ios17.4 packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.mm
           xcrun clang++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ -isysroot "$SDK" -target arm64-apple-ios17.4 packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm
+      - name: Exercise real UIKit editor with reported multiline code and document import
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          python3 test/cheat_editor361_ui_test.py > /tmp/cheat-editor.log 2>&1 || { tail -n 100 /tmp/cheat-editor.log; exit 1; }
+          tail -n 35 /tmp/cheat-editor.log
+      - name: Check live RE4 PAL catalogue without bundling third-party codes
+        continue-on-error: true
+        run: |
+          curl -fL --max-time 20 'https://www.gc-forever.com/forums/viewtopic.php?t=2145' -o /tmp/re4-pal.html
+          /tmp/cheat-catalog /tmp/re4-pal.html
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.2'

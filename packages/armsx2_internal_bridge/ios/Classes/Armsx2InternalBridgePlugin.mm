@@ -947,6 +947,22 @@ static UIViewController* ARMSX2RootViewController(void) {
               NSData* data=[NSData dataWithBytes:json length:strlen(json)];
               id state=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
               if([state isKindOfClass:NSDictionary.class]) {
+                if([request[@"kind"] isEqual:@"delete"]) {
+                  NSDictionary* item=nil;
+                  for(NSDictionary* candidate in state[@"items"])
+                    if([candidate[@"cheat"] boolValue] && [NeoField(candidate,@"id") isEqual:NeoField(request,@"id")] && [NeoField(candidate,@"name") isEqual:NeoField(request,@"name")]){item=candidate;break;}
+                  NSDictionary* plan=item?NeoCheatRemovalPlan(bridge.activeDataDirectory,request,state,YES):NeoCheatFailure(@"notRemovable");
+                  result=plan;
+                  if([plan[@"success"] boolValue]) {
+                    char error[512]={};
+                    if(!bridge.api->set_patch_state([request[@"id"] UTF8String],0,error,sizeof(error)) || !NeoCommitCheatRemoval(plan)) result=NeoCheatFailure(@"writeFailed");
+                    else if(!bridge.api->reload_cheats(error,sizeof(error))) {
+                      [plan[@"previous"] writeToFile:plan[@"file"] options:NSDataWritingAtomic error:nil];
+                      result=NeoCheatFailure(@"writeFailed");
+                    } else result=@{@"success":@YES};
+                  }
+                  dispatch_async(dispatch_get_main_queue(),^{completion(result);});return;
+                }
                 result=NeoPnachImport(bridge.activeDataDirectory,request,state);
                 if([result[@"success"] boolValue] && [result[@"added"] integerValue]>0) {
                   char error[512]={};
