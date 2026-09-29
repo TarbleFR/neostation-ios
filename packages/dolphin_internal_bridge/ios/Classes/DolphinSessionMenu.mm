@@ -42,6 +42,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 }
 
 - (NSString*)text:(NSString*)key {
+  if ([key isEqual:@"downloadGecko"]) return NeoCheatText(@"downloadCatalogs",self.labels[@"__locale"]);
   return self.labels[key] ?: key;
 }
 
@@ -429,7 +430,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       cell.detailTextLabel.text = [self text:
           [self.cheatsSnapshot[@"masterEnabled"] boolValue] ? @"on" : @"off"];
     } else if (row == 1) {
-      cell.textLabel.text = NeoCheatText(@"downloadCatalogs",self.labels[@"__locale"]);
+      cell.textLabel.text = [self text:@"downloadGecko"];
       NSString* gameTdbId = [self.cheatsSnapshot[@"gameTdbId"] isKindOfClass:NSString.class]
           ? self.cheatsSnapshot[@"gameTdbId"] : @"";
       cell.detailTextLabel.text = gameTdbId.length ? gameTdbId : [self text:@"noCheats"];
