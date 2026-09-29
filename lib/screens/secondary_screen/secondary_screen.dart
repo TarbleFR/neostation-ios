@@ -111,7 +111,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   bool _wasNowPlayingActive = false;
   String? _panelGameId;
 
-  /// Ticks once a second while a game is active so the Now Playing "PLAY TIME"
+  /// Ticks once a second while a game is active so the Now Playing play-time
   /// stat counts up live. [_sessionWatch] measures the current session, which is
   /// added to the DB-supplied total at render time.
   Timer? _playTimeTicker;
@@ -475,7 +475,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   }
 
   /// Restarts the session stopwatch and the per-second repaint so the live
-  /// PLAY TIME counts up from zero for this launch.
+  /// The live play-time counter starts at zero for this launch.
   void _startPlayTimeTicker() {
     _sessionWatch
       ..reset()
@@ -1675,7 +1675,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   }
 
   /// The running session length, formatted down to the second so the per-second
-  /// tick is visible. Shown alongside the (static) total PLAY TIME while a game
+  /// tick is visible. Shown alongside the static total play time while a game
   /// is active.
   String _formatSessionTime() {
     final total = _sessionWatch.elapsed.inSeconds;
