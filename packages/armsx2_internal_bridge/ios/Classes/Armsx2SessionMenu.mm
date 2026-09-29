@@ -370,25 +370,6 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
           : (value ? ARMSX2MenuText(@"On", @"Activé") : ARMSX2MenuText(@"Off", @"Désactivé"));
     }
   } else if (self.page == ARMSX2MenuCheats) {
-    if (row == 3) {
-      if(!self.readPatches || !self.importCheats || self.loading)return;
-      self.loading=YES;
-      __weak Armsx2SessionMenu* weakSelf=self;
-      self.readPatches(^(NSDictionary* identity){ARMSX2MenuOnMain(^{
-        Armsx2SessionMenu* menu=weakSelf;if(!menu)return;menu.loading=NO;
-        if(![identity[@"available"] boolValue] || [identity[@"hardcore"] boolValue]) {
-          menu.navigationItem.prompt=NeoCheatText([identity[@"hardcore"] boolValue]?@"hardcore":@"sessionChanged",menu.localeIdentifier);return;
-        }
-        ARMSX2ManualCheatEditor* editor=[ARMSX2ManualCheatEditor new];
-        editor.ps2=YES;editor.localeIdentifier=menu.localeIdentifier;editor.identity=identity;
-        editor.saveCheat=menu.importCheats;
-        editor.saved=^{
-          weakSelf.navigationItem.prompt=NeoCheatText(@"savedDisabled",weakSelf.localeIdentifier);
-          [weakSelf reloadPatches];
-        };
-        if(menu.navigationController.topViewController==menu)[menu.navigationController pushViewController:editor animated:YES];
-      });});return;
-    }
     if (row == 0) {
       cell.textLabel.text = ARMSX2MenuText(@"Enable Cheats", @"Activer les cheats");
       cell.detailTextLabel.text = ARMSX2MenuText([self.snapshot[@"cheats"] boolValue] ? @"On" : @"Off",
@@ -612,6 +593,25 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     }
     [self presentViewController:sheet animated:YES completion:nil];
   } else if (self.page == ARMSX2MenuCheats) {
+    if (row == 3) {
+      if(!self.readPatches || !self.importCheats || self.loading)return;
+      self.loading=YES;
+      __weak Armsx2SessionMenu* weakSelf=self;
+      self.readPatches(^(NSDictionary* identity){ARMSX2MenuOnMain(^{
+        Armsx2SessionMenu* menu=weakSelf;if(!menu)return;menu.loading=NO;
+        if(![identity[@"available"] boolValue] || [identity[@"hardcore"] boolValue]) {
+          menu.navigationItem.prompt=NeoCheatText([identity[@"hardcore"] boolValue]?@"hardcore":@"sessionChanged",menu.localeIdentifier);return;
+        }
+        ARMSX2ManualCheatEditor* editor=[ARMSX2ManualCheatEditor new];
+        editor.ps2=YES;editor.localeIdentifier=menu.localeIdentifier;editor.identity=identity;
+        editor.saveCheat=menu.importCheats;
+        editor.saved=^{
+          weakSelf.navigationItem.prompt=NeoCheatText(@"savedDisabled",weakSelf.localeIdentifier);
+          [weakSelf reloadPatches];
+        };
+        if(menu.navigationController.topViewController==menu)[menu.navigationController pushViewController:editor animated:YES];
+      });});return;
+    }
     if (row == 0) {
       const BOOL enabled = [self.snapshot[@"cheats"] boolValue];
       [self pushChoice:ARMSX2MenuText(@"Enable Cheats", @"Activer les cheats")
