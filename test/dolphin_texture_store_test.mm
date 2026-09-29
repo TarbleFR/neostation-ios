@@ -6,6 +6,10 @@ int main(){@autoreleasepool{
   NSString* user=[root stringByAppendingPathComponent:@"User"];NSString* pack=[root stringByAppendingPathComponent:@"GR8P69"];
   assert([fm createDirectoryAtPath:user withIntermediateDirectories:YES attributes:nil error:nil]);
   assert([fm createDirectoryAtPath:pack withIntermediateDirectories:YES attributes:nil error:nil]);
+  assert(!DOLTextureGame(nil));
+  NSDictionary* empty=DOLTextureStatus(user,@"GR8P69",0);
+  assert(![empty[@"enabled"] boolValue] && [empty[@"count"] intValue]==0);
+  assert(DOLTextureStatus(user,nil,0).count==0);
   const unsigned char png[]={137,80,78,71,13,10,26,10};NSData* bytes=[NSData dataWithBytes:png length:sizeof(png)];
   assert([bytes writeToFile:[pack stringByAppendingPathComponent:@"tex1_a.png"] atomically:YES]);
   NSString* ini=DOLTextureINI(user,@"GR8P69",0);assert([fm createDirectoryAtPath:ini.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil]);

@@ -5,7 +5,7 @@
 #include "DOLTextureZip.h"
 
 static BOOL DOLTextureGame(NSString* game) {
-  return [game rangeOfString:@"^[A-Z0-9]{6}$" options:NSRegularExpressionSearch].location!=NSNotFound;
+  return game.length==6 && [game rangeOfString:@"^[A-Z0-9]{6}$" options:NSRegularExpressionSearch].location!=NSNotFound;
 }
 static NSString* DOLTextureINI(NSString* user,NSString* game,NSInteger revision) {
   if(!DOLTextureGame(game) || revision<0 || revision>65535)return nil;
@@ -39,7 +39,7 @@ static NSDictionary* DOLTextureStatus(NSString* user,NSString* game,NSInteger re
   NSDictionary* manifest=nil;
   if(DOLTextureSafeParents(folder,user)){
     NSData* data=[NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:@"NeoStation-pack.json"]];
-    if(data.length<65536)manifest=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if(data.length && data.length<65536)manifest=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   }
   if(![manifest isKindOfClass:NSDictionary.class])manifest=@{};
   return @{@"enabled":@([DOLIniValue(text,@"Video_Settings",@"HiresTextures") isEqual:@"True"]),

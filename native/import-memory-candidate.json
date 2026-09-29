@@ -18,7 +18,7 @@
     "packages/dolphin_internal_bridge/ios/Classes/DOLManualCheatEditor.h": "4d0bb5260fb8f70d0dc8e16320e610a691a5f67f395988035232d8045913759a",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureLabels.h": "1172e5b8985cda7041450a02d4628675c020707d8f3b41ffd978cb9159d05b9a",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h": "a75ff195a1d3340323a91209ce1a0d8ea751065aeaa51035a5374b177c3007af",
-    "packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h": "ddcbbacd8bab95dc881821001d18bb00acf5e5105c8f863a38df27daa4d0a8fc",
+    "packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h": "692e109040c8c323d2e6bc50c6e146bd05c6821478f18cca2c7979d03259ae67",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureZip.h": "59edaec6da012b577ad80131b5969c62da07ab19f0d8ac0685176b4d92ed6ccf",
     "packages/dolphin_internal_bridge/ios/Classes/DolphinInternalBridgePlugin.mm": "5cf70451a8f65595b69415fa25837b65c53c62e41458bcac68d496844d69bcd3",
     "packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h": "6c23fcd79a47bb89b6b07f1c8c66ba2df9f3dd6d346bbb3e5be525423544392e",
