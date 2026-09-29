@@ -59,7 +59,7 @@ jobs:
               'fr', 'de', 'it', 'id', 'ja', 'ko',
           ):
               count = text.count("'" + locale + "':")
-              assert count == 5, (locale, count)
+              assert count == 6, (locale, count)
           PY
 
       - name: Exercise future app legal embedding
