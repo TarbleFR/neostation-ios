@@ -130,7 +130,9 @@ inline Result parse(const std::string& input, const std::string& requestedType, 
     if(!ok || (hasMode && encrypted!=entry.encrypted)) {
       // A text export may prefix its first block with a human-readable title.
       // Do not treat an invalid address/code line as a title or discard it.
-      const bool titleCandidate=entry.lines.empty() && !hasMode && line.size()>2 &&
+      std::istringstream titleFields(line);std::string firstField,secondField;titleFields>>firstField>>secondField;
+      const bool codeShaped=firstField.size()==8 && secondField.size()==8;
+      const bool titleCandidate=!codeShaped && entry.lines.empty() && !hasMode && line.size()>2 &&
           std::isalpha(static_cast<unsigned char>(line[0])) && line.find(' ')!=std::string::npos &&
           !hex(line.substr(0,line.find(' ')),1,8) && line.find('=')==std::string::npos &&
           line.find('<')==std::string::npos && line.find('>')==std::string::npos;

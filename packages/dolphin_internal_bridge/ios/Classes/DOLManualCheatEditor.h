@@ -160,10 +160,10 @@
   NSString* type=self.ps2?@"pnach":self.importedType?:@[@"gecko",@"actionReplay",@"ini"][self.formatControl.selectedSegmentIndex];
   NSString* name=[self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
   NSString* creator=[self.creatorField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-  NSString* normalized=NeoString(NeoCheat::normalizeText(self.codeField.text.UTF8String?:""));
+  NSString* normalized=NeoString(NeoCheat::normalizeText(NeoUTF8(self.codeField.text)));
   type=self.ps2?@"pnach":NeoString(NeoCheat::detectedFormat(normalized.UTF8String,type.UTF8String));
   if(!name.length) name=[NSString stringWithFormat:@"%@ - %@",[type isEqual:@"actionReplay"]?@"Action Replay":self.ps2?@"PNACH":@"Gecko",NeoField(self.identity,self.ps2?@"crc":@"gameId")];
-  const auto parsed=NeoCheat::parse(normalized.UTF8String,type.UTF8String,name.UTF8String,creator.UTF8String?:"");
+  const auto parsed=NeoCheat::parse(NeoUTF8(normalized),type.UTF8String,name.UTF8String,creator.UTF8String?:"");
   if(!parsed){[self showResultError:NeoParserFailure(parsed)];return;}
   NSMutableDictionary* request=[self.identity mutableCopy];
   request[@"type"]=type;request[@"name"]=name;request[@"creator"]=creator;

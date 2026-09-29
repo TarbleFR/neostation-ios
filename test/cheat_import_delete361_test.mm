@@ -20,6 +20,8 @@ int main(){@autoreleasepool {
  assert(![NeoDecodeCheatDocument([NSData dataWithBytes:gct length:sizeof(gct)],@"G4BE08.gct",identity,NO,@"gecko")[@"success"] boolValue]);
  NSString* root=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
  NSMutableDictionary* request=[identity mutableCopy];request[@"name"]=@"Aim";request[@"creator"]=@"Nikra";request[@"type"]=@"gecko";request[@"content"]=exact;
+ NSString* zero=[NSString stringWithFormat:@"%@%C%@",exact,(unichar)0,@"HIDDEN_INVALID_TAIL"];
+ request[@"content"]=zero;assert(![NeoDolphinImport(root,request,identity,NO)[@"success"] boolValue]);request[@"content"]=exact;
  auto result=NeoDolphinImport(root,request,identity,NO);assert([result[@"success"] boolValue]);
  NSString* path=result[@"file"];NSString* initial=[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
  assert([initial containsString:@"[ActionReplay]\n$Aim [Nikra]\n6HUF-YY22-P0Y4N"]);

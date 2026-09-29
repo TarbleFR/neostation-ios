@@ -34,5 +34,6 @@ int main(){using namespace NeoCheat;
  auto broken=parse("6HUF-YY22-P0Y4N\nYP3X-W34H-8N8PU\n7663-4G9D-1BPQZ\n0WGZ-DYX8-MXNE!\nGPPV-ZN8B-UVPUX","gecko","Aim");
  assert(!broken && broken.line==4 && broken.entries.empty());
  assert(parse("[ActionReplay] Comment\n$Aim [Nikra]\n"+screenshot,"ini","").entries[0].lines.size()==5);
+ assert(!parse("XXXXXXXX 00000001\n04000004 00000002", "gecko", "Broken first line"));
  std::cout<<"PASS: strict Gecko/AR/INI/PNACH parsing, region headers, placeholders, bounds, no activation input\n";
 }

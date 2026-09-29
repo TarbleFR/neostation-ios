@@ -6,6 +6,10 @@
 #include <cstring>
 
 static NSString* NeoString(const std::string& s) { return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding] ?: @""; }
+static std::string NeoUTF8(NSString* text) {
+  NSData* data=[text dataUsingEncoding:NSUTF8StringEncoding];
+  return data.length?std::string(static_cast<const char*>(data.bytes),data.length):std::string{};
+}
 static NSString* NeoField(NSDictionary* d,NSString* key) { return [d[key] isKindOfClass:NSString.class]?d[key]:@""; }
 static NSString* NeoCheatDisplayName(NSString* name) {
   NSArray<NSString*>* parts=[name componentsSeparatedByString:@"/"];
@@ -83,7 +87,7 @@ static NSDictionary* NeoDecodeCheatDocument(NSData* data,NSString* filename,NSDi
     else if(data.length>=2 && bytes[0]==0xFE && bytes[1]==0xFF)text=[[NSString alloc] initWithData:data encoding:NSUTF16BigEndianStringEncoding];
     else text=[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     if(!text)return NeoCheatFailure(@"fileEncoding");
-    text=NeoString(NeoCheat::normalizeText(text.UTF8String?:""));
+    text=NeoString(NeoCheat::normalizeText(NeoUTF8(text)));
     if([text rangeOfString:@"<!doctype" options:NSCaseInsensitiveSearch].location!=NSNotFound ||
         [text rangeOfString:@"<html" options:NSCaseInsensitiveSearch].location!=NSNotFound) return NeoCheatFailure(@"unsupportedFile");
     type=ps2?@"pnach":NeoString(NeoCheat::detectedFormat(text.UTF8String,fallback.UTF8String?:"gecko"));
@@ -172,7 +176,7 @@ static NSDictionary* NeoDolphinImport(NSString* userDirectory,NSDictionary* requ
   if(!userDirectory.length || !NeoIdentityMatches(request,snapshot,NO)) return NeoCheatFailure(@"sessionChanged");
   if([snapshot[@"hardcore"] boolValue]) return NeoCheatFailure(@"hardcore");
   if(!NeoFilenameMatches(NeoField(request,@"filename"),snapshot,NO)) return NeoCheatFailure(@"wrongGame");
-  const auto parsed=NeoCheat::parse([NeoField(request,@"content") UTF8String],[NeoField(request,@"type") UTF8String],[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
+  const auto parsed=NeoCheat::parse(NeoUTF8(NeoField(request,@"content")),[NeoField(request,@"type") UTF8String],[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
   if(!parsed) return NeoParserFailure(parsed);
   NSMutableSet* known=[NSMutableSet set];
   for(NSString* key in @[@"gecko",@"actionReplay"]) {
@@ -216,7 +220,7 @@ static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* reques
   if(!dataDirectory.length || !NeoIdentityMatches(request,snapshot,YES)) return NeoCheatFailure(@"sessionChanged");
   if([snapshot[@"hardcore"] boolValue]) return NeoCheatFailure(@"hardcore");
   if(!NeoFilenameMatches(NeoField(request,@"filename"),snapshot,YES)) return NeoCheatFailure(@"wrongGame");
-  const auto parsed=NeoCheat::parse([NeoField(request,@"content") UTF8String],"pnach",[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
+  const auto parsed=NeoCheat::parse(NeoUTF8(NeoField(request,@"content")),"pnach",[NeoField(request,@"name") UTF8String],[NeoField(request,@"creator") UTF8String]);
   if(!parsed) return NeoParserFailure(parsed);
   NSString* crc=NeoField(snapshot,@"crc").uppercaseString;
   NSMutableString* content=[NSMutableString stringWithFormat:@"// NeoStation manual cheats; serial %@; CRC %@. Disabled until selected.\n",NeoField(snapshot,@"serial"),crc];
