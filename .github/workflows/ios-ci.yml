@@ -24,7 +24,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 # Keep candidate IPA runs separate from native validation.
@@ -968,6 +968,192 @@ jobs:
           cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
+
+      - name: Publish NeoStation iOS 0.0.2
+        if: ${{ contains(github.event.head_commit.message, '[publish-0.0.2]') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: '0.0.2'
+          RELEASE_SOURCE_SHA: 'f4583c6a3083b8aed358da28b2f8f849256e0e8b'
+        run: |
+          set -euo pipefail
+          git diff --exit-code "$RELEASE_SOURCE_SHA" "$GITHUB_SHA" -- \
+            . ':(exclude).github/workflows/ios-ci.yml'
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to replace it." >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Tag $RELEASE_TAG already exists; refusing to move it." >&2
+            exit 1
+          fi
+
+          OUT="$RUNNER_TEMP/release-0.0.2"
+          mkdir -p "$OUT/legal"
+          cp "dist/$IPA_NAME.ipa" "$OUT/NeoStation.ipa"
+          cp LICENSE.md "$OUT/legal/NeoStation-GPL-3.0.txt"
+          cp NOTICE.md "$OUT/legal/NeoStation-NOTICE.md"
+          cp docs/LEGAL_AND_CREDITS.md "$OUT/legal/LEGAL_AND_CREDITS.md"
+          cp -R assets/legal/. "$OUT/legal/"
+          (cd "$OUT" && zip -qr NeoStation-0.0.2-Licenses-and-Notices.zip legal)
+
+          STIK_VERSION="$(python3 -c 'import json; print(json.load(open("build-utils/stikjit/source.json"))["version"])')"
+          STIK_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/stikjit/source.json"))["revision"])')"
+          cat > "$OUT/NeoStation-0.0.2-Source-Manifest.md" <<EOF
+          # NeoStation iOS 0.0.2 — Source Manifest
+
+          - Release tag: 0.0.2
+          - Validated internal build: 365
+          - Application source commit: $RELEASE_SOURCE_SHA
+          - StikJIT: $STIK_VERSION
+          - StikJIT pinned source revision: $STIK_REVISION
+
+          The application source archive is generated directly from the exact
+          application source commit recorded above. The publishing commit changes
+          only the GitHub Actions release workflow and is not part of the
+          application source identity.
+
+          Third-party projects retain their own licenses, copyrights and source
+          boundaries. See NeoStation-0.0.2-Licenses-and-Notices.zip, NOTICE.md and
+          docs/LEGAL_AND_CREDITS.md for the maintained legal record.
+          EOF
+
+          git archive \
+            --format=tar.gz \
+            --prefix=neostation-ios-0.0.2/ \
+            --output="$OUT/NeoStation-0.0.2-NeoStation-Source.tar.gz" \
+            "$RELEASE_SOURCE_SHA"
+
+          cat > "$RUNNER_TEMP/release-notes-0.0.2.md" <<'RELEASE_NOTES'
+          <p align="center">
+            <img src="https://raw.githubusercontent.com/TarbleFR/neostation-ios/f4583c6a3083b8aed358da28b2f8f849256e0e8b/assets/images/fork-icon-valid.jpg" width="180" alt="NeoStation iOS logo">
+          </p>
+
+          <h1 align="center">🎮 NeoStation iOS — 0.0.2</h1>
+
+          <p align="center"><strong>JIT compatibility, DolphiniOS improvements and overall stability update.</strong></p>
+
+          ---
+
+          ## ⚡ StikJIT updated
+
+          NeoStation now integrates **StikJIT 1.9.0**, replacing the previous 1.5.0 integration.
+
+          The JIT layer has been updated to improve compatibility across:
+
+          - **iOS 18**
+          - **iOS 26**
+          - **iOS 27**
+
+          Pairing validation and JIT diagnostics have also been improved to help reduce silent or indefinite loading states.
+
+          ---
+
+          ## 🐬 DolphiniOS improvements
+
+          The embedded Dolphin integration receives several display and runtime improvements:
+
+          - improved frame pacing
+          - reduced micro-stutter
+          - **120 Hz support**
+          - improved Metal presentation
+          - improved shader handling
+          - cleaner resource handling between game sessions
+          - improved display diagnostics
+
+          > 120 Hz support improves presentation on compatible devices but does not turn a 30/60 FPS game into a native 120 FPS game.
+
+          ---
+
+          ## 📱 Requirements
+
+          - iPhone or iPad
+          - **iOS 18 or later**
+          - Developer Mode enabled
+          - NeoStation installed as a standalone IPA
+          - compatible JIT configuration when required
+
+          **LiveContainer is not supported.**
+
+          ---
+
+          ## 🎮 Game files
+
+          NeoStation does not distribute ROMs, ISOs, BIOS files, firmware or copyrighted commercial game assets.
+
+          Native ports such as **KartPad** and **Dusklight** require data from the user's own legally obtained supported games.
+
+          ---
+
+          ## 📦 Release
+
+          Download **NeoStation.ipa** from the Assets section.
+
+          **Version:** 0.0.2  
+          **Internal build:** 365  
+          **Source:** f4583c6a3083b8aed358da28b2f8f849256e0e8b
+
+          Full credits, licenses, source information and checksums are included with the release assets.
+
+          ---
+
+          **One app. One library. Multiple systems.**
+          RELEASE_NOTES
+
+          if grep -Eiq 'RPCS3|ARMSX2|cheat|Wiimote|Wii Motion|ProMotion' "$RUNNER_TEMP/release-notes-0.0.2.md"; then
+            echo "Release notes contain an excluded topic." >&2
+            exit 1
+          fi
+
+          IPA_SIZE="$(stat -f%z "$OUT/NeoStation.ipa")"
+          IPA_SHA="$(shasum -a 256 "$OUT/NeoStation.ipa" | awk '{print $1}')"
+          {
+            echo "$IPA_SHA  NeoStation.ipa"
+            cd "$OUT"
+            shasum -a 256 \
+              NeoStation-0.0.2-Licenses-and-Notices.zip \
+              NeoStation-0.0.2-Source-Manifest.md \
+              NeoStation-0.0.2-NeoStation-Source.tar.gz
+          } > "$OUT/NeoStation-0.0.2-SHA256SUMS.txt"
+
+          gh release create "$RELEASE_TAG" \
+            "$OUT/NeoStation.ipa" \
+            "$OUT/NeoStation-0.0.2-Licenses-and-Notices.zip" \
+            "$OUT/NeoStation-0.0.2-Source-Manifest.md" \
+            "$OUT/NeoStation-0.0.2-NeoStation-Source.tar.gz" \
+            "$OUT/NeoStation-0.0.2-SHA256SUMS.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SOURCE_SHA" \
+            --title "NeoStation iOS 0.0.2" \
+            --notes-file "$RUNNER_TEMP/release-notes-0.0.2.md"
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release-0.0.2.json"
+          jq -e --arg commit "$RELEASE_SOURCE_SHA" \
+            '.tag_name=="0.0.2" and .name=="NeoStation iOS 0.0.2" and .draft==false and .prerelease==false and .target_commitish==$commit' \
+            "$RUNNER_TEMP/release-0.0.2.json" >/dev/null
+
+          for asset in \
+            NeoStation.ipa \
+            NeoStation-0.0.2-Licenses-and-Notices.zip \
+            NeoStation-0.0.2-Source-Manifest.md \
+            NeoStation-0.0.2-NeoStation-Source.tar.gz \
+            NeoStation-0.0.2-SHA256SUMS.txt; do
+            jq -e --arg asset "$asset" '.assets[] | select(.name==$asset)' \
+              "$RUNNER_TEMP/release-0.0.2.json" >/dev/null
+          done
+
+          mkdir -p "$RUNNER_TEMP/release-download-check"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'NeoStation.ipa' \
+            --dir "$RUNNER_TEMP/release-download-check"
+          echo "$IPA_SHA  $RUNNER_TEMP/release-download-check/NeoStation.ipa" | shasum -a 256 -c -
+
+          echo "Published NeoStation iOS 0.0.2"
+          echo "NeoStation.ipa size: $IPA_SIZE"
+          echo "NeoStation.ipa SHA-256: $IPA_SHA"
 
       - name: Encrypt private test IPA before artifact upload
         shell: bash
