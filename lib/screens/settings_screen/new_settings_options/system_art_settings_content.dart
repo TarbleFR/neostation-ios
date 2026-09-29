@@ -182,6 +182,7 @@ class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
       _ThemeItem(
         label: AppLocale.systemArtNone.getString(context),
         folder: '',
+        author: '',
         previewUrl: '',
         isAi: false,
       ),
@@ -189,6 +190,7 @@ class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
         (t) => _ThemeItem(
           label: t.name,
           folder: t.folder,
+          author: t.author,
           previewUrl: t.previewUrl,
           isAi: t.isAi,
         ),
@@ -327,12 +329,14 @@ class SystemArtSettingsContentState extends State<SystemArtSettingsContent> {
 class _ThemeItem {
   final String label;
   final String folder;
+  final String author;
   final String previewUrl;
   final bool isAi;
 
   const _ThemeItem({
     required this.label,
     required this.folder,
+    required this.author,
     required this.previewUrl,
     required this.isAi,
   });
@@ -433,6 +437,36 @@ class _NeoThemeCard extends StatelessWidget {
                               fontSize: 8.r,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    if (item.author.isNotEmpty)
+                      Positioned(
+                        left: 8.r,
+                        right: 8.r,
+                        bottom: 8.r,
+                        child: Align(
+                          alignment: Alignment.bottomLeft,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6.r,
+                              vertical: 2.r,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.68),
+                              borderRadius: BorderRadius.circular(999.r),
+                            ),
+                            child: Text(
+                              item.author,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 7.5.r,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),

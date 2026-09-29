@@ -18,3 +18,12 @@ for file in ('lib/screens/game_screen/my_games_list.dart','lib/screens/secondary
 service=(root/'lib/services/game/game_launch_service.dart').read_text()
 assert service.index('await FrontendMediaGate.instance.quiet')<service.index('await _launchGameImpl')
 print('PASS: exact retained KartPad lifecycle, all preview factories gated, 12 native cheat locales, generated sources match')
+
+import re
+bridge='packages/dolphin_internal_bridge/ios/Classes/DolphinInternalBridgePlugin.mm'
+old_bridge=subprocess.check_output(['git','show','ae7d46f90dff64ce698b8c18e0c12510dbae96fe:'+bridge],cwd=root,text=True)
+pattern=r'extern "C" \{(.*?)\n\}'
+# Header declarations, exported entrypoints and types must remain donor-compatible.
+old_decl=re.search(pattern,old_bridge,re.S)
+new_decl=re.search(pattern,(root/bridge).read_text(),re.S)
+assert old_decl and new_decl and old_decl.group(1)==new_decl.group(1), 'Dolphin core ABI changed'

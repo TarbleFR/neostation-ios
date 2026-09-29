@@ -26,35 +26,52 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ---
 
-CURRENT STABLE IOS BASELINE — BUILD 322
+CURRENT STABLE IOS BASELINE — BUILD 350 / GITHUB RELEASE 0.0.1
 
-Source commit:
-a36a01bc519300369c0d8f9ba9073753c884786f
+Published release:
+https://github.com/TarbleFR/neostation-ios/releases/tag/0.0.1
+
+Release asset:
+NeoStation.ipa
+
+Packaging source commit:
+5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0
 
 Successful Actions run:
-35970470533
-https://github.com/TarbleFR/neostation-ios/actions/runs/35970470533
+36323843067
+https://github.com/TarbleFR/neostation-ios/actions/runs/36323843067
 
-Artifact:
-NeoStation-iOS-Build-322-Dusklight-Warm-Resume
+Workflow artifact ID:
+10932894067
+
+Original validated artifact:
+NeoStation-iOS-Build-350-KartPad-Relaunch-Candidate
+
+IPA size:
+143538718 bytes
 
 IPA SHA-256:
-beb546f5b98b25f27b1903067f1c46956f57a3d2e92ff7fd79b6b34838e9236c
+e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46
 
-Build 322 remains the documented restoration point until a later experimental
-build is explicitly device-validated and promoted. A successful CI run alone
-does not make an experimental build the new stable baseline.
+Build 350 is the documented stable restoration point promoted on
+27 September 2026. The GitHub release 0.0.1 publishes that already-validated
+binary under the asset name NeoStation.ipa.
 
 The corresponding source for an IPA is the exact Git commit whose source tree
-was used to produce that binary. Documentation/CI maintenance commits do not
-retroactively become the source revision of an earlier IPA.
+was used to produce that binary. Documentation, attribution and CI-maintenance
+commits made after publication do not retroactively become the source revision
+of the 0.0.1 IPA and do not alter its bytes.
 
 Public source repository:
 https://github.com/TarbleFR/neostation-ios
 
+Detailed attribution and source identity:
+https://github.com/TarbleFR/neostation-ios/blob/main/docs/LEGAL_AND_CREDITS.md
+https://github.com/TarbleFR/neostation-ios/blob/main/docs/RELEASE_0.0.1_SOURCE_MANIFEST.md
+
 When redistributing an IPA, preserve applicable licenses and notices and give
 recipients access to matching source, integration modifications and build
-scripts.
+scripts required by the applicable licenses.
 
 ---
 
@@ -103,19 +120,24 @@ packages/dolphin_internal_bridge/ and related native helper code.
 
 RPCS3 / XITRIX RPCS3 IOS — EMBEDDED PLAYSTATION 3 ENGINE
 
-NeoStation's current RPCS3 materialization path uses a pinned RPCS3 iOS release
-published by XITRIX and extracts the verified core for NeoStation packaging.
+NeoStation's canonical RPCS3 materialization path uses the XITRIX RPCS3 fork
+at the exact revision recorded in build-utils/rpcs3/canonical-source.json.
+
+Pinned source:
+https://github.com/XITRIX/rpcs3/tree/22f1152783cef1f7e04af7b1c895173e28fd5b03
 
 XITRIX iOS release repository:
 https://github.com/XITRIX/RPCS3-iOS-Releases
 
-Pinned release currently referenced by the materializer:
-v0.8.1
-
 RPCS3 upstream:
 https://github.com/RPCS3/rpcs3
 
-XITRIX's own project credits the RPCS3 project for the emulator core, ARMSX3 for
+The exact pinned XITRIX/rpcs3 source carries RPCS3's GNU GPL version 2 license;
+its README states that most files are GPL-2.0-only and that some files may use
+different licenses. NeoStation does not claim to relicense RPCS3. Preserve the
+exact file-specific notices and third-party terms.
+
+XITRIX's project credits the RPCS3 project for the emulator core, ARMSX3 for
 ARM64 CPU optimizations, StikDebug for iOS JIT work, and the wider iOS emulation
 community. Those upstream credits remain applicable.
 
@@ -193,6 +215,18 @@ WiiCompiled or their translated/runtime work. NeoStation-specific embedding,
 menu, lifecycle and storage adaptations are maintained in native/kartpad/,
 build-utils/kartpad/ and packages/kartpad_internal_bridge/.
 
+KartPad's RIGHTS_AND_LICENSES.md states that KartPad-owned software and its
+WiiCompiled modifications are GPL-3.0-only where covered, while rights in
+Nintendo-owned game content and ahead-of-time translated game logic remain a
+separate issue. NeoStation does not claim that the software license grants
+rights in Mario Kart Wii or other commercial game content.
+
+The pinned NeoStation source manifest also records that the public KartPad
+source delivery excludes generated translation/profile inputs and that a full
+KartPadCore requires an authorized RMCP01 translation graph. Do not describe
+the public source set as complete KartPad Corresponding Source unless the exact
+required source for the distributed binary is actually available.
+
 ---
 
 MELONX / RYUJINX — EXTERNAL NINTENDO SWITCH INTEGRATION
@@ -238,6 +272,11 @@ universal.js and legacy.js components retain their own licenses/notices.
 NeoStation does not embed or redistribute LocalDevVPN. Users who choose that
 route install, configure and control the separate application independently.
 
+For executable distribution of the embedded StikJIT component, recipients must
+also be informed how to obtain the MPL-covered Source Code Form. NeoStation's
+legal/source manifest records the exact StikJIT source location used by the
+project.
+
 ---
 
 GAMEDB / GAMEDB-PS3 — PS3 TITLE CATALOG
@@ -265,6 +304,30 @@ to the source datasets used by the individual database. GameDB-PS3 lists:
 NeoStation does not claim authorship of GameDB or its dataset. Preserve GameDB,
 GameDB-PS3 and source-dataset attribution when redistributing a cached or bundled
 copy.
+
+---
+
+SYSTEM ART / REMOTE CREATIVE ASSETS
+
+NeoStation Assets:
+https://github.com/misobadev/neostation-assets
+
+The NeoStation Assets repository states that its original backgrounds and custom
+icons are licensed under CC BY-NC-SA 4.0, with attribution required and a
+non-commercial condition for those original creative assets. Console logos and
+other trademarks remain the property of their respective owners.
+
+RiiSU:
+https://github.com/mult1v4c/RiiSU
+
+RiiSU credits iiSU Interpreted for ES-DE for its system art icons and iiSU
+Network for the original inspiration:
+https://github.com/VictorUnlocked/iisu-interpreted-es-de
+https://iisu.network/
+
+No standalone RiiSU license file was visible when this integration was added.
+NeoStation therefore keeps RiiSU remotely hosted by its original project and
+only downloads/caches the artwork when selected by the user.
 
 ---
 
@@ -312,3 +375,17 @@ NeoStation iOS is an independent frontend project and is not affiliated with,
 endorsed by, sponsored by, or otherwise associated with those trademark holders
 unless explicitly stated otherwise. Names are used for identification,
 interoperability and compatibility purposes.
+
+---
+
+FUTURE BINARY PACKAGING POLICY
+
+Future NeoStation iOS builds are required by CI to include an application-bundle
+Legal/ directory containing the NeoStation license and notice, comprehensive
+third-party credits, exact build/source identity, and the pinned license texts
+for Dolphin/DolphiniOS, RPCS3, ARMSX2, Dusklight, KartPad/WiiCompiled and
+StikJIT. The build fails if required legal files are absent or stale relative to
+the pinned source revisions.
+
+This policy applies to future builds. It does not modify the already-published
+NeoStation.ipa asset in GitHub release 0.0.1.

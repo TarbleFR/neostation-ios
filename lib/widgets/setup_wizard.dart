@@ -1396,41 +1396,60 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
                     final thumbWidth = isLandscape ? 120.r : 150.r;
                     return Padding(
                       padding: EdgeInsets.only(top: isLandscape ? 10.r : 16.r),
-                      child: Container(
-                        width: thumbWidth,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10.r),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.3,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: thumbWidth,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10.r),
+                              border: Border.all(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: 0.3,
+                                ),
+                                width: 1.r,
+                              ),
                             ),
-                            width: 1.r,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(9.r),
-                          child: AspectRatio(
-                            aspectRatio: 4 / 3,
-                            child: Image.network(
-                              previewUrl,
-                              fit: BoxFit.cover,
-                              loadingBuilder: (_, child, progress) =>
-                                  progress == null
-                                  ? child
-                                  : Container(color: theme.colorScheme.surface),
-                              errorBuilder: (_, _, _) => Container(
-                                color: theme.colorScheme.surface,
-                                child: Icon(
-                                  Symbols.image_rounded,
-                                  size: 24.r,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.3,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(9.r),
+                              child: AspectRatio(
+                                aspectRatio: 4 / 3,
+                                child: Image.network(
+                                  previewUrl,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (_, child, progress) =>
+                                      progress == null
+                                      ? child
+                                      : Container(
+                                          color: theme.colorScheme.surface,
+                                        ),
+                                  errorBuilder: (_, _, _) => Container(
+                                    color: theme.colorScheme.surface,
+                                    child: Icon(
+                                      Symbols.image_rounded,
+                                      size: 24.r,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.3),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                          if (recommended.author.isNotEmpty) ...[
+                            SizedBox(height: 5.r),
+                            Text(
+                              '© ${recommended.author}',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 8.r : 10.r,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ],
                       ),
                     );
                   },

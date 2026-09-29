@@ -1,0 +1,34 @@
+Upstream source: https://github.com/misobadev/neostation-assets
+Pinned revision/tag: main (runtime-fetched catalog; see release manifest for app source identity)
+Original path: LICENSE
+
+License and Trademark Notice - NeoStation Assets
+
+Creative Content License
+The original artistic works, backgrounds, and custom icons created for the NeoStation project and contained in this repository are licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0).
+
+To view a copy of this license, visit: http://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Under this license, you are free to:
+- Share and redistribute the material.
+- Adapt and build upon the material.
+
+Under the following terms:
+- Attribution: You must give appropriate credit to the NeoStation project.
+- Non-Commercial: You may not use the material for commercial purposes.
+- ShareAlike: If you remix or transform the material, you must distribute your contributions under the same license.
+
+---
+
+Trademark Disclaimer
+This repository contains logos, brand names, and console imagery that are registered trademarks of their respective owners (including but not limited to Nintendo, Sony, Sega, Microsoft, SNK, and NEC).
+
+1. Ownership: NeoStation does not claim ownership of these trademarks.
+2. Purpose: These assets are included solely for educational, preservation, and identification purposes within the context of video game emulation.
+3. Non-Affiliation: NeoStation is an independent open-source project and is NOT affiliated with, authorized, or sponsored by any of the companies mentioned.
+4. Usage Warning: Using these logos for commercial purposes or in a way that suggests official endorsement by the trademark owners is strictly prohibited and may lead to legal action by the respective owners.
+
+---
+
+Responsibility
+Users of this repository are responsible for ensuring that their use of these assets complies with local laws and trademark regulations.
