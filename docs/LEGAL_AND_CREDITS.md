@@ -49,6 +49,43 @@ software** merely because NeoStation interoperates with them:
 
 Their own terms, licenses, privacy policies and service rules apply.
 
+## Remote System Art and creative assets
+
+### NeoStation Assets
+
+NeoStation can fetch optional System Art from:
+
+https://github.com/misobadev/neostation-assets
+
+That repository states that its original artistic works, backgrounds and custom
+icons are licensed under **CC BY-NC-SA 4.0**. Attribution to the NeoStation
+project is required, commercial use of those original assets is restricted by
+that license, and trademarked console logos remain owned by their respective
+holders.
+
+These assets are fetched/cached at runtime rather than being treated as
+NeoStation iOS-owned artwork.
+
+### RiiSU / iiSU
+
+NeoStation also exposes the **RiiSU** System Art pack as a curated external
+on-demand source:
+
+- RiiSU — https://github.com/mult1v4c/RiiSU
+- RiiSU repository owner / maintainer — https://github.com/mult1v4c
+- iiSU Interpreted for ES-DE — https://github.com/VictorUnlocked/iisu-interpreted-es-de
+- iiSU Network — https://iisu.network/
+
+RiiSU's README credits iiSU Interpreted for the system art icons and iiSU
+Network for the original inspiration. Its example metadata identifies the author
+as **iiSU Network**.
+
+No standalone license file was visible in the RiiSU repository when this
+integration was added. NeoStation therefore keeps the RiiSU artwork hosted by
+the original project and downloads/cache it only when the user chooses that
+pack. Attribution does not invent redistribution rights that upstream has not
+published.
+
 ## Metadata and datasets
 
 ### GameDB / GameDB-PS3
