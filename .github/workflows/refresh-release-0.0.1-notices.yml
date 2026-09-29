@@ -87,8 +87,9 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"             --jq '.body' > "$RUNNER_TEMP/release.md"
 
           python3 - <<'PY'
+          import os
           from pathlib import Path
-          p = Path("$RUNNER_TEMP/release.md")
+          p = Path(os.environ["RUNNER_TEMP"]) / "release.md"
           text = p.read_text()
 
           if "**NeoStation Assets**" not in text:
