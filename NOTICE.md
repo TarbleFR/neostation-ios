@@ -307,6 +307,30 @@ copy.
 
 ---
 
+SYSTEM ART / REMOTE CREATIVE ASSETS
+
+NeoStation Assets:
+https://github.com/misobadev/neostation-assets
+
+The NeoStation Assets repository states that its original backgrounds and custom
+icons are licensed under CC BY-NC-SA 4.0, with attribution required and a
+non-commercial condition for those original creative assets. Console logos and
+other trademarks remain the property of their respective owners.
+
+RiiSU:
+https://github.com/mult1v4c/RiiSU
+
+RiiSU credits iiSU Interpreted for ES-DE for its system art icons and iiSU
+Network for the original inspiration:
+https://github.com/VictorUnlocked/iisu-interpreted-es-de
+https://iisu.network/
+
+No standalone RiiSU license file was visible when this integration was added.
+NeoStation therefore keeps RiiSU remotely hosted by its original project and
+only downloads/caches the artwork when selected by the user.
+
+---
+
 METADATA / COMMUNITY SERVICES
 
 ScreenScraper:
