@@ -1,7 +1,7 @@
 #import "DolphinInternalBridgePlugin.h"
 #import "DolphinSessionMenu.h"
-#include "DOLCheatCatalogue.h"
 #import "DolphinRetroAchievementsAccount.h"
+#include "DOLCheatCatalogue.h"
 #import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
 #import "DolphinRecordingController.h"

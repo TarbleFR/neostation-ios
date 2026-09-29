@@ -1,6 +1,6 @@
 #import "DolphinSessionMenu.h"
-#include "DOLManualCheatEditor.h"
 #import "DolphinRetroAchievementsAccount.h"
+#include "DOLManualCheatEditor.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
   DOLMenuRoot, DOLMenuGraphics, DOLMenuHacks, DOLMenuCheats, DOLMenuAchievements, DOLMenuControls, DOLMenuChoices, DOLMenuDevices, DOLMenuInputs, DOLMenuConsole, DOLMenuSaveStates, DOLMenuLoadStates, DOLMenuRecording
