@@ -5,11 +5,13 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/fork_credit_locale.dart';
 import 'package:neostation/l10n/fork_about_locale.dart';
+import 'package:neostation/l10n/legal_credits_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'settings_title.dart';
+import '../legal_credits_dialog.dart';
 
 class AboutSettingsContent extends StatefulWidget {
   final bool isContentFocused;
@@ -87,7 +89,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
     }
   }
 
-  int getItemCount() => 4;
+  int getItemCount() => 5;
 
   void selectItem(int index) {
     switch (index) {
@@ -95,12 +97,15 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
         _launchUrl('https://github.com/TarbleFR/neostation-ios');
         break;
       case 1:
-        _launchUrl('https://github.com/misobadev/neostation-frontend');
+        LegalCreditsDialog.show(context);
         break;
       case 2:
-        _launchUrl('https://www.patreon.com/cw/TarbleFR');
+        _launchUrl('https://github.com/misobadev/neostation-frontend');
         break;
       case 3:
+        _launchUrl('https://www.patreon.com/cw/TarbleFR');
+        break;
+      case 4:
         _launchUrl('https://neostation.dev/');
         break;
     }
@@ -188,6 +193,18 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
+                        icon: Symbols.gavel_rounded,
+                        title: LegalCreditsLocale.cardTitle(context),
+                        value: LegalCreditsLocale.cardDescription(context),
+                        onTap: () => LegalCreditsDialog.show(context),
+                        external: false,
+                        theme: theme,
+                        isFocused:
+                            widget.isContentFocused &&
+                            widget.selectedContentIndex == 1,
+                      ),
+                      SizedBox(height: 8.h),
+                      _buildInfoCard(
                         icon: Symbols.code_rounded,
                         title: AppLocale.openSourceLicense.getString(context),
                         value: AppLocale.openSourceLicenseDesc.getString(
@@ -197,7 +214,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                         theme: theme,
                         isFocused:
                             widget.isContentFocused &&
-                            widget.selectedContentIndex == 1,
+                            widget.selectedContentIndex == 2,
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
@@ -208,7 +225,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                         theme: theme,
                         isFocused:
                             widget.isContentFocused &&
-                            widget.selectedContentIndex == 2,
+                            widget.selectedContentIndex == 3,
                       ),
                       SizedBox(height: 8.h),
                       _buildInfoCard(
@@ -219,7 +236,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                         theme: theme,
                         isFocused:
                             widget.isContentFocused &&
-                            widget.selectedContentIndex == 3,
+                            widget.selectedContentIndex == 4,
                       ),
                     ],
                   ),
@@ -236,14 +253,21 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
     required IconData icon,
     required String title,
     required String value,
-    required String url,
+    String? url,
+    VoidCallback? onTap,
+    bool external = true,
     required ThemeData theme,
     bool isFocused = false,
   }) {
+    assert(url != null || onTap != null);
     return InkWell(
       onTap: () {
         SfxService().playNavSound();
-        _launchUrl(url);
+        if (onTap != null) {
+          onTap();
+        } else {
+          _launchUrl(url!);
+        }
       },
       borderRadius: BorderRadius.circular(12.r),
       canRequestFocus: false,
@@ -288,7 +312,9 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
               ),
             ),
             Icon(
-              Symbols.open_in_new_rounded,
+              external
+                  ? Symbols.open_in_new_rounded
+                  : Symbols.chevron_right_rounded,
               size: 14.r,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
             ),
