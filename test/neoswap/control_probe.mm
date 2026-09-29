@@ -43,69 +43,52 @@ static NSDictionary* Owner(NSDictionary* result,NSString* name) {
     for(NSDictionary* owner in result[@"owners"]) if([owner[@"owner"] isEqual:name]) return owner;
     Finish(NO,@"missing owner");return @{};
 }
-static void CapacityCases(void(^done)(void)) {
-    Request(@"configure",@{@"capacityMiB":@8192},^(NSDictionary* configured) {
-        Check([configured[@"result"] intValue]==0 && [configured[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"8GiB budget round trip");
-        const NeoSwapAPI* api=NeoSwap_GetAPI(1);
-        Check(api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,2*1024*1024,65536,&live)==0,@"live block before capacity exercise");
-        Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* busy) {
-            Check([busy[@"result"] intValue]==NEOSWAP_BUSY,@"capacity exercise refuses live game ownership");
-            Check(api->release(live)==0,@"release before capacity exercise");live=nullptr;
-            Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* checked) {
-                Check([checked[@"result"] intValue]==0,@"64MiB production-plugin capacity exercise");
-                NSDictionary* report=checked[@"capacityProbe"];
-                Check([report[@"dataVerified"] boolValue] && [report[@"requestedBytes"] unsignedLongLongValue]==64*1024*1024,@"new capacity report verifies requested bytes");
-                Check([report[@"samples"] count]==5,@"write/sync/reload/release measurements");
-                Check([checked[@"liveBlocks"] unsignedLongLongValue]==0,@"capacity exercise releases every block");
-                Request(@"capacityProbe",@{@"sizeMiB":@16384},^(NSDictionary* invalid) {
-                    Check([invalid[@"result"] intValue]==NEOSWAP_INVALID && !invalid[@"capacityProbe"],@"invalid new test cannot reuse old success evidence");
-                    done();
-                });
-            });
-        });
-    });
-}
 static void RunProbe(void) {
-    [NSUserDefaults.standardUserDefaults removeObjectForKey:@"NeoSwapCapacityMiBV1"];
+    // An old opt-out from the previous candidate cannot disable the new policy.
+    [NSUserDefaults.standardUserDefaults setInteger:0 forKey:@"NeoSwapCapacityMiBV1"];
     ProbeRegistrar* first=[ProbeRegistrar new];ProbeRegistrar* second=[ProbeRegistrar new];
     [NeoSwapPlugin registerWithRegistrar:first];[NeoSwapPlugin registerWithRegistrar:second];
     Check(first.delegate==second.delegate,@"single plugin/broker across two registrars");plugin=first.delegate;
-    Request(@"snapshot",nil,^(NSDictionary* s) {
-        Check([s[@"capacityBytes"] unsignedLongLongValue]==0,@"disabled by default");
-        Check([s[@"configResult"] intValue]==0,@"initial configuration");
-        Request(@"configure",@{@"capacityMiB":@512},^(NSDictionary* configured) {
-            Check([configured[@"result"] intValue]==0,@"enable 512 MiB");
-            Check([NSUserDefaults.standardUserDefaults integerForKey:@"NeoSwapCapacityMiBV1"]==512,@"persist success");
-            const NeoSwapAPI* api=NeoSwap_GetAPI(1);
-            Check(api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,2*1024*1024,65536,&live)==0,@"live broker allocation");
-            memset(live,0x63,2*1024*1024);
-            Request(@"configure",@{@"capacityMiB":@1024},^(NSDictionary* busy) {
-                Check([busy[@"result"] intValue]==NEOSWAP_BUSY,@"live ownership blocks reconfiguration");
-                Check([NSUserDefaults.standardUserDefaults integerForKey:@"NeoSwapCapacityMiBV1"]==512,@"busy does not persist");
-                Request(@"configure",@{@"capacityMiB":@513},^(NSDictionary* invalid) {
-                    Check([invalid[@"result"] intValue]==NEOSWAP_INVALID,@"reject invalid capacity");
-                    Request(@"probe",nil,^(NSDictionary* probed) {
-                        Check([probed[@"result"] intValue]==0,@"8 MiB write/sync/read/release");
-                        Check([Owner(probed,@"probe")[@"allocationCount"] unsignedLongLongValue]==1,@"separate probe owner");
-                        Check([Owner(probed,@"probe")[@"liveBytes"] unsignedLongLongValue]==0,@"probe fully freed");
-                        Check([Owner(probed,@"rpcs3")[@"liveBytes"] unsignedLongLongValue]==2*1024*1024,@"real owner not inflated by probe");
-                        for(size_t i=0;i<2*1024*1024;i++) if(((unsigned char*)live)[i]!=0x63) Finish(NO,@"live data changed");
-                        Check(api->release(live)==0,@"release real block");live=nullptr;
-                        CapacityCases(^{
-                        Request(@"configure",@{@"capacityMiB":@0},^(NSDictionary* disabled) {
-                            Check([disabled[@"result"] intValue]==0,@"disable after release");
-                            Check([disabled[@"liveBlocks"] unsignedLongLongValue]==0,@"no leaked blocks");
-                            Check(!api->enabled(NEOSWAP_RPCS3),@"allocation path off");
-                            Request(@"probe",nil,^(NSDictionary* off) {
-                                Check([off[@"result"] intValue]==NEOSWAP_DISABLED,@"probe obeys disabled configuration");
-                                Check([off[@"configResult"] intValue]==0,@"configuration status remains accurate");
-                                NSString* path=off[@"diagnosticPath"];
-                                NSString* log=[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
-                                Check([log containsString:@"process_start"] && [log containsString:@"probe"],@"diagnostic events written");
-                                Finish(YES,@"single instance; persistence; live-block refusal; 8GiB budget;64MiB capacity integrity; stale evidence rejection; cleanup");
+    Request(@"snapshot",nil,^(NSDictionary* initial) {
+        Check([initial[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"automatic8GiB despite previous Off preference");
+        Check([initial[@"configResult"] intValue]==0,@"automatic startup configuration");
+        const NeoSwapAPI* api=NeoSwap_GetAPI(1);
+        Check(api->enabled(NEOSWAP_RPCS3),@"RPCS3 allocation path enabled without opening settings");
+        Check(api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,2*1024*1024,65536,&live)==0,@"automatic live broker allocation");
+        memset(live,0x63,2*1024*1024);
+        Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* busy) {
+            Check([busy[@"result"] intValue]==NEOSWAP_BUSY,@"capacity exercise refuses live game ownership");
+            Check(!busy[@"capacityProbe"],@"refused exercise has no stale success report");
+            Request(@"probe",nil,^(NSDictionary* probed) {
+                Check([probed[@"result"] intValue]==0,@"8MiB production integrity exercise");
+                Check([Owner(probed,@"probe")[@"allocationCount"] unsignedLongLongValue]==1,@"separate diagnostic owner");
+                Check([Owner(probed,@"probe")[@"liveBytes"] unsignedLongLongValue]==0,@"probe fully released");
+                Check([Owner(probed,@"rpcs3")[@"liveBytes"] unsignedLongLongValue]==2*1024*1024,@"game counter unchanged");
+                for(size_t i=0;i<2*1024*1024;i++)if(((unsigned char*)live)[i]!=0x63)Finish(NO,@"live data changed");
+                Check(api->release(live)==0,@"release real block");live=nullptr;
+                Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* checked) {
+                    Check([checked[@"result"] intValue]==0,@"64MiB write/sync/reload via production plugin");
+                    NSDictionary* report=checked[@"capacityProbe"];
+                    Check([report[@"dataVerified"] boolValue],@"capacity data verified");
+                    Check([report[@"requestedBytes"] unsignedLongLongValue]==64*1024*1024,@"exact requested capacity");
+                    Check([report[@"samples"] count]==5,@"before/write/sync/verify/release measurements");
+                    Check([checked[@"liveBlocks"] unsignedLongLongValue]==0,@"capacity exercise releases every block");
+                    Request(@"capacityProbe",@{@"sizeMiB":@16384},^(NSDictionary* invalid) {
+                        Check([invalid[@"result"] intValue]==NEOSWAP_INVALID,@"over8GiB exercise rejected");
+                        Check(!invalid[@"capacityProbe"],@"invalid retry cannot reuse old success");
+                        FlutterMethodCall* legacy=[FlutterMethodCall new];legacy.method=@"configure";legacy.arguments=@{@"capacityMiB":@0};
+                        [plugin handleMethodCall:legacy result:^(id result) {
+                            Check(result==FlutterMethodNotImplemented,@"old activation command unavailable");
+                            Request(@"snapshot",nil,^(NSDictionary* final) {
+                                Check([final[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"automatic policy remains8GiB after diagnostics");
+                                Check(api->enabled(NEOSWAP_RPCS3),@"runtime path remains enabled");
+                                Check([final[@"liveBlocks"] unsignedLongLongValue]==0,@"no leaked blocks");
+                                Check([Owner(final,@"probe")[@"allocationCount"] unsignedLongLongValue]==2,@"diagnostic ownership isolated");
+                                NSString* log=[NSString stringWithContentsOfFile:final[@"diagnosticPath"] encoding:NSUTF8StringEncoding error:nil];
+                                Check([log containsString:@"process_start"] && [log containsString:@"capacity_probe"],@"diagnostic events written");
+                                Finish(YES,@"automatic8GiB; legacy Off ignored; no activation command; live-game refusal;64MiB integrity; ownership; stale evidence rejection; cleanup");
                             });
-                        });
-                        });
+                        }];
                     });
                 });
             });

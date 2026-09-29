@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <cerrno>
 
-static NSString* const kCapacity = @"NeoSwapCapacityMiBV1";
 static NSString* const kDiagnostic = @"NeoSwap-v1.jsonl";
 static const uint64_t kMiB = 1024 * 1024;
 
@@ -43,8 +42,9 @@ static const uint64_t kMiB = 1024 * 1024;
     NSArray<NSString*>* docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString* diagnosticDir = [docs.firstObject stringByAppendingPathComponent:@"Diagnostics"];
     self.diagnosticPath = [diagnosticDir stringByAppendingPathComponent:kDiagnostic];
-    NSInteger stored = [NSUserDefaults.standardUserDefaults integerForKey:kCapacity];
-    self.capacityMiB = (stored == 512 || stored == 1024 || stored == 2048 || stored == 4096 || stored == 8192) ? stored : 0;
+    // Runtime policy, not an optional user feature. Old Off/budget preferences
+    // cannot disable the integrated service after an update or relaunch.
+    self.capacityMiB = 8192;
     dispatch_async(self.queue, ^{
         NSError* error = nil;
         BOOL created = self.directory.length && [[NSFileManager defaultManager]
@@ -73,9 +73,9 @@ static const uint64_t kMiB = 1024 * 1024;
         @autoreleasepool {
             NSDictionary* row = [strongSelf snapshot:@"sample"];
             uint64_t count = [row[@"allocationCount"] unsignedLongLongValue];
-            // Disabled sessions do not generate periodic disk activity.
-            if ([row[@"capacityBytes"] unsignedLongLongValue] ||
-                [row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount)
+            // Automatic availability does not imply an active game. Avoid
+            // periodic disk writes while the integrated allocator is idle.
+            if ([row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount)
                 [strongSelf appendRecord:row];
             strongSelf.lastAllocationCount = count;
         }
@@ -151,22 +151,12 @@ static const uint64_t kMiB = 1024 * 1024;
     close(fd);
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-    if (![call.method isEqualToString:@"snapshot"] && ![call.method isEqualToString:@"configure"] &&
+    if (![call.method isEqualToString:@"snapshot"] &&
         ![call.method isEqualToString:@"probe"] && ![call.method isEqualToString:@"capacityProbe"]) { result(FlutterMethodNotImplemented); return; }
     dispatch_async(self.queue, ^{
         @autoreleasepool {
             int code = NEOSWAP_OK;
-            if ([call.method isEqualToString:@"configure"]) {
-                id value = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments[@"capacityMiB"] : nil;
-                BOOL numeric = [value isKindOfClass:NSNumber.class];
-                NSInteger requested = numeric ? [value integerValue] : -1;
-                if (!numeric || [value doubleValue] != (double)requested ||
-                    !(requested == 0 || requested == 512 || requested == 1024 || requested == 2048 || requested == 4096 || requested == 8192)) code = NEOSWAP_INVALID;
-                else {
-                    code = [self configure:requested];
-                    if (code == NEOSWAP_OK) [NSUserDefaults.standardUserDefaults setInteger:requested forKey:kCapacity];
-                }
-            } else if ([call.method isEqualToString:@"probe"]) {
+            if ([call.method isEqualToString:@"probe"]) {
                 // Bounded functional check. It is NOT a fake game allocation or a RAM-limit benchmark.
                 void* address = nullptr;
                 const auto* api = NeoSwap_GetAPI(NEOSWAP_ABI);

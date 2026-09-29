@@ -54,9 +54,9 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     }
   }
 
-  Future<void> _run({int? capacity, bool capacityTest = false}) async {
+  Future<void> _run({bool capacityTest = false}) async {
     if (_busy) return;
-    ++_revision; // An earlier diagnostic response cannot undo a newer command.
+    ++_revision; // An earlier diagnostic response cannot undo a newer test.
     setState(() {
       _busy = true;
       _messageKey = null;
@@ -64,9 +64,8 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
       if (capacityTest) _capacityReport = null;
     });
     try {
-      final stats = capacity == null
-          ? (capacityTest ? await NeoSwap.capacityProbe(_probeMiB) : await NeoSwap.probe())
-          : await NeoSwap.configure(capacity);
+      final stats = capacityTest
+          ? await NeoSwap.capacityProbe(_probeMiB) : await NeoSwap.probe();
       if (!mounted) return;
       final code = (stats['result'] as num?)?.toInt() ?? -2;
       setState(() {
@@ -76,11 +75,11 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
         }
         _code = code;
         _messageKey = code == 0
-            ? (capacity == null ? (capacityTest ? 'capacityPass' : 'pass') : 'saved')
+            ? (capacityTest ? 'capacityPass' : 'pass')
             : code == -7
             ? 'busy'
             : code == -1
-            ? 'enableFirst'
+            ? 'unavailable'
             : 'failed';
       });
     } catch (_) {
@@ -100,7 +99,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     for (final owner in (_stats?['owners'] as List? ?? const [])) {
       if (owner is Map && owner['owner'] == 'rpcs3') rpc = owner;
     }
-    // Display the active broker budget, not merely the saved preference.
+    // Display the actual automatic broker budget, including startup failure.
     final activeBytes = _stats?['capacityBytes'] as num?;
     final capacity = activeBytes == null
         ? ((_stats?['capacityMiB'] as num?)?.toInt() ?? 0)
@@ -130,24 +129,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
               Text(t('warning')),
               const SizedBox(height: 16),
               Text(t('capacity')),
-              DropdownButton<int>(
-                key: const ValueKey('neoSwapBudget'),
-                isExpanded: true,
-                value: NeoSwap.capacitiesMiB.contains(capacity) ? capacity : 0,
-                items: NeoSwap.capacitiesMiB
-                    .map(
-                      (n) => DropdownMenuItem(
-                        value: n,
-                        child: Text(n == 0 ? t('off') : '$n MiB'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _busy || _stats == null
-                    ? null
-                    : (n) {
-                        if (n != null) _run(capacity: n);
-                      },
-              ),
+              Text('$capacity MiB', key: const ValueKey('neoSwapBudget')),
               if (_stats != null) ...[
                 Text(t(rpc['registered'] == true ? 'connected' : 'pending')),
                 Text(

@@ -37,10 +37,13 @@ the game to apply; there is no global RAM preload or live Core ABI change.
 ## Memory:8GiB target and actual scope
 
 NeoSwap is an iOS framework with one host allocator and an existing RPCS3
-client. Supported budgets: Off,512MiB,1/2/4/8GiB. Off remains the default.
-Increasing a budget authorizes file-backed allocations; it does not reserve
-all disk bytes or add physical RAM immediately. Each allocation reserves its
-disk extent before mapping, and leaves2GiB free.
+client. At the maintainer’s request,8GiB is the permanent automatic runtime
+budget. Startup applies it without reading the previous optional-budget
+preference, including a previous Off setting. No Flutter activation/configure
+command or budget selector remains. The panel is diagnostics only. Files are
+reserved as allocations need them, with2GiB free headroom; startup does not
+reserve8GiB of disk or add physical RAM. The native allocator’s internal
+reconfiguration API stays available for tests and keeps live-ownership guards.
 
 The new capacity exercise can request64/128/512MiB or1/2/4/8GiB. It stops while
 game-owned mappings are live. It allocates distinct file-backed blocks, writes
@@ -88,6 +91,14 @@ https://developer.apple.com/videos/play/wwdc2022/10106/
 Increased-memory-limit/extended-virtual-addressing are already requested by
 the project. Effective privileges depend on the signed provisioning profile.
 
+## Automatic policy regression
+
+The earlier optional Off/selected-budget UI contract was retired at the
+maintainer’s request. Its replacement asserts automatic8GiB startup despite
+a previous Off preference, no activation command, read-only diagnostics,
+automatic game allocations, retained live-game refusal, and cleanup. Native
+quota/reconfiguration/failure gates and all core/ABI/JIT pins remain.
+
 ## Required acceptance
 
 1. Native allocator failure/concurrency and64MiB reload tests pass.
@@ -96,6 +107,7 @@ the project. Effective privileges depend on the signed provisioning profile.
 3. UIKit import regression uses the supplied GCT bytes and a labelled TXT.
 4. On the actual iPhone, first test64MiB, then512MiB, then8GiB with enough
    storage. Retain JSON and effective entitlement diagnostics.
-5. Compare the same RPCS3 game scene Off versus enabled after fresh launches.
+5. In a development device harness, compare the same RPCS3 game scene against
+   the original allocator, then the automatic policy after fresh launches.
    Require integrity, lower measured footprint and acceptable frame time.
    A working capacity test alone is not a validated game memory extension.

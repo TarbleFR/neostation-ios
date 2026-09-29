@@ -7,36 +7,22 @@ void main() {
   final calls = <MethodCall>[];
   setUp(() {
     calls.clear();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(NeoSwap.channel, (call) async {
-          calls.add(call);
-          return {'result': 0, 'capacityMiB': 512, 'owners': <Object>[]};
-        });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(NeoSwap.channel, (call) async {
+      calls.add(call);
+      return {'result': 0, 'capacityMiB': 8192, 'owners': <Object>[]};
+    });
   });
-  tearDown(
-    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(NeoSwap.channel, null),
-  );
-  test('bounded configuration reaches the native broker', () async {
-    await NeoSwap.configure(512);
-    expect(calls.single.method, 'configure');
-    expect(calls.single.arguments, {'capacityMiB': 512});
-    expect(() => NeoSwap.configure(999999), throwsArgumentError);
-    expect(calls.length, 1);
-  });
-  test('probe and snapshot are separate from game allocations', () async {
-    await NeoSwap.probe();
+  tearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(NeoSwap.channel, null));
+  test('diagnostics use the automatically initialized runtime without activation', () async {
     await NeoSwap.snapshot();
-    expect(calls.map((c) => c.method), ['probe', 'snapshot']);
+    await NeoSwap.probe();
+    expect(calls.map((c) => c.method), ['snapshot', 'probe']);
   });
-  test('8 GiB budget and capacity exercise use separate explicit commands', () async {
-    await NeoSwap.configure(8192);
+  test('capacity exercise is explicit and bounded independently from automatic budget', () async {
     await NeoSwap.capacityProbe(8192);
-    expect(calls[0].arguments, {'capacityMiB': 8192});
-    expect(calls[1].method, 'capacityProbe');
-    expect(calls[1].arguments, {'sizeMiB': 8192});
-    expect(() => NeoSwap.configure(8193), throwsArgumentError);
+    expect(calls.single.method, 'capacityProbe');
+    expect(calls.single.arguments, {'sizeMiB': 8192});
     expect(() => NeoSwap.capacityProbe(8193), throwsArgumentError);
-    expect(calls.length, 2);
+    expect(calls.length, 1);
   });
 }

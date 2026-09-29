@@ -10,7 +10,7 @@ void main() {
   const channel = MethodChannel('neostation/neo_swap');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-  Map<String, dynamic> sample({int capacity = 0, int result = 0}) => {
+  Map<String, dynamic> sample({int capacity = 8192, int result = 0}) => {
     'capacityMiB': capacity,
     'capacityBytes': capacity * 1024 * 1024,
     'configResult': 0,
@@ -77,35 +77,21 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.binding.setSurfaceSize(null);
   });
-  testWidgets(
-    'shows off, does not allocate on open, and retains capacity on busy refusal',
-    (tester) async {
-      final calls = <String>[];
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        calls.add(call.method);
-        return sample(result: call.method == 'configure' ? -7 : 0);
-      });
-      await open(tester);
-      expect(calls, ['snapshot']);
-      expect(find.text(NeoSwapLocale.values['en']!['scope']!), findsOneWidget);
-      final dropdown = tester.widget<DropdownButton<int>>(
-        find.byKey(const ValueKey('neoSwapBudget')),
-      );
-      expect(dropdown.value, 0);
-      dropdown.onChanged!(512);
-      await tester.pumpAndSettle();
-      expect(calls, ['snapshot', 'configure']);
-      expect(find.text(NeoSwapLocale.values['en']!['busy']!), findsOneWidget);
-      expect(
-        tester
-            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
-            .value,
-        0,
-      );
-      await tester.pumpWidget(const SizedBox());
-      await tester.binding.setSurfaceSize(null);
-    },
-  );
+  testWidgets('automatic runtime budget is read-only and opening diagnostics sends no activation command', (tester) async {
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      return sample();
+    });
+    await open(tester);
+    expect(calls, ['snapshot']);
+    expect(find.text(NeoSwapLocale.values['en']!['scope']!), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('neoSwapBudget'))).data, '8192 MiB');
+    expect(find.byType(DropdownButton<int>), findsOneWidget);
+    expect(find.byKey(const ValueKey('neoSwapProbeSize')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.binding.setSurfaceSize(null);
+  });
   testWidgets('late snapshot after close never updates disposed state', (
     tester,
   ) async {
@@ -139,63 +125,31 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.binding.setSurfaceSize(null);
   });
-  testWidgets(
-    'failed restored configuration is visible and never shown as an active budget',
-    (tester) async {
-      messenger.setMockMethodCallHandler(
-        channel,
-        (_) async => {
-          ...sample(capacity: 512),
-          'capacityBytes': 0,
-          'configResult': -4,
-        },
-      );
-      await open(tester);
-      expect(
-        tester
-            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
-            .value,
-        0,
-      );
-      expect(find.text(NeoSwapLocale.values['en']!['failed']!), findsOneWidget);
-      expect(find.text('NeoSwap result: -4'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox());
-      await tester.binding.setSurfaceSize(null);
-    },
-  );
-  testWidgets(
-    'old periodic snapshot cannot revert a successfully changed budget',
-    (tester) async {
-      final pending = Completer<Map<String, dynamic>>();
-      var snapshots = 0;
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'configure') return sample(capacity: 1024);
-        snapshots++;
-        return snapshots == 1 ? sample(capacity: 512) : pending.future;
-      });
-      await open(tester);
-      await tester.pump(const Duration(seconds: 2));
-      expect(snapshots, 2);
-      tester
-          .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
-          .onChanged!(1024);
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
-            .value,
-        1024,
-      );
-      pending.complete(sample(capacity: 512));
-      await tester.pump();
-      expect(
-        tester
-            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
-            .value,
-        1024,
-      );
-      await tester.pumpWidget(const SizedBox());
-      await tester.binding.setSurfaceSize(null);
-    },
-  );
+  testWidgets('failed automatic startup is visible and never shows an active budget', (tester) async {
+    messenger.setMockMethodCallHandler(channel, (_) async => {...sample(), 'capacityBytes': 0, 'configResult': -4});
+    await open(tester);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('neoSwapBudget'))).data, '0 MiB');
+    expect(find.text(NeoSwapLocale.values['en']!['failed']!), findsOneWidget);
+    expect(find.text('NeoSwap result: -4'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.binding.setSurfaceSize(null);
+  });
+  testWidgets('late periodic snapshot cannot overwrite the newer diagnostic result', (tester) async {
+    final pending = Completer<Map<String, dynamic>>();
+    var snapshots = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'probe') return sample();
+      return ++snapshots == 1 ? sample() : pending.future;
+    });
+    await open(tester);
+    await tester.pump(const Duration(seconds: 2));
+    expect(snapshots, 2);
+    tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, NeoSwapLocale.values['en']!['probe']!)).onPressed!();
+    await tester.pumpAndSettle();
+    pending.complete(sample(capacity: 0));
+    await tester.pump();
+    expect(tester.widget<Text>(find.byKey(const ValueKey('neoSwapBudget'))).data, '8192 MiB');
+    await tester.pumpWidget(const SizedBox());
+    await tester.binding.setSurfaceSize(null);
+  });
 }

@@ -5,13 +5,13 @@
   "files_sha256": {
     "build-utils/generate_import_labels.py": "3c7cba0c70a38af217b8d41d61b2d2d8f2c1fb341de789068f91640c4ab4abff",
     "build-utils/validate_cheat_bulk_ipa.py": "3a9d4c425abe6f849c10bdb4472aee7a5955998a8cd244b093c401c5b88232b6",
-    "lib/l10n/neoswap_locale.dart": "5d3cf9a5bfe8ba39d95a4d34dc41d697a24a84b5c99388536b926b10d6fac477",
-    "lib/screens/settings_screen/neoswap_dialog.dart": "1493e7571c07a5cf7309bd15e6c1196de40b53b7bbb117329652586b8ec2862d",
+    "lib/l10n/neoswap_locale.dart": "eb45e4787d8f29f0df2a98c732411ce8906aef02c20aeca2ae15930e46c1e5c4",
+    "lib/screens/settings_screen/neoswap_dialog.dart": "26fa3fdeda4f57baac143623b154a1d847b94d3018623e4d1e1141279c813c31",
     "native/cheats/NeoCheatLabels.h": "e9cef1b8b91ed7c6f74eb976de05c6992c94c7c7e7796690455bfff86a532c1a",
     "native/cheats/NeoManualCheatEditor.template.h": "0efd4176f898426275fa8508da34999eb1895b3ad3e45ec39f3b057c873854de",
     "native/cheats/bulk-labels.json": "31e85457ba0ff7b35b58672649dff4f322982800caacf19cf6f82c87bd9ca708",
     "native/dolphin_textures/labels.json": "07f610824dec883a71b6861e799b5e6c1aa0b7160eebdfba8e9ebcbfbd9dbf0b",
-    "native/neoswap/localizations.json": "f78c0c9147047034f0d80f8a7412e3745b0ba1a21c134785f0ea3a810193a007",
+    "native/neoswap/localizations.json": "fc3cd334fdc267b703c218f1aca0748e55c4d269b54847e752d5655b0a718786",
     "packages/armsx2_internal_bridge/ios/Classes/ARMSX2ManualCheatEditor.h": "e41f07101422009d9060550a836c19275a040bdd0d4ab83aab44ce2a1f32f194",
     "packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm": "f5c9cf4df19cd14902a8afdd1719bcbbe2a8df4cc9e9b61a7443e3fdd19b6104",
     "packages/armsx2_internal_bridge/ios/Classes/NeoCheatLabels.h": "e9cef1b8b91ed7c6f74eb976de05c6992c94c7c7e7796690455bfff86a532c1a",
@@ -27,9 +27,9 @@
     "packages/dolphin_internal_bridge/ios/dolphin_internal_bridge.podspec": "246c92630ff843a6f354e4079bf0109a32dabe581b1c11ddcab80158dac049b2",
     "packages/neo_swap/ios/Classes/NeoSwap.cpp": "dfe7dafba74dc4fb86b9c5809c1ed4ba1be3dc3cfa9ff85cebf1dcbe37ec05a3",
     "packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h": "1fe6ce093643d07dcdb8d7a8ac64aa170155079e118203b36cbaca0076ce5986",
-    "packages/neo_swap/ios/Classes/NeoSwapPlugin.mm": "ff2f763b817271377f6439faf31f0f73e5163815b4c5f7873b90a72d6b6d678b",
+    "packages/neo_swap/ios/Classes/NeoSwapPlugin.mm": "5c6ad4a459d5adebe2f07898cef02a73e49e55800a66f740b4f4e3a761dc8d1e",
     "packages/neo_swap/ios/neo_swap.podspec": "98c16493566db6a29d5655932378e7f68e645cfbbc9d911d240051569b6abac6",
-    "packages/neo_swap/lib/neo_swap.dart": "cd071029d6f10b4788e1a0c3e5a3e5bc22f3ade40ce4f7beea2b19dfc28d3356",
+    "packages/neo_swap/lib/neo_swap.dart": "963bf472ecee442481b57db7f7a7d52e276eafe16c224ce664ef0ada8c72ed08",
     "build-utils/private-test-367-recipient.pem": "3f8b55e1b1858770192af4511b87479fbb8ae7192085aa80b802c191ab56d87b"
   }
 }

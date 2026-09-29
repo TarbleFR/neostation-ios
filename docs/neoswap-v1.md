@@ -1,4 +1,8 @@
-# NeoSwap v1 — private RPCS3 candidate (Build 366)
+# NeoSwap v1 — historical optional candidate (Build 366)
+
+Superseded by the automatic8GiB runtime policy in Build367. See
+[the current candidate](import-memory-build367.md). The controls below describe
+the historical Build366 experiment.
 
 ## Scope
 
