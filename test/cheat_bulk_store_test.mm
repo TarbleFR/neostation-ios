@@ -27,7 +27,7 @@ int main(){@autoreleasepool {
   auto document=NeoDecodeCheatDocument([TestFixture(NO) dataUsingEncoding:encoding.unsignedIntegerValue],@"G4BP08.txt",dolphin,NO,@"gecko");
   assert([document[@"success"] boolValue] && [document[@"count"] intValue]==50 && [document[@"hasTitles"] boolValue]);
   assert([document[@"entries"] count]==50);
-  for(int i=0;i<50;++i){assert([document[@"entries"][i][@"name"] isEqual:[NSString stringWithFormat:@"Cheat %d",i]]);assert([document[@"entries"][i][@"lines"] count]==2);}
+  for(int i=0;i<50;++i){assert(([document[@"entries"][i][@"name"] isEqual:[NSString stringWithFormat:@"Cheat %d",i]]));assert([document[@"entries"][i][@"lines"] count]==2);}
  }
  auto document=NeoDecodeCheatDocument([TestFixture(NO) dataUsingEncoding:NSUTF8StringEncoding],@"G4BP08.txt",dolphin,NO,@"gecko");
  auto request=Request(dolphin,document);auto result=NeoDolphinImport(root,request,dolphin,NO);
@@ -35,7 +35,7 @@ int main(){@autoreleasepool {
  NSData* saved=[NSData dataWithContentsOfFile:target];NSString* ini=[[NSString alloc] initWithData:saved encoding:NSUTF8StringEncoding];
  assert([ini hasPrefix:existing]);assert([[NSData dataWithContentsOfFile:[target stringByAppendingString:@".before-import.bak"]] isEqual:[existing dataUsingEncoding:NSUTF8StringEncoding]]);
  auto parsed=NeoCheat::parse(NeoUTF8(ini),"ini","file");assert(parsed && parsed.entries.size()==51);
- for(int i=0;i<50;++i)assert([ini containsString:[NSString stringWithFormat:@"[Gecko_Disabled]\n$Cheat %d\n",i]]);
+ for(int i=0;i<50;++i)assert(([ini containsString:[NSString stringWithFormat:@"[Gecko_Disabled]\n$Cheat %d\n",i]]));
  result=NeoDolphinImport(root,request,dolphin,NO);assert([result[@"success"] boolValue] && [result[@"added"] intValue]==0 && [result[@"skipped"] intValue]==50);
  assert([[NSData dataWithContentsOfFile:target] isEqual:saved]);
  auto conflict=[request mutableCopy];conflict[@"content"]=[request[@"content"] stringByReplacingOccurrencesOfString:@"04000000 00000001" withString:@"04000000 00000003"];

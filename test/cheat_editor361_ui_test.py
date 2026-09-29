@@ -96,7 +96,7 @@ ns['TESTS']=r'''
   XCTAssertEqual([editor.previewTable.dataSource tableView:editor.previewTable numberOfRowsInSection:0],50);
   XCTAssertTrue(editor.nameField.hidden);XCTAssertTrue(editor.codeField.hidden);XCTAssertFalse(editor.previewTable.hidden);
   XCTAssertTrue([editor.navigationItem.rightBarButtonItem.title containsString:@"50"]);
-  for(int i=0;i<50;++i){XCTAssertEqualObjects(editor.previewEntries[i][@"name"],[NSString stringWithFormat:@"Cheat %d",i]);XCTAssertEqual([editor.previewEntries[i][@"lineCount"] intValue],2);}
+  for(int i=0;i<50;++i){XCTAssertEqualObjects(editor.previewEntries[i][@"name"],([NSString stringWithFormat:@"Cheat %d",i]));XCTAssertEqual([editor.previewEntries[i][@"lineCount"] intValue],2);}
   __block NSUInteger calls=0;__block void (^finish)(NSDictionary*)=nil;__block NSDictionary* captured=nil;__block NSDictionary* saved=nil;
   editor.savedResult=^(NSDictionary* result){saved=result;};
   editor.saveCheat=^(NSDictionary* request,void (^completion)(NSDictionary*)){++calls;captured=request;finish=[completion copy];};
