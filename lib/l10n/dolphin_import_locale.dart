@@ -1746,9 +1746,9 @@ abstract final class DolphinImportLocale {
       ...?values[key],
       ..._modernMenuEn,
       if (key == 'fr') ..._modernMenuFr,
-      ...DolphinExtendedLocale.labels(key),
       ..._accountMenu['en']!,
       ...?_accountMenu[key],
+      ...DolphinExtendedLocale.labels(key),
     };
   }
 
