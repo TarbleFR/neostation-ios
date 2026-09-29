@@ -289,7 +289,7 @@ localizations ||= runner_group.new_variant_group('InfoPlist.strings')
   ref ||= localizations.new_file("#{language}.lproj/InfoPlist.strings")
   ref.name = language
   ref.last_known_file_type = 'text.plist.strings'
-  project.known_regions << language unless project.known_regions.include?(language)
+  project.root_object.known_regions << language unless project.root_object.known_regions.include?(language)
   raise "Missing localized privacy string #{ref.real_path}" unless File.file?(ref.real_path)
 end
 unless runner.resources_build_phase.files.any? { |file| file.file_ref == localizations }
