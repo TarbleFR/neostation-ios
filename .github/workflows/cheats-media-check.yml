@@ -2,15 +2,6 @@ name: Cheats and frontend media tests
 on:
   push:
     branches: [experimental]
-    paths:
-      - 'lib/**'
-      - 'native/cheats/**'
-      - 'packages/**'
-      - 'test/*cheat*'
-      - 'test/frontend_media_gate_test.dart'
-      - '.github/workflows/cheats-media-check.yml'
-      - '.github/workflows/ios-ci.yml'
-      - '.github/workflows/neoswap-ipa.yml'
   workflow_dispatch:
 permissions:
   contents: read

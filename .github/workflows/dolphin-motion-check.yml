@@ -2,14 +2,6 @@ name: Dolphin Wii phone shake and touchscreen lifecycle
 on:
   push:
     branches: [experimental]
-    paths:
-      - 'packages/dolphin_internal_bridge/**'
-      - 'test/*cheat*'
-      - '.github/workflows/ios-ci.yml'
-      - '.github/workflows/neoswap-ipa.yml'
-      - 'native/dolphin_motion/**'
-      - 'test/dolphin_phone_shake*'
-      - '.github/workflows/dolphin-motion-check.yml'
   workflow_dispatch:
 permissions:
   contents: read
