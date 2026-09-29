@@ -10,7 +10,15 @@ int main(){@autoreleasepool{
   assert([bytes writeToFile:[pack stringByAppendingPathComponent:@"tex1_a.png"] atomically:YES]);
   NSString* ini=DOLTextureINI(user,@"GR8P69",0);assert([fm createDirectoryAtPath:ini.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil]);
   NSString* prior=@"[Gecko]\n$User code\n0429F040 3E8001CE\n[Video_Hacks]\nEFBToTextureEnable = True\n";assert([prior writeToFile:ini atomically:YES encoding:NSUTF8StringEncoding error:nil]);
-  assert(!DOLTextureImport([NSURL fileURLWithPath:pack],user,@"GR8P69",0));
+  NSString* imported=DOLTextureImport([NSURL fileURLWithPath:pack],user,@"GR8P69",0);
+  if(imported){
+    NSLog(@"Texture import failed: %@; source=%@; attributes=%@; filesystem=%@",imported,pack,[fm attributesOfItemAtPath:pack error:nil],[fm attributesOfFileSystemForPath:user error:nil]);
+    for(NSURL* entry in [fm enumeratorAtURL:[NSURL fileURLWithPath:pack] includingPropertiesForKeys:@[NSURLIsSymbolicLinkKey,NSURLIsRegularFileKey,NSURLFileSizeKey] options:0 errorHandler:nil])
+      NSLog(@"entry=%@ values=%@",entry,[entry resourceValuesForKeys:@[NSURLIsSymbolicLinkKey,NSURLIsRegularFileKey,NSURLFileSizeKey] error:nil]);
+  }
+  assert(!imported);
+  // Files/coordination can supply a directory URL with a trailing slash.
+  assert(!DOLTextureImport([NSURL fileURLWithPath:[pack stringByAppendingString:@"/"] isDirectory:YES],user,@"GR8P69",0));
   NSDictionary* status=DOLTextureStatus(user,@"GR8P69",0);assert([status[@"enabled"] boolValue] && [status[@"count"] intValue]==1);
   NSString* written=[NSString stringWithContentsOfFile:ini encoding:NSUTF8StringEncoding error:nil];assert([written hasPrefix:prior]);assert([DOLIniValue(written,@"Video_Settings",@"CacheHiresTextures") isEqual:@"False"]);
   assert(DOLTextureEnable(user,@"GR8P69",0,NO));assert(![DOLTextureStatus(user,@"GR8P69",0)[@"enabled"] boolValue]);

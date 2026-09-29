@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parents[1]
 manifest=json.loads((ROOT/'native/import-memory-candidate.json').read_text())
 assert manifest['baseline']=='549f6ae2a84a0b79afcb61b8ea5fb593c76a89a3'
 allowed={
- 'build-utils/validate_cheat_bulk_ipa.py','build-utils/generate_import_labels.py',
+ 'build-utils/private-test-367-recipient.pem','build-utils/validate_cheat_bulk_ipa.py','build-utils/generate_import_labels.py',
  'native/cheats/NeoManualCheatEditor.template.h','native/cheats/NeoCheatLabels.h','native/cheats/bulk-labels.json',
  'native/dolphin_textures/labels.json','native/neoswap/localizations.json',
  'lib/l10n/neoswap_locale.dart','lib/screens/settings_screen/neoswap_dialog.dart',

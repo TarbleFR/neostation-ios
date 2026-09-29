@@ -69,6 +69,11 @@ static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInt
     if([attrs[NSFileType] isEqual:NSFileTypeSymbolicLink])return;
     if([attrs[NSFileType] isEqual:NSFileTypeDirectory]) {
       NSMutableArray* plan=[NSMutableArray array];NSMutableSet* names=[NSMutableSet set];
+      // Foundation may coordinate /var as /private/var or return a directory
+      // URL with a trailing slash. Derive children from normalized paths,
+      // rather than slicing using the original URL's string length.
+      NSString* sourcePath=source.path.stringByStandardizingPath.stringByResolvingSymlinksInPath;
+      NSString* prefix=[sourcePath stringByAppendingString:@"/"];
       __block BOOL readFailed=NO;
       NSDirectoryEnumerator* enumerator=[fm enumeratorAtURL:source includingPropertiesForKeys:@[NSURLIsSymbolicLinkKey,NSURLIsRegularFileKey,NSURLFileSizeKey] options:0 errorHandler:^BOOL(NSURL* bad,NSError* error){readFailed=YES;return NO;}];
       NSUInteger visited=0;
@@ -77,10 +82,12 @@ static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInt
         NSDictionary* v=[entry resourceValuesForKeys:@[NSURLIsSymbolicLinkKey,NSURLIsRegularFileKey,NSURLFileSizeKey] error:nil];
         if(!v || [v[NSURLIsSymbolicLinkKey] boolValue])return;
         if(![v[NSURLIsRegularFileKey] boolValue])continue;
-        NSString* path=[source.lastPathComponent stringByAppendingPathComponent:[entry.path substringFromIndex:source.path.length+1]];
+        NSString* entryPath=entry.path.stringByStandardizingPath.stringByResolvingSymlinksInPath;
+        if(![entryPath hasPrefix:prefix])return;
+        NSString* path=[sourcePath.lastPathComponent stringByAppendingPathComponent:[entryPath substringFromIndex:prefix.length]];
         auto relative=DOLTextures::relative(path.UTF8String,game.UTF8String);if(relative.empty())continue;
         NSString* dest=[NSString stringWithUTF8String:relative.c_str()];uint64_t size=[v[NSURLFileSizeKey] unsignedLongLongValue];
-        if(!size || size>DOLTextures::maxFile || [names containsObject:dest.lowercaseString] || plan.count>=20000)return;
+        if(!dest || !size || size>DOLTextures::maxFile || [names containsObject:dest.lowercaseString] || plan.count>=20000)return;
         total+=size;if(total>DOLTextures::maxPack)return;[names addObject:dest.lowercaseString];[plan addObject:@[entry,dest]];
       }
       if(readFailed || !enumerator || !plan.count)return;

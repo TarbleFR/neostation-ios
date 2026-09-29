@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 366
-run-name: NeoStation NeoSwap private • Build 366 • ${{ github.sha }}
+name: NeoStation NeoSwap private • Build 367
+run-name: NeoStation NeoSwap private • Build 367 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '366'
+        default: '367'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-366
+  group: neostation-neoswap-private-367
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (366)
+    name: Neostation iOS 0.0.2 private IPA (367)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '366' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '367' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-366-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-367-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -609,330 +609,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CORE="packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore"
-          test -s "$CORE"
-          test -d ios/Runner/Sys
-          test -s ios/Runner/cacert.pem
-
-          # The Build 350 IPA carries the exact previously validated Dolphin
-          # runtime. Refuse it if any source defining that ABI has changed.
-          git diff --exit-code "$DOLPHIN_CORE_HOST_SHA" "$GITHUB_SHA" -- \
-            build-utils/patch_dolphin_internal_core_v2.py \
-            packages/dolphin_internal_bridge/core \
-            test/dolphin_cheat_manager_test.py \
-            test/dolphin_cheats_menu_test.py \
-            .github/workflows/dolphin-core.yml
-
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-
-          # This is a recompiled UIKit host API, not the retained core's C ABI.
-          # Permit exactly the added navigation callback, preserving every other declaration.
-          import subprocess
-          menu_path='packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h'
-          original=subprocess.check_output(['git','show',os.environ['DOLPHIN_CORE_HOST_SHA']+':'+menu_path],text=True)
-          current=Path(menu_path).read_text()
-          addition='@property(nonatomic, copy, nullable) dispatch_block_t openDisplaySettings;\n'
-          assert current.count(addition)==1
-          assert current.replace(addition,'')==original, 'Unexpected UIKit menu interface change'
-
-          core = Path(
-              "packages/dolphin_internal_bridge/ios/Frameworks/"
-              "DolphinCore.framework/DolphinCore"
-          )
-          actual = hashlib.sha256(core.read_bytes()).hexdigest()
-          baseline = json.loads(Path("build-utils/baselines/ios-322.json").read_text())
-          expected = baseline["nativeIdentity"]["dolphinCoreSha256"]
-          assert actual == expected, (actual, expected)
-          fast_path = Path("build/fast-native/identity.json")
-          fast = json.loads(fast_path.read_text())
-          fast["dolphinCoreSha256"] = actual
-          fast["dolphinCoreHostCommit"] = os.environ["DOLPHIN_CORE_HOST_SHA"]
-          fast["dolphinSourceRevision"] = os.environ["DOLPHIN_SHA"]
-          fast["dolphinCheatCatalogues"] = [
-              "Gecko/WiiRD", "Action Replay/local INI"
-          ]
-          fast_path.write_text(json.dumps(fast, indent=2) + "\n")
-          print(json.dumps({"sha256": actual, "baseline": expected}, indent=2))
-          PY
-
-          file packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore
-          nm -gU packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore \
-            > build/dolphin-native-exports.txt
-          for symbol in \
-            _neostation_dolphin_initialize \
-            _neostation_dolphin_launch \
-            _neostation_dolphin_menu_snapshot \
-            _neostation_dolphin_cheats_snapshot \
-            _neostation_dolphin_set_cheats_enabled \
-            _neostation_dolphin_set_cheat_enabled \
-            _neostation_dolphin_download_gecko_codes; do
-            grep -q " $symbol$" build/dolphin-native-exports.txt
-          done
-
-      - name: Verify retained stable ARMSX2 Core identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
-          test -f dist/armsx2/identity.json
-          # Refuse a stale core even when both artifacts report the same ABI.
-          git diff --exit-code "$ARMSX2_CORE_HOST_SHA" "$GITHUB_SHA" -- \
-            packages/armsx2_internal_bridge/core \
-            packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h \
-            build-utils/armsx2
-          python3 - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          identity=json.loads(Path('dist/armsx2/identity.json').read_text())
-          source=json.loads(Path('build-utils/armsx2/source.json').read_text())
-          assert identity['revision'] == source['revision'], identity
-          assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
-          assert identity['architectures'] == ['arm64'], identity
-          assert identity['abi_version'] == source['abi_version'], identity
-          binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
-          assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
-          print(identity)
-          PY
-
-      - name: Verify retained stable Dusklight Core identity
-        run: |
-          set -euo pipefail
-          python3 - <<'PYCORE'
-          import hashlib, json, os
-          from pathlib import Path
-          root = Path('dist/dusklight')
-          identity = json.loads((root / 'identity.json').read_text())
-          pins = json.loads(Path('build-utils/dusklight/source.json').read_text())
-          assert identity['host_commit'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']
-          assert identity['source_commit'] == pins['commit']
-          assert identity['abi_version'] == 7
-          assert identity['session_policy'] == 'host_frame_loop_warm_resume_rpcs3_jit_escrow'
-          canonical = Path('native/dusklight')
-          expected_sources = {
-              name: canonical / name
-              for name in json.loads((canonical / 'upstream-manifest.json').read_text())
-          }
-          expected_sources.update({
-              'neostation/' + item.name: item
-              for item in (canonical / 'core').iterdir() if item.is_file()
-          })
-          expected_sources['neostation/DusklightCoreABI.h'] = Path(
-              'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h')
-          assert set(identity['canonical_sources']) == set(expected_sources)
-          for relative, source in expected_sources.items():
-              assert hashlib.sha256(source.read_bytes()).hexdigest() == identity['canonical_sources'][relative], relative
-          framework = root / 'DusklightCore.framework'
-          assert hashlib.sha256((framework / 'DusklightCore').read_bytes()).hexdigest() == identity['sha256']
-          for relative, digest in identity['resources'].items():
-              assert hashlib.sha256((framework / relative).read_bytes()).hexdigest() == digest, relative
-          PYCORE
-
-      - name: Download validated KartPad Core candidate
-        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: KartPadCore-${{ env.KARTPAD_CORE_HOST_SHA }}
-          run-id: ${{ env.KARTPAD_CORE_RUN_ID }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: dist/kartpad-native
-
-      - name: Verify KartPad Core candidate identity
-        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f dist/kartpad-native/KartPadCore.framework/KartPadCore
-          test -f dist/kartpad-native/identity.json
-          python3 build-utils/kartpad/validate_embedded_core.py             dist/kartpad-native/KartPadCore.framework             dist/kartpad-native/identity.json
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          identity=json.loads(Path('dist/kartpad-native/identity.json').read_text())
-          assert identity['host_commit'] == os.environ['KARTPAD_CORE_HOST_SHA'], identity
-          assert identity['sha256'] == '995e876715b98be8fde897a88f7b93fb2357b6c47826d99c1df0a0b05a98930c', identity
-          assert identity['runtime_sha256'] == 'ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0', identity
-          PY
-          git diff --exit-code "$KARTPAD_CORE_HOST_SHA" "$GITHUB_SHA" --             native/kartpad             build-utils/kartpad             packages/kartpad_internal_bridge
-
-      - name: Execute exact KartPad donor language instructions
-        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TEST_ENV="$RUNNER_TEMP/kartpad-abi-tests"
-          python3 -m venv "$TEST_ENV"
-          "$TEST_ENV/bin/pip" install --disable-pip-version-check unicorn==2.1.2
-          "$TEST_ENV/bin/python" test/kartpad_language_bridge_test.py \
-            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
-            2>&1 | tee dist/kartpad-language-abi-tests.txt
-          "$TEST_ENV/bin/python" test/kartpad_session_bridge_test.py \
-            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
-            2>&1 | tee dist/kartpad-session-bridge-tests.txt
-          "$TEST_ENV/bin/python" test/kartpad_system_messages_test.py \
-            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
-            2>&1 | tee dist/kartpad-system-messages-tests.txt
-          "$TEST_ENV/bin/python" test/kartpad_session_reset_test.py \
-            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
-            2>&1 | tee dist/kartpad-session-reset-tests.txt
-          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
-            test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
-          "$RUNNER_TEMP/kartpad-language-state-test"
-          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
-            -Ipackages/kartpad_internal_bridge/ios/Classes \
-            test/kartpad_native_session_test.cpp -o "$RUNNER_TEMP/kartpad-session-test"
-          "$RUNNER_TEMP/kartpad-session-test"
-
-      - name: Prepare emulator build definitions
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
-          values={key:os.environ.get(key,'').strip() for key in required}
-          missing=[key for key,value in values.items() if not value]
-          if missing:
-              raise SystemExit('Missing build secrets: '+', '.join(missing))
-          values.update({
-              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
-              'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
-          })
-          Path('.dart-defines.json').write_text(json.dumps(values))
-          PY
-
-      - name: Configure release host
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 build-utils/patch_ios_video_player_audio_session.py
-          flutter build ios --release --no-codesign --config-only --no-pub \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define-from-file=.dart-defines.json
-          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
-          python3 build-utils/configure_rpcs3_ios_v2.py
-          python3 build-utils/configure_armsx2_ios.py
-          dart run flutter_launcher_icons
-          bash build-utils/force_ios_fork_icon.sh
-          # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
-          python3 build-utils/prepare_ios_icon_fallback.py
-          bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb
-          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
-          python3 - <<'PY'
-          import plistlib
-          from pathlib import Path
-
-          entitlements = plistlib.loads(
-              Path('ios/Runner/Runner.entitlements').read_bytes()
-          )
-          retired = {
-              'com.apple.developer.networking.networkextension',
-              'com.apple.developer.networking.vpn.api',
-          }
-          remaining = retired.intersection(entitlements)
-          if remaining:
-              raise SystemExit(
-                  'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
-              )
-          generated = (
-              Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
-              Path('ios/Podfile').read_text(),
-          )
-          markers = (
-              'NeoStationLocalTunnel',
-              'NetworkExtension.framework',
-              'com.apple.NetworkExtensions.iOS',
-              'packet-tunnel-provider',
-          )
-          found = [marker for marker in markers if any(marker in text for text in generated)]
-          if found:
-              raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
-          if Path('ios/NeoStationLocalTunnel').exists():
-              raise SystemExit('Generated iOS host retains the internal VPN directory')
-          print('Generated iOS host is LocalDevVPN-only.')
-          PY
-          git diff --exit-code -- pubspec.yaml pubspec.lock
-
-      - name: Align application and extension versions to 0.0.2
-        run: python3 build-utils/stamp_host_version.py
-
-      - name: Compile only NeoStation and extensions
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
-            -configuration Release -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath build/ios/DolphinDerivedData \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
-            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
-            COMPILER_INDEX_STORE_ENABLE=NO build \
-            2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
-
-      - name: Embed verified RPCS3 Core and signing metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 build-utils/embed_rpcs3_core_lazy.py
-          python3 build-utils/embed_rpcs3_host_entitlements.py
-
-      - name: Embed lazy-loaded ARMSX2 Core framework
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
-          test -d "$APP"
-          mkdir -p "$APP/Frameworks"
-          rm -rf "$APP/Frameworks/ARMSX2Core.framework"
-          ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
-          test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
-          file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
-          nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
-          grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
-
-      - name: Embed lazy-loaded Dusklight framework and notices
-        run: |
-          set -euo pipefail
-          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
-          ditto dist/dusklight/DusklightCore.framework "$APP/Frameworks/DusklightCore.framework"
-          chmod 755 "$APP/Frameworks/DusklightCore.framework/DusklightCore"
-          ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
-          cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
-
-      - name: Embed validated KartPad Core candidate
-        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
-          python3 build-utils/kartpad/embed_core.py             --app "$APP"             --artifact dist/kartpad-native
-
-      - name: Embed legal, license and source notices
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
-          python3 build-utils/embed_legal_bundle.py \
-            --app "$APP" \
-            --build-number "$BUILD_NUMBER" \
-            --dolphin-sha "$DOLPHIN_SHA"
-
-      - name: Require exact candidate display, motion and cheat simulator evidence
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json,subprocess,time,os
-          for workflow in ('neoswap-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
-              deadline=time.monotonic()+1800
-              while True:
-                  endpoint='repos/TarbleFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
+          CORE="packages/dolphin_internal_bridge/…4143 tokens truncated…eFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
                   rows=json.loads(subprocess.check_output(['gh','api',endpoint]))['workflow_runs']
                   rows=[r for r in rows if r['head_sha']==os.environ['GITHUB_SHA']]
                   if rows and rows[0]['status']=='completed':
@@ -1008,17 +685,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-366-recipient.pem
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-367-recipient.pem
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           cp dist/stikjit-compatibility.json build/private-test/
           cp dist/cheat-bulk-validation.json build/private-test/
-          cp docs/neoswap-v1.md build/private-test/Notes-NeoSwap-Build366.md
+          cp docs/import-memory-build367.md build/private-test/Notes-NeoSwap-Build367.md
           cp dist/neoswap-validation.json build/private-test/
           cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
           cp build/dolphin-motion/tests.json build/private-test/phone-shake-tests.json
           cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
-          printf '%s\n' 'NeoStation-NeoSwap-Build366.ipa' > build/private-test/delivery-name.txt
+          printf '%s\n' 'NeoStation-NeoSwap-Build367.ipa' > build/private-test/delivery-name.txt
           cp build/stikjit-current/modern-baseline.json build/private-test/
           cp build/fast-native/identity.json build/private-test/native-identity.json
           printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt

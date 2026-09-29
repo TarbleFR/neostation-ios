@@ -12,7 +12,7 @@ for token in (
     'test/check_neo_swap_scope.py',
     'build-utils/validate_neoswap_ipa.py',
     "'neoswap-check.yml'",
-    'private-test-366-recipient.pem',
+    'private-test-367-recipient.pem',
 ):
     assert token in workflow,token
 assert 'contents: write' not in workflow and 'gh release create' not in workflow
