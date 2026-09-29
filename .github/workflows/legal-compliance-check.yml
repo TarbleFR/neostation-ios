@@ -63,7 +63,7 @@ jobs:
               'fr', 'de', 'it', 'id', 'ja', 'ko',
           ):
               count = locale_text.count("'" + locale + "':")
-              assert count == 6, (locale, count)
+              assert count == 8, (locale, count)
 
           assets_service = Path('lib/services/neo_assets_service.dart').read_text()
           art_picker = Path(
@@ -82,6 +82,18 @@ jobs:
           assert "recommended.author" in wizard
           assert "NeoStation Assets" in credits
           assert "RiiSU / iiSU System Art" in credits
+          assert "rootBundle.loadString" in credits
+          for asset in (
+              'NeoStation-GPL-3.0.txt',
+              'RPCS3-GPL-2.0.txt',
+              'ARMSX2-GPL-3.0.txt',
+              'Dusklight-CC0-1.0.txt',
+              'StikJIT-MPL-2.0.txt',
+              'GameDB-PS3-GPL-3.0.txt',
+              'NeoStation-Assets-CC-BY-NC-SA-4.0.txt',
+              'RiiSU-ATTRIBUTION.md',
+          ):
+              assert (Path('assets/legal') / asset).is_file(), asset
           PY
 
       - name: Exercise future app legal embedding
