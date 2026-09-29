@@ -62,6 +62,9 @@ class NeoAssetsTheme {
   /// The unique folder identifier for the theme.
   final String folder;
 
+  /// Creator/author attribution supplied by the remote theme metadata.
+  final String author;
+
   /// The direct URL to the theme's preview image.
   final String previewUrl;
 
@@ -74,6 +77,7 @@ class NeoAssetsTheme {
   const NeoAssetsTheme({
     required this.name,
     required this.folder,
+    this.author = '',
     required this.previewUrl,
     required this.previewSource,
     required this.isAi,
@@ -84,6 +88,7 @@ class NeoAssetsTheme {
     return NeoAssetsTheme(
       name: json['name']?.toString() ?? '',
       folder: json['folder']?.toString() ?? '',
+      author: json['author']?.toString().trim() ?? '',
       previewUrl: _resolvePreviewUrl(previewSource),
       previewSource: previewSource,
       isAi: _parseAi(json['ai']),
@@ -93,6 +98,7 @@ class NeoAssetsTheme {
   NeoAssetsTheme copyWith({
     String? name,
     String? folder,
+    String? author,
     String? previewUrl,
     String? previewSource,
     bool? isAi,
@@ -100,6 +106,7 @@ class NeoAssetsTheme {
     return NeoAssetsTheme(
       name: name ?? this.name,
       folder: folder ?? this.folder,
+      author: author ?? this.author,
       previewUrl: previewUrl ?? this.previewUrl,
       previewSource: previewSource ?? this.previewSource,
       isAi: isAi ?? this.isAi,
@@ -219,6 +226,7 @@ class NeoAssetsService {
         const NeoAssetsTheme(
           name: 'RiiSU',
           folder: _riisuThemeFolder,
+          author: 'iiSU Network / RiiSU',
           previewUrl: _riisuPreviewUrl,
           previewSource: _riisuPreviewUrl,
           isAi: false,
@@ -351,6 +359,7 @@ class NeoAssetsService {
             NeoAssetsTheme(
               name: (name == null || name.isEmpty) ? folder : name,
               folder: folder,
+              author: json['author']?.toString().trim() ?? '',
               previewUrl: '',
               previewSource: '',
               isAi: NeoAssetsTheme._parseAi(json['ai']),
