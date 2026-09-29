@@ -758,7 +758,8 @@ BOOL RPCS3JitConfirmCoreLoadHandoff(void) {
     if (![session waitUntilAttached:kRpcs3AttachTimeout]) {
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
-          : @"StikJIT did not attach universal.js to NeoStation.";
+          : [NSString stringWithFormat:@"JIT_PREPARATION_TIMEOUT: StikJIT did not complete preparation. Last stage: %@",
+              session.logs.lastObject ?: @"No helper stage received."];
       response[@"logs"] = session.logs;
       finish();
       return;

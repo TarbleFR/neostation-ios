@@ -205,7 +205,7 @@ def validate(ipa: Path) -> dict:
         core_info = plistlib.loads(z.read(posixpath.dirname(core) + '/Info.plist'))
         stik_info = plistlib.loads(z.read(posixpath.dirname(stik) + '/Info.plist'))
         demand(core_info['CFBundlePackageType'] == 'FMWK', 'Invalid Dolphin framework plist')
-        demand(stik_info['CFBundleShortVersionString'] == '1.5.0', 'Wrong StikJIT version')
+        demand(stik_info['CFBundleShortVersionString'] == '1.9.0', 'Wrong StikJIT version')
         images = {}
         for name in names:
             if name.endswith('/'):

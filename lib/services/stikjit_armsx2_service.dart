@@ -120,6 +120,12 @@ class StikJitArmsx2Service {
       final jit = await Armsx2InternalBridge.prepareJit(
         pairingFilePath: pairingFile.path,
       );
+      final jitLogs = jit['logs'];
+      if (jitLogs is List && jitLogs.isNotEmpty) {
+        await _appendDiagnostic(
+          'JIT preparation detail:\n${jitLogs.join('\n')}\n',
+        );
+      }
       if (jit['success'] != true ||
           jit['helperConnected'] != true ||
           jit['pidAttached'] != true ||

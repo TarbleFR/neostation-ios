@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary          = 'Out-of-process StikJIT universal helper for NeoStation RPCS3.'
   s.description      = <<-DESC
 App-extension implementation used only by NeoStation's embedded PlayStation 3
-engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with universal.js.
+engine. It attaches StikJIT 1.9.0 to the NeoStation host PID with universal.js.
                        DESC
   s.homepage         = 'https://github.com/TarbleFR/neostation-ios'
   s.license          = { :type => 'GPL-3.0' }

@@ -255,15 +255,15 @@ licenses, cores and third-party notices.
 
 ---
 
-STIKJIT FRAMEWORK 1.5.0 — MOZILLA PUBLIC LICENSE 2.0
+STIKJIT FRAMEWORK 1.9.0 — MOZILLA PUBLIC LICENSE 2.0
 
 Copyright StikDebug and the StikJIT contributors.
 
 Source:
-https://github.com/StikDebug/StikJIT/tree/1.5.0
+https://github.com/StikDebug/StikJIT/tree/1.9.0
 
 License:
-https://github.com/StikDebug/StikJIT/blob/1.5.0/LICENSE
+https://github.com/StikDebug/StikJIT/blob/1.9.0/LICENSE
 
 This component is the embedded StikJIT XCFramework, licensed under MPL-2.0.
 It is distinct from the separate StikDebug application. Bundled idevice,

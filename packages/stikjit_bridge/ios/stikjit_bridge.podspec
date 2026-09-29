@@ -21,7 +21,7 @@ Experimental iOS-only bridge allowing NeoStation to prepare StikJIT and enable J
     'DEFINES_MODULE' => 'YES'
   }
 
-  # StikJIT 1.5.0 was distributed with BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+  # StikJIT 1.9.0 was distributed with BUILD_LIBRARY_FOR_DISTRIBUTION=YES
   # while its module and its main public enum share the name `StikJIT`.
   # Swift can therefore resolve module-qualified top-level types as members of
   # enum StikJIT (Swift #56573). The released iOS framework also lacks the
@@ -125,8 +125,8 @@ required_plist = {
     'CFBundleInfoDictionaryVersion': '6.0',
     'CFBundleName': 'StikJIT',
     'CFBundlePackageType': 'FMWK',
-    'CFBundleShortVersionString': '1.5.0',
-    'CFBundleVersion': '1',
+    'CFBundleShortVersionString': '1.9.0',
+    'CFBundleVersion': '10',
     'CFBundleSupportedPlatforms': ['iPhoneOS'],
     'MinimumOSVersion': '17.4',
     'UIDeviceFamily': [1, 2],

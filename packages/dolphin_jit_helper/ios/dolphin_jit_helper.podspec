@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary          = 'Out-of-process StikJIT legacy helper for NeoStation Dolphin.'
   s.description      = <<-DESC
 App-extension implementation used only by NeoStation's embedded GameCube/Wii
-engine. It attaches StikJIT 1.5.0 to the NeoStation host PID with legacy.js.
+engine. It attaches StikJIT 1.9.0 to the NeoStation host PID with legacy.js.
                        DESC
   s.homepage         = 'https://github.com/TarbleFR/neostation-ios'
   s.license          = { :type => 'GPL-3.0' }

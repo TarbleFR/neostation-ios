@@ -15,6 +15,28 @@
 
 static void ARMSX2Diagnostic(NSString* stage, NSString* message) {
   NSLog(@"[ARMSX2:JIT] %@ %@", stage ?: @"", message ?: @"");
+  // Export legacy startup evidence only; modern JIT timing remains unchanged.
+  if (NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26) return;
+  @autoreleasepool {
+    NSURL* documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
+        inDomains:NSUserDomainMask].firstObject;
+    if (documents == nil) return;
+    NSString* path = [documents URLByAppendingPathComponent:@"armsx2_jit_debug.log"].path;
+    FILE* file = fopen(path.fileSystemRepresentation, "a");
+    if (file == NULL) return;
+    fseek(file, 0, SEEK_END);
+    if (ftell(file) > 524288) {
+      fclose(file);
+      file = fopen(path.fileSystemRepresentation, "w");
+      if (file == NULL) return;
+    }
+    NSString* bounded = message.length > 4096 ? [message substringToIndex:4096] : message;
+    NSString* line = [NSString stringWithFormat:@"%@ %@ %@\n", NSDate.date,
+        stage ?: @"", bounded ?: @""];
+    NSData* data = [line dataUsingEncoding:NSUTF8StringEncoding];
+    if (data.length) fwrite(data.bytes, 1, data.length, file);
+    fclose(file);
+  }
 }
 static void ARMSX2Milestone(NSString* stage, NSString* message) {
   NSLog(@"[ARMSX2:JIT:MILESTONE] %@ %@", stage ?: @"", message ?: @"");
@@ -798,7 +820,8 @@ void ARMSX2JitAbortTransaction(void) {
     if (![session waitUntilAttached:kArmsx2AttachTimeout]) {
       response[@"message"] = session.finalMessage.length
           ? session.finalMessage
-          : @"StikJIT did not attach universal.js to NeoStation.";
+          : [NSString stringWithFormat:@"JIT_PREPARATION_TIMEOUT: StikJIT did not complete preparation. Last stage: %@",
+              session.logs.lastObject ?: @"No helper stage received."];
       response[@"logs"] = session.logs;
       finish();
       return;

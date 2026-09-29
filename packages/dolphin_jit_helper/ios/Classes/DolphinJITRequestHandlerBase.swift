@@ -53,7 +53,7 @@ open class DolphinJITRequestHandlerBase: NSObject, NSExtensionRequestHandling {
       reporter = try HelperReporter(port: portNumber.uint16Value, token: token)
       try reporter?.connect()
       try reporter?.send(event: "helper_connected", message: "Dolphin JIT helper connected to NeoStation.")
-      try reporter?.send(event: "log", message: "Preparing StikJIT 1.5.0 for NeoStation PID \(targetPID).")
+      try reporter?.send(event: "log", message: "Preparing StikJIT 1.9.0 for NeoStation PID \(targetPID).")
       let temporaryDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("NeoStationDolphinJIT", isDirectory: true)
       try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
       let pairingURL = temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("plist")

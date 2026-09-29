@@ -90,7 +90,7 @@ def main() -> None:
         kartpad["releaseTagCommit"],
     )
     require_pinned_header(
-        LEGAL_ASSETS / "StikJIT-MPL-2.0.txt", "1.5.0"
+        LEGAL_ASSETS / "StikJIT-MPL-2.0.txt", "1.9.0"
     )
 
     destination = app / "Legal"
@@ -151,7 +151,7 @@ def main() -> None:
         },
         "stikjit": {
             "repository": "https://github.com/StikDebug/StikJIT",
-            "version": "1.5.0",
+            "version": "1.9.0",
             "license": "MPL-2.0",
         },
     }
