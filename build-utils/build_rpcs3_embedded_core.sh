@@ -125,6 +125,11 @@ python3 "$PWD/test/rpcs3_build353_xitrix_v010_test.py" "$SRC"
 python3 "$PWD/test/rpcs3_armsx3_performance_patch_test.py" "$SRC"
 HOST_CXX="$(xcrun --sdk macosx --find clang++)"
 HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)"
+env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+  -DNEOSWAP_TESTING -I "$SRC" -I "$SRC/rpcs3" -I "$PWD/packages/neo_swap/ios/Classes" \
+  "$PWD/packages/neo_swap/ios/Classes/NeoSwap.cpp" "$PWD/test/neoswap_rpcs3_allocator_test.cpp" \
+  -o "$WORK_ROOT/neoswap-rpcs3-allocator-test"
+"$WORK_ROOT/neoswap-rpcs3-allocator-test"
 env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
   "$PWD/test/rpcs3_ppu_no_size_split_policy_test.cpp" -o "$WORK_ROOT/ppu-no-size-split-test"
 "$WORK_ROOT/ppu-no-size-split-test"

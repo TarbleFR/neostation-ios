@@ -1,5 +1,5 @@
-name: RPCS3 Build 353 XITRIX v0.10 core
-run-name: RPCS3 Build 353 XITRIX v0.10 Core • ${{ github.sha }}
+name: RPCS3 NeoSwap v1 core
+run-name: RPCS3 NeoSwap v1 Core • ${{ github.sha }}
 on:
   push:
     branches: [experimental]
@@ -9,6 +9,9 @@ on:
       - 'build-utils/materialize_rpcs3_core.py'
       - 'build-utils/apply_rpcs3_llvm_patch.py'
       - 'build-utils/rpcs3/embedded-core.patch'
+      - 'packages/neo_swap/ios/Classes/NeoSwap.*'
+      - 'native/neoswap/NeoSwapClient.h'
+      - 'test/neoswap*_test.*'
       - 'build-utils/rpcs3/canonical-source.json'
       - 'build-utils/rpcs3/llvm-aarch64-ghc-emergency-spill.patch'
       - 'build-utils/validate_rpcs3_embedded_core.py'
@@ -30,7 +33,7 @@ jobs:
     # The host integration reuses the already built, provenance-checked Core;
     # ios-ci validates its unchanged source, recipe, ABI, and binary identity.
     if: ${{ !contains(github.event.head_commit.message, '[rpcs3-host-integration]') }}
-    name: Build 353 RPCS3 Core arm64
+    name: RPCS3 Core arm64 with NeoSwap client
     runs-on: macos-15
     timeout-minutes: 180
     env:
@@ -51,6 +54,10 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
+          xcrun clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING \
+            -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp \
+            test/neoswap_test.cpp -o "$RUNNER_TEMP/neoswap-test"
+          "$RUNNER_TEMP/neoswap-test"
           bash -n build-utils/build_rpcs3_embedded_core.sh
           python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py test/rpcs3_build352_gow3_memory_test.py test/rpcs3_build353_xitrix_v010_test.py
           python3 test/rpcs3_preprocessor_balance_test.py
@@ -82,7 +89,7 @@ jobs:
           file "$CORE" | tee build/rpcs3-core-diagnostics/file.txt
           lipo -archs "$CORE" | tee build/rpcs3-core-diagnostics/archs.txt
           nm -gU "$CORE" > build/rpcs3-core-diagnostics/exports.txt
-          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_ios_save_state_slot _rpcs3_ios_run_llvm_self_test _rpcs3_ios_shutdown; do
+          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_ios_save_state_slot _rpcs3_ios_run_llvm_self_test _rpcs3_ios_shutdown _rpcs3_ios_set_neoswap_api; do
             grep -q " $symbol$" build/rpcs3-core-diagnostics/exports.txt
           done
           ! grep -q ' _neostation_rpcs3_adopt_jit_layout$' build/rpcs3-core-diagnostics/exports.txt
@@ -104,6 +111,8 @@ jobs:
             'lifecycle_marker':'NEOSTATION_BUILD301_PASSIVE_DLOPEN_V1',
             'allocator_marker':'NEOSTATION_PAGE_ALIGNED_JIT_GAPS_V1',
             'source_patch_sha256':json.loads(Path('build-utils/rpcs3/canonical-source.json').read_text())['patch_sha256'],
+            'neoswap_client_abi':1,
+            'neoswap_coverage':'RSX CPU aligned data >= 1 MiB; all titles; no GPU/JIT hooks',
             'device_runtime_tested':False,
           }
           Path('dist/rpcs3/identity.json').write_text(json.dumps(identity,indent=2)+'\n')

@@ -7305,6 +7305,206 @@ index 8b2689b3e..cc49e82f1 100644
  		{
  			T index = src[i];
  			if (index != restart_index)
+diff --git a/rpcs3/Emu/RSX/Common/aligned_malloc.hpp b/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
+index 2ca59c3cf..50d6d7c86 100644
+--- a/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
++++ b/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
+@@ -1,88 +1,107 @@
+-#pragma once
+-
+-#include <cstdlib>
+-
+-namespace rsx
+-{
+-	namespace aligned_allocator
+-	{
+-		template <size_t Align>
+-			requires (Align != 0) && ((Align& (Align - 1)) == 0)
+-		size_t align_up(size_t size)
+-		{
+-			return (size + (Align - 1)) & ~(Align - 1);
+-		}
+-
+-		template <size_t Align>
+-			requires (Align != 0) && ((Align& (Align - 1)) == 0)
+-		void* malloc(size_t size)
+-		{
+-#if defined(_WIN32)
+-			return _aligned_malloc(size, Align);
+-#elif defined(__APPLE__)
+-			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
+-			return std::aligned_alloc(NativeAlign, align_up<NativeAlign>(size));
+-#else
+-			return std::aligned_alloc(Align, align_up<Align>(size));
+-#endif
+-		}
+-
+-		template <size_t Align>
+-			requires (Align != 0) && ((Align& (Align - 1)) == 0)
+-		void* realloc(void* prev_ptr, [[maybe_unused]] size_t prev_size, size_t new_size)
+-		{
+-			if (align_up<Align>(prev_size) >= new_size)
+-			{
+-				return prev_ptr;
+-			}
+-
+-			ensure(reinterpret_cast<usz>(prev_ptr) % Align == 0, "Pointer not aligned to Align");
+-#if defined(_WIN32)
+-			return _aligned_realloc(prev_ptr, new_size, Align);
+-#else
+-#if defined(__APPLE__)
+-			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
+-			void* ret = std::aligned_alloc(NativeAlign, align_up<NativeAlign>(new_size));
+-#else
+-			void* ret = std::aligned_alloc(Align, align_up<Align>(new_size));
+-#endif
+-			std::memcpy(ret, prev_ptr, std::min(prev_size, new_size));
+-			std::free(prev_ptr);
+-			return ret;
+-#endif
+-		}
+-
+-		static inline void free(void* ptr)
+-		{
+-#ifdef _WIN32
+-			_aligned_free(ptr);
+-#else
+-			std::free(ptr);
+-#endif
+-		}
+-	}
+-
+-	template <typename T, int Alignment = sizeof(T)>
+-	class aligned_pointer_t
+-	{
+-	public:
+-		aligned_pointer_t(size_t size)
+-		{
+-			m_ptr = aligned_allocator::malloc<Alignment>(size);
+-		}
+-
+-		virtual ~aligned_pointer_t()
+-		{
+-			aligned_allocator::free(m_ptr);
+-		}
+-
+-		T* data() const { return m_ptr; }
+-
+-		T& operator * () const { return *m_ptr; }
+-
+-		T* operator -> () const { return m_ptr; }
+-
+-	private:
+-		T* m_ptr;
+-	};
+-}
++#pragma once
++
++#include <cstdlib>
++#ifdef RPCS3_IOS
++#include "ios/NeoSwapClient.h"
++#endif
++
++namespace rsx
++{
++	namespace aligned_allocator
++	{
++		static inline void free(void* ptr);
++		template <size_t Align>
++			requires (Align != 0) && ((Align& (Align - 1)) == 0)
++		size_t align_up(size_t size)
++		{
++			return (size + (Align - 1)) & ~(Align - 1);
++		}
++
++		template <size_t Align>
++			requires (Align != 0) && ((Align& (Align - 1)) == 0)
++		void* malloc(size_t size)
++		{
++#ifdef RPCS3_IOS
++			// NEOSTATION_NEOSWAP_RSX_CPU_V1: all titles, explicit CPU data only.
++			if (void* data = neostation::swap::try_allocate(NEOSWAP_RPCS3, size, Align)) return data;
++#endif
++#if defined(_WIN32)
++			return _aligned_malloc(size, Align);
++#elif defined(__APPLE__)
++			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
++			return std::aligned_alloc(NativeAlign, align_up<NativeAlign>(size));
++#else
++			return std::aligned_alloc(Align, align_up<Align>(size));
++#endif
++		}
++
++		template <size_t Align>
++			requires (Align != 0) && ((Align& (Align - 1)) == 0)
++		void* realloc(void* prev_ptr, [[maybe_unused]] size_t prev_size, size_t new_size)
++		{
++			if (align_up<Align>(prev_size) >= new_size)
++			{
++				return prev_ptr;
++			}
++
++			ensure(reinterpret_cast<usz>(prev_ptr) % Align == 0, "Pointer not aligned to Align");
++#if defined(_WIN32)
++			return _aligned_realloc(prev_ptr, new_size, Align);
++#else
++#if defined(RPCS3_IOS)
++			void* ret = malloc<Align>(new_size);
++			if (!ret) return nullptr; // retain the original buffer on allocation failure
++#elif defined(__APPLE__)
++			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
++			void* ret = std::aligned_alloc(NativeAlign, align_up<NativeAlign>(new_size));
++#else
++			void* ret = std::aligned_alloc(Align, align_up<Align>(new_size));
++#endif
++			std::memcpy(ret, prev_ptr, std::min(prev_size, new_size));
++			free(prev_ptr);
++			return ret;
++#endif
++		}
++
++		static inline void free(void* ptr)
++		{
++#ifdef RPCS3_IOS
++			const int result = neostation::swap::release(ptr);
++			if (result != NEOSWAP_NOT_OWNED)
++			{
++				ensure(result == NEOSWAP_OK, "NeoSwap release failed; not a heap allocation");
++				return;
++			}
++#endif
++#ifdef _WIN32
++			_aligned_free(ptr);
++#else
++			std::free(ptr);
++#endif
++		}
++	}
++
++	template <typename T, int Alignment = sizeof(T)>
++	class aligned_pointer_t
++	{
++	public:
++		aligned_pointer_t(size_t size)
++		{
++			m_ptr = aligned_allocator::malloc<Alignment>(size);
++		}
++
++		virtual ~aligned_pointer_t()
++		{
++			aligned_allocator::free(m_ptr);
++		}
++
++		T* data() const { return m_ptr; }
++
++		T& operator * () const { return *m_ptr; }
++
++		T* operator -> () const { return m_ptr; }
++
++	private:
++		T* m_ptr;
++	};
++}
 diff --git a/rpcs3/Emu/RSX/Common/sampler_invalidation.h b/rpcs3/Emu/RSX/Common/sampler_invalidation.h
 new file mode 100644
 index 000000000..9345076e5
@@ -11227,11 +11427,133 @@ index 000000000..006640b01
 +
 +inline operation current;
 +}
+diff --git a/rpcs3/ios/NeoSwap.h b/rpcs3/ios/NeoSwap.h
+new file mode 100644
+index 000000000..012200b26
+--- /dev/null
++++ b/rpcs3/ios/NeoSwap.h
+@@ -0,0 +1,74 @@
++#ifndef NEOSTATION_NEOSWAP_H
++#define NEOSTATION_NEOSWAP_H
++#include <stddef.h>
++#include <stdint.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++/* NeoSwap v1: explicitly opted-in CPU data, not kernel swap or GPU memory.
++ * One broker per HOST PROCESS. Clients borrow the immutable vtable for the
++ * lifetime of their allocations. No function may be called from a signal
++ * handler or a real-time audio callback. Never pass an arbitrary live region.
++ * Caller must quiesce users before releasing or syncing a block.
++ */
++enum { NEOSWAP_ABI = 1, NEOSWAP_OWNER_COUNT = 6 };
++enum NeoSwapOwner {
++    NEOSWAP_RPCS3 = 0, NEOSWAP_DOLPHIN = 1, NEOSWAP_ARMSX2 = 2,
++    NEOSWAP_DUSKLIGHT = 3, NEOSWAP_KARTPAD = 4, NEOSWAP_PROBE = 5
++};
++enum NeoSwapKind { NEOSWAP_CPU_DATA = 1, NEOSWAP_CPU_CACHE = 2 };
++enum NeoSwapResult {
++    NEOSWAP_OK = 0, NEOSWAP_NOT_OWNED = 1,
++    NEOSWAP_DISABLED = -1, NEOSWAP_INVALID = -2, NEOSWAP_QUOTA = -3,
++    NEOSWAP_STORAGE = -4, NEOSWAP_IO = -5, NEOSWAP_MAPPING = -6,
++    NEOSWAP_BUSY = -7, NEOSWAP_TOO_SMALL = -8, NEOSWAP_LIMIT = -9
++};
++typedef struct NeoSwapConfig {
++    uint32_t struct_size, abi_version;
++    uint64_t capacity_bytes, minimum_free_bytes, minimum_allocation_bytes;
++    uint32_t enabled_owner_mask, reserved;
++} NeoSwapConfig;
++typedef struct NeoSwapOwnerStats {
++    uint64_t live_bytes, peak_bytes, allocation_count, rejection_count;
++} NeoSwapOwnerStats;
++typedef struct NeoSwapStats {
++    uint32_t struct_size, abi_version;
++    uint64_t capacity_bytes, live_bytes, peak_bytes, allocated_disk_bytes;
++    uint64_t live_blocks, allocation_count, rejection_count, io_errors;
++    uint64_t allocation_time_us, max_allocation_time_us, minimum_free_bytes;
++    uint32_t enabled_owner_mask;
++    int32_t last_result, last_errno;
++    uint32_t registered_owner_mask;
++    NeoSwapOwnerStats owners[NEOSWAP_OWNER_COUNT];
++} NeoSwapStats;
++typedef struct NeoSwapAPI {
++    uint32_t struct_size, abi_version;
++    int (*allocate)(uint32_t owner, uint32_t kind, uint64_t bytes,
++                    uint64_t alignment, void** address);
++    /* ONLY NOT_OWNED permits a caller to use its ordinary free(). Any other
++     * failure retains ownership and must not be turned into a heap free. */
++    int (*release)(void* address);
++    int (*sync)(void* address);
++    int (*enabled)(uint32_t owner);
++} NeoSwapAPI;
++#if defined(__GNUC__)
++#define NEOSWAP_PUBLIC __attribute__((visibility("default")))
++#else
++#define NEOSWAP_PUBLIC
++#endif
++NEOSWAP_PUBLIC const NeoSwapAPI* NeoSwap_GetAPI(uint32_t abi_version);
++/* Reconfiguration is atomic; it refuses while any broker block is live. */
++NEOSWAP_PUBLIC int NeoSwap_Configure(const char* private_directory, const NeoSwapConfig* config);
++NEOSWAP_PUBLIC int NeoSwap_Snapshot(NeoSwapStats* stats);
++NEOSWAP_PUBLIC void NeoSwap_RegisterClient(uint32_t owner);
++/* Lock-free display counter, not a residency or OS page-out measurement. */
++NEOSWAP_PUBLIC uint64_t NeoSwap_LiveBytes(uint32_t owner);
++#ifdef NEOSWAP_TESTING
++/* Fault injection is compiled out of deliverable libraries. */
++void NeoSwap_TestFailNext(int stage); /* 1=open, 2=reserve, 3=map, 4=unmap, 5=sync */
++int NeoSwap_TestVerifyFile(void* address, const void* expected, size_t bytes);
++#endif
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/rpcs3/ios/NeoSwapClient.h b/rpcs3/ios/NeoSwapClient.h
+new file mode 100644
+index 000000000..3d7fc8040
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapClient.h
+@@ -0,0 +1,30 @@
++#pragma once
++#include "NeoSwap.h"
++#include <atomic>
++#include <cstddef>
++
++namespace neostation::swap {
++// Each core stores only a borrowed vtable. The broker itself is compiled once
++// into neo_swap.framework, never into each emulator. No static constructors.
++inline constinit std::atomic<const NeoSwapAPI*> client_api{nullptr};
++inline int install(const NeoSwapAPI* api) noexcept {
++    if (!api || api->struct_size != sizeof(NeoSwapAPI) || api->abi_version != NEOSWAP_ABI ||
++        !api->allocate || !api->release || !api->sync || !api->enabled) return NEOSWAP_INVALID;
++    const NeoSwapAPI* expected = nullptr;
++    if (!client_api.compare_exchange_strong(expected, api, std::memory_order_acq_rel) && expected != api)
++        return NEOSWAP_BUSY;
++    return NEOSWAP_OK;
++}
++inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexcept {
++    // Small renderer allocations must not take the broker lock or create files.
++    if (bytes < 1024 * 1024) return nullptr;
++    const auto* api = client_api.load(std::memory_order_acquire);
++    if (!api || !api->enabled(owner)) return nullptr;
++    void* ptr = nullptr;
++    return api->allocate(owner, NEOSWAP_CPU_DATA, bytes, alignment, &ptr) == NEOSWAP_OK ? ptr : nullptr;
++}
++inline int release(void* ptr) noexcept {
++    const auto* api = client_api.load(std::memory_order_acquire);
++    return api ? api->release(ptr) : NEOSWAP_NOT_OWNED;
++}
++}
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc731..c8ac9f3e0 100644
+index 74a6dc731..2adc8c56e 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
-@@ -20,10 +20,15 @@
+@@ -1,4 +1,5 @@
+ #include "RPCS3IOS.h"
++#include "NeoSwapClient.h"
+ #include "RPCS3IOSBigPicture.h"
+ #include "RPCS3IOSBootProgress.h"
+ #include "RPCS3IOSCapabilities.h"
+@@ -20,10 +21,15 @@
  #include "GameLibrary.h"
  #include "GameUpdateManifest.h"
  #include "IOSGSFrame.h"
@@ -11247,7 +11569,7 @@ index 74a6dc731..c8ac9f3e0 100644
  #include "Emu/IdManager.h"
  #include "Emu/Audio/IOS/IOSAudioBackend.h"
  #include "Emu/Audio/Null/null_enumerator.h"
-@@ -110,6 +115,8 @@ std::string g_application_support_path;
+@@ -110,6 +116,8 @@ std::string g_application_support_path;
  std::string g_cache_path;
  std::string g_preferred_language = "en";
  bool g_emu_started = false;
@@ -11256,7 +11578,7 @@ index 74a6dc731..c8ac9f3e0 100644
  std::atomic_bool g_accept_display_surfaces = false;
  std::atomic_bool g_accept_pad_state = false;
  rpcs3::ios::display_surface_registry g_display_surface;
-@@ -312,7 +319,8 @@ boot_progress_snapshot capture_boot_progress()
+@@ -312,7 +320,8 @@ boot_progress_snapshot capture_boot_progress()
  	};
  
  	boot_progress_snapshot snapshot = read();
@@ -11266,7 +11588,7 @@ index 74a6dc731..c8ac9f3e0 100644
  	{
  		boot_progress_snapshot next = read();
  		if (next == snapshot)
-@@ -321,6 +329,7 @@ boot_progress_snapshot capture_boot_progress()
+@@ -321,6 +330,7 @@ boot_progress_snapshot capture_boot_progress()
  		}
  		snapshot = std::move(next);
  	}
@@ -11274,7 +11596,7 @@ index 74a6dc731..c8ac9f3e0 100644
  }
  
  rpcs3_ios_emulation_state current_emulation_state() noexcept
-@@ -378,6 +387,11 @@ void emit_log(int32_t level, std::string_view message)
+@@ -378,6 +388,11 @@ void emit_log(int32_t level, std::string_view message)
  	g_config.log_callback(g_config.user_context, level, terminated.c_str());
  }
  
@@ -11286,7 +11608,7 @@ index 74a6dc731..c8ac9f3e0 100644
  void emit_jit_arena_statistics(std::string_view phase)
  {
  	constexpr usz mib = 1024 * 1024;
-@@ -385,7 +399,7 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -385,7 +400,7 @@ void emit_jit_arena_statistics(std::string_view phase)
  	emit_log(4, fmt::format(
  		"iOS JIT arena %s: code live=%u MiB, free=%u MiB (%llu bytes), largest_free=%u MiB (%llu bytes), "
  		"runtime=%u MiB, peak=%u MiB; data live=%u MiB, free=%u MiB (%llu bytes), "
@@ -11295,7 +11617,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		phase,
  		stats.live_code_bytes / mib,
  		stats.free_code_bytes / mib,
-@@ -401,7 +415,8 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -401,7 +416,8 @@ void emit_jit_arena_statistics(std::string_view phase)
  		static_cast<u64>(stats.largest_free_data_bytes),
  		stats.runtime_data_bytes / mib,
  		stats.peak_data_bytes / mib,
@@ -11305,7 +11627,7 @@ index 74a6dc731..c8ac9f3e0 100644
  }
  
  class callback_log_listener final : public logs::listener
-@@ -448,16 +463,32 @@ private:
+@@ -448,16 +464,32 @@ private:
  	std::string m_name;
  };
  
@@ -11342,7 +11664,7 @@ index 74a6dc731..c8ac9f3e0 100644
  }
  
  bool apply_database_settings_for_api(std::string_view title_id)
-@@ -1267,15 +1298,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
+@@ -1267,15 +1299,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
  
  extern "C" const char* rpcs3_ios_build_info(void) noexcept
  {
@@ -11361,7 +11683,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		return RPCS3_IOS_INVALID_STATE;
  	}
  
-@@ -1289,40 +1320,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1289,40 +1321,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		return result;
  	}
  
@@ -11414,7 +11736,9 @@ index 74a6dc731..c8ac9f3e0 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_prepare",
 +			rpcs3::ios::jit::last_error());
-+	}
+ 	}
+-	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
+-		!rpcs3::ios::jit::seal_arena())
 +
 +	// No process-global runtime has been changed before this point. An early
 +	// reservation failure can be retried by the user after helper completion.
@@ -11423,10 +11747,13 @@ index 74a6dc731..c8ac9f3e0 100644
 +	g_initialization_attempted = true;
 +	emit_log(2, "asmjit_global_runtime_begin");
 +	if (!asmjit::initialize_global_runtime())
-+	{
+ 	{
+-		set_error(rpcs3::ios::jit::last_error());
+-		g_lifecycle.finish_initialize(false);
+-		return RPCS3_IOS_JIT_MAPPING_FAILED;
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "asmjit_global_runtime",
 +			rpcs3::ios::jit::last_error());
-+	}
+ 	}
 +	emit_log(2, "asmjit_global_runtime_end");
 +
 +	std::string trampoline_error;
@@ -11450,19 +11777,14 @@ index 74a6dc731..c8ac9f3e0 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "spu_trampolines",
 +			trampoline_error + "; " + rpcs3::ios::jit::last_error());
- 	}
--	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
--		!rpcs3::ios::jit::seal_arena())
++	}
 +	emit_log(2, "spu_trampoline_init_end");
 +
 +	if (!rpcs3::ios::jit::seal_arena())
- 	{
--		set_error(rpcs3::ios::jit::last_error());
--		g_lifecycle.finish_initialize(false);
--		return RPCS3_IOS_JIT_MAPPING_FAILED;
++	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_seal",
 +			rpcs3::ios::jit::last_error());
- 	}
++	}
 +	emit_log(2, "jit_initialize_success");
  
  	try
@@ -11488,7 +11810,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		// A developer can request one bounded SPU profile through the injected
  		// cache root. Consume the request so subsequent launches stay unchanged.
  		const std::string profile_request = fs::get_cache_dir() + "jit-profile.once";
-@@ -1385,8 +1479,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1385,8 +1480,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		Emu.SetCallbacks(make_callbacks());
  		Emu.SetSupportedRenderers({video_renderer::vulkan});
  		Emu.SetDefaultRenderer(video_renderer::vulkan);
@@ -11497,7 +11819,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		Emu.SetDefaultGraphicsAdapter("iOS Metal GPU");
  		Emu.SetHasGui(false);
  		Emu.SetHeadless(false);
-@@ -1397,6 +1489,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1397,6 +1490,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		g_accept_display_surfaces = true;
  		g_accept_pad_state = true;
  		emit_log(4, "RPCS3 Emu.Init completed with the iOS Vulkan/MoltenVK and RemoteIO frontend");
@@ -11505,7 +11827,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		emit_jit_arena_statistics("after core initialization");
  		return RPCS3_IOS_OK;
  	}
-@@ -1519,6 +1612,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
+@@ -1519,6 +1613,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
  
  		using test_function = uint64_t (*)(uint64_t);
  		const auto function_address = compiler.get("rpcs3_ios_test_function");
@@ -11513,7 +11835,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		if (!function_address)
  		{
  			set_error("LLVM did not publish the self-test function");
-@@ -3161,7 +3255,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
+@@ -3161,7 +3256,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
  		}
  		bool custom_config = false;
  		const bool loaded = load_settings_for_api(title_id, custom_config);
@@ -11522,7 +11844,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		if (!loaded)
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3233,12 +3327,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
+@@ -3233,12 +3328,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
  		{
  			return result;
  		}
@@ -11541,7 +11863,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		return RPCS3_IOS_OK;
  	}
  	catch (const std::exception& error)
-@@ -3310,7 +3407,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
+@@ -3310,7 +3408,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
  
  	try
  	{
@@ -11551,7 +11873,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		{
  			set_error(fmt::format("Unable to remove the custom configuration for %s", title_id));
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3388,10 +3486,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
+@@ -3388,10 +3487,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
  		}
@@ -11562,7 +11884,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		normalize_current_game_resolution(game.resolution);
  		const auto result = finish_game_settings_preset_result(
  			rpcs3::ios::save_current_game_settings_preset(title_id, name));
-@@ -4444,6 +4538,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4444,6 +4539,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  	const char* savestate_id) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -11575,7 +11897,7 @@ index 74a6dc731..c8ac9f3e0 100644
  	if (!title_id || !title_id[0])
  	{
  		set_error("An installed title ID is required");
-@@ -4486,7 +4586,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4486,7 +4587,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  			return RPCS3_IOS_GAME_NOT_FOUND;
  		}
  
@@ -11614,7 +11936,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		if (!requested_savestate_id.empty())
  		{
  			const auto savestates = enumerate_title_savestates(game->title_id, game->path);
-@@ -4503,21 +4633,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4503,21 +4634,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  				return RPCS3_IOS_BOOT_FAILED;
  			}
  			boot_path = selected->path;
@@ -11636,7 +11958,7 @@ index 74a6dc731..c8ac9f3e0 100644
  		}
  
  		if (requested_savestate_id.empty())
-@@ -4730,9 +4845,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
+@@ -4730,9 +4846,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
  	return RPCS3_IOS_INTERNAL_ERROR;
  }
  
@@ -11816,7 +12138,7 @@ index 74a6dc731..c8ac9f3e0 100644
  	if (g_lifecycle.state() != RPCS3_IOS_STATE_READY)
  	{
  		set_error("RPCS3Core must be ready before stopping emulation");
-@@ -4784,6 +5069,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
+@@ -4784,6 +5070,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
  extern "C" rpcs3_ios_status rpcs3_ios_shutdown(void) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -11829,11 +12151,21 @@ index 74a6dc731..c8ac9f3e0 100644
  	bool should_run = false;
  	if (const auto result = g_lifecycle.begin_shutdown(should_run); result != RPCS3_IOS_OK)
  	{
+@@ -4852,3 +5144,9 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
+ 	emit_log(1, text);
+ 	std::abort();
+ }
++
++// Optional v1 service binding; no kernel/JIT changes and no GameID predicate.
++extern "C" RPCS3_IOS_EXPORT int32_t rpcs3_ios_set_neoswap_api(const NeoSwapAPI* api) noexcept
++{
++	return neostation::swap::install(api);
++}
 diff --git a/rpcs3/ios/RPCS3IOS.exports b/rpcs3/ios/RPCS3IOS.exports
-index d7529ab6a..0c88612c9 100644
+index d7529ab6a..991c27501 100644
 --- a/rpcs3/ios/RPCS3IOS.exports
 +++ b/rpcs3/ios/RPCS3IOS.exports
-@@ -72,3 +72,7 @@ _rpcs3_ios_stop_emulation
+@@ -72,3 +72,8 @@ _rpcs3_ios_stop_emulation
  _rpcs3_ios_get_state
  _rpcs3_ios_shutdown
  _rpcs3_ios_last_error
@@ -11841,6 +12173,7 @@ index d7529ab6a..0c88612c9 100644
 +_neostation_rpcs3_ios_enumerate_savestates_live
 +_neostation_rpcs3_ios_get_savestate_status
 +_neostation_rpcs3_ios_save_state_slot
++_rpcs3_ios_set_neoswap_api
 diff --git a/rpcs3/ios/RPCS3IOS.h b/rpcs3/ios/RPCS3IOS.h
 index 20526d090..5be3a76bb 100644
 --- a/rpcs3/ios/RPCS3IOS.h
