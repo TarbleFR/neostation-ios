@@ -1,5 +1,5 @@
-name: NeoStation iOS Build 360 private cheats and media test
-run-name: NeoStation iOS Build 360 private cheats and media test • ${{ github.sha }}
+name: NeoStation iOS Build 361 private cheat import and deletion test
+run-name: NeoStation iOS Build 361 private cheat import and deletion test • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '360'
+        default: '361'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
-    name: Build 360 private cheats and media test IPA
+    name: Build 361 private cheat import and deletion test IPA
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '360' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '361' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-Private-Test-360-Encrypted
+      ARTIFACT_NAME: NeoStation-Private-Test-361-Encrypted
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -393,6 +393,9 @@ jobs:
           "$RUNNER_TEMP/cheat-parser"
           clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_store_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-store"
           "$RUNNER_TEMP/cheat-store"
+          clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_import_delete361_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-import-delete"
+          "$RUNNER_TEMP/cheat-import-delete"
+          python3 test/ar_block361_upstream_test.py
           flutter test test/kartpad_locale_test.dart
           flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
           python3 test/rpcs3_loader_stability_280_test.py
@@ -867,6 +870,27 @@ jobs:
             --build-number "$BUILD_NUMBER" \
             --dolphin-sha "$DOLPHIN_SHA"
 
+      - name: Require reported-cheat UIKit regression proof
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api repos/TarbleFR/neostation-ios/actions/runs/36564433241 > "$RUNNER_TEMP/cheat-regression.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          proof=json.loads((Path(os.environ['RUNNER_TEMP'])/'cheat-regression.json').read_text())
+          assert proof['head_sha']=='1c17a4882e20b6fa0e2f89ae3faae0aab52bef4e', proof
+          assert proof['conclusion']=='success', proof
+          PY
+          git diff --exit-code 1c17a4882e20b6fa0e2f89ae3faae0aab52bef4e "$GITHUB_SHA" -- \
+            native/cheats \
+            packages/dolphin_internal_bridge/ios/Classes \
+            packages/armsx2_internal_bridge/ios/Classes \
+            test/cheat_editor361_ui_test.py test/cheat_import_delete361_test.mm \
+            test/cheat_parser_test.cpp test/cheat_catalog361_test.mm test/ar_block361_upstream_test.py
+
       - name: Package and validate NeoStation IPA
         shell: bash
         run: |
@@ -910,7 +934,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-360-recipient.pem
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-361-recipient.pem
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt
           # Only ciphertext leaves the build runner. The matching private key

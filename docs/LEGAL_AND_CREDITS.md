@@ -176,3 +176,13 @@ application bundle containing:
 
 The already-published `NeoStation.ipa` asset for release 0.0.1 is intentionally
 not modified by this documentation policy.
+
+## Optional cheat catalogue source
+
+The RE4 PAL G4BP08 catalogue adapter fetches the author's public WIIRD topic
+on demand from gc-forever. Credits: **Ralf / Ralf@gc-forever** and any authors
+named beside each code. Source: https://www.gc-forever.com/forums/viewtopic.php?t=2145
+
+The catalogue is not bundled in NeoStation. Imported entries retain the author
+and source URL; attribution is not an endorsement or a claim to relicense the
+creator's work. The source does not specify a disc revision.
