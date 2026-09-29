@@ -14,6 +14,9 @@ on:
       - 'lib/l10n/legal_credits_locale.dart'
       - 'lib/screens/settings_screen/legal_credits_dialog.dart'
       - 'lib/screens/settings_screen/new_settings_options/about_settings_content.dart'
+      - 'lib/screens/settings_screen/new_settings_options/system_art_settings_content.dart'
+      - 'lib/services/neo_assets_service.dart'
+      - 'lib/widgets/setup_wizard.dart'
       - 'build-utils/embed_legal_bundle.py'
       - 'build-utils/validate_legal_bundle_ipa.py'
       - 'pubspec.yaml'
@@ -53,13 +56,32 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          text = Path('lib/l10n/legal_credits_locale.dart').read_text()
+
+          locale_text = Path('lib/l10n/legal_credits_locale.dart').read_text()
           for locale in (
               'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt',
               'fr', 'de', 'it', 'id', 'ja', 'ko',
           ):
-              count = text.count("'" + locale + "':")
+              count = locale_text.count("'" + locale + "':")
               assert count == 6, (locale, count)
+
+          assets_service = Path('lib/services/neo_assets_service.dart').read_text()
+          art_picker = Path(
+              'lib/screens/settings_screen/new_settings_options/'
+              'system_art_settings_content.dart'
+          ).read_text()
+          wizard = Path('lib/widgets/setup_wizard.dart').read_text()
+          credits = Path(
+              'lib/screens/settings_screen/legal_credits_dialog.dart'
+          ).read_text()
+
+          assert "final String author;" in assets_service
+          assert "author: json['author']" in assets_service
+          assert "author: 'iiSU Network / RiiSU'" in assets_service
+          assert "item.author" in art_picker
+          assert "recommended.author" in wizard
+          assert "NeoStation Assets" in credits
+          assert "RiiSU / iiSU System Art" in credits
           PY
 
       - name: Exercise future app legal embedding
