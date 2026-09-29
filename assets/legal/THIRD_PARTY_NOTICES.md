@@ -17,3 +17,30 @@ RetroAchievements.
 Each component remains under its own applicable license and copyright notices.
 Nothing in this file relicenses third-party software, game content, trademarks
 or datasets.
+
+
+## Remote System Art
+
+### NeoStation Assets
+
+Optional System Art is fetched at runtime from:
+https://github.com/misobadev/neostation-assets
+
+That repository licenses its original creative backgrounds and custom icons
+under **CC BY-NC-SA 4.0**. Attribution to the NeoStation project is required;
+the license includes NonCommercial and ShareAlike conditions. Console logos and
+other trademarks remain owned by their respective holders.
+
+### RiiSU / iiSU
+
+RiiSU is a curated external System Art pack fetched on demand:
+https://github.com/mult1v4c/RiiSU
+
+RiiSU credits **iiSU Interpreted for ES-DE** for the system art icons and
+**iiSU Network** for the original inspiration:
+https://github.com/VictorUnlocked/iisu-interpreted-es-de
+https://iisu.network/
+
+No standalone RiiSU license file was visible when this integration was added.
+NeoStation therefore keeps the artwork hosted by the original project and does
+not treat it as NeoStation-owned or generally redistributable material.
