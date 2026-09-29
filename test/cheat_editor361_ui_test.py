@@ -92,6 +92,8 @@ ns['TESTS']=r'''
   NSURL* file=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:ps2.boolValue?@"12345678.pnach":@"G4BP08.txt"]];
   [[self fiftyCodes:ps2.boolValue] writeToURL:file atomically:YES encoding:NSUTF16StringEncoding error:nil];
   [self readFile:file editor:editor];
+  // Importing another TXT must not inherit the preceding canonical INI format.
+  [self readFile:file editor:editor];
   XCTAssertEqual(editor.errorLabel.text.length,0);XCTAssertEqual(editor.previewEntries.count,50);
   XCTAssertEqual([editor.previewTable.dataSource tableView:editor.previewTable numberOfRowsInSection:0],50);
   XCTAssertTrue(editor.nameField.hidden);XCTAssertTrue(editor.codeField.hidden);XCTAssertFalse(editor.previewTable.hidden);

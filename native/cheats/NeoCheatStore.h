@@ -117,6 +117,7 @@ static NSDictionary* NeoDecodeCheatDocument(NSData* data,NSString* filename,NSDi
         [text rangeOfString:@"<html" options:NSCaseInsensitiveSearch].location!=NSNotFound) return NeoCheatFailure(@"unsupportedFile");
     type=ps2?@"pnach":[ext isEqual:@"ar"]?@"actionReplay":fallback?:@"gecko";
     if([ext isEqual:@"ini"] || [ext isEqual:@"dolphin"])type=@"ini";
+    else if(!ps2 && [type isEqual:@"ini"])type=@"gecko"; // Previous file's canonical INI is not the next TXT's source format.
   }
   if(![text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length)return NeoCheatFailure(@"emptyFile");
   NSString* stem=filename.lastPathComponent.stringByDeletingPathExtension;
