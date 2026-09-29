@@ -7,7 +7,9 @@
     "gctCombined": "A binary GCT has no cheat titles. It stays one combined code; use TXT or INI for separate named entries.",
     "emptyBlock": "A named cheat has no code. Nothing was imported.",
     "batchConflict": "This title already belongs to a different or unverifiable code. Nothing was imported.",
-    "batchResult": "{added} cheats imported; {skipped} identical duplicates skipped. New codes are disabled."
+    "batchResult": "{added} cheats imported; {skipped} identical duplicates skipped. New codes are disabled.",
+    "addCheat": "Add a cheat",
+    "gctSave": "Import combined code"
   },
   "fr": {
     "batchPreview": "{count} cheats détectés. Vérifiez les titres, puis importez toute la liste. Les nouveaux codes restent désactivés.",
@@ -17,7 +19,9 @@
     "gctCombined": "Un GCT binaire ne contient pas les titres. Il reste un code combiné ; utilisez un TXT ou INI pour des entrées distinctes avec leurs noms.",
     "emptyBlock": "Un cheat nommé ne contient aucun code. Aucun cheat n’a été importé.",
     "batchConflict": "Ce titre correspond déjà à un autre code ou à un code non vérifiable. Aucun cheat n’a été importé.",
-    "batchResult": "{added} cheats importés ; {skipped} doublons identiques ignorés. Les nouveaux codes sont désactivés."
+    "batchResult": "{added} cheats importés ; {skipped} doublons identiques ignorés. Les nouveaux codes sont désactivés.",
+    "addCheat": "Ajouter un cheat",
+    "gctSave": "Importer le code combiné"
   },
   "de": {
     "batchPreview": "{count} Cheats erkannt. Titel prüfen und die gesamte Liste importieren. Neue Codes bleiben deaktiviert.",
@@ -27,7 +31,9 @@
     "gctCombined": "Binäre GCT-Dateien enthalten keine Cheat-Titel. Sie bleiben ein kombinierter Code. Für einzelne benannte Einträge TXT oder INI verwenden.",
     "emptyBlock": "Ein benannter Cheat enthält keinen Code. Nichts wurde importiert.",
     "batchConflict": "Dieser Titel gehört bereits zu einem anderen oder nicht überprüfbaren Code. Nichts wurde importiert.",
-    "batchResult": "{added} Cheats importiert; {skipped} identische Duplikate übersprungen. Neue Codes sind deaktiviert."
+    "batchResult": "{added} Cheats importiert; {skipped} identische Duplikate übersprungen. Neue Codes sind deaktiviert.",
+    "addCheat": "Cheat hinzufügen",
+    "gctSave": "Kombinierten Code importieren"
   },
   "es": {
     "batchPreview": "Se detectaron {count} trucos. Revisa los títulos e importa toda la lista. Los nuevos códigos quedan desactivados.",
@@ -37,7 +43,9 @@
     "gctCombined": "Un GCT binario no incluye títulos. Se conserva como un código combinado; usa TXT o INI para entradas separadas con nombre.",
     "emptyBlock": "Un truco con nombre no contiene código. No se importó nada.",
     "batchConflict": "Este título ya corresponde a un código distinto o no verificable. No se importó nada.",
-    "batchResult": "{added} trucos importados; {skipped} duplicados idénticos omitidos. Los nuevos códigos están desactivados."
+    "batchResult": "{added} trucos importados; {skipped} duplicados idénticos omitidos. Los nuevos códigos están desactivados.",
+    "addCheat": "Añadir un truco",
+    "gctSave": "Importar código combinado"
   },
   "it": {
     "batchPreview": "Rilevati {count} trucchi. Controlla i titoli e importa tutta la lista. I nuovi codici restano disattivati.",
@@ -47,7 +55,9 @@
     "gctCombined": "Un GCT binario non contiene titoli. Resta un codice combinato; usa TXT o INI per voci separate con nome.",
     "emptyBlock": "Un trucco con nome non contiene codice. Non è stato importato nulla.",
     "batchConflict": "Questo titolo appartiene già a un codice diverso o non verificabile. Non è stato importato nulla.",
-    "batchResult": "{added} trucchi importati; {skipped} duplicati identici ignorati. I nuovi codici sono disattivati."
+    "batchResult": "{added} trucchi importati; {skipped} duplicati identici ignorati. I nuovi codici sono disattivati.",
+    "addCheat": "Aggiungi un trucco",
+    "gctSave": "Importa codice combinato"
   },
   "pt": {
     "batchPreview": "{count} códigos detectados. Confira os títulos e importe a lista inteira. Os novos códigos ficam desativados.",
@@ -57,7 +67,9 @@
     "gctCombined": "Um GCT binário não contém títulos. Ele permanece um código combinado; use TXT ou INI para entradas separadas com nomes.",
     "emptyBlock": "Um código nomeado não contém comandos. Nada foi importado.",
     "batchConflict": "Este título já pertence a outro código ou a um código não verificável. Nada foi importado.",
-    "batchResult": "{added} códigos importados; {skipped} duplicatas idênticas ignoradas. Os novos códigos estão desativados."
+    "batchResult": "{added} códigos importados; {skipped} duplicatas idênticas ignoradas. Os novos códigos estão desativados.",
+    "addCheat": "Adicionar um código",
+    "gctSave": "Importar código combinado"
   },
   "ru": {
     "batchPreview": "Найдено читов: {count}. Проверьте названия и импортируйте весь список. Новые коды останутся отключёнными.",
@@ -67,7 +79,9 @@
     "gctCombined": "Двоичный GCT не содержит названий. Он остаётся одним объединённым кодом. Для отдельных именованных читов используйте TXT или INI.",
     "emptyBlock": "Именованный чит не содержит кода. Ничего не импортировано.",
     "batchConflict": "Это название уже используется другим или непроверяемым кодом. Ничего не импортировано.",
-    "batchResult": "Импортировано: {added}; пропущено одинаковых дубликатов: {skipped}. Новые коды отключены."
+    "batchResult": "Импортировано: {added}; пропущено одинаковых дубликатов: {skipped}. Новые коды отключены.",
+    "addCheat": "Добавить чит",
+    "gctSave": "Импортировать объединённый код"
   },
   "id": {
     "batchPreview": "{count} cheat terdeteksi. Periksa judul lalu impor seluruh daftar. Kode baru tetap nonaktif.",
@@ -77,7 +91,9 @@
     "gctCombined": "GCT biner tidak berisi judul cheat. Berkas tetap menjadi satu kode gabungan; gunakan TXT atau INI untuk entri bernama yang terpisah.",
     "emptyBlock": "Cheat bernama tidak berisi kode. Tidak ada yang diimpor.",
     "batchConflict": "Judul ini sudah digunakan kode lain atau kode yang tidak dapat diverifikasi. Tidak ada yang diimpor.",
-    "batchResult": "{added} cheat diimpor; {skipped} duplikat identik dilewati. Kode baru dinonaktifkan."
+    "batchResult": "{added} cheat diimpor; {skipped} duplikat identik dilewati. Kode baru dinonaktifkan.",
+    "addCheat": "Tambah cheat",
+    "gctSave": "Impor kode gabungan"
   },
   "ja": {
     "batchPreview": "{count}件のチートを検出しました。名前を確認してリスト全体を読み込んでください。新しいコードは無効のままです。",
@@ -87,7 +103,9 @@
     "gctCombined": "バイナリGCTにはチート名がありません。1つの結合コードとして扱います。名前付きの個別項目にはTXTまたはINIを使用してください。",
     "emptyBlock": "名前付きチートにコードがありません。何も読み込まれていません。",
     "batchConflict": "この名前は別のコードまたは確認できないコードで使用されています。何も読み込まれていません。",
-    "batchResult": "{added}件を読み込み、同一の重複{skipped}件をスキップしました。新しいコードは無効です。"
+    "batchResult": "{added}件を読み込み、同一の重複{skipped}件をスキップしました。新しいコードは無効です。",
+    "addCheat": "チートを追加",
+    "gctSave": "結合コードを読み込む"
   },
   "ko": {
     "batchPreview": "치트 {count}개를 찾았습니다. 이름을 확인한 뒤 전체 목록을 가져오세요. 새 코드는 비활성 상태로 유지됩니다.",
@@ -97,7 +115,9 @@
     "gctCombined": "바이너리 GCT에는 치트 이름이 없습니다. 하나의 통합 코드로 유지됩니다. 이름이 있는 개별 항목에는 TXT 또는 INI를 사용하세요.",
     "emptyBlock": "이름이 있는 치트에 코드가 없습니다. 아무것도 가져오지 않았습니다.",
     "batchConflict": "이 이름은 다른 코드 또는 확인할 수 없는 코드가 이미 사용합니다. 아무것도 가져오지 않았습니다.",
-    "batchResult": "치트 {added}개를 가져왔고 동일한 중복 {skipped}개를 건너뛰었습니다. 새 코드는 비활성 상태입니다."
+    "batchResult": "치트 {added}개를 가져왔고 동일한 중복 {skipped}개를 건너뛰었습니다. 새 코드는 비활성 상태입니다.",
+    "addCheat": "치트 추가",
+    "gctSave": "통합 코드 가져오기"
   },
   "zh": {
     "batchPreview": "检测到{count}条金手指。检查名称后导入整个列表。新代码保持禁用。",
@@ -107,7 +127,9 @@
     "gctCombined": "二进制GCT不包含金手指名称，将保留为一条合并代码。请使用TXT或INI导入带名称的独立条目。",
     "emptyBlock": "有名称的金手指不包含代码。未导入任何内容。",
     "batchConflict": "此名称已用于不同或无法验证的代码。未导入任何内容。",
-    "batchResult": "已导入{added}条金手指，跳过{skipped}条完全相同的重复项。新代码已禁用。"
+    "batchResult": "已导入{added}条金手指，跳过{skipped}条完全相同的重复项。新代码已禁用。",
+    "addCheat": "添加金手指",
+    "gctSave": "导入合并代码"
   },
   "zh_Hant": {
     "batchPreview": "偵測到{count}條金手指。確認名稱後匯入整份清單。新代碼保持停用。",
@@ -117,6 +139,8 @@
     "gctCombined": "二進位GCT不含金手指名稱，將保留為一條合併代碼。請使用TXT或INI匯入具有名稱的獨立項目。",
     "emptyBlock": "具有名稱的金手指不含代碼。未匯入任何內容。",
     "batchConflict": "此名稱已用於不同或無法驗證的代碼。未匯入任何內容。",
-    "batchResult": "已匯入{added}條金手指，略過{skipped}條完全相同的重複項目。新代碼已停用。"
+    "batchResult": "已匯入{added}條金手指，略過{skipped}條完全相同的重複項目。新代碼已停用。",
+    "addCheat": "新增金手指",
+    "gctSave": "匯入合併代碼"
   }
 }

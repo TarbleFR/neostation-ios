@@ -22,6 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy) dispatch_block_t quitGame;
 @property(nonatomic, copy) dispatch_block_t restartGame;
 @property(nonatomic, copy, nullable) dispatch_block_t openDisplaySettings;
+@property(nonatomic, copy, nullable) dispatch_block_t openTextureSettings;
 - (void)refreshRecordingStatus;
 @end
 NS_ASSUME_NONNULL_END

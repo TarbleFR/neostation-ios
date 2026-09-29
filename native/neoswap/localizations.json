@@ -21,7 +21,11 @@
     "saved": "Budget saved.",
     "enableFirst": "Enable a storage budget before running the test.",
     "technical": "Technical details",
-    "peakNote": "The peak is measured in this app process, including previous games. Mapped bytes are not bytes proven to have left RAM."
+    "peakNote": "The peak is measured in this app process, including previous games. Mapped bytes are not bytes proven to have left RAM.",
+    "capacityProbe": "File-backed capacity test (game stopped; needs free storage plus 2 GiB).",
+    "capacityRun": "Write and verify selected size",
+    "capacityPass": "All requested data verified. Check footprint measurements; game stability is not yet proven.",
+    "capacityResult": "Requested: {size} · measured footprint rise: {delta}"
   },
   "fr": {
     "title": "NeoSwap (expérimental)",
@@ -45,7 +49,11 @@
     "saved": "Budget enregistré.",
     "enableFirst": "Active un budget de stockage avant de lancer le test.",
     "technical": "Détails techniques",
-    "peakNote": "Le pic est mesuré depuis l’ouverture de l’application, y compris les jeux précédents. Les octets mappés ne prouvent pas qu’ils ont quitté la RAM."
+    "peakNote": "Le pic est mesuré depuis l’ouverture de l’application, y compris les jeux précédents. Les octets mappés ne prouvent pas qu’ils ont quitté la RAM.",
+    "capacityProbe": "Test de capacité sur fichier (jeu arrêté ; stockage libre requis plus 2 Gio).",
+    "capacityRun": "Écrire et vérifier la taille choisie",
+    "capacityPass": "Toutes les données demandées sont vérifiées. Consultez l’empreinte mesurée ; la stabilité en jeu reste à valider.",
+    "capacityResult": "Demandé : {size} · hausse d’empreinte mesurée : {delta}"
   },
   "de": {
     "title": "NeoSwap (experimentell)",
@@ -69,7 +77,11 @@
     "saved": "Budget gespeichert.",
     "enableFirst": "Aktiviere vor dem Test ein Speicherplatzbudget.",
     "technical": "Technische Details",
-    "peakNote": "Der Spitzenwert gilt seit dem App-Start, einschließlich vorheriger Spiele. Zugeordnete Bytes sind kein Nachweis für aus dem RAM ausgelagerte Bytes."
+    "peakNote": "Der Spitzenwert gilt seit dem App-Start, einschließlich vorheriger Spiele. Zugeordnete Bytes sind kein Nachweis für aus dem RAM ausgelagerte Bytes.",
+    "capacityProbe": "Dateibasierter Kapazitätstest (Spiel beenden; freier Speicher plus 2 GiB nötig).",
+    "capacityRun": "Gewählte Größe schreiben und prüfen",
+    "capacityPass": "Alle angeforderten Daten geprüft. Gemessenen Speicherbedarf beachten; Spielstabilität noch nicht bestätigt.",
+    "capacityResult": "Angefordert: {size} · gemessener Mehrbedarf: {delta}"
   },
   "es": {
     "title": "NeoSwap (experimental)",
@@ -93,7 +105,11 @@
     "saved": "Presupuesto guardado.",
     "enableFirst": "Activa un presupuesto de almacenamiento antes de la prueba.",
     "technical": "Detalles técnicos",
-    "peakNote": "El máximo se mide desde el inicio de la aplicación, incluidos los juegos anteriores. Los bytes mapeados no demuestran que hayan salido de la RAM."
+    "peakNote": "El máximo se mide desde el inicio de la aplicación, incluidos los juegos anteriores. Los bytes mapeados no demuestran que hayan salido de la RAM.",
+    "capacityProbe": "Prueba de capacidad en archivo (juego cerrado; espacio libre más 2 GiB).",
+    "capacityRun": "Escribir y verificar tamaño elegido",
+    "capacityPass": "Todos los datos solicitados verificados. Revisa la memoria medida; la estabilidad del juego aún no está validada.",
+    "capacityResult": "Solicitado: {size} · aumento de memoria medido: {delta}"
   },
   "it": {
     "title": "NeoSwap (sperimentale)",
@@ -117,7 +133,11 @@
     "saved": "Budget salvato.",
     "enableFirst": "Attiva un budget di archiviazione prima del test.",
     "technical": "Dettagli tecnici",
-    "peakNote": "Il picco è misurato dall’avvio dell’app, inclusi i giochi precedenti. I byte mappati non dimostrano che siano stati rimossi dalla RAM."
+    "peakNote": "Il picco è misurato dall’avvio dell’app, inclusi i giochi precedenti. I byte mappati non dimostrano che siano stati rimossi dalla RAM.",
+    "capacityProbe": "Test di capacità su file (gioco chiuso; spazio libero più 2 GiB).",
+    "capacityRun": "Scrivi e verifica la dimensione scelta",
+    "capacityPass": "Tutti i dati richiesti verificati. Controlla la memoria misurata; stabilità in gioco ancora da verificare.",
+    "capacityResult": "Richiesto: {size} · aumento memoria misurato: {delta}"
   },
   "pt": {
     "title": "NeoSwap (experimental)",
@@ -141,7 +161,11 @@
     "saved": "Orçamento salvo.",
     "enableFirst": "Ative um orçamento de armazenamento antes do teste.",
     "technical": "Detalhes técnicos",
-    "peakNote": "O pico é medido desde a abertura do aplicativo, incluindo jogos anteriores. Bytes mapeados não comprovam que tenham saído da RAM."
+    "peakNote": "O pico é medido desde a abertura do aplicativo, incluindo jogos anteriores. Bytes mapeados não comprovam que tenham saído da RAM.",
+    "capacityProbe": "Teste de capacidade em arquivo (jogo fechado; espaço livre mais 2 GiB).",
+    "capacityRun": "Gravar e verificar tamanho escolhido",
+    "capacityPass": "Todos os dados solicitados verificados. Confira a memória medida; a estabilidade do jogo ainda não foi validada.",
+    "capacityResult": "Solicitado: {size} · aumento de memória medido: {delta}"
   },
   "ru": {
     "title": "NeoSwap (экспериментальный)",
@@ -165,7 +189,11 @@
     "saved": "Лимит сохранён.",
     "enableFirst": "Включите лимит хранилища перед проверкой.",
     "technical": "Технические сведения",
-    "peakNote": "Пик измеряется с запуска приложения, включая предыдущие игры. Отображённые байты не доказывают выгрузку этих данных из ОЗУ."
+    "peakNote": "Пик измеряется с запуска приложения, включая предыдущие игры. Отображённые байты не доказывают выгрузку этих данных из ОЗУ.",
+    "capacityProbe": "Проверка ёмкости файловой памяти (игра закрыта; свободное место плюс 2 ГиБ).",
+    "capacityRun": "Записать и проверить выбранный объём",
+    "capacityPass": "Все запрошенные данные проверены. Проверьте измеренный расход памяти; стабильность игры пока не подтверждена.",
+    "capacityResult": "Запрошено: {size} · измеренный рост памяти: {delta}"
   },
   "id": {
     "title": "NeoSwap (eksperimental)",
@@ -189,7 +217,11 @@
     "saved": "Batas disimpan.",
     "enableFirst": "Aktifkan batas penyimpanan sebelum pengujian.",
     "technical": "Detail teknis",
-    "peakNote": "Puncak diukur sejak aplikasi dibuka, termasuk game sebelumnya. Byte yang dipetakan bukan bukti bahwa data sudah keluar dari RAM."
+    "peakNote": "Puncak diukur sejak aplikasi dibuka, termasuk game sebelumnya. Byte yang dipetakan bukan bukti bahwa data sudah keluar dari RAM.",
+    "capacityProbe": "Uji kapasitas berbasis berkas (game ditutup; ruang kosong ditambah 2 GiB).",
+    "capacityRun": "Tulis dan verifikasi ukuran terpilih",
+    "capacityPass": "Semua data yang diminta terverifikasi. Periksa penggunaan memori terukur; kestabilan game belum terbukti.",
+    "capacityResult": "Diminta: {size} · kenaikan memori terukur: {delta}"
   },
   "ja": {
     "title": "NeoSwap（試験的）",
@@ -213,7 +245,11 @@
     "saved": "上限を保存しました。",
     "enableFirst": "テスト前にストレージ上限を有効にしてください。",
     "technical": "技術情報",
-    "peakNote": "最大値は以前のゲームを含め、アプリ起動以降の値です。マッピングされたバイト数は、RAMから退避したバイト数を示すものではありません。"
+    "peakNote": "最大値は以前のゲームを含め、アプリ起動以降の値です。マッピングされたバイト数は、RAMから退避したバイト数を示すものではありません。",
+    "capacityProbe": "ファイル型メモリの容量テスト（ゲーム終了、空き容量に加えて2 GiBが必要）。",
+    "capacityRun": "選択サイズを書き込み検証",
+    "capacityPass": "要求した全データを検証しました。メモリ使用量を確認してください。ゲームの安定性は未確認です。",
+    "capacityResult": "要求：{size} · メモリ使用量の増加：{delta}"
   },
   "ko": {
     "title": "NeoSwap (실험적)",
@@ -237,7 +273,11 @@
     "saved": "한도를 저장했습니다.",
     "enableFirst": "테스트 전에 저장 공간 한도를 활성화하세요.",
     "technical": "기술 정보",
-    "peakNote": "최대값은 이전 게임을 포함하여 앱 실행 이후 측정됩니다. 매핑된 바이트 수는 RAM에서 내보낸 데이터의 양을 입증하지 않습니다."
+    "peakNote": "최대값은 이전 게임을 포함하여 앱 실행 이후 측정됩니다. 매핑된 바이트 수는 RAM에서 내보낸 데이터의 양을 입증하지 않습니다.",
+    "capacityProbe": "파일 기반 용량 테스트 (게임 종료, 여유 공간 외 2 GiB 필요).",
+    "capacityRun": "선택한 크기 쓰기 및 검증",
+    "capacityPass": "요청한 모든 데이터를 검증했습니다. 측정된 메모리 사용량을 확인하세요. 게임 안정성은 아직 검증되지 않았습니다.",
+    "capacityResult": "요청: {size} · 측정된 메모리 증가: {delta}"
   },
   "zh": {
     "title": "NeoSwap（实验性）",
@@ -261,7 +301,11 @@
     "saved": "预算已保存。",
     "enableFirst": "测试前请启用存储空间预算。",
     "technical": "技术详情",
-    "peakNote": "峰值从应用启动起统计，包括之前运行的游戏。已映射的字节数并不能证明这些数据已移出 RAM。"
+    "peakNote": "峰值从应用启动起统计，包括之前运行的游戏。已映射的字节数并不能证明这些数据已移出 RAM。",
+    "capacityProbe": "文件内存容量测试（需退出游戏，保留额外2 GiB存储空间）。",
+    "capacityRun": "写入并验证所选容量",
+    "capacityPass": "已验证所有请求的数据。请查看实测内存占用；游戏稳定性尚待验证。",
+    "capacityResult": "请求：{size} · 实测内存占用增长：{delta}"
   },
   "zh_Hant": {
     "title": "NeoSwap（實驗性）",
@@ -285,6 +329,10 @@
     "saved": "預算已儲存。",
     "enableFirst": "測試前請啟用儲存空間預算。",
     "technical": "技術詳情",
-    "peakNote": "峰值從應用程式啟動起統計，包括之前執行的遊戲。已映射的位元組數並不能證明這些資料已移出 RAM。"
+    "peakNote": "峰值從應用程式啟動起統計，包括之前執行的遊戲。已映射的位元組數並不能證明這些資料已移出 RAM。",
+    "capacityProbe": "檔案記憶體容量測試（需結束遊戲，保留額外2 GiB儲存空間）。",
+    "capacityRun": "寫入並驗證所選容量",
+    "capacityPass": "已驗證所有要求的資料。請查看實測記憶體用量；遊戲穩定性尚待驗證。",
+    "capacityResult": "要求：{size} · 實測記憶體用量增加：{delta}"
   }
 }

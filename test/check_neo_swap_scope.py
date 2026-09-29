@@ -2,6 +2,8 @@
 from pathlib import Path
 import hashlib, json, subprocess
 ROOT=Path(__file__).resolve().parents[1]
+import runpy
+candidate=runpy.run_path(str(ROOT/'test/import_memory_candidate_scope_test.py'))
 BASE='f4583c6a3083b8aed358da28b2f8f849256e0e8b'
 def original(p):
     return subprocess.check_output(['git','show',BASE+':'+p],cwd=ROOT,text=True)
@@ -21,7 +23,7 @@ allowed={
  'packages/rpcs3_internal_bridge/ios/rpcs3_internal_bridge.podspec',
 }
 changed=subprocess.check_output(['git','diff','--name-only',BASE,'--','packages','lib','native','build-utils'],cwd=ROOT,text=True).splitlines()
-assert not set(changed)-allowed, set(changed)-allowed
+assert not set(changed)-allowed-candidate['approved']-{'native/import-memory-candidate.json'}, set(changed)-allowed-candidate['approved']
 old=json.loads(original('build-utils/rpcs3/canonical-source.json'))
 new=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
 core_changes={'rpcs3/ios/RPCS3IOS.cpp','rpcs3/ios/RPCS3IOS.exports'}

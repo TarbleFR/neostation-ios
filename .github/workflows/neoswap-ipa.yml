@@ -963,7 +963,7 @@ jobs:
           python3 build-utils/validate_neoswap_ipa.py "dist/$IPA_NAME.ipa" \
             --build-number "$BUILD_NUMBER" --report dist/neoswap-validation.json
           python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
-          python3 build-utils/validate_cheat_bulk_ipa.py "dist/$IPA_NAME.ipa" --report dist/cheat-bulk-validation.json
+          python3 build-utils/validate_cheat_bulk_ipa.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --report dist/cheat-bulk-validation.json
           python3 build-utils/validate_release002_ipa.py "dist/$IPA_NAME.ipa" \
             --build-number "$BUILD_NUMBER" --report dist/0.0.2-validation.json
           python3 build-utils/validate_stikjit_ipa.py "dist/$IPA_NAME.ipa" \

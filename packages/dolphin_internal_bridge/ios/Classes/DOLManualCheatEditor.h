@@ -20,6 +20,7 @@
 @property(nonatomic,copy) NSString* filename;
 @property(nonatomic,assign) BOOL busy;
 @property(nonatomic,assign) BOOL openDocumentOnAppear;
+@property(nonatomic,assign) BOOL importMode;
 @property(nonatomic,assign) BOOL documentImported;
 @property(nonatomic,assign) BOOL documentHasTitles;
 @property(nonatomic,copy) NSArray<NSDictionary*>* previewEntries;
@@ -47,7 +48,7 @@
 - (void)viewDidLoad {
   [super viewDidLoad];self.overrideUserInterfaceStyle=UIUserInterfaceStyleDark;
   self.view.backgroundColor=UIColor.systemGroupedBackgroundColor;
-  self.title=[self text:@"manualTitle"];
+  self.title=[self text:self.importMode?@"importFile":@"addCheat"];
   self.navigationItem.rightBarButtonItem=[[UIBarButtonItem alloc] initWithTitle:[self text:@"save"] style:UIBarButtonItemStyleDone target:self action:@selector(savePressed)];
   self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithTitle:[self text:@"cancel"] style:UIBarButtonItemStylePlain target:self action:@selector(cancelPressed)];
   UIScrollView* scroll=[UIScrollView new];scroll.translatesAutoresizingMaskIntoConstraints=NO;
@@ -110,6 +111,13 @@
   self.errorLabel=[self label:@""];self.errorLabel.textColor=UIColor.systemOrangeColor;
   self.errorLabel.accessibilityIdentifier=@"manualCheatResult";
   [stack addArrangedSubview:self.errorLabel];
+  [self updateManualVisibility];
+  self.navigationItem.rightBarButtonItem.enabled=!self.importMode;
+}
+- (void)updateManualVisibility {
+  BOOL hidden=self.importMode || self.documentHasTitles;
+  self.nameField.hidden=hidden;self.creatorField.hidden=hidden;
+  self.codeTitleLabel.hidden=hidden;self.codeField.hidden=hidden;self.formatControl.hidden=hidden;
 }
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
@@ -143,13 +151,12 @@
   NSString* count=[@(self.previewEntries.count) stringValue];
   self.previewSummary.text=[[self text:@"batchPreview"] stringByReplacingOccurrencesOfString:@"{count}" withString:count];
   NSString* warning=NeoField(result,@"warningKey");
-  if(warning.length)self.previewSummary.text=[self.previewSummary.text stringByAppendingFormat:@"\n%@",[self text:warning]];
-  self.previewSummary.hidden=NO;self.previewTable.hidden=!self.documentHasTitles;
+  if(warning.length)self.previewSummary.text=[self text:warning];
+  self.previewSummary.hidden=NO;self.previewTable.hidden=!(self.importMode || self.documentHasTitles);
   [self.previewTable reloadData];
-  self.nameField.hidden=self.documentHasTitles;self.creatorField.hidden=self.documentHasTitles;
-  self.codeTitleLabel.hidden=self.documentHasTitles;self.codeField.hidden=self.documentHasTitles;
-  self.formatControl.hidden=self.documentHasTitles;
-  self.navigationItem.rightBarButtonItem.title=[[self text:@"batchSave"] stringByReplacingOccurrencesOfString:@"{count}" withString:count];
+  [self updateManualVisibility];
+  self.navigationItem.rightBarButtonItem.title=[warning isEqual:@"gctCombined"]?[self text:@"gctSave"]:
+      [[self text:@"batchSave"] stringByReplacingOccurrencesOfString:@"{count}" withString:count];
 }
 - (void)textViewDidChange:(UITextView*)textView {
   self.navigationItem.rightBarButtonItem.enabled=YES;
@@ -211,8 +218,7 @@
       if(![result[@"success"] boolValue]){
         editor.documentImported=NO;editor.documentHasTitles=NO;editor.previewEntries=@[];
         editor.previewSummary.hidden=YES;editor.previewTable.hidden=YES;
-        editor.nameField.hidden=NO;editor.creatorField.hidden=NO;editor.codeField.hidden=NO;
-        editor.codeTitleLabel.hidden=NO;editor.formatControl.hidden=NO;editor.codeField.text=@"";
+        [editor updateManualVisibility];editor.codeField.text=@"";
         editor.filename=nil;editor.navigationItem.rightBarButtonItem.enabled=NO;
         [editor showResultError:result];return;
       }
@@ -229,7 +235,7 @@
   });
 }
 - (void)savePressed {
-  if(self.busy || !self.saveCheat)return;
+  if(self.busy || !self.saveCheat || (self.importMode && !self.documentImported))return;
   NSString* type=self.ps2?@"pnach":self.importedType?:@[@"gecko",@"actionReplay",@"ini"][self.formatControl.selectedSegmentIndex];
   NSString* name=[self.nameField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
   NSString* creator=[self.creatorField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];

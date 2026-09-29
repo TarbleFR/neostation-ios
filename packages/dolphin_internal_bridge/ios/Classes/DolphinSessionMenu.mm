@@ -3,6 +3,7 @@
 #include "DOLManualCheatEditor.h"
 #import "DolphinFramePacing.h"
 #include "DolphinPhoneShakeLabels.h"
+#include "DOLTextureLabels.h"
 static NSString* const DOLPhoneShakeKey=@"NeoStation.Dolphin.PhoneShake.Enabled";
 static BOOL DOLPhoneShakeEnabled(void) {
   id value=[NSUserDefaults.standardUserDefaults objectForKey:DOLPhoneShakeKey];
@@ -68,7 +69,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       }
       DOLManualCheatEditor* editor=[DOLManualCheatEditor new];
       editor.localeIdentifier=self.labels[@"__locale"]?:@"en";
-      editor.identity=self.cheatsSnapshot;editor.ps2=NO;editor.openDocumentOnAppear=importFile;
+      editor.identity=self.cheatsSnapshot;editor.ps2=NO;editor.openDocumentOnAppear=importFile;editor.importMode=importFile;
       __weak DolphinSessionMenu* weakMenu=self;
       editor.saveCheat=^(NSDictionary* value,void (^completion)(NSDictionary*)) {
         DolphinSessionMenu* menu=weakMenu;
@@ -333,6 +334,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   child.readSettings = self.readSettings;
   child.applySettings = self.applySettings;
   child.openDisplaySettings = self.openDisplaySettings;
+  child.openTextureSettings = self.openTextureSettings;
   child.readStates = self.readStates;
   child.performStateOperation = self.performStateOperation;
   child.readCheats = self.readCheats;
@@ -360,10 +362,10 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     case DOLMenuSaveStates:
     case DOLMenuLoadStates: return [self.snapshot[@"slots"] count];
     case DOLMenuConsole: return self.snapshot ? 2 : 0;
-    case DOLMenuGraphics: return self.snapshot ? (self.openDisplaySettings ? 5 : 4) : 0;
+    case DOLMenuGraphics: return self.snapshot ? 4 + (self.openDisplaySettings?1:0) + (self.openTextureSettings?1:0) : 0;
     case DOLMenuHacks: return self.snapshot ? 8 : 0;
     case DOLMenuCheats:
-      return self.cheatsSnapshot ? 4 +
+      return self.cheatsSnapshot ? 5 +
           [self.cheatsSnapshot[@"gecko"] count] +
           [self.cheatsSnapshot[@"actionReplay"] count] : 0;
     case DOLMenuAchievements: return self.snapshot ? 3 : 0;
@@ -481,13 +483,17 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
       }
     } else if (row == 2) {
-      cell.textLabel.text = NeoCheatText(@"manualTitle",self.labels[@"__locale"]);
+      cell.textLabel.text = NeoCheatText(@"addCheat",self.labels[@"__locale"]);
       cell.detailTextLabel.text = @"Gecko · Action Replay · INI";
     } else if (row == 3) {
       cell.textLabel.text = NeoCheatText(@"searchOther",self.labels[@"__locale"]);
       cell.detailTextLabel.text = [NSString stringWithFormat:@"Dolphin Wiki · %@ · r%@",self.cheatsSnapshot[@"gameId"]?:@"",self.cheatsSnapshot[@"revision"]?:@0];
+    } else if (row == 4) {
+      cell.textLabel.text=NeoCheatText(@"importFile",self.labels[@"__locale"]);
+      cell.detailTextLabel.text=@"TXT · INI · GCT";
+      cell.accessibilityIdentifier=@"cheatImportRow";
     } else {
-      NSInteger offset = row - 4;
+      NSInteger offset = row - 5;
       NSDictionary* item = nil;
       NSString* typeLabel = nil;
       if (offset < (NSInteger)gecko.count) {
@@ -500,7 +506,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
           typeLabel = [self text:@"actionReplayCodes"];
         }
       }
-      cell.textLabel.text = [item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
+      cell.textLabel.text = NeoCheatDisplayName(NeoField(item,@"name"));
       NSString* creator = [item[@"creator"] isKindOfClass:NSString.class] ? item[@"creator"] : @"";
       const BOOL blocked = [self.cheatsSnapshot[@"hardcore"] boolValue] &&
           ![item[@"approved"] boolValue] && ![item[@"enabled"] boolValue];
@@ -562,6 +568,10 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       cell.detailTextLabel.text = [self text:@"restartRequired"];
     }
   } else if (self.page == DOLMenuGraphics) {
+    if(row==4+(self.openDisplaySettings?1:0) && self.openTextureSettings){
+      cell.textLabel.text=DOLTextureText(@"title",self.labels[@"__locale"]?:@"en");
+      cell.detailTextLabel.text=@"PNG · DDS";cell.accessibilityIdentifier=@"dolphinHDTexturesFromMenu";return cell;
+    }
     if(row==4 && self.openDisplaySettings){
       cell.textLabel.text=DOLPacingText(@"title",self.labels[@"__locale"]?:@"en");
       cell.detailTextLabel.text=@"60 / 120 Hz · Metal";
@@ -697,6 +707,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   } else if (self.page == DOLMenuCheats) {
     if (!self.performCheatCommand || !self.cheatsSnapshot) return;
     if (row == 2) {[self openManualCheatEditor:NO];return;}
+    if (row == 4) {[self openManualCheatEditor:YES];return;}
     if (row == 3) {
       NSString* id=NeoField(self.cheatsSnapshot,@"gameId");
       NSString* query=[id stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
@@ -717,7 +728,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       if (!gameTdbId.length) return;
       request[@"kind"] = @"download";
     } else {
-      NSInteger offset = row - 4;
+      NSInteger offset = row - 5;
       NSDictionary* item = nil;
       if (offset < (NSInteger)gecko.count) item = gecko[offset];
       else {
@@ -777,6 +788,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     child.choices = choices;
     [self.navigationController pushViewController:child animated:YES];
   } else if (self.page == DOLMenuGraphics) {
+    if(row==4+(self.openDisplaySettings?1:0) && self.openTextureSettings){self.openTextureSettings();return;}
     if(row==4 && self.openDisplaySettings){self.openDisplaySettings();return;}
     NSString* key = @[@"resolution", @"aspect", @"anisotropy", @"vsync"][row];
     NSArray* values;
@@ -878,9 +890,9 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskLandscape; }
 - (NSDictionary*)removableCheatAt:(NSIndexPath*)path {
   if(self.loading)return nil;
-  if(self.page!=DOLMenuCheats || path.row<4)return nil;
+  if(self.page!=DOLMenuCheats || path.row<5)return nil;
   NSArray* items=[(self.cheatsSnapshot[@"gecko"]?:@[]) arrayByAddingObjectsFromArray:self.cheatsSnapshot[@"actionReplay"]?:@[]];
-  NSInteger index=path.row-4;NSDictionary* item=index<(NSInteger)items.count?items[index]:nil;
+  NSInteger index=path.row-5;NSDictionary* item=index<(NSInteger)items.count?items[index]:nil;
   return [item[@"userDefined"] boolValue] ? item:nil;
 }
 - (void)confirmDeleteCheatAt:(NSIndexPath*)path {

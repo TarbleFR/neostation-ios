@@ -31,6 +31,12 @@ jobs:
             -fsanitize=address,undefined -Ipackages/neo_swap/ios/Classes \
             packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_test.cpp -o "$RUNNER_TEMP/neoswap-asan"
           "$RUNNER_TEMP/neoswap-asan" | tee build/neoswap/native-tests.txt
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING -fsanitize=address,undefined \
+            -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_capacity_probe_test.cpp -o "$RUNNER_TEMP/neoswap-capacity"
+          "$RUNNER_TEMP/neoswap-capacity" | tee build/neoswap/capacity-tests.txt
+          xcrun clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING \
+            -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_capacity_probe_test.cpp -o "$RUNNER_TEMP/neoswap-full-capacity"
+          "$RUNNER_TEMP/neoswap-full-capacity" --full | tee build/neoswap/capacity-8GiB-macOS.txt
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           xcrun clang++ -x objective-c++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only \
             -arch arm64 -isysroot "$SDK" -miphoneos-version-min=17.4 \

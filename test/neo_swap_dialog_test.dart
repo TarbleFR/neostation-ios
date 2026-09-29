@@ -51,7 +51,7 @@ void main() {
       expect(calls, ['snapshot']);
       expect(find.text(NeoSwapLocale.values['en']!['scope']!), findsOneWidget);
       final dropdown = tester.widget<DropdownButton<int>>(
-        find.byType(DropdownButton<int>),
+        find.byKey(const ValueKey('neoSwapBudget')),
       );
       expect(dropdown.value, 0);
       dropdown.onChanged!(512);
@@ -60,7 +60,7 @@ void main() {
       expect(find.text(NeoSwapLocale.values['en']!['busy']!), findsOneWidget);
       expect(
         tester
-            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
             .value,
         0,
       );
@@ -115,7 +115,7 @@ void main() {
       await open(tester);
       expect(
         tester
-            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
             .value,
         0,
       );
@@ -139,12 +139,12 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(snapshots, 2);
       tester
-          .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+          .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
           .onChanged!(1024);
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
             .value,
         1024,
       );
@@ -152,7 +152,7 @@ void main() {
       await tester.pump();
       expect(
         tester
-            .widget<DropdownButton<int>>(find.byType(DropdownButton<int>))
+            .widget<DropdownButton<int>>(find.byKey(const ValueKey('neoSwapBudget')))
             .value,
         1024,
       );

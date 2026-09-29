@@ -4,6 +4,7 @@
 #include "DOLCheatCatalogue.h"
 #import "DolphinFramePacing.h"
 #include "DolphinDisplayTrial.h"
+#include "DOLTextureSettings.h"
 #import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
 #import "DolphinRecordingController.h"
@@ -1177,6 +1178,21 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
         DolphinInternalBridgePlugin* bridge=weakSelf;
         if(!bridge || bridge.stopInProgress || bridge.dolphinController!=owner)return;
         [bridge.sessionMenu pushViewController:[owner.framePacing settingsController] animated:YES];
+      };
+      menu.openTextureSettings = ^{
+        DolphinInternalBridgePlugin* bridge=weakSelf;
+        if(!bridge || bridge.stopInProgress || bridge.dolphinController!=owner || bridge.systemMenuSession)return;
+        dispatch_async(bridge->_runtimeQueue,^{
+          NSDictionary* identity=DOLReadCheatSnapshot();
+          dispatch_async(dispatch_get_main_queue(),^{
+            if(bridge.stopInProgress || bridge.dolphinController!=owner || !bridge.sessionMenu)return;
+            NSString* game=NeoField(identity,@"gameId");if(!DOLTextureGame(game))return;
+            DOLTextureSettings* page=[[DOLTextureSettings alloc] initWithStyle:UITableViewStyleInsetGrouped];
+            page.userDirectory=bridge.activeUserDirectory;page.gameId=game;
+            page.revision=[identity[@"revision"] integerValue];page.localeIdentifier=bridge.menuLabels[@"__locale"]?:@"en";
+            [bridge.sessionMenu pushViewController:page animated:YES];
+          });
+        });
       };
       menu.readRecording = ^(void (^completion)(NSDictionary*)) {
         DolphinInternalBridgePlugin* bridge = weakSelf;

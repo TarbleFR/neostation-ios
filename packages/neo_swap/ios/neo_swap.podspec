@@ -9,6 +9,7 @@ Pod::Spec.new do |s|
   s.source = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.public_header_files = 'Classes/NeoSwap.h', 'Classes/NeoSwapPlugin.h'
+  s.private_header_files = 'Classes/NeoSwapCapacityProbe.h'
   s.dependency 'Flutter'
   s.platform = :ios, '17.4'
   s.frameworks = 'Foundation'

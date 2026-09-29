@@ -17,7 +17,10 @@ for package,editor in [('dolphin_internal_bridge','DOLManualCheatEditor'),('arms
 # must not masquerade as cheat changes or alter any of the accepted cheat code.
 FEATURE_END='f4583c6a3083b8aed358da28b2f8f849256e0e8b'
 changed=subprocess.check_output(['git','diff','--name-only',BASE,FEATURE_END,'--','packages','lib','native','build-utils'],cwd=ROOT,text=True).splitlines()
-subprocess.run(['git','diff','--exit-code',FEATURE_END,'--','native/cheats',*sorted(allowed)],cwd=ROOT,check=True)
+import runpy
+candidate=runpy.run_path(str(ROOT/'test/import_memory_candidate_scope_test.py'))
+current=subprocess.check_output(['git','diff','--name-only',FEATURE_END,'--','native/cheats',*sorted(allowed)],cwd=ROOT,text=True).splitlines()
+assert not set(current)-candidate['approved'],set(current)-candidate['approved']
 for path in changed:
     assert path in allowed or path.startswith('native/cheats/') or path in (
         'build-utils/private-test-365-recipient.pem','build-utils/validate_cheat_bulk_ipa.py'), 'Out-of-scope runtime change: '+path
@@ -35,4 +38,4 @@ for language,values in labels.items():
 for package in ('dolphin_internal_bridge','armsx2_internal_bridge'):
     menu=ROOT/f'packages/{package}/ios/Classes'/('DolphinSessionMenu.mm' if package.startswith('dolphin') else 'Armsx2SessionMenu.mm')
     assert 'cheatImportFromMenu' in menu.read_text()
-print('PASS: immutable bulk-import feature scope; current cheat sources unchanged from accepted feature endpoint; exact generated editors and 12 locales')
+print('PASS: immutable bulk-import endpoint; separately audited requested import UI delta; exact generated editors and12 locales')

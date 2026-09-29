@@ -197,7 +197,7 @@ extern "C" const NeoSwapAPI* NeoSwap_GetAPI(uint32_t version) {
 }
 extern "C" int NeoSwap_Configure(const char* path, const NeoSwapConfig* c) {
     if (!c || c->struct_size != sizeof(*c) || c->abi_version != NEOSWAP_ABI || c->reserved ||
-        c->capacity_bytes > 4 * 1024 * MiB || !c->minimum_allocation_bytes ||
+        c->capacity_bytes > 8 * 1024 * MiB || !c->minimum_allocation_bytes ||
         c->minimum_allocation_bytes > max_block_bytes || (c->enabled_owner_mask >> NEOSWAP_OWNER_COUNT))
         return NEOSWAP_INVALID;
     auto& b = broker(); std::lock_guard guard(b.mutex);

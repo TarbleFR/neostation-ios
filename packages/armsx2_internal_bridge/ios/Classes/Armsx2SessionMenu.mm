@@ -161,7 +161,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
         }
         ARMSX2ManualCheatEditor* editor=[ARMSX2ManualCheatEditor new];
         editor.ps2=YES;editor.localeIdentifier=menu.localeIdentifier;editor.identity=identity;
-        editor.openDocumentOnAppear=importFile;
+        editor.openDocumentOnAppear=importFile;editor.importMode=importFile;
         editor.saveCheat=menu.importCheats;
         editor.savedResult=^(NSDictionary* result){
           weakSelf.navigationItem.prompt=NeoCheatBatchResult(result,weakSelf.localeIdentifier);
@@ -411,7 +411,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
               ARMSX2MenuText(@"for this game revision", @"pour cette révision du jeu")]
           : ARMSX2MenuText(@"Open to scan patches and imported cheats", @"Ouvrir pour lire les patches et cheats importés");
     } else if (row == 3) {
-      cell.textLabel.text=NeoCheatText(@"manualTitle",self.localeIdentifier);
+      cell.textLabel.text=NeoCheatText(@"addCheat",self.localeIdentifier);
       cell.detailTextLabel.text=@"PNACH · CRC";
     } else {
       cell.textLabel.text = ARMSX2MenuText(@"Reload Cheats / Patches", @"Recharger cheats / patches");

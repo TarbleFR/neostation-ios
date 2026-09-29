@@ -1,5 +1,6 @@
 #import "NeoSwapPlugin.h"
 #import "NeoSwap.h"
+#include "NeoSwapCapacityProbe.h"
 #import <Foundation/Foundation.h>
 #include <mach/mach.h>
 #include <os/proc.h>
@@ -20,6 +21,7 @@ static const uint64_t kMiB = 1024 * 1024;
 @property(nonatomic, assign) int configResult;
 @property(nonatomic, assign) uint64_t lastAllocationCount;
 @property(nonatomic, assign) int diagnosticErrno;
+@property(nonatomic, strong) NSDictionary* lastCapacityProbe;
 @end
 
 @implementation NeoSwapPlugin
@@ -42,7 +44,7 @@ static const uint64_t kMiB = 1024 * 1024;
     NSString* diagnosticDir = [docs.firstObject stringByAppendingPathComponent:@"Diagnostics"];
     self.diagnosticPath = [diagnosticDir stringByAppendingPathComponent:kDiagnostic];
     NSInteger stored = [NSUserDefaults.standardUserDefaults integerForKey:kCapacity];
-    self.capacityMiB = (stored == 512 || stored == 1024 || stored == 2048) ? stored : 0;
+    self.capacityMiB = (stored == 512 || stored == 1024 || stored == 2048 || stored == 4096 || stored == 8192) ? stored : 0;
     dispatch_async(self.queue, ^{
         NSError* error = nil;
         BOOL created = self.directory.length && [[NSFileManager defaultManager]
@@ -150,7 +152,7 @@ static const uint64_t kMiB = 1024 * 1024;
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
     if (![call.method isEqualToString:@"snapshot"] && ![call.method isEqualToString:@"configure"] &&
-        ![call.method isEqualToString:@"probe"]) { result(FlutterMethodNotImplemented); return; }
+        ![call.method isEqualToString:@"probe"] && ![call.method isEqualToString:@"capacityProbe"]) { result(FlutterMethodNotImplemented); return; }
     dispatch_async(self.queue, ^{
         @autoreleasepool {
             int code = NEOSWAP_OK;
@@ -159,7 +161,7 @@ static const uint64_t kMiB = 1024 * 1024;
                 BOOL numeric = [value isKindOfClass:NSNumber.class];
                 NSInteger requested = numeric ? [value integerValue] : -1;
                 if (!numeric || [value doubleValue] != (double)requested ||
-                    !(requested == 0 || requested == 512 || requested == 1024 || requested == 2048)) code = NEOSWAP_INVALID;
+                    !(requested == 0 || requested == 512 || requested == 1024 || requested == 2048 || requested == 4096 || requested == 8192)) code = NEOSWAP_INVALID;
                 else {
                     code = [self configure:requested];
                     if (code == NEOSWAP_OK) [NSUserDefaults.standardUserDefaults setInteger:requested forKey:kCapacity];
@@ -178,6 +180,26 @@ static const uint64_t kMiB = 1024 * 1024;
                     int freed = api->release(address);
                     if (freed != NEOSWAP_OK) code = freed;
                 }
+            } else if ([call.method isEqualToString:@"capacityProbe"]) {
+                id size=[call.arguments isKindOfClass:NSDictionary.class]?call.arguments[@"sizeMiB"]:nil;
+                NSInteger amount=[size isKindOfClass:NSNumber.class]?[size integerValue]:0;
+                NeoSwapStats active{};active.struct_size=sizeof(active);NeoSwap_Snapshot(&active);
+                if(![size isKindOfClass:NSNumber.class] || [size doubleValue]!=amount ||
+                   ![@[@64,@128,@512,@1024,@2048,@4096,@8192] containsObject:@(amount)])code=NEOSWAP_INVALID;
+                else if(active.live_blocks)code=NEOSWAP_BUSY;
+                else if(uint64_t(amount)*kMiB>active.capacity_bytes)code=NEOSWAP_QUOTA;
+                else {
+                    NSMutableArray* samples=[NSMutableArray array];
+                    code=NeoSwapCapacityProbe(NeoSwap_GetAPI(1),uint64_t(amount)*kMiB,
+                      [&](const char* phase,uint64_t bytes){
+                        NSMutableDictionary* row=[[self snapshot:@"capacity_probe"] mutableCopy];
+                        row[@"phase"]=[NSString stringWithUTF8String:phase];row[@"testedBytes"]=@(bytes);
+                        [samples addObject:row];[self appendRecord:row];
+                      },[]{return os_proc_available_memory()>256*kMiB;});
+                    self.lastCapacityProbe=@{@"requestedBytes":@(uint64_t(amount)*kMiB),@"result":@(code),
+                      @"dataVerified":@(code==NEOSWAP_OK),@"samples":samples,
+                      @"kind":@"file-backed data capacity; not physical RAM or a donation test"};
+                }
             }
             if (![call.method isEqualToString:@"snapshot"]) {
                 NSMutableDictionary* event = [[self snapshot:call.method] mutableCopy];
@@ -185,6 +207,7 @@ static const uint64_t kMiB = 1024 * 1024;
             }
             NSMutableDictionary* response = [[self snapshot:@"snapshot"] mutableCopy];
             response[@"result"] = @(code);
+            if(self.lastCapacityProbe)response[@"capacityProbe"]=self.lastCapacityProbe;
             dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
         }
     });

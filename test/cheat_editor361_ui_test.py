@@ -2,10 +2,10 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 origin=ROOT/'test/dolphin_account_267_test.py'
 source=origin.read_text().replace("'CLANG_ENABLE_OBJC_ARC': 'YES',", "'CLANG_ENABLE_OBJC_ARC': 'YES', 'CLANG_CXX_LANGUAGE_STANDARD': 'c++20',")
-source=source.replace("{'sdk': 'UIKit.framework'}", "{'sdk': 'UniformTypeIdentifiers.framework'}, {'sdk': 'UIKit.framework'}")
+source=source.replace("{'sdk': 'UIKit.framework'}", "{'sdk': 'libz.tbd'}, {'sdk': 'UniformTypeIdentifiers.framework'}, {'sdk': 'UIKit.framework'}")
 # Compile the real PS2 editor as its own host translation unit, not a mock.
 source=source.replace("(directory / 'main.m').write_text(APP)",
-    "(directory / 'main.m').write_text(APP)\n        (directory / 'PS2Editor.mm').write_text('#include \\\"'+str(ROOT/'packages/armsx2_internal_bridge/ios/Classes/ARMSX2ManualCheatEditor.h')+'\\\"\\n')")
+    "(directory / 'main.m').write_text(APP)\n        (directory / 'PS2Editor.mm').write_text('#include \\\"'+str(ROOT/'packages/armsx2_internal_bridge/ios/Classes/ARMSX2ManualCheatEditor.h')+'\\\"\\n#include \\\"'+str(ROOT/'packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h')+'\\\"\\n')")
 source=source.replace("'sources': [str(directory / 'main.m'),", "'sources': [str(directory / 'main.m'), str(directory / 'PS2Editor.mm'),")
 ns={'__file__':str(origin),'__name__':'cheat_editor_tests'}
 exec(compile(source,str(origin),'exec'),ns)
@@ -14,6 +14,8 @@ ns['TESTS']=r'''
 #import <UIKit/UIKit.h>
 #include "NeoCheatStore.h"
 #include "NeoCheatLabels.h"
+#include "DOLTextureStore.h"
+#include "DolphinSessionMenu.h"
 @interface DOLManualCheatEditor : UIViewController
 @property(nonatomic,copy) NSString* localeIdentifier;
 @property(nonatomic,copy) NSDictionary* identity;
@@ -25,6 +27,7 @@ ns['TESTS']=r'''
 @property(nonatomic,assign) BOOL busy;
 @property(nonatomic,assign) BOOL ps2;
 @property(nonatomic,assign) BOOL documentImported;
+@property(nonatomic,assign) BOOL importMode;
 @property(nonatomic,copy) NSArray<NSDictionary*>* previewEntries;
 @property(nonatomic,strong) UITableView* previewTable;
 @property(nonatomic,strong) UILabel* previewSummary;
@@ -129,12 +132,39 @@ ns['TESTS']=r'''
 - (void)testCancelDoesNotImportAndBatchLabelsExistInTwelveLanguages {
  for(NSString* language in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"]){
   DOLManualCheatEditor* editor=[DOLManualCheatEditor new];editor.identity=[self identity];editor.localeIdentifier=language;[editor loadViewIfNeeded];
-  for(NSString* key in @[@"batchPreview",@"batchSave",@"batchLineCount",@"closePreview",@"gctCombined",@"emptyBlock",@"batchConflict",@"batchResult"])
+  for(NSString* key in @[@"batchPreview",@"batchSave",@"batchLineCount",@"closePreview",@"gctCombined",@"gctSave",@"addCheat",@"emptyBlock",@"batchConflict",@"batchResult"])
     XCTAssertNotEqualObjects(NeoCheatText(key,language),key);
   NSString* message=NeoCheatBatchResult(@{@"added":@48,@"skipped":@2},language);
   XCTAssertTrue([message containsString:@"48"]);XCTAssertFalse([message containsString:@"{added}"]);
   __block BOOL called=NO;editor.saveCheat=^(NSDictionary* request,void(^completion)(NSDictionary*)){called=YES;};[editor cancelPressed];XCTAssertFalse(called);
  }
+}
+- (void)testReportedGCTHasFourCommandsButNeverInventsFourNames {
+ DOLManualCheatEditor* editor=[DOLManualCheatEditor new];editor.localeIdentifier=@"fr";editor.importMode=YES;
+ editor.identity=@{@"gameId":@"GR8P69",@"revision":@0};[editor loadViewIfNeeded];
+ XCTAssertTrue(editor.nameField.hidden);XCTAssertTrue(editor.codeField.hidden);XCTAssertFalse(editor.navigationItem.rightBarButtonItem.enabled);
+ const unsigned char bytes[]={0x00,0xd0,0xc0,0xde,0x00,0xd0,0xc0,0xde,0x04,0x29,0xf0,0x40,0x3e,0x80,0x01,0xce,0x02,0x00,0xf0,0x6e,0x00,0x00,0xff,0xff,0x04,0x14,0xc9,0x74,0x39,0x20,0x03,0xe7,0x02,0x00,0xf0,0x5e,0x00,0x00,0xff,0xff,0xf0,0,0,0,0,0,0,0};
+ NSURL* file=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:@"GR8P69.gct"]];
+ [[NSData dataWithBytes:bytes length:sizeof(bytes)] writeToURL:file atomically:YES];[self readFile:file editor:editor];
+ XCTAssertEqual(editor.previewEntries.count,1);XCTAssertEqual([editor.previewEntries[0][@"lineCount"] intValue],4);
+ XCTAssertEqualObjects(editor.navigationItem.rightBarButtonItem.title,NeoCheatText(@"gctSave",@"fr"));
+ XCTAssertFalse([editor.previewSummary.text containsString:@"1 cheats"]);XCTAssertFalse(editor.previewTable.hidden);XCTAssertTrue(editor.codeField.hidden);
+ // Named source preserves its actual grouping, including multiple lines in one entry.
+ [@"GR8P69\nMedal of Honor\n\nBouncy Ball Mode [Codejunkies]\n0429F040 3E8001CE\n\nTest B\n0200F06E 0000FFFF\n\nTest C\n0414C974 392003E7\n\nTest D\n0200F05E 0000FFFF\n" writeToURL:[file URLByDeletingPathExtension] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+ NSURL* txt=[[file URLByDeletingPathExtension] URLByAppendingPathExtension:@"txt"];
+ [NSFileManager.defaultManager moveItemAtURL:[file URLByDeletingPathExtension] toURL:txt error:nil];[self readFile:txt editor:editor];
+ XCTAssertEqual(editor.previewEntries.count,4);XCTAssertEqualObjects(editor.previewEntries[0][@"name"],@"Bouncy Ball Mode");
+ [NSFileManager.defaultManager removeItemAtURL:file error:nil];[NSFileManager.defaultManager removeItemAtURL:txt error:nil];
+}
+- (void)testDirectMenuImportHasOwnRowAndPreservesFirstToggleIndex {
+ DolphinSessionMenu* menu=[DolphinSessionMenu new];menu.labels=@{@"__locale":@"fr"};[menu setValue:@3 forKey:@"page"];
+ NSDictionary* identity=@{@"gameId":@"GR8P69",@"revision":@0,@"hardcore":@NO,@"gecko":@[@{@"name":@"Bouncy Ball Mode",@"type":@"gecko",@"index":@0,@"enabled":@NO}],@"actionReplay":@[]};
+ [menu setValue:identity forKey:@"cheatsSnapshot"];
+ __block NSDictionary* captured=nil;menu.performCheatCommand=^(NSDictionary* r,void(^done)(BOOL,NSDictionary*)){captured=r;done(YES,@{});};
+ [menu loadViewIfNeeded];UITableViewCell* import=[menu tableView:menu.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:4 inSection:0]];
+ XCTAssertEqualObjects(import.accessibilityIdentifier,@"cheatImportRow");
+ [menu tableView:menu.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:5 inSection:0]];
+ XCTAssertEqualObjects(captured[@"kind"],@"toggle");XCTAssertEqualObjects(captured[@"index"],@0);
 }
 @end
 '''

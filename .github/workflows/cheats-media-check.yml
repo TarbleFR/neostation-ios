@@ -40,6 +40,10 @@ jobs:
           clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_bulk_store_test.mm -framework Foundation -o /tmp/cheat-bulk-store
           /tmp/cheat-bulk-store
           python3 test/cheat_bulk_scope_test.py
+          python3 test/validate_cheat_bulk_ipa_test.py
+          python3 test/dolphin_texture_zip_test.py
+          clang++ -std=c++20 -fobjc-arc -fblocks -Ipackages/dolphin_internal_bridge/ios/Classes test/dolphin_texture_store_test.mm -lz -framework Foundation -o /tmp/texture-store
+          /tmp/texture-store
           clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_store_test.mm -framework Foundation -o /tmp/cheat-store
           /tmp/cheat-store
           clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_import_delete361_test.mm -framework Foundation -o /tmp/cheat-import-delete

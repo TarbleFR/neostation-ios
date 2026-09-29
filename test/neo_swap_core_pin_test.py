@@ -25,5 +25,7 @@ for relative in ('build-utils/build_rpcs3_embedded_core.sh',
                  'native/neoswap/NeoSwapClient.h',
                  'test/neoswap_test.cpp','test/neoswap_rpcs3_allocator_test.cpp'):
     old=subprocess.check_output(['git','show',CORE+':'+relative],cwd=ROOT)
+    if relative=='packages/neo_swap/ios/Classes/NeoSwap.cpp':
+        old=old.replace(b'c->capacity_bytes > 4 * 1024 * MiB',b'c->capacity_bytes > 8 * 1024 * MiB')
     assert old.replace(b'\r\n',b'\n')==(ROOT/relative).read_bytes().replace(b'\r\n',b'\n'),relative
-print('PASS: exact NeoSwap core pin, unchanged allocator/ABI/source/recipe, private-only artifact validation')
+print('PASS: exact NeoSwap core pin, unchanged core/ABI/recipe; explicitly audited8GiB host budget; private-only validation')

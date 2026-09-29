@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 class NeoSwap {
   NeoSwap._();
   static const channel = MethodChannel('neostation/neo_swap');
-  static const capacitiesMiB = [0, 512, 1024, 2048];
+  static const capacitiesMiB = [0, 512, 1024, 2048, 4096, 8192];
+  static const probeSizesMiB = [64, 128, 512, 1024, 2048, 4096, 8192];
 
   static Future<Map<String, dynamic>> snapshot() => _call('snapshot');
   static Future<Map<String, dynamic>> configure(int capacityMiB) {
@@ -15,6 +16,12 @@ class NeoSwap {
   }
 
   static Future<Map<String, dynamic>> probe() => _call('probe');
+  static Future<Map<String, dynamic>> capacityProbe(int sizeMiB) {
+    if (!probeSizesMiB.contains(sizeMiB)) {
+      throw ArgumentError.value(sizeMiB, 'sizeMiB');
+    }
+    return _call('capacityProbe', {'sizeMiB': sizeMiB});
+  }
 
   static Future<Map<String, dynamic>> _call(
     String method, [

@@ -18,6 +18,8 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
   int _revision = 0;
   String? _messageKey;
   int? _code;
+  int _probeMiB = 64;
+  Map<String, dynamic>? _capacityReport;
   @override
   void initState() {
     super.initState();
@@ -52,7 +54,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     }
   }
 
-  Future<void> _run({int? capacity}) async {
+  Future<void> _run({int? capacity, bool capacityTest = false}) async {
     if (_busy) return;
     ++_revision; // An earlier diagnostic response cannot undo a newer command.
     setState(() {
@@ -62,15 +64,18 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     });
     try {
       final stats = capacity == null
-          ? await NeoSwap.probe()
+          ? (capacityTest ? await NeoSwap.capacityProbe(_probeMiB) : await NeoSwap.probe())
           : await NeoSwap.configure(capacity);
       if (!mounted) return;
       final code = (stats['result'] as num?)?.toInt() ?? -2;
       setState(() {
         _stats = stats;
+        if (stats['capacityProbe'] is Map) {
+          _capacityReport = Map<String, dynamic>.from(stats['capacityProbe'] as Map);
+        }
         _code = code;
         _messageKey = code == 0
-            ? (capacity == null ? 'pass' : 'saved')
+            ? (capacity == null ? (capacityTest ? 'capacityPass' : 'pass') : 'saved')
             : code == -7
             ? 'busy'
             : code == -1
@@ -123,6 +128,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
               const SizedBox(height: 16),
               Text(t('capacity')),
               DropdownButton<int>(
+                key: const ValueKey('neoSwapBudget'),
                 isExpanded: true,
                 value: NeoSwap.capacitiesMiB.contains(capacity) ? capacity : 0,
                 items: NeoSwap.capacitiesMiB
@@ -173,6 +179,28 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                 onPressed: _busy || _stats == null ? null : () => _run(),
                 child: Text(t('probe')),
               ),
+              Text(t('capacityProbe')),
+              DropdownButton<int>(
+                key: const ValueKey('neoSwapProbeSize'),
+                isExpanded: true,
+                value: _probeMiB,
+                items: NeoSwap.probeSizesMiB.map((n) => DropdownMenuItem(
+                  value: n, enabled: n <= capacity, child: Text('$n MiB'),
+                )).toList(),
+                onChanged: _busy || _stats == null ? null : (n) {
+                  if (n != null) setState(() => _probeMiB = n);
+                },
+              ),
+              OutlinedButton(
+                onPressed: _busy || _stats == null || _probeMiB > capacity
+                    ? null : () => _run(capacityTest: true),
+                child: Text(t('capacityRun')),
+              ),
+              if (_capacityReport != null)
+                SelectableText(t('capacityResult', {
+                  'size': _bytes(_capacityReport!['requestedBytes']),
+                  'delta': _capacityDelta(),
+                })),
               if (_stats != null) ...[
                 SelectableText(
                   t('diagnostics', {
@@ -184,7 +212,10 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                   title: Text(t('technical')),
                   children: [
                     SelectableText(
-                      const JsonEncoder.withIndent('  ').convert(_stats),
+                      const JsonEncoder.withIndent('  ').convert({
+                        ...?_stats,
+                        if (_capacityReport != null) 'capacityProbe': _capacityReport,
+                      }),
                       style: const TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 11,
@@ -196,7 +227,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
                   child: Text(t('close')),
                 ),
               ),
@@ -205,5 +236,19 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
         ),
       ),
     );
+  }
+  String _capacityDelta() {
+    final samples = _capacityReport?['samples'] as List? ?? const [];
+    if (samples.isEmpty || samples.first is! Map) return '—';
+    final before = (samples.first as Map)['processFootprintBytes'];
+    if (before is! num) return '—';
+    num peak = before;
+    for (final row in samples) {
+      if (row is Map && row['processFootprintBytes'] is num) {
+        final n = row['processFootprintBytes'] as num;
+        if (n > peak) peak = n;
+      }
+    }
+    return _bytes(peak - before);
   }
 }
