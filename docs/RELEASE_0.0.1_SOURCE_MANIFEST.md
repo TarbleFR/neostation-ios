@@ -111,6 +111,27 @@ rights in generated translated game logic.
 - Source: https://github.com/StikDebug/StikJIT/tree/1.5.0
 - License: Mozilla Public License 2.0
 
+## Remote System Art
+
+NeoStation 0.0.1 can fetch optional System Art at runtime from the live
+NeoStation Assets catalog:
+
+- Repository: https://github.com/misobadev/neostation-assets
+- Runtime endpoint: the repository's `main` branch
+- Original creative assets: CC BY-NC-SA 4.0 according to that repository's
+  LICENSE; trademarks remain with their respective holders.
+
+The app can also fetch the curated RiiSU pack on demand:
+
+- RiiSU: https://github.com/mult1v4c/RiiSU
+- iiSU Interpreted for ES-DE: https://github.com/VictorUnlocked/iisu-interpreted-es-de
+- iiSU Network: https://iisu.network/
+
+These resources are remote/live integrations rather than bytes embedded in the
+0.0.1 IPA. RiiSU did not expose a standalone license file when integrated, so
+this manifest records attribution without claiming ungranted redistribution
+rights.
+
 ## External integrations
 
 RetroArch, MeloNX and LocalDevVPN are separate applications when used. They are
