@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: StikDebug/StikJIT
@@ -44,7 +45,7 @@ jobs:
           python3 test/stikjit_rpcs3_patch_test.py .native-sources/StikJIT
           python3 test/stikjit_compat_test.py .native-sources/StikJIT
           node test/rpcs3_debugger_handshake_test.js
-          node test/rpcs3_stop_reply_behavior_test.js
+          python3 test/stikjit_modern_baseline_test.py
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_reporter_send_order_test.py
           python3 test/local_dev_vpn_route_contract_test.py
@@ -70,6 +71,7 @@ jobs:
           zip -qry ../../dist/stikjit/StikJIT.xcframework.zip StikJIT.xcframework
           cd ../..
           cp build/dolphin-ci/stikjit-release.json dist/stikjit/identity.json
+          cp build/stikjit-tests/modern-baseline.json dist/stikjit/modern-baseline.json
           printf '%s\n' "${{ github.sha }}" > dist/stikjit/host-commit.txt
           shasum -a 256 dist/stikjit/StikJIT.xcframework.zip > dist/stikjit/archive.sha256
       - uses: actions/upload-artifact@v4
