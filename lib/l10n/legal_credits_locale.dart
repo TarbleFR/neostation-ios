@@ -95,6 +95,36 @@ abstract final class LegalCreditsLocale {
     'zh_Hant': '關閉',
   };
 
+  static const Map<String, String> _sourceLabels = {
+    'de': 'Quellcode',
+    'en': 'Source',
+    'es': 'Código fuente',
+    'fr': 'Sources',
+    'id': 'Sumber',
+    'it': 'Sorgente',
+    'ja': 'ソース',
+    'ko': '소스',
+    'pt': 'Código-fonte',
+    'ru': 'Исходный код',
+    'zh': '源代码',
+    'zh_Hant': '原始碼',
+  };
+
+  static const Map<String, String> _licenseDocumentLabels = {
+    'de': 'Lizenzdokument',
+    'en': 'License document',
+    'es': 'Documento de licencia',
+    'fr': 'Document de licence',
+    'id': 'Dokumen lisensi',
+    'it': 'Documento di licenza',
+    'ja': 'ライセンス文書',
+    'ko': '라이선스 문서',
+    'pt': 'Documento de licença',
+    'ru': 'Текст лицензии',
+    'zh': '许可文档',
+    'zh_Hant': '授權文件',
+  };
+
   static String cardTitle(BuildContext context) => _lookup(_cardTitles, context);
   static String cardDescription(BuildContext context) =>
       _lookup(_cardDescriptions, context);
@@ -104,6 +134,9 @@ abstract final class LegalCreditsLocale {
   static String fullRecord(BuildContext context) =>
       _lookup(_fullRecords, context);
   static String close(BuildContext context) => _lookup(_closeLabels, context);
+  static String source(BuildContext context) => _lookup(_sourceLabels, context);
+  static String licenseDocument(BuildContext context) =>
+      _lookup(_licenseDocumentLabels, context);
 
   static String _lookup(Map<String, String> values, BuildContext context) {
     final locale = Localizations.localeOf(context);
