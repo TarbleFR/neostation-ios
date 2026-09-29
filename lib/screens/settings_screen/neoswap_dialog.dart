@@ -61,6 +61,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
       _busy = true;
       _messageKey = null;
       _code = null;
+      if (capacityTest) _capacityReport = null;
     });
     try {
       final stats = capacity == null
@@ -108,7 +109,9 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     final messageKey =
         _messageKey ?? (configurationCode != 0 ? 'failed' : null);
     final resultCode = _code ?? configurationCode;
-    return Dialog(
+    return PopScope(
+      canPop: !_busy,
+      child: Dialog(
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 620,
@@ -234,6 +237,7 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

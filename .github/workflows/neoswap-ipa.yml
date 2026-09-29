@@ -581,11 +581,13 @@ jobs:
             build-utils/validate_rpcs3_passive_dlopen.py \
             packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
             packages/neo_swap/ios/Classes/NeoSwap.h \
-            packages/neo_swap/ios/Classes/NeoSwap.cpp \
             native/neoswap/NeoSwapClient.h \
             test/neoswap_test.cpp test/neoswap_rpcs3_allocator_test.cpp
           git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             .github/workflows/rpcs3-core.yml
+          # The host broker is rebuilt with the explicitly audited4→8GiB budget.
+          # Its ABI and every other implementation byte remain pinned.
+          python3 test/neo_swap_core_pin_test.py
           python3 - <<'PY'
           import json, os, shutil, sys
           from pathlib import Path

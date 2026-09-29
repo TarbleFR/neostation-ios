@@ -43,6 +43,28 @@ static NSDictionary* Owner(NSDictionary* result,NSString* name) {
     for(NSDictionary* owner in result[@"owners"]) if([owner[@"owner"] isEqual:name]) return owner;
     Finish(NO,@"missing owner");return @{};
 }
+static void CapacityCases(void(^done)(void)) {
+    Request(@"configure",@{@"capacityMiB":@8192},^(NSDictionary* configured) {
+        Check([configured[@"result"] intValue]==0 && [configured[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"8GiB budget round trip");
+        const NeoSwapAPI* api=NeoSwap_GetAPI(1);
+        Check(api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,2*1024*1024,65536,&live)==0,@"live block before capacity exercise");
+        Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* busy) {
+            Check([busy[@"result"] intValue]==NEOSWAP_BUSY,@"capacity exercise refuses live game ownership");
+            Check(api->release(live)==0,@"release before capacity exercise");live=nullptr;
+            Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* checked) {
+                Check([checked[@"result"] intValue]==0,@"64MiB production-plugin capacity exercise");
+                NSDictionary* report=checked[@"capacityProbe"];
+                Check([report[@"dataVerified"] boolValue] && [report[@"requestedBytes"] unsignedLongLongValue]==64*1024*1024,@"new capacity report verifies requested bytes");
+                Check([report[@"samples"] count]==5,@"write/sync/reload/release measurements");
+                Check([checked[@"liveBlocks"] unsignedLongLongValue]==0,@"capacity exercise releases every block");
+                Request(@"capacityProbe",@{@"sizeMiB":@16384},^(NSDictionary* invalid) {
+                    Check([invalid[@"result"] intValue]==NEOSWAP_INVALID && !invalid[@"capacityProbe"],@"invalid new test cannot reuse old success evidence");
+                    done();
+                });
+            });
+        });
+    });
+}
 static void RunProbe(void) {
     [NSUserDefaults.standardUserDefaults removeObjectForKey:@"NeoSwapCapacityMiBV1"];
     ProbeRegistrar* first=[ProbeRegistrar new];ProbeRegistrar* second=[ProbeRegistrar new];
@@ -69,6 +91,7 @@ static void RunProbe(void) {
                         Check([Owner(probed,@"rpcs3")[@"liveBytes"] unsignedLongLongValue]==2*1024*1024,@"real owner not inflated by probe");
                         for(size_t i=0;i<2*1024*1024;i++) if(((unsigned char*)live)[i]!=0x63) Finish(NO,@"live data changed");
                         Check(api->release(live)==0,@"release real block");live=nullptr;
+                        CapacityCases(^{
                         Request(@"configure",@{@"capacityMiB":@0},^(NSDictionary* disabled) {
                             Check([disabled[@"result"] intValue]==0,@"disable after release");
                             Check([disabled[@"liveBlocks"] unsignedLongLongValue]==0,@"no leaked blocks");
@@ -79,8 +102,9 @@ static void RunProbe(void) {
                                 NSString* path=off[@"diagnosticPath"];
                                 NSString* log=[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
                                 Check([log containsString:@"process_start"] && [log containsString:@"probe"],@"diagnostic events written");
-                                Finish(YES,@"single instance; disabled; persistence; live-block refusal; probe isolation; data integrity; cleanup");
+                                Finish(YES,@"single instance; persistence; live-block refusal; 8GiB budget;64MiB capacity integrity; stale evidence rejection; cleanup");
                             });
+                        });
                         });
                     });
                 });

@@ -181,6 +181,7 @@ static const uint64_t kMiB = 1024 * 1024;
                     if (freed != NEOSWAP_OK) code = freed;
                 }
             } else if ([call.method isEqualToString:@"capacityProbe"]) {
+                self.lastCapacityProbe=nil;
                 id size=[call.arguments isKindOfClass:NSDictionary.class]?call.arguments[@"sizeMiB"]:nil;
                 NSInteger amount=[size isKindOfClass:NSNumber.class]?[size integerValue]:0;
                 NeoSwapStats active{};active.struct_size=sizeof(active);NeoSwap_Snapshot(&active);
