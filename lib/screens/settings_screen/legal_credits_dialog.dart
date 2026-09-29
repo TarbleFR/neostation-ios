@@ -62,6 +62,18 @@ class LegalCreditsDialog {
       'https://github.com/niemasd/GameDB-PS3',
     ),
     _LegalEntry(
+      'NeoStation Assets',
+      'NeoStation asset contributors; runtime-downloaded System Art catalog',
+      'CC BY-NC-SA 4.0 for original creative assets; trademarks remain separate',
+      'https://github.com/misobadev/neostation-assets',
+    ),
+    _LegalEntry(
+      'RiiSU / iiSU System Art',
+      'RiiSU by mult1v4c; icons credited to iiSU Interpreted / iiSU Network',
+      'External on-demand artwork; no standalone RiiSU license was published when integrated',
+      'https://github.com/mult1v4c/RiiSU',
+    ),
+    _LegalEntry(
       'RetroArch / libretro',
       'libretro and RetroArch contributors',
       'External integration; upstream licenses apply',
