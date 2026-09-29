@@ -924,10 +924,13 @@ jobs:
           python3 - <<'PY'
           import zipfile,plistlib,os
           with zipfile.ZipFile('dist/'+os.environ['IPA_NAME']+'.ipa') as z:
-              info=plistlib.loads(z.read('Payload/Runner.app/Info.plist'))
+              apps={n.split('/')[1] for n in z.namelist() if n.startswith('Payload/') and len(n.split('/'))>2 and n.split('/')[1].endswith('.app')}
+              assert len(apps)==1,apps
+              root='Payload/'+apps.pop()+'/'
+              info=plistlib.loads(z.read(root+'Info.plist'))
               assert info.get('CADisableMinimumFrameDurationOnPhone') is True, 'iPhone ProMotion opt-in missing'
-              bridge=z.read('Payload/Runner.app/Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
-              for marker in (b'DolphinFramePacing',b'DOLDisplaySettings',b'MTLUsePresentDrawable',b'ShaderCompilationMode',b'preferredFrameRateRange'):
+              bridge=z.read(root+'Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
+              for marker in (b'DolphinFramePacing',b'DOLDisplaySettings',b'MTLUsePresentDrawable',b'ShaderCompilationMode',b'setPreferredFrameRateRange:'):
                   assert marker in bridge,marker
           PY
           ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
