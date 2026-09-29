@@ -282,7 +282,7 @@ void main() {
     expect(menu, contains('Automatique (ARMSX2/GameDB)'));
     expect(service, contains('launchBios({String uiLocale = \'en\'})'));
     expect(actions, contains("'boot_bios'"));
-    expect(actions, contains('Démarrer le BIOS PS2'));
+    expect(actions, contains("_t('bootBios')"));
   });
 
   test('ARMSX2 import menu exposes BIOS and games', () {
@@ -291,8 +291,8 @@ void main() {
     ).readAsStringSync();
 
     expect(widget, contains("ValueKey('armsx2-internal-import-menu')"));
-    expect(widget, contains("'Importer des jeux'"));
-    expect(widget, contains("'Importer un ou plusieurs BIOS'"));
+    expect(widget, contains("_t('importGames')"));
+    expect(widget, contains("_t('importBios')"));
     expect(widget, contains('Armsx2InternalService.importGames()'));
     expect(widget, contains('Armsx2InternalService.importBios()'));
   });

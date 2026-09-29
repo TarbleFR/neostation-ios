@@ -142,13 +142,13 @@ void main() {
       expect(inspection, isNot(contains('_ensureRuntime')));
       expect(manager, contains('Rpcs3InternalService.prepareManager()'));
       expect(manager, contains('RPCS3 Core'));
-      expect(manager, contains('À la demande'));
+      expect(manager, contains("_t('onDemand')"));
       expect(
         manager,
         isNot(contains('const Center(child: CircularProgressIndicator())')),
       );
       expect(manager, contains('LinearProgressIndicator'));
-      expect(manager, contains('Réessayer'));
+      expect(manager, contains("_t('retry')"));
     });
 
     test(
@@ -337,12 +337,12 @@ void main() {
       ).readAsStringSync();
 
       expect(widget, contains("value: 'open'"));
-      expect(widget, contains('Ouvrir RPCS3'));
+      expect(widget, contains("_t('openRpcs3')"));
       expect(widget, contains('Rpcs3ManagerScreen'));
       expect(widget, contains("value: 'games'"));
       expect(widget, contains("value: 'folder'"));
       expect(widget, contains("value: 'firmware'"));
-      expect(widget, contains('Importer le firmware PS3'));
+      expect(widget, contains("_t('installFirmware')"));
       expect(manager, contains('rpcs3-manager-firmware'));
       expect(manager, contains('rpcs3-manager-games'));
       expect(manager, contains('rpcs3-manager-folder'));
