@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,subprocess,time,os
+          import json,subprocess,time,os,shutil
           from pathlib import Path
           for workflow in ('neoswap-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
               deadline=time.monotonic()+1800
@@ -99,6 +99,7 @@ jobs:
                   time.sleep(15)
           subprocess.run(['python3','test/stikjit_scoped_host_test.py'],check=True)
           subprocess.run(['python3','test/dolphin_phone_shake_test.py'],check=True)
+          shutil.copy2('build/dolphin-motion/tests.json',Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence'/'phone-shake-tests.json')
           PY
 
       - name: Validate KartPad candidate inputs
@@ -1031,7 +1032,7 @@ jobs:
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
-          cp build/dolphin-motion/tests.json build/private-test/phone-shake-tests.json
+          cp "$RUNNER_TEMP/neoswap-evidence/phone-shake-tests.json" build/private-test/
           cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
           printf '%s\n' 'NeoStation-NeoSwap-Build367.ipa' > build/private-test/delivery-name.txt
           cp build/stikjit-current/modern-baseline.json build/private-test/
