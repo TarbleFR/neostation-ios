@@ -876,15 +876,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh api repos/TarbleFR/neostation-ios/actions/runs/36564433241 > "$RUNNER_TEMP/cheat-regression.json"
+          gh api repos/TarbleFR/neostation-ios/actions/runs/36565303980 > "$RUNNER_TEMP/cheat-regression.json"
           python3 - <<'PY'
           import json, os
           from pathlib import Path
           proof=json.loads((Path(os.environ['RUNNER_TEMP'])/'cheat-regression.json').read_text())
-          assert proof['head_sha']=='1c17a4882e20b6fa0e2f89ae3faae0aab52bef4e', proof
+          assert proof['head_sha']=='1e01c133c9bbdd670c364101388eca2525620cf8', proof
           assert proof['conclusion']=='success', proof
           PY
-          git diff --exit-code 1c17a4882e20b6fa0e2f89ae3faae0aab52bef4e "$GITHUB_SHA" -- \
+          git diff --exit-code 1e01c133c9bbdd670c364101388eca2525620cf8 "$GITHUB_SHA" -- \
             native/cheats \
             packages/dolphin_internal_bridge/ios/Classes \
             packages/armsx2_internal_bridge/ios/Classes \
