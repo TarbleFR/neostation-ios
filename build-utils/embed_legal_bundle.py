@@ -24,6 +24,8 @@ REQUIRED_LEGAL_FILES = (
     "KartPad-RIGHTS_AND_LICENSES.md",
     "KartPad-THIRD_PARTY_NOTICES.md",
     "StikJIT-MPL-2.0.txt",
+    "NeoStation-Assets-CC-BY-NC-SA-4.0.txt",
+    "RiiSU-ATTRIBUTION.md",
 )
 
 
