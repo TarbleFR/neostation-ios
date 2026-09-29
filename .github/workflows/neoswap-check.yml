@@ -49,7 +49,7 @@ jobs:
           set -euo pipefail
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
-          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart
+          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart test/jit_backend_preference_service_test.dart
           python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_atomic_startup_test.py
           python3 test/rpcs3_jit_handshake_test.py

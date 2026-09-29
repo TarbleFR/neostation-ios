@@ -41,13 +41,18 @@ void main() {
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools exposes pairing and one fallback switch', () {
+  test('Tools preserves pairing and one fallback switch alongside NeoSwap', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
     ).readAsStringSync();
 
-    expect(tools, contains('int getItemCount() => 2;'));
+    expect(tools, contains('int getItemCount() => 3;'));
+    expect(tools, contains('if (index == 0)'));
+    expect(tools, contains('if (index == 1 && _jitFallbackStateLoaded'));
+    expect(tools, contains('if (index == 2)'));
+    expect(tools, contains('builder: (_) => const NeoSwapDialog()'));
+    expect(RegExp(r'CustomToggleSwitch\(').allMatches(tools).length, 1);
     expect(tools, isNot(contains('LocalJitTunnel')));
     expect(tools, isNot(contains('VPN')));
     expect(tools, contains('JitFallbackLocale.title'));
