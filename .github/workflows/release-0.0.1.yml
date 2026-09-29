@@ -1,0 +1,289 @@
+name: Publish NeoStation 0.0.1
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-0.0.1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Publish NeoStation iOS 0.0.1
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Download validated Build 350 artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 10932894067
+          run-id: 36323843067
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-artifact
+
+      - name: Verify and rename IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t IPAS < <(find release-artifact -type f -name '*.ipa' -print)
+          if [ "${#IPAS[@]}" -ne 1 ]; then
+            printf 'Expected exactly one IPA, found %s\n' "${#IPAS[@]}" >&2
+            printf '%s\n' "${IPAS[@]}" >&2
+            exit 1
+          fi
+
+          IPA="${IPAS[0]}"
+          EXPECTED_SIZE="143538718"
+          EXPECTED_SHA="e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46"
+
+          ACTUAL_SIZE="$(stat -c%s "$IPA")"
+          ACTUAL_SHA="$(sha256sum "$IPA" | awk '{print $1}')"
+
+          test "$ACTUAL_SIZE" = "$EXPECTED_SIZE" || {
+            echo "Unexpected IPA size: $ACTUAL_SIZE" >&2
+            exit 1
+          }
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA" || {
+            echo "Unexpected IPA SHA-256: $ACTUAL_SHA" >&2
+            exit 1
+          }
+
+          cp "$IPA" NeoStation.ipa
+          echo "Validated NeoStation.ipa"
+          echo "SHA-256: $ACTUAL_SHA"
+          ls -lh NeoStation.ipa
+
+      - name: Prepare GitHub release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<'RELEASE_NOTES'
+          <p align="center">
+            <img src="https://raw.githubusercontent.com/TarbleFR/neostation-ios/5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0/assets/images/fork-icon-valid.jpg" width="180" alt="NeoStation iOS logo">
+          </p>
+
+          <h1 align="center">🎮 NeoStation iOS — 0.0.1</h1>
+
+          <p align="center"><strong>First GitHub release of NeoStation iOS.</strong></p>
+
+          > [!IMPORTANT]
+          > Please read the requirements below before installing NeoStation.
+
+          NeoStation combines **built-in emulators, external emulator integrations, native iOS game ports, JIT support and library management** into a single interface.
+
+          ---
+
+          ## 📱 Compatible Devices
+
+          - ✅ iPhone or iPad
+          - ✅ **iOS 18 or later**
+          - ✅ **Developer Mode enabled**
+          - ✅ NeoStation installed as a **standalone IPA**
+
+          An **Apple Developer account** is recommended, especially if you want to avoid the standard three-app sideloading limitation and use the required entitlements more easily.
+
+          Performance depends on your device, iOS version and the system or game being used.
+
+          ---
+
+          ## 📦 Installation & Signing
+
+          NeoStation must be installed as a properly signed **IPA**.
+
+          Compatible installation methods include:
+
+          - SideStore
+          - AltStore
+          - Compatible sideloading services
+          - TrollStore, when supported
+          - Apple Developer signing
+
+          ### ❌ LiveContainer is NOT supported
+
+          Do **not** install or launch NeoStation through LiveContainer.
+
+          NeoStation relies on native iOS functionality including:
+
+          - JIT
+          - Memory entitlements
+          - URL schemes / deep links
+          - External application communication
+          - Native application lifecycle management
+          - Emulator-specific permissions
+
+          NeoStation must therefore run as a **real standalone iOS application**.
+
+          ---
+
+          ## 🕹️ Built-in Emulators
+
+          Several major emulators are integrated **directly inside NeoStation**.
+
+          ### 🐬 Nintendo GameCube / Wii
+          **DolphiniOS**
+
+          ### 🔵 PlayStation 2
+          **ARMSX2**
+
+          ### 🔷 PlayStation 3
+          **RPCS3**
+
+          You no longer need to install separate applications for these NeoStation-integrated implementations.
+
+          Their libraries, configuration and launch process are handled directly from NeoStation.
+
+          ---
+
+          ## 👾 External Emulator Integrations
+
+          Some platforms continue to use external applications.
+
+          ### 🔥 RetroArch
+
+          The **RetroArch TestFlight / Beta version** is recommended for supported multi-system emulation.
+
+          RetroArch must be installed separately when using NeoStation's RetroArch integration.
+
+          NeoStation can then handle features such as:
+
+          - Library synchronization
+          - Playlists
+          - Game launching
+          - Metadata integration
+          - Supported deep links
+
+          Additional RetroArch cores may be required depending on the console you want to emulate.
+
+          ---
+
+          ## ⚡ JIT — StikJIT
+
+          NeoStation uses **StikJIT** for systems requiring JIT.
+
+          The old process involving manually opening **StikDebug** before every game is no longer the recommended workflow.
+
+          Your StikJIT environment must be correctly configured before using JIT-enabled systems.
+
+          This may include:
+
+          - A valid pairing file
+          - **Alt Pairing File** when required
+          - A compatible JIT environment
+          - Appropriate application entitlements
+
+          ### Recommended workflow
+
+          **NeoStation → Select Game → Play → JIT Activation → Game**
+
+          The goal is to keep the process as automatic and simple as possible.
+
+          ---
+
+          ## 🔷 PlayStation 3 — Important Requirements
+
+          RPCS3 is one of the most demanding components included in NeoStation.
+
+          PS3 emulation may require:
+
+          - JIT access
+          - Virtual Addressing entitlement
+          - Increased Memory entitlement
+          - Sufficient available RAM
+          - Correct pairing/JIT configuration
+
+          Depending on your signing method, **GetMoreRam** may also be required.
+
+          ### ⚠️ PS3 Firmware Required
+
+          You must provide and import your own legitimate **PlayStation 3 system firmware** before launching PS3 games.
+
+          ---
+
+          ## 🎮 Native iOS Game Ports
+
+          NeoStation also includes native iOS ports such as **Mario Kart Pad, DuskLight/Duckslide and other supported ports**.
+
+          > [!WARNING]
+          > **NeoStation does not provide the original commercial game files.**
+
+          To use these ports, you must **legally own the original game** and provide the required files from your own copy.
+
+          ### 🏎️ Mario Kart Pad
+
+          Requires files from your own legitimate copy of the **original Wii game**.
+
+          ### 🎮 GameCube-based ports
+
+          If a port is based on a GameCube title, such as **Duckslide/DuskLight where applicable**, you must own the corresponding **original GameCube game** and provide the required game data yourself.
+
+          The same rule applies to every native port included in NeoStation:
+
+          > **You must own the original game required by the port.**
+
+          NeoStation does not include, distribute or provide copyrighted game assets, ROMs, ISOs or commercial game data.
+
+          ---
+
+          ## 📚 Library Setup
+
+          Once everything is installed and configured, NeoStation can be used to:
+
+          - Add your game folders
+          - Import supported games
+          - Synchronize emulator libraries
+          - Configure emulator integrations
+          - Import BIOS and firmware files
+          - Download metadata and artwork
+          - Configure per-game settings
+          - Launch supported games directly from NeoStation
+
+          Some systems require additional files:
+
+          - **PlayStation 2** → Your own BIOS
+          - **PlayStation 3** → Official PS3 firmware
+          - **RetroArch** → Appropriate cores / BIOS when required
+          - **Native Ports** → Files from your legally owned original game
+
+          ---
+
+          ## ✨ One App. One Library. Multiple Systems.
+
+          NeoStation iOS is designed to bring your gaming library together in one place.
+
+          **Library → Metadata → Emulator → JIT → Launch**
+
+          Major systems such as **GameCube / Wii, PlayStation 2 and PlayStation 3** can operate directly inside NeoStation, while other platforms can use external integrations such as RetroArch.
+
+          Native iOS ports are also integrated directly into the experience, while requiring users to provide the files from games they legally own.
+
+          ### 🎯 The goal
+
+          **One library. One interface. The fewest possible steps between choosing a game and playing it.**
+
+          ---
+
+          ### 📦 Release file
+
+          Download **`NeoStation.ipa`** from the Assets section below and sign it using your preferred compatible installation method.
+
+          **Validated build:** Build 350  
+          **IPA SHA-256:** `e1017b96842ec970be3ed0cd981083ee945d069cf76e689a4ca3c81339299b46`
+          RELEASE_NOTES
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view 0.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release 0.0.1 already exists; leaving it unchanged."
+            exit 0
+          fi
+
+          gh release create 0.0.1 NeoStation.ipa             --repo "$GITHUB_REPOSITORY"             --target 5e6dc00b35b7bb7847c24198d9f4b08ade8ed9a0             --title "NeoStation iOS 0.0.1"             --notes-file release-notes.md
