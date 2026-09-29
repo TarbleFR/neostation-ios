@@ -2,7 +2,10 @@ from pathlib import Path
 import subprocess, urllib.request
 root=Path(__file__).resolve().parents[1]
 base='099e3b6fe52af99b1f19d47f429222d770b792eb'
-subprocess.run(['git','diff','--exit-code',base,'HEAD','--',
+# Freeze the completed display-only change against its original endpoint.
+# Subsequent all-title RPCS3 CPU allocations have their own exact scope guard.
+feature_end='f4583c6a3083b8aed358da28b2f8f849256e0e8b'
+subprocess.run(['git','diff','--exit-code',base,feature_end,'--',
  'build-utils/patch_dolphin_internal_core_v2.py','packages/dolphin_internal_bridge/core',
  'packages/armsx2_internal_bridge','packages/rpcs3_internal_bridge','packages/kartpad_internal_bridge',
  'lib/services/frontend_media_gate.dart','lib/services/game/game_launch_service.dart',
@@ -15,6 +18,9 @@ subprocess.run(['git','diff','--exit-code',base,'HEAD','--',
  ':(exclude)packages/armsx2_internal_bridge/ios/Classes/NeoCheatLabels.h',
  ':(exclude)packages/armsx2_internal_bridge/ios/Classes/ARMSX2ManualCheatEditor.h',
  ':(exclude)packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm'],cwd=root,check=True)
+# Current sources must still preserve every non-NeoSwap runtime. This is NOT
+# a blanket exemption for RPCS3 or a deletion of the original display contract.
+subprocess.run(['python3',str(root/'test/check_neo_swap_scope.py')],cwd=root,check=True)
 # Intentional import UI/shared-header changes are separately constrained and tested.
 subprocess.run(['python3',str(root/'test/cheat_bulk_scope_test.py')],cwd=root,check=True)
 # These two exceptions are verified against their complete baseline text after
@@ -46,4 +52,4 @@ metal=upstream('Source/Core/VideoBackends/Metal/MTLGfx.mm')
 assert 'g_ActiveConfig.iUsePresentDrawable == TriState::On ||' in metal
 loader=upstream('Source/Core/Core/ConfigLoaders/GameConfigLoader.cpp')
 assert '{"Video_Settings", {Config::System::GFX, "Settings"}}' in loader
-print('PASS: 120Hz is a display hint, not a second renderer; Metal=1 / Hybrid=2 bind to retained core; unchanged JIT and other emulators')
+print('PASS: 120Hz is a display hint, not a second renderer; Metal=1 / Hybrid=2 bind to retained core; display feature scope preserved; subsequent RPCS3 CPU adapter separately constrained')

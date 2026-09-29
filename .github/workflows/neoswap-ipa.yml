@@ -1,0 +1,1058 @@
+name: NeoStation NeoSwap private • Build 366
+run-name: NeoStation NeoSwap private • Build 366 • ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - experimental
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Candidate build number (used only for manual runs)'
+        required: true
+        default: '366'
+        type: string
+      kartpad_core_run_id:
+        description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
+        required: false
+        default: ''
+        type: string
+      kartpad_core_host_sha:
+        description: 'Commit SHA recorded by the KartPadCore artifact'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+# Keep candidate IPA runs separate from native validation.
+concurrency:
+  group: neostation-neoswap-private-366
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Core-only development commits validate their native engine separately,
+    # not a mislabeled full NeoStation IPA.
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
+    name: Neostation iOS 0.0.2 private IPA (366)
+    runs-on: macos-15
+    timeout-minutes: 210
+    env:
+      BUILD_NUMBER: ${{ inputs.build_number || '366' }}
+      IPA_NAME: NeoStation
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-366-${{ github.sha }}
+      KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
+      KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
+      KARTPAD_CANDIDATE: '1'
+      # Preserve the validated KartPad session recovery while testing the new pinned RPCS3 Core.
+      DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
+      DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
+      ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
+      RPCS3_CORE_HOST_SHA: a30a443723dc144ed5429e8ca23849ec746c396a
+      RPCS3_CORE_RUN_ID: '36619968561'
+      DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
+      SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
+      SCREENSCRAPER_DEV_PASSWORD: ${{ secrets.SCREENSCRAPER_DEV_PASSWORD }}
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate KartPad candidate inputs
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KARTPAD_CORE_RUN_ID"
+          test -n "$KARTPAD_CORE_HOST_SHA"
+          [[ "$KARTPAD_CORE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$KARTPAD_CORE_HOST_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$BUILD_NUMBER" != "322" || {
+            echo "KartPad candidates must not reuse the stable Build 322 number." >&2
+            exit 1
+          }
+
+      - name: Download validated native session and CoreAudio evidence
+        uses: actions/download-artifact@v4
+        with:
+          # Pin successful attempt 2; attempt 1 never launched the simulator app.
+          artifact-ids: 10932827839
+          merge-multiple: true
+          run-id: 36322565781
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/kartpad-lifecycle-evidence
+
+      - name: Require tested lifecycle and frontend sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTEST'
+          import json
+          from pathlib import Path
+          evidence=Path('build/kartpad-lifecycle-evidence')
+          assert (evidence/'source.txt').read_text().strip() == 'd3e558fad05feeb0838b4d3d80fc854546eaf0a4'
+          identity=json.loads((evidence/'donor-identity.json').read_text())
+          assert identity['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+          assert identity['runtime_sha256']=='ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0'
+          report=json.loads((evidence/'probe.json').read_text())
+          assert report['success'] and report['reproducedStaleCallback'] and report['reproducedStaleTimer'], report
+          assert report['hleResetCycles']==20 and report['rendererAudioCycles']==3 and report['frontendAudioCycles']==3, report
+          assert report['uikitStackGuardBound'] and report['uikitHostPumps']>0, report
+          PYTEST
+          # Permit only the two new native identities; compare all existing lifecycle code byte-for-byte.
+          python3 test/cheats_media_source_contract_test.py
+          # The UIKit probe covers these unchanged lifecycle/audio reset sources.
+          # Donor menu and ARM64 instruction changes are separately bound to
+          # KARTPAD_CORE_HOST_SHA and exercised by the native donor workflow.
+          git diff --exit-code d3e558fad05feeb0838b4d3d80fc854546eaf0a4 "$GITHUB_SHA" -- \
+            native/kartpad/core/DonorSessionReset.h \
+            native/kartpad/core/DonorAudioSession.h \
+            native/kartpad/core/DonorDataLifecycle.h \
+            native/kartpad/core/UIKitEventPump.h test/kartpad_simulator_probe.mm \
+            lib/services/music_player_service.dart lib/services/home_music_service.dart
+
+      - name: Download exact iOS 18 Flutter guest-stack evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 10932119768
+          merge-multiple: true
+          run-id: 36322395458
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/kartpad-readiness-evidence/iOS-18
+
+      - name: Download exact iOS 27 Flutter guest-stack evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 10933147219
+          merge-multiple: true
+          run-id: 36322395458
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/kartpad-readiness-evidence/iOS-27
+
+      - name: Require tested readiness, guest-stack recovery and iOS 27 menu exits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          def cycles(rows, fiber=False):
+              assert rows[-1]['stage']=='success', rows[-1]
+              for stage in ('launch_acknowledged','returned','after'):
+                  assert sum(r['stage']==stage for r in rows)==5, stage
+              assert sum(r['stage']=='waiter_contract_passed' for r in rows)==1
+              after=[r['values']['arguments'] for r in rows if r['stage']=='after']
+              assert all(r['frames']>0 and r['delayMs']<2000 for r in after), after
+              if fiber:
+                  guest=[r['values'] for r in rows if r['stage']=='guest_stack_end']
+                  assert len(guest)==5
+                  assert all(r['guardBound'] and r['skipped']>0 and r['hostPumps']>0 for r in guest)
+          for system in ('iOS-18','iOS-27'):
+              evidence=Path('build/kartpad-readiness-evidence')/system
+              assert (evidence/'source.txt').read_text().strip()=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+              identity=json.loads((evidence/'donor-identity.json').read_text())
+              assert identity['host_commit']=='3934ac9d333247d5374b9fb7d71f8ef49bbcd79e'
+              assert identity['runtime_sha256']=='ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0'
+              cycles(json.loads((evidence/'automatic-cycles.json').read_text()))
+              cycles(json.loads((evidence/'fiber-probe.json').read_text()),True)
+              unsafe=json.loads((evidence/'unsafe-fiber-probe.json').read_text())
+              assert unsafe[-1]['stage']=='returned'
+              assert sum(r['stage']=='guest_stack_end' for r in unsafe)==1
+              assert not any(r['stage'] in ('launch_acknowledged','after','success') for r in unsafe)
+              if system=='iOS-27':
+                  # Final probe.json is collected even when xcodebuild hangs
+                  # after its suite. Require the actual five menu exit events.
+                  menu=json.loads((evidence/'flutter-probe.json').read_text())
+                  cycles(menu,True)
+                  assert sum(r['stage']=='menu_exit_requested' for r in menu)==5
+          # iOS 18's menu XCTest still aborts in the pre-existing donor
+          # worker-thread UIKit size read. It is not counted as passing here.
+          PY
+          git diff --exit-code 3934ac9d333247d5374b9fb7d71f8ef49bbcd79e "$GITHUB_SHA" -- \
+            packages/kartpad_internal_bridge/ios/Classes \
+            lib/services/kartpad_internal_service.dart lib/utils/game_launch_utils.dart \
+            native/kartpad/core/UIKitEventPump.h native/kartpad/donor \
+            build-utils/kartpad/patch_donor_session_bridge.py \
+            test/kartpad_flutter_probe.dart test/kartpad_flutter_probe.mm test/kartpad_menu_probe.swift
+
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+
+      - name: Set up Flutter 3.47.2
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Validate canonical host sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/rpcs3-ci build/fast-native
+
+          git diff --check
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          roots = (
+              Path('lib'),
+              Path('native'),
+              Path('packages/stikjit_bridge'),
+              Path('packages/rpcs3_internal_bridge'),
+              Path('packages/armsx2_internal_bridge'),
+              Path('packages/dusklight_internal_bridge'),
+              Path('packages/kartpad_internal_bridge'),
+              Path('packages/armsx2_jit_helper'),
+          )
+          suffixes = {
+              '.dart', '.swift', '.m', '.mm', '.h', '.podspec', '.plist',
+              '.entitlements',
+          }
+          retired = re.compile(
+              r'NeoStationLocalTunnel|NeoStationVPNDiagnostics|'
+              r'PacketTunnelProvider|NETunnelProvider|NEVPN|'
+              r'NetworkExtension|packet-tunnel-provider'
+          )
+          matches = []
+          for root in roots:
+              for path in root.rglob('*'):
+                  if path.is_file() and path.suffix in suffixes:
+                      for line_number, line in enumerate(
+                          path.read_text(errors='replace').splitlines(),
+                          start=1,
+                      ):
+                          if retired.search(line):
+                              matches.append(f'{path}:{line_number}:{line}')
+          if matches:
+              raise SystemExit(
+                  'Retired internal VPN implementation remains in production '
+                  'sources:\n' + '\n'.join(matches)
+              )
+          print('Production sources contain no internal VPN implementation.')
+          PY
+          retired_vpn_build_files=(
+            build-utils/configure_local_jit_tunnel.py
+            build-utils/patch_local_tunnel_build269.py
+            build-utils/patch_rpcs3_build268_tunnel.py
+            build-utils/patch_rpcs3_build270_transport.py
+            build-utils/patch_rpcs3_build274_launch.py
+            build-utils/patch_stikjit_remote_pairing.py
+            build-utils/patch_vpn_build271.py
+            build-utils/patch_vpn_build273.py
+            build-utils/patch_vpn_build276_final.py
+            build-utils/reuse_build266_rpcs3_for267.py
+            build-utils/rpcs3/build270_packet_pump.swift.inc
+            build-utils/validate_build266_identity.py
+            build-utils/validate_build269_identity.py
+            build-utils/validate_build270_identity.py
+            build-utils/validate_build271_identity.py
+            build-utils/validate_build273_identity.py
+            build-utils/validate_build274_identity.py
+            build-utils/validate_build275_identity.py
+            build-utils/validate_build276_identity.py
+            build-utils/validate_vpn_build279_artifact.py
+            build-utils/validate_vpn_build282_handoff.py
+            build-utils/validate_vpn_build284_frozen.py
+            build-utils/validate_vpn_build284_manager.py
+            build-utils/vpn271/manager.swift.inc
+            build-utils/vpn271/provider.swift.inc
+          )
+          for retired in "${retired_vpn_build_files[@]}"; do
+            test ! -e "$retired" || {
+              echo "Retired internal-VPN build source remains: $retired" >&2
+              exit 1
+            }
+          done
+          python3 -m py_compile \
+            build-utils/configure_rpcs3_ios_v2.py \
+            build-utils/embed_rpcs3_host_entitlements.py \
+            build-utils/prepare_ios_icon_fallback.py \
+            build-utils/prepare_fast_native_runtime.py \
+            build-utils/validate_rpcs3_ipa.py \
+            build-utils/validate_rpcs3_embedded_core.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            build-utils/validate_single_ipa_distribution.py \
+            packages/dolphin_internal_bridge/ci/build_support.py \
+            packages/dolphin_internal_bridge/ci/verify_ipa.py
+          python3 test/dolphin_account_267_test.py
+          ruby -c build-utils/add_ios_icon_fallback_resources.rb
+
+      - name: Syntax-check embedded Objective-C++ bridges
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          STUB="$RUNNER_TEMP/flutter-stub"
+          mkdir -p "$STUB/Flutter"
+          cat > "$STUB/Flutter/Flutter.h" <<'EOF'
+          #import <Foundation/Foundation.h>
+          #import <UIKit/UIKit.h>
+          typedef void (^FlutterResult)(id _Nullable result);
+          FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
+          @protocol FlutterBinaryMessenger <NSObject>
+          @end
+          @class FlutterMethodCall;
+          @class FlutterMethodChannel;
+          @protocol FlutterPluginRegistrar <NSObject>
+          @property(nonatomic, readonly) NSObject<FlutterBinaryMessenger>* messenger;
+          @property(nonatomic, readonly, nullable) UIViewController* viewController;
+          - (void)addMethodCallDelegate:(id)delegate channel:(FlutterMethodChannel*)channel;
+          @end
+          @protocol FlutterPlugin <NSObject>
+          + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar;
+          @end
+          @interface FlutterViewController : UIViewController
+          @end
+          @interface FlutterMethodCall : NSObject
+          @property(nonatomic, readonly) NSString* method;
+          @property(nonatomic, readonly) id arguments;
+          @end
+          @interface FlutterMethodChannel : NSObject
+          + (instancetype)methodChannelWithName:(NSString*)name
+                            binaryMessenger:(NSObject<FlutterBinaryMessenger>*)messenger;
+          - (void)invokeMethod:(NSString*)method arguments:(id)arguments;
+          @end
+          EOF
+          mkdir -p "$STUB/neo_swap"
+          cp packages/neo_swap/ios/Classes/NeoSwap.h "$STUB/neo_swap/NeoSwap.h"
+          COMMON=(
+            -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++
+            -isysroot "$SDK" -miphoneos-version-min=17.4
+            -I"$STUB"
+            -Ipackages/rpcs3_internal_bridge/ios/Classes
+          )
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            packages/rpcs3_internal_bridge/ios/Classes/Rpcs3JitBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            -Ipackages/dusklight_internal_bridge/ios/Classes \
+            packages/dusklight_internal_bridge/ios/Classes/DusklightInternalBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            packages/kartpad_internal_bridge/ios/Classes/KartPadInternalBridgePlugin.mm
+          xcrun --sdk iphoneos clang++ "${COMMON[@]}" \
+            packages/kartpad_internal_bridge/ios/Classes/KartPadHostWindowAwaiter.mm
+
+      - name: Resolve Flutter and analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter clean
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
+
+      - name: Run route, debugger, packaging and deletion regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/dolphin_account_267_test.py
+          python3 test/dolphin_cheats_menu_test.py
+          python3 test/dolphin_https_resource_test.py
+          python3 test/dusklight_bridge_contract_test.py
+          python3 test/dusklight_core_loader_test.py
+          python3 test/integrated_import_tab_contract_test.py
+          python3 test/dusklight_queue_shutdown_test.py
+          python3 test/dusklight_resume_test.py
+          python3 test/dusklight_graphics_handoff_test.py
+          python3 test/dusklight_terminal_shutdown_test.py
+          python3 test/dusklight_audio_owner_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/dusklight/core \
+            test/dusklight_vm_trace_test.cpp -o "$RUNNER_TEMP/dusklight-vm-trace-test"
+          "$RUNNER_TEMP/dusklight-vm-trace-test"
+          xcrun --sdk iphoneos clang++ -std=c++20 -arch arm64 \
+            -miphoneos-version-min=17.4 -Wall -Wextra -Werror -fsyntax-only \
+            -Inative/dusklight/core test/dusklight_vm_trace_test.cpp
+          python3 test/dusklight_menu_test.py
+          python3 test/dusklight_language_test.py
+          python3 test/kartpad_bridge_contract_test.py
+          python3 test/kartpad_host_lifecycle_contract_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            test/kartpad_host_window_policy_test.cpp \
+            -o "$RUNNER_TEMP/kartpad-host-window-test"
+          "$RUNNER_TEMP/kartpad-host-window-test"
+          python3 test/kartpad_ipa_validation_test.py
+          flutter test test/frontend_media_gate_test.dart test/video_preview_lifecycle_test.dart
+          clang++ -std=c++20 -Wall -Wextra -Werror -Inative/cheats test/cheat_parser_test.cpp -o "$RUNNER_TEMP/cheat-parser"
+          "$RUNNER_TEMP/cheat-parser"
+          clang++ -std=c++20 -Wall -Wextra -Werror -Inative/cheats test/cheat_bulk_parser_test.cpp -o "$RUNNER_TEMP/cheat-bulk-parser"
+          "$RUNNER_TEMP/cheat-bulk-parser"
+          clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_bulk_store_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-bulk-store"
+          "$RUNNER_TEMP/cheat-bulk-store"
+          python3 test/cheat_bulk_scope_test.py
+          clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_store_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-store"
+          "$RUNNER_TEMP/cheat-store"
+          clang++ -std=c++20 -fobjc-arc -fblocks -Inative/cheats test/cheat_import_delete361_test.mm -framework Foundation -o "$RUNNER_TEMP/cheat-import-delete"
+          "$RUNNER_TEMP/cheat-import-delete"
+          python3 test/ar_block361_upstream_test.py
+          flutter test test/kartpad_locale_test.dart
+          flutter test test/dusklight_locale_test.dart test/dusklight_session_events_test.dart test/dusklight_library_test.dart test/scraper_repository_test.dart test/dolphin_import_ui_test.dart
+          python3 test/rpcs3_loader_stability_280_test.py
+          python3 test/rpcs3_build283_boot_stability_test.py
+          python3 test/rpcs3_build285_core_handoff_test.py
+          python3 test/rpcs3_diagnostics_native_test.py
+          python3 test/rpcs3_jit_handshake_test.py
+          python3 test/rpcs3_atomic_startup_test.py
+          python3 test/rpcs3_early_escrow_integration_test.py
+          c++ -std=c++20 -Wall -Wextra -Werror \
+            -Ipackages/rpcs3_internal_bridge/ios/Classes \
+            test/rpcs3_early_address_space_escrow_test.cpp \
+            -o "$RUNNER_TEMP/rpcs3-early-address-space-escrow-test"
+          "$RUNNER_TEMP/rpcs3-early-address-space-escrow-test"
+          # The pinned RPCS3 Core run compiles this native failure-path test
+          # against its materialized source before publishing its identity.
+          python3 test/game_launch_route_test.py
+          python3 test/game_audio_handoff_test.py
+          flutter test test/audio_policy_service_test.dart
+          python3 test/carousel_chrome_layout_test.py
+          python3 test/armsx2_patch_catalog_test.py
+          python3 test/rpcs3_pod_header_visibility_test.py
+          python3 test/rpcs3_reporter_send_order_test.py
+          python3 test/rpcs3_host_entitlements_test.py
+          python3 test/rpcs3_ipa_validation_test.py
+          python3 test/rpcs3_savestate_overwrite_regression_test.py
+          flutter test test/rpcs3_save_export_contract_test.dart
+          python3 test/diagnostics_files_workspace_test.py
+          python3 test/rpcs3_ui_status_cleanup_test.py
+          python3 test/localization_12_locale_coverage_test.py
+          python3 test/dolphin_ipa_validator_test.py
+          python3 test/local_dev_vpn_route_contract_test.py
+          python3 test/armsx2_vm_shutdown_test.py
+          node test/rpcs3_debugger_handshake_test.js
+          python3 test/rpcs3_build306_single_path_test.py
+          python3 test/build351_native_donor_test.py
+          python3 test/neo_swap_core_pin_test.py
+          python3 test/check_neo_swap_scope.py
+          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart
+          flutter test test/rpcs3_bridge_memory_mode_test.dart test/local_jit_route_proof_test.dart test/rpcs3_boot_watchdog_test.dart test/rpcs3_internal_integration_test.dart test/rpcs3_lazy_load_contract_test.dart test/game_deletion_regression_test.dart test/game_repository_test.dart test/rpcs3_library_service_test.dart test/rpcs3_regular_arena_dolphin_multidelete_contract_test.dart test/stikjit_armsx2_isolation_test.dart test/armsx2_launch_url_encoding_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/armsx2_embedded_library_contract_test.dart test/armsx2_bios_selection_test.dart test/jit_backend_preference_service_test.dart test/emulator_seed_default_test.dart test/rpcs3_embedded_identity_test.dart test/dusklight_ports_stage1_test.dart test/system_info_catalog_coverage_test.dart
+
+      - name: Prepare lightweight build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BUNDLE_PATH="$RUNNER_TEMP/dolphin-ruby-gems"
+          echo "BUNDLE_PATH=$BUNDLE_PATH" >> "$GITHUB_ENV"
+          bundle install
+
+      - name: Generate iOS host
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter config --no-enable-swift-package-manager
+          rm -rf ios
+          python3 packages/dolphin_internal_bridge/ci/build_support.py scaffold
+
+      - name: Download validated Build 350 native donor
+        uses: actions/download-artifact@v4
+        with:
+          # Build 270 was pruned from Actions history after the stable Build
+          # 350 baseline was accepted. Pin the exact retained Build 350 IPA;
+          # only its native Core and UI resources are used, never its JIT framework.
+          artifact-ids: 10932894067
+          run-id: 36323843067
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build/native-donor
+
+      - name: Reuse validated native runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Core/resource bootstrap only. JIT comes exclusively from source below.
+          python3 build-utils/prepare_fast_native_runtime.py \
+            build/native-donor --build-number "$BUILD_NUMBER"
+
+      - name: Build canonical StikJIT from pinned sources for iOS 18 26 and 27
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v xcodegen || brew install xcodegen
+          python3 build-utils/build_patched_stikjit.py
+          python3 test/stikjit_unified_build_test.py
+
+      - name: Require completed exact NeoSwap Core before artifact download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCOREWAIT'
+          import json,os,subprocess,time
+          endpoint='repos/TarbleFR/neostation-ios/actions/runs/'+os.environ['RPCS3_CORE_RUN_ID']
+          deadline=time.monotonic()+7200
+          while True:
+              result=json.loads(subprocess.check_output(['gh','api',endpoint]))
+              assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA'],result
+              if result['status']=='completed':
+                  assert result['conclusion']=='success',result
+                  print('Verified successful exact NeoSwap Core',result['id'],result['head_sha'])
+                  break
+              assert time.monotonic()<deadline,'NeoSwap Core did not finish within the allowed wait'
+              print('Waiting for exact Core',result['id'],result['status'],flush=True)
+              time.sleep(30)
+          PYCOREWAIT
+
+      - name: Download pinned passive RPCS3 Core
+        uses: actions/download-artifact@v4
+        with:
+          name: RPCS3Core-${{ env.RPCS3_CORE_HOST_SHA }}
+          run-id: ${{ env.RPCS3_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/rpcs3-native
+
+      - name: Verify and install passive RPCS3 Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE=dist/rpcs3-native/libRPCS3Core.dylib
+          IDENTITY=dist/rpcs3-native/identity.json
+          CORE=packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib
+          test -s "$SOURCE"
+          test -s "$IDENTITY"
+          test -s "$CORE"
+          # The artifact's source, canonical patch, compiler recipe, binary
+          # checks and native ABI must all be from the same Core commit.
+          git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            build-utils/build_rpcs3_embedded_core.sh \
+            build-utils/materialize_rpcs3_core.py \
+            build-utils/apply_rpcs3_llvm_patch.py \
+            build-utils/rpcs3/canonical-source.json \
+            build-utils/rpcs3/embedded-core.patch \
+            build-utils/rpcs3/llvm-aarch64-ghc-emergency-spill.patch \
+            build-utils/rpcs3_core_syntax_gate.py \
+            test/rpcs3_core_syntax_gate_test.py \
+            test/rpcs3_armsx3_performance_patch_test.py \
+            test/rpcs3_build352_gow3_memory_test.py \
+            test/rpcs3_ios_ppu_compile_budget_test.cpp \
+            test/rpcs3_ppu_no_size_split_policy_test.cpp \
+            test/rpcs3_preprocessor_balance_test.py \
+            build-utils/validate_rpcs3_embedded_core.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
+            packages/neo_swap/ios/Classes/NeoSwap.h \
+            packages/neo_swap/ios/Classes/NeoSwap.cpp \
+            native/neoswap/NeoSwapClient.h \
+            test/neoswap_test.cpp test/neoswap_rpcs3_allocator_test.cpp
+          git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            .github/workflows/rpcs3-core.yml
+          python3 - <<'PY'
+          import json, os, shutil, sys
+          from pathlib import Path
+          sys.path.insert(0, 'build-utils')
+          from validate_rpcs3_ipa import validate_core_identity
+          from validate_rpcs3_embedded_core import validate_core
+          from validate_rpcs3_passive_dlopen import validate as validate_passive_dlopen
+
+          source = Path('dist/rpcs3-native/libRPCS3Core.dylib')
+          identity_path = Path('dist/rpcs3-native/identity.json')
+          destination = Path('packages/rpcs3_internal_bridge/ios/Frameworks/libRPCS3Core.dylib')
+          data = source.read_bytes()
+          identity = validate_core_identity(data, identity_path, os.environ['RPCS3_CORE_HOST_SHA'])
+          validate_core(data)
+          assert identity['neoswap_client_abi'] == 1, identity
+          passive = validate_passive_dlopen(data)
+          assert passive['forbiddenReachability'] is False, passive
+
+          shutil.copy2(source, destination)
+          destination.chmod(0o755)
+          assert destination.read_bytes() == data, 'RPCS3 Core installation changed artifact bytes'
+          fast_path = Path('build/fast-native/identity.json')
+          fast = json.loads(fast_path.read_text())
+          fast.update({
+              'rpcs3CoreSha256': identity['sha256'],
+              'rpcs3CoreHostCommit': identity['host_commit'],
+              'rpcs3CoreSourceCommit': identity['source_commit'],
+              'rpcs3CorePatchSha256': identity['source_patch_sha256'],
+              'rpcs3CoreAbiVersion': identity['abi_version'],
+              'rpcs3CoreRunId': int(os.environ['RPCS3_CORE_RUN_ID']),
+              'rpcs3PassiveDlopen': passive,
+          })
+          fast_path.write_text(json.dumps(fast, indent=2) + '\n')
+          shutil.copy2(identity_path, 'build/fast-native/rpcs3-core-identity.json')
+          print(json.dumps({'identity': identity, 'passiveDlopen': passive}, indent=2))
+          PY
+          file "$CORE"
+          test "$(lipo -archs "$CORE")" = arm64
+          nm -gU "$CORE" > build/rpcs3-core-exports.txt
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, 'build-utils')
+          from validate_rpcs3_ipa import REQUIRED_CORE_SYMBOLS, FORBIDDEN_CORE_SYMBOLS
+          exports = Path('build/rpcs3-core-exports.txt').read_text().splitlines()
+          symbols = {line.split()[-1] for line in exports if line.split()}
+          missing = set(REQUIRED_CORE_SYMBOLS) - symbols
+          forbidden = set(FORBIDDEN_CORE_SYMBOLS) & symbols
+          assert not missing, f'Missing RPCS3 Core exports: {sorted(missing)}'
+          assert not forbidden, f'Retired RPCS3 Core exports: {sorted(forbidden)}'
+          PY
+
+      - name: Verify retained stable Dolphin Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          CORE="packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore"
+          test -s "$CORE"
+          test -d ios/Runner/Sys
+          test -s ios/Runner/cacert.pem
+
+          # The Build 350 IPA carries the exact previously validated Dolphin
+          # runtime. Refuse it if any source defining that ABI has changed.
+          git diff --exit-code "$DOLPHIN_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            build-utils/patch_dolphin_internal_core_v2.py \
+            packages/dolphin_internal_bridge/core \
+            test/dolphin_cheat_manager_test.py \
+            test/dolphin_cheats_menu_test.py \
+            .github/workflows/dolphin-core.yml
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          # This is a recompiled UIKit host API, not the retained core's C ABI.
+          # Permit exactly the added navigation callback, preserving every other declaration.
+          import subprocess
+          menu_path='packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.h'
+          original=subprocess.check_output(['git','show',os.environ['DOLPHIN_CORE_HOST_SHA']+':'+menu_path],text=True)
+          current=Path(menu_path).read_text()
+          addition='@property(nonatomic, copy, nullable) dispatch_block_t openDisplaySettings;\n'
+          assert current.count(addition)==1
+          assert current.replace(addition,'')==original, 'Unexpected UIKit menu interface change'
+
+          core = Path(
+              "packages/dolphin_internal_bridge/ios/Frameworks/"
+              "DolphinCore.framework/DolphinCore"
+          )
+          actual = hashlib.sha256(core.read_bytes()).hexdigest()
+          baseline = json.loads(Path("build-utils/baselines/ios-322.json").read_text())
+          expected = baseline["nativeIdentity"]["dolphinCoreSha256"]
+          assert actual == expected, (actual, expected)
+          fast_path = Path("build/fast-native/identity.json")
+          fast = json.loads(fast_path.read_text())
+          fast["dolphinCoreSha256"] = actual
+          fast["dolphinCoreHostCommit"] = os.environ["DOLPHIN_CORE_HOST_SHA"]
+          fast["dolphinSourceRevision"] = os.environ["DOLPHIN_SHA"]
+          fast["dolphinCheatCatalogues"] = [
+              "Gecko/WiiRD", "Action Replay/local INI"
+          ]
+          fast_path.write_text(json.dumps(fast, indent=2) + "\n")
+          print(json.dumps({"sha256": actual, "baseline": expected}, indent=2))
+          PY
+
+          file packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore
+          nm -gU packages/dolphin_internal_bridge/ios/Frameworks/DolphinCore.framework/DolphinCore \
+            > build/dolphin-native-exports.txt
+          for symbol in \
+            _neostation_dolphin_initialize \
+            _neostation_dolphin_launch \
+            _neostation_dolphin_menu_snapshot \
+            _neostation_dolphin_cheats_snapshot \
+            _neostation_dolphin_set_cheats_enabled \
+            _neostation_dolphin_set_cheat_enabled \
+            _neostation_dolphin_download_gecko_codes; do
+            grep -q " $symbol$" build/dolphin-native-exports.txt
+          done
+
+      - name: Verify retained stable ARMSX2 Core identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/armsx2/ARMSX2Core.framework/ARMSX2Core
+          test -f dist/armsx2/identity.json
+          # Refuse a stale core even when both artifacts report the same ABI.
+          git diff --exit-code "$ARMSX2_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            packages/armsx2_internal_bridge/core \
+            packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h \
+            build-utils/armsx2
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          identity=json.loads(Path('dist/armsx2/identity.json').read_text())
+          source=json.loads(Path('build-utils/armsx2/source.json').read_text())
+          assert identity['revision'] == source['revision'], identity
+          assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
+          assert identity['architectures'] == ['arm64'], identity
+          assert identity['abi_version'] == source['abi_version'], identity
+          binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
+          assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
+          print(identity)
+          PY
+
+      - name: Verify retained stable Dusklight Core identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCORE'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('dist/dusklight')
+          identity = json.loads((root / 'identity.json').read_text())
+          pins = json.loads(Path('build-utils/dusklight/source.json').read_text())
+          assert identity['host_commit'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']
+          assert identity['source_commit'] == pins['commit']
+          assert identity['abi_version'] == 7
+          assert identity['session_policy'] == 'host_frame_loop_warm_resume_rpcs3_jit_escrow'
+          canonical = Path('native/dusklight')
+          expected_sources = {
+              name: canonical / name
+              for name in json.loads((canonical / 'upstream-manifest.json').read_text())
+          }
+          expected_sources.update({
+              'neostation/' + item.name: item
+              for item in (canonical / 'core').iterdir() if item.is_file()
+          })
+          expected_sources['neostation/DusklightCoreABI.h'] = Path(
+              'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h')
+          assert set(identity['canonical_sources']) == set(expected_sources)
+          for relative, source in expected_sources.items():
+              assert hashlib.sha256(source.read_bytes()).hexdigest() == identity['canonical_sources'][relative], relative
+          framework = root / 'DusklightCore.framework'
+          assert hashlib.sha256((framework / 'DusklightCore').read_bytes()).hexdigest() == identity['sha256']
+          for relative, digest in identity['resources'].items():
+              assert hashlib.sha256((framework / relative).read_bytes()).hexdigest() == digest, relative
+          PYCORE
+
+      - name: Download validated KartPad Core candidate
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: KartPadCore-${{ env.KARTPAD_CORE_HOST_SHA }}
+          run-id: ${{ env.KARTPAD_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/kartpad-native
+
+      - name: Verify KartPad Core candidate identity
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/kartpad-native/KartPadCore.framework/KartPadCore
+          test -f dist/kartpad-native/identity.json
+          python3 build-utils/kartpad/validate_embedded_core.py             dist/kartpad-native/KartPadCore.framework             dist/kartpad-native/identity.json
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          identity=json.loads(Path('dist/kartpad-native/identity.json').read_text())
+          assert identity['host_commit'] == os.environ['KARTPAD_CORE_HOST_SHA'], identity
+          assert identity['sha256'] == '995e876715b98be8fde897a88f7b93fb2357b6c47826d99c1df0a0b05a98930c', identity
+          assert identity['runtime_sha256'] == 'ad5c00a0a508bbfcc0dc3eb1ee04a17f10919cde0b5cccd90d1d9e6a31c39eb0', identity
+          PY
+          git diff --exit-code "$KARTPAD_CORE_HOST_SHA" "$GITHUB_SHA" --             native/kartpad             build-utils/kartpad             packages/kartpad_internal_bridge
+
+      - name: Execute exact KartPad donor language instructions
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_ENV="$RUNNER_TEMP/kartpad-abi-tests"
+          python3 -m venv "$TEST_ENV"
+          "$TEST_ENV/bin/pip" install --disable-pip-version-check unicorn==2.1.2
+          "$TEST_ENV/bin/python" test/kartpad_language_bridge_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-language-abi-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_session_bridge_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-session-bridge-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_system_messages_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-system-messages-tests.txt
+          "$TEST_ENV/bin/python" test/kartpad_session_reset_test.py \
+            --runtime dist/kartpad-native/KartPadRuntime.framework/KartPadRuntime \
+            2>&1 | tee dist/kartpad-session-reset-tests.txt
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
+            test/kartpad_guest_language_state_test.cpp -o "$RUNNER_TEMP/kartpad-language-state-test"
+          "$RUNNER_TEMP/kartpad-language-state-test"
+          c++ -std=c++20 -Wall -Wextra -Werror -Inative/kartpad/core \
+            -Ipackages/kartpad_internal_bridge/ios/Classes \
+            test/kartpad_native_session_test.cpp -o "$RUNNER_TEMP/kartpad-session-test"
+          "$RUNNER_TEMP/kartpad-session-test"
+
+      - name: Prepare emulator build definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          required=('SCREENSCRAPER_DEV_ID','SCREENSCRAPER_DEV_PASSWORD')
+          values={key:os.environ.get(key,'').strip() for key in required}
+          missing=[key for key,value in values.items() if not value]
+          if missing:
+              raise SystemExit('Missing build secrets: '+', '.join(missing))
+          values.update({
+              'NEOSTATION_EXPERIMENTAL_STIKJIT_MELONX':'true',
+              'NEOSTATION_MELONX_BUNDLE_ID':'com.nur.nx',
+          })
+          Path('.dart-defines.json').write_text(json.dumps(values))
+          PY
+
+      - name: Configure release host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/patch_ios_video_player_audio_session.py
+          flutter build ios --release --no-codesign --config-only --no-pub \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define-from-file=.dart-defines.json
+          python3 packages/dolphin_internal_bridge/ci/build_support.py configure
+          python3 build-utils/configure_rpcs3_ios_v2.py
+          python3 build-utils/configure_armsx2_ios.py
+          dart run flutter_launcher_icons
+          bash build-utils/force_ios_fork_icon.sh
+          # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
+          python3 build-utils/prepare_ios_icon_fallback.py
+          bundle exec ruby build-utils/add_ios_icon_fallback_resources.rb
+          env -u BUNDLE_GEMFILE -u BUNDLE_PATH pod install --project-directory=ios
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          entitlements = plistlib.loads(
+              Path('ios/Runner/Runner.entitlements').read_bytes()
+          )
+          retired = {
+              'com.apple.developer.networking.networkextension',
+              'com.apple.developer.networking.vpn.api',
+          }
+          remaining = retired.intersection(entitlements)
+          if remaining:
+              raise SystemExit(
+                  'Retired VPN entitlements remain: ' + ', '.join(sorted(remaining))
+              )
+          generated = (
+              Path('ios/Runner.xcodeproj/project.pbxproj').read_text(),
+              Path('ios/Podfile').read_text(),
+          )
+          markers = (
+              'NeoStationLocalTunnel',
+              'NetworkExtension.framework',
+              'com.apple.NetworkExtensions.iOS',
+              'packet-tunnel-provider',
+          )
+          found = [marker for marker in markers if any(marker in text for text in generated)]
+          if found:
+              raise SystemExit('Generated iOS host retains internal VPN markers: ' + ', '.join(found))
+          if Path('ios/NeoStationLocalTunnel').exists():
+              raise SystemExit('Generated iOS host retains the internal VPN directory')
+          print('Generated iOS host is LocalDevVPN-only.')
+          PY
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+
+      - name: Align application and extension versions to 0.0.2
+        run: python3 build-utils/stamp_host_version.py
+
+      - name: Compile only NeoStation and extensions
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/DolphinDerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
+            COMPILER_INDEX_STORE_ENABLE=NO build \
+            2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+
+      - name: Embed verified RPCS3 Core and signing metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/embed_rpcs3_core_lazy.py
+          python3 build-utils/embed_rpcs3_host_entitlements.py
+
+      - name: Embed lazy-loaded ARMSX2 Core framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          test -d "$APP"
+          mkdir -p "$APP/Frameworks"
+          rm -rf "$APP/Frameworks/ARMSX2Core.framework"
+          ditto dist/armsx2/ARMSX2Core.framework "$APP/Frameworks/ARMSX2Core.framework"
+          test -f "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          file "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core"
+          nm -gj "$APP/Frameworks/ARMSX2Core.framework/ARMSX2Core" > build/armsx2-exports.txt
+          grep -qx '_NeoARMSX2_GetAPI' build/armsx2-exports.txt
+
+      - name: Embed lazy-loaded Dusklight framework and notices
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          ditto dist/dusklight/DusklightCore.framework "$APP/Frameworks/DusklightCore.framework"
+          chmod 755 "$APP/Frameworks/DusklightCore.framework/DusklightCore"
+          ditto dist/dusklight/licenses "$APP/Dusklight-Licenses"
+          cp dist/dusklight/identity.json "$APP/Dusklight-native-identity.json"
+
+      - name: Embed validated KartPad Core candidate
+        if: ${{ env.KARTPAD_CANDIDATE == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          python3 build-utils/kartpad/embed_core.py             --app "$APP"             --artifact dist/kartpad-native
+
+      - name: Embed legal, license and source notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app"
+          python3 build-utils/embed_legal_bundle.py \
+            --app "$APP" \
+            --build-number "$BUILD_NUMBER" \
+            --dolphin-sha "$DOLPHIN_SHA"
+
+      - name: Require exact candidate display, motion and cheat simulator evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,subprocess,time,os
+          for workflow in ('neoswap-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
+              deadline=time.monotonic()+1800
+              while True:
+                  endpoint='repos/TarbleFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
+                  rows=json.loads(subprocess.check_output(['gh','api',endpoint]))['workflow_runs']
+                  rows=[r for r in rows if r['head_sha']==os.environ['GITHUB_SHA']]
+                  if rows and rows[0]['status']=='completed':
+                      assert rows[0]['conclusion']=='success',rows[0]
+                      print('Verified exact candidate',workflow,rows[0]['id'])
+                      break
+                  assert time.monotonic()<deadline,'Candidate evidence did not complete: '+workflow
+                  time.sleep(15)
+          subprocess.run(['python3','test/stikjit_scoped_host_test.py'],check=True)
+          subprocess.run(['python3','test/dolphin_phone_shake_test.py'],check=True)
+          PY
+
+      - name: Package and validate NeoStation IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/validate_legal_bundle_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
+          python3 build-utils/validate_rpcs3_ipa.py \
+            --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" \
+            --core-identity build/fast-native/rpcs3-core-identity.json \
+            --core-host-commit "$RPCS3_CORE_HOST_SHA" \
+            --core-run-id "$RPCS3_CORE_RUN_ID"
+          python3 build-utils/validate_single_ipa_distribution.py \
+            "dist/$IPA_NAME.ipa" --report dist/localdevvpn-distribution.json
+          python3 build-utils/validate_neoswap_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --report dist/neoswap-validation.json
+          python3 build-utils/validate_debugger_probe_ipa.py "dist/$IPA_NAME.ipa"
+          python3 build-utils/validate_cheat_bulk_ipa.py "dist/$IPA_NAME.ipa" --report dist/cheat-bulk-validation.json
+          python3 build-utils/validate_release002_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" --report dist/0.0.2-validation.json
+          python3 build-utils/validate_stikjit_ipa.py "dist/$IPA_NAME.ipa" \
+            --identity build/stikjit-current/identity.json \
+            --report dist/stikjit-compatibility.json
+          python3 - <<'PY'
+          import zipfile,plistlib,os
+          with zipfile.ZipFile('dist/'+os.environ['IPA_NAME']+'.ipa') as z:
+              apps={n.split('/')[1] for n in z.namelist() if n.startswith('Payload/') and len(n.split('/'))>2 and n.split('/')[1].endswith('.app')}
+              assert len(apps)==1,apps
+              root='Payload/'+apps.pop()+'/'
+              info=plistlib.loads(z.read(root+'Info.plist'))
+              assert info.get('CADisableMinimumFrameDurationOnPhone') is True, 'iPhone ProMotion opt-in missing'
+              bridge=z.read(root+'Frameworks/dolphin_internal_bridge.framework/dolphin_internal_bridge')
+              for marker in (b'DolphinFramePacing',b'DOLDisplaySettings',b'MTLUsePresentDrawable',b'ShaderCompilationMode',b'setPreferredFrameRateRange:'):
+                  assert marker in bridge,marker
+          PY
+          ARMSX2_SOURCE_REVISION="$(python3 -c 'import json; print(json.load(open("build-utils/armsx2/source.json"))["revision"])')"
+          python3 build-utils/validate_armsx2_ipa.py "dist/$IPA_NAME.ipa" \
+            --build-number "$BUILD_NUMBER" \
+            --source-revision "$ARMSX2_SOURCE_REVISION"
+          python3 build-utils/validate_dusklight_ipa.py "dist/$IPA_NAME.ipa" \
+            --identity dist/dusklight/identity.json --core-host "$DUSKLIGHT_CORE_HOST_SHA" \
+            --build-number "$BUILD_NUMBER"
+          if [ "$KARTPAD_CANDIDATE" = "1" ]; then
+            python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+              --identity dist/kartpad-native/identity.json \
+              --core-host "$KARTPAD_CORE_HOST_SHA" \
+              --build-number "$BUILD_NUMBER"
+            cp dist/kartpad-native/identity.json dist/kartpad-core-identity.json
+          else
+            python3 build-utils/validate_kartpad_ipa.py "dist/$IPA_NAME.ipa" \
+              --build-number "$BUILD_NUMBER" --expect-absent
+          fi
+          cp build/fast-native/identity.json dist/fast-native-identity.json
+          cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
+          shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
+          ls -lah dist
+
+      - name: Encrypt private test IPA before artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/private-test
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-366-recipient.pem
+          shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
+          cp dist/stikjit-compatibility.json build/private-test/
+          cp dist/cheat-bulk-validation.json build/private-test/
+          cp docs/neoswap-v1.md build/private-test/Notes-NeoSwap-Build366.md
+          cp dist/neoswap-validation.json build/private-test/
+          cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
+          cp dist/0.0.2-validation.json build/private-test/
+          cp build/dolphin-motion/tests.json build/private-test/phone-shake-tests.json
+          cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
+          printf '%s\n' 'NeoStation-NeoSwap-Build366.ipa' > build/private-test/delivery-name.txt
+          cp build/stikjit-current/modern-baseline.json build/private-test/
+          cp build/fast-native/identity.json build/private-test/native-identity.json
+          printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt
+          # Only ciphertext leaves the build runner. The matching private key
+          # is not in GitHub, workflow variables, logs or repository secrets.
+          test -z "$(find build/private-test -type f -name '*.ipa' -print)"
+
+      - name: Upload encrypted private test only
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: build/private-test/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Collect fast diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build/fast-diagnostics
+          test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
+          cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
+          cp -f build/fast-native/rpcs3-core-identity.json build/fast-diagnostics/ 2>/dev/null || true
+          printf 'commit=%s\nbuild=%s\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/fast-diagnostics/build.txt
+
+      - name: Upload fast diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-diagnostics
+          path: build/fast-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove temporary secrets
+        if: always()
+        shell: bash
+        run: rm -f .dart-defines.json

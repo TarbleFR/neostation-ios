@@ -17,7 +17,7 @@ workspace:
   - packages/dusklight_internal_bridge
   - packages/kartpad_internal_bridge
 
-version: 0.0.2+365
+version: 0.0.2+366
 environment:
   sdk: '>=3.9.2'
 
