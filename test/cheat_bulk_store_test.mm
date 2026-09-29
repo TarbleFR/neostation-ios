@@ -26,7 +26,7 @@ int main(){@autoreleasepool {
  for(NSNumber* encoding in @[@(NSUTF8StringEncoding),@(NSUTF16StringEncoding)]) {
   auto document=NeoDecodeCheatDocument([TestFixture(NO) dataUsingEncoding:encoding.unsignedIntegerValue],@"G4BP08.txt",dolphin,NO,@"gecko");
   assert([document[@"success"] boolValue] && [document[@"count"] intValue]==50 && [document[@"hasTitles"] boolValue]);
-  auto second=NeoDecodeCheatDocument([TestFixture(NO) dataUsingEncoding:encoding.unsignedIntegerValue],@"G4BP08.txt",dolphin,NO,@"ini");
+  auto second=NeoDecodeCheatDocument([TestFixture(NO) dataUsingEncoding:encoding.unsignedIntegerValue],@"cheats.txt",dolphin,NO,@"ini");
   assert([second[@"success"] boolValue] && [second[@"count"] intValue]==50);
   assert([document[@"entries"] count]==50);
   for(int i=0;i<50;++i){assert(([document[@"entries"][i][@"name"] isEqual:[NSString stringWithFormat:@"Cheat %d",i]]));assert([document[@"entries"][i][@"lines"] count]==2);}

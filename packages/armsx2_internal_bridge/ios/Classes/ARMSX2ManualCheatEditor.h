@@ -88,7 +88,8 @@
   self.codeField.autocorrectionType=UITextAutocorrectionTypeNo;self.codeField.autocapitalizationType=UITextAutocapitalizationTypeNone;
   self.codeField.smartQuotesType=UITextSmartQuotesTypeNo;self.codeField.smartDashesType=UITextSmartDashesTypeNo;
   self.codeField.accessibilityIdentifier=@"manualCheatCode";self.codeField.delegate=self;
-  [self.codeField.heightAnchor constraintEqualToConstant:180].active=YES;
+  NSLayoutConstraint* codeHeight=[self.codeField.heightAnchor constraintEqualToConstant:180];
+  codeHeight.identifier=@"cheatManualHeight";codeHeight.priority=999;codeHeight.active=YES;
   [stack addArrangedSubview:self.codeField];
   self.previewSummary=[self label:@""];self.previewSummary.hidden=YES;
   self.previewSummary.accessibilityIdentifier=@"cheatImportSummary";
@@ -98,7 +99,8 @@
   self.previewTable.dataSource=self;self.previewTable.delegate=self;
   self.previewTable.rowHeight=UITableViewAutomaticDimension;self.previewTable.estimatedRowHeight=64;
   self.previewTable.accessibilityIdentifier=@"cheatImportPreview";self.previewTable.hidden=YES;
-  [self.previewTable.heightAnchor constraintEqualToConstant:280].active=YES;
+  NSLayoutConstraint* previewHeight=[self.previewTable.heightAnchor constraintEqualToConstant:280];
+  previewHeight.identifier=@"cheatBulkPreviewHeight";previewHeight.priority=999;previewHeight.active=YES;
   [stack addArrangedSubview:self.previewTable];
   UIButton* import=[UIButton buttonWithType:UIButtonTypeSystem];
   [import setTitle:[self text:@"importFile"] forState:UIControlStateNormal];

@@ -49,7 +49,11 @@ static BOOL NeoFilenameMatches(NSString* filename,NSDictionary* current,BOOL ps2
     NSRegularExpression* r=[NSRegularExpression regularExpressionWithPattern:@"^([A-Z0-9]{6})(?:R([0-9]+))?$" options:0 error:nil];
     NSTextCheckingResult* m=[r firstMatchInString:stem options:0 range:NSMakeRange(0,stem.length)];
     if(m) {
-      if(![[stem substringWithRange:[m rangeAtIndex:1]] isEqual:NeoField(current,@"gameId")]) return NO;
+      NSString* candidate=[stem substringWithRange:[m rangeAtIndex:1]];
+      // Six-letter generic names such as cheats.txt and export.txt are not an
+      // asserted GameID. Explicit content headers are checked independently.
+      if(!NeoRegex(candidate,@"[0-9]") && ![candidate isEqual:NeoField(current,@"gameId")])return YES;
+      if(![candidate isEqual:NeoField(current,@"gameId")]) return NO;
       if([m rangeAtIndex:2].location!=NSNotFound && [[stem substringWithRange:[m rangeAtIndex:2]] integerValue]!=[current[@"revision"] integerValue]) return NO;
     }
   }

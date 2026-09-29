@@ -89,7 +89,7 @@ ns['TESTS']=r'''
   editor.identity=ps2.boolValue?@{@"available":@YES,@"crc":@"12345678",@"serial":@"SLES-00000",@"items":@[],@"hardcore":@NO}:[self identity];
   UIViewController* parent=[UIViewController new];UINavigationController* navigation=[[UINavigationController alloc] initWithRootViewController:parent];
   [navigation pushViewController:editor animated:NO];[navigation loadViewIfNeeded];[editor loadViewIfNeeded];
-  NSURL* file=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:ps2.boolValue?@"12345678.pnach":@"G4BP08.txt"]];
+  NSURL* file=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:ps2.boolValue?@"12345678.pnach":@"cheats.txt"]];
   [[self fiftyCodes:ps2.boolValue] writeToURL:file atomically:YES encoding:NSUTF16StringEncoding error:nil];
   [self readFile:file editor:editor];
   // Importing another TXT must not inherit the preceding canonical INI format.
@@ -97,6 +97,9 @@ ns['TESTS']=r'''
   XCTAssertEqual(editor.errorLabel.text.length,0);XCTAssertEqual(editor.previewEntries.count,50);
   XCTAssertEqual([editor.previewTable.dataSource tableView:editor.previewTable numberOfRowsInSection:0],50);
   XCTAssertTrue(editor.nameField.hidden);XCTAssertTrue(editor.codeField.hidden);XCTAssertFalse(editor.previewTable.hidden);
+  for(UIView* view in @[editor.codeField,editor.previewTable])for(NSLayoutConstraint* c in view.constraints)
+    if([c.identifier isEqual:@"cheatManualHeight"] || [c.identifier isEqual:@"cheatBulkPreviewHeight"])
+      XCTAssertLessThan(c.priority,UILayoutPriorityRequired);
   XCTAssertTrue([editor.navigationItem.rightBarButtonItem.title containsString:@"50"]);
   for(int i=0;i<50;++i){XCTAssertEqualObjects(editor.previewEntries[i][@"name"],([NSString stringWithFormat:@"Cheat %d",i]));XCTAssertEqual([editor.previewEntries[i][@"lineCount"] intValue],2);}
   __block NSUInteger calls=0;__block void (^finish)(NSDictionary*)=nil;__block NSDictionary* captured=nil;__block NSDictionary* saved=nil;
