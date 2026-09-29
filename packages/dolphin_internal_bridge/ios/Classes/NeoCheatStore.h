@@ -6,6 +6,14 @@
 
 static NSString* NeoString(const std::string& s) { return [[NSString alloc] initWithBytes:s.data() length:s.size() encoding:NSUTF8StringEncoding] ?: @""; }
 static NSString* NeoField(NSDictionary* d,NSString* key) { return [d[key] isKindOfClass:NSString.class]?d[key]:@""; }
+static NSString* NeoCheatDisplayName(NSString* name) {
+  NSArray<NSString*>* parts=[name componentsSeparatedByString:@"/"];
+  if(parts.count>=4 && [parts[0] isEqual:@"NeoStation"] && parts[2].length==32)
+    return [[parts subarrayWithRange:NSMakeRange(3,parts.count-3)] componentsJoinedByString:@"/"];
+  if(parts.count>=3 && [parts[0] isEqual:@"NeoStation"])
+    return [[parts subarrayWithRange:NSMakeRange(2,parts.count-2)] componentsJoinedByString:@"/"];
+  return name;
+}
 static BOOL NeoRegex(NSString* text,NSString* pattern) {return [text rangeOfString:pattern options:NSRegularExpressionSearch].location!=NSNotFound;}
 static NSDictionary* NeoCheatFailure(NSString* key) {return @{@"success":@NO,@"errorKey":key,@"added":@0};}
 static BOOL NeoIdentityMatches(NSDictionary* requested,NSDictionary* current,BOOL ps2) {
@@ -119,7 +127,17 @@ static NSDictionary* NeoPnachImport(NSString* dataDirectory,NSDictionary* reques
   NSString* target=[folder stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-NeoStation-%@.pnach",crc,digest]];
   NSFileManager* fm=NSFileManager.defaultManager;NSError* error=nil;
   if([fm fileExistsAtPath:target]) return @{@"success":@YES,@"added":@0};
-  for(NSDictionary* item in snapshot[@"items"]) if([item[@"cheat"] boolValue] && [names containsObject:NeoField(item,@"name")])return NeoCheatFailure(@"duplicateName");
+  for(NSDictionary* item in snapshot[@"items"]) {
+    NSString* comparable=[NSString stringWithFormat:@"NeoStation/%@/%@",crc,NeoCheatDisplayName(NeoField(item,@"name"))];
+    if([item[@"cheat"] boolValue] && [names containsObject:comparable]) return NeoCheatFailure(@"duplicateName");
+  }
+  // A previously deleted file can leave a name in PCSX2's Enable list. Give a
+  // fresh import a unique group identity so it cannot inherit that enabled state.
+  // Keep the deterministic filename for exact-content duplicate detection.
+  NSString* token=[NSUUID.UUID.UUIDString stringByReplacingOccurrencesOfString:@"-" withString:@""];
+  NSString* prefix=[NSString stringWithFormat:@"[NeoStation/%@/",crc];
+  NSString* unique=[NSString stringWithFormat:@"[NeoStation/%@/%@/",crc,token];
+  bytes=[[content stringByReplacingOccurrencesOfString:prefix withString:unique] dataUsingEncoding:NSUTF8StringEncoding];
   if(![fm createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:&error] || ![bytes writeToFile:target options:NSDataWritingAtomic error:&error]) return NeoCheatFailure(@"writeFailed");
   return @{@"success":@YES,@"added":@(parsed.entries.size()),@"file":target};
 }

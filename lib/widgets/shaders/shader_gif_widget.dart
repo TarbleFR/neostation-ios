@@ -157,6 +157,8 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
       try {
         await controller.setVolume(0.0);
         await controller.pause();
+      } catch (_) {}
+      try {
         await controller.dispose();
       } catch (_) {}
     }

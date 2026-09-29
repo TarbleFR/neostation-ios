@@ -10,11 +10,28 @@ class FrontendMediaGate extends ChangeNotifier {
   final Map<Object, Future<void> Function()> _stoppers = {};
   Future<void> _quiet = Future<void>.value();
   bool get blocked => _owners.isNotEmpty;
-  Future<void> get quiet => _quiet;
+  Future<void> get quiet async {
+    // A new widget can register while the previous teardown is awaiting native
+    // disposal. Follow the latest barrier, not a stale Future snapshot.
+    while (true) {
+      final observed = _quiet;
+      await observed;
+      if (identical(observed, _quiet)) return;
+    }
+  }
+
+  void _observeErrors() {
+    // Callers still receive the original failure through quiet. This observer
+    // prevents an unhandled error before the launch service reaches its await.
+    unawaited(_quiet.catchError((Object _) {}));
+  }
 
   void register(Object owner, Future<void> Function() stop) {
     _stoppers[owner] = stop;
-    if (blocked) _quiet = Future.wait<void>([_quiet, Future<void>.sync(stop)]).then((_) {});
+    if (blocked) {
+      _quiet = Future.wait<void>([_quiet, Future<void>.sync(stop)]).then((_) {});
+      _observeErrors();
+    }
   }
   void unregister(Object owner) => _stoppers.remove(owner);
 
@@ -26,12 +43,13 @@ class FrontendMediaGate extends ChangeNotifier {
       // controller initialization, disposal, JIT or platform handoff.
       final stops = _stoppers.values.toList(growable: false);
       _quiet = Future.wait<void>([
-        _quiet,
+        _quiet.catchError((Object _) {}),
         for (final stop in stops) Future<void>.sync(stop),
       ]).then((_) {});
+      _observeErrors();
       notifyListeners();
     }
-    return _quiet;
+    return quiet;
   }
   void release(Object owner) {
     final wasBlocked = blocked;

@@ -346,6 +346,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   if (self.page == DOLMenuHacks) return [self text:@"hacksHelp"];
   if (self.page == DOLMenuCheats) {
     NSString* help=NeoCheatText(@"helpExact",self.labels[@"__locale"]);
+    if(self.stateMessage.length) help=[NSString stringWithFormat:@"%@\n\n%@",self.stateMessage,help];
     if (self.cheatsSnapshot && ![self.cheatsSnapshot[@"gecko"] count] &&
         ![self.cheatsSnapshot[@"actionReplay"] count]) {
       return [NSString stringWithFormat:@"%@\n%@ · r%@\n\n%@",
@@ -659,7 +660,8 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         menu.performCheatCommand(request,^(BOOL success,NSDictionary* result){completion(result?:NeoCheatFailure(@"writeFailed"));});
       };
       editor.saved=^{
-        weakMenu.navigationItem.prompt=NeoCheatText(@"savedDisabled",weakMenu.labels[@"__locale"]);
+        weakMenu.stateMessage=NeoCheatText(@"savedDisabled",weakMenu.labels[@"__locale"]);
+        weakMenu.navigationItem.prompt=weakMenu.stateMessage;
         [weakMenu reloadCheats];
       };
       [self.navigationController pushViewController:editor animated:YES];return;

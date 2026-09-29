@@ -43,7 +43,9 @@ class GameSessionManager {
   /// [clearLaunchPending] on failure.
   static void beginLaunchPending() {
     _launchPending = true;
-    unawaited(FrontendMediaGate.instance.hold('gameSession'));
+    unawaited(FrontendMediaGate.instance.hold('gameSession').catchError((Object error) {
+      _log.w('Frontend media teardown failed: $error');
+    }));
   }
 
   /// Closes the launch-pending window (e.g. on launch failure).
@@ -141,7 +143,9 @@ class GameSessionManager {
     GameModel game, [
     String? emulatorExeName,
   ]) {
-    unawaited(FrontendMediaGate.instance.hold('gameSession'));
+    unawaited(FrontendMediaGate.instance.hold('gameSession').catchError((Object error) {
+      _log.w('Frontend media teardown failed: $error');
+    }));
     _isGameLaunched = true;
     _launchPending = false;
     _gameLaunchTime = DateTime.now();

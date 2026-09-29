@@ -84,15 +84,18 @@ class GameLaunchService {
     SystemModel system,
     GameModel game,
   ) async {
+    final mediaOwner = Object();
+    final stopMedia = FrontendMediaGate.instance.hold(mediaOwner);
     GameSessionManager.beginLaunchPending();
     try {
+      await stopMedia;
       await FrontendMediaGate.instance.quiet;
       if (!context.mounted) return GameLaunchResult.failure('', '');
       final result = await _launchGameImpl(context, system, game);
-      if (!result.success) await GameSessionManager.endGameSession();
       return result;
     } finally {
       GameSessionManager.clearLaunchPending();
+      FrontendMediaGate.instance.release(mediaOwner);
     }
   }
 

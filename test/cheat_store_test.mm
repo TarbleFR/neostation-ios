@@ -24,8 +24,13 @@ int main(){@autoreleasepool {
  request=[ps2 mutableCopy];request[@"name"]=@"Test";request[@"content"]=@"patch=1,EE,00000000,extended,00000001";
  result=NeoPnachImport(root,request,ps2);assert([result[@"success"] boolValue]);
  NSString* filename=[result[@"file"] lastPathComponent];assert([filename hasPrefix:@"ABCDEF12-NeoStation-"]);assert(![filename containsString:@"SLES"]);
- NSString* patch=[NSString stringWithContentsOfFile:result[@"file"] encoding:NSUTF8StringEncoding error:nil];assert([patch containsString:@"[NeoStation/ABCDEF12/Test]"]);
+ NSString* patch=[NSString stringWithContentsOfFile:result[@"file"] encoding:NSUTF8StringEncoding error:nil];assert([patch containsString:@"[NeoStation/ABCDEF12/"] && [patch containsString:@"/Test]"]);
  assert([NeoPnachImport(root,request,ps2)[@"added"] intValue]==0);
+ [fm removeItemAtPath:result[@"file"] error:nil];
+ result=NeoPnachImport(root,request,ps2);assert([result[@"success"] boolValue]);
+ NSString* reimported=[NSString stringWithContentsOfFile:result[@"file"] encoding:NSUTF8StringEncoding error:nil];
+ assert(![reimported isEqual:patch]); // old Enable-list identity cannot reactivate a new import.
+ assert([NeoCheatDisplayName(@"NeoStation/ABCDEF12/01234567890123456789012345678901/Test") isEqual:@"Test"]);
  request[@"filename"]=@"SLES-00000_11111111.pnach";assert(![NeoPnachImport(root,request,ps2)[@"success"] boolValue]);
  request[@"filename"]=@"SLUS-00000_ABCDEF12.pnach";assert(![NeoPnachImport(root,request,ps2)[@"success"] boolValue]);
  [fm removeItemAtPath:root error:nil];

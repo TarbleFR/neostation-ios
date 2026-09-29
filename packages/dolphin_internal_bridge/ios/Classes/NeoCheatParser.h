@@ -36,10 +36,10 @@ inline bool encryptedLine(const std::string& s, std::string* normalized) {
   *normalized=t; return true;
 }
 inline bool pnachLine(const std::string& s, std::string* normalized) {
-  if(s.rfind("patch=",0)!=0) return false;
+  if(s.rfind("patch=",0)!=0 || s.back()==',') return false;
   std::vector<std::string> v; std::istringstream in(s.substr(6)); std::string t;
   while(std::getline(in,t,',')) v.push_back(trim(t));
-  if(v.size()!=5 || (v[0]!="0" && v[0]!="1" && v[0]!="2") || (v[1]!="EE" && v[1]!="IOP") || !hex(v[2],8,8)) return false;
+  if(v.size()!=5 || (v[0]!="0" && v[0]!="1" && v[0]!="2" && v[0]!="3") || (v[1]!="EE" && v[1]!="IOP") || !hex(v[2],8,8)) return false;
   const size_t width=v[3]=="byte"?2:v[3]=="short"?4:v[3]=="word"?8:v[3]=="double"?16:v[3]=="extended"?8:0;
   if(!width || !hex(v[4],1,width)) return false;
   *normalized="patch="+v[0]+","+v[1]+","+upper(v[2])+","+v[3]+","+upper(v[4]); return true;
@@ -55,6 +55,7 @@ inline Result parse(const std::string& input, const std::string& type, const std
   std::istringstream in(input); std::string line; size_t number=0;
   while(std::getline(in,line)) {
     ++number; line=trim(line); if(number==1 && line.rfind("\xEF\xBB\xBF",0)==0) line.erase(0,3);
+    if(line.empty()) continue;
     if(line.empty() || line[0]=='#' || line[0]==';' || line.rfind("//",0)==0) continue;
     if(line.front()=='[') {
       if(line.back()!=']') {r.error="format";break;}

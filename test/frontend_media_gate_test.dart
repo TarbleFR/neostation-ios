@@ -14,6 +14,19 @@ void main(){
   disposal.complete();await pending;expect(finished,isTrue);
   gate.release('session');expect(gate.blocked,isFalse);
  });
+ test('a captured launch barrier follows renderers registered during teardown',() async {
+  final gate=FrontendMediaGate();final first=Completer<void>();final late=Completer<void>();
+  gate.register('first',()=>first.future);
+  bool finished=false;final waiting=gate.hold('session').then((_){finished=true;});
+  gate.register('late',()=>late.future);
+  first.complete();await Future<void>.delayed(Duration.zero);expect(finished,isFalse);
+  late.complete();await waiting;expect(finished,isTrue);gate.release('session');
+ });
+ test('failed disposal aborts its launch but does not poison the next session',() async {
+  final gate=FrontendMediaGate();gate.register('broken',()async{throw StateError('dispose');});
+  await expectLater(gate.hold('failed'),throwsStateError);gate.release('failed');gate.unregister('broken');
+  await gate.hold('retry');expect(gate.blocked,isTrue);gate.release('retry');
+ });
  test('late media initialization is stopped while game owns foreground',() async {
   final gate=FrontendMediaGate();await gate.hold('session');int stopped=0;
   gate.register('late',() async {stopped++;});await gate.quiet;expect(stopped,1);

@@ -22,5 +22,8 @@ int main(){using namespace NeoCheat;
  assert(network && network.entries.size()==1 && network.entries[0].creator=="Author");
  assert(!geckoDownload("G4BE08\nTitle\n\nExample\n04000000 00000001\n","G4BP08"));
  assert(!geckoDownload("<html>ERROR</html>","G4BP08"));
+ assert(parse("patch=3,EE,00000000,extended,00000001", "pnach", "On enable"));
+ assert(!parse("patch=1,EE,00000000,extended,00000001,", "pnach", "Trailing comma"));
+ assert(!parse("\xEF\xBB\xBF\n", "ini", "BOM only"));
  std::cout<<"PASS: strict Gecko/AR/INI/PNACH parsing, region headers, placeholders, bounds, no activation input\n";
 }

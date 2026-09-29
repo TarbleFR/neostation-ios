@@ -640,6 +640,8 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
         try {
           await controller.setVolume(0.0);
           await controller.pause();
+        } catch (_) {}
+        try {
           await controller.dispose();
         } catch (e) {
           debugPrint('SecondaryScreen: Error disposing video: $e');

@@ -392,7 +392,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     NSArray* items=[self.patches[@"items"] isKindOfClass:NSArray.class] ? self.patches[@"items"] : @[];
     if (row < (NSInteger)items.count) {
       NSDictionary* item=items[row];
-      cell.textLabel.text=[item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
+      cell.textLabel.text=NeoCheatDisplayName(NeoField(item,@"name"));
       NSString* description=[item[@"description"] isKindOfClass:NSString.class] ? item[@"description"] : @"";
       NSString* author=[item[@"author"] isKindOfClass:NSString.class] ? item[@"author"] : @"";
       cell.detailTextLabel.text=description.length && author.length
@@ -634,7 +634,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     NSDictionary* item=items[row];
     if ([item[@"readOnly"] boolValue]) return;
     NSString* identifier=[item[@"id"] isKindOfClass:NSString.class] ? item[@"id"] : item[@"name"];
-    NSString* name=[item[@"name"] isKindOfClass:NSString.class] ? item[@"name"] : @"";
+    NSString* name=NeoCheatDisplayName(NeoField(item,@"name"));
     if (!name.length) return;
     const BOOL automatic=[item[@"automatic"] boolValue];
     UIAlertController* sheet=[UIAlertController alertControllerWithTitle:name
