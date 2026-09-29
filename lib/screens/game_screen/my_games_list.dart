@@ -13,6 +13,7 @@ import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/shimmering_logo.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:video_player/video_player.dart';
+import '../../services/frontend_media_gate.dart';
 import 'package:provider/provider.dart';
 
 import 'dart:io';
@@ -250,6 +251,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _lastShowInfo = _configProvider.config.showGameInfo;
 
     MusicPlayerService().addListener(_onMusicPlayerStateChanged);
+    FrontendMediaGate.instance.register(this, _stopVideoAndCleanup);
+    FrontendMediaGate.instance.addListener(_onFrontendMediaGateChanged);
 
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
@@ -271,6 +274,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   @override
   void dispose() {
+    FrontendMediaGate.instance.unregister(this);
+    FrontendMediaGate.instance.removeListener(_onFrontendMediaGateChanged);
     // Detach listeners before disposal.
     _configProvider.removeListener(_onConfigChanged);
     _databaseProvider.removeListener(_onDatabaseUpdated);

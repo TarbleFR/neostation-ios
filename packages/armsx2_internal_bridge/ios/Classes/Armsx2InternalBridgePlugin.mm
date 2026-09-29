@@ -3,6 +3,7 @@
 #import "ARMSX2CoreABI.h"
 #import "Armsx2RetroAchievementsMenu.h"
 #import "Armsx2SessionMenu.h"
+#include "NeoCheatStore.h"
 #import "ARMSX2InGameLocalization.h"
 
 #import <Foundation/Foundation.h>
@@ -393,6 +394,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) BOOL stopInProgress;
 @property(nonatomic, strong) UINavigationController* sessionMenu;
 @property(nonatomic, assign) BOOL menuOpening;
+@property(nonatomic, copy) NSString* activeDataDirectory;
 @end
 
 @implementation Armsx2InternalBridgePlugin {
@@ -933,6 +935,32 @@ static UIViewController* ARMSX2RootViewController(void) {
         }
         [bridge performPatchCommand:name value:value controller:owner completion:completion];
       };
+      menu.importCheats = ^(NSDictionary* request,void (^completion)(NSDictionary*)) {
+        Armsx2InternalBridgePlugin* bridge=weakSelf;
+        Armsx2GameViewController* owner=weakController;
+        if(!bridge || !owner){completion(NeoCheatFailure(@"sessionChanged"));return;}
+        dispatch_async(bridge->_runtimeQueue,^{
+          NSDictionary* result=NeoCheatFailure(@"sessionChanged");
+          if(bridge.api && bridge.gameController==owner && !bridge.stopInProgress) {
+            char json[262144]={};
+            if(bridge.api->get_available_patches_json(json,sizeof(json))) {
+              NSData* data=[NSData dataWithBytes:json length:strlen(json)];
+              id state=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+              if([state isKindOfClass:NSDictionary.class]) {
+                result=NeoPnachImport(bridge.activeDataDirectory,request,state);
+                if([result[@"success"] boolValue] && [result[@"added"] integerValue]>0) {
+                  char error[512]={};
+                  if(!bridge.api->reload_cheats(error,sizeof(error))) {
+                    [NSFileManager.defaultManager removeItemAtPath:result[@"file"] error:nil];
+                    result=NeoCheatFailure(@"writeFailed");
+                  }
+                }
+              }
+            }
+          }
+          dispatch_async(dispatch_get_main_queue(),^{completion(result);});
+        });
+      };
       menu.resumeGame = ^{
         Armsx2InternalBridgePlugin* bridge = weakSelf;
         Armsx2GameViewController* owner = weakController;
@@ -1083,6 +1111,7 @@ static UIViewController* ARMSX2RootViewController(void) {
     config.size = sizeof(config);
     config.transaction = transactionNumber.unsignedLongLongValue;
     config.data_directory = dataPath.fileSystemRepresentation;
+    self.activeDataDirectory = dataPath;
     NSString* resources = [self resourcePath];
     config.resource_directory = resources.fileSystemRepresentation;
     config.bios_directory = biosDirectory.fileSystemRepresentation;

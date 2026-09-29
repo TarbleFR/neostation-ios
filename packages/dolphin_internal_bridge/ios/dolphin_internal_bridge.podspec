@@ -12,7 +12,7 @@ legacy gate. It does not replace or modify other emulator integrations.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
-  s.private_header_files = 'Classes/DolphinRecordingTimeline.h'
+  s.private_header_files = 'Classes/DolphinRecordingTimeline.h', 'Classes/NeoCheat*.h', 'Classes/*ManualCheatEditor.h', 'Classes/DOLCheatCatalogue.h'
   s.resources        = 'TouchResources/*'
   s.vendored_frameworks = 'Frameworks/DolphinCore.framework'
   s.dependency 'Flutter'
@@ -20,7 +20,7 @@ legacy gate. It does not replace or modify other emulator integrations.
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
   s.swift_version = '5.0'
-  s.frameworks = 'UIKit', 'Metal', 'MetalKit', 'QuartzCore', 'Security', 'AVFoundation', 'AudioToolbox', 'GameController', 'ReplayKit', 'CoreImage', 'VideoToolbox', 'CoreMedia', 'CoreVideo'
+  s.frameworks = 'UniformTypeIdentifiers', 'UIKit', 'Metal', 'MetalKit', 'QuartzCore', 'Security', 'AVFoundation', 'AudioToolbox', 'GameController', 'ReplayKit', 'CoreImage', 'VideoToolbox', 'CoreMedia', 'CoreVideo'
   s.libraries = 'c++', 'z', 'bz2', 'iconv', 'compression'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

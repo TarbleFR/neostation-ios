@@ -1,4 +1,5 @@
 #import "Armsx2SessionMenu.h"
+#include "ARMSX2ManualCheatEditor.h"
 #import "Armsx2RetroAchievementsMenu.h"
 #import "ARMSX2InGameLocalization.h"
 #include <cmath>
@@ -24,8 +25,8 @@ static void ARMSX2MenuOnMain(dispatch_block_t block) {
 
 static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   UINavigationBarAppearance* appearance = [UINavigationBarAppearance new];
-  [appearance configureWithTransparentBackground];
-  appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterialDark];
+  [appearance configureWithOpaqueBackground];
+  appearance.backgroundColor = UIColor.systemGroupedBackgroundColor;
   appearance.shadowColor = [UIColor.separatorColor colorWithAlphaComponent:0.25];
   appearance.titleTextAttributes = @{
     NSForegroundColorAttributeName: UIColor.whiteColor,
@@ -67,8 +68,10 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.view.backgroundColor = UIColor.clearColor;
-  self.tableView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.58];
+  self.overrideUserInterfaceStyle=UIUserInterfaceStyleDark;
+  self.navigationController.overrideUserInterfaceStyle=UIUserInterfaceStyleDark;
+  self.view.backgroundColor=UIColor.systemGroupedBackgroundColor;
+  self.tableView.backgroundColor=UIColor.systemGroupedBackgroundColor;
   self.tableView.separatorColor = [UIColor.separatorColor colorWithAlphaComponent:0.35];
   self.navigationController.navigationBar.tintColor = UIColor.systemIndigoColor;
   self.navigationController.navigationBar.standardAppearance = ARMSX2MenuNavigationAppearance();
@@ -84,7 +87,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
   NSDictionary* choice = self.choices[indexPath.row];
-  cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:0.82];
+  cell.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
   cell.tintColor = UIColor.systemIndigoColor;
   cell.textLabel.textColor = UIColor.labelColor;
   cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -147,8 +150,10 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.view.backgroundColor = UIColor.clearColor;
-  self.tableView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.58];
+  self.overrideUserInterfaceStyle=UIUserInterfaceStyleDark;
+  self.navigationController.overrideUserInterfaceStyle=UIUserInterfaceStyleDark;
+  self.view.backgroundColor=UIColor.systemGroupedBackgroundColor;
+  self.tableView.backgroundColor=UIColor.systemGroupedBackgroundColor;
   self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
   self.tableView.separatorColor = [UIColor.separatorColor colorWithAlphaComponent:0.35];
   self.tableView.sectionHeaderTopPadding = 12;
@@ -234,6 +239,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   child.performGraphicsHack = self.performGraphicsHack;
   child.graphicsHacks = self.graphicsHacks;
   child.readPatches = self.readPatches;
+  child.importCheats = self.importCheats;
   child.performPatchCommand = self.performPatchCommand;
   child.patches = self.patches;
   child.resumeGame = self.resumeGame;
@@ -252,7 +258,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     case ARMSX2MenuGraphicsHacks:
       return [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class]
           ? [self.graphicsHacks[@"items"] count] : 0;
-    case ARMSX2MenuCheats: return self.snapshot.count ? 3 : 0;
+    case ARMSX2MenuCheats: return self.snapshot.count ? 4 : 0;
     case ARMSX2MenuPatches:
       return [self.patches[@"items"] isKindOfClass:NSArray.class]
           ? [self.patches[@"items"] count] : 0;
@@ -304,7 +310,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
-  cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:0.82];
+  cell.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
   cell.tintColor = UIColor.systemIndigoColor;
   cell.textLabel.textColor = UIColor.labelColor;
   cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
@@ -364,6 +370,25 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
           : (value ? ARMSX2MenuText(@"On", @"Activé") : ARMSX2MenuText(@"Off", @"Désactivé"));
     }
   } else if (self.page == ARMSX2MenuCheats) {
+    if (row == 3) {
+      if(!self.readPatches || !self.importCheats || self.loading)return;
+      self.loading=YES;
+      __weak Armsx2SessionMenu* weakSelf=self;
+      self.readPatches(^(NSDictionary* identity){ARMSX2MenuOnMain(^{
+        Armsx2SessionMenu* menu=weakSelf;if(!menu)return;menu.loading=NO;
+        if(![identity[@"available"] boolValue] || [identity[@"hardcore"] boolValue]) {
+          menu.navigationItem.prompt=NeoCheatText([identity[@"hardcore"] boolValue]?@"hardcore":@"sessionChanged",menu.localeIdentifier);return;
+        }
+        ARMSX2ManualCheatEditor* editor=[ARMSX2ManualCheatEditor new];
+        editor.ps2=YES;editor.localeIdentifier=menu.localeIdentifier;editor.identity=identity;
+        editor.saveCheat=menu.importCheats;
+        editor.saved=^{
+          weakSelf.navigationItem.prompt=NeoCheatText(@"savedDisabled",weakSelf.localeIdentifier);
+          [weakSelf reloadPatches];
+        };
+        if(menu.navigationController.topViewController==menu)[menu.navigationController pushViewController:editor animated:YES];
+      });});return;
+    }
     if (row == 0) {
       cell.textLabel.text = ARMSX2MenuText(@"Enable Cheats", @"Activer les cheats");
       cell.detailTextLabel.text = ARMSX2MenuText([self.snapshot[@"cheats"] boolValue] ? @"On" : @"Off",
@@ -375,6 +400,9 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
           ? [NSString stringWithFormat:@"%lu %@", (unsigned long)items.count,
               ARMSX2MenuText(@"for this game revision", @"pour cette révision du jeu")]
           : ARMSX2MenuText(@"Open to scan patches and imported cheats", @"Ouvrir pour lire les patches et cheats importés");
+    } else if (row == 3) {
+      cell.textLabel.text=NeoCheatText(@"manualTitle",self.localeIdentifier);
+      cell.detailTextLabel.text=@"PNACH · CRC";
     } else {
       cell.textLabel.text = ARMSX2MenuText(@"Reload Cheats / Patches", @"Recharger cheats / patches");
       cell.accessoryType = UITableViewCellAccessoryNone;

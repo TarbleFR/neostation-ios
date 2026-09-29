@@ -11,10 +11,11 @@ attached to the NeoStation PID. No standalone ARMSX2 application is embedded.
   s.author           = { 'NeoStation iOS' => 'TarbleFR' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
+  s.private_header_files = 'Classes/NeoCheat*.h', 'Classes/*ManualCheatEditor.h'
   s.dependency 'Flutter'
   s.platform = :ios, '17.4'
   s.ios.deployment_target = '17.4'
-  s.frameworks = 'UIKit', 'Foundation', 'Security'
+  s.frameworks = 'UniformTypeIdentifiers', 'UIKit', 'Foundation', 'Security'
   s.libraries = 'c++'
   s.preserve_paths = 'Frameworks/ARMSX2Core.framework'
   s.pod_target_xcconfig = {

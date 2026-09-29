@@ -13,6 +13,7 @@ import '../../l10n/secondary_ui_locale.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/services/secondary_apps_service.dart';
 import 'package:video_player/video_player.dart';
+import '../../services/frontend_media_gate.dart';
 
 import '../../models/config_model.dart';
 import '../../models/secondary_achievement_item.dart';
@@ -43,6 +44,12 @@ class SecondaryScreen extends StatefulWidget {
 class _SecondaryScreenState extends State<SecondaryScreen> {
   SecondaryDisplayState? _secondaryDisplayState;
   VideoPlayerController? _videoController;
+  Future<void> _videoWork = Future<void>.value();
+  Future<void> _videoDisposal = Future<void>.value();
+  bool get _videoBlocked => FrontendMediaGate.instance.blocked ||
+      (_secondaryDisplayState?.value?.isGameLaunching ?? false) ||
+      (_secondaryDisplayState?.value?.nowPlayingActive ?? false) ||
+      !(_secondaryDisplayState?.value?.deviceScreenOn ?? true);
 
   /// Latches true the first time the main engine reports `appReady`; drives the
   /// app dock's one-shot slide-up. Local so the oscillating shared-state flag
@@ -152,6 +159,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
   @override
   void initState() {
     super.initState();
+    FrontendMediaGate.instance.register(this, _suspendVideo);
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onStateChanged);
@@ -247,7 +255,8 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     _maybeStartCelebration(state);
     _syncDockMount(state);
 
-    if (state.isGameLaunching) {
+    if (_videoBlocked) {
+      _currentVideoPath = null;
       _stopVideo();
       return;
     }
@@ -546,13 +555,31 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
   void _startVideoTimer(String path) {
     _videoTimer?.cancel();
+    if (_videoBlocked) return;
+    final generation = _videoGeneration;
     _videoTimer = Timer(const Duration(milliseconds: 500), () {
-      _initializeVideo(path);
+      if (_videoBlocked || generation != _videoGeneration) return;
+      unawaited(_initializeVideo(path));
     });
   }
 
-  Future<void> _initializeVideo(String path) async {
-    if (!mounted) return;
+  Future<void> _suspendVideo() async {
+    _stopVideo();
+    await Future.wait<void>([_videoWork, _videoDisposal]);
+  }
+
+  Future<void> _initializeVideo(String path) {
+    final generation = _videoGeneration;
+    final pending = _videoWork.catchError((Object _) {}).then((_) async {
+      if (!mounted || _videoBlocked || generation != _videoGeneration) return;
+      await _initializeVideoImpl(path);
+    });
+    _videoWork = pending;
+    return pending;
+  }
+
+  Future<void> _initializeVideoImpl(String path) async {
+    if (!mounted || _videoBlocked) return;
 
     // Snapshot the generation: if _stopVideo runs (e.g. a game launches) while
     // we're awaiting below, this goes stale and we abort before playing.
@@ -561,23 +588,28 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     try {
       controller = VideoPlayerController.file(File(path));
       await controller.initialize();
-      if (!mounted || gen != _videoGeneration) {
+      if (!mounted || _videoBlocked || gen != _videoGeneration) {
         await controller.dispose();
         return;
       }
 
       // IMPORTANT: Set volume BEFORE playing to ensure sync and avoid audio burst
       final isMuted = _secondaryDisplayState?.value?.isVideoMuted ?? true;
-      await controller.setVolume(isMuted ? 0.0 : 1.0);
+      await controller.setVolume(0.0);
 
       await controller.setLooping(true);
+      if (_videoBlocked || gen != _videoGeneration) {
+        await controller.dispose();
+        return;
+      }
       await controller.play();
 
-      if (!mounted || gen != _videoGeneration) {
+      if (!mounted || _videoBlocked || gen != _videoGeneration) {
         await controller.dispose();
         return;
       }
 
+      await controller.setVolume(_videoBlocked || isMuted ? 0.0 : 1.0);
       setState(() {
         _videoController = controller;
         _showVideo = true;
@@ -602,11 +634,17 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
     if (_videoController != null) {
       final controller = _videoController!;
       _videoController = null;
-      try {
-        controller.dispose();
-      } catch (e) {
-        debugPrint('SecondaryScreen: Error disposing video: $e');
-      }
+      final previous = _videoDisposal;
+      _videoDisposal = () async {
+        await previous;
+        try {
+          await controller.setVolume(0.0);
+          await controller.pause();
+          await controller.dispose();
+        } catch (e) {
+          debugPrint('SecondaryScreen: Error disposing video: $e');
+        }
+      }();
     }
     if (mounted) {
       setState(() {
@@ -617,6 +655,7 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
 
   @override
   void dispose() {
+    FrontendMediaGate.instance.unregister(this);
     // Shared singleton — detach our listener, never dispose the instance.
     _secondaryDisplayState?.removeListener(_onStateChanged);
     _celebrationTimer?.cancel();

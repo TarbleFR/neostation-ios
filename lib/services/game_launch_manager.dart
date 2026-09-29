@@ -68,6 +68,8 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     'ios_dusklight_internal',
     'ios_kartpad_internal',
     'ios_armsx2_internal',
+    'ios_dolphin_internal',
+    'ios_rpcs3_internal',
   };
   String? _activeEmulatorExe;
 

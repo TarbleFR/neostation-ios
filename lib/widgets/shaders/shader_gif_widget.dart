@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../utils/image_utils.dart';
+import '../../services/frontend_media_gate.dart';
 
 /// Renders animated background media from the local filesystem.
 ///
@@ -40,11 +41,15 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
 
   VideoPlayerController? _videoController;
   bool _videoReady = false;
+  int _mediaGeneration = 0;
+  Future<void> _mediaWork = Future<void>.value();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    FrontendMediaGate.instance.register(this, _suspendMedia);
+    FrontendMediaGate.instance.addListener(_onMediaGateChanged);
     _loadMedia();
   }
 
@@ -56,7 +61,28 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
     }
   }
 
-  Future<void> _loadMedia() async {
+  void _onMediaGateChanged() {
+    if (mounted && !FrontendMediaGate.instance.blocked) unawaited(_loadMedia());
+  }
+
+  Future<void> _suspendMedia() async {
+    _mediaGeneration++;
+    _ticker?.stop();
+    await _mediaWork;
+    await _clearVideo();
+  }
+
+  Future<void> _loadMedia() {
+    final generation = ++_mediaGeneration;
+    final pending = _mediaWork.catchError((Object _) {}).then((_) async {
+      if (!mounted || FrontendMediaGate.instance.blocked || generation != _mediaGeneration) return;
+      await _loadMediaImpl();
+    });
+    _mediaWork = pending;
+    return pending;
+  }
+
+  Future<void> _loadMediaImpl() async {
     if (ImageUtils.isVideo(widget.imagePath)) {
       await _clearGif();
       await _loadVideo();
@@ -90,12 +116,14 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
     if (!await file.exists()) return;
 
     await _clearVideo();
+    if (!mounted || FrontendMediaGate.instance.blocked) return;
+    final generation = _mediaGeneration;
     final controller = VideoPlayerController.file(file);
     _videoController = controller;
 
     try {
       await controller.initialize();
-      if (!mounted ||
+      if (!mounted || FrontendMediaGate.instance.blocked || generation != _mediaGeneration ||
           _videoController != controller ||
           widget.imagePath != path) {
         await controller.dispose();
@@ -103,6 +131,10 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
       }
       await controller.setLooping(true);
       await controller.setVolume(0.0);
+      if (FrontendMediaGate.instance.blocked || generation != _mediaGeneration) {
+        await _clearVideo();
+        return;
+      }
       await controller.play();
       if (mounted && _videoController == controller) {
         setState(() => _videoReady = true);
@@ -123,6 +155,8 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
     _videoReady = false;
     if (controller != null) {
       try {
+        await controller.setVolume(0.0);
+        await controller.pause();
         await controller.dispose();
       } catch (_) {}
     }
@@ -183,7 +217,7 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
       }
       codec.dispose();
 
-      if (mounted && !ImageUtils.isVideo(widget.imagePath)) {
+      if (mounted && !FrontendMediaGate.instance.blocked && !ImageUtils.isVideo(widget.imagePath)) {
         setState(() {
           _frames = decodedFrames;
           _frameDurations = durations;
@@ -205,11 +239,11 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
     _ticker = createTicker(_onTick);
     _elapsedSinceStart = Duration.zero;
     _lastTick = Duration.zero;
-    _ticker!.start();
+    if (!FrontendMediaGate.instance.blocked) _ticker!.start();
   }
 
   void _onTick(Duration elapsed) {
-    if (_frameDurations.isEmpty) return;
+    if (_frameDurations.isEmpty || FrontendMediaGate.instance.blocked) return;
 
     final delta = elapsed - _lastTick;
     _lastTick = elapsed;
@@ -254,7 +288,7 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
     final controller = _videoController;
     if (controller == null || !_videoReady) return;
 
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed && !FrontendMediaGate.instance.blocked) {
       unawaited(controller.play());
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
@@ -266,6 +300,9 @@ class _ShaderGifWidgetState extends State<ShaderGifWidget>
 
   @override
   void dispose() {
+    _mediaGeneration++;
+    FrontendMediaGate.instance.unregister(this);
+    FrontendMediaGate.instance.removeListener(_onMediaGateChanged);
     WidgetsBinding.instance.removeObserver(this);
     final controller = _videoController;
     _videoController = null;

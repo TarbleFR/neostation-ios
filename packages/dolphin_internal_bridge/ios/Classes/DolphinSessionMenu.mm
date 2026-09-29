@@ -1,4 +1,5 @@
 #import "DolphinSessionMenu.h"
+#include "DOLManualCheatEditor.h"
 #import "DolphinRetroAchievementsAccount.h"
 
 typedef NS_ENUM(NSInteger, DOLMenuPage) {
@@ -53,8 +54,13 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+  self.navigationController.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
   self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
-  self.tableView.backgroundColor = UIColor.clearColor;
+  self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
+  self.tableView.opaque = YES;
+  self.tableView.sectionFooterHeight = UITableViewAutomaticDimension;
+  self.tableView.estimatedSectionFooterHeight = 100;
   self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
   self.tableView.separatorColor = [UIColor.separatorColor colorWithAlphaComponent:0.35];
   self.tableView.sectionHeaderTopPadding = 12;
@@ -82,8 +88,8 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (UINavigationBarAppearance*)modernNavigationAppearance {
   UINavigationBarAppearance* appearance = [UINavigationBarAppearance new];
-  [appearance configureWithTransparentBackground];
-  appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial];
+  [appearance configureWithOpaqueBackground];
+  appearance.backgroundColor = UIColor.systemGroupedBackgroundColor;
   appearance.shadowColor = [UIColor.separatorColor colorWithAlphaComponent:0.25];
   appearance.titleTextAttributes = @{
     NSForegroundColorAttributeName: UIColor.labelColor,
@@ -318,7 +324,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
     case DOLMenuGraphics: return self.snapshot ? 4 : 0;
     case DOLMenuHacks: return self.snapshot ? 8 : 0;
     case DOLMenuCheats:
-      return self.cheatsSnapshot ? 2 +
+      return self.cheatsSnapshot ? 4 +
           [self.cheatsSnapshot[@"gecko"] count] +
           [self.cheatsSnapshot[@"actionReplay"] count] : 0;
     case DOLMenuAchievements: return self.snapshot ? 3 : 0;
@@ -338,7 +344,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   if (self.page == DOLMenuGraphics) return [self text:@"graphicsHelp"];
   if (self.page == DOLMenuHacks) return [self text:@"hacksHelp"];
   if (self.page == DOLMenuCheats) {
-    NSString* help=[self text:@"cheatsHelp"];
+    NSString* help=NeoCheatText(@"helpExact",self.labels[@"__locale"]);
     if (self.cheatsSnapshot && ![self.cheatsSnapshot[@"gecko"] count] &&
         ![self.cheatsSnapshot[@"actionReplay"] count]) {
       return [NSString stringWithFormat:@"%@\n%@ · r%@\n\n%@",
@@ -362,6 +368,17 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   return nil;
 }
 
+- (void)tableView:(UITableView*)tableView willDisplayFooterView:(UIView*)view forSection:(NSInteger)section {
+  if([view isKindOfClass:UITableViewHeaderFooterView.class]) {
+    UITableViewHeaderFooterView* footer=(UITableViewHeaderFooterView*)view;
+    footer.contentView.backgroundColor=UIColor.systemGroupedBackgroundColor;
+    footer.textLabel.textColor=UIColor.labelColor;
+    footer.textLabel.font=[UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    footer.textLabel.adjustsFontForContentSizeCategory=YES;
+    footer.textLabel.numberOfLines=0;
+  }
+}
+
 - (NSString*)graphicsValue:(NSString*)key {
   NSNumber* raw = self.snapshot[@"graphics"][key];
   NSInteger value = raw.integerValue;
@@ -374,9 +391,10 @@ static void DOLMenuOnMain(dispatch_block_t block) {
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
-  cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:0.82];
+  cell.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
   cell.tintColor = UIColor.systemIndigoColor;
   cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+  cell.textLabel.textColor = UIColor.labelColor;
   cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
   cell.textLabel.numberOfLines = 0;
   cell.detailTextLabel.numberOfLines = 0;
@@ -411,7 +429,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       cell.detailTextLabel.text = [self text:
           [self.cheatsSnapshot[@"masterEnabled"] boolValue] ? @"on" : @"off"];
     } else if (row == 1) {
-      cell.textLabel.text = [self text:@"downloadGecko"];
+      cell.textLabel.text = NeoCheatText(@"downloadCatalogs",self.labels[@"__locale"]);
       NSString* gameTdbId = [self.cheatsSnapshot[@"gameTdbId"] isKindOfClass:NSString.class]
           ? self.cheatsSnapshot[@"gameTdbId"] : @"";
       cell.detailTextLabel.text = gameTdbId.length ? gameTdbId : [self text:@"noCheats"];
@@ -420,8 +438,14 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         cell.textLabel.textColor = UIColor.secondaryLabelColor;
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
       }
+    } else if (row == 2) {
+      cell.textLabel.text = NeoCheatText(@"manualTitle",self.labels[@"__locale"]);
+      cell.detailTextLabel.text = @"Gecko · Action Replay · INI";
+    } else if (row == 3) {
+      cell.textLabel.text = NeoCheatText(@"searchOther",self.labels[@"__locale"]);
+      cell.detailTextLabel.text = [NSString stringWithFormat:@"Dolphin Wiki · %@ · r%@",self.cheatsSnapshot[@"gameId"]?:@"",self.cheatsSnapshot[@"revision"]?:@0];
     } else {
-      NSInteger offset = row - 2;
+      NSInteger offset = row - 4;
       NSDictionary* item = nil;
       NSString* typeLabel = nil;
       if (offset < (NSInteger)gecko.count) {
@@ -619,6 +643,32 @@ static void DOLMenuOnMain(dispatch_block_t block) {
         title:[self text:key]] animated:YES];
   } else if (self.page == DOLMenuCheats) {
     if (!self.performCheatCommand || !self.cheatsSnapshot) return;
+    if (row == 2) {
+      if([self.cheatsSnapshot[@"hardcore"] boolValue]) {
+        self.navigationItem.prompt=NeoCheatText(@"hardcore",self.labels[@"__locale"]);return;
+      }
+      DOLManualCheatEditor* editor=[DOLManualCheatEditor new];
+      editor.localeIdentifier=self.labels[@"__locale"]?:@"en";
+      editor.identity=self.cheatsSnapshot;editor.ps2=NO;
+      __weak DolphinSessionMenu* weakMenu=self;
+      editor.saveCheat=^(NSDictionary* value,void (^completion)(NSDictionary*)) {
+        DolphinSessionMenu* menu=weakMenu;
+        if(!menu){completion(NeoCheatFailure(@"sessionChanged"));return;}
+        NSMutableDictionary* request=[value mutableCopy];request[@"kind"]=@"import";
+        menu.performCheatCommand(request,^(BOOL success,NSDictionary* result){completion(result?:NeoCheatFailure(@"writeFailed"));});
+      };
+      editor.saved=^{
+        weakMenu.navigationItem.prompt=NeoCheatText(@"savedDisabled",weakMenu.labels[@"__locale"]);
+        [weakMenu reloadCheats];
+      };
+      [self.navigationController pushViewController:editor animated:YES];return;
+    }
+    if (row == 3) {
+      NSString* id=NeoField(self.cheatsSnapshot,@"gameId");
+      NSString* query=[id stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
+      NSURL* url=[NSURL URLWithString:[@"https://wiki.dolphin-emu.org/index.php?title=Special%3ASearch&search=" stringByAppendingString:query?:@""]];
+      [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];return;
+    }
     NSArray* gecko = [self.cheatsSnapshot[@"gecko"] isKindOfClass:NSArray.class]
         ? self.cheatsSnapshot[@"gecko"] : @[];
     NSArray* actionReplay = [self.cheatsSnapshot[@"actionReplay"] isKindOfClass:NSArray.class]
@@ -633,7 +683,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
       if (!gameTdbId.length) return;
       request[@"kind"] = @"download";
     } else {
-      NSInteger offset = row - 2;
+      NSInteger offset = row - 4;
       NSDictionary* item = nil;
       if (offset < (NSInteger)gecko.count) item = gecko[offset];
       else {
@@ -665,7 +715,7 @@ static void DOLMenuOnMain(dispatch_block_t block) {
             menu.stateMessage = [[menu text:@"downloadedCodes"]
                 stringByReplacingOccurrencesOfString:@"{count}"
                 withString:[NSString stringWithFormat:@"%ld",(long)added]];
-          } else menu.stateMessage = [menu text:@"cheatDownloadFailed"];
+          } else menu.stateMessage = NeoCheatText(NeoField(result,@"errorKey").length?result[@"errorKey"]:@"networkError",menu.labels[@"__locale"]);
         } else menu.stateMessage = success ? [menu text:@"cheatUpdated"] : [menu text:@"settingsFailed"];
         menu.navigationItem.prompt = menu.stateMessage;
         [menu reloadCheats];

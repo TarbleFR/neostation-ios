@@ -37,6 +37,8 @@ import '../macos_application_service.dart';
 import 'emulator_launch_diagnostics.dart';
 import 'favorites_service.dart';
 import 'game_session_manager.dart';
+import '../frontend_media_gate.dart';
+import '../embedded_ios_session_status.dart';
 import '../gamepad/gamepad_navigation_manager.dart';
 
 /// Represents the result of a game launch attempt.
@@ -78,6 +80,23 @@ class GameLaunchService {
   /// Performs pre-launch validations (ROM existence, system config), resolves the
   /// optimal emulator/player, and initiates the execution process.
   static Future<GameLaunchResult> launchGame(
+    BuildContext context,
+    SystemModel system,
+    GameModel game,
+  ) async {
+    GameSessionManager.beginLaunchPending();
+    try {
+      await FrontendMediaGate.instance.quiet;
+      if (!context.mounted) return GameLaunchResult.failure('', '');
+      final result = await _launchGameImpl(context, system, game);
+      if (!result.success) await GameSessionManager.endGameSession();
+      return result;
+    } finally {
+      GameSessionManager.clearLaunchPending();
+    }
+  }
+
+  static Future<GameLaunchResult> _launchGameImpl(
     BuildContext context,
     SystemModel system,
     GameModel game,
@@ -1876,6 +1895,9 @@ class GameLaunchService {
   static Future<void> handleAppResumed() async {
     if (GameSessionManager.isGameLaunched) {
       if (Platform.isLinux) return;
+      // Embedded runtimes own their native lifetime, not iOS foreground edges.
+      if (Platform.isIOS && EmbeddedIOSSessionStatus.handles(
+          GameSessionManager.launchedEmulatorExe)) return;
 
       final isDesktop =
           Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -1915,6 +1937,9 @@ class GameLaunchService {
 
   /// Verifies if a process is running on desktop platforms.
   static Future<bool> isProcessRunning(String processName) async {
+    if (Platform.isIOS && EmbeddedIOSSessionStatus.handles(processName)) {
+      return EmbeddedIOSSessionStatus.isActive(processName);
+    }
     if (Platform.isWindows) return await _isProcessRunning(processName);
     if (Platform.isLinux || Platform.isMacOS) {
       final unixName = processName.replaceAll(

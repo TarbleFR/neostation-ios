@@ -1,5 +1,6 @@
 #import "DolphinInternalBridgePlugin.h"
 #import "DolphinSessionMenu.h"
+#include "DOLCheatCatalogue.h"
 #import "DolphinRetroAchievementsAccount.h"
 #import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
@@ -74,6 +75,14 @@ int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 #ifndef CS_DEBUGGED
 #define CS_DEBUGGED 0x10000000
 #endif
+
+static NSDictionary* DOLReadCheatSnapshot(void) {
+  char* text=neostation_dolphin_cheats_snapshot();
+  if(!text)return nil;
+  NSData* data=[NSData dataWithBytes:text length:strlen(text)];free(text);
+  id decoded=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  return [decoded isKindOfClass:NSDictionary.class]?decoded:nil;
+}
 
 static NSString* const kDolphinChannel = @"neostation/dolphin_internal";
 static NSString* const kDolphinRequestType = @"com.neogamelab.neostation.dolphin-jit-request";
@@ -293,7 +302,7 @@ static UIViewController* _Nullable DOLRootViewController(void) {
   }
   if (!self.acceptsTouchInput) return;
   [self releaseTouchInput];
-  self.touchOverlay.hidden = GCController.controllers.count > 0;
+  self.touchOverlay.hidden = self.presentedViewController != nil || GCController.controllers.count > 0;
 }
 
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
@@ -702,6 +711,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
 @property(nonatomic, copy, nullable) NSString* saveSessionToken;
 @property(nonatomic, copy) NSDictionary<NSString*, NSString*>* menuLabels;
 @property(nonatomic, copy) NSString* activeGameTitle;
+@property(nonatomic, copy) NSString* activeUserDirectory;
 // These values belong to the Dolphin session, not to the global audio policy.
 @property(nonatomic, copy, nullable) NSString* previousAudioCategory;
 @property(nonatomic, copy, nullable) NSString* previousAudioMode;
@@ -816,6 +826,10 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
     });
     return;
   }
+  if ([call.method isEqualToString:@"isSessionActive"]) {
+    result(@(self.dolphinController != nil || self.launchInProgress || self.stopInProgress));
+    return;
+  }
   if ([call.method isEqualToString:@"isRunning"]) {
     result(@(self.launchInProgress || self.stopInProgress || neostation_dolphin_is_running() != 0));
     return;
@@ -870,6 +884,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
   NSString* raUsername = raCredentials[@"username"] ?: @"";
   NSString* raApiToken = raCredentials[@"token"] ?: @"";
   self.activeLogPath = logPath;
+  self.activeUserDirectory = userDirectory;
 
   void (^fail)(NSString*, NSString*) = ^(NSString* stage, NSString* message) {
     state[@"message"] = message;
@@ -1093,6 +1108,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
   self.menuOpening = YES;
   neostation_dolphin_release_touches();
   self.dolphinController.touchOverlay.userInteractionEnabled = NO;
+  self.dolphinController.touchOverlay.hidden = YES;
   DOLAppendJSONLog(self.activeLogPath ?: @"", @"menu.open.begin", @"Opening in-game settings.", nil);
   DOLDolphinViewController* owner = self.dolphinController;
   __weak DolphinInternalBridgePlugin* weakSelf = self;
@@ -1104,6 +1120,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       strongSelf.menuOpening = NO;
       if (!paused || strongSelf.stopInProgress || strongSelf.dolphinController != owner) {
         owner.touchOverlay.userInteractionEnabled = YES;
+          owner.touchOverlay.hidden = GCController.controllers.count > 0;
         return;
       }
       @try {
@@ -1251,15 +1268,35 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
               success = type.length && index >= 0 &&
                   neostation_dolphin_set_cheat_enabled(type.UTF8String,(int32_t)index,
                       [request[@"enabled"] boolValue] ? 1 : 0) != 0;
+            } else if ([kind isEqual:@"import"]) {
+              payload=NeoDolphinImport(bridge.activeUserDirectory,request,DOLReadCheatSnapshot(),NO);
+              success=[payload[@"success"] boolValue];
             } else if ([kind isEqual:@"download"]) {
-              char* text = neostation_dolphin_download_gecko_codes();
-              if (text) {
-                NSData* data = [NSData dataWithBytes:text length:strlen(text)];
-                free(text);
-                id decoded = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-                if ([decoded isKindOfClass:NSDictionary.class]) payload = decoded;
+              NSDictionary* identity=DOLReadCheatSnapshot();
+              if([identity[@"hardcore"] boolValue]) {
+                payload=NeoCheatFailure(@"hardcore");
+              } else {
+                // Never block the runtime queue (stop/restart) on network I/O.
+                DOLFetchCheatCatalogues(identity,^(NSDictionary* fetched){
+                  dispatch_async(bridge->_runtimeQueue,^{
+                    NSDictionary* outcome=fetched;
+                    if(bridge.stopInProgress || bridge.dolphinController!=owner) outcome=NeoCheatFailure(@"sessionChanged");
+                    else if([fetched[@"success"] boolValue]) {
+                      NSMutableDictionary* imported=[identity mutableCopy];
+                      imported[@"type"]=@"ini";imported[@"name"]=@"Catalogue";imported[@"content"]=fetched[@"content"];
+                      NSMutableDictionary* saved=[NeoDolphinImport(bridge.activeUserDirectory,imported,DOLReadCheatSnapshot(),YES) mutableCopy];
+                      saved[@"downloaded"]=fetched[@"downloaded"]?:@0;
+                      saved[@"sources"]=fetched[@"sources"]?:@[];
+                      saved[@"partial"]=fetched[@"partial"]?:@NO;
+                      outcome=saved;
+                    }
+                    DOLAppendJSONLog(bridge.activeLogPath?:@"",@"cheats.catalogues",@"Exact-ID catalogue request finished.",
+                        @{@"gameId":identity[@"gameId"]?:@"",@"success":outcome[@"success"]?:@NO,@"status":outcome[@"errorKey"]?:@"saved"});
+                    dispatch_async(dispatch_get_main_queue(),^{completion([outcome[@"success"] boolValue],outcome);});
+                  });
+                });
+                return;
               }
-              success = [payload[@"success"] boolValue];
             }
             DOLAppendJSONLog(bridge.activeLogPath ?: @"", @"cheats.operation",
                 success ? @"Dolphin cheat operation completed." : @"Dolphin cheat operation failed.",
@@ -1321,6 +1358,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           if (bridge.stopInProgress || bridge.dolphinController != owner) return;
           [owner refreshTouchVisibility];
           owner.touchOverlay.userInteractionEnabled = YES;
+          owner.touchOverlay.hidden = GCController.controllers.count > 0;
           dispatch_async(bridge->_runtimeQueue, ^{ neostation_dolphin_set_paused(0); });
         }];
       };
@@ -1371,6 +1409,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
               bridge.launchInProgress = NO;
               [owner refreshTouchVisibility];
               owner.touchOverlay.userInteractionEnabled = YES;
+          owner.touchOverlay.hidden = GCController.controllers.count > 0;
             }];
           });
         });
@@ -1386,6 +1425,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       } @catch (NSException* exception) {
         strongSelf.sessionMenu = nil;
         owner.touchOverlay.userInteractionEnabled = YES;
+          owner.touchOverlay.hidden = GCController.controllers.count > 0;
         DOLAppendJSONLog(strongSelf.activeLogPath ?: @"", @"menu.presentation_failed", exception.reason ?: @"UIKit presentation failed.", nil);
         dispatch_async(strongSelf->_runtimeQueue, ^{ neostation_dolphin_set_paused(0); });
       }

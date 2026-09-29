@@ -38,6 +38,7 @@ typedef void (^Armsx2SessionPatchCommand)(
 @property(nonatomic, copy) Armsx2SessionReadGraphicsHacks readGraphicsHacks;
 @property(nonatomic, copy) Armsx2SessionGraphicsHackCommand performGraphicsHack;
 @property(nonatomic, copy) Armsx2SessionReadPatches readPatches;
+@property(nonatomic, copy) void (^importCheats)(NSDictionary*, void (^)(NSDictionary*));
 @property(nonatomic, copy) Armsx2SessionPatchCommand performPatchCommand;
 @property(nonatomic, copy) dispatch_block_t resumeGame;
 @property(nonatomic, copy) dispatch_block_t quitGame;

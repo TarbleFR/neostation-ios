@@ -7,6 +7,7 @@ import '../../models/system_model.dart';
 import '../../repositories/game_repository.dart';
 import '../../repositories/system_repository.dart';
 import '../game_session_persistence.dart';
+import '../frontend_media_gate.dart';
 
 /// Owns the game-session lifecycle and its mutable tracking state.
 ///
@@ -40,10 +41,16 @@ class GameSessionManager {
   /// Opens the launch-pending window. Call when a launch is initiated, before
   /// the emulator handoff. Cleared by [registerGameLaunch] on success or
   /// [clearLaunchPending] on failure.
-  static void beginLaunchPending() => _launchPending = true;
+  static void beginLaunchPending() {
+    _launchPending = true;
+    unawaited(FrontendMediaGate.instance.hold('gameSession'));
+  }
 
   /// Closes the launch-pending window (e.g. on launch failure).
-  static void clearLaunchPending() => _launchPending = false;
+  static void clearLaunchPending() {
+    _launchPending = false;
+    if (!_isGameLaunched) FrontendMediaGate.instance.release('gameSession');
+  }
 
   /// Timestamp when the current game session was initiated.
   static DateTime? _gameLaunchTime;
@@ -134,6 +141,7 @@ class GameSessionManager {
     GameModel game, [
     String? emulatorExeName,
   ]) {
+    unawaited(FrontendMediaGate.instance.hold('gameSession'));
     _isGameLaunched = true;
     _launchPending = false;
     _gameLaunchTime = DateTime.now();
@@ -222,6 +230,8 @@ class GameSessionManager {
     _launchedEmulatorExe = null;
     _currentGameSystem = null;
     _currentGame = null;
+    _launchPending = false;
+    FrontendMediaGate.instance.release('gameSession');
   }
 
   static Future<void> _savePlayTime(

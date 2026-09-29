@@ -1480,6 +1480,10 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     return;
   }
 
+  if ([call.method isEqualToString:@"isSessionActive"]) {
+    result(@(self.gameController != nil));
+    return;
+  }
   if ([call.method isEqualToString:@"emulationState"]) {
     dispatch_async(_runtimeQueue, ^{
       int32_t value = self.initialized ? self->_api.get_emulation_state() : 0;

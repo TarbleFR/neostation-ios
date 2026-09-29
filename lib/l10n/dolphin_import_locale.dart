@@ -1749,6 +1749,7 @@ abstract final class DolphinImportLocale {
       ..._accountMenu['en']!,
       ...?_accountMenu[key],
       ...DolphinExtendedLocale.labels(key),
+      '__locale': key,
     };
   }
 

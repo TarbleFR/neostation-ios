@@ -11,6 +11,13 @@ part of '../my_games_list.dart';
 /// host [rebuild] bridge and the host static `_log` is qualified as
 /// `_SystemGamesListState._log` (both required from an extension).
 extension _SecondaryDisplay on _SystemGamesListState {
+  bool get _previewIsSuppressed => _isGameLaunching ||
+      FrontendMediaGate.instance.blocked || GameService.isGameLaunchInProgress;
+
+  void _onFrontendMediaGateChanged() {
+    if (mounted && !_previewIsSuppressed) _startVideoTimer();
+  }
+
   /// Grid cards never expose a video-audio control and their primary preview is
   /// not visible. Keep those previews silent even when the global list/carousel
   /// preview sound preference is enabled.
@@ -93,7 +100,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     // removes the initial audio edge/click after the first decoded frame.
     const steps = 4;
     for (var step = 1; step <= steps; step++) {
-      if (!mounted ||
+      if (!mounted || _previewIsSuppressed ||
           generation != _videoGeneration ||
           _videoController != controller)
         return;
@@ -106,7 +113,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
 
   /// Orchestrates background tasks triggered by game selection changes.
   void _performBackgroundOperationsForSelectedGame({bool force = false}) {
-    if (_selectedGame == null || !mounted) return;
+    if (_selectedGame == null || !mounted || _previewIsSuppressed) return;
 
     // Suppress expensive operations (video, isolates) during rapid scrolling.
     if (_isNavigatingFast && !force) {
@@ -202,7 +209,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
         currentState.isVideoMuted != isVideoMuted ||
         currentState.isGameLaunching != _isGameLaunching;
 
-    if (shouldUpdate && !_isNavigatingBack) {
+    if (shouldUpdate && !_previewIsSuppressed && !_isNavigatingBack) {
       final bool hasFanart = !isMusicSystem && File(fanartPath).existsSync();
       final bool hasScreenshot =
           !isMusicSystem && File(screenshotPath).existsSync();
@@ -300,7 +307,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
 
   /// Pushes specific video path updates to the secondary screen.
   Future<void> _updateSecondaryDisplayVideo(GameModel game) async {
-    if (_secondaryDisplayState == null ||
+    if (_secondaryDisplayState == null || _previewIsSuppressed ||
         _isNavigatingBack ||
         _selectedGame != game) {
       return;
@@ -309,7 +316,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     final videoPath = _getVideoPath(game);
     final videoExists = await _fileProvider.fileExists(videoPath);
 
-    if (videoExists && !_isNavigatingBack && _selectedGame == game) {
+    if (videoExists && !_previewIsSuppressed && !_isNavigatingBack && _selectedGame == game) {
       // ignore: unawaited_futures
       _secondaryDisplayState?.updateState(gameVideo: videoPath);
       _updateMusicDucking();
@@ -318,7 +325,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
 
   /// Dynamically adjusts background music volume to prevent audio conflicts with video previews.
   void _updateMusicDucking() {
-    if (!mounted) return;
+    if (!mounted || _previewIsSuppressed) return;
 
     final config = context.read<SqliteConfigProvider>().config;
 
@@ -344,7 +351,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
   }
 
   void _updateBackground(GameModel game) {
-    if (!mounted ||
+    if (!mounted || _previewIsSuppressed ||
         widget.system.folderName == 'all' ||
         widget.system.folderName == SystemFolderNames.favorites) {
       return;
@@ -392,7 +399,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
   void _startVideoTimer() {
     _videoTimer?.cancel();
     _videoTimer = null;
-    if (!mounted || _isGameLaunching) return;
+    if (!mounted || _previewIsSuppressed || _isGameLaunching) return;
 
     final generation = _videoGeneration;
     final scheduledGame = _selectedGame;
@@ -406,7 +413,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     }
     _videoTimer = Timer(_SystemGamesListState._videoStartDelay, () {
       _videoTimer = null;
-      if (!mounted ||
+      if (!mounted || _previewIsSuppressed ||
           _isGameLaunching ||
           generation != _videoGeneration ||
           _selectedGame != scheduledGame) {
@@ -426,14 +433,14 @@ extension _SecondaryDisplay on _SystemGamesListState {
     GameModel scheduledGame, {
     required int generation,
   }) async {
-    if (!mounted ||
+    if (!mounted || _previewIsSuppressed ||
         generation != _videoGeneration ||
         _selectedGame != scheduledGame) {
       return;
     }
 
     await _updateSecondaryDisplayVideo(scheduledGame);
-    if (!mounted ||
+    if (!mounted || _previewIsSuppressed ||
         generation != _videoGeneration ||
         _selectedGame != scheduledGame) {
       return;
@@ -455,7 +462,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     GameModel game, {
     required int generation,
   }) async {
-    if (!mounted || generation != _videoGeneration || _selectedGame != game) {
+    if (!mounted || _previewIsSuppressed || generation != _videoGeneration || _selectedGame != game) {
       return;
     }
     final config = context.read<SqliteConfigProvider>().config;
@@ -470,7 +477,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     final exists = _fileProvider.isInitialized
         ? await _fileProvider.fileExists(videoPath)
         : File(videoPath).existsSync();
-    if (!mounted || generation != _videoGeneration || _selectedGame != game) {
+    if (!mounted || _previewIsSuppressed || generation != _videoGeneration || _selectedGame != game) {
       return;
     }
     if (!exists) {
@@ -484,7 +491,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     final transition = _videoTransition.catchError((Object _) {}).then((
       _,
     ) async {
-      if (!mounted || generation != _videoGeneration || _selectedGame != game) {
+      if (!mounted || _previewIsSuppressed || generation != _videoGeneration || _selectedGame != game) {
         return;
       }
       final old = _videoController;
@@ -492,14 +499,14 @@ extension _SecondaryDisplay on _SystemGamesListState {
       if (old != null) {
         await _disposeVideoController(old, reason: 'replacement');
       }
-      if (!mounted || generation != _videoGeneration || _selectedGame != game) {
+      if (!mounted || _previewIsSuppressed || generation != _videoGeneration || _selectedGame != game) {
         return;
       }
 
       final controller = VideoPlayerController.file(File(videoPath));
       try {
         await controller.initialize();
-        if (!mounted ||
+        if (!mounted || _previewIsSuppressed ||
             generation != _videoGeneration ||
             _selectedGame != game) {
           await _disposeVideoController(controller, reason: 'stale-initialize');
@@ -508,8 +515,12 @@ extension _SecondaryDisplay on _SystemGamesListState {
 
         await controller.setVolume(0.0);
         await controller.setLooping(true);
+        if (_previewIsSuppressed || generation != _videoGeneration) {
+          await _disposeVideoController(controller, reason: 'game-started-before-play');
+          return;
+        }
         await controller.play();
-        if (!mounted ||
+        if (!mounted || _previewIsSuppressed ||
             generation != _videoGeneration ||
             _selectedGame != game) {
           await _disposeVideoController(controller, reason: 'stale-play');
