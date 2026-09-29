@@ -26,7 +26,13 @@ for path in paths:
 for path in ('.github/workflows/ios-ci.yml','build-utils/prepare_fast_native_runtime.py',
              'packages/dolphin_internal_bridge/ci/build_support.py'):
     text=(ROOT/path).read_text()
-    assert '1.5.0' not in text and '11039092572' not in text,path
+    # A historical version in release prose is not an executable dependency.
+    # Remove ONLY the reviewed sentence; every other obsolete version, artifact
+    # ID and donor option remains forbidden, including commands in this workflow.
+    history='NeoStation now integrates **StikJIT 1.9.0**, replacing the previous 1.5.0 integration.'
+    assert text.count(history) <= 1, 'Unexpected repeated historical version: '+path
+    executable=text.replace(history, '')
+    assert '1.5.0' not in executable and '11039092572' not in text,path
     assert '--stik-xcframework-zip' not in text,path
 pin=json.loads((ROOT/'build-utils/stikjit/source.json').read_text())
 identity_path=ROOT/'build/stikjit-current/identity.json'

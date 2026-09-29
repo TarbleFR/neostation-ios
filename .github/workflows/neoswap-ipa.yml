@@ -485,8 +485,8 @@ jobs:
         run: |
           set -euo pipefail
           command -v xcodegen || brew install xcodegen
-          python3 build-utils/build_patched_stikjit.py
-          python3 test/stikjit_unified_build_test.py
+          python3 build-utils/build_patched_stikjit.py 2>&1 | tee "$RUNNER_TEMP/neoswap-stikjit-step.log"
+          python3 test/stikjit_unified_build_test.py 2>&1 | tee -a "$RUNNER_TEMP/neoswap-stikjit-step.log"
 
       - name: Require completed exact NeoSwap Core before artifact download
         shell: bash
@@ -1039,6 +1039,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/fast-diagnostics
+          test -f "$RUNNER_TEMP/neoswap-stikjit-step.log" && tail -n 150 "$RUNNER_TEMP/neoswap-stikjit-step.log" > build/fast-diagnostics/stikjit-step.log || true
           test -f "$RUNNER_TEMP/neostation-fast-xcodebuild.log" &&             tail -n 350 "$RUNNER_TEMP/neostation-fast-xcodebuild.log" > build/fast-diagnostics/xcodebuild.log || true
           cp -f build/fast-native/identity.json build/fast-diagnostics/ 2>/dev/null || true
           cp -f build/fast-native/rpcs3-core-identity.json build/fast-diagnostics/ 2>/dev/null || true
