@@ -71,11 +71,17 @@ struct SystemHeadroom {
   std::uint64_t purgeable_bytes = 0;
   std::uint64_t reclaimable_bytes = 0;
   std::uint64_t usable_bytes = 0;
+  std::uint64_t kernel_available_bytes = 0;
+  std::uint32_t kernel_available_percent = 0;
+  bool kernel_estimate_valid = false;
   MemoryPressure pressure = MemoryPressure::unobserved;
 };
 // A kernel sample, not os_proc_available_memory (which is a process limit).
-// free_count already includes speculative pages. Inactive/dirty/compressed
-// pages are deliberately not credited. 512 MiB is kept outside growth.
+// The optional memorystatus level estimates allocation headroom, including OS
+// reclamation; it is never a measurement of donated/resident physical pages.
+// free_count includes speculative pages. Keep 512 MiB and one percentage point.
+void derive_system_budget(SystemHeadroom& out, std::uint64_t physical_bytes,
+                          std::uint32_t kernel_percent, bool valid) noexcept;
 Result system_headroom(SystemHeadroom& out) noexcept;
 #if defined(NEOSWAP_TESTING)
 // Negative cleanup test; the object still comes from the real Darwin kernel.

@@ -164,6 +164,9 @@ int main(int argc, const char* argv[]) {
     evidence[@"systemUsableBeforeBytes"] = @(startingSystem.usable_bytes);
     evidence[@"systemPressureBefore"] = @(static_cast<uint32_t>(startingSystem.pressure));
     evidence[@"systemSampleKernelResult"] = @(startingStatus.kernel_result);
+    evidence[@"kernelAvailableBeforeBytes"] = @(startingSystem.kernel_available_bytes);
+    evidence[@"kernelAvailablePercent"] = @(startingSystem.kernel_available_percent);
+    evidence[@"kernelEstimateValid"] = @(startingSystem.kernel_estimate_valid);
     if (stress) {
       char* end = nullptr;
       errno = 0;

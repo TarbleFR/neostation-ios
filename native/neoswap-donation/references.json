@@ -2,6 +2,14 @@
   "schema": 1,
   "claims": [
     {
+      "claim": "XNU exposes memorystatus_level as the integer percentage of its available-page estimate; this advisory allocation headroom is separate from donated resident-page accounting",
+      "source": "https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/vm/vm_pageout.c"
+    },
+    {
+      "claim": "XNU's pressure sysctl returns dispatch pressure flags; iOS may deny this query, in which case asynchronous pressure and conservative fallback sampling remain active",
+      "source": "https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_memorystatus_notify.c"
+    },
+    {
       "claim": "The macOS-only kernel probe binds registered Mach send rights explicitly when spawning a fresh donor process, using XNU's registered-port spawn attribute",
       "source": "https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/spawn/posix_spawn.c"
     },

@@ -12,6 +12,7 @@
 #include <mach/task_info.h>
 #include <mach/vm_statistics.h>
 #include <dispatch/dispatch.h>
+#include <sys/sysctl.h>
 #endif
 
 namespace neostation::donation {
@@ -194,6 +195,24 @@ Result footprint(Footprint& out) noexcept {
 #endif
 }
 
+void derive_system_budget(SystemHeadroom& out, std::uint64_t physical_bytes,
+                          std::uint32_t kernel_percent, bool valid) noexcept {
+  out.kernel_estimate_valid = valid && physical_bytes && kernel_percent <= 100;
+  out.kernel_available_percent = out.kernel_estimate_valid ? kernel_percent : 0;
+  // memorystatus_level is an integer percentage, not free physical bytes.
+  // Round down and reserve a whole percentage point for sample quantization.
+  out.kernel_available_bytes = out.kernel_estimate_valid && kernel_percent
+      ? (physical_bytes / 100) * (kernel_percent - 1) : 0;
+  out.usable_bytes = 0;
+  if (out.free_bytes > UINT64_MAX - out.purgeable_bytes) return;
+  out.reclaimable_bytes = out.free_bytes + out.purgeable_bytes;
+  const auto budget = out.kernel_estimate_valid
+      ? out.kernel_available_bytes : out.reclaimable_bytes;
+  constexpr std::uint64_t margin = 512ULL * 1024 * 1024;
+  if (out.pressure != MemoryPressure::warning && out.pressure != MemoryPressure::critical)
+    out.usable_bytes = budget > margin ? budget - margin : 0;
+}
+
 Result system_headroom(SystemHeadroom& out) noexcept {
   out = {};
 #if defined(__APPLE__)
@@ -201,6 +220,16 @@ Result system_headroom(SystemHeadroom& out) noexcept {
   auto* monitor = pressure_monitor();
   if (!monitor || !monitor->source) return error(Stage::memory_pressure, KERN_NOT_SUPPORTED);
   out.pressure = monitor->pressure.load(std::memory_order_relaxed);
+  std::uint32_t current_pressure = 0;
+  size_t pressure_size = sizeof(current_pressure);
+  if (sysctlbyname("kern.memorystatus_vm_pressure_level", &current_pressure,
+        &pressure_size, nullptr, 0) == 0 && pressure_size == sizeof(current_pressure)) {
+    MemoryPressure measured = MemoryPressure::unobserved;
+    if (current_pressure == DISPATCH_MEMORYPRESSURE_CRITICAL) measured = MemoryPressure::critical;
+    else if (current_pressure == DISPATCH_MEMORYPRESSURE_WARN) measured = MemoryPressure::warning;
+    else if (current_pressure == DISPATCH_MEMORYPRESSURE_NORMAL) measured = MemoryPressure::normal;
+    if (static_cast<unsigned>(measured) > static_cast<unsigned>(out.pressure)) out.pressure = measured;
+  }
   vm_statistics64_data_t memory{};
   mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
   const auto host = mach_host_self();
@@ -217,9 +246,14 @@ Result system_headroom(SystemHeadroom& out) noexcept {
   out.purgeable_bytes = static_cast<std::uint64_t>(memory.purgeable_count) * vm_page_size;
   if (out.free_bytes > UINT64_MAX - out.purgeable_bytes)
     return error(Stage::system_headroom, KERN_INVALID_ARGUMENT);
-  out.reclaimable_bytes = out.free_bytes + out.purgeable_bytes;
-  constexpr std::uint64_t margin = 512ULL * 1024 * 1024;
-  out.usable_bytes = out.reclaimable_bytes > margin ? out.reclaimable_bytes - margin : 0;
+  std::uint64_t physical_bytes = 0;
+  std::uint32_t kernel_percent = 0;
+  size_t physical_size = sizeof(physical_bytes), percent_size = sizeof(kernel_percent);
+  const bool kernel_sample = sysctlbyname("hw.memsize", &physical_bytes, &physical_size, nullptr, 0) == 0 &&
+      physical_size == sizeof(physical_bytes) &&
+      sysctlbyname("kern.memorystatus_level", &kernel_percent, &percent_size, nullptr, 0) == 0 &&
+      percent_size == sizeof(kernel_percent);
+  derive_system_budget(out, physical_bytes, kernel_percent, kernel_sample);
   if (out.pressure == MemoryPressure::warning || out.pressure == MemoryPressure::critical) {
     out.usable_bytes = 0;
     return error(Stage::memory_pressure, KERN_RESOURCE_SHORTAGE);

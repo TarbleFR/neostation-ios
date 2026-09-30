@@ -1,5 +1,6 @@
 #include "NeoSwap.h"
 #include "NeoSwapHost.h"
+#include "Donation/Broker.h"
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -17,6 +18,34 @@ static NeoSwapHostStats host() {
     return stats;
 }
 int main() {
+    // Regression: the hosted Mac reported 85% kernel headroom while free+
+    // purgeable pages were only about 145 MiB. That must allow a bounded real
+    // chunk, without counting the kernel estimate as donated resident memory.
+    neostation::donation::SystemHeadroom system{};
+    system.free_bytes = 8289ULL * 16384;
+    system.purgeable_bytes = 821ULL * 16384;
+    system.pressure = neostation::donation::MemoryPressure::normal;
+    neostation::donation::derive_system_budget(system, 7516192768ULL, 85, true);
+    assert(system.kernel_estimate_valid && system.usable_bytes > 128 * MiB);
+    assert(system.usable_bytes < 7516192768ULL && !host().donated_live_bytes);
+    system.pressure = neostation::donation::MemoryPressure::warning;
+    neostation::donation::derive_system_budget(system, 7516192768ULL, 85, true);
+    assert(!system.usable_bytes);
+    system.pressure = neostation::donation::MemoryPressure::unobserved;
+    neostation::donation::derive_system_budget(system, 7516192768ULL, 101, true);
+    assert(!system.kernel_estimate_valid && !system.usable_bytes);
+    neostation::donation::derive_system_budget(system, 7516192768ULL, 85, false);
+    assert(!system.kernel_estimate_valid && !system.usable_bytes);
+    system.free_bytes = 1024 * MiB;
+    system.purgeable_bytes = 0;
+    neostation::donation::derive_system_budget(system, 7516192768ULL, 0, true);
+    assert(system.kernel_estimate_valid && !system.usable_bytes);
+    neostation::donation::derive_system_budget(system, 7516192768ULL, 0, false);
+    assert(!system.kernel_estimate_valid && system.usable_bytes == 512 * MiB);
+    system.pressure = neostation::donation::MemoryPressure::critical;
+    system.free_bytes = UINT64_MAX;
+    neostation::donation::derive_system_budget(system, UINT64_MAX, 100, true);
+    assert(!system.usable_bytes);
     char directory[] = "/tmp/neoswap-demand-test-XXXXXX";
     assert(mkdtemp(directory));
     const auto* api = NeoSwap_GetAPI(1);

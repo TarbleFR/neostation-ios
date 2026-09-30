@@ -610,6 +610,8 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
             'UISupportedInterfaceOrientations':['UIInterfaceOrientationPortrait']}
     plist(app / 'Info.plist', info)
     entitlements = DONATION / 'NeoSwapDonor.entitlements'
+    simulator_entitlements = work / 'Simulator.entitlements'
+    plist(simulator_entitlements, {})
     report['buildPreflight'] = {'hostInfo':info, 'architecture':architecture, 'helpers':{},
                                 'initialChunkMaximumBytes':16 * 1024**2,
                                 'targetBytesPerPID':PROBE_DONOR_BYTES,
@@ -648,16 +650,26 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
         require_entitlements(actual_entitlements, REQUIRED_DONOR_ENTITLEMENTS, executable)
         if set(actual_entitlements) != set(REQUIRED_DONOR_ENTITLEMENTS):
             raise RuntimeError(f'{name} has unexpected actual embedded signature entitlements')
+        production_signature_preflight = actual_entitlements
+        # macOS AMFI rejects these restricted device-only capabilities on a
+        # Simulator process. Keep their native signature preflight above, then
+        # run the actual extension with an explicitly empty Simulator signature.
+        run(['codesign', '--force', '--sign', '-', '--entitlements',
+             str(simulator_entitlements), str(helper)])
+        actual_entitlements = embedded_entitlements((helper / executable).read_bytes())
+        if actual_entitlements:
+            raise RuntimeError(f'{name} retained device-only capabilities in its Simulator signature')
         report['buildPreflight']['helpers'][name] = {
             'info':helper_info, 'machO':simulator_executable(helper / executable, architecture),
             'embeddedEntitlementValues':actual_entitlements,
+            'productionCapabilitySignaturePreflight':production_signature_preflight,
             'otoolHeaders':run(['xcrun', 'otool', '-hv', str(helper / executable)], capture=True),
             'otoolLoadCommands':run(['xcrun', 'otool', '-l', str(helper / executable)], capture=True),
             'signature':run(['codesign', '--display', '--verbose=4', str(helper)], capture=True),
             'embeddedEntitlements':run(['codesign', '--display', '--entitlements', ':-', str(helper)], capture=True),
         }
     host_entitlements = work / 'host.entitlements'
-    plist(host_entitlements, {'get-task-allow':True})
+    plist(host_entitlements, {})
     run(['codesign', '--force', '--sign', '-', '--entitlements', str(host_entitlements), str(app)])
     run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)])
     report['buildPreflight'].update({
