@@ -90,7 +90,7 @@ résultat appareil à 1 Gio n'est déduit de ces vérifications.
 Une expérience CI séparée demande exactement 1 Gio de pages NONVOLATILE par le
 même chemin NSXPC et les mêmes contrôles de headroom que les essais précédents.
 Elle conserve les refus et valeurs réellement mesurées dans son rapport. Un
-second essai importe chaque chunk vérifié dans un `MTLBuffer` sans copie,
+second essai à 128 Mio importe chaque chunk vérifié dans un `MTLBuffer` sans copie,
 écrit sur les buffers avec une commande GPU, vérifie l'alias CPU et effectue
 une relecture GPU. Les mappings restent vivants jusqu'à la fin des commandes
 et à la libération des objets Metal ; une expiration termine le processus
@@ -104,3 +104,13 @@ Elle ne raccorde pas encore les heaps Vulkan de RPCS3 et ne démontre pas 1 Gio
 en jeu sur iPhone. Le résultat matériel de cette preuve doit précéder le
 raccordement des grosses allocations ; aucune réserve artificielle n'est
 ajoutée au lancement du jeu.
+
+Le premier essai (`1ad7c78`, run `36737143272`) a effectivement préparé
+1 073 741 824 octets dans cinq chunks vérifiés. Le donneur mesurait
+904 314 880 octets résidents et 169 426 944 octets comprimés. Le total est
+exactement 1 Gio, mais l'assertion exigeant 1 Gio résident a échoué avant
+l'import Metal. Ce résultat n'est pas une preuve de 1 Gio résident ni de RAM
+utilisée par RPCS3. L'exigence résidente est conservée. L'essai Metal est ramené
+à 128 Mio pour examiner séparément la compatibilité graphique. Le script
+optionnel est aussi corrigé pour ne pas développer un tableau vide sous le
+`nounset` du Bash 3.2 de macOS ; le chemin NSXPC habituel est revérifié.

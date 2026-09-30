@@ -155,6 +155,7 @@ int main(int argc, const char* argv[]) {
     }
     reportFile = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : nil;
     evidence = [@{@"schema":@2, @"platform":@"macOS-NSXPC-two-process", @"passed":@NO,
+                  @"hostPID":@(getpid()),
                   @"iphoneExtensionValidated":@NO, @"capacityBytes":@0, @"preparedBytes":@0,
                   @"donorResidentBytes":@0, @"donorCompressedBytes":@0} mutableCopy];
     uint64_t target = 128 * MiB;
@@ -213,6 +214,7 @@ int main(int argc, const char* argv[]) {
             "Real XPC donor did not complete shared-page verification");
     if (lastError) std::fprintf(stderr, "%s\n", lastError.description.UTF8String);
     const auto first = [session snapshot];
+    evidence[@"donorPID"] = @(first.donorPID);
     evidence[@"capacityBytes"] = @(first.capacityBytes);
     evidence[@"preparedBytes"] = @(first.capacityBytes);
     evidence[@"donorResidentBytes"] = @(first.donatedResidentBytes);
@@ -264,6 +266,8 @@ int main(int argc, const char* argv[]) {
             snapshot.donorPID != getpid() && snapshot.capacityBytes == target && snapshot.verifiedChunkCount >= 2 &&
             snapshot.donatedResidentBytes + snapshot.donatedCompressedBytes >= target - MiB,
             "Active donor lacks distinct PID and cumulative charged page evidence");
+    evidence[@"stage"] = @"final_resident_ledger";
+    evidence[@"residentTargetVerified"] = @(snapshot.donatedResidentBytes >= target - MiB);
     if (stress)
       require(snapshot.donatedResidentBytes >= target - MiB,
               "The stress target was acquired logically but its final resident ledger does not prove the requested physical pages");
@@ -274,6 +278,7 @@ int main(int argc, const char* argv[]) {
     NSDictionary* metalReport = @{@"requested":@NO, @"passed":@NO};
 #if defined(NEOSWAP_METAL_PROBE)
     metalReport = runMetalDonationProbe(session, target);
+    evidence[@"metalDonation"] = metalReport;
 #endif
     const uint64_t lastIndex = snapshot.verifiedChunkCount - 1;
     const uint64_t lastBytes = [session chunkCapacityBytes:lastIndex];

@@ -22,14 +22,15 @@ for bundle, payload in [
 PY
 sources=("$root/Broker.cpp" "$root/NeoSwapMachHandle.mm" "$root/NeoSwapDonorIPC.mm"
          "$root/NeoSwapDonorRequestHandler.mm" "$root/ipc_macos_probe.mm")
-probe_flags=()
+# Bash 3.2 treats an empty array expansion as unset under nounset. Keep the
+# common compiler arguments in this array so the non-Metal path is nonempty.
+probe_flags=(-DNEOSWAP_DONATION_PROBE=1 -DNEOSWAP_TESTING=1 -mmacosx-version-min=13.0 -framework Foundation -framework Security)
 case "${NEOSWAP_METAL_PROBE:-0}" in
   0) ;;
-  1) probe_flags=(-DNEOSWAP_METAL_PROBE=1 -framework Metal) ;;
+  1) probe_flags+=(-DNEOSWAP_METAL_PROBE=1 -framework Metal) ;;
   *) echo 'ERROR: NEOSWAP_METAL_PROBE must be 0 or 1' >&2; exit 64 ;;
 esac
 xcrun clang++ -x objective-c++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fobjc-arc \
-  -DNEOSWAP_DONATION_PROBE=1 -DNEOSWAP_TESTING=1 -mmacosx-version-min=13.0 -framework Foundation -framework Security \
   "${probe_flags[@]}" "${sources[@]}" -o "$app/Contents/MacOS/NeoSwapIPC"
 cp "$app/Contents/MacOS/NeoSwapIPC" "$service/Contents/MacOS/NeoSwapDonor"
 codesign --force --sign - "$service"

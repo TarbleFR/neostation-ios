@@ -1151,7 +1151,7 @@ jobs:
           cp dist/0.0.2-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/phone-shake-tests.json" build/private-test/
           cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
-          printf '%s\n' 'NeoStation-NeoSwap-Build369.ipa' > build/private-test/delivery-name.txt
+          printf 'NeoStation-Build%s-%s.ipa\n' "$BUILD_NUMBER" "$GITHUB_SHA" > build/private-test/delivery-name.txt
           cp build/stikjit-current/modern-baseline.json build/private-test/
           cp build/fast-native/identity.json build/private-test/native-identity.json
           printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt

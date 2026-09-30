@@ -18,7 +18,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        metal: [0, 1]
+        include:
+          - metal: 0
+            bytes: '1073741824'
+          - metal: 1
+            bytes: '134217728'
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -29,9 +33,9 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-      - name: Exercise verified NSXPC pages at 1 GiB with optional actual Metal import
+      - name: Verify donor residency at the requested size and exercise optional Metal import
         env:
-          NEOSWAP_IPC_STRESS_BYTES: '1073741824'
+          NEOSWAP_IPC_STRESS_BYTES: ${{ matrix.bytes }}
           NEOSWAP_METAL_PROBE: ${{ matrix.metal }}
         run: |
           set -euo pipefail
@@ -46,20 +50,21 @@ jobs:
           import json,os
           from pathlib import Path
           report=json.loads(Path('build/neoswap-1gib/report.json').read_text())
-          assert report['passed'] is True and report['preparedBytes']==1073741824, report
-          assert report['residentTargetVerified'] is True and report['donorResidentBytes']>=1073741824-1024**2, report
+          target=int(os.environ['NEOSWAP_IPC_STRESS_BYTES'])
+          assert report['passed'] is True and report['preparedBytes']==target, report
+          assert report['residentTargetVerified'] is True and report['donorResidentBytes']>=target-1024**2, report
           assert report['iphoneExtensionValidated'] is False, report
           if os.environ['NEOSWAP_METAL_PROBE']=='1':
               metal=report['metalDonation']
-              assert metal['passed'] is True and metal['importedBytes']==1073741824, report
-              assert metal['gpuWrittenBytes']==1073741824 and metal['gpuToCpuAliasVerified'] is True, report
+              assert metal['passed'] is True and metal['importedBytes']==target, report
+              assert metal['gpuWrittenBytes']==target and metal['gpuToCpuAliasVerified'] is True, report
               assert metal['gpuReadbackVerified'] is True, report
               assert metal['realRPCS3GameplayValidated'] is False and metal['realIPhoneValidated'] is False, report
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: NeoSwap-1GiB-Metal${{ matrix.metal }}-${{ github.sha }}
+          name: NeoSwap-proof-${{ matrix.bytes }}-Metal${{ matrix.metal }}-${{ github.sha }}
           path: build/neoswap-1gib/
           if-no-files-found: error
           retention-days: 14
