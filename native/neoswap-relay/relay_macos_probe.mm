@@ -95,11 +95,30 @@ void checkFixedReservation(const NeoSwapRelayAPI* api) {
   evidence[@"failedFixedMapPreservedReservation"] = @YES;
   evidence[@"invalidFixedMapKernelResult"] = @(invalidMap);
 }
-uint64_t residentBytes(void* address, uint64_t bytes) {
+NSDictionary* systemMemorySample() {
+  neostation::donation::SystemHeadroom sample{};
+  const auto result = neostation::donation::system_headroom(sample);
+  return @{ @"sampleSucceeded":@(static_cast<bool>(result)), @"kernelResult":@(result.kernel_result),
+    @"freeBytes":@(sample.free_bytes), @"usableBudgetBytes":@(sample.usable_bytes),
+    @"reclaimableBytes":@(sample.reclaimable_bytes), @"pressure":@(static_cast<uint32_t>(sample.pressure)),
+    @"vmPageBytes":@(vm_page_size), @"getPageSizeBytes":@(getpagesize()) };
+}
+uint64_t residentBytes(void* address, uint64_t bytes, NSMutableDictionary* detail = nil) {
+  require(vm_page_size && bytes % vm_page_size == 0, "Residency query is not page aligned");
   std::vector<char> pages(bytes / vm_page_size);
+  const CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
   require(mincore(address, bytes, pages.data()) == 0, "Kernel mapping residency measurement failed");
-  uint64_t resident = 0;
-  for (char page : pages) if (page & MINCORE_INCORE) resident += vm_page_size;
+  uint64_t resident = 0, pagedOut = 0;
+  for (char page : pages) {
+    if (page & MINCORE_INCORE) resident += vm_page_size;
+#ifdef MINCORE_PAGED_OUT
+    if (page & MINCORE_PAGED_OUT) pagedOut += vm_page_size;
+#endif
+  }
+  if (detail) [detail addEntriesFromDictionary:@{ @"queriedBytes":@(bytes),
+    @"residentBytes":@(resident), @"pagedOutBytes":@(pagedOut),
+    @"nonresidentBytes":@(bytes - resident), @"pageBytes":@(vm_page_size),
+    @"querySeconds":@(CFAbsoluteTimeGetCurrent() - started) }];
   return resident;
 }
 }
@@ -254,6 +273,7 @@ int main(int argc, const char* argv[]) {
     evidence[@"capacityBytes"] = @(stats.capacity_bytes); evidence[@"entryCount"] = @(stats.entry_count);
     neostation::donation::Footprint before{}, after{};
     require(static_cast<bool>(neostation::donation::footprint(before)), "Host footprint baseline failed");
+    evidence[@"systemMemoryBeforeWrite"] = systemMemorySample();
     uint64_t tokens[2]{}; void* views[2][2]{};
     for (unsigned segment = 0; segment < 2; ++segment) {
       require(api->create(0, 512 * MiB, &tokens[segment]) == 0, "Relay token creation failed");
@@ -265,13 +285,27 @@ int main(int argc, const char* argv[]) {
       for (uint64_t word = 0; word < 512 * MiB / sizeof(uint64_t); ++word)
         destination[word] = pattern(word * sizeof(uint64_t), segment);
     }
-    uint64_t resident = 0;
+    const CFAbsoluteTime verificationStarted = CFAbsoluteTimeGetCurrent();
     for (unsigned segment = 0; segment < 2; ++segment) {
       const uint64_t* alias = static_cast<const uint64_t*>(views[segment][1]);
       for (uint64_t word = 0; word < 512 * MiB / sizeof(uint64_t); ++word)
         require(alias[word] == pattern(word * sizeof(uint64_t), segment), "Shared alias did not contain the full post-exit write");
-      resident += residentBytes(views[segment][0], 512 * MiB);
     }
+    evidence[@"verificationSeconds"] = @(CFAbsoluteTimeGetCurrent() - verificationStarted);
+    evidence[@"systemMemoryBeforeResidency"] = systemMemorySample();
+    // One compact measurement interval across both unique backing views. Do
+    // not add a sample before verifying another 512 MiB: that is a sum of
+    // different points in time, not evidence of a full live working set.
+    const CFAbsoluteTime residencyStarted = CFAbsoluteTimeGetCurrent();
+    NSMutableArray* residencyDetails = [NSMutableArray array];
+    uint64_t resident = 0;
+    for (unsigned segment = 0; segment < 2; ++segment) {
+      NSMutableDictionary* detail = [NSMutableDictionary dictionary];
+      resident += residentBytes(views[segment][0], 512 * MiB, detail);
+      detail[@"segment"] = @(segment); [residencyDetails addObject:detail];
+    }
+    evidence[@"residencyDetails"] = residencyDetails;
+    evidence[@"residencyMeasurementSeconds"] = @(CFAbsoluteTimeGetCurrent() - residencyStarted);
     require(static_cast<bool>(neostation::donation::footprint(after)), "Host footprint after writes failed");
     const uint64_t footprintDelta = after.physical > before.physical ? after.physical - before.physical : 0;
     const uint64_t nonvolatileDelta = after.nonvolatile > before.nonvolatile ? after.nonvolatile - before.nonvolatile : 0;

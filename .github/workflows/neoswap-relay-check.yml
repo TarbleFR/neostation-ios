@@ -95,6 +95,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          { sysctl hw.memsize hw.pagesize; vm_stat; } > build/neoswap-relay/macos/runner-memory-before.txt
           bash native/neoswap-relay/run_relay_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-relay/macos/report.json" \
             2>&1 | tee build/neoswap-relay/macos/probe.txt
           python3 - <<'PY'
@@ -124,6 +125,7 @@ jobs:
         if: always()
         run: python3 test/neoswap_relay_simulator_test.py --compile-device --output build/neoswap-relay/simulator
       - name: Prove actual iOS 18 extension exit, aliases, release, relaunch and production manager
+        if: always()
         run: python3 test/neoswap_relay_simulator_test.py --output build/neoswap-relay/simulator
       - uses: actions/upload-artifact@v4
         if: always()
