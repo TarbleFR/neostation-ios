@@ -84,3 +84,23 @@ résultat appareil à 1 Gio n'est déduit de ces vérifications.
   PNACH sont présentes. Le dernier signalement GMXP70/r0 n'est pas confirmé
   comme résolu : le GCT binaire et son TXT source exacts ne sont pas disponibles.
 - L'accès aux menus avec la manette a été annulé par le mainteneur.
+
+## Preuve préalable à 1 Gio et compatibilité Metal
+
+Une expérience CI séparée demande exactement 1 Gio de pages NONVOLATILE par le
+même chemin NSXPC et les mêmes contrôles de headroom que les essais précédents.
+Elle conserve les refus et valeurs réellement mesurées dans son rapport. Un
+second essai importe chaque chunk vérifié dans un `MTLBuffer` sans copie,
+écrit sur les buffers avec une commande GPU, vérifie l'alias CPU et effectue
+une relecture GPU. Les mappings restent vivants jusqu'à la fin des commandes
+et à la libération des objets Metal ; une expiration termine le processus
+de test sans libérer prématurément ses pages.
+
+Le contrôle refuse de conclure à une donation GPU utile si les imports
+augmentent fortement la charge mémoire du processus hôte. Un runner sans GPU
+Metal est un échec de faisabilité documenté, pas une réussite simulée.
+Cette expérience n'est compilée ni dans NeoStation ni dans le donneur livré.
+Elle ne raccorde pas encore les heaps Vulkan de RPCS3 et ne démontre pas 1 Gio
+en jeu sur iPhone. Le résultat matériel de cette preuve doit précéder le
+raccordement des grosses allocations ; aucune réserve artificielle n'est
+ajoutée au lancement du jeu.

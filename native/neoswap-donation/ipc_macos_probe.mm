@@ -31,6 +31,10 @@ void require(bool condition, const char* message) {
 }
 }
 
+#if defined(NEOSWAP_METAL_PROBE)
+#include "MetalDonationProbe.h"
+#endif
+
 @interface ProbeReceiver : NSObject <NeoSwapDonorProbeProtocol>
 @property(nonatomic, strong) NSXPCConnection* connection;
 @property(nonatomic, strong) NeoSwapDonorRequestHandler* handler;
@@ -267,6 +271,10 @@ int main(int argc, const char* argv[]) {
     const uint64_t hostNonvolatileDelta = after.nonvolatile > before.nonvolatile
         ? after.nonvolatile - before.nonvolatile : 0;
     require(hostNonvolatileDelta < MiB, "Host inherited the donor object's nonvolatile accounting");
+    NSDictionary* metalReport = @{@"requested":@NO, @"passed":@NO};
+#if defined(NEOSWAP_METAL_PROBE)
+    metalReport = runMetalDonationProbe(session, target);
+#endif
     const uint64_t lastIndex = snapshot.verifiedChunkCount - 1;
     const uint64_t lastBytes = [session chunkCapacityBytes:lastIndex];
     mach_port_t right = [session copyMemoryEntryForChunk:lastIndex];
@@ -342,6 +350,7 @@ int main(int argc, const char* argv[]) {
       @"donorCompressedBytes":@(snapshot.donatedCompressedBytes),
       @"hostNonvolatileDelta":@(hostNonvolatileDelta), @"rejectedArchive":@(rejectedArchive),
       @"machHandleCleanupRetried":@YES,
+      @"metalDonation":metalReport,
       @"rejectedScenarios":rejected, @"passed":@YES };
     NSData* data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
     if (argc > 1) require([data writeToFile:[NSString stringWithUTF8String:argv[1]] atomically:YES],

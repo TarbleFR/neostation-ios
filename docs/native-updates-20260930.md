@@ -54,6 +54,32 @@ n'a été fourni dans cette session. L'ancienne identité KartPad reste donc
 inchangée jusqu'à l'adaptation du nouveau runtime et à sa validation avec un
 pack personnel. Aucun pack ou code traduit du jeu ne doit être publié.
 
+### Cible réactualisée : 0.7.3 publiée le 30 septembre à 14:26 UTC
+
+La demande de dernière version cible désormais `v0.7.3`, commit
+`9f973c4ecc46284edfba06eb7dede67f629eb4c5`. Le runtime iOS reste exactement
+`8892a36125681adc8e4e3e6c7d560d83291a84fa`. Les changements portent sur la
+construction du pack avec PadMint sur Windows/Linux ; cette version ne change
+pas le jeu ni l'application par rapport à 0.7.2.
+
+L'IPA publique de 8 633 284 octets a été téléchargée et vérifiée : SHA-256
+`f9ff55456560b61ae7e9cf47554bb543f2f78011f28e0345f9164b014adca1e2`.
+Son inspection ZIP confirme l'absence de `libkartpad_game.dylib`. Les 901 fichiers
+suivis du runtime ont été préparés avec les deux entrées générées amont.
+L'empreinte d'interface calculée par le générateur officiel est
+`35ccf81c6a555b043cfbfa25fa62c8e335c7dfac21623a304b24dfbcbb623f52` ; elle
+est aussi présente dans le véritable exécutable public 0.7.3.
+
+`build-utils/kartpad/migration-target.json` fixe ces entrées sans changer
+l'identité du Core installé. `inspect_personal_pack.py` inspecte l'IPA personnelle
+en lecture seule et refuse l'IPA publique vide, une mauvaise ABI, une autre
+empreinte, un binaire macOS/simulateur et des tables Mach-O mal formées. Un succès
+de ce précontrôle n'est pas une validation des exports communs, de la signature
+ni du cycle de vie du futur Core intégré. Le pack personnel et cette migration
+restent nécessaires ; Mario Kart Pad 0.7.3 n'est pas annoncé comme intégré.
+
+Source : https://github.com/chrissotraidis/kartpad/releases/tag/v0.7.3
+
 ## Cheats : distinguer le fichier TXT du binaire GCT
 
 La capture du signalement montre GMXP70 révision 0, un aperçu GCT contenant

@@ -1,0 +1,65 @@
+name: NeoSwap 1 GiB and Metal feasibility proof
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/neoswap-1gib-proof.yml'
+      - 'native/neoswap-donation/MetalDonationProbe.h'
+      - 'native/neoswap-donation/ipc_macos_probe.mm'
+      - 'native/neoswap-donation/run_ipc_macos_probe.sh'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    # An experimental feasibility failure is recorded as failure, never as
+    # evidence of a 1 GiB donation or as a GPU/RPCS3 feature shipped to users.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        metal: [0, 1]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Exercise verified NSXPC pages at 1 GiB with optional actual Metal import
+        env:
+          NEOSWAP_IPC_STRESS_BYTES: '1073741824'
+          NEOSWAP_METAL_PROBE: ${{ matrix.metal }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-1gib
+          printf '%s\n' "$GITHUB_SHA" > build/neoswap-1gib/source.txt
+          shasum -a 256 native/neoswap-donation/MetalDonationProbe.h \
+            native/neoswap-donation/ipc_macos_probe.mm \
+            native/neoswap-donation/run_ipc_macos_probe.sh > build/neoswap-1gib/inputs.txt
+          bash native/neoswap-donation/run_ipc_macos_probe.sh \
+            "$GITHUB_WORKSPACE/build/neoswap-1gib/report.json" 2>&1 | tee build/neoswap-1gib/probe.txt
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads(Path('build/neoswap-1gib/report.json').read_text())
+          assert report['passed'] is True and report['preparedBytes']==1073741824, report
+          assert report['residentTargetVerified'] is True and report['donorResidentBytes']>=1073741824-1024**2, report
+          assert report['iphoneExtensionValidated'] is False, report
+          if os.environ['NEOSWAP_METAL_PROBE']=='1':
+              metal=report['metalDonation']
+              assert metal['passed'] is True and metal['importedBytes']==1073741824, report
+              assert metal['gpuWrittenBytes']==1073741824 and metal['gpuToCpuAliasVerified'] is True, report
+              assert metal['gpuReadbackVerified'] is True, report
+              assert metal['realRPCS3GameplayValidated'] is False and metal['realIPhoneValidated'] is False, report
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-1GiB-Metal${{ matrix.metal }}-${{ github.sha }}
+          path: build/neoswap-1gib/
+          if-no-files-found: error
+          retention-days: 14

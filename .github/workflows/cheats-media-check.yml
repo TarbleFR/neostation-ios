@@ -31,6 +31,7 @@ jobs:
           clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_bulk_store_test.mm -framework Foundation -o /tmp/cheat-bulk-store
           /tmp/cheat-bulk-store
           python3 test/cheat_bulk_scope_test.py
+          python3 test/kartpad_personal_pack_test.py
           python3 test/validate_cheat_bulk_ipa_test.py
           python3 test/dolphin_texture_zip_test.py
           python3 test/dolphin_texture_localizations_test.py

@@ -25,10 +25,12 @@
     "Exact candidate workflow gates, private encrypted packaging and separate macOS 8GiB stress success/refusal evidence; no physical iPhone or 8GiB RAM result claimed",
     "Dusklight v2.0.3 with four reviewed canonical upstream merges; ABI v7, SDL, disc routing and unrelated native cores retained; KartPad 0.7.2 requires a separate game-pack migration",
     "Build 368 device journal analysis; compression-category deltas preserve measured totals and reject true excess; donor errors clear only after current-session authenticated pool adoption, verification and acknowledgements; real-device 1GiB gameplay remains unvalidated",
-    "Requested Dolphin/ARMSX2 bulk import: ordinary eight-letter TXT titles and explicit PNACH groups containing comments; damaged code and empty-group rejection retained; no GCT titles invented"
+    "Requested Dolphin/ARMSX2 bulk import: ordinary eight-letter TXT titles and explicit PNACH groups containing comments; damaged code and empty-group rejection retained; no GCT titles invented",
+    "KartPad v0.7.3 migration input pins and read-only personal-pack ABI/fingerprint inspection; installed Core remains v0.5.1 until compatible personal input and lifecycle migration",
+    "Separate macOS NSXPC 1GiB/Metal feasibility experiment only; no production GPU path, dummy allocation, Core source or physical iPhone/RPCS3 gameplay proof"
   ],
   "files_sha256": {
-    ".github/workflows/cheats-media-check.yml": "3543a35de7abe7e4a345bdbff89da5823d28825ec40f243fdd66d4f48b066d57",
+    ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
     ".github/workflows/dolphin-motion-check.yml": "a1fe492de272586f4aaff6d4eeb9a8f331632a3365d8cf553a524cf57a0191b5",
     ".github/workflows/dusklight-core.yml": "1d4f3b08745eb853830ee29710b387dbc0bb98acbc2cb7f8a3d7ed61bdd092d2",
     ".github/workflows/ios-ci.yml": "0284e1a3a43217cfa6600aa12f776b1df47f8254bfaf6006b60600c47e50028e",
@@ -79,10 +81,10 @@
     "native/neoswap-donation/NeoSwapMachHandle.mm": "e9d2cfa3c75ac6b64569d5c7a6baffde646f2faf4dab1d6f5a36dc33192b3828",
     "native/neoswap-donation/Pool.cpp": "fd3601252dc881cd3d21586ceea3586e4207dfc324724a57ec937d4118fa91e4",
     "native/neoswap-donation/Pool.h": "12944770ba6a841c88054092aab2ce908c8d814e230aabfe81bddd5f83c5356c",
-    "native/neoswap-donation/ipc_macos_probe.mm": "37d5c0ae1e775a366af6161d533fddc2e12308c4cb26731473718e0d2774b684",
+    "native/neoswap-donation/ipc_macos_probe.mm": "0c35f68fb42c474896d934c7729a946a8479344a9abe00b26c7ff51a73671f91",
     "native/neoswap-donation/macOS_probe.cpp": "3da6343d9c5ef79d4b3e5064304c2ffb0ead9b7cb549bc79571374d6be939784",
     "native/neoswap-donation/references.json": "d9f6721c74daf5476e37288e72f22e95620c994cb75b52a6513e56afbc550092",
-    "native/neoswap-donation/run_ipc_macos_probe.sh": "d26f9e7e1978456ecf80a6da2b0eeba7465458b8116e7139df15b65a3306f66c",
+    "native/neoswap-donation/run_ipc_macos_probe.sh": "0730251fd0a58cb419d52af17b8be41757b8ca89f5ae1de0b0f4f7168e701ec3",
     "native/neoswap-donation/run_macos_probe.sh": "257249f6326bff4919782353f6995a82718110de88399666575620afe8ac5e63",
     "native/neoswap/NeoSwapClient.h": "aae1fae7785b6bc524762ffda0d9988300d37088e20cf31f300fa7fb1c258be5",
     "native/neoswap/localizations.json": "b379ae0f6301b3ee74509ec86a1471a9847a09a32365efe2a40bdeb1219d4e30",
@@ -115,7 +117,11 @@
     "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "2cd97430cfb70ce4f292ef46ff59c6910102e570e810aada4764a8424b9444a9",
     "native/cheats/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69",
     "packages/dolphin_internal_bridge/ios/Classes/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69",
-    "packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69"
+    "packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69",
+    ".github/workflows/neoswap-1gib-proof.yml": "105c16c927d2b63f9bd4a66e29445f0b9e9743407d65bea9bd65a44680e0f228",
+    "build-utils/kartpad/migration-target.json": "c4ec5a4d83fecd54bc23e737dbd945abbc9619d783d7be836331b64edbd11ed5",
+    "build-utils/kartpad/inspect_personal_pack.py": "f130fe4a7efe66f97954c5921a01ffaae763c60390d7f8b56503f67aee7f63e2",
+    "native/neoswap-donation/MetalDonationProbe.h": "54870f1ee20f9f86ccb0ca31d29c74f0c02b5965e9839a008624b641dcf61b78"
   },
   "git_modes": {
     ".github/workflows/cheats-media-check.yml": "100644",
@@ -205,13 +211,17 @@
     "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "100644",
     "native/cheats/NeoCheatDocument.h": "100644",
     "packages/dolphin_internal_bridge/ios/Classes/NeoCheatDocument.h": "100644",
-    "packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h": "100644"
+    "packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h": "100644",
+    ".github/workflows/neoswap-1gib-proof.yml": "100644",
+    "build-utils/kartpad/migration-target.json": "100644",
+    "build-utils/kartpad/inspect_personal_pack.py": "100644",
+    "native/neoswap-donation/MetalDonationProbe.h": "100644"
   },
   "support_files_sha256": {
     "docs/dolphin-phone-shake-routing.md": "a7efae79d52bd0af21058997d6517bbd5c7ec201b659dcfa1b991fccf24be0e9",
     "docs/import-memory-build368.md": "1fd3cc6fb5495f0533eef457bce889b1dd687884ada7f8797cf1be9cc82a175e",
-    "docs/native-updates-20260930.md": "5aae561cf010af4003ceb12d0b199499e9ea01b3fb75005051b82a127812e8cf",
-    "docs/neoswap-device-analysis-20260930.md": "0fa561f39faf4320dd568452999ef6fa6a00999e5c5a886d7389a22d0bed63b0",
+    "docs/native-updates-20260930.md": "151fd8f2992f95caaaf25ead252f5689c10f9dc31d684e0536ecdee6b45032fb",
+    "docs/neoswap-device-analysis-20260930.md": "ed23f714fefe862d5f51cdd745a487748e0a13d25312056b50228d97210e6a3c",
     "docs/rpcs3-xitrix-v0101-audit.md": "72397b8ac63a1ae4948104df0159f685319235cc513031acaef25a0af12bb82a",
     "test/cheat_bulk_scope_test.py": "e33132d2d8a540b29843fab06773464b077d398a9d62629e1d8843569fe562d5",
     "test/check_neo_swap_scope.py": "d5cd31ca9eb7399da899807b6da77acfe5c7badafccdd022685f78f8c6811ca6",
@@ -228,7 +238,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "42e063268863527a9a58593f0421ed88a27e46675fe14fcdf51a73e379b88a2f",
+    "test/import_memory_candidate_scope_test.py": "9136dd447f9fd170fd91bafb527085a1736aac4b1afac6ad149d79c8ba72469e",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/legal_bundle_preflight_test.py": "bdbe0893d50d74003b80e7c7d3359838714ea95414b61468158fbf4afbca745e",
     "test/native/rpcs3_neoswap_stats_getter_test.cpp": "72b4c84a0c06335ed302be1af18057972057a92cde068fc6dca94d57756044b0",
@@ -255,7 +265,8 @@
     "test/stikjit_scoped_host_test.py": "1de45a721179a2aa2c823fbeca917d9793094d1f99686f9b86bb9c6d1b56cb9b",
     "test/cheat_bulk_parser_test.cpp": "67d74ac4eb358f568bb76e8427b36135b533861cc70a9ec6ffd029131a64d205",
     "test/cheat_bulk_store_test.mm": "4c68e862f0e822f3aed0ec66e15f8473bb7264aef373b08a1bb98e1dd2bbd2b9",
-    "test/cheat_editor361_ui_test.py": "ff795cc017a3920c6cef22efdd48eda640cb01b91d252a6561bb8e7a0ce99f0a"
+    "test/cheat_editor361_ui_test.py": "ff795cc017a3920c6cef22efdd48eda640cb01b91d252a6561bb8e7a0ce99f0a",
+    "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f"
   },
   "support_git_modes": {
     "docs/dolphin-phone-shake-routing.md": "100644",
@@ -305,7 +316,8 @@
     "test/stikjit_scoped_host_test.py": "100644",
     "test/cheat_bulk_parser_test.cpp": "100644",
     "test/cheat_bulk_store_test.mm": "100644",
-    "test/cheat_editor361_ui_test.py": "100644"
+    "test/cheat_editor361_ui_test.py": "100644",
+    "test/kartpad_personal_pack_test.py": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "08c84e3ae4b2201fc540bc5963e16f7627064652a50987b090fac9ec59e04263",

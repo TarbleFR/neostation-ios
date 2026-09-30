@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "release": "v0.7.3",
+  "release_commit": "9f973c4ecc46284edfba06eb7dede67f629eb4c5",
+  "ios_runtime_commit": "8892a36125681adc8e4e3e6c7d560d83291a84fa",
+  "pack_abi": 3,
+  "pack_interface_fingerprint": "35ccf81c6a555b043cfbfa25fa62c8e335c7dfac21623a304b24dfbcbb623f52",
+  "official_ipa": {
+    "name": "KartPad-v0.7.3-ios-unsigned.ipa",
+    "bytes": 8633284,
+    "sha256": "f9ff55456560b61ae7e9cf47554bb543f2f78011f28e0345f9164b014adca1e2",
+    "executable_sha256": "36a4e85a56273b329280d861dd52fb0c49bb9bb2c5e70d899c4118d681e75dd4",
+    "contains_game_pack": false
+  },
+  "state": "requires_personal_pack_and_embedded_lifecycle_migration",
+  "integrated": false,
+  "physical_iphone_validated": false
+}
