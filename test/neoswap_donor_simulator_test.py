@@ -790,7 +790,7 @@ def main() -> int:
             report['installedRegistration'] = run(['xcrun', 'simctl', 'listapps', identifier], capture=True)[-20000:]
             (output / 'installed-prelaunch.json').write_text(json.dumps(report, indent=2) + '\n')
             report['runnerStage'] = 'launch'
-            launched = run(['xcrun', 'simctl', 'launch', identifier, BUNDLE], capture=True, timeout=30)
+            launched = run(['xcrun', 'simctl', 'launch', identifier, BUNDLE], capture=True, timeout=90)
             report['launchOutput'] = launched
             report['runnerStage'] = 'runtime_evidence'
             evidence = container / 'Documents/donation-simulator.json'

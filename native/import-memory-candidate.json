@@ -204,7 +204,7 @@
     "test/neoswap_client_stats_test.cpp": "49ae0663b43f7f0c307f1636ed9bb78448ff1d4f914c0dfcfb30ac5543def747",
     "test/neoswap_demand_test.cpp": "48eb9cb8bee0b1b111f4444c989e8f292840c137e9bb2ea73df9a64baf8ecfcf",
     "test/neoswap_donor_contract_test.py": "70c047f64c81eb217c810d2cc049d820a38202779e6309d355cbf414d6e6ec3e",
-    "test/neoswap_donor_simulator_test.py": "7988c1dd0f25c772d3bb0366dbf18e205a1848dc5b9df92b160a1f2caf8e043a",
+    "test/neoswap_donor_simulator_test.py": "8bc6cd50552ad3a22050c43024d0dedc8e2367463a520d788c4df2474d8c63a3",
     "test/neoswap_evidence_lifecycle_test.py": "8064be3e510b571bf7e6393ec060cdf4ae8eec3bc0b0f76ec2461b86901061d5",
     "test/neoswap_test.cpp": "2237bbff640259d2e7a3b1cd29ff1c95da87ce783eae369afea1c34503f55f02",
     "test/neoswap_usage_policy_test.cpp": "5bb0d65e227f4fdb265e3991533d36248bec96f0099c9763e3a82d41d2c086b3",
