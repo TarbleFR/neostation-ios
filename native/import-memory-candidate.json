@@ -89,7 +89,7 @@
     "native/neoswap-donation/NeoSwapMachHandle.mm": "e9d2cfa3c75ac6b64569d5c7a6baffde646f2faf4dab1d6f5a36dc33192b3828",
     "native/neoswap-donation/Pool.cpp": "fd3601252dc881cd3d21586ceea3586e4207dfc324724a57ec937d4118fa91e4",
     "native/neoswap-donation/Pool.h": "12944770ba6a841c88054092aab2ce908c8d814e230aabfe81bddd5f83c5356c",
-    "native/neoswap-donation/VulkanDonationProbe.h": "dedc9db64e37b915a6e03b6f7eb5b6f0474eb80c763a83713fee21b4b081d102",
+    "native/neoswap-donation/VulkanDonationProbe.h": "f5e901a8fcb92d9958f7dcd15cb4e05622ba7d4819bed51e2fae6783ea9bff65",
     "native/neoswap-donation/ipc_macos_probe.mm": "2f2c4b55ab787fa5fdcafdd56c52643cd60b8902986ae9a65d730099ed3338d2",
     "native/neoswap-donation/macOS_probe.cpp": "3da6343d9c5ef79d4b3e5064304c2ffb0ead9b7cb549bc79571374d6be939784",
     "native/neoswap-donation/references.json": "d9f6721c74daf5476e37288e72f22e95620c994cb75b52a6513e56afbc550092",

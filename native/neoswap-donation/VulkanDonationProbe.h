@@ -53,15 +53,28 @@ struct memory_block {
 
 static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64_t target) {
   evidence[@"stage"] = @"vulkan_driver";
+  // Direct MoltenVK linking does not use the Vulkan loader's portability
+  // enumeration extension. Enable it only when the actual instance exposes it.
+  u32 instanceExtensionCount = 0;
+  require(vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, nullptr) == VK_SUCCESS,
+          "Vulkan instance extension enumeration failed");
+  std::vector<VkExtensionProperties> instanceProperties(instanceExtensionCount);
+  require(vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, instanceProperties.data()) == VK_SUCCESS,
+          "Vulkan instance extension properties failed");
+  const bool portability = std::any_of(instanceProperties.begin(), instanceProperties.end(), [](const auto& property) {
+    return std::strcmp(property.extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0;
+  });
   const char* instanceExtensions[] = {VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
   VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
   app.pApplicationName = "NeoSwap canonical RPCS3 buffer proof";
   app.apiVersion = VK_API_VERSION_1_2;
   VkInstanceCreateInfo instanceInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   instanceInfo.pApplicationInfo = &app;
-  instanceInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-  instanceInfo.enabledExtensionCount = 1;
-  instanceInfo.ppEnabledExtensionNames = instanceExtensions;
+  if (portability) {
+    instanceInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    instanceInfo.enabledExtensionCount = 1;
+    instanceInfo.ppEnabledExtensionNames = instanceExtensions;
+  }
   VkInstance instance = VK_NULL_HANDLE;
   require(vkCreateInstance(&instanceInfo, nullptr, &instance) == VK_SUCCESS, "MoltenVK instance creation failed");
   u32 count = 0;
