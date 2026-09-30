@@ -52,6 +52,10 @@ static void RunProbe(void) {
     Request(@"snapshot",nil,^(NSDictionary* initial) {
         Check([initial[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"automatic8GiB despite previous Off preference");
         Check([initial[@"configResult"] intValue]==0,@"automatic startup configuration");
+        Check([initial[@"reservedVirtualBytes"] unsignedLongLongValue]==8589934592ULL,@"actual automatic PROT_NONE virtual reservation");
+        Check([initial[@"memoryDonationSupported"] boolValue]==NO,@"helper process donation not misrepresented");
+        Check(initial[@"donatedMemoryBytes"]==NSNull.null,@"unsupported donation is unavailable, not fake zero or allocated bytes");
+        Check([initial[@"allocatedDiskBytes"] unsignedLongLongValue]==0,@"unused arena reserves no disk data");
         const NeoSwapAPI* api=NeoSwap_GetAPI(1);
         Check(api->enabled(NEOSWAP_RPCS3),@"RPCS3 allocation path enabled without opening settings");
         Check(api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,2*1024*1024,65536,&live)==0,@"automatic live broker allocation");
@@ -83,6 +87,7 @@ static void RunProbe(void) {
                                 Check([final[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"automatic policy remains8GiB after diagnostics");
                                 Check(api->enabled(NEOSWAP_RPCS3),@"runtime path remains enabled");
                                 Check([final[@"liveBlocks"] unsignedLongLongValue]==0,@"no leaked blocks");
+                                Check([final[@"reservedVirtualBytes"] unsignedLongLongValue]==8589934592ULL,@"virtual reservation remains after blocks released");
                                 Check([Owner(final,@"probe")[@"allocationCount"] unsignedLongLongValue]==2,@"diagnostic ownership isolated");
                                 NSString* log=[NSString stringWithContentsOfFile:final[@"diagnosticPath"] encoding:NSUTF8StringEncoding error:nil];
                                 Check([log containsString:@"process_start"] && [log containsString:@"capacity_probe"],@"diagnostic events written");

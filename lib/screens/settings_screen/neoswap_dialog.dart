@@ -65,13 +65,16 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     });
     try {
       final stats = capacityTest
-          ? await NeoSwap.capacityProbe(_probeMiB) : await NeoSwap.probe();
+          ? await NeoSwap.capacityProbe(_probeMiB)
+          : await NeoSwap.probe();
       if (!mounted) return;
       final code = (stats['result'] as num?)?.toInt() ?? -2;
       setState(() {
         _stats = stats;
         if (stats['capacityProbe'] is Map) {
-          _capacityReport = Map<String, dynamic>.from(stats['capacityProbe'] as Map);
+          _capacityReport = Map<String, dynamic>.from(
+            stats['capacityProbe'] as Map,
+          );
         }
         _code = code;
         _messageKey = code == 0
@@ -108,121 +111,219 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     final messageKey =
         _messageKey ?? (configurationCode != 0 ? 'failed' : null);
     final resultCode = _code ?? configurationCode;
+    final requests =
+        (rpc['requestCount'] as num?)?.toInt() ??
+        ((rpc['allocationCount'] as num?)?.toInt() ?? 0) +
+            ((rpc['rejectionCount'] as num?)?.toInt() ?? 0);
+    final rejections = (rpc['rejectionCount'] as num?)?.toInt() ?? 0;
+    final allocated = (rpc['allocationCount'] as num?)?.toInt() ?? 0;
+    final rpcLastResult = (rpc['lastResult'] as num?)?.toInt() ?? 0;
+    final donorState = (_stats?['donorSessionState'] as num?)?.toInt() ?? 0;
+    final donationReady = _stats?['memoryDonationSupported'] == true;
     return PopScope(
       canPop: !_busy,
       child: Dialog(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 620,
-          maxHeight: MediaQuery.sizeOf(context).height * .88,
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(t('title'), style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              Text(t('scope')),
-              const SizedBox(height: 8),
-              Text(t('warning')),
-              const SizedBox(height: 16),
-              Text(t('capacity')),
-              Text('$capacity MiB', key: const ValueKey('neoSwapBudget')),
-              if (_stats != null) ...[
-                Text(t(rpc['registered'] == true ? 'connected' : 'pending')),
-                Text(
-                  t('used', {
-                    'current': _bytes(rpc['liveBytes']),
-                    'peak': _bytes(rpc['peakBytes']),
-                  }),
-                ),
-                Text(
-                  t('disk', {'disk': _bytes(_stats?['allocatedDiskBytes'])}),
-                ),
-                Text(
-                  t('footprint', {
-                    'ram': _bytes(_stats?['processFootprintBytes']),
-                  }),
-                ),
-                Text(
-                  t('allocations', {'count': '${rpc['allocationCount'] ?? 0}'}),
-                ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 620,
+            maxHeight: MediaQuery.sizeOf(context).height * .88,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(t('title'), style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                Text(t('scope')),
                 const SizedBox(height: 8),
-                Text(
-                  t('peakNote'),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              const SizedBox(height: 12),
-              if (_busy) const LinearProgressIndicator(),
-              if (messageKey != null) Text(t(messageKey)),
-              if (resultCode != 0)
-                SelectableText('NeoSwap result: $resultCode'),
-              OutlinedButton(
-                onPressed: _busy || _stats == null ? null : () => _run(),
-                child: Text(t('probe')),
-              ),
-              Text(t('capacityProbe')),
-              DropdownButton<int>(
-                key: const ValueKey('neoSwapProbeSize'),
-                isExpanded: true,
-                value: _probeMiB,
-                items: NeoSwap.probeSizesMiB.map((n) => DropdownMenuItem(
-                  value: n, enabled: n <= capacity, child: Text('$n MiB'),
-                )).toList(),
-                onChanged: _busy || _stats == null ? null : (n) {
-                  if (n != null) setState(() => _probeMiB = n);
-                },
-              ),
-              OutlinedButton(
-                onPressed: _busy || _stats == null || _probeMiB > capacity
-                    ? null : () => _run(capacityTest: true),
-                child: Text(t('capacityRun')),
-              ),
-              if (_capacityReport != null)
-                SelectableText(t('capacityResult', {
-                  'size': _bytes(_capacityReport!['requestedBytes']),
-                  'delta': _capacityDelta(),
-                })),
-              if (_stats != null) ...[
-                SelectableText(
-                  t('diagnostics', {
-                    'path': '${_stats?['diagnosticPath'] ?? ''}',
-                  }),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                ExpansionTile(
-                  title: Text(t('technical')),
-                  children: [
-                    SelectableText(
-                      const JsonEncoder.withIndent('  ').convert({
-                        ...?_stats,
-                        if (_capacityReport != null) 'capacityProbe': _capacityReport,
+                Text(t('warning')),
+                const SizedBox(height: 16),
+                Text(t('capacity')),
+                Text('$capacity MiB', key: const ValueKey('neoSwapBudget')),
+                if (_stats != null) ...[
+                  Text(t(rpc['registered'] == true ? 'connected' : 'pending')),
+                  if (_stats!.containsKey('reservedVirtualBytes'))
+                    Text(
+                      t('virtualReserved', {
+                        'size': _bytes(_stats?['reservedVirtualBytes']),
                       }),
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                      ),
+                      key: const ValueKey('neoSwapReservation'),
                     ),
-                  ],
+                  if (_stats!.containsKey('remainingStorageBytes'))
+                    Text(
+                      t('storageAvailable', {
+                        'size': _bytes(_stats?['remainingStorageBytes']),
+                      }),
+                    ),
+                  if (_stats!.containsKey('processAvailableBytes'))
+                    Text(
+                      t('headroom', {
+                        'size': _bytes(_stats?['processAvailableBytes']),
+                      }),
+                    ),
+                  if (donationReady) ...[
+                    Text(
+                      t('donorReady', {
+                        'size': _bytes(_stats?['donatedMemoryBytes']),
+                      }),
+                      key: const ValueKey('neoSwapDonorCharge'),
+                    ),
+                    Text(
+                      t('donorUsed', {
+                        'size': _bytes(_stats?['donatedClientBytes']),
+                      }),
+                      key: const ValueKey('neoSwapDonorUse'),
+                    ),
+                    Text(
+                      t('donorFootprint', {
+                        'pid': '${_stats?['donorPID'] ?? 0}',
+                        'size': _bytes(_stats?['donorFootprintBytes']),
+                      }),
+                    ),
+                    Text(
+                      t('donorNote', {
+                        'size': _bytes(_stats?['donorCapacityBytes']),
+                      }),
+                    ),
+                  ] else if (donorState == 1 || donorState == 2)
+                    Text(t('donorPreparing'))
+                  else if ((_stats?['donationState'] as num?)?.toInt() == 3)
+                    Text(t('donorLost'))
+                  else if (_stats?['memoryDonationSupported'] == false)
+                    Text(t('donationUnavailable')),
+                  Text(
+                    t('used', {
+                      'current': _bytes(rpc['liveBytes']),
+                      'peak': _bytes(rpc['peakBytes']),
+                    }),
+                  ),
+                  Text(
+                    t('disk', {'disk': _bytes(_stats?['allocatedDiskBytes'])}),
+                  ),
+                  Text(
+                    t('footprint', {
+                      'ram': _bytes(_stats?['processFootprintBytes']),
+                    }),
+                  ),
+                  Text(
+                    t('allocations', {
+                      'count': '${rpc['allocationCount'] ?? 0}',
+                    }),
+                  ),
+                  Text(
+                    t('requests', {
+                      'count': '$requests',
+                      'failed': '$rejections',
+                    }),
+                  ),
+                  if (rpc['registered'] == true &&
+                      configurationCode == 0 &&
+                      (rpc['liveBytes'] as num? ?? 0) == 0)
+                    Text(
+                      t(
+                        requests == 0
+                            ? 'noRequests'
+                            : rpcLastResult < 0
+                            ? 'fallback'
+                            : allocated > 0
+                            ? 'released'
+                            : 'noRequests',
+                        {
+                          'code': '$rpcLastResult',
+                          'errno': '${rpc['lastErrno'] ?? 0}',
+                        },
+                      ),
+                      key: const ValueKey('neoSwapIdleReason'),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    t('peakNote'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                if (_busy) const LinearProgressIndicator(),
+                if (messageKey != null) Text(t(messageKey)),
+                if (resultCode != 0)
+                  SelectableText('NeoSwap result: $resultCode'),
+                OutlinedButton(
+                  onPressed: _busy || _stats == null ? null : () => _run(),
+                  child: Text(t('probe')),
+                ),
+                Text(t('capacityProbe')),
+                DropdownButton<int>(
+                  key: const ValueKey('neoSwapProbeSize'),
+                  isExpanded: true,
+                  value: _probeMiB,
+                  items: NeoSwap.probeSizesMiB
+                      .map(
+                        (n) => DropdownMenuItem(
+                          value: n,
+                          enabled: n <= capacity,
+                          child: Text('$n MiB'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _busy || _stats == null
+                      ? null
+                      : (n) {
+                          if (n != null) setState(() => _probeMiB = n);
+                        },
+                ),
+                OutlinedButton(
+                  onPressed: _busy || _stats == null || _probeMiB > capacity
+                      ? null
+                      : () => _run(capacityTest: true),
+                  child: Text(t('capacityRun')),
+                ),
+                if (_capacityReport != null)
+                  SelectableText(
+                    t('capacityResult', {
+                      'size': _bytes(_capacityReport!['requestedBytes']),
+                      'delta': _capacityDelta(),
+                    }),
+                  ),
+                if (_stats != null) ...[
+                  SelectableText(
+                    t('diagnostics', {
+                      'path': '${_stats?['diagnosticPath'] ?? ''}',
+                    }),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  ExpansionTile(
+                    title: Text(t('technical')),
+                    children: [
+                      SelectableText(
+                        const JsonEncoder.withIndent('  ').convert({
+                          ...?_stats,
+                          if (_capacityReport != null)
+                            'capacityProbe': _capacityReport,
+                        }),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                    child: Text(t('close')),
+                  ),
                 ),
               ],
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                  child: Text(t('close')),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
-      ),
     );
   }
+
   String _capacityDelta() {
     final samples = _capacityReport?['samples'] as List? ?? const [];
     if (samples.isEmpty || samples.first is! Map) return '—';

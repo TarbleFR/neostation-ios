@@ -34,7 +34,9 @@ enum DolphinPhoneShakePolicy {
   static func acceptsInput(wii: Bool, remoteLayout: Bool, sessionRunning: Bool,
                            visible: Bool, touchEnabled: Bool, appActive: Bool,
                            physicalController: Bool, enabled: Bool) -> Bool {
-    return wii && remoteLayout && sessionRunning && visible && touchEnabled &&
-           appActive && !physicalController && enabled
+    // A gamepad hides the touch buttons, but the phone remains a valid motion
+    // source. Menus still disable touchEnabled; background/Classic/GC stop it.
+    return wii && remoteLayout && sessionRunning && (visible || physicalController) &&
+           touchEnabled && appActive && enabled
   }
 }

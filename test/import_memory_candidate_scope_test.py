@@ -1,38 +1,210 @@
-"""Explicitly audit the requested import UI, texture host and8GiB capacity delta."""
+"""Hash-lock the explicit requested candidate, including local uncommitted deltas."""
 from pathlib import Path
-import hashlib,json,re,subprocess
-ROOT=Path(__file__).resolve().parents[1]
-manifest=json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-assert manifest['baseline']=='549f6ae2a84a0b79afcb61b8ea5fb593c76a89a3'
-allowed={
- 'build-utils/private-test-367-recipient.pem','build-utils/validate_cheat_bulk_ipa.py','build-utils/generate_import_labels.py',
- 'native/cheats/NeoManualCheatEditor.template.h','native/cheats/NeoCheatLabels.h','native/cheats/bulk-labels.json',
- 'native/dolphin_textures/labels.json','native/neoswap/localizations.json',
- 'lib/l10n/neoswap_locale.dart','lib/screens/settings_screen/neoswap_dialog.dart',
- 'packages/neo_swap/lib/neo_swap.dart','packages/neo_swap/ios/neo_swap.podspec',
- 'packages/neo_swap/ios/Classes/NeoSwap.cpp','packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
- 'packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h',
- 'packages/dolphin_internal_bridge/ios/dolphin_internal_bridge.podspec',
+import hashlib
+import json
+import os
+import re
+import stat
+import subprocess
+
+ROOT = Path(__file__).resolve().parents[1]
+BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
+MANIFEST_PATH = 'native/import-memory-candidate.json'
+manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
+assert manifest['baseline'] == BASE
+assert manifest['target_build'] == 368
+assert manifest['real_device_8gib_validated'] is False
+assert manifest['real_device_donation_validated'] is False
+assert manifest['real_device_dolphin_motion_validated'] is False
+assert manifest['required_donation_evidence'] == ['macOS kernel', 'macOS NSXPC', 'iOS18Simulator']
+
+# Additions require a review of the requested production scope. Never derive
+# this whitelist from git status or from the hash manifest itself.
+PRODUCTION_FILES = {
+    '.gitignore',
+    '.github/workflows/cheats-media-check.yml',
+    '.github/workflows/dolphin-motion-check.yml',
+    '.github/workflows/ios-ci.yml',
+    '.github/workflows/neoswap-check.yml',
+    '.github/workflows/neoswap-donation-check.yml',
+    '.github/workflows/neoswap-ipa.yml',
+    '.github/workflows/rpcs3-core.yml',
+    'build-utils/build_rpcs3_embedded_core.sh',
+    'build-utils/dolphin_motion_localizations.py',
+    'build-utils/configure_neoswap_donor.py',
+    'build-utils/embed_neoswap_donor_entitlements.py',
+    'build-utils/private-test-368-recipient.pem',
+    'build-utils/rpcs3/canonical-source.json',
+    'build-utils/rpcs3/embedded-core.patch',
+    'build-utils/validate_neoswap_ipa.py',
+    'build-utils/validate_rpcs3_ipa.py',
+    'build-utils/validate_single_ipa_distribution.py',
+    'lib/data/datasources/sqlite_database_service.dart',
+    'lib/l10n/neoswap_locale.dart',
+    'lib/models/game_model.dart',
+    'lib/screens/settings_screen/neoswap_dialog.dart',
+    'lib/services/game/game_list_service.dart',
+    'lib/services/ports_display_title.dart',
+    'lib/services/ports_game_identity.dart',
+    'native/dolphin_motion/strings.json',
+    'native/dolphin_textures/labels.json',
+    'native/neoswap/NeoSwapClient.h',
+    'native/neoswap/localizations.json',
+    'native/neoswap-donation/Broker.cpp',
+    'native/neoswap-donation/Broker.h',
+    'native/neoswap-donation/Info.plist',
+    'native/neoswap-donation/NeoSwapDonor.entitlements',
+    'native/neoswap-donation/NeoSwapDonorIPC.h',
+    'native/neoswap-donation/NeoSwapDonorIPC.mm',
+    'native/neoswap-donation/NeoSwapDonorRequestHandler.h',
+    'native/neoswap-donation/NeoSwapDonorRequestHandler.mm',
+    'native/neoswap-donation/NeoSwapMachHandle.h',
+    'native/neoswap-donation/NeoSwapMachHandle.mm',
+    'native/neoswap-donation/Pool.cpp',
+    'native/neoswap-donation/Pool.h',
+    'native/neoswap-donation/ipc_macos_probe.mm',
+    'native/neoswap-donation/macOS_probe.cpp',
+    'native/neoswap-donation/references.json',
+    'native/neoswap-donation/run_ipc_macos_probe.sh',
+    'native/neoswap-donation/run_macos_probe.sh',
+    'packages/dolphin_internal_bridge/ios/Classes/DOLTextureLabels.h',
+    'packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h',
+    'packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h',
+    'packages/dolphin_internal_bridge/ios/Classes/DOLTextureZip.h',
+    'packages/dolphin_internal_bridge/ios/Classes/DolphinInternalBridgePlugin.mm',
+    'packages/dolphin_internal_bridge/ios/Classes/DolphinPhoneShakeLabels.h',
+    'packages/dolphin_internal_bridge/ios/Classes/DolphinSessionMenu.mm',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/DolphinPhoneShake.swift',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/DolphinPhoneShakeBinding.h',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/DolphinPhoneShakeRouting.h',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/DolphinPhoneShakeRouting.mm',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/DolphinShakeDetector.swift',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/DolphinTouchOverlay.swift',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/TCManagerInterface.h',
+    'packages/dolphin_internal_bridge/ios/Classes/TouchController/TCManagerInterface.mm',
+    'packages/dolphin_internal_bridge/ios/dolphin_internal_bridge.podspec',
+    'packages/neo_swap/ios/Classes/NeoSwap.cpp',
+    'packages/neo_swap/ios/Classes/NeoSwapClientStats.h',
+    'packages/neo_swap/ios/Classes/NeoSwapHost.h',
+    'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
+    'packages/neo_swap/ios/neo_swap.podspec',
+    'packages/rpcs3_internal_bridge/ios/Classes/NeoSwapUsagePolicy.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm',
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
-for package,editor,menu in [('dolphin_internal_bridge','DOLManualCheatEditor','DolphinSessionMenu'),('armsx2_internal_bridge','ARMSX2ManualCheatEditor','Armsx2SessionMenu')]:
-    base=f'packages/{package}/ios/Classes/'
-    allowed.update(base+p for p in ('NeoCheatLabels.h',editor+'.h',menu+'.mm'))
-base='packages/dolphin_internal_bridge/ios/Classes/'
-allowed.update(base+p for p in ('DolphinSessionMenu.h','DolphinInternalBridgePlugin.mm','DOLTextureZip.h','DOLTextureStore.h','DOLTextureSettings.h','DOLTextureLabels.h'))
-approved=set(manifest['files_sha256'])
-assert approved==allowed,approved^allowed
-for p,h in manifest['files_sha256'].items():assert hashlib.sha256((ROOT/p).read_bytes()).hexdigest()==h,p
-changed=set(subprocess.check_output(['git','diff','--name-only',manifest['baseline'],'--','packages','lib','native','build-utils'],cwd=ROOT,text=True).splitlines())
-assert not changed-approved-{'native/import-memory-candidate.json'},changed-approved
-def before(p):return subprocess.check_output(['git','show',manifest['baseline']+':'+p],cwd=ROOT,text=True)
-p='packages/neo_swap/ios/Classes/NeoSwap.cpp'
-assert (ROOT/p).read_text()==before(p).replace('c->capacity_bytes > 4 * 1024 * MiB','c->capacity_bytes > 8 * 1024 * MiB'), 'Unexpected broker/ABI change'
-p=base+'DolphinInternalBridgePlugin.mm';source=(ROOT/p).read_text().replace('#include "DOLTextureSettings.h"\n','')
-start=source.index('      menu.openTextureSettings = ^{');end=source.index('      menu.readRecording = ',start)
-assert source[:start]+source[end:]==before(p),'Unrelated Dolphin host change'
-catalog=json.loads((ROOT/'native/dolphin_textures/labels.json').read_text())
-assert set(catalog)=={'en','es','ru','zh','zh_Hant','pt','fr','de','it','id','ja','ko'}
-for lang,values in catalog.items():
-    assert set(values)==set(catalog['en']) and all(values.values()),lang
-    for k,v in values.items():assert set(re.findall(r'\{\w+\}',v))==set(re.findall(r'\{\w+\}',catalog['en'][k]))
-print('PASS requested candidate: exact import/texture/8GiB files; immutable core ABIs, JIT and unrelated host code;12 complete locales')
+SUPPORT_FILES = {
+    'docs/dolphin-phone-shake-routing.md',
+    'docs/import-memory-build368.md',
+    'docs/rpcs3-xitrix-v0101-audit.md',
+    'test/check_neo_swap_scope.py',
+    'test/dolphin_account_267_test.py',
+    'test/dolphin_motion_localizations_test.py',
+    'test/dolphin_pacing362_ui_test.py',
+    'test/dolphin_phone_shake_binding_test.cpp',
+    'test/dolphin_phone_shake_routing_test.mm',
+    'test/dolphin_phone_shake_routing_test.py',
+    'test/dolphin_phone_shake_test.py',
+    'test/dolphin_texture_localizations_test.py',
+    'test/dolphin_texture_store_test.mm',
+    'test/dolphin_texture_zip_test.cpp',
+    'test/dolphin_texture_zip_test.py',
+    'test/import_memory_candidate_scope_test.py',
+    'test/kartpad_display_title_test.dart',
+    'test/native/rpcs3_neoswap_stats_getter_test.cpp',
+    'test/native/rpcs3_spu_analyzer_support.h',
+    'test/native/rpcs3_spu_branch_analyzer_test.cpp',
+    'test/native/rpcs3_vk_conditional_render_test.cpp',
+    'test/native/rpcs3_vk_memory_pressure_test.cpp',
+    'test/neo_swap_core_pin_test.py',
+    'test/neo_swap_dialog_test.dart',
+    'test/neoswap/control_probe.mm',
+    'test/neoswap_client_stats_test.cpp',
+    'test/neoswap_evidence_lifecycle_test.py',
+    'test/neoswap_donor_contract_test.py',
+    'test/neoswap_donor_simulator_test.py',
+    'test/neoswap_test.cpp',
+    'test/neoswap_usage_policy_test.cpp',
+    'test/rpcs3_neoswap_localizations_test.py',
+    'test/rpcs3_xitrix_v0101_native_test.py',
+    'test/single_ipa_distribution_test.py',
+}
+approved = set(manifest['files_sha256'])
+assert approved == PRODUCTION_FILES, 'Production whitelist/manifest mismatch: ' + str(approved ^ PRODUCTION_FILES)
+assert set(manifest['git_modes']) == approved
+for path, expected in manifest['files_sha256'].items():
+    file = ROOT / path
+    assert stat.S_ISREG(file.lstat().st_mode), 'Non-regular approved production file: ' + path
+    assert hashlib.sha256(file.read_bytes()).hexdigest() == expected, 'Approved production hash changed: ' + path
+    mode = '100755' if os.stat(file).st_mode & 0o111 else '100644'
+    assert mode == manifest['git_modes'][path], 'Approved executable mode changed: ' + path
+    old = subprocess.check_output(['git', 'ls-tree', BASE, '--', path], cwd=ROOT, text=True)
+    if old:
+        assert mode == old.split()[0], 'Existing production mode changed: ' + path
+assert set(manifest['support_files_sha256']) == SUPPORT_FILES, 'Explicit support identity set changed'
+for path, expected in manifest['support_files_sha256'].items():
+    file = ROOT / path
+    assert stat.S_ISREG(file.lstat().st_mode), 'Non-regular approved support file: ' + path
+    assert hashlib.sha256(file.read_bytes()).hexdigest() == expected, 'Approved support hash changed: ' + path
+
+# git diff BASE compares the delivered tree to staged AND unstaged content.
+# New source files need the separate untracked query. Git-ignored generated
+# build/artifact/cache output is intentionally outside the source candidate.
+tracked = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', BASE, '--'], cwd=ROOT)
+untracked = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'], cwd=ROOT)
+changed = {path.decode('utf-8') for path in (tracked + untracked).split(b'\0') if path}
+unexpected = changed - approved - SUPPORT_FILES - {MANIFEST_PATH}
+assert not unexpected, 'Unapproved candidate files (including untracked): ' + str(sorted(unexpected))
+
+
+def before(path):
+    return subprocess.check_output(['git', 'show', BASE + ':' + path], cwd=ROOT)
+
+
+assert (ROOT / '.gitignore').read_bytes() == before('.gitignore') + (
+    b'# Materialized from the canonical donation sources before CocoaPods installation.\n'
+    b'/packages/neo_swap/ios/Classes/Donation/\n'
+), 'Unrelated source/build exclusions changed'
+
+
+# Preserve the original three JIT helper bundles, their launch/pairing scripts,
+# all unrelated core recipes and save routing: none is whitelisted above.
+for path in (
+    'native/dolphin_internal_helper/Info.plist',
+    'native/rpcs3_internal_helper/Info.plist',
+    'native/armsx2_internal_helper/Info.plist',
+    'packages/neo_swap/ios/Classes/NeoSwap.h',
+    'packages/neo_swap/lib/neo_swap.dart',
+    'lib/services/kartpad_internal_service.dart',
+    'build-utils/armsx2/source.json',
+    'build-utils/dusklight/source.json',
+    'build-utils/kartpad/source.json',
+    'build-utils/stikjit/source.json',
+):
+    assert (ROOT / path).read_bytes() == before(path), 'Protected helper/core/ABI/routing changed: ' + path
+
+for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/ios-ci.yml'):
+    workflow = (ROOT / workflow_path).read_text()
+    old_workflow = before(workflow_path).decode('utf-8')
+    for key in ('DOLPHIN_SHA', 'DOLPHIN_CORE_HOST_SHA', 'ARMSX2_CORE_HOST_SHA',
+                'DUSKLIGHT_CORE_HOST_SHA', 'KARTPAD_CORE_HOST_SHA', 'KARTPAD_CORE_RUN_ID'):
+        pattern = r'(?m)^      ' + key + r': (.+)$'
+        assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
+workflow = (ROOT / '.github/workflows/neoswap-ipa.yml').read_text()
+assert 'contents: write' not in workflow and 'gh release create' not in workflow
+
+broker = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwap.cpp').read_text()
+assert 'c->capacity_bytes > 8 * 1024 * MiB' in broker
+assert '(kind != NEOSWAP_CPU_DATA && kind != NEOSWAP_CPU_CACHE)' in broker
+assert broker.count('struct Broker {') == 1
+assert '#ifdef NEOSWAP_TESTING' in broker
+
+catalog = json.loads((ROOT / 'native/dolphin_textures/labels.json').read_text())
+assert set(catalog) == {'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt', 'fr', 'de', 'it', 'id', 'ja', 'ko'}
+for locale, values in catalog.items():
+    assert set(values) == set(catalog['en']) and all(values.values()), locale
+    for key, value in values.items():
+        assert set(re.findall(r'\{\w+\}', value)) == set(re.findall(r'\{\w+\}', catalog['en'][key])), (locale, key)
+print('PASS requested candidate scope: explicit hashed production paths, tracked/untracked deltas, '
+      'unchanged original JIT helpers/other cores/save routing and complete texture locales; device evidence separate')

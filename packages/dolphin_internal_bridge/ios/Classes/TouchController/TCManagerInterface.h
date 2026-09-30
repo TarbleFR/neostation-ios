@@ -9,8 +9,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state;
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value;
++ (BOOL)preparePhoneShakeRouting;
++ (NSInteger)phoneShakeRoutingStatus;
++ (void)reportPhoneShakeSensorUnavailable;
 
 @end
 
 NS_ASSUME_NONNULL_END
-

@@ -119,6 +119,16 @@ TESTS = r'''
 
 APP = r'''
 #import <UIKit/UIKit.h>
+#import "TouchController/TCManagerInterface.h"
+// The UIKit fixture does not link an emulator. Production motion routing is
+// executed separately by dolphin_phone_shake_routing_test.py on macOS.
+@implementation TCManagerInterface
++ (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state {}
++ (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {}
++ (BOOL)preparePhoneShakeRouting { return YES; }
++ (NSInteger)phoneShakeRoutingStatus { return [NSUserDefaults.standardUserDefaults integerForKey:@"Test.PhoneShakeRouteStatus"]; }
++ (void)reportPhoneShakeSensorUnavailable { [NSUserDefaults.standardUserDefaults setInteger:3 forKey:@"Test.PhoneShakeRouteStatus"]; }
+@end
 @interface AccountTestDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic, strong) UIWindow* window;
 @end

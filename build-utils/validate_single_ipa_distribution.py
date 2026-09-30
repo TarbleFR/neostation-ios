@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the LocalDevVPN-only NeoStation IPA distribution contract.
 
-NeoStation ships as one application with its Dolphin, RPCS3, and ARMSX2 JIT helpers.
+NeoStation ships as one application with its three JIT helpers and NeoSwap donor.
 The RemotePairing route is supplied by the separately installed LocalDevVPN;
 the IPA must not contain a packet-tunnel extension or VPN entitlement.
 """
@@ -14,9 +14,11 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from configure_neoswap_donor import DONOR_CONTRACT, REQUIRED_DONOR_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
     FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
+    require_entitlements,
     require_runtime_entitlements,
 )
 
@@ -37,6 +39,7 @@ EXPECTED_EXTENSIONS = {
         'principalClass': 'Armsx2JITRequestHandler',
         'marker': 'NeoStationARMSX2JITHelper',
     },
+    'NeoSwapDonor.appex': DONOR_CONTRACT,
 }
 PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
@@ -118,6 +121,10 @@ def validate(ipa: Path) -> dict:
         app_info = load_plist(app / 'Info.plist')
         app_identifier = str(app_info.get('CFBundleIdentifier', ''))
         demand(app_info.get('CFBundlePackageType') == 'APPL', 'Invalid host type')
+        for key in ('CFBundleIdentifier', 'CFBundleVersion', 'CFBundleShortVersionString'):
+            value = app_info.get(key)
+            demand(isinstance(value, str) and bool(value.strip()) and '$(' not in value,
+                   f'NeoStation has an invalid {key}')
         host_executable = app / str(app_info.get('CFBundleExecutable', ''))
         host_entitlements = executable_entitlements(host_executable)
         require_runtime_entitlements(host_entitlements)
@@ -143,6 +150,10 @@ def validate(ipa: Path) -> dict:
                 f'{extension.name} and NeoStation have different build numbers',
             )
             demand(
+                info.get('CFBundleShortVersionString') == app_info.get('CFBundleShortVersionString'),
+                f'{extension.name} and NeoStation have different marketing versions',
+            )
+            demand(
                 extension_point == SHARE_EXTENSION_POINT,
                 f'{extension.name} has an unexpected extension point: '
                 f'{extension_point!r}',
@@ -160,6 +171,13 @@ def validate(ipa: Path) -> dict:
             extension_executable = extension / str(info.get('CFBundleExecutable', ''))
             extension_entitlements = executable_entitlements(extension_executable)
             reject_vpn_entitlements(extension_entitlements, extension.name)
+            if extension.name == 'NeoSwapDonor.appex':
+                require_entitlements(extension_entitlements, REQUIRED_DONOR_ENTITLEMENTS,
+                                     'NeoSwapDonor')
+                unexpected = set(extension_entitlements) - set(REQUIRED_DONOR_ENTITLEMENTS)
+                demand(not unexpected,
+                       'NeoSwapDonor has unexpected embedded entitlements: ' +
+                       ', '.join(sorted(unexpected)))
             extension_reports.append({
                 'bundle': extension.name,
                 'bundleIdentifier': extension_identifier,
@@ -191,6 +209,11 @@ def validate(ipa: Path) -> dict:
             'networkExtensionEntitlementPresent': False,
             'externalJITTransport': 'LocalDevVPN',
             'userSignsOneIPA': True,
+            # Embedded requests do not establish provisioning authorization,
+            # an effective memory limit, or execution on an iPhone.
+            'neoSwapDonorRequestedEntitlements': dict(REQUIRED_DONOR_ENTITLEMENTS),
+            'neoSwapDonorEffectiveDeviceProfileValidated': False,
+            'deviceRuntimeTested': False,
             'nestedSigningOrder': [
                 *[
                     f'NeoStation.app/PlugIns/{name}'

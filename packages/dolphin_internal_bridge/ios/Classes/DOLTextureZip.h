@@ -20,9 +20,16 @@ inline uint32_t u32(const unsigned char* p) { return u16(p)|(uint32_t(u16(p+2))<
 inline bool read(std::ifstream& in,uint64_t at,void* bytes,size_t count) {
   in.clear();in.seekg(at);in.read(static_cast<char*>(bytes),count);return bool(in);
 }
-// The pack must identify the exact region's six-character GameID. Do not infer
-// compatibility from the archive's marketing title or apply another game's files.
-inline std::string relative(const std::string& name,const std::string& game) {
+struct Match { std::string relative, source; bool otherRegion = false; };
+struct Scan { std::set<std::string> sources, otherRegions; bool valid = false; };
+inline bool gameId(const std::string& value) {
+  return value.size()==6 && std::all_of(value.begin(),value.end(),[](unsigned char c){return (c>='A' && c<='Z') || (c>='0' && c<='9');});
+}
+// Dolphin also accepts a three-character region-free folder. A six-character
+// folder for another region is only a candidate: identical hashes are not
+// guaranteed, so the UI must ask before importing it for the current game.
+inline Match match(const std::string& name,const std::string& game) {
+  if(!gameId(game))return {};
   if(name.empty() || name.front()=='/' || name.find('\\')!=std::string::npos || name.find(':')!=std::string::npos || name.find('\0')!=std::string::npos)return {};
   std::vector<std::string> parts;size_t start=0;
   while(start<name.size()) {auto end=name.find('/',start);auto part=name.substr(start,end-start);
@@ -30,15 +37,23 @@ inline std::string relative(const std::string& name,const std::string& game) {
     parts.push_back(part);if(end==std::string::npos)break;start=end+1;
   }
   size_t root=parts.size();
-  for(size_t i=0;i<parts.size();++i)if(parts[i]==game){if(root!=parts.size())return {};root=i;}
+  for(size_t i=0;i<parts.size();++i) {
+    const bool family=parts[i]==game.substr(0,3);
+    const bool regional=gameId(parts[i]) && parts[i].substr(0,3)==game.substr(0,3);
+    if(family || regional){if(root!=parts.size())return {};root=i;}
+  }
   if(root+1>=parts.size())return {};
   const auto& file=parts.back();
   if(file.rfind("tex1_",0)!=0 || !(file.ends_with(".png") || file.ends_with(".dds")))return {};
   std::string result;
   for(size_t i=root+1;i<parts.size();++i){if(!result.empty())result+='/';result+=parts[i];}
-  return result;
+  return {result,parts[root],parts[root].size()==6 && parts[root]!=game};
 }
-inline bool list(std::ifstream& in,const std::string& game,std::vector<File>& files,uint64_t& total) {
+inline std::string relative(const std::string& name,const std::string& game) {
+  const auto result=match(name,game);return result.otherRegion?std::string{}:result.relative;
+}
+inline bool list(std::ifstream& in,const std::string& game,std::vector<File>& files,uint64_t& total,Scan* scan=nullptr,bool allowOtherRegion=false) {
+  if(scan)*scan={};files.clear();total=0;
   in.seekg(0,std::ios::end);auto length=in.tellg();if(length<22 || uint64_t(length)>maxPack)return false;
   size_t tailSize=static_cast<size_t>(std::min<uint64_t>(uint64_t(length),65557));
   std::vector<unsigned char> tail(tailSize);if(!read(in,uint64_t(length)-tailSize,tail.data(),tailSize))return false;
@@ -58,12 +73,15 @@ inline bool list(std::ifstream& in,const std::string& game,std::vector<File>& fi
     // regular texture data is ever materialized, never metadata or executables.
     uint32_t mode=u32(h.data()+38)>>16;
     if((mode&0170000)==0120000 || u16(h.data()+34) || (u16(h.data()+8)&1))return false;
-    auto dest=relative(name,game);if(dest.empty())continue;
+    const auto selection=match(name,game);if(selection.relative.empty())continue;
+    if(selection.otherRegion && !allowOtherRegion){if(scan)scan->otherRegions.insert(selection.source);continue;}
+    const auto& dest=selection.relative;
     File f{name,dest,u32(h.data()+16),u32(h.data()+20),u32(h.data()+24),u32(h.data()+42),u32(e+16),u16(h.data()+10),u16(h.data()+8)};
     std::string folded=dest;for(char& c:folded)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if((f.method!=0 && f.method!=8) || !f.size || f.size>maxFile || !f.compressed || f.compressed==0xffffffff || f.offset==0xffffffff || uint64_t(f.offset)+30+f.compressed>u32(e+16) || !destinations.insert(folded).second)return false;
-    total+=f.size;if(total>maxPack)return false;files.push_back(std::move(f));
+    total+=f.size;if(total>maxPack)return false;files.push_back(std::move(f));if(scan)scan->sources.insert(selection.source);
   }
+  if(scan)scan->valid=at==dirEnd;
   return at==dirEnd && !files.empty();
 }
 inline bool extract(std::ifstream& in,const File& file,const std::filesystem::path& output) {

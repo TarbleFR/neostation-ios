@@ -1,0 +1,116 @@
+name: NeoSwap real memory donation checks
+on:
+  push:
+    branches: [experimental]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoswap-donation-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  kernel:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Prove actual pages and donor ledger ownership with production allocator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-donation/kernel
+          printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/kernel/source.txt
+          bash native/neoswap-donation/run_macos_probe.sh 2>&1 | tee build/neoswap-donation/kernel/probe.txt
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path('build/neoswap-donation/kernel')
+          rows=[json.loads(line) for line in (root/'probe.txt').read_text().splitlines() if line.startswith('{')]
+          assert len(rows)>=6,rows
+          assert 'PASS real shared NONVOLATILE pages' in (root/'probe.txt').read_text()
+          (root/'report.json').write_text(json.dumps({'passed':True,'platform':'macOS-kernel-two-process','source':os.environ['GITHUB_SHA'],'realIPhoneValidated':False,'ledgers':rows},indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-donation-kernel-${{ github.sha }}
+          path: build/neoswap-donation/kernel/
+          if-no-files-found: error
+          retention-days: 14
+  ipc:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Prove real NSXPC Mach rights and reject invalid or late sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-donation/ipc
+          printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/ipc/source.txt
+          bash native/neoswap-donation/run_ipc_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-donation/ipc/report.json" 2>&1 | tee build/neoswap-donation/ipc/probe.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('build/neoswap-donation/ipc/report.json').read_text())
+          assert report['passed'] is True and report['iphoneExtensionValidated'] is False,report
+          assert report['hostPID']!=report['donorPID'] and report['donorPID']>0,report
+          assert report['capacityBytes']>0 and report['donorResidentBytes']>0,report
+          assert report['rejectedArchive'] is True and len(report['rejectedScenarios'])==4,report
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-donation-ipc-${{ github.sha }}
+          path: build/neoswap-donation/ipc/
+          if-no-files-found: error
+          retention-days: 14
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Compile the canonical donation path for native iPhone arm64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-donation/simulator
+          printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/simulator/source.txt
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p "$RUNNER_TEMP/neoswap-donation-include"
+          ln -s "$GITHUB_WORKSPACE/native/neoswap-donation" "$RUNNER_TEMP/neoswap-donation-include/Donation"
+          xcrun clang++ -x objective-c++ -std=c++20 -fobjc-arc -fblocks -Wall -Wextra -Werror -fsyntax-only \
+            -arch arm64 -isysroot "$SDK" -miphoneos-version-min=17.4 -DNEOSWAP_DONATION=1 \
+            -I"$RUNNER_TEMP/neoswap-donation-include" -Itest/neoswap -Ipackages/neo_swap/ios/Classes \
+            native/neoswap-donation/Broker.cpp native/neoswap-donation/Pool.cpp \
+            native/neoswap-donation/NeoSwapMachHandle.mm native/neoswap-donation/NeoSwapDonorIPC.mm \
+            native/neoswap-donation/NeoSwapDonorRequestHandler.mm \
+            packages/neo_swap/ios/Classes/NeoSwap.cpp packages/neo_swap/ios/Classes/NeoSwapPlugin.mm \
+            2>&1 | tee build/neoswap-donation/simulator/arm64-syntax.txt
+      - name: Prove canonical helper launch and actual donated allocations on iOS 18 Simulator
+        run: python3 test/neoswap_donor_simulator_test.py --output build/neoswap-donation/simulator
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-donation-simulator-${{ github.sha }}
+          path: build/neoswap-donation/simulator/
+          if-no-files-found: error
+          retention-days: 14

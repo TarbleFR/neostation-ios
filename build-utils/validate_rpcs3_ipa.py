@@ -18,9 +18,11 @@ import zipfile
 from pathlib import Path
 
 from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
+from configure_neoswap_donor import DONOR_CONTRACT, REQUIRED_DONOR_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
     FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
+    require_entitlements,
     require_runtime_entitlements,
 )
 from validate_rpcs3_embedded_core import validate_core
@@ -43,6 +45,7 @@ CORE_MARKERS = (
     b'505a85e5a8f2cdff1cd63168bd2c56b0f92282bf',
 )
 EXPECTED_HELPERS = {
+    'NeoSwapDonor.appex': DONOR_CONTRACT,
     'DolphinJITHelper.appex': {
         'bundleSuffix': '.dolphinjithelper',
         'principalClass': 'DolphinJITRequestHandler',
@@ -425,6 +428,11 @@ def validate_ipa(
                 extension_executable.read_bytes()
             )
             reject_vpn_entitlements(extension_entitlements, extension.name)
+            if extension.name == 'NeoSwapDonor.appex':
+                require_entitlements(extension_entitlements, REQUIRED_DONOR_ENTITLEMENTS,
+                                     'NeoSwapDonor')
+                demand(set(extension_entitlements) == set(REQUIRED_DONOR_ENTITLEMENTS),
+                       'Donor unexpectedly requests capabilities beyond its three memory/debug keys')
             helper_identifiers[extension.name] = expected_identifier
 
         actual_head = command_output('git', '-C', str(ROOT), 'rev-parse', 'HEAD').strip()
@@ -444,6 +452,8 @@ def validate_ipa(
                 'fixedHostReservation': False,
             },
             'deviceRuntimeTested': False,
+            'neoSwapDonorRequestedEntitlements': REQUIRED_DONOR_ENTITLEMENTS,
+            'neoSwapDonorEffectiveDeviceProfileValidated': False,
             'rpcS3RequiredSymbols': list(REQUIRED_CORE_SYMBOLS),
             'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),
             'rpcS3LoadTimeImportsValidated': True,

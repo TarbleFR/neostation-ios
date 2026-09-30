@@ -3561,7 +3561,7 @@ index 000000000..665988abc
 +}
 +}
 diff --git a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
-index d451a943a..0e018644a 100644
+index d451a943a..f62b48a3b 100644
 --- a/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 +++ b/rpcs3/Emu/Cell/SPUCommonRecompiler.cpp
 @@ -40,6 +40,19 @@ const extern spu_decoder<spu_itype> g_spu_itype;
@@ -4046,12 +4046,14 @@ index d451a943a..0e018644a 100644
  	{
  		g_fxo->get<spu_cache>() = std::move(cache);
  	}
-@@ -1500,7 +1682,7 @@ spu_runtime::spu_runtime()
+@@ -1499,8 +1681,8 @@ spu_runtime::spu_runtime()
+ #ifdef RPCS3_IOS
  	if (rpcs3::ios::get_experimental_policy().persistent_spu_object_cache)
  	{
- 		// v3 retires objects produced before ARM64 persistence was disabled.
+-		// v3 retires objects produced before ARM64 persistence was disabled.
 -		constexpr u32 cache_version = 3;
-+		constexpr u32 cache_version = 4;
++		// v5 retires objects whose analyzer omitted the BID continuation edge.
++		constexpr u32 cache_version = 5;
  		constexpr usz max_files = 12'000;
  		sha1_context ctx;
  		u8 key[20];
@@ -4152,7 +4154,7 @@ index d451a943a..0e018644a 100644
  spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, std::map<u32, std::vector<u32>>* out_target_list)
  {
  	// Result: addr + raw instruction data
-@@ -3401,7 +3639,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -3401,11 +3639,23 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				const u32 target = spu_branch_target(av);
  
@@ -4167,7 +4169,17 @@ index d451a943a..0e018644a 100644
  
  				if (type == spu_itype::BI && target == pos + 4 && op.d)
  				{
-@@ -5789,7 +6034,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+-					// Disable interrupts idiom
++					// Both recompilers recognize this fallthrough through m_targets.
++					// Keep the continuation as a real block so target cleanup retains
++					// the edge; otherwise LLVM exits here while later PHIs still expect
++					// this block to execute the instructions after the BID.
++					m_targets[pos].push_back(target);
++					add_block(target);
+ 					break;
+ 				}
+ 
+@@ -5789,7 +6039,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				getllar_starts[previous.lsa_pc] = true;
  				g_fxo->get<putllc16_statistics_t>().breaking_reason[cause]++;
  
@@ -4176,7 +4188,7 @@ index d451a943a..0e018644a 100644
  				{
  					return;
  				}
-@@ -5829,7 +6074,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5829,7 +6079,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				}
  
  				fmt::append(tracing, " of %d failures", fail_count);
@@ -4185,7 +4197,7 @@ index d451a943a..0e018644a 100644
  			}
  		};
  
-@@ -5846,7 +6091,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5846,7 +6096,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  				g_fxo->get<rchcnt_statistics_t>().breaking_reason[cause]++;
  
@@ -4194,7 +4206,7 @@ index d451a943a..0e018644a 100644
  				{
  					return;
  				}
-@@ -5886,7 +6131,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5886,7 +6136,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				}
  
  				fmt::append(tracing, " of %d failures", fail_count);
@@ -4203,7 +4215,7 @@ index d451a943a..0e018644a 100644
  			}
  		};
  
-@@ -5896,7 +6141,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5896,7 +6146,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				g_fxo->get<reduced_statistics_t>().breaking_reason[cause]++;
  
@@ -4212,7 +4224,7 @@ index d451a943a..0e018644a 100644
  				{
  					return;
  				}
-@@ -5941,12 +6186,12 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -5941,12 +6191,12 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  				}
  
  				fmt::append(tracing, " of %d failures", fail_count);
@@ -4227,7 +4239,7 @@ index d451a943a..0e018644a 100644
  			}
  		};
  
-@@ -6157,7 +6402,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -6157,7 +6407,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  						{
  							if (!std::exchange(logged_block[target_pc / 4], true))
  							{
@@ -4236,7 +4248,7 @@ index d451a943a..0e018644a 100644
  							}
  
  							state_it->parent_target_index++;
-@@ -6830,7 +7075,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -6830,7 +7080,14 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			{
  				const reg_state_t& rt = vregs[op.rt];
  
@@ -4252,7 +4264,7 @@ index d451a943a..0e018644a 100644
  				{
  					if (rchcnt_loop->conditioned)
  					{
-@@ -6841,7 +7093,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -6841,7 +7098,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  					rchcnt_loop->conditioned = true;
  					rchcnt_loop->branch_pc = pos;
@@ -4265,7 +4277,7 @@ index d451a943a..0e018644a 100644
  				}
  
  				break;
-@@ -7679,7 +7935,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -7679,7 +7940,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  							if (getllar_starts.emplace(atomic16->lsa_pc, false).second)
  							{
  								g_fxo->get<putllc16_statistics_t>().all++;
@@ -4274,7 +4286,7 @@ index d451a943a..0e018644a 100644
  							}
  						}
  
-@@ -8745,7 +9001,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -8745,7 +9006,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  			if (rchcnt_loop->active)
  			{
@@ -4283,7 +4295,7 @@ index d451a943a..0e018644a 100644
  				{
  					if (op.si10 != 0 && op.si10 != 1)
  					{
-@@ -8754,7 +9010,9 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -8754,7 +9015,9 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  					}
  
  					rchcnt_loop->ch_product = vregs[op.rt];
@@ -4294,7 +4306,7 @@ index d451a943a..0e018644a 100644
  				}
  			}
  
-@@ -9007,7 +9265,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -9007,7 +9270,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			add_pattern(inst_attr::putllc16, pattern.put_pc - result.entry_point, value.data);
  		}
  
@@ -4303,7 +4315,7 @@ index d451a943a..0e018644a 100644
  			, pattern.mem_count, pattern.put_pc, value.type == v_relative, value.off18, value.type == v_const, value.type == v_reg2, value.reg, value.runtime16_select, entry_point, func_hash, pattern_hash, +stats.nowrite, ++stats.single, +stats.all);
  	}
  
-@@ -9024,6 +9282,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -9024,6 +9287,11 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  			continue;
  		}
  
@@ -4315,7 +4327,7 @@ index d451a943a..0e018644a 100644
  		if (inst_attr attr = m_inst_attrs[(read_pc - entry_point) / 4]; attr == inst_attr::none)
  		{
  			add_pattern(inst_attr::rchcnt_loop, read_pc - result.entry_point, 0);
-@@ -9113,7 +9376,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
+@@ -9113,7 +9381,7 @@ spu_program spu_recompiler_base::analyse(const be_t<u32>* ls, u32 entry_point, s
  
  	if (likely_putllc_loop && !had_putllc_evaluation)
  	{
@@ -8460,7 +8472,7 @@ index 77927e27b..9102bf6d2 100644
  		auto& sampled_image_info = texture_env[offsets[static_cast<u32>(sampler_state->image_type)] + i];
  		sampled_image_info = { *view, *fs_sampler_handles[i] };
 diff --git a/rpcs3/Emu/RSX/VK/VKGSRender.cpp b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
-index 63cab28e9..c7e429e6f 100644
+index 63cab28e9..64731ba64 100644
 --- a/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKGSRender.cpp
 @@ -16,10 +16,14 @@
@@ -8518,7 +8530,21 @@ index 63cab28e9..c7e429e6f 100644
  }
  
  bool VKGSRender::on_vram_exhausted(rsx::problem_severity severity)
-@@ -1096,33 +1127,18 @@ bool VKGSRender::on_vram_exhausted(rsx::problem_severity severity)
+@@ -1048,6 +1079,13 @@ bool VKGSRender::on_vram_exhausted(rsx::problem_severity severity)
+ 				for (auto i = 0ull; i < texture_array.size(); ++i)
+ 				{
+ 					const auto& tex = texture_array[i];
++					// Disabled slots may retain offsets into memory the guest has
++					// already unmapped. They are not active eviction exclusions.
++					if (!tex.enabled())
++					{
++						continue;
++					}
++
+ 					const auto addr = rsx::get_address(tex.offset(), tex.location());
+ 					exclusion_list.insert(addr);
+ 				}
+@@ -1096,33 +1134,18 @@ bool VKGSRender::on_vram_exhausted(rsx::problem_severity severity)
  		return any_cache_relieved;
  	}
  
@@ -8533,15 +8559,7 @@ index 63cab28e9..c7e429e6f 100644
 -			{
 -				return;
 -			}
-+		// Spilling and resolve-cache eviction destroy image views. Invalidate
-+		// every cached framebuffer descriptor, even when a global refresh is
-+		// already pending: load_texture_env only refreshes the current shader's
-+		// referenced slots before clearing that global flag.
-+		const bool invalidate_fragment_samplers = rsx::invalidate_sampler_context(
-+			fs_sampler_state, m_textures_dirty, rsx::texture_upload_context::framebuffer_storage);
-+		const bool invalidate_vertex_samplers = rsx::invalidate_sampler_context(
-+			vs_sampler_state, m_vertex_textures_dirty, rsx::texture_upload_context::framebuffer_storage);
- 
+-
 -			for (auto i = 0ull; i < texture_array.size(); ++i)
 -			{
 -				if (texture_array[i].enabled() &&
@@ -8553,7 +8571,15 @@ index 63cab28e9..c7e429e6f 100644
 -				}
 -			}
 -		};
--
++		// Spilling and resolve-cache eviction destroy image views. Invalidate
++		// every cached framebuffer descriptor, even when a global refresh is
++		// already pending: load_texture_env only refreshes the current shader's
++		// referenced slots before clearing that global flag.
++		const bool invalidate_fragment_samplers = rsx::invalidate_sampler_context(
++			fs_sampler_state, m_textures_dirty, rsx::texture_upload_context::framebuffer_storage);
++		const bool invalidate_vertex_samplers = rsx::invalidate_sampler_context(
++			vs_sampler_state, m_vertex_textures_dirty, rsx::texture_upload_context::framebuffer_storage);
+ 
 -		scan_array(rsx::method_registers.fragment_textures, fs_sampler_state);
 -		scan_array(rsx::method_registers.vertex_textures, vs_sampler_state);
 -
@@ -8562,7 +8588,7 @@ index 63cab28e9..c7e429e6f 100644
  		{
  			m_samplers_dirty.store(true);
  		}
-@@ -1276,6 +1292,19 @@ void VKGSRender::on_init_thread()
+@@ -1276,6 +1299,19 @@ void VKGSRender::on_init_thread()
  			m_shaders_cache->load(&dlg);
  		}
  	}
@@ -8582,7 +8608,7 @@ index 63cab28e9..c7e429e6f 100644
  }
  
  void VKGSRender::on_exit()
-@@ -1912,7 +1941,11 @@ bool VKGSRender::load_program()
+@@ -1912,7 +1948,11 @@ bool VKGSRender::load_program()
  
  		vk::leave_uninterruptible();
  
@@ -8620,6 +8646,31 @@ index e3817d8e6..c7903bda9 100644
  	bool bind_texture_env();
  	bool bind_interpreter_texture_env();
  
+diff --git a/rpcs3/Emu/RSX/VK/VKHelpers.cpp b/rpcs3/Emu/RSX/VK/VKHelpers.cpp
+index 936021579..fbdb63f27 100644
+--- a/rpcs3/Emu/RSX/VK/VKHelpers.cpp
++++ b/rpcs3/Emu/RSX/VK/VKHelpers.cpp
+@@ -91,7 +91,6 @@ namespace vk
+ 		g_drv_sanitize_fp_values = false;
+ 		g_drv_disable_fence_reset = false;
+ 		g_drv_strict_query_scopes = !!g_cfg.video.strict_rendering_mode;
+-		g_drv_emulate_cond_render = (g_cfg.video.relaxed_zcull_sync && !g_render_device->get_conditional_render_support());
+ 		g_num_processed_frames = 0;
+ 		g_num_total_frames = 0;
+ 		g_heap_compatible_buffer_types = 0;
+@@ -102,6 +101,12 @@ namespace vk
+ 		g_driver_vendor = gpu.get_driver_vendor();
+ 		g_chip_class = gpu.get_chip_class();
+ 
++		// MoltenVK resolves conditional rendering on the CPU (see backend_config).
++		// It never creates the GPU predicate buffer, so shader emulation would
++		// read the zero-filled scratch fallback and discard ordinary draws.
++		g_drv_emulate_cond_render = (g_driver_vendor != driver_vendor::MVK &&
++			g_cfg.video.relaxed_zcull_sync && !g_render_device->get_conditional_render_support());
++
+ 		switch (g_driver_vendor)
+ 		{
+ 		case driver_vendor::AMD:
 diff --git a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp b/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
 index 85e981c4f..9ada142bd 100644
 --- a/rpcs3/Emu/RSX/VK/VKPipelineCompiler.cpp
@@ -11509,12 +11560,13 @@ index 000000000..012200b26
 +#endif
 diff --git a/rpcs3/ios/NeoSwapClient.h b/rpcs3/ios/NeoSwapClient.h
 new file mode 100644
-index 000000000..3d7fc8040
+index 000000000..6cae2f0b2
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapClient.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,63 @@
 +#pragma once
 +#include "NeoSwap.h"
++#include "NeoSwapClientStats.h"
 +#include <atomic>
 +#include <cstddef>
 +
@@ -11522,6 +11574,9 @@ index 000000000..3d7fc8040
 +// Each core stores only a borrowed vtable. The broker itself is compiled once
 +// into neo_swap.framework, never into each emulator. No static constructors.
 +inline constinit std::atomic<const NeoSwapAPI*> client_api{nullptr};
++inline constinit std::atomic<uint64_t> skipped_small{0}, missing_api{0}, disabled{0};
++inline constinit std::atomic<uint64_t> eligible_attempts{0}, failed_allocations{0}, successful_allocations{0};
++inline constinit std::atomic<int32_t> last_result{NEOSWAP_OK};
 +inline int install(const NeoSwapAPI* api) noexcept {
 +    if (!api || api->struct_size != sizeof(NeoSwapAPI) || api->abi_version != NEOSWAP_ABI ||
 +        !api->allocate || !api->release || !api->sync || !api->enabled) return NEOSWAP_INVALID;
@@ -11532,19 +11587,67 @@ index 000000000..3d7fc8040
 +}
 +inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexcept {
 +    // Small renderer allocations must not take the broker lock or create files.
-+    if (bytes < 1024 * 1024) return nullptr;
++    if (bytes < 1024 * 1024) {
++        skipped_small.fetch_add(1, std::memory_order_relaxed);
++        return nullptr;
++    }
 +    const auto* api = client_api.load(std::memory_order_acquire);
-+    if (!api || !api->enabled(owner)) return nullptr;
++    if (!api) {
++        missing_api.fetch_add(1, std::memory_order_relaxed);
++        return nullptr;
++    }
++    if (!api->enabled(owner)) {
++        disabled.fetch_add(1, std::memory_order_relaxed);
++        return nullptr;
++    }
 +    void* ptr = nullptr;
-+    return api->allocate(owner, NEOSWAP_CPU_DATA, bytes, alignment, &ptr) == NEOSWAP_OK ? ptr : nullptr;
++    eligible_attempts.fetch_add(1, std::memory_order_relaxed);
++    const int result = api->allocate(owner, NEOSWAP_CPU_DATA, bytes, alignment, &ptr);
++    last_result.store(result, std::memory_order_relaxed);
++    if (result == NEOSWAP_OK && ptr) {
++        successful_allocations.fetch_add(1, std::memory_order_relaxed);
++        return ptr;
++    }
++    failed_allocations.fetch_add(1, std::memory_order_relaxed);
++    return nullptr;
++}
++inline int snapshot(NeoSwapClientStats* out) noexcept {
++    if (!out || out->struct_size != sizeof(*out) ||
++        out->abi_version != NEOSWAP_CLIENT_STATS_ABI) return NEOSWAP_INVALID;
++    // Relaxed cumulative observations avoid adding locks to renderer threads.
++    *out = {sizeof(*out), NEOSWAP_CLIENT_STATS_ABI,
++        skipped_small.load(std::memory_order_relaxed), missing_api.load(std::memory_order_relaxed),
++        disabled.load(std::memory_order_relaxed), eligible_attempts.load(std::memory_order_relaxed),
++        failed_allocations.load(std::memory_order_relaxed), successful_allocations.load(std::memory_order_relaxed),
++        last_result.load(std::memory_order_relaxed), 0};
++    return NEOSWAP_OK;
 +}
 +inline int release(void* ptr) noexcept {
 +    const auto* api = client_api.load(std::memory_order_acquire);
 +    return api ? api->release(ptr) : NEOSWAP_NOT_OWNED;
 +}
 +}
+diff --git a/rpcs3/ios/NeoSwapClientStats.h b/rpcs3/ios/NeoSwapClientStats.h
+new file mode 100644
+index 000000000..91bb89d96
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapClientStats.h
+@@ -0,0 +1,13 @@
++#pragma once
++#include <stdint.h>
++
++// Optional diagnostic getter, independent of both the allocator v1 vtable and
++// RPCS3's runtime ABI. Counts reflect actual allocator decisions, not RAM gains.
++enum { NEOSWAP_CLIENT_STATS_ABI = 1 };
++typedef struct NeoSwapClientStats {
++    uint32_t struct_size, abi_version;
++    uint64_t skipped_small, missing_api, disabled;
++    uint64_t eligible_attempts, failed_allocations, successful_allocations;
++    int32_t last_result;
++    uint32_t reserved;
++} NeoSwapClientStats;
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc731..2adc8c56e 100644
+index 74a6dc731..9f118f83c 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
 @@ -1,4 +1,5 @@
@@ -11736,9 +11839,7 @@ index 74a6dc731..2adc8c56e 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_prepare",
 +			rpcs3::ios::jit::last_error());
- 	}
--	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
--		!rpcs3::ios::jit::seal_arena())
++	}
 +
 +	// No process-global runtime has been changed before this point. An early
 +	// reservation failure can be retried by the user after helper completion.
@@ -11747,13 +11848,10 @@ index 74a6dc731..2adc8c56e 100644
 +	g_initialization_attempted = true;
 +	emit_log(2, "asmjit_global_runtime_begin");
 +	if (!asmjit::initialize_global_runtime())
- 	{
--		set_error(rpcs3::ios::jit::last_error());
--		g_lifecycle.finish_initialize(false);
--		return RPCS3_IOS_JIT_MAPPING_FAILED;
++	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "asmjit_global_runtime",
 +			rpcs3::ios::jit::last_error());
- 	}
++	}
 +	emit_log(2, "asmjit_global_runtime_end");
 +
 +	std::string trampoline_error;
@@ -11768,7 +11866,9 @@ index 74a6dc731..2adc8c56e 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "ppu_hle_trampolines",
 +			trampoline_error + "; " + rpcs3::ios::jit::last_error());
-+	}
+ 	}
+-	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
+-		!rpcs3::ios::jit::seal_arena())
 +	emit_log(2, "ppu_trampoline_init_end");
 +
 +	trampoline_error.clear();
@@ -11781,10 +11881,13 @@ index 74a6dc731..2adc8c56e 100644
 +	emit_log(2, "spu_trampoline_init_end");
 +
 +	if (!rpcs3::ios::jit::seal_arena())
-+	{
+ 	{
+-		set_error(rpcs3::ios::jit::last_error());
+-		g_lifecycle.finish_initialize(false);
+-		return RPCS3_IOS_JIT_MAPPING_FAILED;
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_seal",
 +			rpcs3::ios::jit::last_error());
-+	}
+ 	}
 +	emit_log(2, "jit_initialize_success");
  
  	try
@@ -12151,7 +12254,7 @@ index 74a6dc731..2adc8c56e 100644
  	bool should_run = false;
  	if (const auto result = g_lifecycle.begin_shutdown(should_run); result != RPCS3_IOS_OK)
  	{
-@@ -4852,3 +5144,9 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
+@@ -4852,3 +5144,14 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
  	emit_log(1, text);
  	std::abort();
  }
@@ -12161,11 +12264,16 @@ index 74a6dc731..2adc8c56e 100644
 +{
 +	return neostation::swap::install(api);
 +}
++
++extern "C" RPCS3_IOS_EXPORT int32_t rpcs3_ios_get_neoswap_client_stats(NeoSwapClientStats* out) noexcept
++{
++	return neostation::swap::snapshot(out);
++}
 diff --git a/rpcs3/ios/RPCS3IOS.exports b/rpcs3/ios/RPCS3IOS.exports
-index d7529ab6a..991c27501 100644
+index d7529ab6a..61d2783f6 100644
 --- a/rpcs3/ios/RPCS3IOS.exports
 +++ b/rpcs3/ios/RPCS3IOS.exports
-@@ -72,3 +72,8 @@ _rpcs3_ios_stop_emulation
+@@ -72,3 +72,9 @@ _rpcs3_ios_stop_emulation
  _rpcs3_ios_get_state
  _rpcs3_ios_shutdown
  _rpcs3_ios_last_error
@@ -12174,11 +12282,20 @@ index d7529ab6a..991c27501 100644
 +_neostation_rpcs3_ios_get_savestate_status
 +_neostation_rpcs3_ios_save_state_slot
 +_rpcs3_ios_set_neoswap_api
++_rpcs3_ios_get_neoswap_client_stats
 diff --git a/rpcs3/ios/RPCS3IOS.h b/rpcs3/ios/RPCS3IOS.h
-index 20526d090..5be3a76bb 100644
+index 20526d090..d1dbee1ad 100644
 --- a/rpcs3/ios/RPCS3IOS.h
 +++ b/rpcs3/ios/RPCS3IOS.h
-@@ -139,6 +139,7 @@ typedef struct rpcs3_ios_config
+@@ -3,6 +3,7 @@
+ 
+ #include <stddef.h>
+ #include <stdint.h>
++#include "NeoSwapClientStats.h"
+ 
+ #if defined(__cplusplus)
+ extern "C" {
+@@ -139,6 +140,7 @@ typedef struct rpcs3_ios_config
      rpcs3_ios_log_callback log_callback;
      rpcs3_ios_main_thread_callback main_thread_callback;
      void* user_context;
@@ -12186,6 +12303,17 @@ index 20526d090..5be3a76bb 100644
      uint32_t expanded_jit_arena;
      uint32_t reserved;
  } rpcs3_ios_config;
+@@ -792,6 +794,10 @@ RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_get_boot_progress(
+ // lifecycle lock. Fields without a valid_fields bit must not be displayed.
+ RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_get_performance_metrics(
+     rpcs3_ios_performance_metrics* metrics) RPCS3_IOS_NOEXCEPT;
++// Optional allocator diagnostics: caller supplies the exact struct size and
++// NEOSWAP_CLIENT_STATS_ABI. Independent of the main Core and allocator ABI.
++RPCS3_IOS_EXPORT int32_t rpcs3_ios_get_neoswap_client_stats(
++    NeoSwapClientStats* stats) RPCS3_IOS_NOEXCEPT;
+ // Uses the same Emulator::Pause/Resume lifecycle as the desktop frontend.
+ // Pause is accepted only from running; resume is accepted only from paused.
+ RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_pause_emulation(void) RPCS3_IOS_NOEXCEPT;
 diff --git a/rpcs3/ios/RPCS3IOSContract.h b/rpcs3/ios/RPCS3IOSContract.h
 index b4602fea9..37a708aa6 100644
 --- a/rpcs3/ios/RPCS3IOSContract.h

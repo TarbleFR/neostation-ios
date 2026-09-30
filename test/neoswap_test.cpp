@@ -1,4 +1,5 @@
 #include "NeoSwap.h"
+#include "NeoSwapHost.h"
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -23,11 +24,25 @@ int main() {
     NeoSwapConfig config{sizeof(config), NEOSWAP_ABI, 8*MiB, 0, 4096, 0x3f, 0};
     void* p = reinterpret_cast<void*>(1);
     assert(api->allocate(0, NEOSWAP_CPU_DATA, MiB, 16, &p) == NEOSWAP_DISABLED && !p);
+    NeoSwapHostStats host{};
+    assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);
+    assert(host.owner_last_result[0] == NEOSWAP_DISABLED);
     assert(NeoSwap_Configure(dir, &config) == 0);
+    assert(!NeoSwap_HostSnapshot(&host) && host.reserved_virtual_bytes == 8*MiB);
+    assert(!snapshot().live_bytes && !snapshot().allocated_disk_bytes);
+    // Virtual space is reserved persistently without fake owner allocations.
+    // A failed replacement must retain the working arena and owner policy.
+    NeoSwap_TestFailNext(6);
+    assert(NeoSwap_Configure(dir, &config) == NEOSWAP_MAPPING);
+    assert(!NeoSwap_HostSnapshot(&host) && host.reserved_virtual_bytes == 8*MiB);
+    assert(host.reservation_result == NEOSWAP_MAPPING && host.reservation_errno);
     assert(api->enabled(0));
+    void* previous = nullptr;
     for (auto alignment : {1u, 16u, 4096u, 16384u, 65536u}) {
         assert(api->allocate(0, NEOSWAP_CPU_DATA, MiB+31, alignment, &p) == 0);
         assert(reinterpret_cast<uintptr_t>(p) % alignment == 0);
+        if (previous) assert(p == previous); // released PROT_NONE space is reusable
+        previous = p;
         auto* data = static_cast<unsigned char*>(p);
         for (size_t n=0; n<MiB+31; ++n) assert(!data[n]);
         for (size_t n=0; n<MiB+31; ++n) data[n] = byte_at(n);
@@ -40,6 +55,7 @@ int main() {
         assert(s.live_blocks == 1 && s.live_bytes >= MiB+31 && s.allocated_disk_bytes >= MiB);
         assert(NeoSwap_Configure(dir, &config) == NEOSWAP_BUSY);
         assert(api->release(p) == 0);
+        assert(!NeoSwap_HostSnapshot(&host) && host.reserved_virtual_bytes == 8*MiB);
         assert(api->release(p) == NEOSWAP_NOT_OWNED);
     }
     int local = 0;
@@ -54,6 +70,8 @@ int main() {
     config.minimum_free_bytes = UINT64_MAX;
     assert(NeoSwap_Configure(dir, &config) == 0);
     assert(api->allocate(0, 1, MiB, 16, &p) == NEOSWAP_STORAGE && !p);
+    assert(!NeoSwap_HostSnapshot(&host) && host.owner_last_result[0] == NEOSWAP_STORAGE);
+    assert(host.owner_last_errno[0] == ENOSPC && !host.remaining_storage_bytes);
     config.minimum_free_bytes = 0;
     assert(NeoSwap_Configure(dir, &config) == 0);
     for (int stage=1; stage<=3; ++stage) {
@@ -78,6 +96,8 @@ int main() {
                 void* ptr = nullptr;
                 if (api->allocate(owner, NEOSWAP_CPU_DATA, 65536, 65536, &ptr)) { ++failures; continue; }
                 std::memset(ptr, static_cast<int>(owner+1), 65536);
+                NeoSwapHostStats display{};
+                if (NeoSwap_HostSnapshot(&display) || display.reserved_virtual_bytes != 8*MiB) ++failures;
                 for (size_t n=0; n<65536; ++n) if (static_cast<unsigned char*>(ptr)[n] != owner+1) ++failures;
                 if (api->release(ptr)) ++failures;
             }
@@ -92,6 +112,7 @@ int main() {
     for (auto ptr : pointers) assert(api->release(ptr) == 0);
     config.capacity_bytes = 0;
     assert(NeoSwap_Configure(nullptr, &config) == 0 && !api->enabled(0));
+    assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);
     assert(api->allocate(0, 1, MiB, 16, &p) == NEOSWAP_DISABLED);
     assert(::rmdir(dir) == 0); // no backing names survive any success/error path
     auto result = snapshot();

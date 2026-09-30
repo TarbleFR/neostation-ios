@@ -5,7 +5,7 @@ import '../../utils/switch_title_extractor.dart';
 import 'sqlite_service.dart';
 import 'sqlite_config_service.dart';
 import '../../utils/vita_title_extractor.dart';
-import '../../services/dusklight_game_identity.dart';
+import '../../services/ports_game_identity.dart';
 
 import 'package:neostation/services/android_service.dart';
 import 'package:neostation/services/saf_directory_service.dart';
@@ -567,10 +567,10 @@ class SqliteDatabaseService {
         String? titleName;
 
         if (systemFolderName == 'ports') {
-          final identity = await DusklightGameIdentity.read(entry.path);
+          final identity = await PortGameIdentity.read(entry.path);
           if (identity != null) {
             titleId = identity.discId;
-            titleName = DusklightGameIdentity.displayTitle;
+            titleName = identity.displayTitle;
           }
         }
 

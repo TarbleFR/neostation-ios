@@ -43,7 +43,8 @@ static NSDictionary* DOLTextureStatus(NSString* user,NSString* game,NSInteger re
   }
   if(![manifest isKindOfClass:NSDictionary.class])manifest=@{};
   return @{@"enabled":@([DOLIniValue(text,@"Video_Settings",@"HiresTextures") isEqual:@"True"]),
-    @"count":manifest[@"count"]?:@0,@"bytes":manifest[@"bytes"]?:@0};
+    @"count":manifest[@"count"]?:@0,@"bytes":manifest[@"bytes"]?:@0,
+    @"sourceGameIds":[manifest[@"sourceGameIds"] isKindOfClass:NSArray.class]?manifest[@"sourceGameIds"]:@[]};
 }
 static BOOL DOLTextureSignature(NSString* path) {
   NSFileHandle* file=[NSFileHandle fileHandleForReadingAtPath:path];if(!file)return NO;
@@ -54,7 +55,8 @@ static BOOL DOLTextureSignature(NSString* path) {
 }
 // Work only in a new private staging directory. An error never replaces a
 // working pack, changes cheats, or extracts paths supplied by an archive verbatim.
-static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInteger revision) {
+static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInteger revision,BOOL allowOtherRegion=NO,NSDictionary** details=nullptr) {
+  if(details)*details=@{};
   if(!DOLTextureGame(game) || !DOLTextureINI(user,game,revision))return @"invalid";
   NSFileManager* fm=NSFileManager.defaultManager;
   NSString* parent=[user stringByAppendingPathComponent:@"Load/Textures"];
@@ -62,6 +64,7 @@ static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInt
   NSString* stage=[parent stringByAppendingPathComponent:[@".import-" stringByAppendingString:NSUUID.UUID.UUIDString]];
   if(![fm createDirectoryAtPath:stage withIntermediateDirectories:NO attributes:nil error:nil])return @"failed";
   __block NSString* failure=@"invalid";__block uint64_t total=0;__block NSUInteger count=0;
+  NSMutableSet<NSString*>* sources=[NSMutableSet set];NSMutableSet<NSString*>* otherRegions=[NSMutableSet set];
   BOOL scoped=[url startAccessingSecurityScopedResource];__block NSError* coordination=nil;
   NSFileCoordinator* coordinator=[[NSFileCoordinator alloc] initWithFilePresenter:nil];
   [coordinator coordinateReadingItemAtURL:url options:0 error:&coordination byAccessor:^(NSURL* source){
@@ -85,12 +88,16 @@ static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInt
         NSString* entryPath=entry.path.stringByStandardizingPath.stringByResolvingSymlinksInPath;
         if(![entryPath hasPrefix:prefix])return;
         NSString* path=[sourcePath.lastPathComponent stringByAppendingPathComponent:[entryPath substringFromIndex:prefix.length]];
-        auto relative=DOLTextures::relative(path.UTF8String,game.UTF8String);if(relative.empty())continue;
-        NSString* dest=[NSString stringWithUTF8String:relative.c_str()];uint64_t size=[v[NSURLFileSizeKey] unsignedLongLongValue];
+        const auto selection=DOLTextures::match(path.UTF8String,game.UTF8String);if(selection.relative.empty())continue;
+        NSString* sourceGame=[NSString stringWithUTF8String:selection.source.c_str()];
+        if(selection.otherRegion && !allowOtherRegion){[otherRegions addObject:sourceGame];continue;}
+        [sources addObject:sourceGame];
+        NSString* dest=[NSString stringWithUTF8String:selection.relative.c_str()];uint64_t size=[v[NSURLFileSizeKey] unsignedLongLongValue];
         if(!dest || !size || size>DOLTextures::maxFile || [names containsObject:dest.lowercaseString] || plan.count>=20000)return;
         total+=size;if(total>DOLTextures::maxPack)return;[names addObject:dest.lowercaseString];[plan addObject:@[entry,dest]];
       }
-      if(readFailed || !enumerator || !plan.count)return;
+      if(readFailed || !enumerator)return;
+      if(!plan.count){if(otherRegions.count)failure=@"region";return;}
       uint64_t free=[[[fm attributesOfFileSystemForPath:parent error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue];
       if(free<total+1024ULL*1024*1024){failure=@"space";return;}
       for(NSArray* item in plan) {
@@ -100,8 +107,11 @@ static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInt
         ++count;
       }
     } else if([source.pathExtension.lowercaseString isEqual:@"zip"]) {
-      std::ifstream input(source.path.fileSystemRepresentation,std::ios::binary);std::vector<DOLTextures::File> files;
-      if(!DOLTextures::list(input,game.UTF8String,files,total))return;
+      std::ifstream input(source.path.fileSystemRepresentation,std::ios::binary);std::vector<DOLTextures::File> files;DOLTextures::Scan scan;
+      BOOL valid=DOLTextures::list(input,game.UTF8String,files,total,&scan,allowOtherRegion);
+      for(const auto& id:scan.sources)[sources addObject:[NSString stringWithUTF8String:id.c_str()]];
+      for(const auto& id:scan.otherRegions)[otherRegions addObject:[NSString stringWithUTF8String:id.c_str()]];
+      if(!valid){if(scan.valid && otherRegions.count && files.empty())failure=@"region";return;}
       uint64_t free=[[[fm attributesOfFileSystemForPath:parent error:nil] objectForKey:NSFileSystemFreeSize] unsignedLongLongValue];
       if(free<total+1024ULL*1024*1024){failure=@"space";return;}
       for(const auto& file:files) {
@@ -113,8 +123,10 @@ static NSString* DOLTextureImport(NSURL* url,NSString* user,NSString* game,NSInt
     failure=nil;
   }];
   if(scoped)[url stopAccessingSecurityScopedResource];
+  if(details)*details=@{@"sourceGameIds":[otherRegions.allObjects sortedArrayUsingSelector:@selector(compare:)],@"gameId":game};
   if(coordination || failure || !count){[fm removeItemAtPath:stage error:nil];return failure?:@"failed";}
-  NSData* manifest=[NSJSONSerialization dataWithJSONObject:@{@"gameId":game,@"revision":@(revision),@"count":@(count),@"bytes":@(total)} options:0 error:nil];
+  NSData* manifest=[NSJSONSerialization dataWithJSONObject:@{@"gameId":game,@"revision":@(revision),@"count":@(count),@"bytes":@(total),
+    @"sourceGameIds":[sources.allObjects sortedArrayUsingSelector:@selector(compare:)]} options:0 error:nil];
   if(![manifest writeToFile:[stage stringByAppendingPathComponent:@"NeoStation-pack.json"] atomically:YES]){[fm removeItemAtPath:stage error:nil];return @"failed";}
   NSString* target=[parent stringByAppendingPathComponent:game];NSString* backup=[parent stringByAppendingPathComponent:[@".previous-" stringByAppendingString:NSUUID.UUID.UUIDString]];
   if(!DOLTextureSafeParents(target,user)){[fm removeItemAtPath:stage error:nil];return @"failed";}

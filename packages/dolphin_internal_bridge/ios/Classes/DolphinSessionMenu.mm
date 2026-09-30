@@ -3,6 +3,7 @@
 #include "DOLManualCheatEditor.h"
 #import "DolphinFramePacing.h"
 #include "DolphinPhoneShakeLabels.h"
+#include "TouchController/TCManagerInterface.h"
 #include "DOLTextureLabels.h"
 static NSString* const DOLPhoneShakeKey=@"NeoStation.Dolphin.PhoneShake.Enabled";
 static BOOL DOLPhoneShakeEnabled(void) {
@@ -611,8 +612,12 @@ static void DOLMenuOnMain(dispatch_block_t block) {
   } else if (self.page == DOLMenuControls) {
     if (indexPath.section == 0 && self.wii && row == 4) {
       cell.textLabel.text=DOLPhoneShakeText(@"title",self.labels[@"__locale"]);
-      cell.detailTextLabel.text=DOLPacingText(DOLPhoneShakeEnabled()?@"on":@"off",self.labels[@"__locale"]);
-      cell.accessoryType=DOLPhoneShakeEnabled()?UITableViewCellAccessoryCheckmark:UITableViewCellAccessoryNone;
+      const NSInteger status = [TCManagerInterface phoneShakeRoutingStatus];
+      const BOOL enabled = DOLPhoneShakeEnabled();
+      const BOOL failed = enabled && (status == 2 || status == 3);
+      cell.detailTextLabel.text = failed ? DOLPhoneShakeText(status == 2 ? @"routeFailed" : @"sensorUnavailable", self.labels[@"__locale"])
+          : DOLPacingText(enabled ? @"on" : @"off", self.labels[@"__locale"]);
+      cell.accessoryType = enabled && !failed ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
       return cell;
     }
     if (indexPath.section == 0) {

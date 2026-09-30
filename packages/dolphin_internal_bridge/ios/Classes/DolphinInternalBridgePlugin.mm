@@ -7,6 +7,7 @@
 #include "DOLTextureSettings.h"
 #import "DolphinPerformanceOverlay.h"
 #import "DolphinSessionLifecycle.h"
+#include "TouchController/DolphinPhoneShakeRouting.h"
 #import "DolphinRecordingController.h"
 #import <dolphin_internal_bridge/dolphin_internal_bridge-Swift.h>
 #import <GameController/GameController.h>
@@ -758,6 +759,7 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
   self = [super init];
   if (self) {
     _runtimeQueue = dispatch_queue_create("com.neogamelab.neostation.dolphin.runtime", DISPATCH_QUEUE_SERIAL);
+    DOLPhoneShakeSetRuntimeQueue(_runtimeQueue);
     self.recorder = [DolphinRecordingController new];
     __weak DolphinInternalBridgePlugin* weakSelf = self;
     self.recorder.statusHandler = ^(DolphinRecordingState state, NSError* error) {
@@ -1556,7 +1558,8 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
       const BOOL samplePerformance = (owner.showingPerformance || owner.framePacing.traceEnabled) && !strongSelf.sessionMenu && !strongSelf.menuOpening;
       // The upstream input scanner already signals hotplug. Avoid taking the
       // host/input locks every 500 ms when no controller/configuration changed.
-      const BOOL refreshInput=owner.framePacing.activeProfile==0 || strongSelf.lastControllerGeneration!=owner.controllerGeneration;
+      const BOOL controllersChanged = strongSelf.lastControllerGeneration != owner.controllerGeneration;
+      const BOOL refreshInput=owner.framePacing.activeProfile==0 || controllersChanged;
       if(refreshInput)strongSelf.lastControllerGeneration=owner.controllerGeneration;
       // Serialize status checks with pause/restart/stop. A false running flag
       // during Core::Shutdown must never detach the surface from the main timer.
@@ -1590,8 +1593,13 @@ static BOOL DOLLaunchHelper(DOLHelperSession* session,
           if (strongSelf.dolphinController != owner) return;
           strongSelf.monitorPollInProgress = NO;
           if (strongSelf.stopInProgress) return;
-          if (layout && strongSelf.wiiSession)
+          if (layout && strongSelf.wiiSession) {
             [owner.touchOverlay updateExtension:layout == 2 ? @"Classic" : @"Nunchuk"];
+            // Legacy pacing polls every 500 ms. Only the controller-change
+            // refresh needs requalification; ordinary polls must not truncate
+            // a just-started shake or perform another settings snapshot.
+            if (controllersChanged) [owner.touchOverlay refreshPhoneShakeRouting];
+          }
           if(performance && !strongSelf.sessionMenu && !strongSelf.menuOpening)
             [owner.framePacing appendPerformance:performance inputMs:inputMs refreshed:refreshInput];
           if (performance && owner.showingPerformance && owner.performanceGeneration == performanceGeneration &&

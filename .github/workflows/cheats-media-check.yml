@@ -33,6 +33,7 @@ jobs:
           python3 test/cheat_bulk_scope_test.py
           python3 test/validate_cheat_bulk_ipa_test.py
           python3 test/dolphin_texture_zip_test.py
+          python3 test/dolphin_texture_localizations_test.py
           clang++ -std=c++20 -fobjc-arc -fblocks -Ipackages/dolphin_internal_bridge/ios/Classes test/dolphin_texture_store_test.mm -lz -framework Foundation -o /tmp/texture-store
           /tmp/texture-store
           clang++ -std=c++20 -fobjc-arc -fblocks -Wno-deprecated-declarations -Inative/cheats test/cheat_store_test.mm -framework Foundation -o /tmp/cheat-store
@@ -69,3 +70,5 @@ jobs:
       - run: flutter analyze --no-fatal-infos
       - name: Execute frontend media and existing preview regression tests
         run: flutter test test/frontend_media_gate_test.dart test/video_preview_lifecycle_test.dart
+      - name: Verify native Ports display title and retained source identity
+        run: flutter test test/kartpad_display_title_test.dart test/dusklight_library_test.dart test/dusklight_ports_stage1_test.dart test/kartpad_locale_test.dart

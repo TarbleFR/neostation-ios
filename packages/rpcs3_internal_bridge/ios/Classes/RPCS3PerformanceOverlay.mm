@@ -2,6 +2,7 @@
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
 #import <neo_swap/NeoSwap.h>
+#include "NeoSwapUsagePolicy.h"
 
 #include <array>
 #include <cmath>
@@ -33,6 +34,7 @@ NSString* MemoryText(uint64_t value) {
 }
 @property(nonatomic, strong) UILabel* ratesLabel;
 @property(nonatomic, strong) UILabel* memoryLabel;
+@property(nonatomic, strong) UILabel* swapLabel;
 @property(nonatomic, strong) UILabel* graphLabel;
 @property(nonatomic, copy) NSString* localeIdentifier;
 @end
@@ -53,6 +55,8 @@ NSString* MemoryText(uint64_t value) {
 
   self.ratesLabel = [self newLabelWithSize:13 weight:UIFontWeightSemibold];
   self.memoryLabel = [self newLabelWithSize:11 weight:UIFontWeightRegular];
+  self.swapLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
+  self.swapLabel.numberOfLines = 2;
   self.graphLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
   self.graphLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
   [self setLocaleIdentifier:NSLocale.preferredLanguages.firstObject ?: @"en"];
@@ -79,14 +83,15 @@ NSString* MemoryText(uint64_t value) {
   return label;
 }
 
-- (CGSize)intrinsicContentSize { return CGSizeMake(310, 150); }
+- (CGSize)intrinsicContentSize { return CGSizeMake(310, 185); }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGFloat width = MAX(0.0, self.bounds.size.width - 20.0);
   self.ratesLabel.frame = CGRectMake(10, 8, width, 18);
   self.memoryLabel.frame = CGRectMake(10, 29, width, 16);
-  self.graphLabel.frame = CGRectMake(10, 50, width, 14);
+  self.swapLabel.frame = CGRectMake(10, 47, width, 32);
+  self.graphLabel.frame = CGRectMake(10, 85, width, 14);
   [self setNeedsDisplay];
 }
 
@@ -97,6 +102,7 @@ NSString* MemoryText(uint64_t value) {
   self.ratesLabel.text = @"FPS — · CPU — · RSX —";
   self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
       RPCS3LocalizedString(@"memory", self.localeIdentifier)];
+  self.swapLabel.text = @"NeoSwap —";
   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
   [self setNeedsDisplay];
 }
@@ -128,12 +134,6 @@ NSString* MemoryText(uint64_t value) {
         RPCS3LocalizedString(@"memory", self.localeIdentifier)];
   }
 
-  // Lock-free mapped-byte counter: never enumerate files on the render/UI path.
-  if (NeoSwap_GetAPI(NEOSWAP_ABI)->enabled(NEOSWAP_RPCS3)) {
-    self.memoryLabel.text = [self.memoryLabel.text stringByAppendingFormat:@" · NeoSwap %@",
-        MemoryText(NeoSwap_LiveBytes(NEOSWAP_RPCS3))];
-  }
-
   if ((validFields & kFPSValid) && std::isfinite(fps) && fps > 0) {
     while (_sampleCount && timestampMs - _samples[_sampleStart].timestampMs > kWindowMs) {
       _sampleStart = (_sampleStart + 1) % kCapacity;
@@ -149,12 +149,39 @@ NSString* MemoryText(uint64_t value) {
   [self setNeedsDisplay];
 }
 
+- (void)appendNeoSwapWithClient:(const NeoSwapClientStats*)client host:(const NeoSwapHostStats*)host {
+  NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
+  if (self.hidden) return;
+  const uint64_t live = NeoSwap_LiveBytes(NEOSWAP_RPCS3);
+  NSString* key = @"swapWaiting";
+  switch (NeoSwapUsage(live, client, host)) {
+    case NeoSwapUsageStatus::unavailable: key = @"swapUnavailable"; break;
+    case NeoSwapUsageStatus::clientUnavailable: key = @"swapClientUnavailable"; break;
+    case NeoSwapUsageStatus::disabled: key = @"swapDisabled"; break;
+    case NeoSwapUsageStatus::waiting: key = @"swapWaiting"; break;
+    case NeoSwapUsageStatus::small: key = @"swapSmall"; break;
+    case NeoSwapUsageStatus::rejected: key = @"swapRejected"; break;
+    case NeoSwapUsageStatus::released: key = @"swapReleased"; break;
+    case NeoSwapUsageStatus::active: key = @"swapActive"; break;
+  }
+  const BOOL donorVerified = host && host->donation_state == 2 && host->donor_prepared_bytes;
+  self.swapLabel.text = [NSString stringWithFormat:@"NeoSwap · %@ %@ · %@ %@\n%@ %@ · %@",
+      RPCS3LocalizedString(@"swapAllocated", self.localeIdentifier), MemoryText(live),
+      RPCS3LocalizedString(@"swapDonor", self.localeIdentifier),
+      donorVerified ? MemoryText(host->donor_prepared_bytes) : @"—",
+      RPCS3LocalizedString(@"swapReserved", self.localeIdentifier),
+      host ? MemoryText(host->reserved_virtual_bytes) : @"—",
+      RPCS3LocalizedString(key, self.localeIdentifier)];
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
+      self.ratesLabel.text, self.memoryLabel.text, self.swapLabel.text];
+}
+
 - (void)drawRect:(CGRect)rect {
   [super drawRect:rect];
   CGContextRef context = UIGraphicsGetCurrentContext();
   if (!context) return;
-  CGRect graph = CGRectMake(40, 69, MAX(0.0, self.bounds.size.width - 50.0),
-                            MAX(0.0, self.bounds.size.height - 94.0));
+  CGRect graph = CGRectMake(40, 104, MAX(0.0, self.bounds.size.width - 50.0),
+                            MAX(0.0, self.bounds.size.height - 129.0));
   if (graph.size.width <= 0 || graph.size.height <= 0) return;
 
   double maximum = 33.4;

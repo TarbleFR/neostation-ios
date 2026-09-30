@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../providers/file_provider.dart';
+import '../services/ports_display_title.dart';
 import 'database_game_model.dart';
 
 /// Represents a unified game entity combining metadata, filesystem info, and database state.
@@ -172,6 +173,18 @@ class GameModel {
   /// older RPCS3 builds whose ScreenScraper value was only the Title ID.
   static ({String displayName, String realName, bool hasMeaningfulScrapedName})
   resolveDatabaseNamesForDisplay(DatabaseGameModel db) {
+    final portTitle = PortsDisplayTitle.forLibraryEntry(
+      systemFolderName: db.systemFolderName,
+      gamePath: db.romPath,
+    );
+    if (portTitle != null) {
+      return (
+        displayName: portTitle,
+        realName: portTitle,
+        hasMeaningfulScrapedName:
+            db.screenscraperRealName?.trim().isNotEmpty ?? false,
+      );
+    }
     final isRpcs3Virtual = db.romPath.toLowerCase().startsWith(
       'rpcs3-library://',
     );

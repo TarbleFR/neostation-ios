@@ -7,6 +7,7 @@ import '../../models/system_model.dart';
 import '../../repositories/game_repository.dart';
 import '../../repositories/system_repository.dart';
 import '../../constants/system_folder_names.dart';
+import '../ports_display_title.dart';
 
 /// Loads game lists/details and resolves their display names.
 ///
@@ -91,6 +92,18 @@ class GameListService {
     final resolvedNames = GameModel.resolveDatabaseNamesForDisplay(dbGame);
     final scraped = _hasScreenscraperRealName(dbGame);
     final coalesced = resolvedNames.displayName;
+
+    final portTitle = PortsDisplayTitle.forLibraryEntry(
+      systemFolderName: dbGame.systemFolderName,
+      gamePath: dbGame.romPath,
+    );
+    if (portTitle != null) {
+      return (
+        name: portTitle,
+        realName: portTitle,
+        showRomFileNameSubtitle: false,
+      );
+    }
 
     if (preferFileName && !isRpcs3Virtual) {
       return (

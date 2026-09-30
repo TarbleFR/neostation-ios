@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import <UIKit/UIKit.h>
+#include <neo_swap/NeoSwapHost.h>
+#include <neo_swap/NeoSwapClientStats.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -15,6 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
                  validFields:(uint32_t)validFields
                    timestamp:(double)timestampMs;
 - (void)reset;
+- (void)appendNeoSwapWithClient:(const NeoSwapClientStats* _Nullable)client
+                          host:(const NeoSwapHostStats* _Nullable)host;
 @end
 
 NS_ASSUME_NONNULL_END

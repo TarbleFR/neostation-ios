@@ -6,18 +6,30 @@ with tempfile.TemporaryDirectory() as temp:
     folder=Path(temp);binary=folder/'texture-zip'
     subprocess.run([os.environ.get('CXX','clang++'),'-std=c++20','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I'+str(ROOT/'packages/dolphin_internal_bridge/ios/Classes'),str(ROOT/'test/dolphin_texture_zip_test.cpp'),'-lz','-o',str(binary)],check=True)
     payload=b'\x89PNG\r\n\x1a\n'+bytes(range(256))*400
-    def run(name,entries,method=zipfile.ZIP_DEFLATED,mutate=None):
+    def run(name,entries,method=zipfile.ZIP_DEFLATED,mutate=None,game=None,allow_other_region=False):
         archive=folder/(name+'.zip');dest=folder/name
         with warnings.catch_warnings():
             warnings.simplefilter('ignore',UserWarning)
             with zipfile.ZipFile(archive,'w',compression=method) as z:
                 for path,data in entries:z.writestr(path,data)
         if mutate:archive.write_bytes(mutate(archive.read_bytes()))
-        return subprocess.run([str(binary),str(archive),str(dest)],capture_output=True).returncode,dest
+        command=[str(binary),str(archive),str(dest)]
+        if game:command.append(game)
+        if allow_other_region:command.append('allow-other-region')
+        return subprocess.run(command,capture_output=True).returncode,dest
     for method in (zipfile.ZIP_STORED,zipfile.ZIP_DEFLATED):
         code,dest=run('valid'+str(method),[('Pack/Load/Textures/GR8P69/sub/tex1_a.png',payload),('README.txt',b'Info')],method)
         assert code==0 and (dest/'sub/tex1_a.png').read_bytes()==payload
     assert run('wrong-game',[('GR8E69/tex1_a.png',payload)])[0]!=0
+    code,dest=run('fire-emblem-region-free',[('Fire Emblem/GFE/Portraits/tex1_a.png',payload)],game='GFEP01')
+    assert code==0 and (dest/'Portraits/tex1_a.png').read_bytes()==payload
+    entries=[('GFEE01/Map and Battle/tex1_a.png',payload)]
+    code,dest=run('fire-emblem-region-refused',entries,game='GFEP01')
+    assert code==4 and not dest.exists(), 'US pack must be reported before modifying PAL textures'
+    code,dest=run('fire-emblem-region-confirmed',entries,game='GFEP01',allow_other_region=True)
+    assert code==0 and (dest/'Map and Battle/tex1_a.png').read_bytes()==payload
+    assert run('different-game-confirmation',[('GR8E69/tex1_a.png',payload)],game='GFEP01',allow_other_region=True)[0]!=0
+    assert run('region-traversal',[('GFEE01/../tex1_a.png',payload)],game='GFEP01',allow_other_region=True)[0]!=0
     assert run('traversal',[('../GR8P69/tex1_a.png',payload)])[0]!=0
     assert run('absolute',[('/GR8P69/tex1_a.png',payload)])[0]!=0
     assert run('duplicate',[('GR8P69/tex1_a.png',payload),('GR8P69/tex1_a.png',payload)])[0]!=0
@@ -31,4 +43,4 @@ with tempfile.TemporaryDirectory() as temp:
         b=bytearray(data);at=b.index(b'PK\x01\x02');struct.pack_into('<I',b,at+24,128*1024*1024+1);return b
     assert run('oversize',[('GR8P69/tex1_a.png',payload)],mutate=too_large)[0]!=0
     assert run('truncated',[('GR8P69/tex1_a.png',payload)],mutate=lambda b:b[:-5])[0]!=0
-print('PASS HD ZIP: stored/deflate roundtrip; exact GameID; traversal, links, duplicate/case collision, oversize, bad CRC and truncation rejected')
+print('PASS HD ZIP: stored/deflate roundtrip; region-free folders; US-to-PAL confirmation required; different games, traversal, links, duplicate/case collision, oversize, bad CRC and truncation rejected')

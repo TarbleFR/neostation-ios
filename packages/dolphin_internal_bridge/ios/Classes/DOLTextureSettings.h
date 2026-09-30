@@ -13,9 +13,16 @@
 @property(nonatomic,strong) NSDictionary* textureStatus;
 @property(nonatomic,assign) BOOL busy;
 @property(nonatomic,copy) NSString* resultKey;
+@property(nonatomic,strong) NSDictionary* resultDetails;
 @end
 @implementation DOLTextureSettings
 - (NSString*)text:(NSString*)key {return DOLTextureText(key,self.localeIdentifier);}
+- (NSString*)text:(NSString*)key sources:(NSArray*)sources {
+  NSString* value=[self text:key];
+  value=[value stringByReplacingOccurrencesOfString:@"{game}" withString:self.gameId];
+  value=[value stringByReplacingOccurrencesOfString:@"{family}" withString:[self.gameId substringToIndex:3]];
+  return [value stringByReplacingOccurrencesOfString:@"{source}" withString:[sources componentsJoinedByString:@", "]];
+}
 - (void)viewDidLoad {
   [super viewDidLoad];self.title=[self text:@"title"];
   self.tableView.backgroundColor=UIColor.systemGroupedBackgroundColor;
@@ -27,8 +34,9 @@
   return [NSString stringWithFormat:@"%@ · r%ld",self.gameId,(long)self.revision];
 }
 - (NSString*)tableView:(UITableView*)tableView titleForFooterInSection:(NSInteger)section {
-  NSString* help=[[self text:@"help"] stringByReplacingOccurrencesOfString:@"{game}" withString:self.gameId];
-  return self.resultKey.length?[NSString stringWithFormat:@"%@\n\n%@",[self text:self.resultKey],help]:help;
+  NSString* help=[self text:@"help" sources:@[]];
+  NSString* result=[self.resultKey isEqual:@"region"]?[self text:@"regionMessage" sources:self.resultDetails[@"sourceGameIds"]?:@[]]:[self text:self.resultKey?:@""];
+  return self.resultKey.length?[NSString stringWithFormat:@"%@\n\n%@",result,help]:help;
 }
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)path {
   UITableViewCell* cell=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
@@ -37,6 +45,8 @@
   if(path.row==2) {
     cell.accessoryType=[self.textureStatus[@"enabled"] boolValue]?UITableViewCellAccessoryCheckmark:UITableViewCellAccessoryNone;
     cell.detailTextLabel.text=[[self text:@"count"] stringByReplacingOccurrencesOfString:@"{count}" withString:[self.textureStatus[@"count"] stringValue]?:@"0"];
+    NSArray* sources=self.textureStatus[@"sourceGameIds"];
+    if(sources.count)cell.detailTextLabel.text=[cell.detailTextLabel.text stringByAppendingFormat:@"\n%@",[self text:@"source" sources:sources]];
   } else cell.accessoryType=UITableViewCellAccessoryDisclosureIndicator;
   if(self.busy){cell.userInteractionEnabled=NO;cell.textLabel.textColor=UIColor.secondaryLabelColor;}
   return cell;
@@ -65,11 +75,33 @@
   picker.delegate=self;picker.allowsMultipleSelection=NO;[self presentViewController:picker animated:YES completion:nil];
 }
 - (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
-  NSURL* url=urls.firstObject;if(!url || self.busy)return;[self setWorking:YES];
+  NSURL* url=urls.firstObject;if(!url || self.busy)return;
+  [self setWorking:YES];
+  // A fast region check can finish before Files has dismissed its picker.
+  // Present the confirmation only after its presentation has ended.
+  [controller dismissViewControllerAnimated:YES completion:^{
+    if(self.view.window)[self importURL:url allowOtherRegion:NO];
+    else [self setWorking:NO];
+  }];
+}
+- (void)importURL:(NSURL*)url allowOtherRegion:(BOOL)allowOtherRegion {
+  [self setWorking:YES];
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
-    NSString* error=DOLTextureImport(url,self.userDirectory,self.gameId,self.revision);
+    NSDictionary* details=nil;
+    NSString* error=DOLTextureImport(url,self.userDirectory,self.gameId,self.revision,allowOtherRegion,&details);
     NSDictionary* status=DOLTextureStatus(self.userDirectory,self.gameId,self.revision);
-    dispatch_async(dispatch_get_main_queue(),^{self.textureStatus=status;self.resultKey=error?:@"done";[self setWorking:NO];});
+    dispatch_async(dispatch_get_main_queue(),^{
+      self.textureStatus=status;self.resultKey=error?:@"done";self.resultDetails=details;[self setWorking:NO];
+      if([error isEqual:@"region"] && !allowOtherRegion && self.view.window){
+        UIAlertController* alert=[UIAlertController alertControllerWithTitle:[self text:@"regionTitle"]
+          message:[self text:@"regionMessage" sources:details[@"sourceGameIds"]?:@[]] preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:[self text:@"cancel"] style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:[self text:@"regionImport"] style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
+          if(!self.busy)[self importURL:url allowOtherRegion:YES];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+      }
+    });
   });
 }
 @end

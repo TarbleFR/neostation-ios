@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "claims": [
+    {
+      "claim": "NSXPCCoder provides typed custom encoding and decoding of XPC objects over NSXPCConnection",
+      "source": "https://developer.apple.com/documentation/foundation/nsxpccoder"
+    },
+    {
+      "claim": "NSXPCListenerEndpoint can name an anonymous listener across an existing connection",
+      "source": "https://developer.apple.com/documentation/foundation/nsxpclistener/endpoint"
+    },
+    {
+      "claim": "Mach send rights are boxed rather than transferring a task-local numeric port name",
+      "source": "https://developer.apple.com/documentation/xpc/xpc_dictionary_set_mach_send(_:_:_:)"
+    },
+    {
+      "claim": "Chromium production precedent for an NSSecureCoding object carrying a Mach send right through NSXPCCoder",
+      "source": "https://chromium.googlesource.com/chromium/src.git/+/72.0.3626.80/chrome/browser/ui/cocoa/notifications/xpc_mach_port.mm"
+    },
+    {
+      "claim": "Runtime-discovered private launch overload passes listenerEndpoint outside generic extension items",
+      "source": "https://github.com/nst/iOS-Runtime-Headers/blob/master/Frameworks/Foundation.framework/NSExtension.h"
+    },
+    {
+      "claim": "Runtime-discovered NSExtensionContext exposes its own auxiliary NSXPCConnection",
+      "source": "https://github.com/nst/iOS-Runtime-Headers/blob/master/Frameworks/Foundation.framework/NSExtensionContext.h"
+    }
+  ],
+  "limitations": [
+    "The NSExtension selector and auxiliary connection are private runtime APIs, feature-probed and fail closed.",
+    "The macOS NSXPC service probe does not validate extension suspension, jetsam, signing, or accounting on a physical iPhone.",
+    "No app group, ownership-transfer entitlement, global decoder hook, file-backed allocation, or virtual address reservation is used as evidence of donation.",
+    "Prepared capacity is distinct from measured resident and compressed memory in the donor kernel ledgers."
+  ]
+}

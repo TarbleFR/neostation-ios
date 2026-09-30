@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'dusklight_game_identity.dart';
 import 'kartpad_internal_service.dart';
+import 'ports_display_title.dart';
 
 /// Canonical identity for a title owned by NeoStation's Ports playlist.
 ///
@@ -42,8 +43,8 @@ class PortGameIdentity {
     }
     return const PortGameIdentity(
       discId: KartPadInternalService.supportedDiscId,
-      title: KartPadInternalService.displayTitle,
-      displayTitle: KartPadInternalService.displayTitle,
+      title: PortsDisplayTitle.kartPadSourceGame,
+      displayTitle: PortsDisplayTitle.kartPad,
       screenScraperSystemId: 16,
     );
   }

@@ -3,9 +3,13 @@
 // Adapted for NeoStation from DolphiniOS 7cac5416.
 #import "TCManagerInterface.h"
 #include <stdint.h>
+#include "DolphinPhoneShakeRouting.h"
 extern "C" void neostation_dolphin_touch_event(int32_t, int32_t, float, int32_t);
 
 @implementation TCManagerInterface
++ (BOOL)preparePhoneShakeRouting { return DOLPreparePhoneShakeRouting(); }
++ (NSInteger)phoneShakeRoutingStatus { return DOLPhoneShakeRoutingStatus(); }
++ (void)reportPhoneShakeSensorUnavailable { DOLPhoneShakeSensorUnavailable(); }
 + (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state {
   neostation_dolphin_touch_event((int32_t)controllerId, (int32_t)button, state ? 1.0f : 0.0f, 0);
 }

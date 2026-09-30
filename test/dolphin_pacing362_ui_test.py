@@ -116,9 +116,26 @@ ns['TESTS']=r'''
  XCTAssertTrue([NSUserDefaults.standardUserDefaults boolForKey:key]);XCTAssertEqual(writes,0U);
  menu.wii=NO;XCTAssertEqual([menu tableView:menu.tableView numberOfRowsInSection:0],3);
  for(NSString* lang in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"])
-  for(NSString* name in @[@"title",@"help",@"usage"])
+  for(NSString* name in @[@"title",@"help",@"usage",@"routeFailed",@"sensorUnavailable"])
    XCTAssertNotEqualObjects(DOLPhoneShakeText(name,lang),name);
  [NSUserDefaults.standardUserDefaults removeObjectForKey:key];
+}
+- (void)testWiiPhoneShakeFailureIsVisibleAndNotMarkedActiveInAllLocales {
+ NSUserDefaults* settings=NSUserDefaults.standardUserDefaults;
+ [settings setBool:YES forKey:@"NeoStation.Dolphin.PhoneShake.Enabled"];
+ for(NSString* locale in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"]) {
+  DolphinSessionMenu* menu=[DolphinSessionMenu new];menu.wii=YES;
+  menu.labels=@{@"__locale":locale};[menu setValue:@5 forKey:@"page"];
+  [menu setValue:@{@"controls":@[]} forKey:@"snapshot"];[menu loadViewIfNeeded];
+  for(NSNumber* status in @[@2,@3]) {
+   [settings setInteger:status.integerValue forKey:@"Test.PhoneShakeRouteStatus"];
+   UITableViewCell* cell=[menu tableView:menu.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:4 inSection:0]];
+   XCTAssertEqualObjects(cell.detailTextLabel.text,DOLPhoneShakeText(status.integerValue==2?@"routeFailed":@"sensorUnavailable",locale));
+   XCTAssertEqual(cell.accessoryType,UITableViewCellAccessoryNone);
+  }
+ }
+ [settings removeObjectForKey:@"Test.PhoneShakeRouteStatus"];
+ [settings removeObjectForKey:@"NeoStation.Dolphin.PhoneShake.Enabled"];
 }
 @end
 '''

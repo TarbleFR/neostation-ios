@@ -911,6 +911,7 @@ jobs:
                   time.sleep(15)
           subprocess.run(['python3','test/stikjit_scoped_host_test.py'],check=True)
           subprocess.run(['python3','test/dolphin_phone_shake_test.py'],check=True)
+          subprocess.run(['python3','test/dolphin_phone_shake_routing_test.py'],check=True)
           PY
 
       - name: Package and validate NeoStation IPA

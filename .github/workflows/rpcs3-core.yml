@@ -11,6 +11,8 @@ on:
       - 'build-utils/rpcs3/embedded-core.patch'
       - 'packages/neo_swap/ios/Classes/NeoSwap.*'
       - 'native/neoswap/NeoSwapClient.h'
+      - 'packages/neo_swap/ios/Classes/NeoSwapClientStats.h'
+      - 'test/neo_swap_core_pin_test.py'
       - 'test/neoswap*_test.*'
       - 'build-utils/rpcs3/canonical-source.json'
       - 'build-utils/rpcs3/llvm-aarch64-ghc-emergency-spill.patch'
@@ -22,6 +24,10 @@ on:
       - 'test/rpcs3_build351_gow3_engine_test.py'
       - 'test/rpcs3_build352_gow3_memory_test.py'
       - 'test/rpcs3_build353_xitrix_v010_test.py'
+      - 'test/rpcs3_xitrix_v0101_native_test.py'
+      - 'test/native/rpcs3_spu_*'
+      - 'test/native/rpcs3_vk_*'
+      - 'test/native/rpcs3_neoswap_stats_getter_test.cpp'
   workflow_dispatch:
 permissions:
   contents: read
@@ -59,7 +65,7 @@ jobs:
             test/neoswap_test.cpp -o "$RUNNER_TEMP/neoswap-test"
           "$RUNNER_TEMP/neoswap-test"
           bash -n build-utils/build_rpcs3_embedded_core.sh
-          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py test/rpcs3_build352_gow3_memory_test.py test/rpcs3_build353_xitrix_v010_test.py
+          python3 -m py_compile build-utils/materialize_rpcs3_core.py build-utils/apply_rpcs3_llvm_patch.py build-utils/validate_rpcs3_embedded_core.py test/rpcs3_atomic_startup_test.py test/rpcs3_preprocessor_balance_test.py test/rpcs3_build351_gow3_engine_test.py test/rpcs3_build352_gow3_memory_test.py test/rpcs3_build353_xitrix_v010_test.py test/rpcs3_xitrix_v0101_native_test.py
           python3 test/rpcs3_preprocessor_balance_test.py
           python3 test/rpcs3_embedded_core_validator_test.py
           python3 test/rpcs3_build301_passive_dlopen_test.py
@@ -89,14 +95,16 @@ jobs:
           file "$CORE" | tee build/rpcs3-core-diagnostics/file.txt
           lipo -archs "$CORE" | tee build/rpcs3-core-diagnostics/archs.txt
           nm -gU "$CORE" > build/rpcs3-core-diagnostics/exports.txt
-          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_ios_save_state_slot _rpcs3_ios_run_llvm_self_test _rpcs3_ios_shutdown _rpcs3_ios_set_neoswap_api; do
+          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_ios_save_state_slot _rpcs3_ios_run_llvm_self_test _rpcs3_ios_shutdown _rpcs3_ios_set_neoswap_api _rpcs3_ios_get_neoswap_client_stats; do
             grep -q " $symbol$" build/rpcs3-core-diagnostics/exports.txt
           done
           ! grep -q ' _neostation_rpcs3_adopt_jit_layout$' build/rpcs3-core-diagnostics/exports.txt
           ! grep -q ' _neostation_rpcs3_reset_failed_startup$' build/rpcs3-core-diagnostics/exports.txt
           python3 - <<'PY'
-          import hashlib,json,os
+          import hashlib,json,os,sys
           from pathlib import Path
+          sys.path.insert(0,'test')
+          from neo_swap_core_pin_test import core_input_hashes
           core=Path('dist/rpcs3/libRPCS3Core.dylib')
           identity={
             'schema_version':1,
@@ -112,6 +120,8 @@ jobs:
             'allocator_marker':'NEOSTATION_PAGE_ALIGNED_JIT_GAPS_V1',
             'source_patch_sha256':json.loads(Path('build-utils/rpcs3/canonical-source.json').read_text())['patch_sha256'],
             'neoswap_client_abi':1,
+            'neoswap_client_stats_abi':1,
+            'core_input_sha256':core_input_hashes(),
             'neoswap_coverage':'RSX CPU aligned data >= 1 MiB; all titles; no GPU/JIT hooks',
             'device_runtime_tested':False,
           }

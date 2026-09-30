@@ -20,18 +20,43 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
+      - name: Verify canonical donor target and executable capabilities
+        shell: bash
+        env:
+          BUNDLE_GEMFILE: ${{ runner.temp }}/neoswap-donor-ruby/Gemfile
+          BUNDLE_PATH: ${{ runner.temp }}/neoswap-donor-ruby/gems
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap
+          mkdir -p "$RUNNER_TEMP/neoswap-donor-ruby"
+          cp build-utils/Gemfile.dolphin "$BUNDLE_GEMFILE"
+          bundle install --jobs 4 --retry 3
+          python3 test/neoswap_donor_contract_test.py 2>&1 | tee build/neoswap/donor-contract-tests.txt
+          python3 test/single_ipa_distribution_test.py 2>&1 | tee build/neoswap/single-ipa-tests.txt
       - name: Check scope and native allocation behavior
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/neoswap
           git diff --check
+          python3 test/rpcs3_neoswap_localizations_test.py | tee build/neoswap/overlay-locales-tests.txt
           python3 test/check_neo_swap_scope.py
           python3 test/neoswap_evidence_lifecycle_test.py
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING \
             -fsanitize=address,undefined -Ipackages/neo_swap/ios/Classes \
             packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_test.cpp -o "$RUNNER_TEMP/neoswap-asan"
           "$RUNNER_TEMP/neoswap-asan" | tee build/neoswap/native-tests.txt
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread \
+            -fsanitize=address,undefined -Inative/neoswap -Ipackages/neo_swap/ios/Classes \
+            packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_client_stats_test.cpp -o "$RUNNER_TEMP/neoswap-client-stats"
+          "$RUNNER_TEMP/neoswap-client-stats" | tee build/neoswap/client-stats-tests.txt
+          mkdir -p "$RUNNER_TEMP/neoswap-usage-include"
+          ln -s "$GITHUB_WORKSPACE/packages/neo_swap/ios/Classes" "$RUNNER_TEMP/neoswap-usage-include/neo_swap"
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -I"$RUNNER_TEMP/neoswap-usage-include" \
+            -Ipackages/rpcs3_internal_bridge/ios/Classes \
+            test/neoswap_usage_policy_test.cpp -o "$RUNNER_TEMP/neoswap-usage-policy"
+          "$RUNNER_TEMP/neoswap-usage-policy" | tee build/neoswap/usage-policy-tests.txt
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -DNEOSWAP_TESTING -fsanitize=address,undefined \
             -Ipackages/neo_swap/ios/Classes packages/neo_swap/ios/Classes/NeoSwap.cpp test/neoswap_capacity_probe_test.cpp -o "$RUNNER_TEMP/neoswap-capacity"
           "$RUNNER_TEMP/neoswap-capacity" | tee build/neoswap/capacity-tests.txt
@@ -56,7 +81,7 @@ jobs:
           set -euo pipefail
           flutter pub get --enforce-lockfile
           flutter analyze --no-fatal-infos
-          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart test/jit_backend_preference_service_test.dart
+          flutter test test/neo_swap_locale_test.dart test/neo_swap_channel_test.dart test/neo_swap_dialog_test.dart test/jit_backend_preference_service_test.dart --reporter expanded | tee build/neoswap/dart-ui-tests.txt
           python3 test/stikjit_unified_build_test.py
           python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_atomic_startup_test.py

@@ -7,7 +7,9 @@ import GameController
   private var layoutName = ""
   @objc public var sessionInputActive = false { didSet { refreshPhoneShake() } }
   private var appActive = UIApplication.shared.applicationState == .active
-  private lazy var phoneShake = DolphinPhoneShake { pressed in
+  private lazy var phoneShake = DolphinPhoneShake(
+    prepare: { TCManagerInterface.preparePhoneShakeRouting() },
+    unavailable: { TCManagerInterface.reportPhoneShakeSensorUnavailable() }) { pressed in
     for button in DolphinPhoneShakePolicy.shakeButtons {
       TCManagerInterface.setButtonStateFor(button,
         controller: DolphinPhoneShakePolicy.touchPort, state: pressed)
@@ -29,7 +31,18 @@ import GameController
     }
     if notification.name == UIApplication.willResignActiveNotification { appActive = false }
     if notification.name == UIApplication.didBecomeActiveNotification { appActive = true }
+    if notification.name == NSNotification.Name.GCControllerDidConnect ||
+       notification.name == NSNotification.Name.GCControllerDidDisconnect {
+      // The default device/profile can change while the sensor stays enabled.
+      // Re-qualify phone shake inputs for the new profile before accepting one.
+      phoneShake.stop()
+    }
     refreshPhoneShake()
+  }
+
+  @objc public func refreshPhoneShakeRouting() {
+    refreshPhoneShake()
+    phoneShake.refreshRouting()
   }
 
   private func refreshPhoneShake() {

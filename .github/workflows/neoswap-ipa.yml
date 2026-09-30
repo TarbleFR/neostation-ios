@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 367
-run-name: NeoStation NeoSwap private • Build 367 • ${{ github.sha }}
+name: NeoStation NeoSwap private • Build 368
+run-name: NeoStation NeoSwap private • Build 368 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '367'
+        default: '368'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-367
+  group: neostation-neoswap-private-368
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (367)
+    name: Neostation iOS 0.0.2 private IPA (368)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '367' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '368' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-367-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-368-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -67,7 +67,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Require exact import, 8GiB memory and retained simulator checks before compilation
+      - name: Require exact import, memory donation and retained simulator checks before compilation
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -76,8 +76,8 @@ jobs:
           python3 - <<'PY'
           import json,subprocess,time,os,shutil
           from pathlib import Path
-          for workflow in ('neoswap-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
-              deadline=time.monotonic()+1800
+          for workflow in ('neoswap-check.yml','neoswap-donation-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
+              deadline=time.monotonic()+3600
               while True:
                   endpoint='repos/TarbleFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
                   rows=json.loads(subprocess.check_output(['gh','api',endpoint]))['workflow_runs']
@@ -94,11 +94,28 @@ jobs:
                           assert len(reports)==1 and reports[0]['verifiedBytes']==8589934592 and reports[0]['realIPhoneValidated'] is False
                           assert reports[0]['footprintPeak']>=reports[0]['footprintBefore']>0
                           (evidence/'capacity-8GiB-macOS.json').write_text(json.dumps(reports[0],indent=2)+'\n')
+                      if workflow=='neoswap-donation-check.yml':
+                          evidence=Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence'/'donation';evidence.mkdir(parents=True,exist_ok=True)
+                          for phase in ('kernel','ipc','simulator'):
+                              destination=evidence/phase
+                              subprocess.run(['gh','run','download',str(rows[0]['id']),'-n','NeoSwap-donation-'+phase+'-'+os.environ['GITHUB_SHA'],'-D',str(destination)],check=True)
+                              assert (destination/'source.txt').read_text().strip()==os.environ['GITHUB_SHA']
+                              report=json.loads((destination/'report.json').read_text())
+                              assert report['passed'] is True,(phase,report)
+                              if phase=='kernel':
+                                  assert report['realIPhoneValidated'] is False and report['source']==os.environ['GITHUB_SHA']
+                              elif phase=='ipc':
+                                  assert report['iphoneExtensionValidated'] is False and report['hostPID']!=report['donorPID']
+                              else:
+                                  assert report['realIPhoneValidated'] is False and report['hostPID']!=report['donorPID']
+                                  assert report['capacityBytes']>0
+                          (evidence/'identity.json').write_text(json.dumps({'source':os.environ['GITHUB_SHA'],'realIPhoneValidated':False,'validatedPlatforms':['macOS kernel','macOS NSXPC','iOS18Simulator']},indent=2)+'\n')
                       break
                   assert time.monotonic()<deadline,'Candidate evidence did not complete: '+workflow
                   time.sleep(15)
           subprocess.run(['python3','test/stikjit_scoped_host_test.py'],check=True)
           subprocess.run(['python3','test/dolphin_phone_shake_test.py'],check=True)
+          subprocess.run(['python3','test/dolphin_phone_shake_routing_test.py'],check=True)
           shutil.copy2('build/dolphin-motion/tests.json',Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence'/'phone-shake-tests.json')
           PY
 
@@ -362,7 +379,7 @@ jobs:
           @end
           EOF
           mkdir -p "$STUB/neo_swap"
-          cp packages/neo_swap/ios/Classes/NeoSwap.h "$STUB/neo_swap/NeoSwap.h"
+          cp packages/neo_swap/ios/Classes/NeoSwap{,Host,ClientStats}.h "$STUB/neo_swap/"
           COMMON=(
             -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++
             -isysroot "$SDK" -miphoneos-version-min=17.4
@@ -565,6 +582,7 @@ jobs:
           test -s "$CORE"
           # The artifact's source, canonical patch, compiler recipe, binary
           # checks and native ABI must all be from the same Core commit.
+          # RPCS3_CORE_INPUTS_BEGIN
           git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
             build-utils/build_rpcs3_embedded_core.sh \
             build-utils/materialize_rpcs3_core.py \
@@ -573,27 +591,45 @@ jobs:
             build-utils/rpcs3/embedded-core.patch \
             build-utils/rpcs3/llvm-aarch64-ghc-emergency-spill.patch \
             build-utils/rpcs3_core_syntax_gate.py \
+            build-utils/validate_rpcs3_embedded_core.py \
+            build-utils/validate_rpcs3_passive_dlopen.py \
+            build-utils/patch_rpcs3_build301_passive_dlopen.py \
+            packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
+            packages/neo_swap/ios/Classes/NeoSwap.h \
+            packages/neo_swap/ios/Classes/NeoSwapClientStats.h \
+            native/neoswap/NeoSwapClient.h \
+            test/neo_swap_core_pin_test.py \
+            test/neoswap_rpcs3_allocator_test.cpp \
             test/rpcs3_core_syntax_gate_test.py \
+            test/rpcs3_embedded_core_validator_test.py \
+            test/rpcs3_preprocessor_balance_test.py \
+            test/rpcs3_build301_passive_dlopen_test.py \
+            test/rpcs3_atomic_startup_test.py \
+            test/rpcs3_failed_startup_test.py \
+            test/rpcs3_build264_gow3_core_test.py \
+            test/rpcs3_build351_gow3_engine_test.py \
+            test/rpcs3_build353_xitrix_v010_test.py \
             test/rpcs3_armsx3_performance_patch_test.py \
             test/rpcs3_build352_gow3_memory_test.py \
             test/rpcs3_ios_ppu_compile_budget_test.cpp \
             test/rpcs3_ppu_no_size_split_policy_test.cpp \
-            test/rpcs3_preprocessor_balance_test.py \
-            build-utils/validate_rpcs3_embedded_core.py \
-            build-utils/validate_rpcs3_passive_dlopen.py \
-            packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
-            packages/neo_swap/ios/Classes/NeoSwap.h \
-            native/neoswap/NeoSwapClient.h \
-            test/neoswap_test.cpp test/neoswap_rpcs3_allocator_test.cpp
-          git diff --exit-code "$RPCS3_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            test/rpcs3_xitrix_v0101_native_test.py \
+            test/native/rpcs3_spu_analyzer_support.h \
+            test/native/rpcs3_spu_branch_analyzer_test.cpp \
+            test/native/rpcs3_vk_memory_pressure_test.cpp \
+            test/native/rpcs3_vk_conditional_render_test.cpp \
+            test/native/rpcs3_neoswap_stats_getter_test.cpp \
             .github/workflows/rpcs3-core.yml
-          # The host broker is rebuilt with the explicitly audited4→8GiB budget.
-          # Its ABI and every other implementation byte remain pinned.
+          # RPCS3_CORE_INPUTS_END
+          # The independent host broker/donation is rebuilt by this IPA job.
+          # Only the Core source, client ABI, recipe and native tests are pinned.
           python3 test/neo_swap_core_pin_test.py
           python3 - <<'PY'
           import json, os, shutil, sys
           from pathlib import Path
           sys.path.insert(0, 'build-utils')
+          sys.path.insert(0, 'test')
+          from neo_swap_core_pin_test import validate_core_input_identity
           from validate_rpcs3_ipa import validate_core_identity
           from validate_rpcs3_embedded_core import validate_core
           from validate_rpcs3_passive_dlopen import validate as validate_passive_dlopen
@@ -605,6 +641,8 @@ jobs:
           identity = validate_core_identity(data, identity_path, os.environ['RPCS3_CORE_HOST_SHA'])
           validate_core(data)
           assert identity['neoswap_client_abi'] == 1, identity
+          assert identity['neoswap_client_stats_abi'] == 1, identity
+          validate_core_input_identity(identity)
           passive = validate_passive_dlopen(data)
           assert passive['forbiddenReachability'] is False, passive
 
@@ -636,7 +674,9 @@ jobs:
           from validate_rpcs3_ipa import REQUIRED_CORE_SYMBOLS, FORBIDDEN_CORE_SYMBOLS
           exports = Path('build/rpcs3-core-exports.txt').read_text().splitlines()
           symbols = {line.split()[-1] for line in exports if line.split()}
-          missing = set(REQUIRED_CORE_SYMBOLS) - symbols
+          missing = (set(REQUIRED_CORE_SYMBOLS) | {
+              '_rpcs3_ios_set_neoswap_api', '_rpcs3_ios_get_neoswap_client_stats',
+          }) - symbols
           forbidden = set(FORBIDDEN_CORE_SYMBOLS) & symbols
           assert not missing, f'Missing RPCS3 Core exports: {sorted(missing)}'
           assert not forbidden, f'Retired RPCS3 Core exports: {sorted(forbidden)}'
@@ -855,6 +895,7 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
           python3 build-utils/configure_rpcs3_ios_v2.py
           python3 build-utils/configure_armsx2_ios.py
+          python3 build-utils/configure_neoswap_donor.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
@@ -918,6 +959,7 @@ jobs:
           set -euo pipefail
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
+          python3 build-utils/embed_neoswap_donor_entitlements.py
 
       - name: Embed lazy-loaded ARMSX2 Core framework
         shell: bash
@@ -1023,18 +1065,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-367-recipient.pem
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-368-recipient.pem
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           cp dist/stikjit-compatibility.json build/private-test/
           cp dist/cheat-bulk-validation.json build/private-test/
-          cp docs/import-memory-build367.md build/private-test/Notes-NeoSwap-Build367.md
+          cp docs/import-memory-build368.md build/private-test/Notes-NeoSwap-Build368.md
           cp dist/neoswap-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
+          cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence
           cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/phone-shake-tests.json" build/private-test/
           cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
-          printf '%s\n' 'NeoStation-NeoSwap-Build367.ipa' > build/private-test/delivery-name.txt
+          printf '%s\n' 'NeoStation-NeoSwap-Build368.ipa' > build/private-test/delivery-name.txt
           cp build/stikjit-current/modern-baseline.json build/private-test/
           cp build/fast-native/identity.json build/private-test/native-identity.json
           printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt

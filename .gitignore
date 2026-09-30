@@ -317,3 +317,5 @@ __pycache__/
 *.tmp
 .dolphin-ccache/
 .ccache/
+# Materialized from the canonical donation sources before CocoaPods installation.
+/packages/neo_swap/ios/Classes/Donation/

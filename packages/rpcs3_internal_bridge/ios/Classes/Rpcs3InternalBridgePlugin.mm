@@ -154,7 +154,7 @@ static UIViewController* RPCS3RootViewController(void) {
     [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:8],
     [self.performanceOverlay.topAnchor constraintEqualToAnchor:menu.topAnchor],
     [self.performanceOverlay.widthAnchor constraintEqualToConstant:310],
-    [self.performanceOverlay.heightAnchor constraintEqualToConstant:150],
+    [self.performanceOverlay.heightAnchor constraintEqualToConstant:185],
   ]];
 }
 - (void)viewDidAppear:(BOOL)animated {
@@ -220,6 +220,7 @@ static UIViewController* RPCS3RootViewController(void) {
   uint64_t _diagnosticMinimumAvailableMemory;
   NSInteger _diagnosticWorstThermalState;
   rpcs3_ios_api _api;
+  int32_t (*_neoSwapClientStats)(NeoSwapClientStats*);
   neostation::rpcs3::early_escrow::EarlyAddressSpaceEscrow _jitEscrow;
 }
 
@@ -438,8 +439,11 @@ static void RPCS3Progress(void* context,
   auto bindSwap = reinterpret_cast<NeoSwapBinder>(dlsym(handle, "rpcs3_ios_set_neoswap_api"));
   const int swapResult = bindSwap ? bindSwap(NeoSwap_GetAPI(NEOSWAP_ABI)) : NEOSWAP_INVALID;
   if (swapResult == NEOSWAP_OK) NeoSwap_RegisterClient(NEOSWAP_RPCS3);
+  _neoSwapClientStats = reinterpret_cast<int32_t (*)(NeoSwapClientStats*)>(
+      dlsym(handle, "rpcs3_ios_get_neoswap_client_stats"));
   RPCS3Diagnostic(@"neoswap_client", [NSString stringWithFormat:
-      @"abi=1 result=%d scope=RSX_CPU_DATA min=1MiB all_titles=1", swapResult]);
+      @"abi=1 result=%d scope=RSX_CPU_DATA min=1MiB all_titles=1 stats=%d",
+      swapResult, _neoSwapClientStats != nullptr]);
   return YES;
 }
 
@@ -574,6 +578,13 @@ static void RPCS3Progress(void* context,
       rpcs3_ios_performance_metrics metrics = {};
       metrics.size = sizeof(metrics);
       if (strongSelf->_api.get_performance_metrics(&metrics) != 0) return;
+      NeoSwapClientStats client = {};
+      client.struct_size = sizeof(client);
+      client.abi_version = NEOSWAP_CLIENT_STATS_ABI;
+      const BOOL clientValid = strongSelf->_neoSwapClientStats &&
+          strongSelf->_neoSwapClientStats(&client) == NEOSWAP_OK;
+      NeoSwapHostStats host = {};
+      const BOOL hostValid = NeoSwap_HostSnapshot(&host) == NEOSWAP_OK;
       const double timestamp = CACurrentMediaTime() * 1000.0;
       dispatch_async(dispatch_get_main_queue(), ^{
         RPCS3GameViewController* owner = strongSelf.gameController;
@@ -585,6 +596,8 @@ static void RPCS3Progress(void* context,
                                            memoryTotal:metrics.memory_total_bytes
                                            validFields:metrics.valid_fields
                                              timestamp:timestamp];
+        [owner.performanceOverlay appendNeoSwapWithClient:clientValid ? &client : nullptr
+                                                    host:hostValid ? &host : nullptr];
       });
     });
     dispatch_resume(timer);
@@ -615,6 +628,13 @@ static void RPCS3Progress(void* context,
 
     const NSInteger thermal = NSProcessInfo.processInfo.thermalState;
     const uint64_t availableMemory = os_proc_available_memory();
+    NeoSwapClientStats client = {};
+    client.struct_size = sizeof(client);
+    client.abi_version = NEOSWAP_CLIENT_STATS_ABI;
+    const BOOL clientValid = strongSelf->_neoSwapClientStats &&
+        strongSelf->_neoSwapClientStats(&client) == NEOSWAP_OK;
+    NeoSwapHostStats host = {};
+    const BOOL hostValid = NeoSwap_HostSnapshot(&host) == NEOSWAP_OK;
     strongSelf->_diagnosticWorstThermalState = MAX(strongSelf->_diagnosticWorstThermalState, thermal);
     strongSelf->_diagnosticMinimumAvailableMemory = MIN(strongSelf->_diagnosticMinimumAvailableMemory, availableMemory);
     if (metrics.valid_fields & rpcs3_ios_performance_memory) {
@@ -629,12 +649,26 @@ static void RPCS3Progress(void* context,
     }
 
     RPCS3Diagnostic(@"performance_sample", [NSString stringWithFormat:
-        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld",
+        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld swap_live=%llu swap_reserved=%llu swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_pid=%d donor_generation=%llu donor_prepared=%llu donor_live=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_compressed=%llu donor_stage=%d donor_kernel=%d",
         strongSelf.activeTitleId, metrics.valid_fields, metrics.frames_per_second,
         metrics.cpu_usage_percent, metrics.gpu_usage_percent,
         (unsigned long long)metrics.memory_used_bytes,
         (unsigned long long)metrics.memory_total_bytes,
-        (unsigned long long)availableMemory, (long)thermal]);
+        (unsigned long long)availableMemory, (long)thermal,
+        (unsigned long long)NeoSwap_LiveBytes(NEOSWAP_RPCS3),
+        (unsigned long long)host.reserved_virtual_bytes, hostValid, clientValid,
+        (unsigned long long)client.skipped_small,
+        (unsigned long long)client.eligible_attempts,
+        (unsigned long long)client.failed_allocations,
+        (unsigned long long)client.successful_allocations, client.last_result,
+        host.donation_state, host.donor_pid,
+        (unsigned long long)host.donor_generation,
+        (unsigned long long)host.donor_prepared_bytes,
+        (unsigned long long)host.donated_live_bytes,
+        (unsigned long long)host.donor_footprint_bytes,
+        (unsigned long long)host.donor_nonvolatile_bytes,
+        (unsigned long long)host.donor_compressed_bytes,
+        host.donation_last_stage, host.donation_last_kernel_result]);
   });
   dispatch_resume(timer);
 }
