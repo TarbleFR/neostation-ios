@@ -9,6 +9,8 @@ on:
       - 'native/neoswap-donation/run_ipc_macos_probe.sh'
       - 'build-utils/validate_neoswap_vulkan_evidence.py'
       - 'test/neoswap_vulkan_evidence_test.py'
+      - 'test/import_memory_candidate_scope_test.py'
+      - 'native/import-memory-candidate.json'
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,7 +50,7 @@ jobs:
           urllib.request.urlretrieve('https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar',archive)
           assert hashlib.sha256(archive.read_bytes()).hexdigest()=='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
           subprocess.run(['tar','-xf',str(archive),'-C',str(work)],check=True)
-          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','packages/neo_swap/ios/Classes/NeoSwap.cpp']
+          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','packages/neo_swap/ios/Classes/NeoSwap.cpp','build-utils/validate_neoswap_vulkan_evidence.py','test/neoswap_vulkan_evidence_test.py','test/import_memory_candidate_scope_test.py','native/import-memory-candidate.json']
           identity={'source':os.environ['GITHUB_SHA'],'moltenVK':'1.4.2','moltenVKSHA256':hashlib.sha256(archive.read_bytes()).hexdigest(),'canonicalPatchSHA256':pins['patch_sha256'],'productionImportSHA256':pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h'],'inputsSHA256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in inputs},'realIPhoneValidated':False,'realRPCS3GameplayValidated':False}
           identity['targetBytes']=1073741824
           identity['coreInputSHA256']=core_input_hashes()
