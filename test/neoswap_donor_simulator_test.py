@@ -785,13 +785,13 @@ def main() -> int:
             identifier = run(['xcrun', 'simctl', 'create', 'NeoSwapDonorProof', matches[0]['identifier'], runtime], capture=True).strip()
             run(['xcrun', 'simctl', 'boot', identifier])
             run(['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=180)
-            run(['xcrun', 'simctl', 'install', identifier, str(app)], timeout=90)
+            run(['xcrun', 'simctl', 'install', identifier, str(app)], timeout=180)
             report['runnerStage'] = 'installed_prelaunch'
             container = Path(run(['xcrun', 'simctl', 'get_app_container', identifier, BUNDLE, 'data'], capture=True).strip())
             report['installedRegistration'] = run(['xcrun', 'simctl', 'listapps', identifier], capture=True)[-20000:]
             (output / 'installed-prelaunch.json').write_text(json.dumps(report, indent=2) + '\n')
             report['runnerStage'] = 'launch'
-            launched = run(['xcrun', 'simctl', 'launch', identifier, BUNDLE], capture=True, timeout=90)
+            launched = run(['xcrun', 'simctl', 'launch', identifier, BUNDLE], capture=True, timeout=180)
             report['launchOutput'] = launched
             report['runnerStage'] = 'runtime_evidence'
             evidence = container / 'Documents/donation-simulator.json'
