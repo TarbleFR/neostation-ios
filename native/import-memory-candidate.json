@@ -53,8 +53,8 @@
     "build-utils/kartpad/inspect_personal_pack.py": "f130fe4a7efe66f97954c5921a01ffaae763c60390d7f8b56503f67aee7f63e2",
     "build-utils/kartpad/migration-target.json": "c4ec5a4d83fecd54bc23e737dbd945abbc9619d783d7be836331b64edbd11ed5",
     "build-utils/private-test-368-recipient.pem": "cfcdd4f3460e2aea0a5c1ef3fb57ebc7e72d1538168414bd7c29b4b9adea7487",
-    "build-utils/rpcs3/canonical-source.json": "7e278dfd420a87ae82f366734f2e7749113560763f92c917ed68cdc079c05477",
-    "build-utils/rpcs3/embedded-core.patch": "3723e29a28ebb17e643e279b26839df36b3c407a9b5ab90717a16f5f763da855",
+    "build-utils/rpcs3/canonical-source.json": "0a2a6d5ffd84c1b0ddf32c38e9f9307b591f57c5dd62e9f23f8bcedfb5312927",
+    "build-utils/rpcs3/embedded-core.patch": "847272e7bfe15a07f6e0f5adacdbaea34f632d88ef05ca885c87bf9b439d9af9",
     "build-utils/rpcs3_core_syntax_gate.py": "1fe0e3e2b27e35dc0585e0d09ce8b68c24d92425b067f596b2dc040d8ec9178a",
     "build-utils/validate_dusklight_ipa.py": "92d60429e9429b1a87e606094ba23576f437a1dfb6f7e33b057f661cba8b0d32",
     "build-utils/validate_neoswap_ipa.py": "884468b88bf4532956883f2902a458612153511d7091f4156e04cf18c05d8a1b",
@@ -89,7 +89,7 @@
     "native/neoswap-donation/NeoSwapMachHandle.mm": "e9d2cfa3c75ac6b64569d5c7a6baffde646f2faf4dab1d6f5a36dc33192b3828",
     "native/neoswap-donation/Pool.cpp": "fd3601252dc881cd3d21586ceea3586e4207dfc324724a57ec937d4118fa91e4",
     "native/neoswap-donation/Pool.h": "12944770ba6a841c88054092aab2ce908c8d814e230aabfe81bddd5f83c5356c",
-    "native/neoswap-donation/VulkanDonationProbe.h": "f5e901a8fcb92d9958f7dcd15cb4e05622ba7d4819bed51e2fae6783ea9bff65",
+    "native/neoswap-donation/VulkanDonationProbe.h": "8421a99f7f80bd7ef9b1578f90259e7dd739c1f56d0c2d03f56fa11851a5efe2",
     "native/neoswap-donation/ipc_macos_probe.mm": "2f2c4b55ab787fa5fdcafdd56c52643cd60b8902986ae9a65d730099ed3338d2",
     "native/neoswap-donation/macOS_probe.cpp": "3da6343d9c5ef79d4b3e5064304c2ffb0ead9b7cb549bc79571374d6be939784",
     "native/neoswap-donation/references.json": "d9f6721c74daf5476e37288e72f22e95620c994cb75b52a6513e56afbc550092",
@@ -253,12 +253,12 @@
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
     "test/legal_bundle_preflight_test.py": "bdbe0893d50d74003b80e7c7d3359838714ea95414b61468158fbf4afbca745e",
     "test/native/rpcs3_neoswap_stats_getter_test.cpp": "72b4c84a0c06335ed302be1af18057972057a92cde068fc6dca94d57756044b0",
-    "test/native/rpcs3_neoswap_vulkan_buffer_test.cpp": "7f52a565d311a0eb823151633c847f3562c32783ec62033300240f2fe386fc3e",
+    "test/native/rpcs3_neoswap_vulkan_buffer_test.cpp": "43b606af27539abdd187036ca1d3c878b05765e63c4d5e3e2f4ee0d38c227145",
     "test/native/rpcs3_spu_analyzer_support.h": "67e90e91c47a394a71a7bbedbc0986fbe16910bb0a5edf5635ea4d9a68333864",
     "test/native/rpcs3_spu_branch_analyzer_test.cpp": "69c855b80c49f6d9b4c9fe06211c61e774ef7afdc4ac454d348e072db36ef33e",
     "test/native/rpcs3_vk_conditional_render_test.cpp": "fb925a69c80a7a07a53ed64f71bbcf35e01d857746476edefcf68eacca1634d1",
     "test/native/rpcs3_vk_memory_pressure_test.cpp": "b7033e5e27d9259591df5b5a62fbacafe98c527df508fec1be84c60aff7d8fab",
-    "test/neo_swap_core_pin_test.py": "27fe9da6552e91e832f4d51f5b3fd1ea7e9558d4a1c5a045254af41639435129",
+    "test/neo_swap_core_pin_test.py": "2d8a1605a53dcfad8448aaaf90fde63086c2b079b7b78aceacf2331976bff394",
     "test/neo_swap_dialog_test.dart": "c1896176cbaa7631ec7d487e08012bde2813b7d6791ae6da1791862a40be0b2d",
     "test/neoswap/Flutter/Flutter.h": "9bf4aacde1b5d7c15e54efad4b44fbe7e52fd339d09785b58f469c8d1127016c",
     "test/neoswap/control_probe.mm": "02a722030ab2f915e1cb5526b0d6e0b6471c74b6c0e6a68d5be36d234a34e23d",
@@ -341,6 +341,6 @@
     "rpcs3/ios/RPCS3IOS.h": "16e922bf5596e6fba64f9c1a3f0aae146da653fed05ae7025101ea46206d42e3",
     "rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp": "957e822673760d8600387c58c663e92e0a5044a2c0783bc6d11d34db16d58118",
     "rpcs3/Emu/RSX/VK/vkutils/memory.h": "528f21f7af17749b80ef0bf8b74ad5069267f18c5c28d948f777c1743e25cbe1",
-    "rpcs3/ios/NeoSwapVulkanBuffer.h": "c13514839ddb311b4f0dfa0984493f1a62ca3b32aecd4108bfb35a53f0ffc0dd"
+    "rpcs3/ios/NeoSwapVulkanBuffer.h": "e20f464b6c427f576c6c842fc10bcefb6f0be287ced7518684a64c1c0b5e343c"
   }
 }

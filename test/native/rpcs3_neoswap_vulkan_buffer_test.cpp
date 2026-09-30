@@ -51,10 +51,20 @@ static u64 host_alignment = 16384, memory_alignment = 256, requirement_size = Mi
 static u32 host_bits = 3, required_bits = 3, selected_type = 0;
 static std::vector<std::string> events;
 static void* loan = nullptr;
+static void* tracked_handle = nullptr;
+static u64 tracked_bytes = 0;
 struct logger { template<class... T> void error(const char*, T...) { ++release_errors; } } rsx_log;
 static void ensure(bool value) { if (!value) throw std::out_of_range("mapping"); }
 namespace vk {
 enum vmm_allocation_pool { VMM_ALLOCATION_POOL_SYSTEM, VMM_ALLOCATION_POOL_TEXTURE_CACHE };
+static void vmm_notify_memory_allocated(void* handle, u32 type, u64 bytes, vmm_allocation_pool pool) {
+ assert(!tracked_handle && handle && type == selected_type && pool == VMM_ALLOCATION_POOL_SYSTEM);
+ tracked_handle = handle; tracked_bytes = bytes; events.push_back("track-vmm");
+}
+static void vmm_notify_memory_freed(void* handle) {
+ assert(handle == tracked_handle && tracked_bytes == requirement_size);
+ tracked_handle = nullptr; tracked_bytes = 0; events.push_back("free-vmm");
+}
 struct render_device {
  operator VkDevice() const { return 9; }
  auto gpu() const { return 8; }
@@ -123,7 +133,7 @@ static int release_loan(void* pointer) {
 static int sync_loan(void*) { return NEOSWAP_OK; }
 static int is_enabled(u32) { return enabled; }
 static void reset() {
- assert(!loan); fault = queries = release_errors = 0; extension = enabled = can_import = true;
+ assert(!loan && !tracked_handle && !tracked_bytes); fault = queries = release_errors = 0; extension = enabled = can_import = true;
  host_alignment = 16384; memory_alignment = 256; requirement_size = MiB;
  host_bits = required_bits = 3; events.clear();
 }
@@ -137,6 +147,7 @@ int main() {
   const bool result = vk::try_neoswap_buffer(device, info, access, pool, output, memory);
   if (result) {
    assert(output == 19 && memory->size() == MiB);
+   assert(tracked_handle == memory.get() && tracked_bytes == MiB);
    assert(memory->map(0, MiB) == loan); std::memset(memory->map(0, MiB), 0x3c, MiB);
    assert(memory->map(0, VK_WHOLE_SIZE) == loan);
    assert(static_cast<unsigned char*>(memory->map(MiB-1, 1))[0] == 0x3c);
@@ -146,14 +157,15 @@ int main() {
    // Stand in for buffer::~buffer, after deferred GPU completion.
    vkDestroyBuffer(device, output, nullptr); memory.reset();
   } else assert(!output && !memory);
+  assert(!tracked_handle && !tracked_bytes);
   return result;
  };
  reset(); assert(attempt());
- assert((events == std::vector<std::string>{"create","loan","pointer","allocate-vk","bind","destroy-buffer","free-vk","release-loan"}));
+ assert((events == std::vector<std::string>{"create","loan","pointer","allocate-vk","track-vmm","bind","destroy-buffer","free-vmm","free-vk","release-loan"}));
  reset(); host_bits = 2; assert(attempt() && selected_type == 1); // actual intersection, not first generic type
  for (int stage = 1; stage <= 5; ++stage) {
   reset(); fault = stage; assert(!attempt() && !loan);
-  if (stage == 4) assert((std::vector<std::string>(events.end()-3,events.end()) == std::vector<std::string>{"destroy-buffer","free-vk","release-loan"}));
+  if (stage == 4) assert((std::vector<std::string>(events.end()-4,events.end()) == std::vector<std::string>{"destroy-buffer","free-vmm","free-vk","release-loan"}));
  }
  reset(); host_bits = 0; assert(!attempt() && !loan);
  reset(); required_bits = 0; assert(!attempt() && !loan);

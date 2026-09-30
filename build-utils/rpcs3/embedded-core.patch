@@ -11686,10 +11686,10 @@ index 000000000..91bb89d96
 +} NeoSwapClientStats;
 diff --git a/rpcs3/ios/NeoSwapVulkanBuffer.h b/rpcs3/ios/NeoSwapVulkanBuffer.h
 new file mode 100644
-index 0000000..f502cbc
+index 0000000..0c2639e
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapVulkanBuffer.h
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,139 @@
 +#pragma once
 +#include "NeoSwapClient.h"
 +#include <algorithm>
@@ -11716,7 +11716,11 @@ index 0000000..f502cbc
 +    {
 +        // buffer::~buffer destroys VkBuffer first. The renderer's existing
 +        // deferred disposal guarantees GPU completion before either destructor.
-+        if (m_memory) vkFreeMemory(m_device, m_memory, nullptr);
++        if (m_memory)
++        {
++            vmm_notify_memory_freed(this);
++            vkFreeMemory(m_device, m_memory, nullptr);
++        }
 +        if (m_pointer)
 +        {
 +            const auto result = neostation::swap::release(m_pointer);
@@ -11750,6 +11754,9 @@ index 0000000..f502cbc
 +        VkDeviceMemory imported = VK_NULL_HANDLE;
 +        if (vkAllocateMemory(m_device, &allocation, nullptr, &imported) != VK_SUCCESS) return false;
 +        m_memory = imported;
++        // Preserve renderer pool/type budgets and the iOS VRAM diagnostics even
++        // though the backing pages belong to another process rather than VMA.
++        vmm_notify_memory_allocated(this, memory_type, m_bytes, VMM_ALLOCATION_POOL_SYSTEM);
 +        return true;
 +    }
 +    VkDeviceMemory get_vk_device_memory() override { return m_memory; }

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 using u64 = std::uint64_t;
@@ -22,6 +23,18 @@ struct VulkanProbeLogger {
 static VulkanProbeLogger rsx_log;
 namespace vk {
 enum vmm_allocation_pool { VMM_ALLOCATION_POOL_SYSTEM };
+static std::unordered_map<void*, u64> trackedAllocations;
+static u64 trackedBytes = 0;
+static void vmm_notify_memory_allocated(void* handle, u32, u64 bytes, vmm_allocation_pool pool) {
+  require(pool == VMM_ALLOCATION_POOL_SYSTEM && trackedAllocations.emplace(handle, bytes).second,
+          "Canonical Vulkan import duplicated its renderer budget entry");
+  trackedBytes += bytes;
+}
+static void vmm_notify_memory_freed(void* handle) {
+  const auto entry = trackedAllocations.find(handle);
+  require(entry != trackedAllocations.end(), "Canonical Vulkan import lost its renderer budget entry");
+  trackedBytes -= entry->second; trackedAllocations.erase(entry);
+}
 struct render_device {
   VkDevice handle;
   VkPhysicalDevice physical;
@@ -189,6 +202,7 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
           host.owner_donated_live_bytes[NEOSWAP_RPCS3] == target &&
           NeoSwap_LiveBytes(NEOSWAP_RPCS3) == target && host.reserved_virtual_bytes == 0,
           "Imported buffers are not actual RPCS3-owned donation loans");
+  require(vk::trackedBytes == target, "Canonical Vulkan imports omitted the renderer memory budget");
   evidence[@"vulkanDonatedLiveBytes"] = @(host.owner_donated_live_bytes[NEOSWAP_RPCS3]);
   evidence[@"stage"] = @"vulkan_gpu_fill";
   VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -219,6 +233,7 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
   evidence[@"vulkanHostFootprintDeltaBytes"] = @(physicalDelta);
   require(nonvolatile < MiB && physicalDelta < 64 * MiB, "Vulkan imported pages charged substantial memory to the host");
   for (auto& buffer : buffers) { vkDestroyBuffer(device, buffer.handle, nullptr); buffer.memory.reset(); }
+  require(vk::trackedBytes == 0 && vk::trackedAllocations.empty(), "Vulkan retirement retained renderer budget entries");
   require(NeoSwap_LiveBytes(NEOSWAP_RPCS3) == 0 && NeoSwap_HostSnapshot(&host) == NEOSWAP_OK &&
           host.owner_donated_live_bytes[NEOSWAP_RPCS3] == 0, "Vulkan retirement retained live donation loans");
   pool_donor_lost(snapshot.generation, 0, snapshot.generation, 0);
@@ -229,6 +244,7 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
       @"importedBytes":@(imported), @"donatedLiveBytesDuringGPU":@(target), @"retiredLiveBytes":@0,
       @"bufferCount":@(buffers.size()), @"gpuWrittenBytes":@(imported), @"gpuToCpuAliasVerified":@YES,
       @"productionRPCS3ImportPath":@YES, @"productionHostBroker":@YES,
+      @"rendererBudgetDuringGPU":@(target), @"rendererBudgetAfterRetirement":@0,
       @"hostNonvolatileDeltaBytes":@(nonvolatile), @"hostFootprintDeltaBytes":@(physicalDelta),
       @"realRPCS3GameplayValidated":@NO, @"realIPhoneValidated":@NO};
 }

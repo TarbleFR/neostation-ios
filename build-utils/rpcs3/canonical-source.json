@@ -129,9 +129,9 @@
     "rpcs3/util/logs.cpp": "81500df702bf134dce8f7ca19a1d2efafa814ea31c952d6dff90d4bb52cc3efe",
     "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded",
     "rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp": "957e822673760d8600387c58c663e92e0a5044a2c0783bc6d11d34db16d58118",
-    "rpcs3/ios/NeoSwapVulkanBuffer.h": "c13514839ddb311b4f0dfa0984493f1a62ca3b32aecd4108bfb35a53f0ffc0dd"
+    "rpcs3/ios/NeoSwapVulkanBuffer.h": "e20f464b6c427f576c6c842fc10bcefb6f0be287ced7518684a64c1c0b5e343c"
   },
-  "patch_sha256": "3723e29a28ebb17e643e279b26839df36b3c407a9b5ab90717a16f5f763da855",
+  "patch_sha256": "847272e7bfe15a07f6e0f5adacdbaea34f632d88ef05ca885c87bf9b439d9af9",
   "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
