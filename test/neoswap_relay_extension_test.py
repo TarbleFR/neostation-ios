@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -82,7 +83,186 @@ def fixture(root):
     shutil.copyfile(ROOT / 'build-utils/Gemfile.dolphin', gem)
 
 
+def _code_without_comments(source: str, *, strip_strings: bool = False) -> str:
+    output = []
+    index = 0
+    while index < len(source):
+        if source.startswith('//', index):
+            index += 2
+            while index < len(source) and source[index] != '\n':
+                index += 1
+            if index < len(source):
+                output.append('\n')
+                index += 1
+        elif source.startswith('/*', index):
+            index += 2
+            while index < len(source) and not source.startswith('*/', index):
+                if source[index] == '\n':
+                    output.append('\n')
+                index += 1
+            index += 2 if index < len(source) else 0
+        elif source[index] in ('"', "'"):
+            quote = source[index]
+            output.append(' ' if strip_strings else source[index])
+            index += 1
+            while index < len(source):
+                character = source[index]
+                if character == '\\' and index + 1 < len(source):
+                    output.append('  ' if strip_strings else source[index:index + 2])
+                    index += 2
+                else:
+                    output.append('\n' if strip_strings and character == '\n'
+                                  else ' ' if strip_strings else character)
+                    index += 1
+                    if character == quote:
+                        break
+        else:
+            output.append(source[index])
+            index += 1
+    return ''.join(output)
+
+
+def _assert_uses_public_vm_api(testcase: unittest.TestCase, sources: dict[str, str]) -> None:
+    include = re.compile(r'^\s*#\s*(?:include|import)\s*[<"]mach/mach_vm\.h[>"]', re.MULTILINE)
+    call = re.compile(r'\bmach_vm_(?:map|deallocate|region)\s*\(')
+    for label, source in sources.items():
+        testcase.assertIsNone(include.search(_code_without_comments(source)), label)
+        testcase.assertIsNone(call.search(_code_without_comments(source, strip_strings=True)), label)
+
+
+def _static_assert_conditions(source: str) -> list[str]:
+    code = _code_without_comments(source, strip_strings=True)
+    conditions = []
+    position = 0
+    while True:
+        index = code.find('static_assert', position)
+        if index < 0:
+            return conditions
+        before = code[index - 1:index]
+        after = code[index + len('static_assert'):index + len('static_assert') + 1]
+        if (before and (before.isalnum() or before == '_')) or (after and (after.isalnum() or after == '_')):
+            position = index + len('static_assert')
+            continue
+        open_paren = code.find('(', index + len('static_assert'))
+        if open_paren < 0:
+            return conditions
+        depth = 0
+        for close_paren in range(open_paren, len(code)):
+            if code[close_paren] == '(':
+                depth += 1
+            elif code[close_paren] == ')':
+                depth -= 1
+                if depth == 0:
+                    conditions.append(code[open_paren + 1:close_paren])
+                    position = close_paren + 1
+                    break
+        else:
+            return conditions
+
+
+def _has_width_assert(conditions: list[str], left: str, right: str, *, minimum: bool = False) -> bool:
+    left_size = rf'sizeof\s*\(\s*{left}\s*\)'
+    right_size = rf'sizeof\s*\(\s*(?:std::)?{right}\s*\)'
+    direct = r'(?:==|>=)' if minimum else '=='
+    reverse = r'(?:==|<=)' if minimum else '=='
+    return any(
+        re.search(rf'{left_size}\s*{direct}\s*{right_size}', condition) or
+        re.search(rf'{right_size}\s*{reverse}\s*{left_size}', condition)
+        for condition in conditions)
+
+
+def _assert_backend_vm_width_asserts(testcase: unittest.TestCase, backend: str) -> None:
+    conditions = _static_assert_conditions(backend)
+    testcase.assertTrue(_has_width_assert(conditions, 'vm_address_t', 'uintptr_t'), 'vm_address_t')
+    testcase.assertTrue(_has_width_assert(conditions, 'vm_size_t', 'uint64_t', minimum=True), 'vm_size_t')
+    testcase.assertTrue(_has_width_assert(conditions, 'vm_offset_t', 'uint64_t', minimum=True), 'vm_offset_t')
+
+
 class RelayExtensionTests(unittest.TestCase):
+    def test_public_vm_api_guard_cases(self):
+        allowed = {
+            'comments': '''
+                // #include <mach/mach_vm.h>
+                /* #import "mach/mach_vm.h" */
+                // mach_vm_map(mach_task_self(), nullptr, 0, 0, 0, 0, 0, 0, 0, 0);
+            ''',
+            'strings': '''
+                const char* header = "mach/mach_vm.h";
+                const char* call = "mach_vm_region(mach_task_self(), &address, &size)";
+            ''',
+            'public': '''
+                #include <mach/mach.h>
+                kern_return_t result = vm_region_64(task, &address, &size, flavor, info, &count, &object);
+            ''',
+        }
+        _assert_uses_public_vm_api(self, allowed)
+        forbidden = [
+            '#include <mach/mach_vm.h>',
+            '#include "mach/mach_vm.h"',
+            '#import <mach/mach_vm.h>',
+            '#import "mach/mach_vm.h"',
+            'auto result = mach_vm_map(task, &address, size, 0, flags, port, 0, false, prot, max, inherit);',
+            'auto result = mach_vm_deallocate(task, address, size);',
+            'auto result = mach_vm_region(task, &address, &size, flavor, info, &count, &object);',
+        ]
+        for source in forbidden:
+            with self.subTest(source=source), self.assertRaises(AssertionError):
+                _assert_uses_public_vm_api(self, {'source.mm':source})
+
+    def test_backend_vm_width_assert_guard_cases(self):
+        good = '''
+            static_assert(sizeof(vm_address_t) == sizeof(std::uintptr_t), "address width");
+            static_assert(sizeof(vm_size_t) == sizeof(std::uint64_t), "size width");
+            static_assert(sizeof(uint64_t) == sizeof(vm_offset_t), "offset width");
+        '''
+        _assert_backend_vm_width_asserts(self, good)
+        minimum = good.replace('sizeof(vm_size_t) ==', 'sizeof(vm_size_t) >=').replace(
+            'sizeof(uint64_t) == sizeof(vm_offset_t)', 'sizeof(uint64_t) <= sizeof(vm_offset_t)')
+        _assert_backend_vm_width_asserts(self, minimum)
+        for wrong in (
+                minimum.replace('sizeof(vm_size_t) >=', 'sizeof(vm_size_t) <='),
+                minimum.replace('sizeof(uint64_t) <=', 'sizeof(uint64_t) >='),
+                minimum.replace('sizeof(vm_address_t) ==', 'sizeof(vm_address_t) >=')):
+            with self.subTest(wrong=wrong), self.assertRaises(AssertionError):
+                _assert_backend_vm_width_asserts(self, wrong)
+        missing = '''
+            static_assert(sizeof(vm_address_t) == sizeof(std::uintptr_t), "address width");
+            static_assert(sizeof(vm_size_t) == sizeof(std::uint64_t), "size width");
+        '''
+        with self.assertRaises(AssertionError):
+            _assert_backend_vm_width_asserts(self, missing)
+        spilled = '''
+            static_assert(sizeof(vm_address_t) == sizeof(vm_size_t), "wrong address width");
+            static_assert(sizeof(vm_offset_t) == sizeof(std::uintptr_t), "unrelated uintptr");
+            static_assert(sizeof(vm_size_t) == sizeof(std::uint64_t), "size width");
+            static_assert(sizeof(vm_offset_t) == sizeof(std::uint64_t), "offset width");
+        '''
+        with self.assertRaises(AssertionError):
+            _assert_backend_vm_width_asserts(self, spilled)
+        incorrect = [
+            good.replace('std::uintptr_t', 'std::uint64_t'),
+            good.replace('std::uint64_t), "size width"', 'std::uintptr_t), "size width"'),
+            good.replace('uint64_t) == sizeof(vm_offset_t)', 'uintptr_t) == sizeof(vm_offset_t)'),
+        ]
+        for source in incorrect:
+            with self.subTest(source=source), self.assertRaises(AssertionError):
+                _assert_backend_vm_width_asserts(self, source)
+
+    def test_materialized_sources_and_harness_use_public_vm_api(self):
+        from neoswap_relay_simulator_test import HARNESS
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture(root)
+            relay.materialize(root)
+            generated = {}
+            for relative in ('packages/neo_swap/ios/Classes/Relay', 'ios/NeoSwapPageRelay'):
+                for path in (root / relative).iterdir():
+                    if path.suffix in ('.cpp', '.h', '.mm'):
+                        generated[str(path.relative_to(root))] = path.read_text()
+            _assert_uses_public_vm_api(self, {**generated, 'test/neoswap_relay_simulator_test.py::HARNESS':HARNESS})
+            _assert_backend_vm_width_asserts(
+                self, (root / 'packages/neo_swap/ios/Classes/Relay/Backend.cpp').read_text())
+
     def test_canonical_bundle_contract(self):
         info = plistlib.loads((ROOT / 'native/neoswap-relay/Info.plist').read_bytes())
         for key, value in {'CFBundlePackageType':'XPC!', 'MinimumOSVersion':'18.0',

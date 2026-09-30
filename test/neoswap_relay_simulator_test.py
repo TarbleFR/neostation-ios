@@ -38,7 +38,7 @@ HARNESS = r'''
 #include "Broker.h"
 #include <atomic>
 #include <cstring>
-#include <mach/mach_vm.h>
+#include <mach/mach.h>
 #include <unistd.h>
 
 namespace {
@@ -65,15 +65,15 @@ bool allBytes(const void* address, unsigned char pattern) {
   return true;
 }
 bool isReadOnly(void* address) {
-  mach_vm_address_t current = reinterpret_cast<mach_vm_address_t>(address);
-  mach_vm_size_t bytes = 0;
+  vm_address_t current = reinterpret_cast<vm_address_t>(address);
+  vm_size_t bytes = 0;
   vm_region_basic_info_data_64_t info{};
   mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
   mach_port_t object = MACH_PORT_NULL;
-  kern_return_t result = mach_vm_region(mach_task_self(), &current, &bytes, VM_REGION_BASIC_INFO_64,
+  kern_return_t result = vm_region_64(mach_task_self(), &current, &bytes, VM_REGION_BASIC_INFO_64,
       reinterpret_cast<vm_region_info_t>(&info), &count, &object);
   if (object) mach_port_deallocate(mach_task_self(), object);
-  return result == KERN_SUCCESS && current == reinterpret_cast<mach_vm_address_t>(address) &&
+  return result == KERN_SUCCESS && current == reinterpret_cast<vm_address_t>(address) &&
       bytes >= target && info.protection == VM_PROT_READ;
 }
 }
