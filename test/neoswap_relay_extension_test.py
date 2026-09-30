@@ -263,6 +263,22 @@ class RelayExtensionTests(unittest.TestCase):
             _assert_backend_vm_width_asserts(
                 self, (root / 'packages/neo_swap/ios/Classes/Relay/Backend.cpp').read_text())
 
+    def test_optional_mach_import_guard_matches_final_ipa_contract(self):
+        from neoswap_relay_simulator_test import validate_optional_mach_imports, OPTIONAL_MACH_IMPORTS
+        allowed = '_vm_map\n_vm_deallocate\n_vm_region_64\n_dlsym\n_mach_task_self_\n'
+        validate_optional_mach_imports(allowed)
+        validate_optional_mach_imports('')
+        expected = {'_mach_make_memory_entry_64', '_mach_vm_map',
+                    '_mach_vm_deallocate', '_mach_vm_purgable_control'}
+        self.assertEqual(OPTIONAL_MACH_IMPORTS, expected)
+        for symbol in expected:
+            for rendered in (symbol + '\n', '                 U ' + symbol + '\n'):
+                with self.subTest(symbol=symbol, rendered=rendered), self.assertRaises(RuntimeError):
+                    validate_optional_mach_imports(allowed + rendered)
+        # Reject exact linker symbols, not unrelated longer names or the public
+        # native-width vm_* entry points which every supported SDK exports.
+        validate_optional_mach_imports('_mach_vm_map_named_diagnostic\n')
+
     def test_canonical_bundle_contract(self):
         info = plistlib.loads((ROOT / 'native/neoswap-relay/Info.plist').read_bytes())
         for key, value in {'CFBundlePackageType':'XPC!', 'MinimumOSVersion':'18.0',

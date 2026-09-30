@@ -313,6 +313,19 @@ def validate_evidence(report: dict) -> None:
         raise RuntimeError('Actual production manager lacks its bounded host-footprint capability measurement')
 
 
+# Same compatibility contract as validate_neoswap_ipa.py, checked on actual
+# linked host/helper binaries before accepting either Apple preflight report.
+OPTIONAL_MACH_IMPORTS = frozenset({
+    '_mach_make_memory_entry_64', '_mach_vm_map', '_mach_vm_deallocate', '_mach_vm_purgable_control',
+})
+
+
+def validate_optional_mach_imports(undefined_symbols: str) -> None:
+    eager = OPTIONAL_MACH_IMPORTS.intersection(undefined_symbols.split())
+    if eager:
+        raise RuntimeError('Optional Mach APIs must be resolved at runtime: ' + ', '.join(sorted(eager)))
+
+
 def source_hashes() -> dict[str, str]:
     sources = list(RELAY.glob('*')) + [DONATION / 'Broker.cpp', DONATION / 'Broker.h',
         PUBLIC / 'NeoSwapRelay.h', PUBLIC / 'NeoSwapRelayService.h', PUBLIC / 'NeoSwapRelayService.mm',
@@ -361,6 +374,8 @@ def build(work: Path, sdk: str, report: dict, *, device: bool = False) -> Path:
     extension_symbols = run(['xcrun', 'nm', '-gU', str(helper / 'NeoSwapPageRelay')], capture=True)
     if '_OBJC_CLASS_$_NeoSwapPageRelaySession' in extension_symbols:
         raise RuntimeError('Extension must not contain the host launcher class')
+    for executable in (app / 'NeoSwapRelaySimulator', helper / 'NeoSwapPageRelay'):
+        validate_optional_mach_imports(run(['xcrun', 'nm', '-u', str(executable)], capture=True))
     host_info = {'CFBundleIdentifier':BUNDLE, 'CFBundleExecutable':'NeoSwapRelaySimulator',
                  'CFBundleName':'NeoSwapRelaySimulator', 'CFBundlePackageType':'APPL',
                  'CFBundleInfoDictionaryVersion':'6.0', 'CFBundleVersion':'1',
@@ -379,7 +394,8 @@ def build(work: Path, sdk: str, report: dict, *, device: bool = False) -> Path:
         raise RuntimeError('Unresolved extension build setting in compiled probe')
     plist(helper / 'Info.plist', helper_info)
     report['buildPreflight'] = {'architecture':architecture, 'hostInfo':host_info, 'helperInfo':helper_info,
-                              'hostLauncherAbsentFromExtension':True, 'sourceSHA256':source_hashes()}
+                              'hostLauncherAbsentFromExtension':True, 'optionalMachEagerImportsAbsent':True,
+                              'sourceSHA256':source_hashes()}
     if device:
         for executable in (app / 'NeoSwapRelaySimulator', helper / 'NeoSwapPageRelay'):
             data = executable.read_bytes()

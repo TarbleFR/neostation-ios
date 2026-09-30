@@ -14,6 +14,7 @@
 #include <vector>
 #include <unistd.h>
 #include <mach/mach.h>
+#include <dlfcn.h>
 
 namespace {
 constexpr uint64_t maximumSegment = 512ULL * 1024 * 1024;
@@ -131,6 +132,11 @@ NSError* failure(NSString* detail) {
 - (void)issueNext {
   if (_closed || _awaitingExitAck) return;
   if (_capacity == _target) { [self requestExit]; return; }
+  // Keep this optional entry-creation API out of dyld's eager imports. The
+  // dedicated helper reports a normal preparation failure when unavailable.
+  static const auto createEntry = reinterpret_cast<decltype(&mach_make_memory_entry_64)>(
+      dlsym(RTLD_DEFAULT, "mach_make_memory_entry_64"));
+  if (!createEntry) { [self failStage:@"memory_entry_api_unavailable" kernel:KERN_NOT_SUPPORTED]; return; }
   const uint64_t bytes = MIN(maximumSegment, _target - _capacity);
   auto right = std::make_unique<neostation::donation::SendRight>();
   const auto prepared = right->prepare();
@@ -140,7 +146,7 @@ NSError* failure(NSString* detail) {
   // As in Guest Page Relay: create a ledger-tagged named object without a donor
   // mapping or fake page touch. Capacity is not reported as resident memory.
   const vm_prot_t permissions = VM_PROT_READ | VM_PROT_WRITE | MAP_MEM_NAMED_CREATE | MAP_MEM_LEDGER_TAGGED;
-  kern_return_t kr = mach_make_memory_entry_64(mach_task_self(), &size, 0, permissions, &entry, MACH_PORT_NULL);
+  kern_return_t kr = createEntry(mach_task_self(), &size, 0, permissions, &entry, MACH_PORT_NULL);
   if (entry != MACH_PORT_NULL) (void)right->adopt(entry);
   if (kr != KERN_SUCCESS || size != bytes || entry == MACH_PORT_NULL) {
     [self failStage:@"create_ledger_tagged_entry" kernel:kr == KERN_SUCCESS ? KERN_INVALID_ARGUMENT : kr]; return;
