@@ -479,6 +479,8 @@ BOOL number(NSDictionary* input, NSString* key) {
     self->_diagnostics[@"lastVerifiedChunkBytes"] = metadata[@"chunkBytes"];
     self->_diagnostics[@"growthState"] = @(self->_snapshot.growthState);
     self->_diagnostics[@"headroomBytes"] = @(self->_snapshot.donorHeadroomBytes);
+    self->_diagnostics[@"processHeadroomRequired"] = metadata[@"processHeadroomRequired"] ?: NSNull.null;
+    self->_diagnostics[@"simulator"] = metadata[@"simulator"] ?: NSNull.null;
     self->_diagnostics[@"systemHeadroomBytes"] = metadata[@"systemHeadroomBytes"] ?: NSNull.null;
     self->_diagnostics[@"systemPressure"] = metadata[@"systemPressure"] ?: NSNull.null;
     self->_diagnostics[@"measurement"] = @"donor_process_nonvolatile_ledger_delta_bounded_by_verified_chunks";
@@ -514,6 +516,8 @@ BOOL number(NSDictionary* input, NSString* key) {
       self->_diagnostics[@"actualCapacityBytes"] = metadata[@"capacityBytes"];
       self->_diagnostics[@"headroomBytes"] = metadata[@"headroom"] ?: NSNull.null;
       self->_diagnostics[@"headroomAPIAvailable"] = metadata[@"headroomAPIAvailable"] ?: NSNull.null;
+      self->_diagnostics[@"processHeadroomRequired"] = metadata[@"processHeadroomRequired"] ?: NSNull.null;
+      self->_diagnostics[@"simulator"] = metadata[@"simulator"] ?: NSNull.null;
       if ([metadata[@"effectiveEntitlements"] isKindOfClass:NSDictionary.class])
         self->_diagnostics[@"helperEffectiveEntitlements"] = metadata[@"effectiveEntitlements"];
       [self fail:failure(3116, [NSString stringWithFormat:@"Donor %s failed (%d)",

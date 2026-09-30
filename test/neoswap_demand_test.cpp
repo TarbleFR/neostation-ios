@@ -1,6 +1,7 @@
 #include "NeoSwap.h"
 #include "NeoSwapHost.h"
 #include "Donation/Broker.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -18,6 +19,16 @@ static NeoSwapHostStats host() {
     return stats;
 }
 int main() {
+    using neostation::donation::process_headroom_budget;
+    // Real-device zero/low readings stay closed, including during page fill.
+    assert(process_headroom_budget(0, true, 17 * MiB) == 0);
+    assert(process_headroom_budget(16 * MiB, true, 17 * MiB) == 0);
+    assert(process_headroom_budget(17 * MiB, true, 17 * MiB) == 0);
+    assert(process_headroom_budget(33 * MiB, true, 17 * MiB) == 16 * MiB);
+    assert(process_headroom_budget(24 * MiB, true, 16 * MiB) == 8 * MiB);
+    assert(process_headroom_budget(16 * MiB - 1, true, 16 * MiB) == 0);
+    // Simulator zero imposes no process bound; system pressure still vetoes it.
+    assert(process_headroom_budget(0, false, 17 * MiB) == UINT64_MAX);
     // Regression: the hosted Mac reported 85% kernel headroom while free+
     // purgeable pages were only about 145 MiB. That must allow a bounded real
     // chunk, without counting the kernel estimate as donated resident memory.
@@ -31,6 +42,7 @@ int main() {
     system.pressure = neostation::donation::MemoryPressure::warning;
     neostation::donation::derive_system_budget(system, 7516192768ULL, 85, true);
     assert(!system.usable_bytes);
+    assert(std::min(process_headroom_budget(0, false, 17 * MiB), system.usable_bytes) == 0);
     system.pressure = neostation::donation::MemoryPressure::unobserved;
     neostation::donation::derive_system_budget(system, 7516192768ULL, 101, true);
     assert(!system.kernel_estimate_valid && !system.usable_bytes);

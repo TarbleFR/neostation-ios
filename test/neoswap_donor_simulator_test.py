@@ -544,6 +544,53 @@ def sdk_runtime() -> tuple[str, str, str]:
     return sdk, runtime['identifier'], sdk_version
 
 
+def collect_launch_evidence(arguments: list[str], evidence: Path, *, timeout: float = 240) -> dict:
+    """Observe the actual app independently of a stalled simctl client.
+
+    The deadline equals the previous 180s launch + 60s evidence limits. A
+    successful command without native proof still fails. Only this CLI process
+    is terminated after evidence; the native report must pass all checks later.
+    """
+    if evidence.exists():
+        raise RuntimeError('Refusing pre-existing Simulator evidence')
+    with tempfile.TemporaryFile(mode='w+') as command_output:
+        process = subprocess.Popen(arguments, text=True, stdout=command_output,
+                                   stderr=subprocess.STDOUT)
+        result = None
+        stopped_after_evidence = False
+        try:
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                status = process.poll()
+                if status is not None and status != 0:
+                    raise subprocess.CalledProcessError(status, arguments)
+                if evidence.is_file():
+                    result = json.loads(evidence.read_text())
+                    if not isinstance(result, dict):
+                        raise RuntimeError('Native Simulator evidence must be an object')
+                    stopped_after_evidence = status is None
+                    break
+                time.sleep(0.1)
+            if result is None:
+                raise RuntimeError('Actual Simulator app did not produce extension/allocator proof before the deadline')
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+            command_output.seek(0)
+            launched = command_output.read()
+            LOGS.append('COMMAND ' + ' '.join(arguments) + '\n' + launched +
+                        f'\nCLIENT_RETURN_CODE {process.returncode}\n'
+                        f'CLIENT_STOPPED_AFTER_EVIDENCE {stopped_after_evidence}\n')
+        return {'runtimeEvidence':result, 'launchOutput':launched,
+                'launchClientReturnCode':process.returncode,
+                'launchClientStoppedAfterEvidence':stopped_after_evidence}
+
+
 def plist(path: Path, value: dict) -> None:
     path.write_bytes(plistlib.dumps(value))
 
@@ -791,16 +838,11 @@ def main() -> int:
             report['installedRegistration'] = run(['xcrun', 'simctl', 'listapps', identifier], capture=True)[-20000:]
             (output / 'installed-prelaunch.json').write_text(json.dumps(report, indent=2) + '\n')
             report['runnerStage'] = 'launch'
-            launched = run(['xcrun', 'simctl', 'launch', identifier, BUNDLE], capture=True, timeout=180)
-            report['launchOutput'] = launched
-            report['runnerStage'] = 'runtime_evidence'
             evidence = container / 'Documents/donation-simulator.json'
-            deadline = time.monotonic() + 60
-            while not evidence.is_file() and time.monotonic() < deadline:
-                time.sleep(1)
-            if not evidence.is_file():
-                raise RuntimeError('Actual Simulator app did not produce extension/allocator proof; launch output: ' + launched[-12000:])
-            report.update(json.loads(evidence.read_text()))
+            launch = collect_launch_evidence(['xcrun', 'simctl', 'launch', identifier, BUNDLE], evidence)
+            report.update(launch.pop('runtimeEvidence'))
+            report.update(launch)
+            report['runnerStage'] = 'runtime_evidence'
             if report.get('passed') is not True:
                 raise RuntimeError(report.get('technicalError') or 'The actual extension lifecycle failed')
             validate_evidence(report)

@@ -4,6 +4,7 @@
 
 #import <objc/message.h>
 #import <objc/runtime.h>
+#include <TargetConditionals.h>
 #include <dlfcn.h>
 #include <cstring>
 #include <memory>
@@ -92,7 +93,7 @@ NSDictionary* effectiveEntitlements() {
   BOOL _proofComplete;
   BOOL _preparing;
   BOOL _updateInFlight;
-  BOOL _probe;
+  BOOL _processHeadroomRequired;
   BOOL _closed;
   std::vector<std::unique_ptr<neostation::donation::Block>> _blocks;
   std::unique_ptr<neostation::donation::Block> _pending;
@@ -165,7 +166,7 @@ NSDictionary* effectiveEntitlements() {
     return;
   }
   _connection = connection;
-  _probe = probe;
+  _processHeadroomRequired = !probe && !TARGET_OS_SIMULATOR;
   _effectiveEntitlements = effectiveEntitlements();
   _nonce = [metadata[@"nonce"] copy];
   _generation = [metadata[@"generation"] unsignedLongLongValue];
@@ -230,7 +231,7 @@ NSDictionary* effectiveEntitlements() {
   }
   _preparing = YES;
   _headroom = headroom();
-  if (!_probe && !headroomQuery()) {
+  if (_processHeadroomRequired && !headroomQuery()) {
     [self stopGrowth:@"headroom_api_unavailable" requested:maximum kernel:KERN_NOT_SUPPORTED];
     return;
   }
@@ -245,7 +246,8 @@ NSDictionary* effectiveEntitlements() {
   // Keep another MiB for Block/XPC setup before the repeated 16 MiB process
   // and 512 MiB system margin checks, so a small extension is not refused merely
   // because its metadata consumed a few pages after the first sample.
-  const uint64_t processBudget = _probe ? maximum : (_headroom > 17 * MiB ? _headroom - 17 * MiB : 0);
+  const uint64_t processBudget = neostation::donation::process_headroom_budget(
+      _headroom, _processHeadroomRequired, 17 * MiB);
   const uint64_t systemBudget = _system.usable_bytes > MiB ? _system.usable_bytes - MiB : 0;
   // Growth serves one actual contiguous host buffer. Several smaller memory
   // entries cannot cover that loan, so refuse before creating an undersized
@@ -286,7 +288,8 @@ NSDictionary* effectiveEntitlements() {
     if (offset % (8 * MiB) == 0) {
       auto status = neostation::donation::system_headroom(_system);
       if (!status || _system.usable_bytes < _chunkBytes - offset ||
-          (!_probe && headroom() < _chunkBytes - offset + 16 * MiB)) {
+          neostation::donation::process_headroom_budget(
+              headroom(), _processHeadroomRequired, 16 * MiB) < _chunkBytes - offset) {
         [self stopGrowth:!status ? [NSString stringWithUTF8String:neostation::donation::stage_name(status.stage)]
                                     : @"headroom_changed_during_page_preparation"
               requested:maximum kernel:!status ? status.kernel_result : KERN_RESOURCE_SHORTAGE];
@@ -364,6 +367,8 @@ NSDictionary* effectiveEntitlements() {
             @"chunkIndex":@(index), @"chunkBytes":@(_chunkBytes), @"verifiedChunkCount":@(_blocks.size()),
             @"pid":@(getpid()), @"headroom":@(_headroom),
             @"headroomAPIAvailable":@(headroomQuery() != nullptr),
+            @"processHeadroomRequired":@(_processHeadroomRequired),
+            @"simulator":@(TARGET_OS_SIMULATOR != 0),
             @"systemHeadroomBytes":@(_system.usable_bytes), @"systemPressure":@(static_cast<uint32_t>(_system.pressure)),
             @"effectiveEntitlements":_effectiveEntitlements ?: @{}} mutableCopy];
 }

@@ -42,6 +42,10 @@
       "source": "https://developer.apple.com/documentation/os/os_proc_available_memory"
     },
     {
+      "claim": "Apple's macOS test expects zero available process memory unless the process is managed and has a hard memory limit; Simulator zero is not a measured system budget, and device zero remains a refusal",
+      "source": "https://github.com/apple-oss-distributions/xnu/blob/main/tests/os_proc.c"
+    },
+    {
       "claim": "XNU VM statistics include speculative pages in free_count, so speculative pages must not be added again",
       "source": "https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/mach/vm_statistics.h"
     },

@@ -83,6 +83,14 @@ struct SystemHeadroom {
 void derive_system_budget(SystemHeadroom& out, std::uint64_t physical_bytes,
                           std::uint32_t kernel_percent, bool valid) noexcept;
 Result system_headroom(SystemHeadroom& out) noexcept;
+// A macOS-hosted probe/Simulator has no required iOS jetsam limit. Its zero
+// process reading is not a zero system budget. Device zero remains a refusal.
+// UINT64_MAX means no process bound, never measured or donated capacity; the
+// caller must still intersect this bound with freshly measured system headroom.
+constexpr std::uint64_t process_headroom_budget(std::uint64_t measured,
+    bool required, std::uint64_t margin) noexcept {
+  return !required ? UINT64_MAX : measured > margin ? measured - margin : 0;
+}
 #if defined(NEOSWAP_TESTING)
 // Negative cleanup test; the object still comes from the real Darwin kernel.
 void test_fail_next_unmaps(std::uint32_t count) noexcept;

@@ -149,6 +149,32 @@ def packaged_helpers(root):
 
 
 class DonorContractTests(unittest.TestCase):
+    def test_simulator_launcher_keeps_native_result_when_cli_stalls(self):
+        # Local child exercises orchestration only, never Foundation/donation.
+        from neoswap_donor_simulator_test import collect_launch_evidence, validate_evidence
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / 'report.json'
+            command = [sys.executable, '-c',
+                       'import pathlib,sys,time; pathlib.Path(sys.argv[1]).write_text('
+                       '\'{"passed":false,"stage":"actual_native_failure"}\'); time.sleep(30)', str(evidence)]
+            result = collect_launch_evidence(command, evidence, timeout=5)
+            self.assertEqual(result['runtimeEvidence']['stage'], 'actual_native_failure')
+            self.assertIs(result['launchClientStoppedAfterEvidence'], True)
+            self.assertIsNotNone(result['launchClientReturnCode'])
+            with self.assertRaises(RuntimeError):
+                validate_evidence(result['runtimeEvidence'])
+            with self.assertRaisesRegex(RuntimeError, 'pre-existing'):
+                collect_launch_evidence(command, evidence, timeout=1)
+
+    def test_simulator_launcher_requires_evidence_even_after_cli_success(self):
+        from neoswap_donor_simulator_test import collect_launch_evidence
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / 'report.json'
+            with self.assertRaisesRegex(RuntimeError, 'did not produce'):
+                collect_launch_evidence([sys.executable, '-c', 'pass'], evidence, timeout=0.5)
+            with self.assertRaises(subprocess.CalledProcessError):
+                collect_launch_evidence([sys.executable, '-c', 'raise SystemExit(7)'], evidence, timeout=5)
+
     def test_bundle_identity_versions_and_original_jit_plists(self):
         info = plistlib.loads((ROOT / 'native/neoswap-donation/Info.plist').read_bytes())
         self.assertEqual(info['CFBundlePackageType'], 'XPC!')
