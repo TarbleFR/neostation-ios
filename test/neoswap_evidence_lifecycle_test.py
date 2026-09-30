@@ -26,13 +26,15 @@ copy_commands = [
     if line.strip().startswith('cp ') and any(name in line for name in (
         'capacity-8GiB-macOS.json', 'phone-shake-tests.json',
         'neoswap-evidence/donation"',
+        'neoswap-evidence/vulkan"',
     ))
 ]
-assert len(copy_commands) == 3
+assert len(copy_commands) == 4
 sha = 'd' * 40
 WORKFLOW_IDS = {
     'neoswap-check.yml': 101,
     'neoswap-donation-check.yml': 102,
+    'neoswap-vulkan-proof.yml': 106,
     'dolphin-pacing-check.yml': 103,
     'dolphin-motion-check.yml': 104,
     'cheats-media-check.yml': 105,
@@ -42,6 +44,27 @@ report = {'platform': 'macOS host', 'verifiedBytes': 8589934592,
           'realIPhoneValidated': False}
 motion_report = {'productionSwiftExecuted': True, 'sensor': 'mocked',
                  'realDeviceValidated': False, 'result': 'native test evidence'}
+canonical = json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+vulkan_input = 'native/neoswap-donation/VulkanDonationProbe.h'
+vulkan_identity = {
+    'source': sha, 'moltenVK': '1.4.2',
+    'moltenVKSHA256': 'f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e',
+    'canonicalPatchSHA256': canonical['patch_sha256'],
+    'productionImportSHA256': canonical['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h'],
+    'inputsSHA256': {vulkan_input: hashlib.sha256((ROOT/vulkan_input).read_bytes()).hexdigest()},
+}
+vulkan_report = {
+    'passed': True, 'residentTargetVerified': True, 'hostPID': 501, 'donorPID': 502,
+    'donorResidentBytes': 134217728,
+    'vulkanDonation': {
+        'passed': True, 'importedBytes': 134217728, 'donatedLiveBytesDuringGPU': 134217728,
+        'gpuWrittenBytes': 134217728, 'gpuToCpuAliasVerified': True, 'retiredLiveBytes': 0,
+        'rendererBudgetDuringGPU': 134217728, 'rendererBudgetAfterRetirement': 0,
+        'productionRPCS3ImportPath': True, 'productionHostBroker': True,
+        'hostNonvolatileDeltaBytes': 0, 'hostFootprintDeltaBytes': 2*1024**2,
+        'realIPhoneValidated': False, 'realRPCS3GameplayValidated': False,
+    },
+}
 donation_reports = {
     'kernel': {'passed': True, 'platform': 'macOS-kernel-two-process',
                'source': sha, 'realIPhoneValidated': False,
@@ -93,7 +116,8 @@ retained_commands = [
 ]
 
 
-def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, export=False):
+def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, export=False,
+             bad_vulkan_digest=False, bad_vulkan_lifetime=False, bad_vulkan_charge=False):
     api_workflows, executed_commands = [], []
 
     def api(command):
@@ -117,6 +141,19 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
                 assert command[3] == str(WORKFLOW_IDS['neoswap-check.yml'])
                 assert destination.name == 'neoswap-evidence'
                 (destination / 'capacity-8GiB-macOS.txt').write_text(json.dumps(report) + '\n')
+            elif artifact == 'NeoSwap-Vulkan-' + sha:
+                assert command[3] == str(WORKFLOW_IDS['neoswap-vulkan-proof.yml'])
+                assert destination.parts[-2:] == ('neoswap-evidence', 'vulkan')
+                identity = copy.deepcopy(vulkan_identity)
+                fixture = copy.deepcopy(vulkan_report)
+                if bad_source == 'vulkan': identity['source'] = 'c'*40
+                if failed_phase == 'vulkan': fixture['vulkanDonation']['passed'] = False
+                if bad_device_claim == 'vulkan': fixture['vulkanDonation']['realIPhoneValidated'] = True
+                if bad_vulkan_digest: identity['productionImportSHA256'] = 'b'*64
+                if bad_vulkan_lifetime: fixture['vulkanDonation']['retiredLiveBytes'] = 4096
+                if bad_vulkan_charge: fixture['vulkanDonation']['hostNonvolatileDeltaBytes'] = 134217728
+                (destination/'identity.json').write_text(json.dumps(identity))
+                (destination/'report.json').write_text(json.dumps(fixture))
             else:
                 phase = next((name for name in donation_reports
                               if artifact == 'NeoSwap-donation-' + name + '-' + sha), None)
@@ -142,6 +179,10 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
         base = Path(temporary)
         checkout = base / 'checkout'
         checkout.mkdir()
+        for relative in ('build-utils/rpcs3/canonical-source.json', vulkan_input):
+            destination = checkout/relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT/relative, destination)
         runner_temp = base / 'runner-temp'
         runner_temp.mkdir()
         environment = dict(os.environ, GITHUB_SHA=sha, RUNNER_TEMP=str(runner_temp), GITHUB_WORKSPACE=str(ROOT))
@@ -150,9 +191,9 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
             os.chdir(checkout)
             with patch.dict(os.environ, environment), patch.object(subprocess, 'check_output', api), patch.object(subprocess, 'run', run):
                 exec(compile(script, '.github/workflows/neoswap-ipa.yml', 'exec'), {})
-            assert api_workflows == list(WORKFLOW_IDS), 'All five exact-SHA gates must execute'
+            assert api_workflows == list(WORKFLOW_IDS), 'All six exact-SHA gates must execute'
             assert executed_commands[-3:] == retained_commands
-            assert len([command for command in executed_commands if command[:3] == ['gh', 'run', 'download']]) == 5
+            assert len([command for command in executed_commands if command[:3] == ['gh', 'run', 'download']]) == 6
             if export:
                 # Flutter clean removes build/ after the producer. Execute the
                 # actual export commands extracted from the workflow afterward.
@@ -164,6 +205,8 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
                 exported = checkout / 'build/private-test'
                 assert json.loads((exported / 'capacity-8GiB-macOS.json').read_text()) == report
                 assert json.loads((exported / 'phone-shake-tests.json').read_text()) == motion_report
+                assert json.loads((exported/'vulkan-evidence/report.json').read_text()) == vulkan_report
+                assert json.loads((exported/'vulkan-evidence/identity.json').read_text()) == vulkan_identity
                 donation = exported / 'donation-evidence'
                 for phase, expected in donation_reports.items():
                     assert (donation / phase / 'source.txt').read_text().strip() == sha
@@ -177,7 +220,7 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
 
 
 exercise(export=True)
-for phase in donation_reports:
+for phase in [*donation_reports, 'vulkan']:
     for argument in ('bad_source', 'bad_device_claim', 'failed_phase'):
         if phase == 'stress' and argument == 'failed_phase':
             continue  # An explicit stress refusal is retained, never counted as 8 GiB.
@@ -189,5 +232,13 @@ for phase in donation_reports:
         else:
             raise AssertionError('Actual workflow accepted invalid ' + argument + ' in ' + phase)
 
-print('PASS: five actual exact-SHA gates and all three donation evidence exports survive Flutter clean; '
-      'wrong source/failed phase/device claims rejected for each phase; runtime proofs are mocked here')
+for argument in ('bad_vulkan_digest', 'bad_vulkan_lifetime', 'bad_vulkan_charge'):
+    try:
+        with redirect_stdout(io.StringIO()): exercise(**{argument: True})
+    except (AssertionError, RuntimeError):
+        pass
+    else:
+        raise AssertionError('Actual workflow accepted invalid '+argument)
+
+print('PASS: six actual exact-SHA gates and all four evidence exports survive Flutter clean; '
+      'wrong source/failed phase/device claims rejected; Vulkan source, lifetime and host-charge refusals; runtime proofs are mocked here')

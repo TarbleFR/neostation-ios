@@ -1174,6 +1174,7 @@ jobs:
           cp dist/neoswap-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence
+          cp -R "$RUNNER_TEMP/neoswap-evidence/vulkan" build/private-test/vulkan-evidence
           cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/phone-shake-tests.json" build/private-test/
