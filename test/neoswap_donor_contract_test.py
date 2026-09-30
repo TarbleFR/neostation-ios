@@ -162,6 +162,19 @@ def packaged_helpers(root):
 
 
 class DonorContractTests(unittest.TestCase):
+    def test_ipa_validator_matches_single_relay_lifecycle_ownership(self):
+        validator = (ROOT / 'build-utils/validate_neoswap_ipa.py').read_text()
+        bridge = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
+        plugin = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
+        for call in ('NeoSwap_GetAPI(', 'NeoSwap_GetRelayAPI(', 'NeoSwapRelay_WaitReady(',
+                     'NeoSwap_LiveBytes(', 'NeoSwap_HostSnapshot(', 'NeoSwap_RegisterClient('):
+            self.assertIn(call, bridge)
+        self.assertNotIn('NeoSwapRelay_Start(', bridge)
+        self.assertIn('NeoSwapRelay_Start();', plugin)
+        self.assertIn("'_NeoSwapRelay_Start' not in undefined", validator)
+        self.assertIn("'_NeoSwapRelay_Start'", validator)
+        self.assertIn("'_NeoSwap_GetRelayAPI'", validator)
+
     def test_chunk_preparation_uses_chunk_deadline_not_idle_heartbeat(self):
         source = (ROOT / 'native/neoswap-donation/NeoSwapDonorIPC.mm').read_text()
         timer = source.split('- (void)beginTimer {', 1)[1].split('- (void)start {', 1)[0]

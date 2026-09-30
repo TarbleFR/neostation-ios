@@ -36,8 +36,15 @@ with zipfile.ZipFile(a.ipa) as z, tempfile.TemporaryDirectory() as tmp:
     assert not any('_NeoSwap_Test' in name for name in exports['broker']), 'Test hooks in deliverable'
     deps=subprocess.check_output(['otool','-L',str(paths['bridge'])],text=True)
     assert '/neo_swap.framework/neo_swap' in deps,'RPCS3 host bridge does not link the shared service'
-    undefined=subprocess.check_output(['nm','-u',str(paths['bridge'])],text=True)
-    assert {'_NeoSwap_GetAPI','_NeoSwap_GetRelayAPI','_NeoSwapRelay_Start','_NeoSwapRelay_WaitReady','_NeoSwap_LiveBytes','_NeoSwap_HostSnapshot'} <= set(undefined.split())
+    undefined=set(subprocess.check_output(['nm','-u',str(paths['bridge'])],text=True).split())
+    # The shared NeoSwap plugin starts the relay during broker initialization.
+    # RPCS3's bridge waits for that preparation and borrows both versioned APIs;
+    # it must not own or directly start a second relay lifecycle.
+    bridge_imports={'_NeoSwap_GetAPI','_NeoSwap_GetRelayAPI','_NeoSwapRelay_WaitReady',
+                    '_NeoSwap_LiveBytes','_NeoSwap_HostSnapshot','_NeoSwap_RegisterClient'}
+    missing_bridge_imports=bridge_imports-undefined
+    assert not missing_bridge_imports, 'Missing shared NeoSwap bridge imports: '+str(sorted(missing_bridge_imports))
+    assert '_NeoSwapRelay_Start' not in undefined, 'RPCS3 bridge must not start a second relay lifecycle'
     donor_hashes={};relay_hashes={}
     eager_mach={'_mach_make_memory_entry_64','_mach_vm_map','_mach_vm_deallocate','_mach_vm_purgable_control'}
     broker_undefined=set(subprocess.check_output(['nm','-u',str(paths['broker'])],text=True).split())
