@@ -24,6 +24,7 @@ PRODUCTION_FILES = {
     '.gitignore',
     '.github/workflows/cheats-media-check.yml',
     '.github/workflows/dolphin-motion-check.yml',
+    '.github/workflows/dusklight-core.yml',
     '.github/workflows/ios-ci.yml',
     '.github/workflows/neoswap-check.yml',
     '.github/workflows/neoswap-donation-check.yml',
@@ -31,6 +32,8 @@ PRODUCTION_FILES = {
     '.github/workflows/rpcs3-core.yml',
     'build-utils/build_rpcs3_embedded_core.sh',
     'build-utils/dolphin_motion_localizations.py',
+    'build-utils/dusklight/build_core.py',
+    'build-utils/dusklight/source.json',
     'build-utils/configure_neoswap_donor.py',
     'build-utils/embed_neoswap_donor_entitlements.py',
     'build-utils/private-test-368-recipient.pem',
@@ -48,6 +51,11 @@ PRODUCTION_FILES = {
     'lib/services/ports_game_identity.dart',
     'native/dolphin_motion/strings.json',
     'native/dolphin_textures/labels.json',
+    'native/dusklight/upstream-manifest.json',
+    'native/dusklight/upstream/CMakeLists.txt',
+    'native/dusklight/upstream/extern/aurora/lib/dolphin/AR.cpp',
+    'native/dusklight/upstream/extern/aurora/lib/webgpu/gpu.cpp',
+    'native/dusklight/upstream/extern/aurora/lib/webgpu/gpu.hpp',
     'native/neoswap/NeoSwapClient.h',
     'native/neoswap/localizations.json',
     'native/neoswap-donation/Broker.cpp',
@@ -98,6 +106,7 @@ PRODUCTION_FILES = {
 SUPPORT_FILES = {
     'docs/dolphin-phone-shake-routing.md',
     'docs/import-memory-build368.md',
+    'docs/native-updates-20260930.md',
     'docs/rpcs3-xitrix-v0101-audit.md',
     'test/check_neo_swap_scope.py',
     'test/cheat_bulk_scope_test.py',
@@ -112,6 +121,8 @@ SUPPORT_FILES = {
     'test/dolphin_texture_store_test.mm',
     'test/dolphin_texture_zip_test.cpp',
     'test/dolphin_texture_zip_test.py',
+    'test/dusklight_bridge_contract_test.py',
+    'test/dusklight_terminal_shutdown_test.py',
     'test/import_memory_candidate_scope_test.py',
     'test/kartpad_display_title_test.dart',
     'test/native/rpcs3_neoswap_stats_getter_test.cpp',
@@ -206,11 +217,24 @@ for path in (
     'packages/neo_swap/lib/neo_swap.dart',
     'lib/services/kartpad_internal_service.dart',
     'build-utils/armsx2/source.json',
-    'build-utils/dusklight/source.json',
     'build-utils/kartpad/source.json',
     'build-utils/stikjit/source.json',
 ):
     assert (ROOT / path).read_bytes() == before(path), 'Protected helper/core/ABI/routing changed: ' + path
+
+# The requested Dusklight update replaces only its reviewed upstream pins.
+# Keep its disc routing and SDL source identical to the preceding candidate.
+old_dusklight = json.loads(before('build-utils/dusklight/source.json'))
+new_dusklight = json.loads((ROOT / 'build-utils/dusklight/source.json').read_text())
+assert set(new_dusklight) == set(old_dusklight) | {'release'}
+assert new_dusklight['release'] == 'v2.0.3'
+assert new_dusklight['commit'] == '40457c6adb381928e4b5fef6ed459ed291edd5e2'
+assert new_dusklight['submodules'] == {
+    'aurora': '3227d76c60e1e782ca576610bce61c9e7744d8be',
+    'borealis': '4ac5e7052a8c49a122f8d57f626b5c75c5ca6968',
+}
+for key in set(old_dusklight) - {'commit', 'submodules'}:
+    assert new_dusklight[key] == old_dusklight[key], ('Dusklight routing/SDL changed', key)
 
 for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/ios-ci.yml'):
     workflow = (ROOT / workflow_path).read_text()

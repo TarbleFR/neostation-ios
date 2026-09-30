@@ -88,6 +88,7 @@ def package(source, framework, destination):
     assert "/opt/homebrew" not in loads and "/Users/" not in loads, loads
     identity = {
         "host_commit": run("git", "-C", str(ROOT), "rev-parse", "HEAD"),
+        "source_release": PINS["release"],
         "source_commit": PINS["commit"],
         "submodules": PINS["submodules"],
         "sdl_commit": PINS["sdl"]["commit"],

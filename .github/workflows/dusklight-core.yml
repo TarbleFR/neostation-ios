@@ -9,6 +9,7 @@ on:
       - 'build-utils/dusklight/**'
       - 'packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h'
       - 'test/dusklight_native_session_test.cpp'
+      - 'test/dusklight_bridge_contract_test.py'
       - 'test/dusklight_queue_shutdown_test.py'
       - 'test/dusklight_resume_test.py'
       - 'test/dusklight_menu_test.py'
@@ -46,6 +47,7 @@ jobs:
           set -euo pipefail
           git diff --check
           python3 -m py_compile build-utils/dusklight/build_core.py
+          python3 test/dusklight_bridge_contract_test.py
           c++ -std=c++20 -Wall -Wextra -Werror \
             -Inative/dusklight/core -Ipackages/dusklight_internal_bridge/ios/Classes \
             test/dusklight_native_session_test.cpp -o "$RUNNER_TEMP/dusklight-session-test"
@@ -85,14 +87,16 @@ jobs:
           set -euo pipefail
           SRC="$RUNNER_TEMP/dusklight"
           SDL_SRC="$RUNNER_TEMP/dusklight-sdl"
+          DUSKLIGHT_COMMIT="$(python3 -c 'import json; print(json.load(open("build-utils/dusklight/source.json"))["commit"])')"
+          SDL_COMMIT="$(python3 -c 'import json; print(json.load(open("build-utils/dusklight/source.json"))["sdl"]["commit"])')"
           git init "$SRC"
           git -C "$SRC" remote add origin https://github.com/TwilitRealm/dusklight.git
-          git -C "$SRC" fetch --depth 1 origin ad979d3dae092d0f5cbdaf49eabca7b4f1db4838
+          git -C "$SRC" fetch --depth 1 origin "$DUSKLIGHT_COMMIT"
           git -C "$SRC" checkout --detach FETCH_HEAD
           git -C "$SRC" submodule update --init --recursive --depth 1 extern/aurora extern/borealis
           git init "$SDL_SRC"
           git -C "$SDL_SRC" remote add origin https://github.com/libsdl-org/SDL.git
-          git -C "$SDL_SRC" fetch --depth 1 origin 8e37db5e797b6167f3a00d697d816a684bd259c7
+          git -C "$SDL_SRC" fetch --depth 1 origin "$SDL_COMMIT"
           git -C "$SDL_SRC" checkout --detach FETCH_HEAD
           python3 test/dusklight_audio_owner_test.py \
             --source "$SDL_SRC/src/audio/coreaudio/SDL_coreaudio.m" --expect-host-interference

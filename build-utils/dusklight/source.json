@@ -1,9 +1,10 @@
 {
   "repository": "https://github.com/TwilitRealm/dusklight.git",
-  "commit": "ad979d3dae092d0f5cbdaf49eabca7b4f1db4838",
+  "release": "v2.0.3",
+  "commit": "40457c6adb381928e4b5fef6ed459ed291edd5e2",
   "submodules": {
-    "aurora": "d0933b745abe0eb9815bedcea8047575da18698d",
-    "borealis": "0bdba6c50a46409c4862474c72b4a3a631fbe0ec"
+    "aurora": "3227d76c60e1e782ca576610bce61c9e7744d8be",
+    "borealis": "4ac5e7052a8c49a122f8d57f626b5c75c5ca6968"
   },
   "supported_extensions": [
     "iso",

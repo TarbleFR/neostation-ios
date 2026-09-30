@@ -1,8 +1,8 @@
 {
-  "upstream/CMakeLists.txt": "418b77394e29a6cb28575aab8d1471faae9ee45dba8cc2fe482fdbd648eaa3d4",
+  "upstream/CMakeLists.txt": "9864f6ae6aeedd6605c829d0e82e55953f81e7ad79dbfb644eea3090f4280c1d",
   "upstream/src/m_Do/m_Do_main.cpp": "2ff7e7ec9caaa3591aca019c20bd697c330d4c3d7ad9631bd4f3e12c75e30477",
   "upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp": "4464ce818124cb84f313b63c75892d22249bd300ba8bb345cab322d7f8c8e153",
-  "upstream/extern/aurora/lib/dolphin/AR.cpp": "4393e2393ea6577af55dbdf9f65de9bdcf671f9181cf5382c228dcd07d2fff7e",
+  "upstream/extern/aurora/lib/dolphin/AR.cpp": "4c83004e657d62d331b7bbd1c1b45e3e757682373ad9d17a72df52f13eb860c0",
   "upstream/extern/aurora/lib/window.cpp": "72f7afec8ebf6a0b3420868e0d746e3afd379bc3b60ee16d24f9f083a9b26e40",
   "sdl/src/filesystem/cocoa/SDL_sysfilesystem.m": "0f690c8536c07a8031e13c1a061cd04701a91aeb1541ae52ec15b538871e2652",
   "sdl/src/audio/coreaudio/SDL_coreaudio.m": "c1ed4d18205056f615ae3f7098b53cd69ccbb939e1e8f212f029c0e8c1cc44af",
@@ -20,6 +20,6 @@
   "upstream/libs/JSystem/src/JFramework/JFWDisplay.cpp": "3febc54fdaa88492ad02fcb6987491add659a14a059ecfea2cf8bc187c16b317",
   "upstream/extern/aurora/lib/gfx/frame.cpp": "1b64edf2ff31e7839e2a579cd056167f425b70610ad829c118636930ff84e695",
   "upstream/extern/aurora/lib/gfx/frame.hpp": "1ee5b043a796532501c5e71abaa4fe4713cb9c773828b469da492833c300c04b",
-  "upstream/extern/aurora/lib/webgpu/gpu.cpp": "d333710527abacf05095f398ae01ec8a2b6a7082efd05c9314618d49c18294e3",
-  "upstream/extern/aurora/lib/webgpu/gpu.hpp": "d318c9cf164bdcc5ffadcb5ed84498dc90ce3ed38b531bf1b351f683e5bee4a9"
+  "upstream/extern/aurora/lib/webgpu/gpu.cpp": "980c2aeb3800292eb59f9ae76a48794e7075a0a477315d3b5175d660e40bbb73",
+  "upstream/extern/aurora/lib/webgpu/gpu.hpp": "5b3aaee8ed95e86b52eb1b5c7eaa7dce67495257c8ef0a255a84059e2a302182"
 }

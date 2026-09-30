@@ -128,7 +128,7 @@ for source, release in (
 assert manifest["upstream/extern/aurora/lib/dolphin/os/OSMemory.cpp"] == \
     "4464ce818124cb84f313b63c75892d22249bd300ba8bb345cab322d7f8c8e153"
 assert manifest["upstream/extern/aurora/lib/dolphin/AR.cpp"] == \
-    "4393e2393ea6577af55dbdf9f65de9bdcf671f9181cf5382c228dcd07d2fff7e"
+    "4c83004e657d62d331b7bbd1c1b45e3e757682373ad9d17a72df52f13eb860c0"
 
 # IDLE means the retained runtime is reusable; only ENDED means the destructive
 # fatal barrier ran. Returning to NeoStation must not be gated on destruction.

@@ -22,8 +22,10 @@ assert "DUSKLIGHT_CORE_NOT_READY" in plugin
 assert 'dlsym(_coreHandle, "NeoDusklight_GetAPI")' in plugin
 for member in ("initialize", "start", "stop", "is_running", "set_event_callback", "session_state", "set_ui_text"):
     assert member in abi, member
-assert pins["commit"] == "ad979d3dae092d0f5cbdaf49eabca7b4f1db4838"
-assert pins["submodules"]["aurora"] == "d0933b745abe0eb9815bedcea8047575da18698d"
+assert pins["release"] == "v2.0.3"
+assert pins["commit"] == "40457c6adb381928e4b5fef6ed459ed291edd5e2"
+assert pins["submodules"]["aurora"] == "3227d76c60e1e782ca576610bce61c9e7744d8be"
+assert pins["submodules"]["borealis"] == "4ac5e7052a8c49a122f8d57f626b5c75c5ca6968"
 assert set(pins["supported_disc_ids"]) == {
     "GZ2E01", "GZ2J01", "GZ2P01", "RZDE01", "RZDJ01", "RZDP01"
 }
