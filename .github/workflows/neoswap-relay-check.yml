@@ -9,6 +9,32 @@ concurrency:
   group: neoswap-relay-${{ github.sha }}
   cancel-in-progress: false
 jobs:
+  source-snapshot:
+    name: Preserve exact relay source snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Archive tracked sources without credentials or build output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git archive --format=tar.gz -o "$RUNNER_TEMP/NeoSwap-source.tar.gz" HEAD
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/NeoSwap-source-commit.txt"
+          sha256sum "$RUNNER_TEMP/NeoSwap-source.tar.gz" > "$RUNNER_TEMP/NeoSwap-source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeoSwap-Source-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/NeoSwap-source.tar.gz
+            ${{ runner.temp }}/NeoSwap-source-commit.txt
+            ${{ runner.temp }}/NeoSwap-source.sha256
+          if-no-files-found: error
+          retention-days: 7
   proof:
     runs-on: macos-15
     timeout-minutes: 35
