@@ -24,17 +24,19 @@ for lower,cls in (('rpcs3','Rpcs3'),('armsx2','Armsx2')):
     assert old==new,p+' changed outside diagnostics'
 p='packages/dolphin_internal_bridge/ci/verify_ipa.py'
 new=(ROOT/p).read_text()
-# The shared IPA now contains the NeoSwap donor. Normalize only its reviewed
-# packaging contract; every original Dolphin/JIT check must remain byte-exact.
+# The shared IPA contains the NeoSwap donor and separate guest-page relay.
+# Normalize only these reviewed packaging additions; every original
+# Dolphin/JIT check must remain byte-exact. Each addition occurs exactly once.
 replacements = (
     ('import sys\n', ''),
     ("sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'build-utils'))\n"
      'from validate_single_ipa_distribution import (\n'
-     '    DONOR_CONTRACTS, DONOR_EXTENSION_POINT, validate as validate_distribution,\n'
+     '    DONOR_CONTRACTS, RELAY_CONTRACTS, DONOR_EXTENSION_POINT, validate as validate_distribution,\n'
      ')\n\n', ''),
     ('    **DONOR_CONTRACTS,\n', ''),
+    ('    **RELAY_CONTRACTS,\n', ''),
     ('    validate_distribution(ipa)\n', ''),
-    ('(DONOR_EXTENSION_POINT if bundle_name in DONOR_CONTRACTS else SHARE_EXTENSION_POINT)',
+    ('(DONOR_EXTENSION_POINT if bundle_name in DONOR_CONTRACTS or bundle_name in RELAY_CONTRACTS else SHARE_EXTENSION_POINT)',
      'SHARE_EXTENSION_POINT'),
 )
 for added, previous in replacements:

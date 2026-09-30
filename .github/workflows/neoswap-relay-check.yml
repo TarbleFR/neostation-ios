@@ -12,6 +12,10 @@ jobs:
   proof:
     runs-on: macos-15
     timeout-minutes: 35
+    env:
+      # Project fixtures use their own Gemfile. Keep the installed gem root
+      # absolute so Bundler resolves the same xcodeproj inside temporary roots.
+      BUNDLE_PATH: ${{ github.workspace }}/vendor/bundle
     steps:
       - uses: actions/checkout@v4
         with:

@@ -142,6 +142,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #endif
             NSDictionary* row = [strongSelf snapshot:@"sample"];
             uint64_t count = [row[@"allocationCount"] unsignedLongLongValue];
+            BOOL record = [row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount;
 #if defined(NEOSWAP_RELAY)
             const uint64_t relayLive = [row[@"guestRelay"][@"liveBackingBytes"] unsignedLongLongValue];
             NSString* relayState = row[@"guestRelay"][@"state"] ?: @"unknown";
@@ -149,13 +150,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                 ![relayState isEqualToString:strongSelf.lastRelayState];
             strongSelf.lastRelayLiveBytes = relayLive;
             strongSelf.lastRelayState = relayState;
-#else
-            const uint64_t relayLive = 0;
-            const BOOL relayChanged = NO;
+            record = record || relayLive || relayChanged;
 #endif
             // Automatic availability does not imply an active game. Avoid
             // periodic disk writes while the integrated allocator is idle.
-            if ([row[@"liveBytes"] unsignedLongLongValue] || relayLive || relayChanged || count != strongSelf.lastAllocationCount)
+            if (record)
                 [strongSelf appendRecord:row];
             strongSelf.lastAllocationCount = count;
         }

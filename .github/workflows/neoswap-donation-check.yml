@@ -95,7 +95,7 @@ jobs:
     # Runner memory is not an iPhone memory budget. An explicit refusal remains
     # visible in this separate report and never passes as an 8 GiB donation.
     continue-on-error: true
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
