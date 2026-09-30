@@ -71,6 +71,7 @@
     "native/neoswap-donation/run_macos_probe.sh": "257249f6326bff4919782353f6995a82718110de88399666575620afe8ac5e63",
     "native/neoswap/NeoSwapClient.h": "aae1fae7785b6bc524762ffda0d9988300d37088e20cf31f300fa7fb1c258be5",
     "native/neoswap/localizations.json": "b379ae0f6301b3ee74509ec86a1471a9847a09a32365efe2a40bdeb1219d4e30",
+    "packages/dolphin_internal_bridge/ci/verify_ipa.py": "af6731fbae06fd8ef664a4550ec5b19856e58348f946e98ea861461db93765da",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureLabels.h": "a544e98f5674e1ec5d99bca548099b9a697b9dd53cb184a7605fba9a04c0db8d",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h": "4b3e0a5d5f4dca87e4ae2286172a90d225f01df3f68389f5dd6540e4bc1cd041",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h": "7e739d08ea9c0759957289b2c4dbb723b4907874d402402faf9b52b0a9cfa347",
@@ -145,6 +146,7 @@
     "native/neoswap-donation/run_macos_probe.sh": "100644",
     "native/neoswap/NeoSwapClient.h": "100644",
     "native/neoswap/localizations.json": "100644",
+    "packages/dolphin_internal_bridge/ci/verify_ipa.py": "100644",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureLabels.h": "100644",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h": "100644",
     "packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h": "100644",
@@ -174,7 +176,7 @@
   },
   "support_files_sha256": {
     "docs/dolphin-phone-shake-routing.md": "a7efae79d52bd0af21058997d6517bbd5c7ec201b659dcfa1b991fccf24be0e9",
-    "docs/import-memory-build368.md": "65c53b50f29b78721e686e675c034de537e62de7c437cb7754796c67a0afa7e3",
+    "docs/import-memory-build368.md": "1fd3cc6fb5495f0533eef457bce889b1dd687884ada7f8797cf1be9cc82a175e",
     "docs/rpcs3-xitrix-v0101-audit.md": "72397b8ac63a1ae4948104df0159f685319235cc513031acaef25a0af12bb82a",
     "test/cheat_bulk_scope_test.py": "e33132d2d8a540b29843fab06773464b077d398a9d62629e1d8843569fe562d5",
     "test/check_neo_swap_scope.py": "d5cd31ca9eb7399da899807b6da77acfe5c7badafccdd022685f78f8c6811ca6",
@@ -189,7 +191,7 @@
     "test/dolphin_texture_store_test.mm": "3f13439da73a94055782567ee24eb9ae4fcc0bf99ab9a0f68d25579858070fb0",
     "test/dolphin_texture_zip_test.cpp": "6580ff36a238c77fef41bd86a8bb6ba2e87058d9203aae35aff2cd0b4c094483",
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
-    "test/import_memory_candidate_scope_test.py": "def1097f5732d50d122e4b082e1d8658d0a807e87d6245bb69ca76fb71d71473",
+    "test/import_memory_candidate_scope_test.py": "21cf4acd6bd855a9b8a6249e0145c86b93deab1745e496a6dd334b42b5e11cd6",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/native/rpcs3_neoswap_stats_getter_test.cpp": "72b4c84a0c06335ed302be1af18057972057a92cde068fc6dca94d57756044b0",
     "test/native/rpcs3_spu_analyzer_support.h": "67e90e91c47a394a71a7bbedbc0986fbe16910bb0a5edf5635ea4d9a68333864",
@@ -210,7 +212,8 @@
     "test/neoswap_usage_policy_test.cpp": "5bb0d65e227f4fdb265e3991533d36248bec96f0099c9763e3a82d41d2c086b3",
     "test/rpcs3_neoswap_localizations_test.py": "77c3d40b4134a6b6348a8bc2625b5ee18416500df1928171180bd63c78338597",
     "test/rpcs3_xitrix_v0101_native_test.py": "a15f3a5a9a23717b5dd409805bf54af7859ca5e41ed8d93dab5bc052d05c3b0b",
-    "test/single_ipa_distribution_test.py": "10f5ea59a24f911fd0ef71df4d61eeb158bae2edbf79a05368d31e3a433c5707"
+    "test/single_ipa_distribution_test.py": "41d4bd1d0914a481c5ece26934066e6a3b3a6f7b82c7938ad5cf5fac9d2b3a31",
+    "test/stikjit_scoped_host_test.py": "1de45a721179a2aa2c823fbeca917d9793094d1f99686f9b86bb9c6d1b56cb9b"
   },
   "support_git_modes": {
     "docs/dolphin-phone-shake-routing.md": "100644",
@@ -250,7 +253,8 @@
     "test/neoswap_usage_policy_test.cpp": "100644",
     "test/rpcs3_neoswap_localizations_test.py": "100644",
     "test/rpcs3_xitrix_v0101_native_test.py": "100644",
-    "test/single_ipa_distribution_test.py": "100644"
+    "test/single_ipa_distribution_test.py": "100644",
+    "test/stikjit_scoped_host_test.py": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "08c84e3ae4b2201fc540bc5963e16f7627064652a50987b090fac9ec59e04263",

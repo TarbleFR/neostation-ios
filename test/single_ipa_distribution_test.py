@@ -18,6 +18,8 @@ sys.path.insert(0, str(ROOT / 'build-utils'))
 
 import validate_single_ipa_distribution as validator
 from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
+sys.path.insert(0, str(ROOT / 'packages/dolphin_internal_bridge/ci'))
+import verify_ipa as dolphin_validator
 
 APP = 'Payload/NeoStation.app/'
 DONOR = APP + 'PlugIns/NeoSwapDonor.appex/'
@@ -123,18 +125,86 @@ def complete_ipa_members() -> dict[str, bytes]:
     return members
 
 
+def packaging_image(entitlements, *, dependencies=(), rpaths=(), symbols=(), filetype=2):
+    """Synthetic arm64/iOS parsing fixture; never an executable runtime proof."""
+    def command(kind, value):
+        text = value.encode() + b'\0'
+        size = (24 + len(text) + 7) // 8 * 8
+        return struct.pack('<6I', kind, size, 24, 0, 0, 0) + text + bytes(size - 24 - len(text))
+    commands = [struct.pack('<6I', 0x32, 24, 2, (17 << 16) | (4 << 8), 0, 0)]
+    commands += [command(0xC, value) for value in dependencies]
+    commands += [command(0x8000001C, value) for value in rpaths]
+    strings = bytearray(b'\0')
+    entries = bytearray()
+    for symbol in sorted(symbols):
+        entries += struct.pack('<IBBHQ', len(strings), 0x0F, 1, 0, 0x1000)
+        strings += symbol.encode() + b'\0'
+    size = sum(map(len, commands)) + 24 + 16
+    symbol_offset = 32 + size
+    string_offset = symbol_offset + len(entries)
+    signature = macho(entitlements)[48:]
+    commands += [struct.pack('<6I', 2, 24, symbol_offset, len(symbols), string_offset, len(strings)),
+                 struct.pack('<4I', 0x1D, 16, string_offset + len(strings), len(signature))]
+    return (struct.pack('<8I', 0xFEEDFACF, 0x0100000C, 0, filetype, len(commands), size, 0, 0) +
+            b''.join(commands) + entries + strings + signature)
+
+
+def complete_dolphin_packaging_members():
+    members = complete_ipa_members()
+    host = plistlib.loads(members[APP + 'Info.plist'])
+    host.update(NSPhotoLibraryAddUsageDescription='Parser fixture',
+                LSApplicationQueriesSchemes=['retroarch', 'shortcuts', 'melonx'])
+    members[APP + 'Info.plist'] = plistlib.dumps(host)
+    for path, data in list(members.items()):
+        if data[:4] != b'\xcf\xfa\xed\xfe':
+            continue
+        dependencies, rpaths = (), ()
+        if path == APP + 'Runner':
+            dependencies = ('@rpath/DolphinCore.framework/DolphinCore',)
+            rpaths = ('@executable_path/Frameworks',)
+        elif path.endswith('/DolphinJITHelper'):
+            dependencies = ('@rpath/StikJIT.framework/StikJIT',)
+            rpaths = ('@executable_path/../../Frameworks',)
+        members[path] = packaging_image(validator.embedded_entitlements(data),
+                                        dependencies=dependencies, rpaths=rpaths)
+    core = APP + 'Frameworks/DolphinCore.framework/'
+    members[core + 'DolphinCore'] = packaging_image({}, filetype=6,
+        symbols=dolphin_validator.BRIDGE | {'_BootCore', '_JitArm64'}) + bytes(1024**2)
+    members[core + 'Info.plist'] = plistlib.dumps({'CFBundlePackageType':'FMWK'})
+    stik = APP + 'Frameworks/StikJIT.framework/'
+    members[stik + 'StikJIT'] = packaging_image({}, filetype=6)
+    members[stik + 'Info.plist'] = plistlib.dumps({'CFBundleShortVersionString':'1.9.0'})
+    bridge = APP + 'Frameworks/dolphin_internal_bridge.framework/'
+    members[bridge + 'dolphin_internal_bridge'] = packaging_image({}, filetype=6,
+        symbols={'_OBJC_CLASS_$_DolphinRecordingController'},
+        dependencies=tuple('/System/Library/Frameworks/' + name + '.framework/' + name
+                           for name in ('ReplayKit', 'AVFoundation', 'CoreImage')))
+    for layout in ('TCGameCubePad', 'TCWiiPad', 'TCClassicWiiPad'):
+        members[bridge + layout + '.nib'] = b'fixture'
+    for button in ('gcpad_a', 'wiimote_a', 'classic_a', 'nunchuk_c', 'gcwii_joystick'):
+        members[bridge + button + '@2x.png'] = b'fixture'
+    for resource in ('Sys/GC/dsp_rom.bin', 'Sys/GC/dsp_coef.bin', 'Sys/Wii/fixture'):
+        members[APP + resource] = b'fixture'
+    members[APP + 'cacert.pem'] = b'BEGIN CERTIFICATE' + bytes(100001)
+    return members
+
+
 class SingleIPADistributionTests(unittest.TestCase):
-    def validate_members(self, members: dict[str, bytes]) -> dict:
+    def validate_members(self, members: dict[str, bytes], check=validator.validate) -> dict:
         with tempfile.TemporaryDirectory(prefix='single-ipa-test-') as temp:
             ipa = Path(temp) / 'NeoStation.ipa'
             with zipfile.ZipFile(ipa, 'w') as archive:
                 for path, data in members.items():
-                    archive.writestr(path, data)
-            return validator.validate(ipa)
+                    entry = zipfile.ZipInfo(path)
+                    entry.external_attr = 0o100755 << 16
+                    archive.writestr(entry, data)
+            return check(ipa)
 
     def reject(self, members: dict[str, bytes], reason: str) -> None:
-        with self.assertRaisesRegex((validator.DistributionError, ValueError), reason):
-            self.validate_members(members)
+        for check in (validator.validate, dolphin_validator.validate):
+            with self.subTest(packager=check.__module__):
+                with self.assertRaisesRegex((validator.DistributionError, ValueError), reason):
+                    self.validate_members(members, check)
 
     def modify_info(self, members, prefix, change):
         info = plistlib.loads(members[prefix + 'Info.plist'])
@@ -156,6 +226,14 @@ class SingleIPADistributionTests(unittest.TestCase):
         self.assertIs(report['deviceRuntimeTested'], False)
         self.assertEqual(len(report['nestedSigningOrder']), 5)
         self.assertEqual(report['nestedSigningOrder'][-1], 'NeoStation.app')
+
+    def test_actual_dolphin_packaging_validator_accepts_the_same_four_extensions(self):
+        self.assertEqual(dolphin_validator.EXPECTED_HELPERS, validator.EXPECTED_EXTENSIONS)
+        report = self.validate_members(complete_dolphin_packaging_members(), dolphin_validator.validate)
+        self.assertEqual(report['structuralValidation'], 'passed')
+        self.assertEqual(set(report['embeddedExtensions']), JIT_HELPERS | set(DONOR_IDENTITIES))
+        self.assertIs(report['deviceLaunchValidated'], False)
+        self.assertEqual(report['mainApplicationCount'], 1)
 
     def test_requires_each_of_the_four_extensions(self):
         for name in JIT_HELPERS | set(DONOR_IDENTITIES):

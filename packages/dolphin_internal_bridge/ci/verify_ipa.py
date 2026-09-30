@@ -8,8 +8,14 @@ import json
 import plistlib
 import posixpath
 import struct
+import sys
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'build-utils'))
+from validate_single_ipa_distribution import (
+    DONOR_CONTRACTS, DONOR_EXTENSION_POINT, validate as validate_distribution,
+)
 
 ARM64 = 0x0100000C
 LOAD_DYLIB = {0xC, 0x80000018, 0x8000001F, 0x20, 0x80000023}
@@ -45,6 +51,7 @@ EXPECTED_HELPERS = {
         'principalClass': 'Armsx2JITRequestHandler',
         'marker': 'NeoStationARMSX2JITHelper',
     },
+    **DONOR_CONTRACTS,
 }
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
 NETWORK_EXTENSION_DEPENDENCY = (
@@ -141,6 +148,7 @@ def macho(data: bytes) -> dict:
 
 def validate(ipa: Path) -> dict:
     demand(ipa.is_file() and ipa.stat().st_size > 0, 'IPA is absent or empty')
+    validate_distribution(ipa)
     with zipfile.ZipFile(ipa) as z:
         demand(z.testzip() is None, 'IPA ZIP CRC validation failed')
         names = z.namelist()
@@ -183,7 +191,7 @@ def validate(ipa: Path) -> dict:
             extension = helper_info.get('NSExtension', {})
             demand(
                 extension.get('NSExtensionPointIdentifier') ==
-                SHARE_EXTENSION_POINT,
+                (DONOR_EXTENSION_POINT if bundle_name in DONOR_CONTRACTS else SHARE_EXTENSION_POINT),
                 f'{bundle_name} has an unexpected extension point',
             )
             demand(

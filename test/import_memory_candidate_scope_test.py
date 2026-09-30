@@ -67,6 +67,7 @@ PRODUCTION_FILES = {
     'native/neoswap-donation/references.json',
     'native/neoswap-donation/run_ipc_macos_probe.sh',
     'native/neoswap-donation/run_macos_probe.sh',
+    'packages/dolphin_internal_bridge/ci/verify_ipa.py',
     'packages/dolphin_internal_bridge/ios/Classes/DOLTextureLabels.h',
     'packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h',
     'packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h',
@@ -133,6 +134,7 @@ SUPPORT_FILES = {
     'test/rpcs3_neoswap_localizations_test.py',
     'test/rpcs3_xitrix_v0101_native_test.py',
     'test/single_ipa_distribution_test.py',
+    'test/stikjit_scoped_host_test.py',
 }
 approved = set(manifest['files_sha256'])
 assert approved == PRODUCTION_FILES, 'Production whitelist/manifest mismatch: ' + str(approved ^ PRODUCTION_FILES)

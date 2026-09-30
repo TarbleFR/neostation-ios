@@ -23,7 +23,24 @@ for lower,cls in (('rpcs3','Rpcs3'),('armsx2','Armsx2')):
                     '          : @"StikJIT did not attach universal.js to NeoStation.";')
     assert old==new,p+' changed outside diagnostics'
 p='packages/dolphin_internal_bridge/ci/verify_ipa.py'
-assert (ROOT/p).read_text().replace("== '1.9.0', 'Wrong StikJIT version'", "== '1.5.0', 'Wrong StikJIT version'")==original(p)
+new=(ROOT/p).read_text()
+# The shared IPA now contains the NeoSwap donor. Normalize only its reviewed
+# packaging contract; every original Dolphin/JIT check must remain byte-exact.
+replacements = (
+    ('import sys\n', ''),
+    ("sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'build-utils'))\n"
+     'from validate_single_ipa_distribution import (\n'
+     '    DONOR_CONTRACTS, DONOR_EXTENSION_POINT, validate as validate_distribution,\n'
+     ')\n\n', ''),
+    ('    **DONOR_CONTRACTS,\n', ''),
+    ('    validate_distribution(ipa)\n', ''),
+    ('(DONOR_EXTENSION_POINT if bundle_name in DONOR_CONTRACTS else SHARE_EXTENSION_POINT)',
+     'SHARE_EXTENSION_POINT'),
+)
+for added, previous in replacements:
+    assert new.count(added)==1, 'Unexpected NeoSwap packaging delta: '+added
+    new=new.replace(added, previous)
+assert new.replace("== '1.9.0', 'Wrong StikJIT version'", "== '1.5.0', 'Wrong StikJIT version'")==original(p)
 p='packages/dolphin_jit_helper/ios/Classes/DolphinJITRequestHandlerBase.swift'
 assert (ROOT/p).read_text().replace('StikJIT 1.9.0','StikJIT 1.5.0')==original(p)
 print('PASS: exact retained JIT host state machines; only timeout text/legacy log; Dolphin algorithm unchanged')
