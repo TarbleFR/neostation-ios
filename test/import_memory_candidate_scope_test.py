@@ -192,6 +192,7 @@ SUPPORT_FILES = {
     'test/dusklight_bridge_contract_test.py',
     'test/dusklight_terminal_shutdown_test.py',
     'test/import_memory_candidate_scope_test.py',
+    'test/neoswap_bridge_syntax_stub_test.py',
     'test/kartpad_display_title_test.dart',
     'test/kartpad_personal_pack_test.py',
     'test/legal_bundle_preflight_test.py',
