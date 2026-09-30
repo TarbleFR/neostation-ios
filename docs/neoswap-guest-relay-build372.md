@@ -51,6 +51,9 @@ JIT. Les prêts Vulkan et le donneur NeoSwap v1 restent des chemins distincts.
 
 Lorsque le relais n’est pas disponible, que son budget est épuisé ou que la
 pression mémoire l’interdit, RPCS3 conserve son chemin d’allocation habituel.
+Ce repli est possible avant la publication de la première vue d’un objet.
+Ensuite, toutes ses vues doivent conserver le même support mémoire : un échec
+ne peut pas être masqué en mélangeant des pages relayées et un fichier distinct.
 Dolphin, ARMSX2, DuskLight, Mario Kart Pad, Flutter et UIKit ne sont pas branchés
 sur cette nouvelle interface dans cette candidate. L’interface peut être
 réutilisée ultérieurement après une adaptation propre à chaque moteur.

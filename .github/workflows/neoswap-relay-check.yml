@@ -95,6 +95,7 @@ jobs:
           assert capacity['liveBytesAfterRelease']==capacity['retainedBytesAfterShutdown']==0,capacity
           PY
       - name: Link the canonical extension and production manager for iPhone arm64
+        if: always()
         run: python3 test/neoswap_relay_simulator_test.py --compile-device --output build/neoswap-relay/simulator
       - name: Prove actual iOS 18 extension exit, aliases, release, relaunch and production manager
         run: python3 test/neoswap_relay_simulator_test.py --output build/neoswap-relay/simulator

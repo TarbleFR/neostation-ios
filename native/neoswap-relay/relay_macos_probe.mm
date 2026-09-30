@@ -55,12 +55,21 @@ void checkFixedReservation(const NeoSwapRelayAPI* api) {
     MEMORY_OBJECT_NULL, 0, FALSE, VM_PROT_NONE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE) == KERN_SUCCESS,
     "Guest PROT_NONE reservation could not be created");
   requireReservation(reservation, bytes);
+  // MACH_PORT_NULL and MACH_PORT_DEAD both follow XNU's anonymous-map path.
+  // Use a genuine send right to an ordinary receive port instead: it is valid
+  // IPC ownership, but cannot be interpreted as a named memory-entry object.
+  mach_port_t nonMemoryPort = MACH_PORT_NULL;
+  require(mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &nonMemoryPort) == KERN_SUCCESS &&
+    mach_port_insert_right(mach_task_self(), nonMemoryPort, nonMemoryPort, MACH_MSG_TYPE_MAKE_SEND) == KERN_SUCCESS,
+    "Negative fixed-map test could not create a non-memory Mach right");
   mach_vm_address_t invalidTarget = reservation;
   const auto invalidMap = mach_vm_map(mach_task_self(), &invalidTarget, bytes, 0,
-    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, MACH_PORT_DEAD, 0, FALSE,
+    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, nonMemoryPort, 0, FALSE,
     VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
-  require(invalidMap != KERN_SUCCESS, "An invalid Mach right unexpectedly produced a fixed mapping");
+  require(invalidMap != KERN_SUCCESS, "A non-memory Mach right unexpectedly produced a fixed mapping");
   requireReservation(reservation, bytes);
+  require(mach_port_destroy(mach_task_self(), nonMemoryPort) == KERN_SUCCESS,
+    "Negative fixed-map Mach right cleanup failed");
   uint64_t token = 0;
   void* view = nullptr;
   require(api->create(0, bytes, &token) == 0 &&
