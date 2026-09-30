@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 372
-run-name: NeoStation NeoSwap private • Build 372 • ${{ github.sha }}
+name: NeoStation NeoSwap private • Build 373
+run-name: NeoStation NeoSwap private • Build 373 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '372'
+        default: '373'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-372
+  group: neostation-neoswap-private-373
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (372)
+    name: Neostation iOS 0.0.2 private IPA (373)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '372' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '373' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-372-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-373-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -1215,13 +1215,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-368-recipient.pem
+          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-373-recipient.pem
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           cp dist/stikjit-compatibility.json build/private-test/
           cp dist/cheat-bulk-validation.json build/private-test/
           cp docs/import-memory-build368.md build/private-test/Notes-NeoSwap-Build368.md
           cp docs/native-updates-20260930.md build/private-test/Notes-Native-Build369.md
-          cp docs/neoswap-guest-relay-build372.md build/private-test/Notes-NeoSwap-Relay-Build372.md
+          cp docs/neoswap-guest-relay-build373.md build/private-test/Notes-NeoSwap-Relay-Build373.md
           cp dist/dusklight/identity.json build/private-test/dusklight-native-identity.json
           cp dist/neoswap-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
