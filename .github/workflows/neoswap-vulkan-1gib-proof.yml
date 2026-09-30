@@ -1,0 +1,79 @@
+name: NeoSwap 1 GiB canonical RPCS3 Vulkan proof
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/neoswap-vulkan-1gib-proof.yml'
+      - 'native/neoswap-donation/VulkanDonationProbe.h'
+      - 'native/neoswap-donation/ipc_macos_probe.mm'
+      - 'native/neoswap-donation/run_ipc_macos_probe.sh'
+      - 'build-utils/validate_neoswap_vulkan_evidence.py'
+      - 'test/neoswap_vulkan_evidence_test.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoswap-vulkan-1gib-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  proof:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Materialize the canonical RPCS3 import path and verify MoltenVK 1.4.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-vulkan-1gib "$RUNNER_TEMP/neoswap-vulkan"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess,urllib.request,sys
+          sys.path.insert(0,'test')
+          from neo_swap_core_pin_test import core_input_hashes
+          work=pathlib.Path(os.environ['RUNNER_TEMP'])/'neoswap-vulkan'
+          pins=json.loads(pathlib.Path('build-utils/rpcs3/canonical-source.json').read_text())
+          source=work/'rpcs3'
+          subprocess.run(['git','init',str(source)],check=True)
+          subprocess.run(['git','-C',str(source),'fetch','--depth=1','https://github.com/'+pins['upstream_repository']+'.git',pins['upstream_commit']],check=True)
+          subprocess.run(['git','-C',str(source),'checkout','--detach','FETCH_HEAD'],check=True)
+          subprocess.run(['python3','build-utils/materialize_rpcs3_core.py',str(source)],check=True)
+          archive=work/'MoltenVK-macos.tar'
+          urllib.request.urlretrieve('https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar',archive)
+          assert hashlib.sha256(archive.read_bytes()).hexdigest()=='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
+          subprocess.run(['tar','-xf',str(archive),'-C',str(work)],check=True)
+          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','packages/neo_swap/ios/Classes/NeoSwap.cpp']
+          identity={'source':os.environ['GITHUB_SHA'],'moltenVK':'1.4.2','moltenVKSHA256':hashlib.sha256(archive.read_bytes()).hexdigest(),'canonicalPatchSHA256':pins['patch_sha256'],'productionImportSHA256':pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h'],'inputsSHA256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in inputs},'realIPhoneValidated':False,'realRPCS3GameplayValidated':False}
+          identity['targetBytes']=1073741824
+          identity['coreInputSHA256']=core_input_hashes()
+          identity['productionRuntimeReferenceCommit']='abc9566f1747891534927d58e446bef758a53c2b'
+          subprocess.run(['git','diff','--exit-code',identity['productionRuntimeReferenceCommit'],'HEAD','--','packages/neo_swap','packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h','native/neoswap/NeoSwapClient.h','native/neoswap-donation',':!native/neoswap-donation/VulkanDonationProbe.h',':!native/neoswap-donation/ipc_macos_probe.mm'],check=True)
+          pathlib.Path('build/neoswap-vulkan-1gib/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')
+              f.write('NEOSWAP_MOLTENVK_ROOT='+str(work/'MoltenVK'/'MoltenVK')+'\n')
+          PY
+      - name: Exercise actual donor loans through Vulkan and verify GPU writes and retirement
+        shell: bash
+        env:
+          NEOSWAP_IPC_STRESS_BYTES: '1073741824'
+          NEOSWAP_VULKAN_PROBE: '1'
+        run: |
+          set -euo pipefail
+          bash native/neoswap-donation/run_ipc_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-vulkan-1gib/report.json" 2>&1 | tee build/neoswap-vulkan-1gib/probe.txt
+          python3 test/neoswap_vulkan_evidence_test.py
+          python3 build-utils/validate_neoswap_vulkan_evidence.py build/neoswap-vulkan-1gib/report.json --bytes 1073741824
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-Vulkan-1GiB-${{ github.sha }}
+          path: build/neoswap-vulkan-1gib/
+          if-no-files-found: error
+          retention-days: 14

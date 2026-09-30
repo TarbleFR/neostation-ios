@@ -204,6 +204,10 @@ int main(int argc, const char* argv[]) {
         requestedBytes:target generation:1 timeout:10
         observer:^(NeoSwapDonorSession* source, NeoSwapDonorSnapshot snapshot, NSError* error) {
       (void)source;
+#if defined(NEOSWAP_VULKAN_PROBE)
+      if (snapshot.state == NeoSwapDonorStateActive && !error)
+        vulkanDonorLedgerEpoch.fetch_add(1, std::memory_order_release);
+#endif
       if (snapshot.state == NeoSwapDonorStateFailed ||
           (snapshot.state == NeoSwapDonorStateActive &&
            (snapshot.verifiedChunkCount > signaledChunks || snapshot.growthState == NeoSwapDonorGrowthRefused))) {

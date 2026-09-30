@@ -6,6 +6,8 @@
 #include "NeoSwap.h"
 #include "NeoSwapHost.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -14,6 +16,9 @@
 using u64 = std::uint64_t;
 using u32 = std::uint32_t;
 static PFN_vkGetMemoryHostPointerPropertiesEXT _vkGetMemoryHostPointerPropertiesEXT;
+// Probe observer increments this only after an authenticated, accepted donor
+// ledger update. It provides a freshness boundary after the GPU fence.
+static std::atomic<u64> vulkanDonorLedgerEpoch{0};
 static void ensure(bool value) { require(value, "Vulkan borrowed mapping exceeds its extent"); }
 struct VulkanProbeLogger {
   template<class... T> void error(const char* message, T...) {
@@ -198,9 +203,12 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
     buffers.push_back({handle, std::move(memory), info.size});
   }
   NeoSwapHostStats host{};
+  NeoSwapStats broker{};
   require(imported == target && NeoSwap_HostSnapshot(&host) == NEOSWAP_OK &&
           host.owner_donated_live_bytes[NEOSWAP_RPCS3] == target &&
-          NeoSwap_LiveBytes(NEOSWAP_RPCS3) == target && host.reserved_virtual_bytes == 0,
+          NeoSwap_LiveBytes(NEOSWAP_RPCS3) == target && host.reserved_virtual_bytes == 0 &&
+          host.file_ready_owner_mask == 0 && NeoSwap_Snapshot(&broker) == NEOSWAP_OK &&
+          broker.allocated_disk_bytes == 0,
           "Imported buffers are not actual RPCS3-owned donation loans");
   require(vk::trackedBytes == target, "Canonical Vulkan imports omitted the renderer memory budget");
   evidence[@"vulkanDonatedLiveBytes"] = @(host.owner_donated_live_bytes[NEOSWAP_RPCS3]);
@@ -226,6 +234,28 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
       require(bytes[offset] == 0x3c, "Vulkan GPU writes did not reach the borrowed donor alias");
     require(bytes[buffer.bytes - 1] == 0x3c, "Vulkan GPU last-byte write mismatch");
   }
+  evidence[@"stage"] = @"vulkan_fresh_donor_ledger";
+  const auto epoch = vulkanDonorLedgerEpoch.load(std::memory_order_acquire);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+  // One update may already be in flight at the fence. The donor permits only
+  // one pending update: its second new reply necessarily measures pages after
+  // completion, rather than merely delivering an older sample afterwards.
+  while (vulkanDonorLedgerEpoch.load(std::memory_order_acquire) < epoch + 2 &&
+         std::chrono::steady_clock::now() < deadline) usleep(20000);
+  require(vulkanDonorLedgerEpoch.load(std::memory_order_acquire) >= epoch + 2,
+          "Vulkan proof received no fresh authenticated donor ledger after GPU completion");
+  const auto finalDonor = session.snapshot;
+  evidence[@"vulkanDonorResidentAfterGPUBytes"] = @(finalDonor.donatedResidentBytes);
+  evidence[@"vulkanDonorCompressedAfterGPUBytes"] = @(finalDonor.donatedCompressedBytes);
+  require(finalDonor.state == NeoSwapDonorStateActive && finalDonor.donorPID == snapshot.donorPID &&
+          finalDonor.generation == snapshot.generation && finalDonor.capacityBytes == target &&
+          finalDonor.donatedResidentBytes >= target - MiB &&
+          finalDonor.donatedCompressedBytes <= MiB,
+          "Vulkan donor no longer owns the requested resident pages after GPU completion");
+  require(NeoSwap_HostSnapshot(&host) == NEOSWAP_OK &&
+          host.owner_donated_live_bytes[NEOSWAP_RPCS3] == target &&
+          NeoSwap_LiveBytes(NEOSWAP_RPCS3) == target,
+          "Vulkan loans changed before the refreshed donor ledger was measured");
   require(bool(footprint(after)), "Vulkan host final ledger failed");
   const auto nonvolatile = after.nonvolatile > before.nonvolatile ? after.nonvolatile - before.nonvolatile : 0;
   const auto physicalDelta = after.physical > before.physical ? after.physical - before.physical : 0;
@@ -244,7 +274,12 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
       @"importedBytes":@(imported), @"donatedLiveBytesDuringGPU":@(target), @"retiredLiveBytes":@0,
       @"bufferCount":@(buffers.size()), @"gpuWrittenBytes":@(imported), @"gpuToCpuAliasVerified":@YES,
       @"productionRPCS3ImportPath":@YES, @"productionHostBroker":@YES,
+      @"allocatedDiskBytesDuringGPU":@(broker.allocated_disk_bytes),
+      @"fileArenaConfigured":@NO,
       @"rendererBudgetDuringGPU":@(target), @"rendererBudgetAfterRetirement":@0,
+      @"donorLedgerRefreshedAfterGPU":@YES,
+      @"donorResidentAfterGPUBytes":@(finalDonor.donatedResidentBytes),
+      @"donorCompressedAfterGPUBytes":@(finalDonor.donatedCompressedBytes),
       @"hostNonvolatileDeltaBytes":@(nonvolatile), @"hostFootprintDeltaBytes":@(physicalDelta),
       @"realRPCS3GameplayValidated":@NO, @"realIPhoneValidated":@NO};
 }
