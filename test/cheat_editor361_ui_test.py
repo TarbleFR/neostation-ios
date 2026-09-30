@@ -129,6 +129,27 @@ ns['TESTS']=r'''
  __block BOOL saved=NO;editor.saveCheat=^(NSDictionary* request,void(^completion)(NSDictionary*)){saved=YES;};
  [editor savePressed];XCTAssertFalse(saved);[NSFileManager.defaultManager removeItemAtURL:file error:nil];
 }
+- (void)testOrdinaryTitlesAndPnachCommentsSurviveActualPickerAndSave {
+ for(NSNumber* ps2 in @[@NO,@YES]) {
+  DOLManualCheatEditor* editor=(id)[NSClassFromString(ps2.boolValue?@"ARMSX2ManualCheatEditor":@"DOLManualCheatEditor") new];
+  editor.ps2=ps2.boolValue;editor.localeIdentifier=@"fr";editor.importMode=YES;
+  editor.identity=ps2.boolValue?@{@"available":@YES,@"crc":@"12345678",@"serial":@"SLES-00000",@"items":@[],@"hardcore":@NO}:[self identity];
+  [editor loadViewIfNeeded];
+  NSString* content=ps2.boolValue?@"[Health]\n\n// writes health\npatch=1,EE,00000000,word,00000001\n\n// continuation\npatch=1,EE,00000004,word,00000002\n[Ammo]\npatch=1,EE,00000008,word,00000003":@"Infinite Grenades\n04000000 00000001\n\n04000004 00000002\nUltimate Strength\n04000008 00000003";
+  NSURL* file=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:ps2.boolValue?@"12345678.pnach":@"cheats.txt"]];
+  [content writeToURL:file atomically:YES encoding:NSUTF8StringEncoding error:nil];[self readFile:file editor:editor];
+  XCTAssertEqual(editor.errorLabel.text.length,0);XCTAssertEqual(editor.previewEntries.count,2);
+  XCTAssertEqualObjects(editor.previewEntries[0][@"name"],ps2.boolValue?@"Health":@"Infinite Grenades");
+  XCTAssertEqualObjects(editor.previewEntries[1][@"name"],ps2.boolValue?@"Ammo":@"Ultimate Strength");
+  XCTAssertEqual([editor.previewEntries[0][@"lineCount"] intValue],2);
+  __block NSDictionary* captured=nil;
+  editor.saveCheat=^(NSDictionary* request,void(^completion)(NSDictionary*)){captured=request;completion(@{@"success":@YES,@"added":@2});};
+  [editor savePressed];XCTAssertNotNil(captured);XCTAssertTrue([captured[@"batchImport"] boolValue]);
+  auto parsed=NeoCheat::parse(NeoUTF8(captured[@"content"]),NeoUTF8(captured[@"type"]),NeoUTF8(captured[@"name"]));
+  XCTAssertTrue(bool(parsed));XCTAssertEqual(parsed.entries.size(),2);XCTAssertEqual(parsed.entries[0].lines.size(),2);
+  [NSFileManager.defaultManager removeItemAtURL:file error:nil];
+ }
+}
 - (void)testCancelDoesNotImportAndBatchLabelsExistInTwelveLanguages {
  for(NSString* language in @[@"en",@"fr",@"de",@"es",@"it",@"pt",@"ru",@"id",@"ja",@"ko",@"zh",@"zh_Hant"]){
   DOLManualCheatEditor* editor=[DOLManualCheatEditor new];editor.identity=[self identity];editor.localeIdentifier=language;[editor loadViewIfNeeded];

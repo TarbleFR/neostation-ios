@@ -24,7 +24,8 @@
     "Exactly eight audited RPCS3 postimages for selective v0.10.1 fixes and optional client diagnostics; historical JIT/VM/GoW3/save contracts retained",
     "Exact candidate workflow gates, private encrypted packaging and separate macOS 8GiB stress success/refusal evidence; no physical iPhone or 8GiB RAM result claimed",
     "Dusklight v2.0.3 with four reviewed canonical upstream merges; ABI v7, SDL, disc routing and unrelated native cores retained; KartPad 0.7.2 requires a separate game-pack migration",
-    "Build 368 device journal analysis; compression-category deltas preserve measured totals and reject true excess; donor errors clear only after current-session authenticated pool adoption, verification and acknowledgements; real-device 1GiB gameplay remains unvalidated"
+    "Build 368 device journal analysis; compression-category deltas preserve measured totals and reject true excess; donor errors clear only after current-session authenticated pool adoption, verification and acknowledgements; real-device 1GiB gameplay remains unvalidated",
+    "Requested Dolphin/ARMSX2 bulk import: ordinary eight-letter TXT titles and explicit PNACH groups containing comments; damaged code and empty-group rejection retained; no GCT titles invented"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "3543a35de7abe7e4a345bdbff89da5823d28825ec40f243fdd66d4f48b066d57",
@@ -111,7 +112,10 @@
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm": "bca3d16c4ef60abbf0d43763d352aa0c394de15515acfc9f191452f8209e6df3",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h": "466fe81d85795bf2aa141a7c1e2c150c6fcb180c1eb379507d66ec1e64f9aad3",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm": "a259f475015f4f98cf6addd19141322414b3c97fcd5fc885252014f035ae49f8",
-    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "2cd97430cfb70ce4f292ef46ff59c6910102e570e810aada4764a8424b9444a9"
+    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "2cd97430cfb70ce4f292ef46ff59c6910102e570e810aada4764a8424b9444a9",
+    "native/cheats/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69",
+    "packages/dolphin_internal_bridge/ios/Classes/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69",
+    "packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h": "94a8a6b3123b493a402e2ee2967e9ebc1873dcfb5348dbcc576ed68aa0b85c69"
   },
   "git_modes": {
     ".github/workflows/cheats-media-check.yml": "100644",
@@ -198,12 +202,15 @@
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm": "100644",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h": "100644",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm": "100644",
-    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "100644"
+    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "100644",
+    "native/cheats/NeoCheatDocument.h": "100644",
+    "packages/dolphin_internal_bridge/ios/Classes/NeoCheatDocument.h": "100644",
+    "packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h": "100644"
   },
   "support_files_sha256": {
     "docs/dolphin-phone-shake-routing.md": "a7efae79d52bd0af21058997d6517bbd5c7ec201b659dcfa1b991fccf24be0e9",
     "docs/import-memory-build368.md": "1fd3cc6fb5495f0533eef457bce889b1dd687884ada7f8797cf1be9cc82a175e",
-    "docs/native-updates-20260930.md": "e8371df46d07cf6eecbee6960b8ef75e6b31d600a5ed167c0d8f2faa5779e789",
+    "docs/native-updates-20260930.md": "5aae561cf010af4003ceb12d0b199499e9ea01b3fb75005051b82a127812e8cf",
     "docs/neoswap-device-analysis-20260930.md": "0fa561f39faf4320dd568452999ef6fa6a00999e5c5a886d7389a22d0bed63b0",
     "docs/rpcs3-xitrix-v0101-audit.md": "72397b8ac63a1ae4948104df0159f685319235cc513031acaef25a0af12bb82a",
     "test/cheat_bulk_scope_test.py": "e33132d2d8a540b29843fab06773464b077d398a9d62629e1d8843569fe562d5",
@@ -221,7 +228,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "8e042b83fa72fb85073bdca6a8c6e22f997024d57174b0f0cc820611c99ab6c4",
+    "test/import_memory_candidate_scope_test.py": "42e063268863527a9a58593f0421ed88a27e46675fe14fcdf51a73e379b88a2f",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/legal_bundle_preflight_test.py": "bdbe0893d50d74003b80e7c7d3359838714ea95414b61468158fbf4afbca745e",
     "test/native/rpcs3_neoswap_stats_getter_test.cpp": "72b4c84a0c06335ed302be1af18057972057a92cde068fc6dca94d57756044b0",
@@ -245,7 +252,10 @@
     "test/rpcs3_neoswap_localizations_test.py": "77c3d40b4134a6b6348a8bc2625b5ee18416500df1928171180bd63c78338597",
     "test/rpcs3_xitrix_v0101_native_test.py": "a15f3a5a9a23717b5dd409805bf54af7859ca5e41ed8d93dab5bc052d05c3b0b",
     "test/single_ipa_distribution_test.py": "41d4bd1d0914a481c5ece26934066e6a3b3a6f7b82c7938ad5cf5fac9d2b3a31",
-    "test/stikjit_scoped_host_test.py": "1de45a721179a2aa2c823fbeca917d9793094d1f99686f9b86bb9c6d1b56cb9b"
+    "test/stikjit_scoped_host_test.py": "1de45a721179a2aa2c823fbeca917d9793094d1f99686f9b86bb9c6d1b56cb9b",
+    "test/cheat_bulk_parser_test.cpp": "67d74ac4eb358f568bb76e8427b36135b533861cc70a9ec6ffd029131a64d205",
+    "test/cheat_bulk_store_test.mm": "4c68e862f0e822f3aed0ec66e15f8473bb7264aef373b08a1bb98e1dd2bbd2b9",
+    "test/cheat_editor361_ui_test.py": "ff795cc017a3920c6cef22efdd48eda640cb01b91d252a6561bb8e7a0ce99f0a"
   },
   "support_git_modes": {
     "docs/dolphin-phone-shake-routing.md": "100644",
@@ -292,7 +302,10 @@
     "test/rpcs3_neoswap_localizations_test.py": "100644",
     "test/rpcs3_xitrix_v0101_native_test.py": "100644",
     "test/single_ipa_distribution_test.py": "100644",
-    "test/stikjit_scoped_host_test.py": "100644"
+    "test/stikjit_scoped_host_test.py": "100644",
+    "test/cheat_bulk_parser_test.cpp": "100644",
+    "test/cheat_bulk_store_test.mm": "100644",
+    "test/cheat_editor361_ui_test.py": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "08c84e3ae4b2201fc540bc5963e16f7627064652a50987b090fac9ec59e04263",

@@ -34,6 +34,20 @@ int main(){
  auto invalid=parseDocument("First\n04000000 00000001\n\nBad\n04000004 XXXXXXXX\n\nGood\n04000008 00000003","gecko","");assert(!invalid && invalid.line==5);
  assert(!parseDocument("0123-4567-89ABC\n04000000 00000001","actionReplay","file"));
  auto raw=parseDocument("04000000 00000001\n\n04000004 00000002","gecko","File");assert(raw && raw.entries.size()==1 && raw.entries[0].lines.size()==2);
+ // Ordinary eight-letter words are titles, not malformed hexadecimal pairs.
+ for(const auto& title:{"Infinite Grenades","INFINITE GRENADES","Ultimate Strength"}) {
+  auto r=parseDocument(std::string(title)+"\n04000000 00000001\nAmmo\n04000004 00000002","gecko","File");
+  assert(r && r.entries.size()==2 && r.entries[0].name==title && r.entries[0].lines.size()==1);
+ }
+ for(const auto& code:{"XXXXXXXX XXXXXXXX","04000000 XXXXXXXX","???????? 00000001"})
+  assert(!parseDocument(std::string("First\n")+code+"\nSecond\n04000004 00000002","gecko","File"));
+ // Explicit PNACH groups survive blank lines and comments before/between code
+ // lines. Legacy comment headings are already covered by the fifty-block case.
+ auto grouped=parseDocument("gametitle=Test\n[Cheats\\Health]\ndescription=Health\nauthor=Tester\n\n// writes health\npatch=1,EE,00000000,word,00000001\n\n// continuation\npatch=1,EE,00000004,word,00000002\n[Cheats\\Ammo]\n\n// writes ammo\npatch=1,EE,00000008,word,00000003","pnach","File");
+ assert(grouped && grouped.entries.size()==2);
+ assert(grouped.entries[0].name=="Cheats\\Health" && grouped.entries[0].creator=="Tester" && grouped.entries[0].lines.size()==2);
+ assert(grouped.entries[1].name=="Cheats\\Ammo" && grouped.entries[1].lines.size()==1);
+ assert(!parseDocument("[Empty]\n\n// comment\n[Valid]\npatch=1,EE,00000000,word,00000001","pnach","File"));
  assert(!parseDocument(std::string(262145,'x'),"gecko","file"));assert(!parseDocument(std::string("A\0B",3),"gecko","file"));
  std::string count;for(int i=0;i<513;++i)count+="$Code "+std::to_string(i)+"\n04000000 00000001\n";
  assert(!parseDocument(count,"gecko","file"));

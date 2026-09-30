@@ -13,8 +13,16 @@ inline bool documentEncryptedShape(const std::string& text) {
 }
 inline bool documentCodeShaped(const std::string& s) {
   std::istringstream stream(s);std::string a,b;stream>>a>>b;
+  // Word length alone is not a code signature: "Infinite Grenades" has
+  // two eight-letter words. Keep rejecting damaged hexadecimal pairs,
+  // including placeholder X/? bytes, without rejecting ordinary titles.
+  const auto damagedHex=[](const std::string& word) {
+    return word.size()==8 && std::all_of(word.begin(),word.end(),[](unsigned char ch) {
+      return std::isxdigit(ch)!=0 || ch=='X' || ch=='x' || ch=='?';
+    });
+  };
   return s.rfind("patch",0)==0 || s.find('=')!=std::string::npos ||
-      (a.size()==8 && b.size()==8) || hex(a,7,16) ||
+      (damagedHex(a) && damagedHex(b)) || hex(a,7,16) ||
       a.rfind("0x",0)==0 || documentEncryptedShape(s);
 }
 inline bool documentTitle(std::string text,Entry* entry,bool brackets=false) {
@@ -46,6 +54,12 @@ inline Result parseDocument(const std::string& input,const std::string& requeste
       line.rfind("[ActionReplay]",0)==0 || line.rfind("[Action Replay]",0)==0)ini=true;
   if(ps2 && ini)return fail("format",1);
   ini=ini || (!ps2 && requested=="ini");
+  // PNACH 2.0 groups are authoritative. Comments inside a named group,
+  // even after blank lines, must never rename or split that group. The
+  // comment-heading convention is retained only for legacy ungrouped files.
+  const bool pnachGroups=ps2 && std::any_of(lines.begin(),lines.end(),[](const auto& line) {
+    return line.size()>=2 && line.front()=='[' && line.back()==']';
+  });
   size_t start=0;while(start<lines.size() && lines[start].empty())++start;
   std::string nextValue;
   const bool nextIsCode=start+1<lines.size() && (rawLine(lines[start+1],&nextValue) ||
@@ -106,7 +120,7 @@ inline Result parseDocument(const std::string& input,const std::string& requeste
       // Conventional PNACH headings separated from the previous block. A comment
       // between consecutive patch lines stays a comment, not a second cheat.
       std::string title=trim(line.substr(line.rfind("//",0)==0?2:1));
-      if(ps2 && boundary && !ini && followedByCode(i) && safeName(title) &&
+      if(ps2 && !pnachGroups && boundary && !ini && followedByCode(i) && safeName(title) &&
           title.find('=')==std::string::npos && title.find("http")==std::string::npos) {
         if(!flush())return fail(result.error,result.line?result.line:i+1);
         if(!documentTitle(title,&entry))return fail("name",i+1);

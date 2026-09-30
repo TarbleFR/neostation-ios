@@ -74,3 +74,27 @@ Sources :
 - https://github.com/chrissotraidis/kartpad/releases/tag/v0.7.2
 - https://github.com/chrissotraidis/wiicompiled/blob/8892a36125681adc8e4e3e6c7d560d83291a84fa/runtime/include/game_pack.h
 - https://github.com/chrissotraidis/kartpad/blob/2a06769d155a348fd4c0d17c984a20375b7c93be/padmint.json
+
+## Correctifs d'import reproduits pour la candidate 370
+
+Deux erreurs ont été reproduites avant correction dans le parseur commun :
+un titre TXT composé de deux mots de huit lettres (« Infinite Grenades »)
+était pris pour une paire hexadécimale invalide ; un commentaire après une
+ligne vide dans un groupe PNACH explicite pouvait produire `emptyBlock` ou
+séparer les lignes de ce groupe. Les mots ordinaires sont maintenant reconnus
+comme titres, tandis que les paires hexadécimales endommagées restent refusées.
+Les groupes PNACH entre crochets deviennent la seule frontière de cheats dans
+un document groupé ; la convention des titres en commentaire reste disponible
+pour les anciens fichiers sans groupes explicites.
+
+Le fichier canonique et ses deux copies Dolphin/ARMSX2 sont identiques. Les tests
+portables couvrent titres en minuscules/majuscules, paires endommagées, groupes
+hiérarchiques, commentaires avant et entre les lignes, et rejet d'un groupe vide.
+Les tests du décodeur et du véritable sélecteur UIKit couvrent également ces
+deux imports jusqu'à la requête d'enregistrement. Aucun libellé UI n'est ajouté.
+Ces corrections ne reconstituent pas les titres absents d'un GCT et ne constituent
+pas une preuve d'effet en jeu sur iPhone. Le TXT/GCT exact de GMXP70 et le PNACH
+signalé restent nécessaires pour une reproduction fidèle des fichiers du testeur.
+
+Le contrat des groupes PNACH est documenté par PCSX2 :
+https://pcsx2.net/docs/advanced/writing-patches/

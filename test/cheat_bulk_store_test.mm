@@ -53,6 +53,13 @@ int main(){@autoreleasepool {
  auto malicious=[request mutableCopy];malicious[@"type"]=@"pnach";malicious[@"content"]=@"[PS2]\npatch=1,EE,00000000,word,00000001";
  assert(![NeoDolphinImport(root,malicious,dolphin,NO)[@"success"] boolValue]);
  // PS2: fifty independent groups in one atomic file, exact-repeat import is a no-op.
+ auto titled=NeoDecodeCheatDocument([@"Infinite Grenades\n04000000 00000001\nUltimate Strength\n04000004 00000002" dataUsingEncoding:NSUTF8StringEncoding],@"cheats.txt",dolphin,NO,@"gecko");
+ assert([titled[@"success"] boolValue] && [titled[@"count"] intValue]==2);
+ assert([titled[@"entries"][0][@"name"] isEqual:@"Infinite Grenades"]);
+ auto commented=NeoDecodeCheatDocument([@"[Health]\n\n// writes health\npatch=1,EE,00000000,word,00000001\n\n// continuation\npatch=1,EE,00000004,word,00000002\n[Ammo]\npatch=1,EE,00000008,word,00000003" dataUsingEncoding:NSUTF8StringEncoding],@"12345678.pnach",ps2,YES,@"pnach");
+ assert([commented[@"success"] boolValue] && [commented[@"count"] intValue]==2);
+ assert([commented[@"entries"][0][@"name"] isEqual:@"Health"] && [commented[@"entries"][0][@"lines"] count]==2);
+ assert([commented[@"entries"][1][@"name"] isEqual:@"Ammo"]);
  document=NeoDecodeCheatDocument([TestFixture(YES) dataUsingEncoding:NSUTF16StringEncoding],@"12345678.pnach",ps2,YES,@"pnach");
  assert([document[@"success"] boolValue] && [document[@"count"] intValue]==50);
  request=Request(ps2,document);result=NeoPnachImport(root,request,ps2);assert([result[@"success"] boolValue] && [result[@"added"] intValue]==50);

@@ -53,6 +53,7 @@ PRODUCTION_FILES = {
     'lib/services/ports_display_title.dart',
     'lib/services/ports_game_identity.dart',
     'native/dolphin_motion/strings.json',
+    'native/cheats/NeoCheatDocument.h',
     'native/dolphin_textures/labels.json',
     'native/dusklight/upstream-manifest.json',
     'native/dusklight/upstream/CMakeLists.txt',
@@ -80,6 +81,8 @@ PRODUCTION_FILES = {
     'native/neoswap-donation/run_ipc_macos_probe.sh',
     'native/neoswap-donation/run_macos_probe.sh',
     'packages/dolphin_internal_bridge/ci/verify_ipa.py',
+    'packages/dolphin_internal_bridge/ios/Classes/NeoCheatDocument.h',
+    'packages/armsx2_internal_bridge/ios/Classes/NeoCheatDocument.h',
     'packages/dolphin_internal_bridge/ios/Classes/DOLTextureLabels.h',
     'packages/dolphin_internal_bridge/ios/Classes/DOLTextureSettings.h',
     'packages/dolphin_internal_bridge/ios/Classes/DOLTextureStore.h',
@@ -108,6 +111,9 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'test/cheat_bulk_parser_test.cpp',
+    'test/cheat_bulk_store_test.mm',
+    'test/cheat_editor361_ui_test.py',
     'docs/dolphin-phone-shake-routing.md',
     'docs/import-memory-build368.md',
     'docs/native-updates-20260930.md',
