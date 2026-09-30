@@ -17,7 +17,9 @@ def validate(ipa, identity_path, core_host, build_number):
     identity = json.loads(identity_path.read_text())
     pins = json.loads((ROOT / "build-utils/dusklight/source.json").read_text())
     assert identity["host_commit"] == core_host, "Wrong native Core build"
+    assert identity["source_release"] == pins["release"], "Wrong Dusklight release"
     assert identity["source_commit"] == pins["commit"], "Wrong Dusklight revision"
+    assert identity["submodules"] == pins["submodules"], "Wrong Dusklight submodules"
     assert identity["sdl_commit"] == pins["sdl"]["commit"], "Wrong SDL revision"
     assert identity["abi_version"] == 7
     assert identity["session_policy"] == "host_frame_loop_warm_resume_rpcs3_jit_escrow"
@@ -27,6 +29,7 @@ def validate(ipa, identity_path, core_host, build_number):
         app = apps[0].removesuffix("Info.plist")
         info = plistlib.loads(z.read(apps[0]))
         assert str(info["CFBundleVersion"]) == build_number
+        assert json.loads(z.read(app + "Dusklight-native-identity.json")) == identity, "Packaged Core identity changed"
         framework = app + "Frameworks/DusklightCore.framework/"
         binary = z.read(framework + "DusklightCore")
         assert hashlib.sha256(binary).hexdigest() == identity["sha256"], "Native Core bytes changed"
@@ -54,6 +57,8 @@ def validate(ipa, identity_path, core_host, build_number):
         assert art in z.namelist(), "Ports artwork missing"
         assert not any("Dusklight.app/" in name for name in z.namelist()), "Standalone app was nested"
     return {"build": build_number, "core_host_commit": core_host,
+            "source_release": identity["source_release"],
+            "source_commit": identity["source_commit"],
             "core_sha256": identity["sha256"], "resources": len(identity["resources"]),
             "passive_load": True, "device_gameplay_tested": False}
 

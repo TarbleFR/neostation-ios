@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 368
-run-name: NeoStation NeoSwap private • Build 368 • ${{ github.sha }}
+name: NeoStation NeoSwap private • Build 369
+run-name: NeoStation NeoSwap private • Build 369 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '368'
+        default: '369'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-368
+  group: neostation-neoswap-private-369
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (368)
+    name: Neostation iOS 0.0.2 private IPA (369)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '368' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '369' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-368-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-369-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -53,7 +53,8 @@ jobs:
       ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
       RPCS3_CORE_HOST_SHA: a32f39677bd4d45e1bc4915550dafb6d150e37d9
       RPCS3_CORE_RUN_ID: '36651573591'
-      DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
+      DUSKLIGHT_CORE_HOST_SHA: 94ed2d91e1547e1879fab214b6ef082b642dff84
+      DUSKLIGHT_CORE_RUN_ID: '36720032937'
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
       SCREENSCRAPER_DEV_ID: ${{ secrets.SCREENSCRAPER_DEV_ID }}
@@ -794,7 +795,42 @@ jobs:
           print(identity)
           PY
 
-      - name: Verify retained stable Dusklight Core identity
+      - name: Require completed exact Dusklight 2.0.3 Core
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, shutil, subprocess, time
+          endpoint = 'repos/TarbleFR/neostation-ios/actions/runs/' + os.environ['DUSKLIGHT_CORE_RUN_ID']
+          deadline = time.monotonic() + 3600
+          while True:
+              result = json.loads(subprocess.check_output(['gh', 'api', endpoint]))
+              assert result['head_sha'] == os.environ['DUSKLIGHT_CORE_HOST_SHA'], result
+              assert result['path'] == '.github/workflows/dusklight-core.yml', result
+              if result['status'] == 'completed':
+                  assert result['conclusion'] == 'success', result
+                  break
+              assert time.monotonic() < deadline, 'Pinned Dusklight Core did not complete'
+              print('Waiting for exact Dusklight Core', result['id'], result['status'], flush=True)
+              time.sleep(30)
+          # The retained donor was verified separately. Remove its complete
+          # Dusklight tree so retired resources cannot survive the update.
+          shutil.rmtree('dist/dusklight')
+          PY
+          git diff --exit-code "$DUSKLIGHT_CORE_HOST_SHA" "$GITHUB_SHA" -- \
+            native/dusklight build-utils/dusklight .github/workflows/dusklight-core.yml \
+            packages/dusklight_internal_bridge/ios/Classes/DusklightCoreABI.h
+
+      - name: Download pinned Dusklight 2.0.3 Core
+        uses: actions/download-artifact@v4
+        with:
+          name: NeoStation-Dusklight-Core-${{ env.DUSKLIGHT_CORE_HOST_SHA }}
+          run-id: ${{ env.DUSKLIGHT_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/dusklight
+
+      - name: Verify updated Dusklight Core identity
         run: |
           set -euo pipefail
           python3 - <<'PYCORE'
@@ -804,7 +840,10 @@ jobs:
           identity = json.loads((root / 'identity.json').read_text())
           pins = json.loads(Path('build-utils/dusklight/source.json').read_text())
           assert identity['host_commit'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']
+          assert identity['source_release'] == pins['release'] == 'v2.0.3'
           assert identity['source_commit'] == pins['commit']
+          assert identity['submodules'] == pins['submodules']
+          assert identity['sdl_commit'] == pins['sdl']['commit']
           assert identity['abi_version'] == 7
           assert identity['session_policy'] == 'host_frame_loop_warm_resume_rpcs3_jit_escrow'
           canonical = Path('native/dusklight')
@@ -825,6 +864,16 @@ jobs:
           assert hashlib.sha256((framework / 'DusklightCore').read_bytes()).hexdigest() == identity['sha256']
           for relative, digest in identity['resources'].items():
               assert hashlib.sha256((framework / relative).read_bytes()).hexdigest() == digest, relative
+          fast_path = Path('build/fast-native/identity.json')
+          fast = json.loads(fast_path.read_text())
+          fast.update({
+              'dusklightCoreSha256': identity['sha256'],
+              'dusklightCoreHostCommit': identity['host_commit'],
+              'dusklightSourceRevision': identity['source_commit'],
+              'dusklightSourceRelease': identity['source_release'],
+              'dusklightCoreRun': os.environ['DUSKLIGHT_CORE_RUN_ID'],
+          })
+          fast_path.write_text(json.dumps(fast, indent=2) + '\n')
           PYCORE
 
       - name: Download validated KartPad Core candidate
@@ -1087,6 +1136,8 @@ jobs:
           cp dist/stikjit-compatibility.json build/private-test/
           cp dist/cheat-bulk-validation.json build/private-test/
           cp docs/import-memory-build368.md build/private-test/Notes-NeoSwap-Build368.md
+          cp docs/native-updates-20260930.md build/private-test/Notes-Native-Build369.md
+          cp dist/dusklight/identity.json build/private-test/dusklight-native-identity.json
           cp dist/neoswap-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence
@@ -1094,7 +1145,7 @@ jobs:
           cp dist/0.0.2-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/phone-shake-tests.json" build/private-test/
           cp docs/releases/0.0.2.md build/private-test/Notes-0.0.2.md
-          printf '%s\n' 'NeoStation-NeoSwap-Build368.ipa' > build/private-test/delivery-name.txt
+          printf '%s\n' 'NeoStation-NeoSwap-Build369.ipa' > build/private-test/delivery-name.txt
           cp build/stikjit-current/modern-baseline.json build/private-test/
           cp build/fast-native/identity.json build/private-test/native-identity.json
           printf 'commit=%s\nbuild=%s\nrelease_published=false\n' "$GITHUB_SHA" "$BUILD_NUMBER" > build/private-test/identity.txt

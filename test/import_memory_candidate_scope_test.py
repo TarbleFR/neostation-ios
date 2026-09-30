@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 368
+assert manifest['target_build'] == 369
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -40,6 +40,7 @@ PRODUCTION_FILES = {
     'build-utils/rpcs3/canonical-source.json',
     'build-utils/rpcs3/embedded-core.patch',
     'build-utils/validate_neoswap_ipa.py',
+    'build-utils/validate_dusklight_ipa.py',
     'build-utils/validate_rpcs3_ipa.py',
     'build-utils/validate_single_ipa_distribution.py',
     'lib/data/datasources/sqlite_database_service.dart',
@@ -240,9 +241,18 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
     workflow = (ROOT / workflow_path).read_text()
     old_workflow = before(workflow_path).decode('utf-8')
     for key in ('DOLPHIN_SHA', 'DOLPHIN_CORE_HOST_SHA', 'ARMSX2_CORE_HOST_SHA',
-                'DUSKLIGHT_CORE_HOST_SHA', 'KARTPAD_CORE_HOST_SHA', 'KARTPAD_CORE_RUN_ID'):
+                'KARTPAD_CORE_HOST_SHA', 'KARTPAD_CORE_RUN_ID'):
         pattern = r'(?m)^      ' + key + r': (.+)$'
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
+    pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
+    if workflow_path == '.github/workflows/neoswap-ipa.yml':
+        assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
+        assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
+        assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow
+        assert "result['head_sha'] == os.environ['DUSKLIGHT_CORE_HOST_SHA']" in workflow
+        assert "identity['submodules'] == pins['submodules']" in workflow
+    else:
+        assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow)
 workflow = (ROOT / '.github/workflows/neoswap-ipa.yml').read_text()
 assert 'contents: write' not in workflow and 'gh release create' not in workflow
 
