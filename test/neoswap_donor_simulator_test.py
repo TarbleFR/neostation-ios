@@ -830,17 +830,31 @@ def main() -> int:
                         report.setdefault('crashCollectionErrors', []).append(str(crash_error))
             try:
                 logs = run(['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--last', '2m',
-                            '--style', 'compact', '--predicate',
-                            '(process IN {"NeoSwapDonor", "NeoSwapSimulator", '
+                            '--info', '--debug', '--style', 'compact', '--predicate',
+                            '(process IN {"NeoSwapDonor", "NeoSwapSimulator"}) OR '
+                            '((process IN {'
                             '"SpringBoard", "runningboardd", "launchd_sim", "launchd", "launchservicesd", "installd", "pkd"}) '
                             'AND (eventMessage CONTAINS[c] "NeoSwap" OR '
                             f'eventMessage CONTAINS[c] "{BUNDLE}" OR '
-                            'eventMessage CONTAINS[c] "FBS" OR eventMessage CONTAINS[c] "denied")'],
+                            'eventMessage CONTAINS[c] "FBS" OR eventMessage CONTAINS[c] "denied"))'],
                            capture=True, timeout=40)
                 report['simulatorLogs'] = logs[-30000:]
             except subprocess.SubprocessError as log_error:
                 report['simulatorLogError'] = str(log_error)
                 report['simulatorLogPartial'] = LOGS[-1][-30000:]
+            # CrashReporter can finish after the immediate request failure.
+            # Collect again after log retrieval, while our device still exists.
+            for root in crash_roots:
+                for crash in sorted(root.glob('NeoSwapDonor*')):
+                    try:
+                        if (crash.is_file() and crash.suffix in ('.ips', '.crash') and
+                                crash.stat().st_mtime >= campaign_started):
+                            shutil.copyfile(crash, output / crash.name)
+                            names = report.setdefault('donorCrashReports', [])
+                            if crash.name not in names:
+                                names.append(crash.name)
+                    except OSError as crash_error:
+                        report.setdefault('crashCollectionErrors', []).append(str(crash_error))
         return 1
     finally:
         report_path.parent.mkdir(parents=True, exist_ok=True)
