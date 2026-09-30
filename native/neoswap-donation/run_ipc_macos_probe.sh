@@ -30,6 +30,24 @@ case "${NEOSWAP_METAL_PROBE:-0}" in
   1) probe_flags+=(-DNEOSWAP_METAL_PROBE=1 -framework Metal) ;;
   *) echo 'ERROR: NEOSWAP_METAL_PROBE must be 0 or 1' >&2; exit 64 ;;
 esac
+case "${NEOSWAP_VULKAN_PROBE:-0}" in
+  0) ;;
+  1)
+    : "${NEOSWAP_RPCS3_SOURCE:?Materialized canonical RPCS3 source is required}"
+    : "${NEOSWAP_MOLTENVK_ROOT:?Verified MoltenVK package root is required}"
+    api="$root/../../packages/neo_swap/ios/Classes"
+    library="$NEOSWAP_MOLTENVK_ROOT/dynamic/dylib/macOS"
+    test -f "$NEOSWAP_RPCS3_SOURCE/rpcs3/ios/NeoSwapVulkanBuffer.h"
+    test -f "$library/libMoltenVK.dylib"
+    ln -s "$root" "$work/Donation"
+    sources+=("$root/Pool.cpp" "$api/NeoSwap.cpp")
+    probe_flags+=(-DNEOSWAP_VULKAN_PROBE=1 -DNEOSWAP_DONATION=1
+      -Wno-missing-field-initializers -pthread -I"$api" -I"$work"
+      -I"$NEOSWAP_RPCS3_SOURCE" -I"$NEOSWAP_MOLTENVK_ROOT/include"
+      -L"$library" -lMoltenVK -Wl,-rpath,"$library")
+    ;;
+  *) echo 'ERROR: NEOSWAP_VULKAN_PROBE must be 0 or 1' >&2; exit 64 ;;
+esac
 xcrun clang++ -x objective-c++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fobjc-arc \
   "${probe_flags[@]}" "${sources[@]}" -o "$app/Contents/MacOS/NeoSwapIPC"
 cp "$app/Contents/MacOS/NeoSwapIPC" "$service/Contents/MacOS/NeoSwapDonor"

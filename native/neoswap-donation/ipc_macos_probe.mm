@@ -34,6 +34,9 @@ void require(bool condition, const char* message) {
 #if defined(NEOSWAP_METAL_PROBE)
 #include "MetalDonationProbe.h"
 #endif
+#if defined(NEOSWAP_VULKAN_PROBE)
+#include "VulkanDonationProbe.h"
+#endif
 
 @interface ProbeReceiver : NSObject <NeoSwapDonorProbeProtocol>
 @property(nonatomic, strong) NSXPCConnection* connection;
@@ -280,6 +283,11 @@ int main(int argc, const char* argv[]) {
     metalReport = runMetalDonationProbe(session, target);
     evidence[@"metalDonation"] = metalReport;
 #endif
+    NSDictionary* vulkanReport = @{@"requested":@NO, @"passed":@NO};
+#if defined(NEOSWAP_VULKAN_PROBE)
+    vulkanReport = runVulkanDonationProbe(session, target);
+    evidence[@"vulkanDonation"] = vulkanReport;
+#endif
     const uint64_t lastIndex = snapshot.verifiedChunkCount - 1;
     const uint64_t lastBytes = [session chunkCapacityBytes:lastIndex];
     mach_port_t right = [session copyMemoryEntryForChunk:lastIndex];
@@ -356,6 +364,7 @@ int main(int argc, const char* argv[]) {
       @"hostNonvolatileDelta":@(hostNonvolatileDelta), @"rejectedArchive":@(rejectedArchive),
       @"machHandleCleanupRetried":@YES,
       @"metalDonation":metalReport,
+      @"vulkanDonation":vulkanReport,
       @"rejectedScenarios":rejected, @"passed":@YES };
     NSData* data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
     if (argc > 1) require([data writeToFile:[NSString stringWithUTF8String:argv[1]] atomically:YES],
