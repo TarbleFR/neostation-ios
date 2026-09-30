@@ -76,9 +76,13 @@ AUDITED_CORE_FILES = {
     'rpcs3/ios/RPCS3IOS.cpp',
     'rpcs3/ios/RPCS3IOS.h',
     'rpcs3/ios/RPCS3IOS.exports',
+    'rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp',
+    'rpcs3/Emu/RSX/VK/vkutils/memory.h',
+    'rpcs3/ios/NeoSwapVulkanBuffer.h',
 }
 ADDED_CORE_FILES = {
     'rpcs3/Emu/RSX/VK/VKHelpers.cpp', 'rpcs3/ios/NeoSwapClientStats.h',
+    'rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp', 'rpcs3/ios/NeoSwapVulkanBuffer.h',
 }
 old = json.loads(original('build-utils/rpcs3/canonical-source.json'))
 new = json.loads((ROOT / 'build-utils/rpcs3/canonical-source.json').read_text())
@@ -89,8 +93,8 @@ assert changed == AUDITED_CORE_FILES, 'Unaudited Core postimages: ' + str(change
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: new['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'
-allowed_manifest_changes = {'files_sha256', 'patch_sha256', 'policy', 'xitrix_v0101_backports'}
-assert set(new) == set(old) | {'xitrix_v0101_backports'}
+allowed_manifest_changes = {'files_sha256', 'patch_sha256', 'policy', 'xitrix_v0101_backports', 'neoswap_vulkan_buffers'}
+assert set(new) == set(old) | {'xitrix_v0101_backports', 'neoswap_vulkan_buffers'}
 for key in set(old) - allowed_manifest_changes:
     assert new[key] == old[key], 'Unrelated canonical contract changed: ' + key
 assert new['device_runtime_tested'] is False
@@ -179,5 +183,5 @@ assert broker.count('struct Broker {') == 1
 assert broker.count('Broker& broker() { static Broker b; return b; }') == 1
 catalog = json.loads((ROOT / 'native/neoswap/localizations.json').read_text())
 assert set(catalog) == {'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt', 'fr', 'de', 'it', 'id', 'ja', 'ko'}
-print('PASS NeoSwap scope: exactly eight audited RPCS3 postimages; runtime ABI30/allocator ABI1; '
+print('PASS NeoSwap scope: eleven audited RPCS3 postimages including coherent Vulkan buffer imports; runtime ABI30/allocator ABI1; '
       'historical JIT/VM/GoW3/savestate patch sections retained; one host broker; no device validation claim')

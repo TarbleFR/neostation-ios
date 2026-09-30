@@ -86,7 +86,7 @@
     "rpcs3/Emu/RSX/VK/vkutils/dynamic_state_cache.hpp": "aae2b2dc2e74a55627f1ad1c82e4adaf52f44e87f0ebfd3e50226b04c49b4054",
     "rpcs3/Emu/RSX/VK/vkutils/image.cpp": "9282d1374018aa18971a6a28a5cdd04e7a19db35692d3c27fb964f8f3c1f3c83",
     "rpcs3/Emu/RSX/VK/vkutils/image.h": "cb168358cb42f739d4b52b6221c90922800a23354a2bee7f181a416431558147",
-    "rpcs3/Emu/RSX/VK/vkutils/memory.h": "a77e126b55c298401d7b0c537445dee5585d49407856df03a141cb89b64b273d",
+    "rpcs3/Emu/RSX/VK/vkutils/memory.h": "528f21f7af17749b80ef0bf8b74ad5069267f18c5c28d948f777c1743e25cbe1",
     "rpcs3/Emu/RSX/VK/vkutils/metal_event.h": "47f0cf78d3188cbe5a06d5e532ce493e55294d1766cfac704bf3e2b62d412d0e",
     "rpcs3/Emu/RSX/VK/vkutils/metal_event.mm": "6c2eff1f97055ddd4f515a0dd3333b523616ded9b9ce5a85159434b170b67efe",
     "rpcs3/Emu/RSX/VK/vkutils/query_slot_queue.hpp": "326d3d273a0294d4b2dcf5706a320164b6ffdb51d4a6c40d3634919d0d4b3204",
@@ -127,10 +127,12 @@
     "rpcs3/ios/tests/JITArenaAllocatorTests.cpp": "3ab1baee6a555e9ae1b871381ec7a82870c383071ae1ce4653d829e35dcd68b1",
     "rpcs3/ios/tests/NativeProgressCompletionTests.cpp": "ecaf16e72df5b386f59ff058095950ec15fe8898d600439f9d6c565d57c74577",
     "rpcs3/util/logs.cpp": "81500df702bf134dce8f7ca19a1d2efafa814ea31c952d6dff90d4bb52cc3efe",
-    "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded"
+    "rpcs3/util/serialization_ext.cpp": "ffc56c242d500f10cc6a1c2b586fc3c5d69098e78e3d2996922aa2ebfd996ded",
+    "rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp": "957e822673760d8600387c58c663e92e0a5044a2c0783bc6d11d34db16d58118",
+    "rpcs3/ios/NeoSwapVulkanBuffer.h": "c13514839ddb311b4f0dfa0984493f1a62ca3b32aecd4108bfb35a53f0ffc0dd"
   },
-  "patch_sha256": "36ff8cf3f7073e6d573a9bab91f7c1f8a11df72b2fce52ce532c041080d36ac3",
-  "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged",
+  "patch_sha256": "3723e29a28ebb17e643e279b26839df36b3c407a9b5ab90717a16f5f763da855",
+  "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
   "upstream_repository": "XITRIX/rpcs3",
@@ -150,5 +152,14 @@
     ],
     "scope": "SPU continuation CFG and Vulkan correctness only; existing decoders, game policy, JIT, VM and savestate retained",
     "device_runtime_tested": false
+  },
+  "neoswap_vulkan_buffers": {
+    "minimum_bytes": 1048576,
+    "maximum_bytes": 268435456,
+    "scope": "coherent host-visible SYSTEM buffers only",
+    "extension": "VK_EXT_external_memory_host",
+    "lifetime": "buffer destruction then vkFreeMemory then host loan release after existing GPU deferred disposal",
+    "device_runtime_tested": false,
+    "iphone_1gib_gameplay_validated": false
   }
 }

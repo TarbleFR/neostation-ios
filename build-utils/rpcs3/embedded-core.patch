@@ -9454,6 +9454,35 @@ index dd10f2a22..e1f251bf9 100644
  			}
  		}
  
+diff --git a/rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp b/rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp
+index 47f79ad..037e8a1 100644
+--- a/rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp
++++ b/rpcs3/Emu/RSX/VK/vkutils/buffer_object.cpp
+@@ -1,6 +1,9 @@
+ #include "buffer_object.h"
+ #include "device.h"
+ #include "shared.h"
++#ifdef RPCS3_IOS
++#include "ios/NeoSwapVulkanBuffer.h"
++#endif
+ 
+ namespace vk
+ {
+@@ -58,6 +61,14 @@ namespace vk
+ 		info.usage = usage;
+ 		info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+ 
++#ifdef RPCS3_IOS
++		// The existing resource manager retires this buffer after GPU completion.
++		// Its imported memory owns the loan until the Vulkan handle is destroyed.
++		if (try_neoswap_buffer(dev, info, access_flags, allocation_pool, value, memory))
++		{
++			return;
++		}
++#endif
+ 		CHECK_RESULT(vkCreateBuffer(m_device, &info, nullptr, &value));
+ 
+ 		// Allocate vram for this buffer
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/commands.cpp b/rpcs3/Emu/RSX/VK/vkutils/commands.cpp
 index 549d557af..4a7895263 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/commands.cpp
@@ -9693,10 +9722,19 @@ index a301db6a6..a5fa74765 100644
  		using image::image;
  
 diff --git a/rpcs3/Emu/RSX/VK/vkutils/memory.h b/rpcs3/Emu/RSX/VK/vkutils/memory.h
-index 352aaba0b..ded74578b 100644
+index 352aaba..8ada42e 100644
 --- a/rpcs3/Emu/RSX/VK/vkutils/memory.h
 +++ b/rpcs3/Emu/RSX/VK/vkutils/memory.h
-@@ -208,7 +208,7 @@ namespace vk
+@@ -176,6 +176,8 @@ namespace vk
+ 
+ 	protected:
+ 		memory_block() = default;
++		// Imported allocations have their own Vulkan handle, outside VMA.
++		explicit memory_block(u64 size) : m_device(VK_NULL_HANDLE), m_mem_handle{}, m_size(size) {}
+ 
+ 	private:
+ 		VkDevice m_device;
+@@ -208,7 +210,7 @@ namespace vk
  	void vmm_notify_memory_allocated(void* handle, u32 memory_type, u64 memory_size, vmm_allocation_pool pool);
  	void vmm_notify_memory_freed(void* handle);
  	void vmm_reset();
@@ -11646,6 +11684,144 @@ index 000000000..91bb89d96
 +    int32_t last_result;
 +    uint32_t reserved;
 +} NeoSwapClientStats;
+diff --git a/rpcs3/ios/NeoSwapVulkanBuffer.h b/rpcs3/ios/NeoSwapVulkanBuffer.h
+new file mode 100644
+index 0000000..f502cbc
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapVulkanBuffer.h
+@@ -0,0 +1,132 @@
++#pragma once
++#include "NeoSwapClient.h"
++#include <algorithm>
++#include <limits>
++#include <memory>
++#include <utility>
++
++// Included after vkutils/device.h and memory.h. Only coherent host-visible
++// SYSTEM buffers opt in; images, guest VM, JIT and device-private buffers retain
++// their allocators. The Vulkan extension is queried, never inferred from Metal.
++namespace vk
++{
++class neoswap_buffer_memory final : public memory_block
++{
++    VkDevice m_device;
++    VkDeviceMemory m_memory = VK_NULL_HANDLE;
++    void* m_pointer = nullptr;
++    u64 m_bytes;
++
++public:
++    neoswap_buffer_memory(VkDevice device, u64 bytes)
++        : memory_block(bytes), m_device(device), m_bytes(bytes) {}
++    ~neoswap_buffer_memory() override
++    {
++        // buffer::~buffer destroys VkBuffer first. The renderer's existing
++        // deferred disposal guarantees GPU completion before either destructor.
++        if (m_memory) vkFreeMemory(m_device, m_memory, nullptr);
++        if (m_pointer)
++        {
++            const auto result = neostation::swap::release(m_pointer);
++            if (result != NEOSWAP_OK)
++                rsx_log.error("NeoSwap Vulkan loan release failed: %d; broker retains the mapping", result);
++        }
++    }
++    bool import(const render_device& device, u64 alignment, u32 type_bits, u32 access_flags, VkBuffer buffer)
++    {
++        m_pointer = neostation::swap::try_allocate(NEOSWAP_RPCS3, m_bytes, alignment);
++        if (!m_pointer) return false;
++
++        // The actual pointer can have stricter memory-type restrictions than
++        // the generic buffer. An empty intersection is a hard refusal.
++        VkMemoryHostPointerPropertiesEXT host{VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT};
++        if (_vkGetMemoryHostPointerPropertiesEXT(m_device,
++                VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, m_pointer, &host) != VK_SUCCESS) return false;
++        u32 memory_type;
++        if (!device.get_compatible_memory_type(type_bits & host.memoryTypeBits, access_flags, &memory_type)) return false;
++
++        VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
++        dedicated.buffer = buffer;
++        VkImportMemoryHostPointerInfoEXT host_import{VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT};
++        host_import.pNext = &dedicated;
++        host_import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
++        host_import.pHostPointer = m_pointer;
++        VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
++        allocation.pNext = &host_import;
++        allocation.allocationSize = m_bytes;
++        allocation.memoryTypeIndex = memory_type;
++        VkDeviceMemory imported = VK_NULL_HANDLE;
++        if (vkAllocateMemory(m_device, &allocation, nullptr, &imported) != VK_SUCCESS) return false;
++        m_memory = imported;
++        return true;
++    }
++    VkDeviceMemory get_vk_device_memory() override { return m_memory; }
++    u64 get_vk_device_memory_offset() override { return 0; }
++    void* map(u64 offset, u64 bytes) override
++    {
++        ensure(offset <= m_bytes && (bytes == VK_WHOLE_SIZE || bytes <= m_bytes - offset));
++        return static_cast<char*>(m_pointer) + offset;
++    }
++    void unmap() override {} // The persistent CPU alias is borrowed, not vkMapMemory.
++};
++
++inline bool try_neoswap_buffer(const render_device& device, const VkBufferCreateInfo& info,
++    u32 access_flags, vmm_allocation_pool pool, VkBuffer& output,
++    std::unique_ptr<memory_block>& output_memory)
++{
++    constexpr u64 MiB = 1024 * 1024;
++    constexpr u32 coherent = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
++    if (info.size < MiB || info.size > 256 * MiB || pool != VMM_ALLOCATION_POOL_SYSTEM ||
++        (access_flags & coherent) != coherent || info.flags || info.pNext ||
++        !device.get_external_memory_host_support() || !_vkGetMemoryHostPointerPropertiesEXT) return false;
++
++    VkPhysicalDeviceExternalBufferInfo query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO};
++    query.usage = info.usage;
++    query.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
++    VkExternalBufferProperties support{VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES};
++    vkGetPhysicalDeviceExternalBufferProperties(device.gpu(), &query, &support);
++    if (!(support.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) ||
++        !(support.externalMemoryProperties.compatibleHandleTypes & query.handleType)) return false;
++
++    VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_limits{
++        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT};
++    VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
++    properties.pNext = &host_limits;
++    vkGetPhysicalDeviceProperties2(device.gpu(), &properties);
++    const u64 host_alignment = host_limits.minImportedHostPointerAlignment;
++    if (!host_alignment || host_alignment > 65536 || (host_alignment & (host_alignment - 1))) return false;
++
++    // All failure paths destroy the buffer before imported memory and its loan.
++    struct candidate
++    {
++        VkDevice device;
++        VkBuffer buffer = VK_NULL_HANDLE;
++        std::unique_ptr<neoswap_buffer_memory> memory;
++        ~candidate() { if (buffer) vkDestroyBuffer(device, buffer, nullptr); }
++    } pending{device, VK_NULL_HANDLE, nullptr};
++    VkExternalMemoryBufferCreateInfo external{VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO};
++    external.handleTypes = query.handleType;
++    auto external_info = info;
++    external_info.pNext = &external;
++    VkBuffer created = VK_NULL_HANDLE;
++    if (vkCreateBuffer(device, &external_info, nullptr, &created) != VK_SUCCESS) return false;
++    pending.buffer = created;
++    VkMemoryRequirements required{};
++    vkGetBufferMemoryRequirements(device, pending.buffer, &required);
++    const u64 alignment = std::max<u64>(host_alignment, required.alignment);
++    if (!alignment || alignment > 65536 || (alignment & (alignment - 1)) || required.size < info.size ||
++        required.size > 256 * MiB || required.size > std::numeric_limits<u64>::max() - (alignment - 1)) return false;
++    const u64 bytes = (required.size + alignment - 1) & ~(alignment - 1);
++    if (bytes > 256 * MiB) return false;
++
++    // The pointer-specific intersection in import() honors all original access
++    // flags. An empty intersection always falls back; no vendor workaround.
++    pending.memory = std::make_unique<neoswap_buffer_memory>(device, bytes);
++    if (!pending.memory->import(device, alignment, required.memoryTypeBits, access_flags, pending.buffer)) return false;
++    if (vkBindBufferMemory(device, pending.buffer, pending.memory->get_vk_device_memory(), 0) != VK_SUCCESS) return false;
++
++    output_memory = std::move(pending.memory);
++    output = std::exchange(pending.buffer, VK_NULL_HANDLE);
++    return true;
++}
++} // namespace vk
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
 index 74a6dc731..9f118f83c 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp

@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 370
+assert manifest['target_build'] == 371
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -33,6 +33,7 @@ PRODUCTION_FILES = {
     '.github/workflows/rpcs3-core.yml',
     'assets/legal/Dusklight-CC0-1.0.txt',
     'build-utils/build_rpcs3_embedded_core.sh',
+    'build-utils/rpcs3_core_syntax_gate.py',
     'build-utils/dolphin_motion_localizations.py',
     'build-utils/dusklight/build_core.py',
     'build-utils/dusklight/source.json',
@@ -148,6 +149,8 @@ SUPPORT_FILES = {
     'test/native/rpcs3_vk_conditional_render_test.cpp',
     'test/native/rpcs3_vk_memory_pressure_test.cpp',
     'test/neo_swap_core_pin_test.py',
+    'test/rpcs3_neoswap_vulkan_buffer_test.py',
+    'test/native/rpcs3_neoswap_vulkan_buffer_test.cpp',
     'test/neo_swap_dialog_test.dart',
     'test/neoswap/control_probe.mm',
     'test/neoswap_client_stats_test.cpp',

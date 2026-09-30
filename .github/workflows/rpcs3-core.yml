@@ -28,6 +28,9 @@ on:
       - 'test/native/rpcs3_spu_*'
       - 'test/native/rpcs3_vk_*'
       - 'test/native/rpcs3_neoswap_stats_getter_test.cpp'
+      - 'test/rpcs3_neoswap_vulkan_buffer_test.py'
+      - 'test/native/rpcs3_neoswap_vulkan_buffer_test.cpp'
+      - 'build-utils/rpcs3_core_syntax_gate.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -122,7 +125,7 @@ jobs:
             'neoswap_client_abi':1,
             'neoswap_client_stats_abi':1,
             'core_input_sha256':core_input_hashes(),
-            'neoswap_coverage':'RSX CPU aligned data >= 1 MiB; all titles; no GPU/JIT hooks',
+            'neoswap_coverage':'RSX CPU data and coherent host-visible Vulkan SYSTEM buffers (1-256MiB); strict import checks and GPU retirement; no JIT/VM/images',
             'device_runtime_tested':False,
           }
           Path('dist/rpcs3/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
