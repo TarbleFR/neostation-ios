@@ -275,9 +275,13 @@ int main(int argc, const char* argv[]) {
             "Active donor lacks distinct PID and cumulative charged page evidence");
     evidence[@"stage"] = @"final_resident_ledger";
     evidence[@"residentTargetVerified"] = @(snapshot.donatedResidentBytes >= target - MiB);
+    const auto beforeConsumer = snapshot;
+    NSString* residentPhase = @"prepared_donor_before_consumer";
+#if !defined(NEOSWAP_VULKAN_PROBE)
     if (stress)
       require(snapshot.donatedResidentBytes >= target - MiB,
               "The stress target was acquired logically but its final resident ledger does not prove the requested physical pages");
+#endif
     require(bool(neostation::donation::footprint(after)), "Host after-map TASK_VM_INFO failed");
     const uint64_t hostNonvolatileDelta = after.nonvolatile > before.nonvolatile
         ? after.nonvolatile - before.nonvolatile : 0;
@@ -289,8 +293,17 @@ int main(int argc, const char* argv[]) {
 #endif
     NSDictionary* vulkanReport = @{@"requested":@NO, @"passed":@NO};
 #if defined(NEOSWAP_VULKAN_PROBE)
+    // Cold verified pages may have compressed before any consumer accesses
+    // them. The Vulkan proof must demonstrate the full resident target while
+    // actual RPCS3 loans are alive, after GPU use and fresh ledger updates.
+    // That stricter consumer measurement lives inside runVulkanDonationProbe;
+    // compressed preparation alone is never reported as a successful proof.
     vulkanReport = runVulkanDonationProbe(session, target);
     evidence[@"vulkanDonation"] = vulkanReport;
+    snapshot = [session snapshot];
+    residentPhase = @"vulkan_live_buffers_after_gpu_completion";
+    require(snapshot.donatedResidentBytes >= target - MiB,
+            "The post-Vulkan resident target was lost before the final report");
 #endif
     const uint64_t lastIndex = snapshot.verifiedChunkCount - 1;
     const uint64_t lastBytes = [session chunkCapacityBytes:lastIndex];
@@ -363,6 +376,9 @@ int main(int argc, const char* argv[]) {
       @"verifiedChunkCount":@(snapshot.verifiedChunkCount),
       @"preparedBytes":@(snapshot.capacityBytes), @"stressRequested":@(stress),
       @"residentTargetVerified":@(snapshot.donatedResidentBytes >= target - MiB),
+      @"residentMeasurementPhase":residentPhase,
+      @"donorResidentBeforeGPUBytes":@(beforeConsumer.donatedResidentBytes),
+      @"donorCompressedBeforeGPUBytes":@(beforeConsumer.donatedCompressedBytes),
       @"distinctChunkRights":@YES, @"priorBorrowedDataPreserved":@YES,
       @"donorCompressedBytes":@(snapshot.donatedCompressedBytes),
       @"hostNonvolatileDelta":@(hostNonvolatileDelta), @"rejectedArchive":@(rejectedArchive),

@@ -204,6 +204,7 @@ static NSDictionary* runVulkanDonationProbe(NeoSwapDonorSession* session, uint64
   }
   NeoSwapHostStats host{};
   NeoSwapStats broker{};
+  broker.struct_size = sizeof(broker);
   require(imported == target && NeoSwap_HostSnapshot(&host) == NEOSWAP_OK &&
           host.owner_donated_live_bytes[NEOSWAP_RPCS3] == target &&
           NeoSwap_LiveBytes(NEOSWAP_RPCS3) == target && host.reserved_virtual_bytes == 0 &&

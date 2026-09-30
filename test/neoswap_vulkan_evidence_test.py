@@ -12,6 +12,7 @@ TARGET = 1024**3
 REPORT = {
     'schema': 2, 'platform': 'macOS-NSXPC-two-process', 'passed': True,
     'residentTargetVerified': True, 'hostPID': 10, 'donorPID': 11,
+    'residentMeasurementPhase': 'vulkan_live_buffers_after_gpu_completion',
     'targetBytes': TARGET, 'requestedBytes': TARGET, 'preparedBytes': TARGET,
     'capacityBytes': TARGET, 'donorResidentBytes': TARGET, 'donorCompressedBytes': 0,
     'verifiedChunkCount': 5, 'iphoneExtensionValidated': False,
@@ -35,6 +36,7 @@ class EvidenceTests(unittest.TestCase):
     def test_reject_incomplete_or_misleading_measurements(self):
         cases = [
             (None, 'passed', False), (None, 'hostPID', 11),
+            (None, 'residentMeasurementPhase', 'prepared_donor_before_consumer'),
             (None, 'preparedBytes', TARGET//8), (None, 'donorResidentBytes', TARGET//2),
             (None, 'donorCompressedBytes', TARGET//2), (None, 'iphoneExtensionValidated', True),
             ('gpu', 'importedBytes', TARGET//8), ('gpu', 'donatedLiveBytesDuringGPU', 0),

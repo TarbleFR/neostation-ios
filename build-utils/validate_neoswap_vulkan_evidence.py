@@ -23,6 +23,8 @@ def validate(report, expected_bytes):
            'Native residency proof did not pass')
     demand(report.get('platform') == 'macOS-NSXPC-two-process' and report.get('schema') == 2,
            'Unexpected native proof platform or schema')
+    demand(report.get('residentMeasurementPhase') == 'vulkan_live_buffers_after_gpu_completion',
+           'The resident target must be measured while Vulkan actually uses donor pages')
     host, donor = number(report, 'hostPID'), number(report, 'donorPID')
     demand(host > 0 and donor > 0 and host != donor, 'Donor must have its own real PID')
     for key in ('targetBytes', 'requestedBytes', 'preparedBytes', 'capacityBytes'):
