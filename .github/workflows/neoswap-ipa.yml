@@ -68,6 +68,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Validate pinned notices before tests and compilation
+        run: |
+          set -euo pipefail
+          python3 test/legal_bundle_preflight_test.py
+          python3 build-utils/embed_legal_bundle.py --validate-only --dolphin-sha "$DOLPHIN_SHA"
+
       - name: Require exact import, memory donation and retained simulator checks before compilation
         shell: bash
         env:

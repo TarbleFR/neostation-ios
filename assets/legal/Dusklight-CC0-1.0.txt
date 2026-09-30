@@ -1,5 +1,5 @@
 Upstream source: https://github.com/TwilitRealm/dusklight
-Pinned revision/tag: ad979d3dae092d0f5cbdaf49eabca7b4f1db4838
+Pinned revision/tag: 40457c6adb381928e4b5fef6ed459ed291edd5e2
 Original path: LICENSE.md
 
 Creative Commons Legal Code

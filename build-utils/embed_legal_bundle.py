@@ -51,14 +51,19 @@ def copy_file(source: Path, destination: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--app", required=True, type=Path)
-    parser.add_argument("--build-number", required=True)
+    parser.add_argument("--app", type=Path)
+    parser.add_argument("--build-number")
     parser.add_argument("--dolphin-sha", required=True)
+    parser.add_argument("--validate-only", action="store_true",
+                        help="Check source notices without requiring or writing an app bundle")
     args = parser.parse_args()
 
-    app = args.app.resolve()
-    if not app.is_dir() or app.suffix != ".app":
-        raise SystemExit(f"Expected built .app bundle, got: {app}")
+    if not args.validate_only:
+        if args.app is None or args.build_number is None:
+            parser.error("--app and --build-number are required when embedding notices")
+        app = args.app.resolve()
+        if not app.is_dir() or app.suffix != ".app":
+            raise SystemExit(f"Expected built .app bundle, got: {app}")
 
     for name in REQUIRED_LEGAL_FILES:
         if not (LEGAL_ASSETS / name).is_file():
@@ -92,6 +97,10 @@ def main() -> None:
     require_pinned_header(
         LEGAL_ASSETS / "StikJIT-MPL-2.0.txt", "1.9.0"
     )
+
+    if args.validate_only:
+        print("Validated all required notices and pinned revisions before compilation")
+        return
 
     destination = app / "Legal"
     if destination.exists():
