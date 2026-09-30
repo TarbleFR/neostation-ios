@@ -19,6 +19,7 @@ from pathlib import Path
 
 from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
 from configure_neoswap_donor import DONOR_CONTRACTS, REQUIRED_DONOR_ENTITLEMENTS
+from configure_neoswap_relay import RELAY_CONTRACTS, REQUIRED_RELAY_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
     FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
@@ -47,6 +48,7 @@ CORE_MARKERS = (
 )
 EXPECTED_HELPERS = {
     **DONOR_CONTRACTS,
+    **RELAY_CONTRACTS,
     'DolphinJITHelper.appex': {
         'bundleSuffix': '.dolphinjithelper',
         'principalClass': 'DolphinJITRequestHandler',
@@ -81,6 +83,7 @@ REQUIRED_CORE_SYMBOLS = (
     '_neostation_rpcs3_ios_enumerate_savestates_live',
     '_rpcs3_ios_stop_emulation',
     '_rpcs3_ios_shutdown',
+    '_rpcs3_ios_set_neoswap_relay_api',
 )
 
 FORBIDDEN_CORE_SYMBOLS = (
@@ -245,6 +248,7 @@ def validate_helper_bundles(app: Path, info: dict, archive_root: Path | None = N
     identifiers = {}
     for extension in extensions:
         contract = EXPECTED_HELPERS[extension.name]
+        is_relay = extension.name in RELAY_CONTRACTS
         extension_info = plistlib.loads((extension / 'Info.plist').read_bytes())
         demand(isinstance(extension_info, dict), f'{extension.name} property list is invalid')
         extension_metadata = extension_info.get('NSExtension', {})
@@ -252,7 +256,7 @@ def validate_helper_bundles(app: Path, info: dict, archive_root: Path | None = N
         point = extension_metadata.get('NSExtensionPointIdentifier')
         demand(point != PACKET_TUNNEL_EXTENSION_POINT,
                f'{extension.name} is a forbidden packet-tunnel provider')
-        demand(point == (DONOR_EXTENSION_POINT if extension.name in DONOR_CONTRACTS else SHARE_EXTENSION_POINT),
+        demand(point == (DONOR_EXTENSION_POINT if extension.name in DONOR_CONTRACTS or is_relay else SHARE_EXTENSION_POINT),
                f'{extension.name} has an unexpected extension point: {point!r}')
         demand(extension_metadata.get('NSExtensionPrincipalClass') == contract['principalClass'],
                f'{extension.name} principal class is inconsistent')
@@ -282,7 +286,9 @@ def validate_helper_bundles(app: Path, info: dict, archive_root: Path | None = N
             index = extension_info.get('NeoStationNeoSwapDonorIndex')
             demand(isinstance(index, str) and index == contract['index'],
                    f'{extension.name} donor index is inconsistent')
-            demand(extension_info.get('MinimumOSVersion') == '17.4',
+        if extension.name in DONOR_CONTRACTS or is_relay:
+            required_capabilities = REQUIRED_RELAY_ENTITLEMENTS if is_relay else REQUIRED_DONOR_ENTITLEMENTS
+            demand(extension_info.get('MinimumOSVersion') == ('18.0' if is_relay else '17.4'),
                    f'{extension.name} donor minimum iOS version is inconsistent')
             attributes = extension_metadata.get('NSExtensionAttributes', {})
             demand(attributes == {'NSExtensionActivationRule': 'FALSEPREDICATE'},
@@ -291,12 +297,12 @@ def validate_helper_bundles(app: Path, info: dict, archive_root: Path | None = N
             demand(isinstance(service, dict) and service == DONOR_XPC_SERVICE
                    and service.get('_MultipleInstances') is True,
                    f'{extension.name} donor multiple-instance metadata is inconsistent')
-            for key, expected in (('NSExtensionContextClass', 'NeoSwapDonorContext'),
+            for key, expected in (('NSExtensionContextClass', 'NeoSwapPageRelayContext' if is_relay else 'NeoSwapDonorContext'),
                                   ('NSExtensionContextHostClass', 'NSExtensionContext')):
                 demand(extension_metadata.get(key) == expected,
                        f'{extension.name} donor {key} is inconsistent')
-            require_entitlements(capabilities, REQUIRED_DONOR_ENTITLEMENTS, extension.name)
-            demand(set(capabilities) == set(REQUIRED_DONOR_ENTITLEMENTS),
+            require_entitlements(capabilities, required_capabilities, extension.name)
+            demand(set(capabilities) == set(required_capabilities),
                    f'{extension.name} unexpectedly requests capabilities beyond its three memory/debug keys')
         identifiers[extension.name] = expected_identifier
     return identifiers
@@ -337,6 +343,7 @@ def validate_core_identity(
         'source_commit': manifest['upstream_commit'],
         'source_patch_sha256': patch_sha,
         'abi_version': expected_abi,
+        'neoswap_relay_abi': 1,
         'architectures': ['arm64'],
         'sha256': actual_sha,
         'lifecycle_marker': CORE_LIFECYCLE_MARKER,
@@ -476,6 +483,12 @@ def validate_ipa(
                 name: helper_identifiers[name] for name in DONOR_CONTRACTS
             },
             'neoSwapDonorEffectiveDeviceProfileValidated': False,
+            'neoSwapRelayRequestedEntitlements': dict(REQUIRED_RELAY_ENTITLEMENTS),
+            'neoSwapRelayBundleIdentifiers': {
+                name: helper_identifiers[name] for name in RELAY_CONTRACTS
+            },
+            'neoSwapRelayEffectiveDeviceProfileValidated': False,
+            'neoSwapRelayResidentMemoryValidated': False,
             'neoSwapDonorMultipleInstancesRequested': True,
             'rpcS3RequiredSymbols': list(REQUIRED_CORE_SYMBOLS),
             'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),

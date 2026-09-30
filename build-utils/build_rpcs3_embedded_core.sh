@@ -134,6 +134,8 @@ env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wex
 "$WORK_ROOT/neoswap-rpcs3-allocator-test"
 env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
   python3 "$PWD/test/rpcs3_neoswap_vulkan_buffer_test.py" "$SRC"
+env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
+  python3 "$PWD/test/rpcs3_neoswap_relay_test.py" "$SRC"
 env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wextra -Werror -I "$SRC" \
   "$PWD/test/rpcs3_ppu_no_size_split_policy_test.cpp" -o "$WORK_ROOT/ppu-no-size-split-test"
 "$WORK_ROOT/ppu-no-size-split-test"

@@ -319,3 +319,5 @@ __pycache__/
 .ccache/
 # Materialized from the canonical donation sources before CocoaPods installation.
 /packages/neo_swap/ios/Classes/Donation/
+# Materialized from the canonical guest relay sources before CocoaPods installation.
+/packages/neo_swap/ios/Classes/Relay/

@@ -12,15 +12,52 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 371
+assert manifest['target_build'] == 372
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
 assert manifest['required_donation_evidence'] == ['macOS kernel', 'macOS NSXPC', 'iOS18Simulator']
+assert manifest['real_device_relay_validated'] is False
+assert manifest['real_device_relay_gameplay_validated'] is False
+assert manifest['abi']['neoswap_relay'] == 1
+assert manifest['required_relay_evidence'] == [
+    'macOS NSXPC creator exit, written pages and coherent aliases',
+    'iOS18Simulator extension exit, aliases, release and relaunch',
+    'iPhone arm64 compile and link only',
+    'macOS 8GiB retained capacity with separately measured 1MiB sparse sample',
+]
+assert manifest['required_relay_checks'] == [
+    '.github/workflows/neoswap-relay-check.yml',
+    'test/rpcs3_neoswap_relay_test.py',
+]
+assert manifest['relay_capacity_is_resident_ram'] is False
+assert manifest['relay_target_capacity_bytes'] == 8 * 1024 ** 3
+assert manifest['relay_target_object_count'] == 16
 
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Build372: reviewed relay runtime, separate extension, packaging and attribution.
+    '.github/workflows/neoswap-relay-check.yml',
+    'NOTICE.md',
+    'assets/legal/Guest-Page-Relay-MIT.txt',
+    'build-utils/configure_neoswap_relay.py',
+    'native/neoswap-relay/Backend.cpp',
+    'native/neoswap-relay/Backend.h',
+    'native/neoswap-relay/Info.plist',
+    'native/neoswap-relay/LICENSE',
+    'native/neoswap-relay/NeoSwapPageRelay.entitlements',
+    'native/neoswap-relay/NeoSwapPageRelay.h',
+    'native/neoswap-relay/NeoSwapPageRelay.mm',
+    'native/neoswap-relay/NeoSwapPageRelayHandler.h',
+    'native/neoswap-relay/NeoSwapPageRelayHandler.mm',
+    'native/neoswap-relay/relay_macos_probe.mm',
+    'native/neoswap-relay/run_relay_macos_probe.sh',
+    'packages/neo_swap/ios/Classes/NeoSwapRelay.h',
+    'packages/neo_swap/ios/Classes/NeoSwapRelayService.h',
+    'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm',
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h',
+
     '.gitignore',
     '.github/workflows/cheats-media-check.yml',
     '.github/workflows/dolphin-motion-check.yml',
@@ -120,6 +157,15 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'docs/neoswap-guest-relay-build372.md',
+    # Relay ownership/alias/error checks and exact Core identity fixture.
+    'test/native/rpcs3_neoswap_relay_test.cpp',
+    'test/neoswap_relay_extension_test.py',
+    'test/neoswap_relay_simulator_test.py',
+    'test/relay_backend_test.cpp',
+    'test/rpcs3_neoswap_relay_test.py',
+    'test/rpcs3_build306_single_path_test.py',
+
     'test/cheat_bulk_parser_test.cpp',
     'test/cheat_bulk_store_test.mm',
     'test/cheat_editor361_ui_test.py',
@@ -230,6 +276,8 @@ def before(path):
 assert (ROOT / '.gitignore').read_bytes() == before('.gitignore') + (
     b'# Materialized from the canonical donation sources before CocoaPods installation.\n'
     b'/packages/neo_swap/ios/Classes/Donation/\n'
+    b'# Materialized from the canonical guest relay sources before CocoaPods installation.\n'
+    b'/packages/neo_swap/ios/Classes/Relay/\n'
 ), 'Unrelated source/build exclusions changed'
 
 

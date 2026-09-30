@@ -1,0 +1,103 @@
+name: NeoSwap page relay checks
+on:
+  push:
+    branches: [experimental]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoswap-relay-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  proof:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: build-utils/Gemfile.dolphin
+      - name: Record exact source identity before running the real native campaign
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-relay/macos build/neoswap-relay/simulator
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess
+          root=pathlib.Path('.')
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['GITHUB_SHA']
+          inputs=list(root.glob('native/neoswap-relay/*'))
+          inputs += [root/name for name in (
+              'native/neoswap-donation/Broker.cpp','native/neoswap-donation/Broker.h',
+              'packages/neo_swap/ios/Classes/NeoSwapRelay.h',
+              'packages/neo_swap/ios/Classes/NeoSwapRelayService.h',
+              'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm',
+              'build-utils/configure_neoswap_relay.py','build-utils/embed_rpcs3_host_entitlements.py',
+              'test/relay_backend_test.cpp','test/neoswap_relay_extension_test.py',
+              'test/neoswap_relay_simulator_test.py','test/neoswap_donor_simulator_test.py',
+              '.github/workflows/neoswap-relay-check.yml')]
+          identity={'schema':1,'source':os.environ['GITHUB_SHA'],'realIPhoneValidated':False,
+              'realRPCS3GameplayValidated':False,'macOSWrittenTargetBytes':1073741824,
+              'simulatorWrittenTargetBytes':33554432,'productionManagerCapacityTargetBytes':8589934592,
+              'macOSCapacityTargetBytes':8589934592,'macOSCapacitySampleWrittenTargetBytes':1048576,
+              'inputsSHA256':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs if p.is_file()}}
+          (root/'build/neoswap-relay/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
+          PY
+      - name: Validate backend ownership, aliasing, rollback, pressure and stale tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined \
+            native/neoswap-relay/Backend.cpp native/neoswap-donation/Broker.cpp \
+            test/relay_backend_test.cpp -o "$RUNNER_TEMP/neoswap-relay-backend"
+          "$RUNNER_TEMP/neoswap-relay-backend" 2>&1 | tee build/neoswap-relay/backend.txt
+          python3 test/neoswap_relay_extension_test.py 2>&1 | tee build/neoswap-relay/extension-tests.txt
+      - name: Prove 1 GiB full writes and separate 8 GiB retained capacity after creator exit
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash native/neoswap-relay/run_relay_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-relay/macos/report.json" \
+            2>&1 | tee build/neoswap-relay/macos/probe.txt
+          python3 - <<'PY'
+          import json,pathlib
+          report=json.loads(pathlib.Path('build/neoswap-relay/macos/report.json').read_text())
+          assert report['schema']==1 and report['passed'] is True,report
+          assert report['platform']=='macOS-real-NSXPC-creator-exit',report
+          assert report['iphoneExtensionValidated'] is False and report['realRPCS3GameValidated'] is False,report
+          assert report['hostPID']>0 and report['creatorPID']>0 and report['hostPID']!=report['creatorPID'],report
+          assert report['creatorExitObserved'] is True and report['aliasesMatched'] is True,report
+          assert report['capacityBytes']==1073741824 and report['actualWrittenBytes']==1073741824,report
+          assert report['reservedVirtualBytesClaimedAsRAM']==0,report
+          assert 1073741824-1048576<=report['residentBytesMeasured']<=1073741824,report
+          assert report['hostFootprintDelta']<67108864 and report['hostNonvolatileDelta']<1048576,report
+          assert report['liveBytesAfterRelease']==0 and report['aliasesAfterRelease']==0,report
+          assert report['reusedIntervalZeroed'] is True and report['relaunchSucceeded'] is True,report
+          assert len(report['negativeScenarios'])==5 and all(case['passed'] is True for case in report['negativeScenarios']),report
+          capacity=report['capacity8GiB']
+          assert capacity['passed'] is True and capacity['creatorExitObserved'] is True and capacity['aliasesMatched'] is True,capacity
+          assert capacity['requestedCapacityBytes']==capacity['capacityBytes']==8589934592,capacity
+          assert capacity['entryCount']==16 and capacity['segmentBytes']==536870912,capacity
+          assert capacity['actualWrittenBytes']==1048576 and capacity['perSegmentWrittenBytes']==65536,capacity
+          assert 0<capacity['residentBytesForSample']<=1048576 and capacity['fullCapacityResidentValidated'] is False,capacity
+          assert capacity['liveBytesAfterRelease']==capacity['retainedBytesAfterShutdown']==0,capacity
+          PY
+      - name: Link the canonical extension and production manager for iPhone arm64
+        run: python3 test/neoswap_relay_simulator_test.py --compile-device --output build/neoswap-relay/simulator
+      - name: Prove actual iOS 18 extension exit, aliases, release, relaunch and production manager
+        run: python3 test/neoswap_relay_simulator_test.py --output build/neoswap-relay/simulator
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-Relay-${{ github.sha }}
+          path: build/neoswap-relay/
+          if-no-files-found: error
+          retention-days: 14

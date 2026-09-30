@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = '847272e7bfe15a07f6e0f5adacdbaea34f632d88ef05ca885c87bf9b439d9af9'
+PATCH_SHA256 = 'ea93b436b545674c93624c8a0438fa34270201d19ee9b0d566d4667257509791'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -40,11 +40,14 @@ CORE_INPUTS = (
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h',
     'packages/neo_swap/ios/Classes/NeoSwap.h',
     'packages/neo_swap/ios/Classes/NeoSwapClientStats.h',
+    'packages/neo_swap/ios/Classes/NeoSwapRelay.h',
     'native/neoswap/NeoSwapClient.h',
     'test/neo_swap_core_pin_test.py',
     'test/neoswap_rpcs3_allocator_test.cpp',
     'test/rpcs3_neoswap_vulkan_buffer_test.py',
     'test/native/rpcs3_neoswap_vulkan_buffer_test.cpp',
+    'test/rpcs3_neoswap_relay_test.py',
+    'test/native/rpcs3_neoswap_relay_test.cpp',
     'test/rpcs3_core_syntax_gate_test.py',
     'test/rpcs3_embedded_core_validator_test.py',
     'test/rpcs3_preprocessor_balance_test.py',
@@ -98,9 +101,14 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
     require(manifest['neoswap']['client_abi'] == 1 and
             manifest['neoswap']['broker_compiled_into_host_only'] is True,
             'Core must borrow ABI 1; host owns the broker')
+    require(manifest['neoswap_guest_relay']['client_abi'] == 1 and
+            manifest['neoswap_guest_relay']['broker_compiled_into_host_only'] is True and
+            manifest['neoswap_guest_relay']['real_iphone_validated'] is False,
+            'Core must borrow relay ABI 1 from the host without claiming device proof')
     for host, core in (
         ('packages/neo_swap/ios/Classes/NeoSwap.h', 'rpcs3/ios/NeoSwap.h'),
         ('packages/neo_swap/ios/Classes/NeoSwapClientStats.h', 'rpcs3/ios/NeoSwapClientStats.h'),
+        ('packages/neo_swap/ios/Classes/NeoSwapRelay.h', 'rpcs3/ios/NeoSwapRelay.h'),
         ('native/neoswap/NeoSwapClient.h', 'rpcs3/ios/NeoSwapClient.h'),
     ):
         payload = (root / host).read_bytes().replace(b'\r\n', b'\n')
@@ -110,11 +118,16 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'Unexpected allocator ABI')
     require('NEOSWAP_CLIENT_STATS_ABI = 1' in (root / 'packages/neo_swap/ios/Classes/NeoSwapClientStats.h').read_text(),
             'Unexpected diagnostics ABI')
+    require('NEOSWAP_RELAY_ABI = 1' in (root / 'packages/neo_swap/ios/Classes/NeoSwapRelay.h').read_text(),
+            'Unexpected page-relay ABI')
     recipe = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
     require('RPCS3_IOS_ABI="${RPCS3_IOS_ABI:-30}"' in recipe, 'Unexpected main Core ABI')
     require('test/rpcs3_xitrix_v0101_native_test.py' in recipe, 'Missing production native regressions')
+    require('test/rpcs3_neoswap_relay_test.py' in recipe, 'Missing actual shared-memory relay regressions')
     core_workflow = (root / '.github/workflows/rpcs3-core.yml').read_text()
     require('_rpcs3_ios_get_neoswap_client_stats' in core_workflow, 'Getter export must be verified')
+    require('_rpcs3_ios_set_neoswap_relay_api' in core_workflow, 'Relay setter export must be verified')
+    require("'neoswap_relay_abi':1" in core_workflow, 'Missing relay identity ABI')
     require("'neoswap_client_stats_abi':1" in core_workflow, 'Missing diagnostics identity ABI')
     require("'core_input_sha256':core_input_hashes()" in core_workflow, 'Missing recipe/input identity')
     ipa_workflow = (root / '.github/workflows/neoswap-ipa.yml').read_text()
@@ -124,6 +137,8 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'IPA exact-diff inputs differ from the published Core input identity')
     require("assert identity['neoswap_client_stats_abi'] == 1" in ipa_workflow,
             'IPA must reject an old Core without diagnostics ABI 1')
+    require("assert identity['neoswap_relay_abi'] == 1" in ipa_workflow,
+            'IPA must reject a Core without shared-memory relay ABI 1')
     require('validate_core_input_identity(identity)' in ipa_workflow,
             'IPA must verify the complete Core input identity')
     if source_root is not None:
@@ -137,6 +152,9 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
         require('_rpcs3_ios_get_neoswap_client_stats' in
                 (source_root / 'rpcs3/ios/RPCS3IOS.exports').read_text().splitlines(),
                 'Materialized getter is not exported')
+        require('_rpcs3_ios_set_neoswap_relay_api' in
+                (source_root / 'rpcs3/ios/RPCS3IOS.exports').read_text().splitlines(),
+                'Materialized relay setter is not exported')
 
 
 def validate_exact_pin(commit: str, root: Path = ROOT) -> None:
@@ -156,7 +174,7 @@ def validate_exact_pin(commit: str, root: Path = ROOT) -> None:
 
 def validate_core_input_identity(identity: dict, root: Path = ROOT) -> None:
     for name, expected in (
-        ('abi_version', 30), ('neoswap_client_abi', 1), ('neoswap_client_stats_abi', 1),
+        ('abi_version', 30), ('neoswap_client_abi', 1), ('neoswap_client_stats_abi', 1), ('neoswap_relay_abi', 1),
         ('source_commit', UPSTREAM), ('source_patch_sha256', PATCH_SHA256),
     ):
         value = identity.get(name)
@@ -176,7 +194,7 @@ def main() -> None:
     validate_source_contract(source_root=args.source_root)
     if args.source_only:
         require(not args.pin and not args.identity, '--source-only cannot validate a published Core pin/identity')
-        print('PASS: reviewed Core source/recipe, ABI 30, client ABI 1, stats ABI 1; binary pin not checked')
+        print('PASS: reviewed Core source/recipe, ABI 30, client ABI 1, stats ABI 1, relay ABI 1; binary pin not checked')
         return
     workflow = (ROOT / '.github/workflows/neoswap-ipa.yml').read_text()
     pin = args.pin or os.environ.get('RPCS3_CORE_HOST_SHA')
@@ -189,7 +207,7 @@ def main() -> None:
         identity = json.loads(args.identity.read_text())
         require(identity.get('host_commit') == pin, 'Downloaded Core identity belongs to another host commit')
         validate_core_input_identity(identity)
-    print(f'PASS: exact Core inputs pinned to {pin}; independent host broker; ABI 30/client 1/stats 1')
+    print(f'PASS: exact Core inputs pinned to {pin}; independent host broker; ABI 30/client 1/stats 1/relay 1')
 
 
 if __name__ == '__main__':

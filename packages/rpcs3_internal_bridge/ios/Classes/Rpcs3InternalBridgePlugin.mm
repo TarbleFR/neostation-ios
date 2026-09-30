@@ -3,6 +3,8 @@
 #import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
 #import <neo_swap/NeoSwap.h>
+#import <neo_swap/NeoSwapRelay.h>
+#import <neo_swap/NeoSwapRelayService.h>
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3EarlyLoaderDiagnostics.h"
 #import "Rpcs3EarlyAddressSpaceEscrow.h"
@@ -439,6 +441,15 @@ static void RPCS3Progress(void* context,
   auto bindSwap = reinterpret_cast<NeoSwapBinder>(dlsym(handle, "rpcs3_ios_set_neoswap_api"));
   const int swapResult = bindSwap ? bindSwap(NeoSwap_GetAPI(NEOSWAP_ABI)) : NEOSWAP_INVALID;
   if (swapResult == NEOSWAP_OK) NeoSwap_RegisterClient(NEOSWAP_RPCS3);
+  // prepare runs independently; a bounded worker wait must not delay the main
+  // thread. Failure keeps ordinary shared-memory files for this guest session.
+  const int relayReady = NeoSwapRelay_WaitReady(2500);
+  auto bindRelay = reinterpret_cast<rpcs3_ios_neoswap_relay_binder>(
+      dlsym(handle, "rpcs3_ios_set_neoswap_relay_api"));
+  const int relayResult = bindRelay ? bindRelay(NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)) : NEOSWAP_RELAY_INVALID;
+  RPCS3Diagnostic(@"neoswap_relay_client", [NSString stringWithFormat:
+      @"abi=1 prepare_result=%d bind_result=%d scope=GUEST_DATA shared_aliases=1 executable=0",
+      relayReady, relayResult]);
   _neoSwapClientStats = reinterpret_cast<int32_t (*)(NeoSwapClientStats*)>(
       dlsym(handle, "rpcs3_ios_get_neoswap_client_stats"));
   RPCS3Diagnostic(@"neoswap_client", [NSString stringWithFormat:

@@ -6977,6 +6977,28 @@ index 01b36d8ee..403436ff6 100644
  
  	const auto ct = idm::get_unlocked<lv2_memory_container>(cid);
  
+diff --git a/rpcs3/Emu/Cell/lv2/sys_mmapper.cpp b/rpcs3/Emu/Cell/lv2/sys_mmapper.cpp
+index 1f939ba7a..46b165f58 100644
+--- a/rpcs3/Emu/Cell/lv2/sys_mmapper.cpp
++++ b/rpcs3/Emu/Cell/lv2/sys_mmapper.cpp
+@@ -642,7 +642,7 @@ error_code sys_mmapper_map_shared_memory(ppu_thread& ppu, u32 addr, u32 mem_id,
+ 			// Insert atomically the memory handle (laziliy allocated)
+ 			if (!to_insert)
+ 			{
+-				to_insert = make_single_value(std::make_shared<utils::shm>(mem.size, 1 /* shareable flag */));
++				to_insert = make_single_value(std::make_shared<utils::shm>(mem.size, 1 /* shareable flag */, utils::shm_use::guest_data));
+ 			}
+ 
+ 			null.reset();
+@@ -712,7 +712,7 @@ error_code sys_mmapper_search_and_map(ppu_thread& ppu, u32 start_addr, u32 mem_i
+ 			// Insert atomically the memory handle (laziliy allocated)
+ 			if (!to_insert)
+ 			{
+-				to_insert = make_single_value(std::make_shared<utils::shm>(mem.size, 1 /* shareable flag */));
++				to_insert = make_single_value(std::make_shared<utils::shm>(mem.size, 1 /* shareable flag */, utils::shm_use::guest_data));
+ 			}
+ 
+ 			null.reset();
 diff --git a/rpcs3/Emu/Cell/lv2/sys_net/lv2_socket.cpp b/rpcs3/Emu/Cell/lv2/sys_net/lv2_socket.cpp
 index 0d2a59821..cc8055e0f 100644
 --- a/rpcs3/Emu/Cell/lv2/sys_net/lv2_socket.cpp
@@ -7148,7 +7170,7 @@ index 669f7594e..d0e01fd8c 100644
  
  		return false;
 diff --git a/rpcs3/Emu/Memory/vm.cpp b/rpcs3/Emu/Memory/vm.cpp
-index e7f55d727..58286f591 100644
+index e7f55d727..02c617c90 100644
 --- a/rpcs3/Emu/Memory/vm.cpp
 +++ b/rpcs3/Emu/Memory/vm.cpp
 @@ -13,6 +13,8 @@
@@ -7211,6 +7233,60 @@ index e7f55d727..58286f591 100644
  
  			for (auto lock = g_locks.cbegin(), end = lock + g_cfg.core.ppu_threads; lock != end; lock++)
  			{
+@@ -1044,7 +1068,7 @@ namespace vm
+ 		else
+ 		{
+ 			shm->unmap_critical(g_base_addr + addr);
+-#ifdef _WIN32
++#if defined(_WIN32) || defined(RPCS3_IOS)
+ 			shm->unmap_critical(g_sudo_addr + addr);
+ #endif
+ 		}
+@@ -1321,7 +1345,7 @@ namespace vm
+ 			};
+ 
+ 			// Special path for whole-allocated areas allowing 4k granularity
+-			m_common = std::make_shared<utils::shm>(size, fmt::format("_block_x%08x", addr));
++			m_common = std::make_shared<utils::shm>(size, fmt::format("_block_x%08x", addr), utils::shm_use::guest_data);
+ 
+ 			if (!map_critical(vm::_ptr<u8>(addr), this->flags & page_size_4k && utils::get_page_size() > 4096 ? utils::protection::rw : utils::protection::no) || !map_critical(vm::get_super_ptr(addr), utils::protection::rw))
+ 			{
+@@ -1361,7 +1385,7 @@ namespace vm
+ 			if (m_common)
+ 			{
+ 				m_common->unmap_critical(vm::base(addr));
+-#ifdef _WIN32
++#if defined(_WIN32) || defined(RPCS3_IOS)
+ 				m_common->unmap_critical(vm::get_super_ptr(addr));
+ #endif
+ 				ensure(m_common.use_count() == 1);
+@@ -1415,7 +1439,7 @@ namespace vm
+ 			shm = *src;
+ 		else
+ 		{
+-			shm = std::make_shared<utils::shm>(size);
++			shm = std::make_shared<utils::shm>(size, 0, utils::shm_use::guest_data);
+ 		}
+ 
+ 		const u32 max = (this->addr + this->size - size) & (0 - align);
+@@ -1494,7 +1518,7 @@ namespace vm
+ 			shm = *src;
+ 		else
+ 		{
+-			shm = std::make_shared<utils::shm>(size);
++			shm = std::make_shared<utils::shm>(size, 0, utils::shm_use::guest_data);
+ 		}
+ 
+ 		vm::writer_lock lock;
+@@ -1808,7 +1832,7 @@ namespace vm
+ 	{
+ 		if (flags & preallocated)
+ 		{
+-			m_common = std::make_shared<utils::shm>(size, fmt::format("_block_x%08x", addr));
++			m_common = std::make_shared<utils::shm>(size, fmt::format("_block_x%08x", addr), utils::shm_use::guest_data);
+ 			m_common->map_critical(vm::base(addr), this->flags & page_size_4k && utils::get_page_size() > 4096 ? utils::protection::rw : utils::protection::no);
+ 			m_common->map_critical(vm::get_super_ptr(addr));
+ 		}
 @@ -1849,6 +1873,13 @@ namespace vm
  			{
  				pflags |= page_size_64k;
@@ -7225,6 +7301,15 @@ index e7f55d727..58286f591 100644
  			else if (!(flags & (page_size_mask & ~page_size_1m)))
  			{
  				pflags |= page_size_1m;
+@@ -2403,7 +2434,7 @@ namespace vm
+ 
+ 			const u32 flags = ar.pop<u32>();
+ 			const u64 size = ar.pop<u64>();
+-			shm = std::make_shared<utils::shm>(size, flags);
++			shm = std::make_shared<utils::shm>(size, flags, utils::shm_use::guest_data);
+ 
+ 			// Load binary image
+ 			// elad335: I'm not proud about it as well.. (ideal situation is to not call map_self())
 diff --git a/rpcs3/Emu/RSX/Common/BufferUtils.cpp b/rpcs3/Emu/RSX/Common/BufferUtils.cpp
 index 8b2689b3e..cc49e82f1 100644
 --- a/rpcs3/Emu/RSX/Common/BufferUtils.cpp
@@ -11684,6 +11769,219 @@ index 000000000..91bb89d96
 +    int32_t last_result;
 +    uint32_t reserved;
 +} NeoSwapClientStats;
+diff --git a/rpcs3/ios/NeoSwapRelay.h b/rpcs3/ios/NeoSwapRelay.h
+new file mode 100644
+index 000000000..25a589a4d
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapRelay.h
+@@ -0,0 +1,70 @@
++// SPDX-License-Identifier: MIT
++#ifndef NEOSTATION_NEOSWAP_RELAY_H
++#define NEOSTATION_NEOSWAP_RELAY_H
++#include <stdint.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Separate ABI: does not change NeoSwapAPI v1 or its allocation ownership.
++ * A token owns one backing interval. Every map of that token aliases the SAME
++ * bytes. Capacity is retained VM-object capacity, never resident physical RAM.
++ * All calls require a normal thread. Quiesce every guest/CPU/GPU user before
++ * unmap/release; these operations do not wait for emulator work to complete.
++ */
++enum { NEOSWAP_RELAY_ABI = 1, NEOSWAP_RELAY_ALIGNMENT = 65536 };
++enum NeoSwapRelayProtection {
++    NEOSWAP_RELAY_NONE = 0, NEOSWAP_RELAY_READ = 1, NEOSWAP_RELAY_READ_WRITE = 3
++};
++enum NeoSwapRelayResult {
++    NEOSWAP_RELAY_OK = 0, NEOSWAP_RELAY_DISABLED = -1,
++    NEOSWAP_RELAY_INVALID = -2, NEOSWAP_RELAY_QUOTA = -3,
++    NEOSWAP_RELAY_MAPPING = -4, NEOSWAP_RELAY_BUSY = -5,
++    NEOSWAP_RELAY_UNKNOWN = -6, NEOSWAP_RELAY_PRESSURE = -7,
++    NEOSWAP_RELAY_LIMIT = -8, NEOSWAP_RELAY_CLEANUP = -9
++};
++typedef struct NeoSwapRelayStats {
++    uint32_t struct_size, abi_version;
++    uint64_t capacity_bytes, retained_capacity_bytes, live_bytes, peak_live_bytes;
++    uint64_t object_count, alias_count, mapped_alias_bytes, entry_count;
++    uint64_t rejection_count, os_error_count, pending_cleanup_entries, retiring_object_count;
++    uint64_t quarantined_fixed_alias_count;
++    uint32_t enabled_owner_mask, pressure_raised;
++    int32_t last_result, last_os_error;
++} NeoSwapRelayStats;
++typedef struct NeoSwapRelayAPI {
++    uint32_t struct_size, abi_version;
++    int (*create)(uint32_t owner, uint64_t bytes, uint64_t* token);
++    /* A non-null target MUST be a caller-owned reserved guest range. Existing
++     * guest users must be quiesced. Failed maps leave that reservation intact.
++     * Null requests a new, 64-KiB-aligned alias. No executable mapping exists.
++     */
++    int (*map)(uint64_t token, void* target, uint32_t protection, void** mapped);
++    /* A fixed alias is atomically replaced with a PROT_NONE reservation;
++     * an anywhere alias is deallocated. Failure retains ownership and mapping.
++     */
++    int (*unmap)(uint64_t token, void* address);
++    /* BUSY while any aliases remain. Scrub failure retains the token for retry;
++     * no error permits reuse of the backing interval or an ordinary free().
++     */
++    int (*release)(uint64_t token);
++    int (*enabled)(uint32_t owner);
++    int (*snapshot)(NeoSwapRelayStats* stats);
++    /* Destructor path: caller has quiesced ALL users and relinquishes the
++     * token. The backend blocks new maps immediately and owns retirement of
++     * every remaining alias. ANYWHERE cleanup errors are retried by collect().
++     * FIXED aliases are attempted synchronously once: a failed fixed replacement
++     * is permanently quarantined because its caller may subsequently reuse the
++     * virtual address. That object is never scrubbed/reissued during this process.
++     * Unlike release(), caller may forget the token after calling retire().
++     */
++    int (*retire)(uint64_t token);
++} NeoSwapRelayAPI;
++#if defined(__GNUC__)
++__attribute__((visibility("default")))
++#endif
++const NeoSwapRelayAPI* NeoSwap_GetRelayAPI(uint32_t abi_version);
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/rpcs3/ios/NeoSwapRelayClient.h b/rpcs3/ios/NeoSwapRelayClient.h
+new file mode 100644
+index 000000000..394543d55
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapRelayClient.h
+@@ -0,0 +1,131 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include "NeoSwapRelay.h"
++#include "NeoSwap.h"
++#include <atomic>
++#include <cstdint>
++#include <mutex>
++#include <memory>
++#include <new>
++
++namespace neostation::relay {
++// The Core borrows the host vtable; no broker, extension, allocation or static
++// constructor is linked into the Core. The installed vtable lives for its lifetime.
++inline constinit std::atomic<const NeoSwapRelayAPI*> client_api{nullptr};
++inline int install(const NeoSwapRelayAPI* api) noexcept {
++    if (!api || api->struct_size != sizeof(*api) || api->abi_version != NEOSWAP_RELAY_ABI ||
++        !api->create || !api->map || !api->unmap || !api->release || !api->enabled || !api->snapshot || !api->retire)
++        return NEOSWAP_RELAY_INVALID;
++    const NeoSwapRelayAPI* expected = nullptr;
++    if (!client_api.compare_exchange_strong(expected, api, std::memory_order_acq_rel) && expected != api)
++        return NEOSWAP_RELAY_BUSY;
++    return NEOSWAP_RELAY_OK;
++}
++
++// One shared-memory object selects its backing once. File fallback is permitted
++// only before any alias has been exposed: mixing file and relay views would
++// silently give g_base/g_sudo/map_self different bytes.
++class shared_memory {
++    enum class mode { file, candidate, relay };
++    mutable std::mutex mutex;
++    mode state = mode::file;
++    const NeoSwapRelayAPI* api = nullptr;
++    std::uint64_t token = 0, bytes = 0;
++    bool published = false;
++    struct alias { void* address = nullptr; alias* next = nullptr; };
++    mutable alias* aliases = nullptr;
++public:
++    struct map_result { bool handled; void* address; int result; };
++    shared_memory() = default;
++    shared_memory(const shared_memory&) = delete;
++    shared_memory& operator=(const shared_memory&) = delete;
++    void configure(std::uint64_t size, bool guest_data) noexcept {
++        bytes = size;
++        if (guest_data && size && size % NEOSWAP_RELAY_ALIGNMENT == 0)
++            state = mode::candidate;
++    }
++    map_result map(void* target, std::uint32_t protection, bool compatible) noexcept {
++        const std::lock_guard lock(mutex);
++        if (state == mode::file) return {false, nullptr, NEOSWAP_RELAY_DISABLED};
++        if (!compatible || (target && reinterpret_cast<std::uintptr_t>(target) % NEOSWAP_RELAY_ALIGNMENT)) {
++            if (state == mode::candidate) {
++                state = mode::file;
++                return {false, nullptr, NEOSWAP_RELAY_DISABLED};
++            }
++            return {true, nullptr, NEOSWAP_RELAY_INVALID};
++        }
++        if (state == mode::candidate) {
++            api = client_api.load(std::memory_order_acquire);
++            // Uses the unchanged common NeoSwap owner ABI.
++            if (!api || !api->enabled(NEOSWAP_RPCS3) || api->create(NEOSWAP_RPCS3, bytes, &token) != NEOSWAP_RELAY_OK || !token) {
++                state = mode::file;
++                return {false, nullptr, NEOSWAP_RELAY_DISABLED};
++            }
++            state = mode::relay;
++        }
++        // Allocate bookkeeping before publishing a mapping. OOM must not
++        // produce an untracked alias after the kernel has replaced a range.
++        std::unique_ptr<alias> record(new (std::nothrow) alias);
++        if (!record) {
++            if (!published && api->release(token) == NEOSWAP_RELAY_OK) {
++                token = 0;
++                state = mode::file;
++                return {false, nullptr, NEOSWAP_RELAY_LIMIT};
++            }
++            return {true, nullptr, NEOSWAP_RELAY_LIMIT};
++        }
++        void* address = nullptr;
++        const int result = api->map(token, target, protection, &address);
++        if (result == NEOSWAP_RELAY_OK && address) {
++            record->address = address;
++            record->next = aliases;
++            aliases = record.release();
++            published = true;
++            return {true, address, result};
++        }
++        if (!published && api->release(token) == NEOSWAP_RELAY_OK) {
++            token = 0;
++            state = mode::file;
++            return {false, nullptr, result};
++        }
++        return {true, nullptr, result == NEOSWAP_RELAY_OK ? NEOSWAP_RELAY_MAPPING : result};
++    }
++    // Returns whether this object owns the alias. Failed cleanup must never
++    // fall through to munmap/free or release the token for another guest.
++    bool unmap(void* address, int& result) const noexcept {
++        const std::lock_guard lock(mutex);
++        if (state != mode::relay) return false;
++        alias** found = &aliases;
++        while (*found && (*found)->address != address) found = &(*found)->next;
++        if (!*found) {
++            result = NEOSWAP_RELAY_UNKNOWN;
++            return true;
++        }
++        result = api->unmap(token, address);
++        if (result == NEOSWAP_RELAY_OK) {
++            alias* retired = *found;
++            *found = retired->next;
++            delete retired;
++        }
++        return true;
++    }
++    // Destruction transfers cleanup ownership to the host before dropping local
++    // metadata. All users must be quiesced; the token can never map again.
++    // The host retires aliases, then scrubs/reclaims only after the last one.
++    // Failed fixed-address retirement remains quarantined: retrying an overwrite
++    // after this call could corrupt a later guest using the same reservation.
++    bool retire() noexcept {
++        const std::lock_guard lock(mutex);
++        if (!token || !api) return false;
++        (void)api->retire(token);
++        token = 0;
++        while (aliases) {
++            alias* retired = aliases;
++            aliases = retired->next;
++            delete retired;
++        }
++        return true;
++    }
++    ~shared_memory() { (void)retire(); }
++};
++}
 diff --git a/rpcs3/ios/NeoSwapVulkanBuffer.h b/rpcs3/ios/NeoSwapVulkanBuffer.h
 new file mode 100644
 index 0000000..0c2639e
@@ -11830,16 +12128,17 @@ index 0000000..0c2639e
 +}
 +} // namespace vk
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc731..9f118f83c 100644
+index 74a6dc731..5b629888a 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,6 @@
  #include "RPCS3IOS.h"
 +#include "NeoSwapClient.h"
++#include "NeoSwapRelayClient.h"
  #include "RPCS3IOSBigPicture.h"
  #include "RPCS3IOSBootProgress.h"
  #include "RPCS3IOSCapabilities.h"
-@@ -20,10 +21,15 @@
+@@ -20,10 +22,15 @@
  #include "GameLibrary.h"
  #include "GameUpdateManifest.h"
  #include "IOSGSFrame.h"
@@ -11855,7 +12154,7 @@ index 74a6dc731..9f118f83c 100644
  #include "Emu/IdManager.h"
  #include "Emu/Audio/IOS/IOSAudioBackend.h"
  #include "Emu/Audio/Null/null_enumerator.h"
-@@ -110,6 +116,8 @@ std::string g_application_support_path;
+@@ -110,6 +117,8 @@ std::string g_application_support_path;
  std::string g_cache_path;
  std::string g_preferred_language = "en";
  bool g_emu_started = false;
@@ -11864,7 +12163,7 @@ index 74a6dc731..9f118f83c 100644
  std::atomic_bool g_accept_display_surfaces = false;
  std::atomic_bool g_accept_pad_state = false;
  rpcs3::ios::display_surface_registry g_display_surface;
-@@ -312,7 +320,8 @@ boot_progress_snapshot capture_boot_progress()
+@@ -312,7 +321,8 @@ boot_progress_snapshot capture_boot_progress()
  	};
  
  	boot_progress_snapshot snapshot = read();
@@ -11874,7 +12173,7 @@ index 74a6dc731..9f118f83c 100644
  	{
  		boot_progress_snapshot next = read();
  		if (next == snapshot)
-@@ -321,6 +330,7 @@ boot_progress_snapshot capture_boot_progress()
+@@ -321,6 +331,7 @@ boot_progress_snapshot capture_boot_progress()
  		}
  		snapshot = std::move(next);
  	}
@@ -11882,7 +12181,7 @@ index 74a6dc731..9f118f83c 100644
  }
  
  rpcs3_ios_emulation_state current_emulation_state() noexcept
-@@ -378,6 +388,11 @@ void emit_log(int32_t level, std::string_view message)
+@@ -378,6 +389,11 @@ void emit_log(int32_t level, std::string_view message)
  	g_config.log_callback(g_config.user_context, level, terminated.c_str());
  }
  
@@ -11894,7 +12193,7 @@ index 74a6dc731..9f118f83c 100644
  void emit_jit_arena_statistics(std::string_view phase)
  {
  	constexpr usz mib = 1024 * 1024;
-@@ -385,7 +400,7 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -385,7 +401,7 @@ void emit_jit_arena_statistics(std::string_view phase)
  	emit_log(4, fmt::format(
  		"iOS JIT arena %s: code live=%u MiB, free=%u MiB (%llu bytes), largest_free=%u MiB (%llu bytes), "
  		"runtime=%u MiB, peak=%u MiB; data live=%u MiB, free=%u MiB (%llu bytes), "
@@ -11903,7 +12202,7 @@ index 74a6dc731..9f118f83c 100644
  		phase,
  		stats.live_code_bytes / mib,
  		stats.free_code_bytes / mib,
-@@ -401,7 +416,8 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -401,7 +417,8 @@ void emit_jit_arena_statistics(std::string_view phase)
  		static_cast<u64>(stats.largest_free_data_bytes),
  		stats.runtime_data_bytes / mib,
  		stats.peak_data_bytes / mib,
@@ -11913,7 +12212,7 @@ index 74a6dc731..9f118f83c 100644
  }
  
  class callback_log_listener final : public logs::listener
-@@ -448,16 +464,32 @@ private:
+@@ -448,16 +465,32 @@ private:
  	std::string m_name;
  };
  
@@ -11950,7 +12249,7 @@ index 74a6dc731..9f118f83c 100644
  }
  
  bool apply_database_settings_for_api(std::string_view title_id)
-@@ -1267,15 +1299,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
+@@ -1267,15 +1300,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
  
  extern "C" const char* rpcs3_ios_build_info(void) noexcept
  {
@@ -11969,7 +12268,7 @@ index 74a6dc731..9f118f83c 100644
  		return RPCS3_IOS_INVALID_STATE;
  	}
  
-@@ -1289,40 +1321,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1289,40 +1322,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		return result;
  	}
  
@@ -12015,15 +12314,20 @@ index 74a6dc731..9f118f83c 100644
 -		return RPCS3_IOS_JIT_UNAVAILABLE;
 +		return fail_initialize(RPCS3_IOS_JIT_UNAVAILABLE, "debugger_readiness",
 +			rpcs3::ios::jit::last_error());
-+	}
+ 	}
+-	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
+-		!rpcs3::ios::jit::seal_arena())
 +
 +	emit_log(2, fmt::format("requested_code_capacity policy=%u", config->expanded_jit_arena));
 +	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena))
-+	{
+ 	{
+-		set_error(rpcs3::ios::jit::last_error());
+-		g_lifecycle.finish_initialize(false);
+-		return RPCS3_IOS_JIT_MAPPING_FAILED;
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_prepare",
 +			rpcs3::ios::jit::last_error());
-+	}
-+
+ 	}
+ 
 +	// No process-global runtime has been changed before this point. An early
 +	// reservation failure can be retried by the user after helper completion.
 +	// Once executable runtime construction starts, retain the single-instance
@@ -12049,9 +12353,7 @@ index 74a6dc731..9f118f83c 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "ppu_hle_trampolines",
 +			trampoline_error + "; " + rpcs3::ios::jit::last_error());
- 	}
--	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
--		!rpcs3::ios::jit::seal_arena())
++	}
 +	emit_log(2, "ppu_trampoline_init_end");
 +
 +	trampoline_error.clear();
@@ -12064,15 +12366,12 @@ index 74a6dc731..9f118f83c 100644
 +	emit_log(2, "spu_trampoline_init_end");
 +
 +	if (!rpcs3::ios::jit::seal_arena())
- 	{
--		set_error(rpcs3::ios::jit::last_error());
--		g_lifecycle.finish_initialize(false);
--		return RPCS3_IOS_JIT_MAPPING_FAILED;
++	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_seal",
 +			rpcs3::ios::jit::last_error());
- 	}
++	}
 +	emit_log(2, "jit_initialize_success");
- 
++
  	try
  	{
 -		g_application_support_path = config->application_support_path;
@@ -12096,7 +12395,7 @@ index 74a6dc731..9f118f83c 100644
  		// A developer can request one bounded SPU profile through the injected
  		// cache root. Consume the request so subsequent launches stay unchanged.
  		const std::string profile_request = fs::get_cache_dir() + "jit-profile.once";
-@@ -1385,8 +1480,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1385,8 +1481,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		Emu.SetCallbacks(make_callbacks());
  		Emu.SetSupportedRenderers({video_renderer::vulkan});
  		Emu.SetDefaultRenderer(video_renderer::vulkan);
@@ -12105,7 +12404,7 @@ index 74a6dc731..9f118f83c 100644
  		Emu.SetDefaultGraphicsAdapter("iOS Metal GPU");
  		Emu.SetHasGui(false);
  		Emu.SetHeadless(false);
-@@ -1397,6 +1490,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1397,6 +1491,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		g_accept_display_surfaces = true;
  		g_accept_pad_state = true;
  		emit_log(4, "RPCS3 Emu.Init completed with the iOS Vulkan/MoltenVK and RemoteIO frontend");
@@ -12113,7 +12412,7 @@ index 74a6dc731..9f118f83c 100644
  		emit_jit_arena_statistics("after core initialization");
  		return RPCS3_IOS_OK;
  	}
-@@ -1519,6 +1613,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
+@@ -1519,6 +1614,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
  
  		using test_function = uint64_t (*)(uint64_t);
  		const auto function_address = compiler.get("rpcs3_ios_test_function");
@@ -12121,7 +12420,7 @@ index 74a6dc731..9f118f83c 100644
  		if (!function_address)
  		{
  			set_error("LLVM did not publish the self-test function");
-@@ -3161,7 +3256,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
+@@ -3161,7 +3257,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
  		}
  		bool custom_config = false;
  		const bool loaded = load_settings_for_api(title_id, custom_config);
@@ -12130,7 +12429,7 @@ index 74a6dc731..9f118f83c 100644
  		if (!loaded)
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3233,12 +3328,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
+@@ -3233,12 +3329,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
  		{
  			return result;
  		}
@@ -12149,7 +12448,7 @@ index 74a6dc731..9f118f83c 100644
  		return RPCS3_IOS_OK;
  	}
  	catch (const std::exception& error)
-@@ -3310,7 +3408,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
+@@ -3310,7 +3409,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
  
  	try
  	{
@@ -12159,7 +12458,7 @@ index 74a6dc731..9f118f83c 100644
  		{
  			set_error(fmt::format("Unable to remove the custom configuration for %s", title_id));
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3388,10 +3487,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
+@@ -3388,10 +3488,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
  		}
@@ -12170,7 +12469,7 @@ index 74a6dc731..9f118f83c 100644
  		normalize_current_game_resolution(game.resolution);
  		const auto result = finish_game_settings_preset_result(
  			rpcs3::ios::save_current_game_settings_preset(title_id, name));
-@@ -4444,6 +4539,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4444,6 +4540,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  	const char* savestate_id) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -12183,7 +12482,7 @@ index 74a6dc731..9f118f83c 100644
  	if (!title_id || !title_id[0])
  	{
  		set_error("An installed title ID is required");
-@@ -4486,7 +4587,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4486,7 +4588,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  			return RPCS3_IOS_GAME_NOT_FOUND;
  		}
  
@@ -12222,7 +12521,7 @@ index 74a6dc731..9f118f83c 100644
  		if (!requested_savestate_id.empty())
  		{
  			const auto savestates = enumerate_title_savestates(game->title_id, game->path);
-@@ -4503,21 +4634,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4503,21 +4635,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  				return RPCS3_IOS_BOOT_FAILED;
  			}
  			boot_path = selected->path;
@@ -12244,7 +12543,7 @@ index 74a6dc731..9f118f83c 100644
  		}
  
  		if (requested_savestate_id.empty())
-@@ -4730,9 +4846,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
+@@ -4730,9 +4847,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
  	return RPCS3_IOS_INTERNAL_ERROR;
  }
  
@@ -12424,7 +12723,7 @@ index 74a6dc731..9f118f83c 100644
  	if (g_lifecycle.state() != RPCS3_IOS_STATE_READY)
  	{
  		set_error("RPCS3Core must be ready before stopping emulation");
-@@ -4784,6 +5070,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
+@@ -4784,6 +5071,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
  extern "C" rpcs3_ios_status rpcs3_ios_shutdown(void) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -12437,7 +12736,7 @@ index 74a6dc731..9f118f83c 100644
  	bool should_run = false;
  	if (const auto result = g_lifecycle.begin_shutdown(should_run); result != RPCS3_IOS_OK)
  	{
-@@ -4852,3 +5144,14 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
+@@ -4852,3 +5145,20 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
  	emit_log(1, text);
  	std::abort();
  }
@@ -12452,11 +12751,17 @@ index 74a6dc731..9f118f83c 100644
 +{
 +	return neostation::swap::snapshot(out);
 +}
++
++// Optional guest-data relay binding. Main Core ABI and NeoSwap v1 are unchanged.
++extern "C" RPCS3_IOS_EXPORT int32_t rpcs3_ios_set_neoswap_relay_api(const NeoSwapRelayAPI* api) noexcept
++{
++	return neostation::relay::install(api);
++}
 diff --git a/rpcs3/ios/RPCS3IOS.exports b/rpcs3/ios/RPCS3IOS.exports
-index d7529ab6a..61d2783f6 100644
+index d7529ab6a..e0376ca72 100644
 --- a/rpcs3/ios/RPCS3IOS.exports
 +++ b/rpcs3/ios/RPCS3IOS.exports
-@@ -72,3 +72,9 @@ _rpcs3_ios_stop_emulation
+@@ -72,3 +72,11 @@ _rpcs3_ios_stop_emulation
  _rpcs3_ios_get_state
  _rpcs3_ios_shutdown
  _rpcs3_ios_last_error
@@ -12466,19 +12771,22 @@ index d7529ab6a..61d2783f6 100644
 +_neostation_rpcs3_ios_save_state_slot
 +_rpcs3_ios_set_neoswap_api
 +_rpcs3_ios_get_neoswap_client_stats
++
++_rpcs3_ios_set_neoswap_relay_api
 diff --git a/rpcs3/ios/RPCS3IOS.h b/rpcs3/ios/RPCS3IOS.h
-index 20526d090..d1dbee1ad 100644
+index 20526d090..367413d81 100644
 --- a/rpcs3/ios/RPCS3IOS.h
 +++ b/rpcs3/ios/RPCS3IOS.h
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
  
  #include <stddef.h>
  #include <stdint.h>
 +#include "NeoSwapClientStats.h"
++#include "NeoSwapRelay.h"
  
  #if defined(__cplusplus)
  extern "C" {
-@@ -139,6 +140,7 @@ typedef struct rpcs3_ios_config
+@@ -139,6 +141,7 @@ typedef struct rpcs3_ios_config
      rpcs3_ios_log_callback log_callback;
      rpcs3_ios_main_thread_callback main_thread_callback;
      void* user_context;
@@ -12486,10 +12794,13 @@ index 20526d090..d1dbee1ad 100644
      uint32_t expanded_jit_arena;
      uint32_t reserved;
  } rpcs3_ios_config;
-@@ -792,6 +794,10 @@ RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_get_boot_progress(
+@@ -792,6 +795,13 @@ RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_get_boot_progress(
  // lifecycle lock. Fields without a valid_fields bit must not be displayed.
  RPCS3_IOS_EXPORT rpcs3_ios_status rpcs3_ios_get_performance_metrics(
      rpcs3_ios_performance_metrics* metrics) RPCS3_IOS_NOEXCEPT;
++// Optional guest-data relay, bound by the host before initialize/boot.
++RPCS3_IOS_EXPORT int32_t rpcs3_ios_set_neoswap_relay_api(
++    const NeoSwapRelayAPI* api) RPCS3_IOS_NOEXCEPT;
 +// Optional allocator diagnostics: caller supplies the exact struct size and
 +// NEOSWAP_CLIENT_STATS_ABI. Independent of the main Core and allocator ABI.
 +RPCS3_IOS_EXPORT int32_t rpcs3_ios_get_neoswap_client_stats(
@@ -13882,3 +14193,170 @@ index cd3dfab08..e6901e4f6 100644
  	}
  }
  
+diff --git a/rpcs3/util/vm.hpp b/rpcs3/util/vm.hpp
+index 560823cb3..d173fcf7c 100644
+--- a/rpcs3/util/vm.hpp
++++ b/rpcs3/util/vm.hpp
+@@ -4,6 +4,9 @@
+ #include "util/atomic.hpp"
+ 
+ #include <string>
++#ifdef RPCS3_IOS
++#include "ios/NeoSwapRelayClient.h"
++#endif
+ 
+ namespace utils
+ {
+@@ -66,6 +69,9 @@ namespace utils
+ 	// Map file descriptor
+ 	void* memory_map_fd(native_handle fd, usz size, protection prot);
+ 
++	// Relay eligibility is explicit; general/COW/JIT storage keeps its existing backing.
++	enum class shm_use { general, guest_data };
++
+ 	// Shared memory handle
+ 	class shm
+ 	{
+@@ -78,12 +84,15 @@ namespace utils
+ 		u64 m_size{};
+ 		atomic_t<void*> m_ptr{nullptr};
+ 		std::string m_storage;
++#ifdef RPCS3_IOS
++		mutable neostation::relay::shared_memory m_relay;
++#endif
+ 
+ 	public:
+-		explicit shm(u64 size, u32 flags = 0);
++		explicit shm(u64 size, u32 flags = 0, shm_use use = shm_use::general);
+ 
+ 		// Construct with specified path as sparse file storage
+-		shm(u64 size, const std::string& storage);
++		shm(u64 size, const std::string& storage, shm_use use = shm_use::general);
+ 
+ 		shm(const shm&) = delete;
+ 
+diff --git a/rpcs3/util/vm_native.cpp b/rpcs3/util/vm_native.cpp
+index 822c1708a..4afd1a39c 100644
+--- a/rpcs3/util/vm_native.cpp
++++ b/rpcs3/util/vm_native.cpp
+@@ -497,7 +497,7 @@ namespace utils
+ #endif
+ 	}
+ 
+-	shm::shm(u64 size, u32 flags)
++	shm::shm(u64 size, u32 flags, [[maybe_unused]] shm_use use)
+ 		: m_flags(flags)
+ 		, m_size(utils::align(size, 0x10000))
+ 	{
+@@ -506,6 +506,7 @@ namespace utils
+ 		m_handle = ensure(::CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_EXECUTE_READWRITE, max_size.HighPart, max_size.LowPart, nullptr));
+ #elif defined(RPCS3_IOS)
+ 		m_file = ensure(rpcs3::ios::create_shared_memory_file(fs::get_cache_dir(), m_size), FN(x >= 0));
++		m_relay.configure(m_size, use == shm_use::guest_data);
+ #elif defined(__linux__) || defined(__FreeBSD__)
+ 		m_file = -1;
+ 
+@@ -543,7 +544,7 @@ namespace utils
+ #endif
+ 	}
+ 
+-	shm::shm(u64 size, const std::string& storage)
++	shm::shm(u64 size, const std::string& storage, [[maybe_unused]] shm_use use)
+ 		: m_size(utils::align(size, 0x10000))
+ 	{
+ #ifdef _WIN32
+@@ -716,6 +717,7 @@ namespace utils
+ #ifdef RPCS3_IOS
+ 		(void)storage;
+ 		m_file = ensure(rpcs3::ios::create_shared_memory_file(fs::get_cache_dir(), m_size), FN(x >= 0));
++		m_relay.configure(m_size, use == shm_use::guest_data);
+ 		return;
+ #else
+ 
+@@ -822,7 +824,14 @@ namespace utils
+ 
+ 	shm::~shm()
+ 	{
++#ifdef RPCS3_IOS
++		// Users are quiesced. Transfer every remaining alias (including self and
++		// partial-constructor mappings) to retryable host retirement as one object.
++		if (m_relay.retire()) m_ptr.exchange(nullptr);
++		else this->unmap_self();
++#else
+ 		this->unmap_self();
++#endif
+ 
+ #ifdef _WIN32
+ 		::CloseHandle(m_handle);
+@@ -836,6 +845,17 @@ namespace utils
+ 
+ 	u8* shm::map(void* ptr, protection prot, bool cow) const
+ 	{
++#ifdef RPCS3_IOS
++		const bool compatible = !cow && (prot == protection::rw || prot == protection::ro || prot == protection::no);
++		const u32 relay_protection = prot == protection::rw ? NEOSWAP_RELAY_READ_WRITE :
++			prot == protection::ro ? NEOSWAP_RELAY_READ : NEOSWAP_RELAY_NONE;
++		const auto relay = m_relay.map(reinterpret_cast<void*>(reinterpret_cast<u64>(ptr) & -0x10000), relay_protection, compatible);
++		if (relay.handled)
++		{
++			if (!relay.address) errno = relay.result == NEOSWAP_RELAY_INVALID ? EINVAL : ENOMEM;
++			return static_cast<u8*>(relay.address);
++		}
++#endif
+ #ifdef _WIN32
+ 		DWORD access = FILE_MAP_WRITE;
+ 		switch (prot)
+@@ -911,6 +931,14 @@ namespace utils
+ #ifdef _WIN32
+ 		return this->map(target, prot, cow);
+ #else
++#ifdef RPCS3_IOS
++		// try_map() treats target as a hint, never a reserved range to overwrite.
++		const bool compatible = !cow && (prot == protection::rw || prot == protection::ro || prot == protection::no);
++		const u32 relay_protection = prot == protection::rw ? NEOSWAP_RELAY_READ_WRITE :
++			prot == protection::ro ? NEOSWAP_RELAY_READ : NEOSWAP_RELAY_NONE;
++		const auto relay = m_relay.map(nullptr, relay_protection, compatible);
++		if (relay.handled) return static_cast<u8*>(relay.address);
++#endif
+ 		const auto result = reinterpret_cast<u8*>(::mmap(reinterpret_cast<void*>(target), m_size, +prot, (cow ? MAP_PRIVATE : MAP_SHARED), m_file, 0));
+ 
+ 		if (result == reinterpret_cast<void*>(uptr{umax}))
+@@ -1020,6 +1048,7 @@ namespace utils
+ 			if (!mapped)
+ 			{
+ 				mapped = this->map(nullptr, prot);
++				if (!mapped || mapped == reinterpret_cast<void*>(uptr{umax})) return nullptr;
+ 			}
+ 
+ 			// Install mapped memory
+@@ -1040,6 +1069,14 @@ namespace utils
+ 
+ 	void shm::unmap(void* ptr) const
+ 	{
++#ifdef RPCS3_IOS
++		int result = NEOSWAP_RELAY_OK;
++		if (m_relay.unmap(ptr, result))
++		{
++			ensure(result == NEOSWAP_RELAY_OK);
++			return;
++		}
++#endif
+ #ifdef _WIN32
+ 		::UnmapViewOfFile(ptr);
+ #else
+@@ -1050,7 +1087,14 @@ namespace utils
+ 	void shm::unmap_critical(void* ptr)
+ 	{
+ 		const auto target = reinterpret_cast<u8*>(reinterpret_cast<u64>(ptr) & -0x10000);
+-
++#ifdef RPCS3_IOS
++		int result = NEOSWAP_RELAY_OK;
++		if (m_relay.unmap(target, result))
++		{
++			ensure(result == NEOSWAP_RELAY_OK);
++			return;
++		}
++#endif
+ #ifdef _WIN32
+ 		if (is_memory_mappping_memory(ptr))
+ 		{

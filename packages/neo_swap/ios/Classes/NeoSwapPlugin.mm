@@ -2,6 +2,9 @@
 #import "NeoSwap.h"
 #include "NeoSwapHost.h"
 #include "NeoSwapCapacityProbe.h"
+#if defined(NEOSWAP_RELAY)
+#import "NeoSwapRelayService.h"
+#endif
 #import <Foundation/Foundation.h>
 #include <TargetConditionals.h>
 #include <mach/mach.h>
@@ -26,6 +29,10 @@ static const uint64_t kMiB = 1024 * 1024;
 @property(nonatomic, assign) NSInteger capacityMiB;
 @property(nonatomic, assign) int configResult;
 @property(nonatomic, assign) uint64_t lastAllocationCount;
+#if defined(NEOSWAP_RELAY)
+@property(nonatomic, assign) uint64_t lastRelayLiveBytes;
+@property(nonatomic, copy) NSString* lastRelayState;
+#endif
 @property(nonatomic, assign) int diagnosticErrno;
 @property(nonatomic, strong) NSDictionary* lastCapacityProbe;
 #if defined(NEOSWAP_DONATION)
@@ -91,6 +98,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     // Runtime policy, not an optional user feature. Old Off/budget preferences
     // cannot disable the integrated service after an update or relaunch.
     self.capacityMiB = 8192;
+#if defined(NEOSWAP_RELAY)
+    NeoSwapRelay_Start();
+#endif
     dispatch_async(self.queue, ^{
         NSError* error = nil;
         BOOL created = self.directory.length && [[NSFileManager defaultManager]
@@ -127,11 +137,25 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             (void)neostation::donation::retry_cleanup();
             [strongSelf advanceDonors];
 #endif
+#if defined(NEOSWAP_RELAY)
+            NeoSwapRelay_Maintain();
+#endif
             NSDictionary* row = [strongSelf snapshot:@"sample"];
             uint64_t count = [row[@"allocationCount"] unsignedLongLongValue];
+#if defined(NEOSWAP_RELAY)
+            const uint64_t relayLive = [row[@"guestRelay"][@"liveBackingBytes"] unsignedLongLongValue];
+            NSString* relayState = row[@"guestRelay"][@"state"] ?: @"unknown";
+            const BOOL relayChanged = relayLive != strongSelf.lastRelayLiveBytes ||
+                ![relayState isEqualToString:strongSelf.lastRelayState];
+            strongSelf.lastRelayLiveBytes = relayLive;
+            strongSelf.lastRelayState = relayState;
+#else
+            const uint64_t relayLive = 0;
+            const BOOL relayChanged = NO;
+#endif
             // Automatic availability does not imply an active game. Avoid
             // periodic disk writes while the integrated allocator is idle.
-            if ([row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount)
+            if ([row[@"liveBytes"] unsignedLongLongValue] || relayLive || relayChanged || count != strongSelf.lastAllocationCount)
                 [strongSelf appendRecord:row];
             strongSelf.lastAllocationCount = count;
         }
@@ -520,6 +544,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"memoryHeadroomPolicy":TARGET_OS_SIMULATOR ? @"macOS-hosted simulator; iOS process limit unavailable" : @"iOS process headroom above256MiB required for capacity test",
         @"physicalMemoryBytes":@(NSProcessInfo.processInfo.physicalMemory),
         @"osVersion":NSProcessInfo.processInfo.operatingSystemVersionString,
+#if defined(NEOSWAP_RELAY)
+        @"guestRelay":NeoSwapRelay_Diagnostics(),
+#endif
         @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"",
         @"diagnosticErrno":@(self.diagnosticErrno)};
 }

@@ -28,6 +28,7 @@ REQUIRED_LEGAL_FILES = (
     "RiiSU-ATTRIBUTION.md",
     "NeoStation-GPL-3.0.txt",
     "GameDB-PS3-GPL-3.0.txt",
+    "Guest-Page-Relay-MIT.txt",
 )
 
 

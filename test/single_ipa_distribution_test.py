@@ -1,4 +1,4 @@
-"""Exercise the four-extension IPA contract with synthetic Mach-O signatures.
+"""Exercise the five-extension IPA contract with synthetic Mach-O signatures.
 
 These fixtures test embedded entitlement parsing, not certificate trust,
 provisioning authorization or memory donation on an iPhone.
@@ -55,6 +55,11 @@ DONOR_ENTITLEMENTS = {
     'com.apple.developer.kernel.increased-memory-limit': True,
     'com.apple.developer.kernel.increased-debugging-memory-limit': True,
 }
+RELAY_CONTRACTS = {
+    'NeoSwapPageRelay.appex': {'bundleSuffix': '.NeoSwapPageRelay',
+        'principalClass': 'NeoSwapPageRelayHandler', 'marker': 'NeoStationNeoSwapPageRelay'},
+}
+RELAY = APP + 'PlugIns/NeoSwapPageRelay.appex/'
 DONOR_POINT = 'com.apple.ar.viewer'
 DONOR_SERVICE = {'ServiceType': 'Application', '_MultipleInstances': True, '_ProcessType': 'App'}
 
@@ -97,7 +102,7 @@ def complete_ipa_members() -> dict[str, bytes]:
         APP + 'Info.plist': plistlib.dumps(host),
         APP + 'Runner': macho(REQUIRED_RUNTIME_ENTITLEMENTS),
     }
-    for name, contract in (JIT_CONTRACTS | DONOR_CONTRACTS).items():
+    for name, contract in (JIT_CONTRACTS | DONOR_CONTRACTS | RELAY_CONTRACTS).items():
         executable = name.removesuffix('.appex')
         info = {
             'CFBundleExecutable': executable,
@@ -108,7 +113,7 @@ def complete_ipa_members() -> dict[str, bytes]:
             'MinimumOSVersion': '17.4',
             contract['marker']: '1',
             'NSExtension': {
-                'NSExtensionPointIdentifier': DONOR_POINT if name in DONOR_IDENTITIES else 'com.apple.share-services',
+                'NSExtensionPointIdentifier': DONOR_POINT if name in DONOR_IDENTITIES or name in RELAY_CONTRACTS else 'com.apple.share-services',
                 'NSExtensionPrincipalClass': contract['principalClass'],
                 'NSExtensionAttributes': {'NSExtensionActivationRule': 'FALSEPREDICATE'},
             },
@@ -118,9 +123,14 @@ def complete_ipa_members() -> dict[str, bytes]:
             info['XPCService'] = dict(DONOR_SERVICE)
             info['NSExtension'].update(NSExtensionContextClass='NeoSwapDonorContext',
                                        NSExtensionContextHostClass='NSExtensionContext')
+        if name in RELAY_CONTRACTS:
+            info['MinimumOSVersion'] = '18.0'
+            info['XPCService'] = dict(DONOR_SERVICE)
+            info['NSExtension'].update(NSExtensionContextClass='NeoSwapPageRelayContext',
+                                       NSExtensionContextHostClass='NSExtensionContext')
         prefix = APP + 'PlugIns/' + name + '/'
         members[prefix + 'Info.plist'] = plistlib.dumps(info)
-        entitlements = DONOR_ENTITLEMENTS if name in DONOR_IDENTITIES else None
+        entitlements = DONOR_ENTITLEMENTS if name in DONOR_IDENTITIES or name in RELAY_CONTRACTS else None
         members[prefix + executable] = macho(entitlements)
     return members
 
@@ -212,36 +222,75 @@ class SingleIPADistributionTests(unittest.TestCase):
         members[prefix + 'Info.plist'] = plistlib.dumps(info)
 
     def test_accepts_one_app_with_exact_original_helpers_and_one_donor_bundle(self):
-        self.assertEqual(validator.EXPECTED_EXTENSIONS, JIT_CONTRACTS | DONOR_CONTRACTS)
+        self.assertEqual(validator.EXPECTED_EXTENSIONS, JIT_CONTRACTS | DONOR_CONTRACTS | RELAY_CONTRACTS)
         self.assertEqual(validator.REQUIRED_DONOR_ENTITLEMENTS, DONOR_ENTITLEMENTS)
         report = self.validate_members(complete_ipa_members())
         self.assertEqual(report['installationUnits'], 1)
         self.assertEqual({entry['bundle'] for entry in report['embeddedExtensions']},
-                         JIT_HELPERS | set(DONOR_IDENTITIES))
+                         JIT_HELPERS | set(DONOR_IDENTITIES) | set(RELAY_CONTRACTS))
         self.assertEqual(report['neoSwapDonorRequestedEntitlements'],
                          DONOR_ENTITLEMENTS)
         self.assertEqual(report['neoSwapDonorCount'], 1)
         self.assertIs(report['neoSwapDonorProcessInstancesValidated'], False)
         self.assertIs(report['neoSwapDonorEffectiveDeviceProfileValidated'], False)
         self.assertIs(report['deviceRuntimeTested'], False)
-        self.assertEqual(len(report['nestedSigningOrder']), 5)
+        self.assertEqual(report['neoSwapRelayCount'], 1)
+        self.assertEqual(report['neoSwapRelayRequestedEntitlements'], DONOR_ENTITLEMENTS)
+        self.assertIs(report['neoSwapRelayEffectiveDeviceProfileValidated'], False)
+        self.assertIs(report['neoSwapRelayResidentMemoryValidated'], False)
+        self.assertEqual(len(report['nestedSigningOrder']), 6)
         self.assertEqual(report['nestedSigningOrder'][-1], 'NeoStation.app')
 
-    def test_actual_dolphin_packaging_validator_accepts_the_same_four_extensions(self):
+    def test_actual_dolphin_packaging_validator_accepts_the_same_five_extensions(self):
         self.assertEqual(dolphin_validator.EXPECTED_HELPERS, validator.EXPECTED_EXTENSIONS)
         report = self.validate_members(complete_dolphin_packaging_members(), dolphin_validator.validate)
         self.assertEqual(report['structuralValidation'], 'passed')
-        self.assertEqual(set(report['embeddedExtensions']), JIT_HELPERS | set(DONOR_IDENTITIES))
+        self.assertEqual(set(report['embeddedExtensions']), JIT_HELPERS | set(DONOR_IDENTITIES) | set(RELAY_CONTRACTS))
         self.assertIs(report['deviceLaunchValidated'], False)
         self.assertEqual(report['mainApplicationCount'], 1)
 
-    def test_requires_each_of_the_four_extensions(self):
-        for name in JIT_HELPERS | set(DONOR_IDENTITIES):
+    def test_requires_each_of_the_five_extensions(self):
+        for name in JIT_HELPERS | set(DONOR_IDENTITIES) | set(RELAY_CONTRACTS):
             with self.subTest(extension=name):
                 prefix = APP + 'PlugIns/' + name + '/'
                 members = {path: data for path, data in complete_ipa_members().items()
                            if not path.startswith(prefix)}
                 self.reject(members, 'Unexpected app-extension set')
+
+    def test_relay_contract_is_independent_and_strict(self):
+        mutations = [
+            (lambda i: i.update(CFBundleIdentifier='com.neogamelab.neostation.neoswappagerelay'), 'bundle identifier'),
+            (lambda i: i.update(CFBundleExecutable='../../Runner'), 'executable name'),
+            (lambda i: i.update(CFBundleVersion='367'), 'build numbers'),
+            (lambda i: i.update(CFBundleShortVersionString='0.0.1'), 'marketing versions'),
+            (lambda i: i.update(CFBundlePackageType='APPL'), 'package type'),
+            (lambda i: i.update(MinimumOSVersion='17.4'), 'minimum iOS version'),
+            (lambda i: i.update(NeoStationNeoSwapPageRelay=1), 'identity marker'),
+            (lambda i: i['NSExtension'].update(NSExtensionPrincipalClass='NeoSwapDonorRequestHandler'), 'principal class'),
+            (lambda i: i['NSExtension'].update(NSExtensionContextClass='NeoSwapDonorContext'), 'NSExtensionContextClass'),
+            (lambda i: i['NSExtension'].update(NSExtensionContextHostClass='Other'), 'NSExtensionContextHostClass'),
+            (lambda i: i['NSExtension'].update(NSExtensionPointIdentifier='com.apple.share-services'), 'extension point'),
+            (lambda i: i['NSExtension'].update(NSExtensionAttributes={}), 'activation rule'),
+            (lambda i: i.update(XPCService={}), 'multiple-instance metadata'),
+            (lambda i: i['XPCService'].update(_MultipleInstances=1), 'multiple-instance metadata'),
+        ]
+        for change, reason in mutations:
+            with self.subTest(reason=reason):
+                members = complete_ipa_members()
+                self.modify_info(members, RELAY, change)
+                self.reject(members, reason)
+        for entitlements in ({}, dict(DONOR_ENTITLEMENTS, **{'get-task-allow': 1}),
+                             dict(DONOR_ENTITLEMENTS, **{'com.apple.private.memorystatus': True})):
+            with self.subTest(entitlements=entitlements):
+                members = complete_ipa_members()
+                members[RELAY + 'NeoSwapPageRelay'] = macho(entitlements)
+                self.reject(members, 'entitlement|capabilit')
+        for data in (macho(DONOR_ENTITLEMENTS, cpu=0x01000007),
+                     macho(DONOR_ENTITLEMENTS, filetype=6), b'not-a-mach-o'):
+            with self.subTest(binary=data[:8]):
+                members = complete_ipa_members()
+                members[RELAY + 'NeoSwapPageRelay'] = data
+                self.reject(members, 'arm64|Mach-O|MH_EXECUTE')
 
     def test_rejects_unexpected_extension(self):
         members = complete_ipa_members()

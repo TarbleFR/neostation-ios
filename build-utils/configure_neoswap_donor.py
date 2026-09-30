@@ -163,3 +163,7 @@ if __name__ == '__main__':
         raise SystemExit('Generate the Flutter iOS project first')
     materialize()
     configure_project()
+    # The relay is a separate target; the verified live donor remains intact.
+    import configure_neoswap_relay as relay
+    relay.materialize()
+    relay.configure_project()

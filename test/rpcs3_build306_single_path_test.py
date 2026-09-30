@@ -83,6 +83,7 @@ identity = {
     'source_commit': manifest['upstream_commit'],
     'source_patch_sha256': manifest['patch_sha256'],
     'abi_version': 30,
+    'neoswap_relay_abi': 1,
     'architectures': ['arm64'],
     'sha256': hashlib.sha256(payload).hexdigest(),
     'lifecycle_marker': ipa_validator.CORE_LIFECYCLE_MARKER,

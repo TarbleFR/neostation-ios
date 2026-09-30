@@ -389,3 +389,14 @@ the pinned source revisions.
 
 This policy applies to future builds. It does not modify the already-published
 NeoStation.ipa asset in GitHub release 0.0.1.
+
+## Guest Page Relay / NeoSwap guest-memory relay
+
+The new guest-memory relay adapts the MIT-licensed Guest Page Relay prototype
+provided by the maintainer on 30 September 2026 (archive SHA-256
+`f4d8425956a0f59f8dd126901690b5b863045054f3c272f076fccd2685d12426`).
+Copyright (c) 2026 Guest Page Relay contributors. The original permission and
+disclaimer are retained in `assets/legal/Guest-Page-Relay-MIT.txt` and included
+in the IPA Legal directory. NeoStation adds authenticated extension transport,
+shared backing aliases, bounded cleanup and measured validation. This notice
+does not imply physical-iPhone validation or additional physical RAM.

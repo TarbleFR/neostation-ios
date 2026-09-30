@@ -55,7 +55,16 @@ jobs:
           identity['targetBytes']=1073741824
           identity['coreInputSHA256']=core_input_hashes()
           identity['productionRuntimeReferenceCommit']='abc9566f1747891534927d58e446bef758a53c2b'
-          subprocess.run(['git','diff','--exit-code',identity['productionRuntimeReferenceCommit'],'HEAD','--','packages/neo_swap','packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h','native/neoswap/NeoSwapClient.h','native/neoswap-donation',':!native/neoswap-donation/VulkanDonationProbe.h',':!native/neoswap-donation/ipc_macos_probe.mm'],check=True)
+          # The new guest relay has separate sources/ABI. This proof exercises
+          # only the unchanged v1 donor, broker and Vulkan import implementation.
+          runtime_paths=['packages/neo_swap/ios/Classes/'+name for name in ('NeoSwap.cpp','NeoSwap.h','NeoSwapHost.h','NeoSwapCapacityProbe.h','NeoSwapClientStats.h')]
+          runtime_paths+=['native/neoswap/NeoSwapClient.h']
+          runtime_paths+=['native/neoswap-donation/'+name for name in ('Broker.cpp','Broker.h','Pool.cpp','Pool.h','DonorLedger.h','NeoSwapMachHandle.mm','NeoSwapMachHandle.h','NeoSwapDonorIPC.mm','NeoSwapDonorIPC.h','NeoSwapDonorRequestHandler.mm','NeoSwapDonorRequestHandler.h','Info.plist','NeoSwapDonor.entitlements')]
+          subprocess.run(['git','diff','--exit-code',identity['productionRuntimeReferenceCommit'],'HEAD','--',*runtime_paths],check=True)
+          reference=json.loads(subprocess.check_output(['git','show',identity['productionRuntimeReferenceCommit']+':build-utils/rpcs3/canonical-source.json']))
+          assert pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']==reference['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
+          identity['verifiedRuntimeSourceSHA256']={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in runtime_paths}
+          identity['productionRuntimeReferenceScope']='v1 donation broker and coherent Vulkan import only; separate guest relay is validated independently'
           pathlib.Path('build/neoswap-vulkan-1gib/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')

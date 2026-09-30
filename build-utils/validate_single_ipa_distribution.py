@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the LocalDevVPN-only NeoStation IPA distribution contract.
 
-NeoStation ships as one application with three JIT helpers and one NeoSwap donor bundle.
+NeoStation ships as one application with three JIT helpers, one NeoSwap donor and one page relay.
 The RemotePairing route is supplied by the separately installed LocalDevVPN;
 the IPA must not contain a packet-tunnel extension or VPN entitlement.
 """
@@ -16,6 +16,7 @@ import zipfile
 from pathlib import Path
 
 from configure_neoswap_donor import DONOR_CONTRACTS, REQUIRED_DONOR_ENTITLEMENTS
+from configure_neoswap_relay import RELAY_CONTRACTS, REQUIRED_RELAY_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
     FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
@@ -41,6 +42,7 @@ EXPECTED_EXTENSIONS = {
         'marker': 'NeoStationARMSX2JITHelper',
     },
     **DONOR_CONTRACTS,
+    **RELAY_CONTRACTS,
 }
 PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
@@ -173,6 +175,7 @@ def validate(ipa: Path) -> dict:
             contract = EXPECTED_EXTENSIONS[extension.name]
             info = load_plist(extension / 'Info.plist')
             is_donor = extension.name in DONOR_CONTRACTS
+            is_relay = extension.name in RELAY_CONTRACTS
             extension_identifier = str(info.get('CFBundleIdentifier', ''))
             metadata = info.get('NSExtension', {})
             demand(isinstance(metadata, dict), f'{extension.name} extension metadata is invalid')
@@ -193,7 +196,7 @@ def validate(ipa: Path) -> dict:
                 f'{extension.name} and NeoStation have different marketing versions',
             )
             demand(
-                extension_point == (DONOR_EXTENSION_POINT if is_donor else SHARE_EXTENSION_POINT),
+                extension_point == (DONOR_EXTENSION_POINT if (is_donor or is_relay) else SHARE_EXTENSION_POINT),
                 f'{extension.name} has an unexpected extension point: '
                 f'{extension_point!r}',
             )
@@ -211,15 +214,16 @@ def validate(ipa: Path) -> dict:
                 donor_index = info.get('NeoStationNeoSwapDonorIndex')
                 demand(isinstance(donor_index, str) and donor_index == contract['index'],
                        f'{extension.name} donor index is inconsistent')
+            if is_donor or is_relay:
                 demand(info.get('CFBundleExecutable') == extension.name.removesuffix('.appex'),
                        f'{extension.name} executable name is inconsistent')
-                demand(info.get('MinimumOSVersion') == '17.4',
+                demand(info.get('MinimumOSVersion') == ('18.0' if is_relay else '17.4'),
                        f'{extension.name} minimum iOS version is inconsistent')
                 service = info.get('XPCService')
                 demand(isinstance(service, dict) and service == DONOR_XPC_SERVICE and
                        service.get('_MultipleInstances') is True,
                        f'{extension.name} multiple-instance metadata is inconsistent')
-                for key, expected in (('NSExtensionContextClass', 'NeoSwapDonorContext'),
+                for key, expected in (('NSExtensionContextClass', 'NeoSwapPageRelayContext' if is_relay else 'NeoSwapDonorContext'),
                                   ('NSExtensionContextHostClass', 'NSExtensionContext')):
                     demand(metadata.get(key) == expected,
                            f'{extension.name} {key} is inconsistent')
@@ -231,11 +235,12 @@ def validate(ipa: Path) -> dict:
             extension_executable = extension / str(info.get('CFBundleExecutable', ''))
             extension_entitlements = executable_entitlements(extension_executable)
             reject_vpn_entitlements(extension_entitlements, extension.name)
-            if is_donor:
+            if is_donor or is_relay:
+                required_capabilities = REQUIRED_RELAY_ENTITLEMENTS if is_relay else REQUIRED_DONOR_ENTITLEMENTS
                 require_arm64_executable(extension_executable.read_bytes(), extension.name)
-                require_entitlements(extension_entitlements, REQUIRED_DONOR_ENTITLEMENTS,
+                require_entitlements(extension_entitlements, required_capabilities,
                                      extension.name.removesuffix('.appex'))
-                unexpected = set(extension_entitlements) - set(REQUIRED_DONOR_ENTITLEMENTS)
+                unexpected = set(extension_entitlements) - set(required_capabilities)
                 demand(not unexpected,
                        extension.name + ' has unexpected embedded entitlements: ' +
                        ', '.join(sorted(unexpected)))
@@ -274,6 +279,10 @@ def validate(ipa: Path) -> dict:
             # an effective memory limit, or execution on an iPhone.
             'neoSwapDonorRequestedEntitlements': dict(REQUIRED_DONOR_ENTITLEMENTS),
             'neoSwapDonorCount': len(DONOR_CONTRACTS),
+            'neoSwapRelayCount': len(RELAY_CONTRACTS),
+            'neoSwapRelayRequestedEntitlements': dict(REQUIRED_RELAY_ENTITLEMENTS),
+            'neoSwapRelayEffectiveDeviceProfileValidated': False,
+            'neoSwapRelayResidentMemoryValidated': False,
             # Bundle metadata requests multiple instances; it does not prove
             # that iOS launched any distinct donor process.
             'neoSwapDonorProcessInstancesValidated': False,

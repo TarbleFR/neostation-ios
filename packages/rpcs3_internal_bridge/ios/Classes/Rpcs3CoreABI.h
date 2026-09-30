@@ -8,6 +8,10 @@ extern "C" {
 
 typedef int32_t rpcs3_ios_status;
 
+// Optional NeoSwap relay symbol, separate from the immutable main Core ABI.
+struct NeoSwapRelayAPI;
+typedef int32_t (*rpcs3_ios_neoswap_relay_binder)(const struct NeoSwapRelayAPI*);
+
 typedef void (*rpcs3_ios_log_callback)(void* context,
                                        int32_t level,
                                        const char* message);

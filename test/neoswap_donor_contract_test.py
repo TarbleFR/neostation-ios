@@ -37,6 +37,11 @@ EXPECTED_DONOR_CONTRACTS = {
     for name, suffix, index in DONOR_IDENTITIES
 }
 
+EXPECTED_RELAY_CONTRACTS = {
+    'NeoSwapPageRelay.appex': {'bundleSuffix': '.NeoSwapPageRelay',
+        'principalClass': 'NeoSwapPageRelayHandler', 'marker': 'NeoStationNeoSwapPageRelay'},
+}
+
 CREATE_PROJECT = r'''
 require 'xcodeproj'
 require 'json'
@@ -126,7 +131,7 @@ def packaged_helpers(root):
         'ARMSX2JITHelper.appex': {'bundleSuffix': '.armsx2jithelper',
             'principalClass': 'Armsx2JITRequestHandler', 'marker': 'NeoStationARMSX2JITHelper'},
     }
-    for bundle, contract in {**jit_contracts, **EXPECTED_DONOR_CONTRACTS}.items():
+    for bundle, contract in {**jit_contracts, **EXPECTED_DONOR_CONTRACTS, **EXPECTED_RELAY_CONTRACTS}.items():
         folder = app / 'PlugIns' / bundle
         folder.mkdir(parents=True)
         info = {**host, 'CFBundleIdentifier': host['CFBundleIdentifier'] + contract['bundleSuffix'],
@@ -142,8 +147,16 @@ def packaged_helpers(root):
             info['NSExtension']['NSExtensionContextClass'] = 'NeoSwapDonorContext'
             info['NSExtension']['NSExtensionContextHostClass'] = 'NSExtensionContext'
             info['XPCService'] = {'ServiceType': 'Application', '_ProcessType': 'App', '_MultipleInstances': True}
+        if bundle in EXPECTED_RELAY_CONTRACTS:
+            info['MinimumOSVersion'] = '18.0'
+            info['NSExtension'].update(
+                NSExtensionAttributes={'NSExtensionActivationRule': 'FALSEPREDICATE'},
+                NSExtensionPointIdentifier='com.apple.ar.viewer',
+                NSExtensionContextClass='NeoSwapPageRelayContext',
+                NSExtensionContextHostClass='NSExtensionContext')
+            info['XPCService'] = {'ServiceType': 'Application', '_ProcessType': 'App', '_MultipleInstances': True}
         (folder / 'Info.plist').write_bytes(plistlib.dumps(info))
-        capabilities = PUBLIC_CAPABILITIES if bundle in EXPECTED_DONOR_CONTRACTS else {}
+        capabilities = PUBLIC_CAPABILITIES if bundle in EXPECTED_DONOR_CONTRACTS or bundle in EXPECTED_RELAY_CONTRACTS else {}
         (folder / info['CFBundleExecutable']).write_bytes(signed_macho(capabilities))
     return app, host
 
@@ -274,15 +287,46 @@ class DonorContractTests(unittest.TestCase):
         self.assertEqual({name: rpcs3.EXPECTED_HELPERS[name] for name in EXPECTED_DONOR_CONTRACTS},
                          EXPECTED_DONOR_CONTRACTS)
         self.assertEqual(set(rpcs3.EXPECTED_HELPERS),
-                         {name + '.appex' for name in JIT_TARGETS} | set(EXPECTED_DONOR_CONTRACTS))
+                         {name + '.appex' for name in JIT_TARGETS} | set(EXPECTED_DONOR_CONTRACTS) | set(EXPECTED_RELAY_CONTRACTS))
         with tempfile.TemporaryDirectory() as directory:
             app, host = packaged_helpers(Path(directory))
             result = rpcs3.validate_helper_bundles(app, host, Path(directory))
-            self.assertEqual(len(result), 4)
-            self.assertEqual(len(set(result.values())), 4)
+            self.assertEqual(len(result), 5)
+            self.assertEqual(len(set(result.values())), 5)
             for name, suffix, _ in DONOR_IDENTITIES:
                 self.assertEqual(result[name + '.appex'], host['CFBundleIdentifier'] + suffix)
             shutil.rmtree(app / 'PlugIns/NeoSwapDonor.appex')
+            with self.assertRaisesRegex(rpcs3.ValidationError, 'Unexpected app-extension set'):
+                rpcs3.validate_helper_bundles(app, host)
+
+    def test_rpcs3_validator_requires_relay_identity_and_signature(self):
+        import validate_rpcs3_ipa as rpcs3
+        self.assertEqual({name: rpcs3.EXPECTED_HELPERS[name] for name in EXPECTED_RELAY_CONTRACTS},
+                         EXPECTED_RELAY_CONTRACTS)
+        changes = (
+            ('CFBundleIdentifier', 'com.test.neostation.neoswappagerelay'),
+            ('CFBundleVersion', '367'), ('CFBundleShortVersionString', '0.0.1'),
+            ('CFBundleExecutable', '../../Runner'), ('NeoStationNeoSwapPageRelay', 1),
+            ('MinimumOSVersion', '17.4'), ('XPCService', {}),
+        )
+        for key, invalid in changes:
+            with self.subTest(field=key), tempfile.TemporaryDirectory() as directory:
+                app, host = packaged_helpers(Path(directory))
+                path = app / 'PlugIns/NeoSwapPageRelay.appex/Info.plist'
+                info = plistlib.loads(path.read_bytes()); info[key] = invalid
+                path.write_bytes(plistlib.dumps(info))
+                with self.assertRaises(rpcs3.ValidationError):
+                    rpcs3.validate_helper_bundles(app, host)
+        for capabilities in ({}, dict(PUBLIC_CAPABILITIES, **{'get-task-allow': 1}),
+                             dict(PUBLIC_CAPABILITIES, **{'com.apple.private.memorystatus': True})):
+            with self.subTest(capabilities=capabilities), tempfile.TemporaryDirectory() as directory:
+                app, host = packaged_helpers(Path(directory))
+                (app / 'PlugIns/NeoSwapPageRelay.appex/NeoSwapPageRelay').write_bytes(signed_macho(capabilities))
+                with self.assertRaises((rpcs3.ValidationError, ValueError)):
+                    rpcs3.validate_helper_bundles(app, host)
+        with tempfile.TemporaryDirectory() as directory:
+            app, host = packaged_helpers(Path(directory))
+            shutil.rmtree(app / 'PlugIns/NeoSwapPageRelay.appex')
             with self.assertRaisesRegex(rpcs3.ValidationError, 'Unexpected app-extension set'):
                 rpcs3.validate_helper_bundles(app, host)
 

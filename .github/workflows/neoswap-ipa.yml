@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 371
-run-name: NeoStation NeoSwap private • Build 371 • ${{ github.sha }}
+name: NeoStation NeoSwap private • Build 372
+run-name: NeoStation NeoSwap private • Build 372 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '371'
+        default: '372'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-371
+  group: neostation-neoswap-private-372
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (371)
+    name: Neostation iOS 0.0.2 private IPA (372)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '371' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '372' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-371-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-372-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -81,10 +81,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,subprocess,time,os,shutil,runpy
+          import json,subprocess,time,os,shutil,runpy,sys
           from pathlib import Path
+          sys.path.insert(0,str(Path(os.environ['GITHUB_WORKSPACE'])/'test'))
+          validate_relay_simulator=runpy.run_path(str(Path(os.environ['GITHUB_WORKSPACE'])/'test/neoswap_relay_simulator_test.py'))['validate_evidence']
           validate_simulator=runpy.run_path(str(Path(os.environ['GITHUB_WORKSPACE'])/'test/neoswap_donor_simulator_test.py'))['validate_evidence']
-          for workflow in ('neoswap-check.yml','neoswap-donation-check.yml','neoswap-vulkan-proof.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
+          for workflow in ('neoswap-check.yml','neoswap-donation-check.yml','neoswap-vulkan-proof.yml','neoswap-relay-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
               deadline=time.monotonic()+3600
               while True:
                   endpoint='repos/TarbleFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
@@ -114,6 +116,51 @@ jobs:
                           assert gpu['productionRPCS3ImportPath'] is True and gpu['productionHostBroker'] is True
                           assert gpu['hostNonvolatileDeltaBytes']<1024**2 and gpu['hostFootprintDeltaBytes']<64*1024**2
                           assert gpu['realIPhoneValidated'] is False and gpu['realRPCS3GameplayValidated'] is False
+                      if workflow=='neoswap-relay-check.yml':
+                          import hashlib
+                          evidence=Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence'/'relay';evidence.mkdir(parents=True,exist_ok=True)
+                          subprocess.run(['gh','run','download',str(rows[0]['id']),'-n','NeoSwap-Relay-'+os.environ['GITHUB_SHA'],'-D',str(evidence)],check=True)
+                          identity=json.loads((evidence/'identity.json').read_text())
+                          assert identity['source']==os.environ['GITHUB_SHA'] and identity['realIPhoneValidated'] is False
+                          assert identity['realRPCS3GameplayValidated'] is False
+                          assert identity['macOSWrittenTargetBytes']==1073741824 and identity['simulatorWrittenTargetBytes']==33554432
+                          assert identity['productionManagerCapacityTargetBytes']==8589934592
+                          assert identity['macOSCapacityTargetBytes']==8589934592 and identity['macOSCapacitySampleWrittenTargetBytes']==1048576
+                          required={'native/neoswap-relay/'+name for name in ('Backend.cpp','Backend.h','NeoSwapPageRelay.mm','NeoSwapPageRelay.h','NeoSwapPageRelayHandler.mm','NeoSwapPageRelayHandler.h','Info.plist','NeoSwapPageRelay.entitlements','relay_macos_probe.mm','run_relay_macos_probe.sh')}
+                          required.update({'packages/neo_swap/ios/Classes/'+name for name in ('NeoSwapRelay.h','NeoSwapRelayService.h','NeoSwapRelayService.mm')})
+                          required.update(('build-utils/configure_neoswap_relay.py','test/relay_backend_test.cpp','test/neoswap_relay_extension_test.py','test/neoswap_relay_simulator_test.py','.github/workflows/neoswap-relay-check.yml'))
+                          assert required<=set(identity['inputsSHA256']),identity
+                          for path,digest in identity['inputsSHA256'].items():
+                              assert hashlib.sha256((Path(os.environ['GITHUB_WORKSPACE'])/path).read_bytes()).hexdigest()==digest,(path,digest)
+                          native=json.loads((evidence/'macos/report.json').read_text())
+                          assert native['schema']==1 and native['passed'] is True and native['platform']=='macOS-real-NSXPC-creator-exit'
+                          assert native['iphoneExtensionValidated'] is False and native['realRPCS3GameValidated'] is False
+                          assert native['hostPID']>0 and native['creatorPID']>0 and native['hostPID']!=native['creatorPID']
+                          assert native['creatorExitObserved'] is True and native['aliasesMatched'] is True
+                          assert native['capacityBytes']==native['actualWrittenBytes']==1073741824
+                          assert 1073741824-1048576<=native['residentBytesMeasured']<=1073741824
+                          assert native['hostFootprintDelta']<67108864 and native['hostNonvolatileDelta']<1048576
+                          assert native['reservedVirtualBytesClaimedAsRAM']==0 and native['liveBytesAfterRelease']==native['aliasesAfterRelease']==0
+                          assert native['reusedIntervalZeroed'] is True and native['relaunchSucceeded'] is True
+                          assert len(native['negativeScenarios'])==5 and all(case['passed'] is True for case in native['negativeScenarios'])
+                          capacity=native['capacity8GiB']
+                          assert capacity['passed'] is True and capacity['creatorExitObserved'] is True and capacity['aliasesMatched'] is True
+                          assert capacity['requestedCapacityBytes']==capacity['capacityBytes']==8589934592
+                          assert capacity['entryCount']==16 and capacity['segmentBytes']==536870912
+                          assert capacity['actualWrittenBytes']==1048576 and capacity['perSegmentWrittenBytes']==65536
+                          assert 0<capacity['residentBytesForSample']<=1048576 and capacity['fullCapacityResidentValidated'] is False
+                          assert capacity['liveBytesAfterRelease']==capacity['retainedBytesAfterShutdown']==0
+                          simulator=json.loads((evidence/'simulator/report.json').read_text())
+                          validate_relay_simulator(simulator)
+                          arm64=json.loads((evidence/'simulator/arm64-report.json').read_text())
+                          assert arm64['passed'] is True and arm64['platform']=='iOS18-arm64-compile-only'
+                          assert arm64['realIPhoneValidated'] is False and arm64['realRPCS3GameplayValidated'] is False
+                          assert arm64['buildPreflight']['deviceArm64Linked'] is True
+                          for proof in (simulator,arm64):
+                              assert proof['source']==os.environ['GITHUB_SHA']
+                              assert proof['buildPreflight']['hostLauncherAbsentFromExtension'] is True
+                              for path,digest in proof['buildPreflight']['sourceSHA256'].items():
+                                  assert identity['inputsSHA256'][path]==digest,(path,digest)
                       if workflow=='neoswap-check.yml':
                           # Flutter clean removes build/ after this gate.
                           evidence=Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence';evidence.mkdir(parents=True,exist_ok=True)
@@ -642,11 +689,14 @@ jobs:
             packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h \
             packages/neo_swap/ios/Classes/NeoSwap.h \
             packages/neo_swap/ios/Classes/NeoSwapClientStats.h \
+            packages/neo_swap/ios/Classes/NeoSwapRelay.h \
             native/neoswap/NeoSwapClient.h \
             test/neo_swap_core_pin_test.py \
             test/neoswap_rpcs3_allocator_test.cpp \
             test/rpcs3_neoswap_vulkan_buffer_test.py \
             test/native/rpcs3_neoswap_vulkan_buffer_test.cpp \
+            test/rpcs3_neoswap_relay_test.py \
+            test/native/rpcs3_neoswap_relay_test.cpp \
             test/rpcs3_core_syntax_gate_test.py \
             test/rpcs3_embedded_core_validator_test.py \
             test/rpcs3_preprocessor_balance_test.py \
@@ -689,6 +739,7 @@ jobs:
           validate_core(data)
           assert identity['neoswap_client_abi'] == 1, identity
           assert identity['neoswap_client_stats_abi'] == 1, identity
+          assert identity['neoswap_relay_abi'] == 1, identity
           validate_core_input_identity(identity)
           passive = validate_passive_dlopen(data)
           assert passive['forbiddenReachability'] is False, passive
@@ -1170,11 +1221,13 @@ jobs:
           cp dist/cheat-bulk-validation.json build/private-test/
           cp docs/import-memory-build368.md build/private-test/Notes-NeoSwap-Build368.md
           cp docs/native-updates-20260930.md build/private-test/Notes-Native-Build369.md
+          cp docs/neoswap-guest-relay-build372.md build/private-test/Notes-NeoSwap-Relay-Build372.md
           cp dist/dusklight/identity.json build/private-test/dusklight-native-identity.json
           cp dist/neoswap-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence
           cp -R "$RUNNER_TEMP/neoswap-evidence/vulkan" build/private-test/vulkan-evidence
+          cp -R "$RUNNER_TEMP/neoswap-evidence/relay" build/private-test/relay-evidence
           cp docs/cheats-bulk365.md build/private-test/Notes-Cheats-Build365.md
           cp dist/0.0.2-validation.json build/private-test/
           cp "$RUNNER_TEMP/neoswap-evidence/phone-shake-tests.json" build/private-test/

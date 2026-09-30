@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'build-utils'))
 from validate_single_ipa_distribution import (
-    DONOR_CONTRACTS, DONOR_EXTENSION_POINT, validate as validate_distribution,
+    DONOR_CONTRACTS, RELAY_CONTRACTS, DONOR_EXTENSION_POINT, validate as validate_distribution,
 )
 
 ARM64 = 0x0100000C
@@ -52,6 +52,7 @@ EXPECTED_HELPERS = {
         'marker': 'NeoStationARMSX2JITHelper',
     },
     **DONOR_CONTRACTS,
+    **RELAY_CONTRACTS,
 }
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
 NETWORK_EXTENSION_DEPENDENCY = (
@@ -191,7 +192,7 @@ def validate(ipa: Path) -> dict:
             extension = helper_info.get('NSExtension', {})
             demand(
                 extension.get('NSExtensionPointIdentifier') ==
-                (DONOR_EXTENSION_POINT if bundle_name in DONOR_CONTRACTS else SHARE_EXTENSION_POINT),
+                (DONOR_EXTENSION_POINT if bundle_name in DONOR_CONTRACTS or bundle_name in RELAY_CONTRACTS else SHARE_EXTENSION_POINT),
                 f'{bundle_name} has an unexpected extension point',
             )
             demand(
