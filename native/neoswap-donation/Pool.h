@@ -18,12 +18,57 @@ struct PoolSnapshot {
   std::uint64_t donor_footprint = 0;
   std::uint64_t donor_nonvolatile = 0;
   std::uint64_t donor_nonvolatile_compressed = 0;
+  std::uint64_t target_bytes = 0;
+  std::uint64_t retained_bytes = 0;
+  std::uint64_t retained_live_bytes = 0;
+  std::uint64_t resident_bytes = 0;
+  std::uint64_t compressed_bytes = 0;
+  std::uint64_t verified_chunks = 0;
+  std::uint32_t donor_count = 0;
+  std::uint32_t lost_donor_count = 0;
 };
+
+struct PoolDonorSnapshot {
+  std::uint64_t generation = 0;
+  std::int32_t pid = 0;
+  PoolState state = PoolState::unavailable;
+  std::uint64_t prepared_bytes = 0;
+  std::uint64_t retained_bytes = 0;
+  std::uint64_t live_bytes = 0;
+  std::uint64_t resident_bytes = 0;
+  std::uint64_t compressed_bytes = 0;
+  std::uint64_t footprint_bytes = 0;
+  std::uint64_t nonvolatile_bytes = 0;
+  std::uint64_t nonvolatile_compressed_bytes = 0;
+  std::uint64_t verified_chunks = 0;
+  Stage last_stage = Stage::none;
+  std::int32_t last_kernel_result = 0;
+};
+
+// Eight distinct donor PIDs. One campaign owns the global target/quota. Only
+// chunks confirmed by the IPC page/ledger proof may become new local loans.
+Result pool_campaign_begin(std::uint64_t epoch, std::uint64_t target_bytes) noexcept;
+Result pool_donor_begin(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::int32_t pid) noexcept;
+Result pool_adopt_donor(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::uint64_t chunk_index,
+    std::uint32_t entry, std::size_t bytes) noexcept;
+Result pool_verify_donor(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::uint64_t verified_capacity,
+    const Footprint& donor, std::uint64_t resident_delta,
+    std::uint64_t compressed_delta) noexcept;
+void pool_donor_lost(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::int32_t reason) noexcept;
+void pool_donor_snapshot(std::uint32_t index, PoolDonorSnapshot& out) noexcept;
+// Background collection only; live borrowed intervals are never touched.
+Result pool_collect_lost() noexcept;
+bool pool_donor_restartable(std::uint64_t epoch, std::uint32_t index) noexcept;
 
 // Called by the async, authenticated process manager. API success, an extension
 // PID and virtual entries alone must never cause pool_verified to be called.
 // Verification requires shared-page round trips and actual footprint ledgers.
 // Starting a later generation is refused until all earlier loans are released.
+// These single-donor wrappers are retained for the original kernel probes.
 Result pool_begin(std::uint64_t generation, std::int32_t donor_pid,
                   std::uint64_t max_shared_bytes) noexcept;
 Result pool_adopt(std::uint64_t generation, std::uint32_t entry,

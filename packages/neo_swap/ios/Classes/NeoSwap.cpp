@@ -22,18 +22,25 @@
 namespace {
 constexpr uint64_t MiB = 1024 * 1024;
 constexpr size_t max_blocks = 256;
-constexpr uint64_t max_block_bytes = 256 * MiB;
+constexpr uint64_t max_block_bytes = 8 * 1024 * MiB;
+[[maybe_unused]] constexpr uint64_t max_donation_block_bytes = 256 * MiB;
 struct Block {
     void* address = nullptr;
     uint64_t size = 0;
     uint32_t owner = 0;
     int fd = -1;
     uint64_t donation_token = 0;
+    // A file allocation owns only this exact region. A rejected allocation
+    // whose cleanup failed keeps it here, without exposing a client pointer.
+    void* region = nullptr;
+    uint64_t region_size = 0;
 };
 struct HostCounters {
     std::atomic<uint64_t> reserved_virtual_bytes{0}, disk_free_bytes{0}, remaining_storage_bytes{0};
     std::atomic<int32_t> reservation_result{NEOSWAP_OK}, reservation_errno{0};
     std::array<std::atomic<int32_t>, NEOSWAP_OWNER_COUNT> owner_last_result{}, owner_last_errno{};
+    std::atomic<uint64_t> donor_pending_demand_bytes{0}, donor_inflight_demand_bytes{0};
+    std::atomic<uint64_t> donor_pending_demand_count{0}, donor_demand_overflow_count{0};
 };
 static_assert(std::atomic<uint64_t>::is_always_lock_free && std::atomic<int32_t>::is_always_lock_free);
 struct Broker {
@@ -42,11 +49,12 @@ struct Broker {
     NeoSwapConfig config{};
 #if defined(NEOSWAP_DONATION)
     NeoSwapConfig donation_config{};
+    uint64_t demand_sequence = 0;
+    NeoSwapDonationDemand inflight_demand{};
+    std::array<NeoSwapDonationDemand, 64> pending_demands{};
 #endif
     NeoSwapStats stats{};
     HostCounters host_stats{};
-    void* arena = nullptr;
-    size_t arena_size = 0;
     int directory = -1;
     uint64_t next_name = 1;
     uint64_t file_live_bytes = 0, shared_live_bytes = 0;
@@ -55,18 +63,54 @@ struct Broker {
     std::atomic<uint32_t> donation_enabled_mask{0};
 #endif
     std::array<std::atomic<uint64_t>, NEOSWAP_OWNER_COUNT> owner_bytes{};
+    std::array<std::atomic<uint64_t>, NEOSWAP_OWNER_COUNT> owner_donated_bytes{};
 #ifdef NEOSWAP_TESTING
     int failure = 0;
 #endif
     ~Broker() {
         for (auto& b : blocks) {
             if (b.address && b.fd >= 0) ::close(b.fd);
+            if (b.region) ::munmap(b.region, b.region_size);
         }
-        if (arena) ::munmap(arena, arena_size);
         if (directory >= 0) ::close(directory);
     }
 };
 Broker& broker() { static Broker b; return b; }
+#if defined(NEOSWAP_DONATION)
+void publish_demands(Broker& b) {
+    uint64_t smallest = 0, count = 0;
+    for (const auto& demand : b.pending_demands) if (demand.bytes) {
+        smallest = smallest ? std::min(smallest, demand.bytes) : demand.bytes;
+        ++count;
+    }
+    b.host_stats.donor_pending_demand_bytes.store(smallest, std::memory_order_relaxed);
+    b.host_stats.donor_pending_demand_count.store(count, std::memory_order_relaxed);
+    b.host_stats.donor_inflight_demand_bytes.store(b.inflight_demand.bytes, std::memory_order_relaxed);
+}
+void request_donation(Broker& b, uint64_t bytes) {
+    // This is a failed real host-buffer request, never a memory allocation.
+    // Bound hints as well as chunks. New small requests must not be hidden by
+    // an older large request for which the measured headroom is insufficient.
+    if (!bytes || bytes > max_donation_block_bytes || b.demand_sequence == UINT64_MAX) return;
+    NeoSwapDonationDemand* free = nullptr;
+    NeoSwapDonationDemand* largest = nullptr;
+    for (auto& demand : b.pending_demands) {
+        if (demand.bytes == bytes) {
+            demand.sequence = ++b.demand_sequence;
+            publish_demands(b); return;
+        }
+        if (!demand.bytes && !free) free = &demand;
+        if (demand.bytes && (!largest || demand.bytes > largest->bytes)) largest = &demand;
+    }
+    if (!free) {
+        b.host_stats.donor_demand_overflow_count.fetch_add(1, std::memory_order_relaxed);
+        if (!largest || bytes >= largest->bytes) return;
+        free = largest;
+    }
+    *free = {++b.demand_sequence, bytes};
+    publish_demands(b);
+}
+#endif
 [[maybe_unused]] bool donation_ready() {
 #if defined(NEOSWAP_DONATION)
     neostation::donation::PoolSnapshot stats{};
@@ -95,10 +139,19 @@ void host_snapshot(const Broker& b, NeoSwapHostStats* out) {
     for (uint32_t i = 0; i < NEOSWAP_OWNER_COUNT; ++i) {
         out->owner_last_result[i] = h.owner_last_result[i].load(std::memory_order_relaxed);
         out->owner_last_errno[i] = h.owner_last_errno[i].load(std::memory_order_relaxed);
+        out->owner_donated_live_bytes[i] = b.owner_donated_bytes[i].load(std::memory_order_relaxed);
     }
     out->donated_live_bytes = out->donor_prepared_bytes = out->donor_footprint_bytes = 0;
     out->donor_nonvolatile_bytes = out->donor_compressed_bytes = out->donor_generation = 0;
     out->donor_pid = out->donation_state = out->donation_last_stage = out->donation_last_kernel_result = 0;
+    out->donor_target_bytes = out->donor_retained_bytes = out->donor_retained_live_bytes = 0;
+    out->donor_resident_bytes = out->donor_accounted_compressed_bytes = 0;
+    out->donor_count = out->donor_lost_count = 0;
+    out->file_ready_owner_mask = b.enabled_mask.load(std::memory_order_acquire);
+    out->donor_pending_demand_bytes = h.donor_pending_demand_bytes.load(std::memory_order_relaxed);
+    out->donor_inflight_demand_bytes = h.donor_inflight_demand_bytes.load(std::memory_order_relaxed);
+    out->donor_pending_demand_count = h.donor_pending_demand_count.load(std::memory_order_relaxed);
+    out->donor_demand_overflow_count = h.donor_demand_overflow_count.load(std::memory_order_relaxed);
 #if defined(NEOSWAP_DONATION)
     neostation::donation::PoolSnapshot donation{};
     neostation::donation::pool_snapshot(donation);
@@ -112,6 +165,13 @@ void host_snapshot(const Broker& b, NeoSwapHostStats* out) {
     out->donation_state = static_cast<int32_t>(donation.state);
     out->donation_last_stage = static_cast<int32_t>(donation.last_stage);
     out->donation_last_kernel_result = donation.last_kernel_result;
+    out->donor_target_bytes = donation.target_bytes;
+    out->donor_retained_bytes = donation.retained_bytes;
+    out->donor_retained_live_bytes = donation.retained_live_bytes;
+    out->donor_resident_bytes = donation.resident_bytes;
+    out->donor_accounted_compressed_bytes = donation.compressed_bytes;
+    out->donor_count = donation.donor_count;
+    out->donor_lost_count = donation.lost_donor_count;
 #endif
 }
 bool fail(Broker& b, int stage) {
@@ -151,51 +211,82 @@ int preallocate(int fd, uint64_t bytes) {
     // Never map a sparse promise and hope that space will exist on first write.
     return ::ftruncate(fd, static_cast<off_t>(bytes));
 }
-void* reserve_arena(size_t bytes) {
-    // All supported client alignments fit in the quota, including a completely
-    // full capacity test. Align the arena itself without charging padding.
-    constexpr size_t alignment = 65536;
-    const size_t span = bytes + alignment;
-    void* original = ::mmap(nullptr, span, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (original == MAP_FAILED) return MAP_FAILED;
+void reservation_error(Broker& b, int error) {
+    b.host_stats.reservation_result = NEOSWAP_MAPPING;
+    b.host_stats.reservation_errno = error;
+}
+int discard_region(Broker& b, Block& block, bool injected_failure = false) {
+    if (!block.region) return 0;
+    if (injected_failure || ::munmap(block.region, block.region_size)) {
+        if (injected_failure) errno = EIO;
+        reservation_error(b, errno);
+        return -1; // keep the complete owned interval for a later retry
+    }
+    b.host_stats.reserved_virtual_bytes.fetch_sub(block.region_size, std::memory_order_relaxed);
+    block.region = nullptr;
+    block.region_size = 0;
+    return 0;
+}
+int cleanup_rejected_regions(Broker& b) {
+    int error = 0;
+    for (auto& block : b.blocks) if (!block.address && block.region) {
+        // Fault 8 exercises a rejected region's retry, independently of the
+        // original mapping/cleanup failure (fault 7).
+        if (discard_region(b, block, fail(b, 8)) && !error) error = errno;
+    }
+    if (error) { errno = error; return -1; }
+    return 0;
+}
+void* reserve_region(Broker& b, Block& block, size_t bytes, size_t alignment, size_t page) {
+    // Reserve only this work buffer. Alignment padding exists briefly while
+    // trimming and is never retained on a successful allocation. Bookkeeping
+    // starts before any fallible trim so rejected cleanup cannot lose ownership.
+    const size_t span = bytes + (alignment > page ? alignment - page : 0);
+    void* original = fail(b, 6) ? MAP_FAILED : ::mmap(nullptr, span,
+        PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (original == MAP_FAILED) { reservation_error(b, errno); return MAP_FAILED; }
+    block.region = original;
+    block.region_size = span;
+    b.host_stats.reserved_virtual_bytes.fetch_add(span, std::memory_order_relaxed);
     const uintptr_t start = reinterpret_cast<uintptr_t>(original);
     const uintptr_t aligned = (start + alignment - 1) & ~(alignment - 1);
     const size_t prefix = aligned - start;
     const size_t suffix = span - prefix - bytes;
-    if (prefix && ::munmap(original, prefix)) {
-        const int error = errno; ::munmap(original, span); errno = error; return MAP_FAILED;
-    }
-    if (suffix && ::munmap(reinterpret_cast<void*>(aligned + bytes), suffix)) {
-        const int error = errno;
-        ::munmap(reinterpret_cast<void*>(aligned), span - prefix);
-        errno = error; return MAP_FAILED;
-    }
-    return reinterpret_cast<void*>(aligned);
-}
-void* available_address(const Broker& b, uint64_t bytes, uint64_t alignment) {
-    // The mutex protects every live interval and the uninterrupted reservation.
-    // Never replace an emulator/JIT/GPU allocation or an arbitrary address.
-    const uintptr_t begin = reinterpret_cast<uintptr_t>(b.arena);
-    const uintptr_t end = begin + b.arena_size;
-    uintptr_t candidate = (begin + alignment - 1) & ~(alignment - 1);
-    while (candidate <= end && bytes <= end - candidate) {
-        uintptr_t next = candidate;
-        for (const auto& block : b.blocks) if (block.address) {
-            const uintptr_t start = reinterpret_cast<uintptr_t>(block.address);
-            const uintptr_t finish = start + block.size;
-            if (candidate < finish && start < candidate + bytes && finish > next)
-                next = finish;
+    if (prefix) {
+        if (::munmap(original, prefix)) {
+            const int error = errno;
+            discard_region(b, block);
+            reservation_error(b, error); errno = error;
+            return MAP_FAILED;
         }
-        if (next == candidate) return reinterpret_cast<void*>(candidate);
-        candidate = (next + alignment - 1) & ~(alignment - 1);
+        block.region = reinterpret_cast<void*>(aligned);
+        block.region_size -= prefix;
+        b.host_stats.reserved_virtual_bytes.fetch_sub(prefix, std::memory_order_relaxed);
     }
-    return nullptr;
+    if (suffix) {
+        if (::munmap(reinterpret_cast<void*>(aligned + bytes), suffix)) {
+            const int error = errno;
+            discard_region(b, block);
+            reservation_error(b, error); errno = error;
+            return MAP_FAILED;
+        }
+        block.region_size -= suffix;
+        b.host_stats.reserved_virtual_bytes.fetch_sub(suffix, std::memory_order_relaxed);
+    }
+    b.host_stats.reservation_result = NEOSWAP_OK;
+    b.host_stats.reservation_errno = 0;
+    return block.region;
 }
 int record_allocation(Broker& b, Block& slot, void* address, uint64_t size,
                       uint32_t owner, int fd, uint64_t donation_token,
                       std::chrono::steady_clock::time_point started, void** out) {
-    slot = {address, size, owner, fd, donation_token};
-    if (donation_token) b.shared_live_bytes += size;
+    // Preserve the file region acquired before MAP_FIXED; a donor has none.
+    slot.address = address; slot.size = size; slot.owner = owner;
+    slot.fd = fd; slot.donation_token = donation_token;
+    if (donation_token) {
+        b.shared_live_bytes += size;
+        b.owner_donated_bytes[owner].fetch_add(size, std::memory_order_relaxed);
+    }
     else b.file_live_bytes += size;
     b.stats.live_bytes += size; ++b.stats.live_blocks; ++b.stats.allocation_count;
     if (b.stats.live_bytes > b.stats.peak_bytes) b.stats.peak_bytes = b.stats.live_bytes;
@@ -225,7 +316,7 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     donor_enabled = owner == NEOSWAP_RPCS3 && b.donation_config.capacity_bytes &&
         (b.donation_config.enabled_owner_mask & (1u << owner)) && donation_ready();
 #endif
-    const bool file_enabled = b.config.capacity_bytes && b.directory >= 0 && b.arena &&
+    const bool file_enabled = b.config.capacity_bytes && b.directory >= 0 &&
         (b.config.enabled_owner_mask & (1u << owner));
     if (!file_enabled && !donor_enabled)
         return reject(b, owner, NEOSWAP_DISABLED);
@@ -243,7 +334,7 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     if (b.stats.live_bytes > capacity || rounded > capacity - b.stats.live_bytes)
         return reject(b, owner, NEOSWAP_QUOTA);
     Block* slot = nullptr;
-    for (auto& item : b.blocks) if (!item.address) { slot = &item; break; }
+    for (auto& item : b.blocks) if (!item.address && !item.region) { slot = &item; break; }
     if (!slot || b.next_name == std::numeric_limits<uint64_t>::max()) return reject(b, owner, NEOSWAP_LIMIT);
     const auto started = std::chrono::steady_clock::now();
 #if defined(NEOSWAP_DONATION)
@@ -252,13 +343,22 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     if (donor_enabled) {
         void* donated = nullptr;
         uint64_t token = 0;
-        if (neostation::donation::pool_acquire(rounded, std::max(alignment, page), &donated, &token))
+        const auto acquired = neostation::donation::pool_acquire(rounded, std::max(alignment, page), &donated, &token);
+        if (acquired)
             return record_allocation(b, *slot, donated, rounded, owner, -1, token, started, out);
+        if (acquired.stage == neostation::donation::Stage::pool_quota ||
+            acquired.stage == neostation::donation::Stage::pool_unready)
+            request_donation(b, rounded);
+    } else if (owner == NEOSWAP_RPCS3 && b.donation_config.capacity_bytes &&
+        (b.donation_config.enabled_owner_mask & (1u << owner)) &&
+        rounded >= b.donation_config.minimum_allocation_bytes) {
+        request_donation(b, rounded); // first request may precede helper proof
     }
 #endif
     if (!file_enabled) return reject(b, owner, NEOSWAP_DISABLED);
-    void* reserved = available_address(b, rounded, alignment > page ? alignment : page);
-    if (!reserved) return reject(b, owner, NEOSWAP_QUOTA);
+    if (cleanup_rejected_regions(b)) return reject(b, owner, NEOSWAP_MAPPING, errno);
+    if (b.file_live_bytes > b.config.capacity_bytes || rounded > b.config.capacity_bytes - b.file_live_bytes)
+        return reject(b, owner, NEOSWAP_QUOTA);
     struct statvfs space{};
     if (::fstatvfs(b.directory, &space) || !space.f_frsize) return reject(b, owner, NEOSWAP_STORAGE, errno);
     const uint64_t free_bytes = space.f_bavail > UINT64_MAX / space.f_frsize
@@ -283,11 +383,18 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     if (fail(b, 2) || preallocate(fd, rounded)) {
         const int e = errno; ::close(fd); return reject(b, owner, NEOSWAP_IO, e);
     }
-    // This interval belongs exclusively to the broker's PROT_NONE arena.
-    void* p = fail(b, 3) ? MAP_FAILED : ::mmap(reserved, rounded,
+    void* reserved = reserve_region(b, *slot, rounded, std::max(alignment, page), page);
+    if (reserved == MAP_FAILED) {
+        const int e = errno; ::close(fd); return reject(b, owner, NEOSWAP_MAPPING, e);
+    }
+    // MAP_FIXED replaces only this exact, continuously owned PROT_NONE region.
+    // Fault 7 tests rejected mapping plus failed cleanup, without a fake client.
+    const bool cleanup_failure = fail(b, 7);
+    void* p = cleanup_failure || fail(b, 3) ? MAP_FAILED : ::mmap(reserved, rounded,
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0);
     if (p == MAP_FAILED) {
-        const int e = errno; ::close(fd); return reject(b, owner, NEOSWAP_MAPPING, e);
+        const int e = errno; discard_region(b, *slot, cleanup_failure);
+        ::close(fd); return reject(b, owner, NEOSWAP_MAPPING, e);
     }
     return record_allocation(b, *slot, p, rounded, owner, fd, 0, started, out);
 }
@@ -308,16 +415,19 @@ int release(void* p) {
         } else
 #endif
         {
-        // Atomically restore our reservation. There is never an unmapped gap
-        // into which another allocator could insert a foreign mapping.
-        if (fail(b, 4) || ::mmap(p, block.size, PROT_NONE,
-                MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) == MAP_FAILED) {
+        // Release only our recorded interval. A failed unmap retains the live
+        // pointer and file; a successful release never remaps that address.
+        if (fail(b, 4) || discard_region(b, block)) {
+            reservation_error(b, errno);
             ++b.stats.io_errors; b.stats.last_result = NEOSWAP_MAPPING;
             b.stats.last_errno = errno; return NEOSWAP_MAPPING; // retain descriptor/ownership
         }
         }
         const int fd = block.fd;
-        if (block.donation_token) b.shared_live_bytes -= block.size;
+        if (block.donation_token) {
+            b.shared_live_bytes -= block.size;
+            b.owner_donated_bytes[block.owner].fetch_sub(block.size, std::memory_order_relaxed);
+        }
         else b.file_live_bytes -= block.size;
         b.stats.live_bytes -= block.size; --b.stats.live_blocks;
         b.stats.owners[block.owner].live_bytes -= block.size;
@@ -350,7 +460,7 @@ int enabled(uint32_t owner) {
     auto& b = broker();
     if (b.enabled_mask.load(std::memory_order_acquire) & (1u << owner)) return 1;
 #if defined(NEOSWAP_DONATION)
-    // Do not make a verified donor depend on a successful file-cache arena.
+    // Do not make a verified donor depend on a successful file-cache policy.
     if (owner == NEOSWAP_RPCS3 && donation_ready()) {
         return (b.donation_enabled_mask.load(std::memory_order_acquire) & (1u << owner)) != 0;
     }
@@ -372,47 +482,29 @@ extern "C" int NeoSwap_Configure(const char* path, const NeoSwapConfig* c) {
     if (c->capacity_bytes && (!path || path[0] != '/')) return NEOSWAP_INVALID;
 #if defined(NEOSWAP_DONATION)
     // This validated donor policy is independent from disk availability and
-    // address reservation. A failed file reconfiguration preserves its old
+    // per-buffer mapping. A failed file reconfiguration preserves its old
     // working config while a ready donor can still serve the requested budget.
     b.donation_config = *c;
     b.donation_enabled_mask.store(c->capacity_bytes ? c->enabled_owner_mask : 0u,
                                  std::memory_order_release);
 #endif
     int directory = -1;
-    void* arena = nullptr;
-    size_t arena_size = 0;
     if (c->capacity_bytes) {
         directory = ::open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
         if (directory < 0) return NEOSWAP_STORAGE;
         struct stat st{};
         if (::fstat(directory, &st) || !S_ISDIR(st.st_mode)) { ::close(directory); return NEOSWAP_STORAGE; }
-        const long page = ::sysconf(_SC_PAGESIZE);
-        if (page <= 0 || !power_of_two(static_cast<uint64_t>(page))) {
-            ::close(directory); return NEOSWAP_MAPPING;
-        }
-        arena_size = (c->capacity_bytes + static_cast<uint64_t>(page) - 1) &
-            ~(static_cast<uint64_t>(page) - 1);
-        // No bytes are read/written and no backing file is created here.
-        arena = fail(b, 6) ? MAP_FAILED : reserve_arena(arena_size);
-        if (arena == MAP_FAILED) {
-            const int error = errno;
-            ::close(directory);
-            b.host_stats.reservation_result = NEOSWAP_MAPPING;
-            b.host_stats.reservation_errno = error;
-            return NEOSWAP_MAPPING; // previous working configuration is retained
-        }
     }
-    if (b.arena && ::munmap(b.arena, b.arena_size)) {
+    // Configure only policy and the directory. There is no capacity-sized
+    // reservation. A failed cleanup retains quarantined owned regions and
+    // the previous working file policy, without erasing their diagnostics.
+    if (cleanup_rejected_regions(b)) {
         const int error = errno;
-        if (arena) ::munmap(arena, arena_size);
         if (directory >= 0) ::close(directory);
-        b.host_stats.reservation_result = NEOSWAP_MAPPING;
-        b.host_stats.reservation_errno = error;
+        reservation_error(b, error);
         return NEOSWAP_MAPPING;
     }
     if (b.directory >= 0) ::close(b.directory);
-    b.arena = arena; b.arena_size = arena_size;
-    b.host_stats.reserved_virtual_bytes = arena_size;
     b.host_stats.reservation_result = NEOSWAP_OK;
     b.host_stats.reservation_errno = 0;
     b.directory = directory; b.config = *c;
@@ -440,6 +532,38 @@ extern "C" void NeoSwap_RegisterClient(uint32_t owner) {
     if (owner >= NEOSWAP_OWNER_COUNT) return;
     auto& b = broker(); std::lock_guard guard(b.mutex);
     b.stats.registered_owner_mask |= 1u << owner;
+}
+extern "C" int NeoSwap_ClaimDonationDemand(NeoSwapDonationDemand* out) {
+    if (!out) return NEOSWAP_INVALID;
+    *out = {};
+#if defined(NEOSWAP_DONATION)
+    auto& b = broker(); std::lock_guard guard(b.mutex);
+    NeoSwapDonationDemand* smallest = nullptr;
+    for (auto& demand : b.pending_demands) if (demand.bytes &&
+        (!smallest || demand.bytes < smallest->bytes)) smallest = &demand;
+    if (smallest && (!b.inflight_demand.bytes || smallest->bytes < b.inflight_demand.bytes)) {
+        std::swap(b.inflight_demand, *smallest);
+        for (auto& queued : b.pending_demands) if (&queued != smallest && smallest->bytes &&
+            queued.bytes == smallest->bytes) {
+            smallest->sequence = std::max(smallest->sequence, queued.sequence);
+            queued = {};
+        }
+    }
+    *out = b.inflight_demand;
+    publish_demands(b);
+#endif
+    return NEOSWAP_OK;
+}
+extern "C" int NeoSwap_AcknowledgeDonationDemand(uint64_t sequence) {
+#if defined(NEOSWAP_DONATION)
+    auto& b = broker(); std::lock_guard guard(b.mutex);
+    if (!sequence || sequence != b.inflight_demand.sequence) return NEOSWAP_NOT_OWNED;
+    b.inflight_demand = {};
+    publish_demands(b);
+    return NEOSWAP_OK;
+#else
+    (void)sequence; return NEOSWAP_NOT_OWNED;
+#endif
 }
 extern "C" int NeoSwap_HostSnapshot(NeoSwapHostStats* out) {
     if (!out) return NEOSWAP_INVALID;

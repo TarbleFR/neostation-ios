@@ -8,48 +8,126 @@
 #include <mutex>
 #include <new>
 #if defined(__APPLE__)
-#include <mach/mach.h>
 #include <unistd.h>
 #endif
 
 namespace neostation::donation {
 namespace {
-constexpr std::size_t max_entries = 64;
+constexpr std::size_t max_donors = 8;
+constexpr std::size_t max_entries = 512;
 constexpr std::size_t max_loans = 256;
 constexpr std::uint64_t max_capacity = 8ULL * 1024 * 1024 * 1024;
 struct Entry {
   std::unique_ptr<Block> block;
-  std::uint64_t generation = 0;
-  std::size_t loans = 0;
+  std::uint64_t generation = 0, chunk = 0;
+  std::size_t donor = 0, loans = 0;
+  bool verified = false;
 };
 struct Loan {
-  std::uint64_t token = 0;
-  std::uint64_t bytes = 0;
-  std::uint64_t offset = 0;
+  std::uint64_t token = 0, bytes = 0, offset = 0;
   std::size_t entry = 0;
+};
+struct Donor {
+  PoolDonorSnapshot stats;
+  std::uint64_t next_chunk = 0;
 };
 struct Pool {
   std::mutex mutex;
   std::array<Entry, max_entries> entries;
   std::array<Loan, max_loans> loans{};
+  std::array<Donor, max_donors> donors;
   PoolSnapshot stats;
-  std::uint64_t capacity = 0;
   std::uint64_t next_token = 1;
-  // Advisory display samples are independent relaxed atomic observations.
-  // Reading telemetry never waits on a mapping/allocation mutex.
-  std::array<std::atomic<std::uint64_t>, 12> published{};
+  std::atomic<std::uint64_t> publication_sequence{0};
+  std::array<std::atomic<std::uint64_t>, 20> published{};
+  std::array<std::array<std::atomic<std::uint64_t>, 14>, max_donors> donor_published{};
 };
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 Pool& pool() { static Pool instance; return instance; }
+bool power_of_two(std::uint64_t n) { return n && !(n & (n - 1)); }
+
 void publish(Pool& p) {
-  const auto& s = p.stats;
+  p.publication_sequence.fetch_add(1, std::memory_order_acq_rel);
+  std::atomic_thread_fence(std::memory_order_release);
+  auto& s = p.stats;
+  s.prepared_bytes = s.retained_bytes = s.retained_live_bytes = 0;
+  s.donor_footprint = s.donor_nonvolatile = s.donor_nonvolatile_compressed = 0;
+  s.resident_bytes = s.compressed_bytes = s.verified_chunks = 0;
+  s.donor_count = s.lost_donor_count = 0;
+  s.donor_pid = 0;
+  bool preparing = false;
+  for (auto& d : p.donors) {
+    d.stats.prepared_bytes = d.stats.retained_bytes = d.stats.live_bytes = 0;
+    d.stats.verified_chunks = 0;
+  }
+  for (const auto& e : p.entries) if (e.block) {
+    const auto bytes = e.block->size();
+    auto& d = p.donors[e.donor].stats;
+    d.retained_bytes += bytes;
+    s.retained_bytes += bytes;
+    if (e.verified && d.state == PoolState::verified && e.generation == d.generation) {
+      d.prepared_bytes += bytes;
+      ++d.verified_chunks;
+      s.prepared_bytes += bytes;
+      ++s.verified_chunks;
+    }
+  }
+  for (const auto& loan : p.loans) if (loan.token) {
+    const auto& e = p.entries[loan.entry];
+    auto& d = p.donors[e.donor].stats;
+    d.live_bytes += loan.bytes;
+    if (d.state != PoolState::verified || d.generation != e.generation)
+      s.retained_live_bytes += loan.bytes;
+  }
+  for (std::size_t index = 0; index < p.donors.size(); ++index) {
+    const auto& d = p.donors[index].stats;
+    if (d.state == PoolState::verified) {
+      ++s.donor_count;
+      s.donor_pid = s.donor_count == 1 ? d.pid : 0;
+      s.donor_footprint += d.footprint_bytes;
+      s.donor_nonvolatile += d.nonvolatile_bytes;
+      s.donor_nonvolatile_compressed += d.nonvolatile_compressed_bytes;
+      s.resident_bytes += d.resident_bytes;
+      s.compressed_bytes += d.compressed_bytes;
+    } else if (d.state == PoolState::donor_lost) ++s.lost_donor_count;
+    else if (d.state == PoolState::preparing) preparing = true;
+    const std::uint64_t values[] = {d.generation, static_cast<std::uint64_t>(d.pid),
+        static_cast<std::uint64_t>(d.state), d.prepared_bytes, d.retained_bytes, d.live_bytes,
+        d.resident_bytes, d.compressed_bytes, d.footprint_bytes, d.nonvolatile_bytes,
+        d.nonvolatile_compressed_bytes, d.verified_chunks,
+        static_cast<std::uint64_t>(d.last_stage), static_cast<std::uint64_t>(d.last_kernel_result)};
+    for (std::size_t i = 0; i < p.donor_published[index].size(); ++i)
+      p.donor_published[index][i].store(values[i], std::memory_order_relaxed);
+  }
+  s.state = s.donor_count ? PoolState::verified : preparing ? PoolState::preparing :
+      s.lost_donor_count ? PoolState::donor_lost : PoolState::unavailable;
   const std::uint64_t values[] = {s.generation, static_cast<std::uint64_t>(s.donor_pid),
       static_cast<std::uint64_t>(s.state), static_cast<std::uint64_t>(s.last_stage),
       static_cast<std::uint64_t>(s.last_kernel_result), s.prepared_bytes, s.live_bytes,
       s.live_blocks, s.peak_live_bytes, s.donor_footprint, s.donor_nonvolatile,
-      s.donor_nonvolatile_compressed};
+      s.donor_nonvolatile_compressed, s.target_bytes, s.retained_bytes,
+      s.retained_live_bytes, s.resident_bytes, s.compressed_bytes, s.verified_chunks,
+      s.donor_count, s.lost_donor_count};
   for (std::size_t i = 0; i < p.published.size(); ++i)
     p.published[i].store(values[i], std::memory_order_relaxed);
+  p.publication_sequence.fetch_add(1, std::memory_order_release);
+}
+
+template <std::size_t Size>
+bool read_published(Pool& p, const std::array<std::atomic<std::uint64_t>, Size>& source,
+                    std::uint64_t (&values)[Size]) noexcept {
+  // A heartbeat can move a page charge between resident and compressed
+  // ledgers. Never combine different publications into a fictitious larger
+  // charge. The UI path stays bounded and reports unavailable while busy.
+  for (unsigned attempt = 0; attempt < 16; ++attempt) {
+    const auto before = p.publication_sequence.load(std::memory_order_acquire);
+    if (before & 1) continue;
+    for (std::size_t i = 0; i < Size; ++i)
+      values[i] = source[i].load(std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_acquire);
+    if (before == p.publication_sequence.load(std::memory_order_acquire)) return true;
+  }
+  return false;
 }
 Result fail(Pool& p, Stage stage, std::int32_t code = -1) {
   p.stats.last_stage = stage;
@@ -57,133 +135,204 @@ Result fail(Pool& p, Stage stage, std::int32_t code = -1) {
   publish(p);
   return {stage, code};
 }
-bool power_of_two(std::uint64_t n) { return n && !(n & (n - 1)); }
-void update_footprint(Pool& p, const Footprint& donor) {
-  p.stats.donor_footprint = donor.physical;
-  p.stats.donor_nonvolatile = donor.nonvolatile;
-  p.stats.donor_nonvolatile_compressed = donor.nonvolatile_compressed;
+void lost(Donor& d, std::int32_t reason) {
+  d.stats.state = PoolState::donor_lost;
+  d.stats.last_stage = Stage::pool_unready;
+  d.stats.last_kernel_result = reason;
+  d.stats.resident_bytes = d.stats.compressed_bytes = d.stats.footprint_bytes = 0;
+  d.stats.nonvolatile_bytes = d.stats.nonvolatile_compressed_bytes = 0;
+}
+bool matches(const Pool& p, std::uint64_t epoch, std::uint32_t index,
+             std::uint64_t generation) {
+  return epoch == p.stats.generation && index < max_donors && generation &&
+      generation == p.donors[index].stats.generation;
 }
 }  // namespace
 
-Result pool_begin(std::uint64_t generation, std::int32_t donor_pid,
-                  std::uint64_t max_shared_bytes) noexcept {
+Result pool_campaign_begin(std::uint64_t epoch, std::uint64_t target) noexcept {
   if (auto result = availability(); !result) return result;
   auto& p = pool();
   std::lock_guard guard(p.mutex);
-  if (!generation || generation <= p.stats.generation || donor_pid <= 0 ||
-      !max_shared_bytes || max_shared_bytes > max_capacity)
+  if (!epoch || epoch <= p.stats.generation || !target || target > max_capacity)
     return fail(p, Stage::invalid_argument);
-#if defined(__APPLE__)
-  if (donor_pid == ::getpid()) return fail(p, Stage::invalid_argument);
-#endif
-  // A first implementation does not restart a donor while pointers from the
-  // previous session remain borrowed. Thus prepared/live bytes always refer
-  // to this generation, never to an object formerly charged to another task.
   if (p.stats.live_blocks) return fail(p, Stage::pool_unready);
-  // Disable new loans before removing any old mapping. A partial cleanup
-  // failure must not leave a verified pool offering an already unmapped slot.
-  p.stats.state = PoolState::preparing;
-  p.stats.donor_footprint = 0;
-  p.stats.donor_nonvolatile = 0;
-  p.stats.donor_nonvolatile_compressed = 0;
-  for (auto& entry : p.entries) if (entry.block && !entry.loans) {
-    const auto bytes = entry.block->size();
-    const auto result = entry.block->reset();
-    p.stats.prepared_bytes -= bytes - entry.block->size();
-    if (!result) return fail(p, result.stage, result.kernel_result);
+  // Disable all old sources before removing even one old mapping. No new
+  // campaign can attribute old retained objects to its new donor processes.
+  for (auto& d : p.donors) if (d.stats.state != PoolState::unavailable) lost(d, 0);
+  for (auto& entry : p.entries) if (entry.block) {
+    if (auto result = entry.block->reset(); !result)
+      return fail(p, result.stage, result.kernel_result);
     entry = {};
   }
-  p.stats.generation = generation;
-  p.stats.donor_pid = donor_pid;
-  p.stats.state = PoolState::preparing;
+  p.donors = {};
+  p.stats.generation = epoch;
+  p.stats.target_bytes = target;
   p.stats.last_stage = Stage::none;
   p.stats.last_kernel_result = 0;
-  p.stats.donor_footprint = 0;
-  p.stats.donor_nonvolatile = 0;
-  p.stats.donor_nonvolatile_compressed = 0;
-  p.capacity = max_shared_bytes;
   publish(p);
   return {};
 }
 
-Result pool_adopt(std::uint64_t generation, std::uint32_t entry,
-                  std::size_t bytes) noexcept {
+Result pool_donor_begin(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::int32_t pid) noexcept {
+  auto& p = pool();
+  std::lock_guard guard(p.mutex);
+  if (epoch != p.stats.generation || index >= max_donors || !generation || pid <= 0)
+    return fail(p, Stage::invalid_argument);
+#if defined(__APPLE__)
+  if (pid == ::getpid()) return fail(p, Stage::invalid_argument);
+#endif
+  auto& d = p.donors[index];
+  if ((d.stats.state != PoolState::unavailable && d.stats.state != PoolState::donor_lost) ||
+      d.stats.retained_bytes || d.stats.live_bytes)
+    return fail(p, Stage::pool_unready);
+  if (d.stats.generation && generation <= d.stats.generation)
+    return fail(p, Stage::invalid_argument);
+  for (const auto& entry : p.entries) if (entry.block && entry.donor == index)
+    return fail(p, Stage::pool_unready); // even a retained send right with no mapping
+  for (const auto& other : p.donors) if (other.stats.pid == pid &&
+      (other.stats.state == PoolState::preparing || other.stats.state == PoolState::verified))
+    return fail(p, Stage::pool_duplicate_pid);
+  d = {};
+  d.stats.generation = generation;
+  d.stats.pid = pid;
+  d.stats.state = PoolState::preparing;
+  publish(p);
+  return {};
+}
+
+Result pool_adopt_donor(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::uint64_t chunk, std::uint32_t entry,
+    std::size_t bytes) noexcept {
   auto mapping = std::unique_ptr<Block>(new (std::nothrow) Block);
   if (!mapping) return {Stage::pool_limit, -1};
   if (auto result = Block::map_borrowed(entry, bytes, *mapping); !result) return result;
   auto& p = pool();
   std::lock_guard guard(p.mutex);
-  if (generation != p.stats.generation ||
-      (p.stats.state != PoolState::preparing && p.stats.state != PoolState::verified))
-    return fail(p, Stage::pool_unready);
-  if (p.stats.prepared_bytes > p.capacity || bytes > p.capacity - p.stats.prepared_bytes)
+  if (!matches(p, epoch, index, generation)) return fail(p, Stage::pool_unready);
+  auto& d = p.donors[index];
+  if ((d.stats.state != PoolState::preparing && d.stats.state != PoolState::verified) ||
+      chunk != d.next_chunk || chunk >= 64) return fail(p, Stage::pool_unready);
+  if (p.stats.retained_bytes > p.stats.target_bytes ||
+      bytes > p.stats.target_bytes - p.stats.retained_bytes)
     return fail(p, Stage::pool_quota);
+  // Replaying the same named object must not create fictitious additional
+  // capacity. IPC additionally ties each new proof and ledger delta to index.
+  for (const auto& old : p.entries) if (old.block && old.block->entry() == entry)
+    return fail(p, Stage::invalid_argument);
   for (auto& slot : p.entries) if (!slot.block) {
     slot.block = std::move(mapping);
     slot.generation = generation;
-    slot.loans = 0;
-    p.stats.prepared_bytes += bytes;
+    slot.chunk = chunk;
+    slot.donor = index;
+    slot.verified = false;
+    ++d.next_chunk;
     publish(p);
     return {};
   }
   return fail(p, Stage::pool_limit);
 }
 
-Result pool_verified(std::uint64_t generation, const Footprint& donor) noexcept {
+Result pool_verify_donor(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::uint64_t capacity, const Footprint& donor,
+    std::uint64_t resident, std::uint64_t compressed) noexcept {
   auto& p = pool();
   std::lock_guard guard(p.mutex);
-  if (generation != p.stats.generation || p.stats.state != PoolState::preparing)
+  if (!matches(p, epoch, index, generation)) return fail(p, Stage::pool_unready);
+  auto& d = p.donors[index];
+  if (d.stats.state != PoolState::preparing && d.stats.state != PoolState::verified)
     return fail(p, Stage::pool_unready);
-  const bool has_entry = std::any_of(p.entries.begin(), p.entries.end(),
-      [generation](const Entry& e) { return e.block && e.generation == generation; });
-  if (!has_entry) return fail(p, Stage::pool_unready);
-  update_footprint(p, donor);
-  p.stats.state = PoolState::verified;
+  std::uint64_t mapped = 0;
+  for (const auto& e : p.entries) if (e.block && e.donor == index && e.generation == generation)
+    mapped += e.block->size();
+  const auto tolerance = std::min<std::uint64_t>(1024 * 1024, capacity / 16);
+  if (!capacity || capacity != mapped || compressed > capacity || resident > capacity - compressed ||
+      resident + compressed < capacity - tolerance || donor.nonvolatile < resident ||
+      donor.nonvolatile_compressed < compressed || donor.physical < resident + compressed) {
+    lost(d, -1);
+    return fail(p, Stage::footprint);
+  }
+  d.stats.state = PoolState::verified;
+  d.stats.resident_bytes = resident;
+  d.stats.compressed_bytes = compressed;
+  d.stats.footprint_bytes = donor.physical;
+  d.stats.nonvolatile_bytes = donor.nonvolatile;
+  d.stats.nonvolatile_compressed_bytes = donor.nonvolatile_compressed;
+  d.stats.last_stage = Stage::none;
+  d.stats.last_kernel_result = 0;
+  for (auto& e : p.entries) if (e.block && e.donor == index && e.generation == generation)
+    e.verified = true;
   p.stats.last_stage = Stage::none;
   p.stats.last_kernel_result = 0;
   publish(p);
   return {};
 }
 
-void pool_footprint(std::uint64_t generation, const Footprint& donor) noexcept {
+void pool_donor_lost(std::uint64_t epoch, std::uint32_t index,
+    std::uint64_t generation, std::int32_t reason) noexcept {
   auto& p = pool();
   std::lock_guard guard(p.mutex);
-  if (generation == p.stats.generation && p.stats.state != PoolState::donor_lost) {
-    update_footprint(p, donor);
-    publish(p);
-  }
+  if (!matches(p, epoch, index, generation)) return;
+  lost(p.donors[index], reason);
+  // Retain all live mappings; an unrelated verified donor continues offering
+  // loans. Unused lost mappings are removed only when the campaign is retired.
+  publish(p);
 }
 
-void pool_lost(std::uint64_t generation, std::int32_t reason) noexcept {
+Result pool_collect_lost() noexcept {
   auto& p = pool();
   std::lock_guard guard(p.mutex);
-  if (generation != p.stats.generation) return;
-  p.stats.state = PoolState::donor_lost;
-  p.stats.last_stage = Stage::pool_unready;
-  p.stats.last_kernel_result = reason;
-  // These snapshots describe the last measured donor, not its current charge.
-  // Zero them on disconnection rather than claiming a dead task still owns RAM.
-  p.stats.donor_footprint = 0;
-  p.stats.donor_nonvolatile = 0;
-  p.stats.donor_nonvolatile_compressed = 0;
+  Result first{};
+  for (auto& e : p.entries) if (e.block && !e.loans &&
+      p.donors[e.donor].stats.state == PoolState::donor_lost) {
+    const auto result = e.block->reset();
+    if (result) e = {};
+    else if (first) first = result;
+  }
+  if (!first) return fail(p, first.stage, first.kernel_result);
   publish(p);
+  return {};
+}
+
+bool pool_donor_restartable(std::uint64_t epoch, std::uint32_t index) noexcept {
+  auto& p = pool();
+  std::lock_guard guard(p.mutex);
+  if (epoch != p.stats.generation || index >= max_donors) return false;
+  const auto& d = p.donors[index].stats;
+  if ((d.state != PoolState::unavailable && d.state != PoolState::donor_lost) || d.live_bytes)
+    return false;
+  for (const auto& entry : p.entries) if (entry.block && entry.donor == index) return false;
+  return true;
 }
 
 void pool_snapshot(PoolSnapshot& out) noexcept {
   auto& p = pool();
-  std::uint64_t v[12]{};
-  for (std::size_t i = 0; i < p.published.size(); ++i)
-    v[i] = p.published[i].load(std::memory_order_relaxed);
+  std::uint64_t v[20]{};
+  if (!read_published(p, p.published, v)) {
+    out = {}; out.last_stage = Stage::snapshot_busy; return;
+  }
   out = {v[0], static_cast<std::int32_t>(v[1]), static_cast<PoolState>(v[2]),
-         static_cast<Stage>(v[3]), static_cast<std::int32_t>(v[4]),
-         v[5], v[6], v[7], v[8], v[9], v[10], v[11]};
+      static_cast<Stage>(v[3]), static_cast<std::int32_t>(v[4]),
+      v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14],
+      v[15], v[16], v[17], static_cast<std::uint32_t>(v[18]), static_cast<std::uint32_t>(v[19])};
+}
+void pool_donor_snapshot(std::uint32_t index, PoolDonorSnapshot& out) noexcept {
+  out = {};
+  if (index >= max_donors) return;
+  auto& p = pool();
+  std::uint64_t v[14]{};
+  if (!read_published(p, p.donor_published[index], v)) {
+    out.last_stage = Stage::snapshot_busy; return;
+  }
+  out = {v[0], static_cast<std::int32_t>(v[1]), static_cast<PoolState>(v[2]),
+      v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11],
+      static_cast<Stage>(v[12]), static_cast<std::int32_t>(v[13])};
 }
 
 Result pool_acquire(std::uint64_t bytes, std::uint64_t alignment,
-                    void** out, std::uint64_t* token) noexcept {
+    void** out, std::uint64_t* token) noexcept {
   if (!out || !token) return {Stage::invalid_argument, -1};
-  *out = nullptr;
-  *token = 0;
+  *out = nullptr; *token = 0;
   auto& p = pool();
   std::lock_guard guard(p.mutex);
   if (p.stats.state != PoolState::verified) return fail(p, Stage::pool_unready);
@@ -195,10 +344,12 @@ Result pool_acquire(std::uint64_t bytes, std::uint64_t alignment,
   for (auto& candidate : p.loans) if (!candidate.token) { loan = &candidate; break; }
   if (!loan) return fail(p, Stage::pool_limit);
   for (std::size_t index = 0; index < p.entries.size(); ++index) {
-    auto& entry = p.entries[index];
-    if (!entry.block || entry.generation != p.stats.generation) continue;
-    const auto base = reinterpret_cast<std::uintptr_t>(entry.block->data());
-    const std::uint64_t size = entry.block->size();
+    auto& e = p.entries[index];
+    const auto& donor = p.donors[e.donor].stats;
+    if (!e.block || !e.verified || donor.state != PoolState::verified ||
+        e.generation != donor.generation) continue;
+    const auto base = reinterpret_cast<std::uintptr_t>(e.block->data());
+    const std::uint64_t size = e.block->size();
     std::uint64_t offset = (alignment - (base & (alignment - 1))) & (alignment - 1);
     while (offset <= size && bytes <= size - offset) {
       std::uint64_t next = offset;
@@ -207,14 +358,11 @@ Result pool_acquire(std::uint64_t bytes, std::uint64_t alignment,
         next = std::max(next, live.offset + live.bytes);
       if (next == offset) {
         *loan = {p.next_token++, bytes, offset, index};
-        ++entry.loans;
-        p.stats.live_bytes += bytes;
-        ++p.stats.live_blocks;
+        ++e.loans;
+        p.stats.live_bytes += bytes; ++p.stats.live_blocks;
         p.stats.peak_live_bytes = std::max(p.stats.peak_live_bytes, p.stats.live_bytes);
-        p.stats.last_stage = Stage::none;
-        p.stats.last_kernel_result = 0;
-        *out = reinterpret_cast<void*>(base + offset);
-        *token = loan->token;
+        p.stats.last_stage = Stage::none; p.stats.last_kernel_result = 0;
+        *out = reinterpret_cast<void*>(base + offset); *token = loan->token;
         publish(p);
         return {};
       }
@@ -228,17 +376,37 @@ Result pool_release(std::uint64_t token) noexcept {
   auto& p = pool();
   std::lock_guard guard(p.mutex);
   for (auto& loan : p.loans) if (token && loan.token == token) {
-    auto& entry = p.entries[loan.entry];
-    p.stats.live_bytes -= loan.bytes;
-    --p.stats.live_blocks;
-    --entry.loans;
+    --p.entries[loan.entry].loans;
+    p.stats.live_bytes -= loan.bytes; --p.stats.live_blocks;
     loan = {};
-    // Maps remain retained even on donor loss. A generation change is refused
-    // until every loan is released; only pool_begin then removes the mappings.
     publish(p);
     return {};
   }
   return fail(p, Stage::pool_not_owned);
 }
 
+Result pool_begin(std::uint64_t generation, std::int32_t pid, std::uint64_t target) noexcept {
+  if (auto result = pool_campaign_begin(generation, target); !result) return result;
+  return pool_donor_begin(generation, 0, generation, pid);
+}
+Result pool_adopt(std::uint64_t generation, std::uint32_t entry, std::size_t bytes) noexcept {
+  std::uint64_t next = 0;
+  { auto& p = pool(); std::lock_guard guard(p.mutex); next = p.donors[0].next_chunk; }
+  return pool_adopt_donor(generation, 0, generation, next, entry, bytes);
+}
+Result pool_verified(std::uint64_t generation, const Footprint& donor) noexcept {
+  PoolDonorSnapshot stats{}; pool_donor_snapshot(0, stats);
+  if (stats.last_stage == Stage::snapshot_busy) return {Stage::snapshot_busy, 0};
+  return pool_verify_donor(generation, 0, generation, stats.retained_bytes, donor,
+      donor.nonvolatile, donor.nonvolatile_compressed);
+}
+void pool_footprint(std::uint64_t generation, const Footprint& donor) noexcept {
+  PoolDonorSnapshot stats{}; pool_donor_snapshot(0, stats);
+  if (stats.last_stage == Stage::snapshot_busy) return;
+  (void)pool_verify_donor(generation, 0, generation, stats.prepared_bytes, donor,
+      donor.nonvolatile, donor.nonvolatile_compressed);
+}
+void pool_lost(std::uint64_t generation, std::int32_t reason) noexcept {
+  pool_donor_lost(generation, 0, generation, reason);
+}
 }  // namespace neostation::donation

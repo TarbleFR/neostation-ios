@@ -7,6 +7,7 @@ import copy
 from contextlib import redirect_stdout
 import io
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -45,20 +46,42 @@ donation_reports = {
     'kernel': {'passed': True, 'platform': 'macOS-kernel-two-process',
                'source': sha, 'realIPhoneValidated': False,
                'ledgers': [{'pid': 501, 'physical': 4096, 'nonvolatile': 4096}] * 6},
-    'ipc': {'schema': 1, 'passed': True, 'platform': 'macOS-NSXPC-two-process',
+    'ipc': {'schema': 2, 'passed': True, 'platform': 'macOS-NSXPC-two-process',
             'iphoneExtensionValidated': False, 'hostPID': 501, 'donorPID': 502,
-            'capacityBytes': 64 * 1024 * 1024, 'donorResidentBytes': 64 * 1024 * 1024,
+            'capacityBytes': 128 * 1024 * 1024, 'donorResidentBytes': 128 * 1024 * 1024,
             'donorCompressedBytes': 0, 'hostNonvolatileDelta': 0,
+            'verifiedChunkCount': 2, 'distinctChunkRights': True, 'priorBorrowedDataPreserved': True,
+            'machHandleCleanupRetried': True,
             'rejectedArchive': True, 'rejectedScenarios': [
                 {'scenario': name, 'rejected': True}
                 for name in ('BadNonceSession', 'BadGenerationSession', 'WaitOnlySession', 'LateSession')
             ]},
-    'simulator': {'schema': 1, 'passed': True, 'platform': 'iOS18Simulator',
+    'simulator': {'schema': 2, 'passed': True, 'platform': 'iOS18Simulator',
+                  'transport': 'real-NSExtension-auxiliary-NSXPC',
                   'realIPhoneValidated': False, 'physicalIphoneValidated': False,
-                  'hostPID': 501, 'donorPID': 502, 'capacityBytes': 64 * 1024 * 1024,
+                  'hostPID': 501, 'donorCount': 2, 'capacityBytes': 64 * 1024 * 1024,
                   'donorResidentBytes': 64 * 1024 * 1024, 'donorCompressedBytes': 0,
-                  'abiVersion': 1, 'realDonationLoanBytes': 1024 * 1024, 'donationDiskBytes': 0,
-                  'sourceSHA256': {'native/neoswap-donation/Broker.cpp': 'a' * 64}},
+                  'abiVersion': 1, 'realDonationLoanBytes': 64 * 1024 * 1024, 'donationDiskBytes': 0,
+                  'verifiedChunkCount': 4,
+                  'donorBundleCount': 1, 'requestCount': 2,
+                  'rpcs3DonatedLiveBytes': 64*1024*1024, 'rpcs3LiveBytes': 64*1024*1024,
+                  'retainedDataAfterClose': True, 'newLoansBlockedAfterClose': True,
+                  'survivingDonorNewLoanPassed': True, 'explicitFileFallbackPassed': True,
+                  'releasePassed': True, 'kernelMappingCleanupPassed': True,
+                  'donors': [
+                      {'helperIdentifier': 'com.neogamelab.neostation.neoswap-simulator-proof.neoswapdonor',
+                       'helperIndex': '0', 'poolIndex': i, 'pid': 502+i,
+                       'generation': 100+i, 'capacityBytes': 32*1024*1024,
+                       'residentBytes': 32*1024*1024, 'compressedBytes': 0, 'verifiedChunkCount': 2,
+                       'chunks': [{'index': j, 'capacityBytes': 16*1024*1024} for j in range(2)]}
+                      for i in range(2)
+                  ],
+                  'sourceSHA256': {'native/neoswap-donation/Broker.cpp': hashlib.sha256(
+                      (ROOT/'native/neoswap-donation/Broker.cpp').read_bytes()).hexdigest()}},
+    'stress': {'schema': 2, 'passed': False, 'platform': 'macOS-NSXPC-two-process',
+               'iphoneExtensionValidated': False, 'targetBytes': 8589934592,
+               'stage': 'stress_system_headroom_guard', 'preparedBytes': 0,
+               'technicalError': 'Fixture runner lacks the measured headroom for 8 GiB; no donation claimed'},
 }
 retained_commands = [
     ['python3', 'test/stikjit_scoped_host_test.py'],
@@ -102,7 +125,7 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
                 if failed_phase == phase:
                     fixture['passed'] = False
                 if bad_device_claim == phase:
-                    fixture['iphoneExtensionValidated' if phase == 'ipc' else 'realIPhoneValidated'] = True
+                    fixture['iphoneExtensionValidated' if phase in ('ipc','stress') else 'realIPhoneValidated'] = True
                 (destination / 'report.json').write_text(json.dumps(fixture))
         else:
             assert command in retained_commands, 'Unexpected independent verification command'
@@ -118,7 +141,7 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
         checkout.mkdir()
         runner_temp = base / 'runner-temp'
         runner_temp.mkdir()
-        environment = dict(os.environ, GITHUB_SHA=sha, RUNNER_TEMP=str(runner_temp))
+        environment = dict(os.environ, GITHUB_SHA=sha, RUNNER_TEMP=str(runner_temp), GITHUB_WORKSPACE=str(ROOT))
         previous = Path.cwd()
         try:
             os.chdir(checkout)
@@ -126,7 +149,7 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
                 exec(compile(script, '.github/workflows/neoswap-ipa.yml', 'exec'), {})
             assert api_workflows == list(WORKFLOW_IDS), 'All five exact-SHA gates must execute'
             assert executed_commands[-3:] == retained_commands
-            assert len([command for command in executed_commands if command[:3] == ['gh', 'run', 'download']]) == 4
+            assert len([command for command in executed_commands if command[:3] == ['gh', 'run', 'download']]) == 5
             if export:
                 # Flutter clean removes build/ after the producer. Execute the
                 # actual export commands extracted from the workflow afterward.
@@ -153,10 +176,12 @@ def exercise(*, bad_source=None, bad_device_claim=None, failed_phase=None, expor
 exercise(export=True)
 for phase in donation_reports:
     for argument in ('bad_source', 'bad_device_claim', 'failed_phase'):
+        if phase == 'stress' and argument == 'failed_phase':
+            continue  # An explicit stress refusal is retained, never counted as 8 GiB.
         try:
             with redirect_stdout(io.StringIO()):
                 exercise(**{argument: phase})
-        except AssertionError:
+        except (AssertionError, RuntimeError):
             pass
         else:
             raise AssertionError('Actual workflow accepted invalid ' + argument + ' in ' + phase)

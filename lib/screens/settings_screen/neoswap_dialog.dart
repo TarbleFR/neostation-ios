@@ -119,7 +119,9 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     final allocated = (rpc['allocationCount'] as num?)?.toInt() ?? 0;
     final rpcLastResult = (rpc['lastResult'] as num?)?.toInt() ?? 0;
     final donorState = (_stats?['donorSessionState'] as num?)?.toInt() ?? 0;
+    final target = _stats?['donationTargetBytes'] ?? 8192 * 1024 * 1024;
     final donationReady = _stats?['memoryDonationSupported'] == true;
+    final growthState = _stats?['donationGrowthState'];
     return PopScope(
       canPop: !_busy,
       child: Dialog(
@@ -140,17 +142,19 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                 const SizedBox(height: 8),
                 Text(t('warning')),
                 const SizedBox(height: 16),
-                Text(t('capacity')),
-                Text('$capacity MiB', key: const ValueKey('neoSwapBudget')),
+                Text(
+                  t('donorTarget', {'size': _bytes(target)}),
+                  key: const ValueKey('neoSwapTarget'),
+                ),
                 if (_stats != null) ...[
                   Text(t(rpc['registered'] == true ? 'connected' : 'pending')),
-                  if (_stats!.containsKey('reservedVirtualBytes'))
-                    Text(
-                      t('virtualReserved', {
-                        'size': _bytes(_stats?['reservedVirtualBytes']),
-                      }),
-                      key: const ValueKey('neoSwapReservation'),
-                    ),
+                  Text(
+                    t('donorPrepared', {
+                      'size': _bytes(_stats?['donationPreparedBytes'] ?? 0),
+                      'count': '${_stats?['donorCount'] ?? 0}',
+                    }),
+                    key: const ValueKey('neoSwapDonorPrepared'),
+                  ),
                   if (_stats!.containsKey('remainingStorageBytes'))
                     Text(
                       t('storageAvailable', {
@@ -178,21 +182,38 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                     ),
                     Text(
                       t('donorFootprint', {
-                        'pid': '${_stats?['donorPID'] ?? 0}',
                         'size': _bytes(_stats?['donorFootprintBytes']),
                       }),
                     ),
                     Text(
-                      t('donorNote', {
-                        'size': _bytes(_stats?['donorCapacityBytes']),
+                      t('donorPhysical', {
+                        'resident': _bytes(_stats?['donatedResidentBytes']),
+                        'compressed': _bytes(_stats?['donatedCompressedBytes']),
                       }),
+                      key: const ValueKey('neoSwapDonorPhysical'),
                     ),
+                    Text(t('donorNote')),
                   ] else if (donorState == 1 || donorState == 2)
                     Text(t('donorPreparing'))
                   else if ((_stats?['donationState'] as num?)?.toInt() == 3)
                     Text(t('donorLost'))
                   else if (_stats?['memoryDonationSupported'] == false)
                     Text(t('donationUnavailable')),
+                  if (growthState == 'growing') Text(t('donorGrowing')),
+                  if (growthState == 'waiting') Text(t('donorWaiting')),
+                  if (growthState == 'limited')
+                    Text(
+                      t('donorLimited', {
+                        'remaining': _bytes(_stats?['donationRemainingBytes']),
+                      }),
+                      key: const ValueKey('neoSwapDonorLimited'),
+                    ),
+                  if ((_stats?['donationRetainedLiveBytes'] as num? ?? 0) > 0)
+                    Text(
+                      t('donorRetained', {
+                        'size': _bytes(_stats?['donationRetainedLiveBytes']),
+                      }),
+                    ),
                   Text(
                     t('used', {
                       'current': _bytes(rpc['liveBytes']),
@@ -295,6 +316,11 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                   ExpansionTile(
                     title: Text(t('technical')),
                     children: [
+                      Text(t('capacity')),
+                      Text(
+                        '$capacity MiB',
+                        key: const ValueKey('neoSwapBudget'),
+                      ),
                       SelectableText(
                         const JsonEncoder.withIndent('  ').convert({
                           ...?_stats,

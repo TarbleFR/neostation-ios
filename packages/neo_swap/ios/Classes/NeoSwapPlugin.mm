@@ -29,9 +29,17 @@ static const uint64_t kMiB = 1024 * 1024;
 @property(nonatomic, assign) int diagnosticErrno;
 @property(nonatomic, strong) NSDictionary* lastCapacityProbe;
 #if defined(NEOSWAP_DONATION)
-@property(nonatomic, strong) NeoSwapDonorSession* donorSession;
-@property(nonatomic, assign) uint64_t donorPoolGeneration;
-@property(nonatomic, strong) NSDictionary* donorError;
+@property(nonatomic, strong) NSMutableArray* donorSessions;
+@property(nonatomic, strong) NSMutableArray<NSNumber*>* donorAdoptedChunks;
+@property(nonatomic, strong) NSMutableArray<NSDate*>* donorRetryAfter;
+@property(nonatomic, strong) NSMutableDictionary* donorErrors;
+@property(nonatomic, strong) NSDictionary* donorGrowthRefusal;
+@property(nonatomic, assign) uint64_t donorEpoch;
+@property(nonatomic, assign) NSInteger donorPendingIndex;
+@property(nonatomic, assign) NSUInteger donorLaunchIndex;
+@property(nonatomic, assign) NSUInteger donorCursor;
+@property(nonatomic, assign) NeoSwapDonationDemand donorDemand;
+@property(nonatomic, assign) uint64_t donorGenerationCounter;
 #endif
 @end
 
@@ -103,7 +111,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         self.configResult = [self configure:self.capacityMiB];
         if (!created && self.configResult == NEOSWAP_OK) self.configResult = NEOSWAP_STORAGE;
 #if defined(NEOSWAP_DONATION)
-        [self startDonor];
+        [self startDonors];
 #endif
         [self appendRecord:[self snapshot:@"process_start"]];
     });
@@ -117,6 +125,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @autoreleasepool {
 #if defined(NEOSWAP_DONATION)
             (void)neostation::donation::retry_cleanup();
+            [strongSelf advanceDonors];
 #endif
             NSDictionary* row = [strongSelf snapshot:@"sample"];
             uint64_t count = [row[@"allocationCount"] unsignedLongLongValue];
@@ -131,51 +140,225 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     return self;
 }
 #if defined(NEOSWAP_DONATION)
-- (void)startDonor {
+- (void)startDonors {
+    if (self.donorSessions) return;
+    self.donorEpoch = 1;
+    self.donorGenerationCounter = self.donorEpoch * 16;
+    self.donorPendingIndex = -1;
+    self.donorSessions = [NSMutableArray new];
+    self.donorAdoptedChunks = [NSMutableArray new];
+    self.donorRetryAfter = [NSMutableArray new];
+    self.donorErrors = [NSMutableDictionary new];
+    for (NSUInteger index = 0; index < 8; ++index) {
+        [self.donorSessions addObject:NSNull.null];
+        [self.donorAdoptedChunks addObject:@0];
+        [self.donorRetryAfter addObject:NSDate.distantPast];
+    }
+    auto begun = neostation::donation::pool_campaign_begin(self.donorEpoch, uint64_t(8192)*kMiB);
+    if (!begun) {
+        self.donorGrowthRefusal = @{@"stage":[NSString stringWithUTF8String:
+            neostation::donation::stage_name(begun.stage)], @"kernelResult":@(begun.kernel_result)};
+        return;
+    }
+    [self advanceDonors];
+}
+- (uint64_t)nextDonationBudget {
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    if (pool.generation != self.donorEpoch || pool.retained_bytes >= pool.target_bytes) return 0;
+    neostation::donation::SystemHeadroom system{};
+    const auto sampled = neostation::donation::system_headroom(system);
+    // phys_footprint includes uncompressed-page equivalents of compressed
+    // memory. It is a diagnostic ledger, not free physical RAM to subtract.
+    uint64_t available = sampled ? system.usable_bytes : 0;
+    available = MIN(available, pool.target_bytes - pool.retained_bytes);
+    available -= available % vm_page_size;
+    if (available < kMiB) {
+        self.donorGrowthRefusal = @{@"stage":sampled ? @"insufficient_system_headroom" :
+            [NSString stringWithUTF8String:neostation::donation::stage_name(sampled.stage)],
+            @"kernelResult":@(!sampled ? sampled.kernel_result : KERN_RESOURCE_SHORTAGE),
+            @"remainingTargetBytes":@(pool.target_bytes - pool.prepared_bytes),
+            @"freeBytes":@(system.free_bytes), @"purgeableBytes":@(system.purgeable_bytes),
+            @"systemUsableBytes":@(system.usable_bytes),
+            @"pressure":@(static_cast<uint32_t>(system.pressure))};
+        return 0;
+    }
+    self.donorGrowthRefusal = nil;
+    return available;
+}
+- (void)launchDonor:(NSUInteger)index budget:(uint64_t)budget {
+    if (self.donorGenerationCounter == UINT64_MAX) {
+        self.donorGrowthRefusal = @{@"stage":@"donor_generation_exhausted"};
+        return;
+    }
     NSString* bundleID = NSBundle.mainBundle.bundleIdentifier;
-    if (!bundleID.length || self.donorSession) return;
+    if (!bundleID.length) return;
+    // Separate outstanding requests ask Foundation for distinct instances
+    // of the same signed extension. The pool refuses a reused donor PID.
     NSString* identifier = [bundleID stringByAppendingString:@".neoswapdonor"];
     __weak NeoSwapPlugin* weakSelf = self;
-    self.donorSession = [[NeoSwapDonorSession alloc] initWithHelperIdentifier:identifier
-        requestedBytes:64*kMiB generation:1 timeout:10 observer:^(NeoSwapDonorSession* session,
-            NeoSwapDonorSnapshot status, NSError* failure) {
+    NeoSwapDonorSession* session = [[NeoSwapDonorSession alloc] initWithHelperIdentifier:identifier
+        requestedBytes:uint64_t(8192)*kMiB generation:++self.donorGenerationCounter
+        timeout:10 observer:^(NeoSwapDonorSession* source, NeoSwapDonorSnapshot ignored, NSError* failure) {
+        (void)ignored;
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
-        dispatch_async(strongSelf.queue, ^{
-            if (session != strongSelf.donorSession) return;
-            if (failure) strongSelf.donorError = @{@"domain":failure.domain,
-                @"code":@(failure.code), @"description":failure.localizedDescription};
-            if (status.state == NeoSwapDonorStateActive) {
-                neostation::donation::Footprint measured{};
-                measured.physical = status.donorFootprintBytes;
-                measured.nonvolatile = status.donorNonvolatileBytes;
-                measured.nonvolatile_compressed = status.donorCompressedBytes;
-                if (strongSelf.donorPoolGeneration != status.generation) {
-                    auto result = neostation::donation::pool_begin(status.generation,
-                        status.donorPID, uint64_t(8192)*kMiB);
-                    mach_port_t entry = result ? [session copyMemoryEntry] : MACH_PORT_NULL;
-                    if (result && entry == MACH_PORT_NULL)
-                        result = {neostation::donation::Stage::retain_entry, KERN_INVALID_RIGHT};
-                    if (result) result = neostation::donation::pool_adopt(status.generation,
-                        entry, status.capacityBytes);
-                    if (entry != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), entry);
-                    if (result) result = neostation::donation::pool_verified(status.generation, measured);
-                    if (result) strongSelf.donorPoolGeneration = status.generation;
-                    else {
-                        strongSelf.donorError = @{@"stage":[NSString stringWithUTF8String:
-                            neostation::donation::stage_name(result.stage)],
-                            @"kernelResult":@(result.kernel_result)};
-                        neostation::donation::pool_lost(status.generation, result.kernel_result);
-                        [session close];
-                    }
-                } else neostation::donation::pool_footprint(status.generation, measured);
-            } else if (status.state == NeoSwapDonorStateFailed || status.state == NeoSwapDonorStateClosed) {
-                neostation::donation::pool_lost(status.generation, status.kernelResult);
-            }
-            [strongSelf appendRecord:[strongSelf snapshot:@"donor_state"]];
-        });
+        dispatch_async(strongSelf.queue, ^{ [strongSelf donorChanged:source index:index error:failure]; });
     }];
-    [self.donorSession start];
+    const uint64_t first = MIN(budget, kMiB);
+    if (![session setInitialChunkMaximumBytes:first]) {
+        self.donorErrors[[NSString stringWithFormat:@"%lu", (unsigned long)index]] =
+            @{@"stage":@"initial_chunk_budget", @"bytes":@(first)};
+        return;
+    }
+    self.donorSessions[index] = session;
+    self.donorAdoptedChunks[index] = @0;
+    self.donorPendingIndex = index;
+    [session start];
+}
+- (void)advanceDonors {
+    if (!self.donorSessions || self.donorPendingIndex >= 0) return;
+    (void)neostation::donation::pool_collect_lost();
+    if (self.donorLaunchIndex < 8) {
+        const uint64_t budget = [self nextDonationBudget];
+        if (!budget) return;
+        const NSUInteger index = self.donorLaunchIndex++;
+        [self launchDonor:index budget:budget];
+        return;
+    }
+    for (NSUInteger index = 0; index < 8; ++index) {
+        id object = self.donorSessions[index];
+        if (![object isKindOfClass:NeoSwapDonorSession.class]) continue;
+        const auto status = [(NeoSwapDonorSession*)object snapshot];
+        if ((status.state != NeoSwapDonorStateFailed && status.state != NeoSwapDonorStateClosed) ||
+            [self.donorRetryAfter[index] timeIntervalSinceNow] > 0 ||
+            !neostation::donation::pool_donor_restartable(self.donorEpoch, index)) continue;
+        NSDictionary* diagnostics = [(NeoSwapDonorSession*)object diagnostics];
+        neostation::donation::CleanupSnapshot cleanup{};
+        neostation::donation::cleanup_snapshot(cleanup);
+        if ([diagnostics[@"cleanupPending"] boolValue] || cleanup.pending_blocks) {
+            self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
+            if ([diagnostics[@"cleanupPending"] boolValue]) [(NeoSwapDonorSession*)object close];
+            continue; // keep the old Session until proof/right cleanup actually succeeds
+        }
+        const uint64_t retryBudget = [self nextDonationBudget];
+        self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
+        if (!retryBudget) return;
+        [self launchDonor:index budget:retryBudget];
+        return;
+    }
+    NeoSwapDonationDemand demand{};
+    if (NeoSwap_ClaimDonationDemand(&demand) != NEOSWAP_OK) return;
+    self.donorDemand = demand;
+    if (!demand.bytes) {
+        self.donorGrowthRefusal = nil;
+        return; // Never fill idle device RAM merely to reach the target.
+    }
+    const uint64_t budget = [self nextDonationBudget];
+    if (budget < demand.bytes) {
+        if (budget) self.donorGrowthRefusal = @{@"stage":@"insufficient_headroom_for_requested_buffer",
+            @"requestedBytes":@(demand.bytes), @"availableBytes":@(budget),
+            @"requestSequence":@(demand.sequence), @"kernelResult":@(KERN_RESOURCE_SHORTAGE)};
+        return; // A loan cannot span several smaller donated objects.
+    }
+    for (NSUInteger attempt = 0; attempt < 8; ++attempt) {
+        const NSUInteger index = self.donorCursor++ % 8;
+        id object = self.donorSessions[index];
+        if (![object isKindOfClass:NeoSwapDonorSession.class]) continue;
+        NeoSwapDonorSession* session = object;
+        const NeoSwapDonorSnapshot status = [session snapshot];
+        if (status.state != NeoSwapDonorStateActive || status.verifiedChunkCount >= 64 ||
+            status.growthState == NeoSwapDonorGrowthComplete ||
+            [self.donorRetryAfter[index] timeIntervalSinceNow] > 0) continue;
+        const uint64_t maximum = demand.bytes;
+        if ([session requestNextChunkWithMaximumBytes:maximum]) {
+            self.donorPendingIndex = index;
+            return;
+        }
+    }
+}
+- (void)donorChanged:(NeoSwapDonorSession*)session index:(NSUInteger)index error:(NSError*)failure {
+    if (index >= self.donorSessions.count || self.donorSessions[index] != session) return;
+    // Notifications can have queued while the Session moved forward. Inspect
+    // its current authenticated state before granting/revoking any new loans.
+    const NeoSwapDonorSnapshot status = [session snapshot];
+    NSString* errorKey = [NSString stringWithFormat:@"%lu", (unsigned long)index];
+    if (failure) self.donorErrors[errorKey] = @{@"domain":failure.domain,
+        @"code":@(failure.code), @"description":failure.localizedDescription};
+    if ([failure.domain isEqualToString:@"NeoSwapDonation"] &&
+        (failure.code == 3104 || (failure.code == 3103 && ![NeoSwapMachHandle isTransportAvailable])))
+        self.donorRetryAfter[index] = NSDate.distantFuture; // an unavailable SPI cannot recover by respawning
+    if (status.state == NeoSwapDonorStateActive) {
+        neostation::donation::PoolDonorSnapshot pooled{};
+        neostation::donation::pool_donor_snapshot(index, pooled);
+        // A bounded cached read can overlap an allocation publication. This
+        // sample grants nothing and must not revoke a valid donor generation.
+        if (pooled.last_stage == neostation::donation::Stage::snapshot_busy) return;
+        neostation::donation::Result result{};
+        if (!pooled.generation || pooled.generation != status.generation) result = neostation::donation::pool_donor_begin(
+            self.donorEpoch, index, status.generation, status.donorPID);
+        uint64_t adopted = self.donorAdoptedChunks[index].unsignedLongLongValue;
+        const uint64_t previous = adopted;
+        uint64_t largestNewChunk = 0;
+        while (result && adopted < status.verifiedChunkCount) {
+            const uint64_t bytes = [session chunkCapacityBytes:adopted];
+            neostation::donation::SendRight copied;
+            result = copied.prepare();
+            const mach_port_t entry = result ? [session copyMemoryEntryForChunk:adopted] : MACH_PORT_NULL;
+            if (result && entry != MACH_PORT_NULL) result = copied.adopt(entry);
+            if (result && (!bytes || entry == MACH_PORT_NULL)) result = {
+                neostation::donation::Stage::retain_entry, KERN_INVALID_RIGHT};
+            if (result) result = neostation::donation::pool_adopt_donor(self.donorEpoch,
+                index, status.generation, adopted, entry, bytes);
+            const auto released = copied.reset();
+            if (!released) result = released;
+            if (result) { ++adopted; largestNewChunk = MAX(largestNewChunk, bytes); }
+        }
+        neostation::donation::Footprint measured{};
+        measured.physical = status.donorFootprintBytes;
+        measured.nonvolatile = status.donorNonvolatileBytes;
+        measured.nonvolatile_compressed = status.donorCompressedBytes;
+        if (result) result = neostation::donation::pool_verify_donor(self.donorEpoch,
+            index, status.generation, status.capacityBytes, measured,
+            status.donatedResidentBytes, status.donatedCompressedBytes);
+        for (uint64_t chunk = previous; result && chunk < adopted; ++chunk)
+            if (![session acknowledgeVerifiedChunk:chunk]) result = {
+                neostation::donation::Stage::pool_unready, KERN_FAILURE};
+        if (result && adopted > previous && self.donorDemand.bytes &&
+            self.donorPendingIndex == (NSInteger)index) {
+            if (largestNewChunk >= self.donorDemand.bytes) {
+                const int acknowledged = NeoSwap_AcknowledgeDonationDemand(self.donorDemand.sequence);
+                if (acknowledged == NEOSWAP_OK) self.donorDemand = (NeoSwapDonationDemand){};
+                else result = {neostation::donation::Stage::pool_unready, acknowledged};
+            } else {
+                self.donorGrowthRefusal = @{@"stage":@"verified_chunk_smaller_than_requested_buffer",
+                    @"requestedBytes":@(self.donorDemand.bytes), @"actualBytes":@(largestNewChunk)};
+                self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
+            }
+        }
+        if (result) {
+            self.donorAdoptedChunks[index] = @(adopted);
+            if (self.donorPendingIndex == (NSInteger)index && status.growthState == NeoSwapDonorGrowthRefused)
+                self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
+            if (self.donorPendingIndex == (NSInteger)index &&
+                status.growthState != NeoSwapDonorGrowthRequested &&
+                status.growthState != NeoSwapDonorGrowthPreparing) self.donorPendingIndex = -1;
+        } else {
+            self.donorErrors[errorKey] = @{@"stage":[NSString stringWithUTF8String:
+                neostation::donation::stage_name(result.stage)], @"kernelResult":@(result.kernel_result)};
+            neostation::donation::pool_donor_lost(self.donorEpoch, index, status.generation, result.kernel_result);
+            if (self.donorPendingIndex == (NSInteger)index) self.donorPendingIndex = -1;
+            self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
+            [session close];
+        }
+    } else if (status.state == NeoSwapDonorStateFailed || status.state == NeoSwapDonorStateClosed) {
+        neostation::donation::pool_donor_lost(self.donorEpoch, index, status.generation, status.kernelResult);
+        if ([self.donorRetryAfter[index] timeIntervalSinceNow] <= 0)
+            self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
+        if (self.donorPendingIndex == (NSInteger)index) self.donorPendingIndex = -1;
+    }
+    [self appendRecord:[self snapshot:@"donor_state"]];
+    [self advanceDonors];
 }
 #endif
 - (int)configure:(NSInteger)capacity {
@@ -222,25 +405,67 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     uint32_t donorSessionState = 0;
     uint64_t donorCapacity = 0;
     id cleanupDiagnostics = NSNull.null;
+    id donationWorkers = @[];
+    id growthRefusal = NSNull.null;
+    NSString* growthState = @"unavailable";
+    uint64_t target = uint64_t(8192)*kMiB;
+    uint64_t remaining = target;
 #if defined(NEOSWAP_DONATION)
-    NeoSwapDonorSnapshot donor{};
-    if (self.donorSession) donor = [self.donorSession snapshot];
-    donorSessionState = donor.state;
-    donorCapacity = donor.capacityBytes;
-    donationSupported = host.donation_state == static_cast<int32_t>(neostation::donation::PoolState::verified) &&
-        donor.state == NeoSwapDonorStateActive && donor.generation == host.donor_generation &&
-        donor.donorPID == host.donor_pid && donor.capacityBytes == host.donor_prepared_bytes &&
-        donor.donatedCompressedBytes <= donor.capacityBytes &&
-        donor.donatedResidentBytes <= donor.capacityBytes - donor.donatedCompressedBytes;
-    if (donationSupported) {
-        donatedMemory = @(donor.donatedResidentBytes + donor.donatedCompressedBytes);
-        donatedResident = @(donor.donatedResidentBytes);
-        donatedCompressed = @(donor.donatedCompressedBytes);
-        donorFootprint = @(donor.donorFootprintBytes);
-        donorHeadroom = @(donor.donorHeadroomBytes);
+    NSMutableArray* workers = [NSMutableArray new];
+    uint64_t measuredHeadroom = 0;
+    BOOL anyRefused = NO;
+    for (NSUInteger index = 0; index < self.donorSessions.count; ++index) {
+        id object = self.donorSessions[index];
+        if (![object isKindOfClass:NeoSwapDonorSession.class]) continue;
+        NeoSwapDonorSession* session = object;
+        const NeoSwapDonorSnapshot status = [session snapshot];
+        neostation::donation::PoolDonorSnapshot pooled{};
+        neostation::donation::pool_donor_snapshot(index, pooled);
+        if (pooled.state == neostation::donation::PoolState::verified &&
+            (status.state != NeoSwapDonorStateActive || status.generation != pooled.generation ||
+             status.donorPID != pooled.pid)) {
+            neostation::donation::pool_donor_lost(self.donorEpoch, index, pooled.generation, status.kernelResult);
+            neostation::donation::pool_donor_snapshot(index, pooled);
+        }
+        const BOOL ready = pooled.state == neostation::donation::PoolState::verified &&
+            status.state == NeoSwapDonorStateActive && status.generation == pooled.generation &&
+            status.donorPID == pooled.pid;
+        if (ready) measuredHeadroom += status.donorHeadroomBytes;
+        anyRefused |= status.growthState == NeoSwapDonorGrowthRefused;
+        if (self.donorPendingIndex == (NSInteger)index) donorSessionState = status.state;
+        [workers addObject:@{@"index":@(index), @"pid":@(status.donorPID),
+            @"generation":@(status.generation), @"state":@(status.state),
+            @"growthState":@(status.growthState), @"targetBytes":@(status.targetBytes),
+            @"verifiedChunkCount":@(pooled.verified_chunks), @"preparedBytes":@(pooled.prepared_bytes),
+            @"retainedBytes":@(pooled.retained_bytes), @"liveBytes":@(pooled.live_bytes),
+            @"residentBytes":ready ? @(pooled.resident_bytes) : NSNull.null,
+            @"compressedBytes":ready ? @(pooled.compressed_bytes) : NSNull.null,
+            @"headroomBytes":@(status.donorHeadroomBytes), @"refusedBytes":@(status.refusedBytes),
+            @"diagnostics":[session diagnostics], @"error":self.donorErrors[
+                [NSString stringWithFormat:@"%lu", (unsigned long)index]] ?: NSNull.null}];
     }
-    donorDiagnostics = self.donorSession ? [self.donorSession diagnostics] : @{};
-    donationPoolError = self.donorError ?: NSNull.null;
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    // Refresh the cached aggregate after fail-closed per-PID state checks above.
+    NeoSwap_HostSnapshot(&host);
+    donationSupported = pool.donor_count > 0;
+    donorCapacity = pool.prepared_bytes;
+    if (donationSupported) {
+        donatedMemory = @(pool.resident_bytes + pool.compressed_bytes);
+        donatedResident = @(pool.resident_bytes);
+        donatedCompressed = @(pool.compressed_bytes);
+        donorFootprint = @(pool.donor_footprint);
+        donorHeadroom = @(measuredHeadroom);
+        if (self.donorPendingIndex < 0) donorSessionState = NeoSwapDonorStateActive;
+    }
+    donationWorkers = workers;
+    donorDiagnostics = @{@"workers":workers};
+    donationPoolError = self.donorErrors.count ? self.donorErrors : (id)NSNull.null;
+    growthRefusal = self.donorGrowthRefusal ?: NSNull.null;
+    remaining = pool.prepared_bytes < target ? target - pool.prepared_bytes : 0;
+    growthState = !remaining ? @"complete" : self.donorPendingIndex >= 0 ? @"growing" :
+        self.donorLaunchIndex >= 8 && pool.donor_count && !self.donorDemand.bytes && !host.donor_pending_demand_bytes
+            ? @"waiting" : self.donorGrowthRefusal || anyRefused ? @"limited" : @"idle";
     neostation::donation::CleanupSnapshot cleanup{};
     neostation::donation::cleanup_snapshot(cleanup);
     cleanupDiagnostics = @{@"pendingBlocks":@(cleanup.pending_blocks),
@@ -258,7 +483,17 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         // Live shared loans, measured helper pages and untouched pool capacity
         // are different quantities. No amount is inferred from the 8 GiB quota.
         @"memoryDonationSupported":@(donationSupported), @"donatedMemoryBytes":donatedMemory,
-        @"donatedClientBytes":@(host.donated_live_bytes),
+        @"donatedClientBytes":@(host.owner_donated_live_bytes[NEOSWAP_RPCS3]),
+        @"donationTargetBytes":@(target), @"donationRemainingBytes":@(remaining),
+        @"donorCount":@(host.donor_count), @"donorLostCount":@(host.donor_lost_count),
+        @"donationRetainedBytes":@(host.donor_retained_bytes),
+        @"donationRetainedLiveBytes":@(host.donor_retained_live_bytes),
+        @"donationGrowthState":growthState, @"donationGrowthRefusal":growthRefusal,
+        @"donationPendingDemandBytes":@(host.donor_pending_demand_bytes),
+        @"donationInflightDemandBytes":@(host.donor_inflight_demand_bytes),
+        @"donationPendingDemandCount":@(host.donor_pending_demand_count),
+        @"donationDemandOverflowCount":@(host.donor_demand_overflow_count),
+        @"donationWorkers":donationWorkers,
         @"donationPreparedBytes":@(host.donor_prepared_bytes), @"donorCapacityBytes":@(donorCapacity),
         @"donatedResidentBytes":donatedResident, @"donatedCompressedBytes":donatedCompressed,
         @"donorFootprintBytes":donorFootprint, @"donorHeadroomBytes":donorHeadroom,

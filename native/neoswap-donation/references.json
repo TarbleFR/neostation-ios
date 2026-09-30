@@ -24,12 +24,33 @@
     {
       "claim": "Runtime-discovered NSExtensionContext exposes its own auxiliary NSXPCConnection",
       "source": "https://github.com/nst/iOS-Runtime-Headers/blob/master/Frameworks/Foundation.framework/NSExtensionContext.h"
+    },
+    {
+      "claim": "os_proc_available_memory is advisory current process-limit headroom, not physical device RAM, and its value must not be cached as available capacity",
+      "source": "https://developer.apple.com/documentation/os/os_proc_available_memory"
+    },
+    {
+      "claim": "XNU VM statistics include speculative pages in free_count, so speculative pages must not be added again",
+      "source": "https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/mach/vm_statistics.h"
+    },
+    {
+      "claim": "LiveContainer configures one extension with com.apple.ar.viewer, NSExtensionContext host and guest contexts, and top-level XPCService Application/_MultipleInstances/App metadata",
+      "source": "https://github.com/LiveContainer/LiveContainer/blob/4dbe0f9a626de801184a42c0be8d2cb105058e3d/LiveProcess/Info.plist"
+    },
+    {
+      "claim": "LiveContainer creates an NSExtension request for each guest scene and obtains its PID from the request identifier",
+      "source": "https://github.com/LiveContainer/LiveContainer/blob/4dbe0f9a626de801184a42c0be8d2cb105058e3d/MultitaskSupport/AppSceneViewController.m"
     }
   ],
   "limitations": [
     "The NSExtension selector and auxiliary connection are private runtime APIs, feature-probed and fail closed.",
+    "The extension point and XPCService multiple-instance metadata are private runtime configuration; NeoSwap requires distinct verified donor PIDs and does not infer process isolation from these keys.",
     "The macOS NSXPC service probe does not validate extension suspension, jetsam, signing, or accounting on a physical iPhone.",
     "No app group, ownership-transfer entitlement, global decoder hook, file-backed allocation, or virtual address reservation is used as evidence of donation.",
-    "Prepared capacity is distinct from measured resident and compressed memory in the donor kernel ledgers."
+    "Prepared capacity is distinct from measured resident and compressed memory in the donor kernel ledgers.",
+    "Eight independently verified donor PIDs share the same physical device RAM; the aggregate 8 GiB target is never reported as acquired memory.",
+    "Each growth chunk is faulted with varying page data and requires its own bidirectional pattern plus incremental and cumulative nonvolatile kernel ledger evidence.",
+    "Growth is driven by one host scheduler, bounded by measured process and system headroom, and stops without invalidating previously borrowed chunks when resources are refused.",
+    "Resident ledger pages and compressed ledger equivalents are reported separately; compressed equivalents are not physical compressor bytes."
   ]
 }

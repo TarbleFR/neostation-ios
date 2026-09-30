@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <new>
 
 #if defined(__APPLE__)
 #include <dlfcn.h>
@@ -10,6 +11,7 @@
 #include <mach/vm_map.h>
 #include <mach/task_info.h>
 #include <mach/vm_statistics.h>
+#include <dispatch/dispatch.h>
 #endif
 
 namespace neostation::donation {
@@ -33,8 +35,42 @@ struct CleanupRegistry {
 // Constructed before runtime Block/Pool instances, so their destructors can
 // quarantine resources without allocating or relying on destroyed statics.
 CleanupRegistry cleanup_registry;
+struct PressureMonitor {
+  dispatch_source_t source = nullptr;
+  std::atomic<MemoryPressure> pressure{MemoryPressure::unobserved};
+};
+void pressure_changed(void* context) {
+  auto& monitor = *static_cast<PressureMonitor*>(context);
+  const auto flags = dispatch_source_get_data(monitor.source);
+  if (flags & DISPATCH_MEMORYPRESSURE_CRITICAL)
+    monitor.pressure.store(MemoryPressure::critical, std::memory_order_relaxed);
+  else if (flags & DISPATCH_MEMORYPRESSURE_WARN)
+    monitor.pressure.store(MemoryPressure::warning, std::memory_order_relaxed);
+  else if (flags & DISPATCH_MEMORYPRESSURE_NORMAL)
+    monitor.pressure.store(MemoryPressure::normal, std::memory_order_relaxed);
+}
+PressureMonitor* pressure_monitor() {
+  // A process-lifetime subscription: an async callback must never refer to a
+  // C++ static whose destructor has already run during application shutdown.
+  static PressureMonitor* monitor = new (std::nothrow) PressureMonitor;
+  static std::once_flag once;
+  if (!monitor) return nullptr;
+  std::call_once(once, [&] {
+    monitor->source = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
+        DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN |
+        DISPATCH_MEMORYPRESSURE_CRITICAL,
+        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+    if (monitor->source) {
+      dispatch_set_context(monitor->source, monitor);
+      dispatch_source_set_event_handler_f(monitor->source, pressure_changed);
+      dispatch_resume(monitor->source);
+    }
+  });
+  return monitor;
+}
 #if defined(NEOSWAP_TESTING)
 std::atomic<std::uint32_t> failed_unmaps{0};
+std::atomic<std::uint32_t> failed_right_releases{0};
 #endif
 
 std::uint32_t acquire_cleanup_slot() noexcept {
@@ -68,11 +104,14 @@ struct DarwinAPI {
   using Purgeable = kern_return_t (*)(vm_map_t, std::uint64_t, vm_purgable_t, int*);
   using TaskInfo = kern_return_t (*)(task_name_t, task_flavor_t,
       task_info_t, mach_msg_type_number_t*);
+  using HostStatistics = kern_return_t (*)(host_t, host_flavor_t,
+      host_info64_t, mach_msg_type_number_t*);
   Create create = nullptr;
   Map map = nullptr;
   Unmap unmap = nullptr;
   Purgeable purgeable = nullptr;
   TaskInfo task_info_call = nullptr;
+  HostStatistics host_statistics = nullptr;
   const char* missing = nullptr;
 
   DarwinAPI() noexcept {
@@ -81,6 +120,7 @@ struct DarwinAPI {
     unmap = resolve<decltype(unmap)>("mach_vm_deallocate");
     purgeable = resolve<decltype(purgeable)>("mach_vm_purgable_control");
     task_info_call = resolve<decltype(task_info_call)>("task_info");
+    host_statistics = resolve<decltype(host_statistics)>("host_statistics64");
   }
 
   template <typename T>
@@ -105,6 +145,15 @@ kern_return_t unmap(std::uint64_t address, std::size_t bytes) noexcept {
       std::memory_order_relaxed)) return KERN_FAILURE;
 #endif
   return api().unmap(mach_task_self(), address, bytes);
+}
+
+kern_return_t release_right(std::uint32_t entry) noexcept {
+#if defined(NEOSWAP_TESTING)
+  auto count = failed_right_releases.load(std::memory_order_relaxed);
+  while (count) if (failed_right_releases.compare_exchange_weak(count, count - 1,
+      std::memory_order_relaxed)) return KERN_FAILURE;
+#endif
+  return mach_port_deallocate(mach_task_self(), entry);
 }
 
 bool valid_size(std::size_t bytes) noexcept {
@@ -145,6 +194,42 @@ Result footprint(Footprint& out) noexcept {
 #endif
 }
 
+Result system_headroom(SystemHeadroom& out) noexcept {
+  out = {};
+#if defined(__APPLE__)
+  if (auto result = availability(); !result) return result;
+  auto* monitor = pressure_monitor();
+  if (!monitor || !monitor->source) return error(Stage::memory_pressure, KERN_NOT_SUPPORTED);
+  out.pressure = monitor->pressure.load(std::memory_order_relaxed);
+  vm_statistics64_data_t memory{};
+  mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+  const auto host = mach_host_self();
+  const auto kr = api().host_statistics(host, HOST_VM_INFO64,
+      reinterpret_cast<host_info64_t>(&memory), &count);
+  const auto released = mach_port_deallocate(mach_task_self(), host);
+  if (kr != KERN_SUCCESS) return error(Stage::system_headroom, kr);
+  if (released != KERN_SUCCESS) return error(Stage::release_entry, released);
+  if (count < HOST_VM_INFO64_COUNT || !vm_page_size ||
+      memory.free_count > UINT64_MAX / vm_page_size ||
+      memory.purgeable_count > UINT64_MAX / vm_page_size)
+    return error(Stage::system_headroom, KERN_NOT_SUPPORTED);
+  out.free_bytes = static_cast<std::uint64_t>(memory.free_count) * vm_page_size;
+  out.purgeable_bytes = static_cast<std::uint64_t>(memory.purgeable_count) * vm_page_size;
+  if (out.free_bytes > UINT64_MAX - out.purgeable_bytes)
+    return error(Stage::system_headroom, KERN_INVALID_ARGUMENT);
+  out.reclaimable_bytes = out.free_bytes + out.purgeable_bytes;
+  constexpr std::uint64_t margin = 512ULL * 1024 * 1024;
+  out.usable_bytes = out.reclaimable_bytes > margin ? out.reclaimable_bytes - margin : 0;
+  if (out.pressure == MemoryPressure::warning || out.pressure == MemoryPressure::critical) {
+    out.usable_bytes = 0;
+    return error(Stage::memory_pressure, KERN_RESOURCE_SHORTAGE);
+  }
+  return {};
+#else
+  return availability();
+#endif
+}
+
 Result retry_cleanup() noexcept {
 #if defined(__APPLE__)
   if (auto result = availability(); !result) return result;
@@ -162,7 +247,7 @@ Result retry_cleanup() noexcept {
       slot.bytes = 0;
     }
     if (slot.entry) {
-      const auto kr = mach_port_deallocate(mach_task_self(), slot.entry);
+      const auto kr = release_right(slot.entry);
       if (kr != KERN_SUCCESS) {
         if (first) first = error(Stage::release_entry, kr);
         continue;
@@ -200,7 +285,62 @@ void test_fail_next_unmaps(std::uint32_t count) noexcept {
   (void)count;
 #endif
 }
+void test_fail_next_right_releases(std::uint32_t count) noexcept {
+#if defined(__APPLE__)
+  failed_right_releases.store(count, std::memory_order_relaxed);
+#else
+  (void)count;
 #endif
+}
+#endif
+
+SendRight::~SendRight() {
+  const auto result = reset();
+#if defined(__APPLE__)
+  if (!result && cleanup_slot_ != UINT32_MAX) {
+    std::lock_guard guard(cleanup_registry.mutex);
+    cleanup_registry.slots[cleanup_slot_] = {true, true, 0, 0, entry_};
+    cleanup_registry.last_stage = result.stage;
+    cleanup_registry.last_kernel_result = result.kernel_result;
+  }
+#else
+  (void)result;
+#endif
+}
+Result SendRight::prepare() noexcept {
+  if (auto result = availability(); !result) return result;
+#if defined(__APPLE__)
+  if (entry_ || cleanup_slot_ != UINT32_MAX)
+    return error(Stage::invalid_argument, KERN_INVALID_ARGUMENT);
+  cleanup_slot_ = acquire_cleanup_slot();
+  if (cleanup_slot_ == UINT32_MAX)
+    return error(Stage::cleanup_limit, KERN_RESOURCE_SHORTAGE);
+#endif
+  return {};
+}
+Result SendRight::adopt(std::uint32_t entry) noexcept {
+#if defined(__APPLE__)
+  if (!entry || entry_ || cleanup_slot_ == UINT32_MAX)
+    return error(Stage::invalid_argument, KERN_INVALID_ARGUMENT);
+  entry_ = entry;
+  return {};
+#else
+  (void)entry;
+  return availability();
+#endif
+}
+Result SendRight::reset() noexcept {
+#if defined(__APPLE__)
+  if (entry_) {
+    const auto kr = release_right(entry_);
+    if (kr != KERN_SUCCESS) return error(Stage::release_entry, kr);
+    entry_ = 0;
+  }
+  release_cleanup_slot(cleanup_slot_);
+  cleanup_slot_ = UINT32_MAX;
+#endif
+  return {};
+}
 
 Block::~Block() {
   const auto result = reset();
@@ -322,7 +462,7 @@ Result Block::reset() noexcept {
     bytes_ = 0;
   }
   if (entry_) {
-    const auto kr = mach_port_deallocate(mach_task_self(), entry_);
+    const auto kr = release_right(entry_);
     if (kr != KERN_SUCCESS) return error(Stage::release_entry, kr);
     entry_ = 0;
   }
@@ -352,6 +492,10 @@ const char* stage_name(Stage stage) noexcept {
     case Stage::pool_limit: return "pool_limit";
     case Stage::pool_not_owned: return "pool_not_owned";
     case Stage::cleanup_limit: return "cleanup_limit";
+    case Stage::system_headroom: return "system_headroom";
+    case Stage::memory_pressure: return "memory_pressure";
+    case Stage::pool_duplicate_pid: return "pool_duplicate_pid";
+    case Stage::snapshot_busy: return "snapshot_busy";
   }
   return "unknown";
 }

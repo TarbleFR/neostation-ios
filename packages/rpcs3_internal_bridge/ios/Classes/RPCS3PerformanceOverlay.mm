@@ -56,7 +56,7 @@ NSString* MemoryText(uint64_t value) {
   self.ratesLabel = [self newLabelWithSize:13 weight:UIFontWeightSemibold];
   self.memoryLabel = [self newLabelWithSize:11 weight:UIFontWeightRegular];
   self.swapLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
-  self.swapLabel.numberOfLines = 2;
+  self.swapLabel.numberOfLines = 3;
   self.graphLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
   self.graphLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
   [self setLocaleIdentifier:NSLocale.preferredLanguages.firstObject ?: @"en"];
@@ -83,15 +83,15 @@ NSString* MemoryText(uint64_t value) {
   return label;
 }
 
-- (CGSize)intrinsicContentSize { return CGSizeMake(310, 185); }
+- (CGSize)intrinsicContentSize { return CGSizeMake(310, 210); }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGFloat width = MAX(0.0, self.bounds.size.width - 20.0);
   self.ratesLabel.frame = CGRectMake(10, 8, width, 18);
   self.memoryLabel.frame = CGRectMake(10, 29, width, 16);
-  self.swapLabel.frame = CGRectMake(10, 47, width, 32);
-  self.graphLabel.frame = CGRectMake(10, 85, width, 14);
+  self.swapLabel.frame = CGRectMake(10, 47, width, 48);
+  self.graphLabel.frame = CGRectMake(10, 101, width, 14);
   [self setNeedsDisplay];
 }
 
@@ -164,13 +164,22 @@ NSString* MemoryText(uint64_t value) {
     case NeoSwapUsageStatus::released: key = @"swapReleased"; break;
     case NeoSwapUsageStatus::active: key = @"swapActive"; break;
   }
-  const BOOL donorVerified = host && host->donation_state == 2 && host->donor_prepared_bytes;
-  self.swapLabel.text = [NSString stringWithFormat:@"NeoSwap · %@ %@ · %@ %@\n%@ %@ · %@",
-      RPCS3LocalizedString(@"swapAllocated", self.localeIdentifier), MemoryText(live),
+  // An unavailable or busy donor sample is not a measurement of zero charge.
+  // Retained RPCS3 loans remain independent of the active donor-page proof.
+  const BOOL donorMeasured = NeoSwapDonorMeasured(host);
+  self.swapLabel.text = [NSString stringWithFormat:@"NeoSwap · %@ %@ · %@ %@\n%@ %@ · %@ %@\n%@ %@ · %@ %@ · %@",
       RPCS3LocalizedString(@"swapDonor", self.localeIdentifier),
-      donorVerified ? MemoryText(host->donor_prepared_bytes) : @"—",
-      RPCS3LocalizedString(@"swapReserved", self.localeIdentifier),
-      host ? MemoryText(host->reserved_virtual_bytes) : @"—",
+      donorMeasured ? MemoryText(host->donor_prepared_bytes) : @"—",
+      RPCS3LocalizedString(@"swapAllocated", self.localeIdentifier),
+      host ? MemoryText(host->owner_donated_live_bytes[NEOSWAP_RPCS3]) : @"—",
+      RPCS3LocalizedString(@"swapResident", self.localeIdentifier),
+      donorMeasured ? MemoryText(host->donor_resident_bytes) : @"—",
+      RPCS3LocalizedString(@"swapCompressed", self.localeIdentifier),
+      donorMeasured ? MemoryText(host->donor_accounted_compressed_bytes) : @"—",
+      RPCS3LocalizedString(@"swapTarget", self.localeIdentifier),
+      host && host->donor_target_bytes ? MemoryText(host->donor_target_bytes) : @"—",
+      RPCS3LocalizedString(@"swapDonors", self.localeIdentifier),
+      host && host->donation_state ? [NSString stringWithFormat:@"%u", (unsigned)host->donor_count] : @"—",
       RPCS3LocalizedString(key, self.localeIdentifier)];
   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
       self.ratesLabel.text, self.memoryLabel.text, self.swapLabel.text];
@@ -180,8 +189,8 @@ NSString* MemoryText(uint64_t value) {
   [super drawRect:rect];
   CGContextRef context = UIGraphicsGetCurrentContext();
   if (!context) return;
-  CGRect graph = CGRectMake(40, 104, MAX(0.0, self.bounds.size.width - 50.0),
-                            MAX(0.0, self.bounds.size.height - 129.0));
+  CGRect graph = CGRectMake(40, 120, MAX(0.0, self.bounds.size.width - 50.0),
+                            MAX(0.0, self.bounds.size.height - 145.0));
   if (graph.size.width <= 0 || graph.size.height <= 0) return;
 
   double maximum = 33.4;

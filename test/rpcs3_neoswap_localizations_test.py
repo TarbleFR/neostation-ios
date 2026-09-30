@@ -11,18 +11,21 @@ ROOT = Path(__file__).resolve().parents[1]
 CLASSES = ROOT / "packages/rpcs3_internal_bridge/ios/Classes"
 SOURCE = CLASSES / "RPCS3InGameLocalization.mm"
 KEYS = (
-    "swapAllocated", "swapDonor", "swapReserved", "swapUnavailable", "swapClientUnavailable",
+    "swapAllocated", "swapDonor", "swapTarget", "swapResident", "swapCompressed", "swapDonors",
+    "swapUnavailable", "swapClientUnavailable",
     "swapDisabled", "swapWaiting", "swapSmall", "swapRejected", "swapReleased",
     "swapActive",
 )
 LOCALES = {"en", "es", "ru", "zh", "zh_Hant", "pt", "fr", "de", "it", "id", "ja", "ko"}
 ENGLISH = (
-    "Allocated", "Donor", "Virtual reserve", "Reservation unavailable", "Core telemetry unavailable",
+    "RPCS3", "Shared", "Target", "Resident", "Compressed", "Donors",
+    "Allocator unavailable", "Core telemetry unavailable",
     "Client disabled", "No eligible allocation yet", "Only small buffers so far",
     "Last allocation rejected", "Temporary buffers released", "Buffers in use",
 )
 FRENCH = (
-    "Alloué", "Donneur", "Réserve virtuelle", "Réserve indisponible", "Diagnostic cœur indisponible",
+    "RPCS3", "Partagé", "Cible", "Résident", "Comprimé", "Donneurs",
+    "Allocateur indisponible", "Diagnostic cœur indisponible",
     "Client désactivé", "Aucune allocation éligible", "Buffers trop petits",
     "Dernière allocation refusée", "Buffers temporaires libérés", "Buffers utilisés",
 )
@@ -44,6 +47,7 @@ def catalogues() -> dict:
         parsed = [(json.loads('"' + key + '"'), json.loads('"' + value + '"')) for key, value in pairs]
         assert len(parsed) == len(dict(parsed)), f"Duplicate localization key: {locale}"
         values = dict(parsed)
+        assert 'swapReserved' not in values, f"Obsolete virtual-reserve label: {locale}"
         assert set(KEYS) <= values.keys(), (locale, set(KEYS) - values.keys())
         selected = {key: values[key] for key in KEYS}
         for key, value in selected.items():
@@ -53,6 +57,7 @@ def catalogues() -> dict:
         catalogues[locale] = selected
     assert tuple(catalogues["en"].values()) == ENGLISH
     assert tuple(catalogues["fr"].values()) == FRENCH
+    assert all(values['swapAllocated'] == 'RPCS3' for values in catalogues.values())
     overlay = (CLASSES / "RPCS3PerformanceOverlay.mm").read_text()
     used = set(re.findall(r'@"(swap[A-Z]\w*)"', overlay))
     assert used == set(KEYS), (used - set(KEYS), set(KEYS) - used)
@@ -93,8 +98,8 @@ int main() { @autoreleasepool {
   Check([RPCS3CanonicalLocale(@"unsupported") isEqualToString:@"en"], @"Unknown locale");
   for (NSString* key in expected[@"en"])
     Check([RPCS3LocalizedString(key, nil) isEqualToString:expected[@"en"][key]], @"Missing locale");
-  Check(checks == 132, @"All twelve catalogues were exercised");
-  std::puts("PASS: production Foundation lookup executes 132 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
+  Check(checks == 168, @"All twelve catalogues were exercised");
+  std::puts("PASS: production Foundation lookup executes 168 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
 } return 0; }
 '''.replace("EXPECTED_CATALOGUES", expected)
     with tempfile.TemporaryDirectory(prefix="rpcs3-neoswap-locales-") as temporary:
@@ -110,7 +115,7 @@ int main() { @autoreleasepool {
 
 if __name__ == "__main__":
     values = catalogues()
-    print("PASS: all 11 shipped NeoSwap overlay keys have explicit values in 12 catalogues; English/French contract and placeholders verified", flush=True)
+    print("PASS: all 14 shipped NeoSwap overlay keys have explicit values in 12 catalogues; English/French contract and placeholders verified", flush=True)
     if sys.platform == "darwin":
         execute_native_lookup(values)
     else:

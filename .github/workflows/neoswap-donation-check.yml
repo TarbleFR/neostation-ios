@@ -67,7 +67,10 @@ jobs:
           report=json.loads(Path('build/neoswap-donation/ipc/report.json').read_text())
           assert report['passed'] is True and report['iphoneExtensionValidated'] is False,report
           assert report['hostPID']!=report['donorPID'] and report['donorPID']>0,report
-          assert report['capacityBytes']>0 and report['donorResidentBytes']>0,report
+          assert report['schema']==2 and report['verifiedChunkCount']>=2,report
+          assert report['capacityBytes']==128*1024**2 and report['donorResidentBytes']>0,report
+          assert report['distinctChunkRights'] is True and report['priorBorrowedDataPreserved'] is True,report
+          assert report['machHandleCleanupRetried'] is True,report
           assert report['rejectedArchive'] is True and len(report['rejectedScenarios'])==4,report
           PY
       - uses: actions/upload-artifact@v4
@@ -75,6 +78,43 @@ jobs:
         with:
           name: NeoSwap-donation-ipc-${{ github.sha }}
           path: build/neoswap-donation/ipc/
+          if-no-files-found: error
+          retention-days: 14
+  stress:
+    # Runner memory is not an iPhone memory budget. An explicit refusal remains
+    # visible in this separate report and never passes as an 8 GiB donation.
+    continue-on-error: true
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Attempt 8 GiB of real donated resident pages with kernel headroom guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-donation/stress
+          printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/stress/source.txt
+          NEOSWAP_IPC_STRESS_BYTES=8589934592 bash native/neoswap-donation/run_ipc_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-donation/stress/report.json" 2>&1 | tee build/neoswap-donation/stress/probe.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('build/neoswap-donation/stress/report.json').read_text())
+          assert report['passed'] is True and report['stressRequested'] is True,report
+          assert report['iphoneExtensionValidated'] is False,report
+          assert report['requestedBytes']==8589934592 and report['preparedBytes']==8589934592,report
+          assert report['donorResidentBytes']>=8589934592-1024**2 and report['residentTargetVerified'] is True,report
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoSwap-donation-stress-${{ github.sha }}
+          path: build/neoswap-donation/stress/
           if-no-files-found: error
           retention-days: 14
   simulator:

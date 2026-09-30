@@ -122,6 +122,8 @@ SUPPORT_FILES = {
     'test/neo_swap_dialog_test.dart',
     'test/neoswap/control_probe.mm',
     'test/neoswap_client_stats_test.cpp',
+    'test/neoswap_capacity_probe_test.cpp',
+    'test/neoswap_demand_test.cpp',
     'test/neoswap_evidence_lifecycle_test.py',
     'test/neoswap_donor_contract_test.py',
     'test/neoswap/Flutter/Flutter.h',
@@ -145,19 +147,41 @@ for path, expected in manifest['files_sha256'].items():
     if old:
         assert mode == old.split()[0], 'Existing production mode changed: ' + path
 assert set(manifest['support_files_sha256']) == SUPPORT_FILES, 'Explicit support identity set changed'
+assert set(manifest['support_git_modes']) == SUPPORT_FILES, 'Explicit support mode set changed'
 for path, expected in manifest['support_files_sha256'].items():
     file = ROOT / path
     assert stat.S_ISREG(file.lstat().st_mode), 'Non-regular approved support file: ' + path
     assert hashlib.sha256(file.read_bytes()).hexdigest() == expected, 'Approved support hash changed: ' + path
+    mode = '100755' if os.stat(file).st_mode & 0o111 else '100644'
+    assert mode == manifest['support_git_modes'][path], 'Approved support mode changed: ' + path
+    old = subprocess.check_output(['git', 'ls-tree', BASE, '--', path], cwd=ROOT, text=True)
+    if old:
+        assert mode == old.split()[0], 'Existing support mode changed: ' + path
 
-# git diff BASE compares the delivered tree to staged AND unstaged content.
+# Compare the final working tree and the index independently. A staged change
+# canceled only in the working tree remains a source delta that needs review.
 # New source files need the separate untracked query. Git-ignored generated
 # build/artifact/cache output is intentionally outside the source candidate.
 tracked = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', BASE, '--'], cwd=ROOT)
+cached = subprocess.check_output(['git', 'diff', '--cached', '--no-renames', '--name-only', '-z', BASE, '--'], cwd=ROOT)
 untracked = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'], cwd=ROOT)
-changed = {path.decode('utf-8') for path in (tracked + untracked).split(b'\0') if path}
+changed = {path.decode('utf-8') for path in (tracked + cached + untracked).split(b'\0') if path}
 unexpected = changed - approved - SUPPORT_FILES - {MANIFEST_PATH}
 assert not unexpected, 'Unapproved candidate files (including untracked): ' + str(sorted(unexpected))
+reviewed_hashes = manifest['files_sha256'] | manifest['support_files_sha256']
+reviewed_modes = manifest['git_modes'] | manifest['support_git_modes']
+for path in (item.decode('utf-8') for item in cached.split(b'\0') if item):
+    if path == MANIFEST_PATH:
+        continue
+    entry = subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--', path], cwd=ROOT)
+    rows = [row for row in entry.split(b'\0') if row]
+    assert len(rows) == 1, 'Missing or unmerged indexed candidate file: ' + path
+    metadata, indexed_path = rows[0].split(b'\t', 1)
+    mode, object_id, stage = metadata.decode('ascii').split()
+    assert indexed_path.decode('utf-8') == path and stage == '0', 'Invalid candidate index entry: ' + path
+    assert mode == reviewed_modes[path], 'Indexed candidate mode differs from reviewed file: ' + path
+    data = subprocess.check_output(['git', 'cat-file', 'blob', object_id], cwd=ROOT)
+    assert hashlib.sha256(data).hexdigest() == reviewed_hashes[path], 'Indexed candidate hash differs from reviewed file: ' + path
 
 
 def before(path):

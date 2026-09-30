@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <cstring>
 #include <memory>
+#include <vector>
 #include <unistd.h>
 
 namespace {
@@ -23,8 +24,8 @@ uint64_t headroom() {
 struct LedgerDelta { uint64_t resident; uint64_t compressed; bool valid; };
 LedgerDelta measuredDelta(const neostation::donation::Footprint& current,
                           const neostation::donation::Footprint& baseline, uint64_t capacity) {
-  // TASK_VM_INFO fields are process-wide. This dedicated helper creates one
-  // known object, and only its ledger increase (bounded by that entry) is shown.
+  // TASK_VM_INFO fields are process-wide. This dedicated helper creates only
+  // its known chunk objects, and only the bounded cumulative increase is shown.
   const uint64_t resident = current.nonvolatile > baseline.nonvolatile
       ? current.nonvolatile - baseline.nonvolatile : 0;
   const uint64_t compressed = current.nonvolatile_compressed > baseline.nonvolatile_compressed
@@ -70,12 +71,24 @@ NSDictionary* effectiveEntitlements() {
   NSXPCConnection* _connection;
   NSString* _nonce;
   uint64_t _generation;
+  uint64_t _target;
   uint64_t _capacity;
+  uint64_t _chunkBytes;
   uint64_t _headroom;
+  uint64_t _chunkAccountedDelta;
+  uint64_t _refusedBytes;
+  NSString* _growthStage;
+  BOOL _growthRefused;
   BOOL _proofComplete;
+  BOOL _preparing;
+  BOOL _updateInFlight;
+  BOOL _probe;
   BOOL _closed;
-  std::unique_ptr<neostation::donation::Block> _block;
+  std::vector<std::unique_ptr<neostation::donation::Block>> _blocks;
+  std::unique_ptr<neostation::donation::Block> _pending;
   neostation::donation::Footprint _baseline;
+  neostation::donation::Footprint _chunkBaseline;
+  neostation::donation::SystemHeadroom _system;
   NSDictionary* _effectiveEntitlements;
 }
 
@@ -116,12 +129,12 @@ NSDictionary* effectiveEntitlements() {
 - (void)beginWithConnection:(NSXPCConnection*)connection
                    metadata:(NSDictionary*)metadata probe:(BOOL)probe {
   if (_closed || _connection || ![metadata isKindOfClass:NSDictionary.class] ||
-      ![metadata[@"version"] isEqual:@1] ||
+      ![metadata[@"version"] isEqual:@2] ||
       ![metadata[@"nonce"] isKindOfClass:NSString.class] ||
       [metadata[@"nonce"] length] < 16 || [metadata[@"nonce"] length] > 128 ||
       !numeric(metadata, @"generation") || ![metadata[@"generation"] unsignedLongLongValue] ||
-      !numeric(metadata, @"capacityBytes") || !numeric(metadata, @"hostPID") ||
-      [metadata[@"hostPID"] intValue] <= 0 ||
+      !numeric(metadata, @"targetBytes") || !numeric(metadata, @"initialMaximumBytes") ||
+      !numeric(metadata, @"hostPID") || [metadata[@"hostPID"] intValue] <= 0 ||
       [metadata[@"hostPID"] intValue] != connection.processIdentifier ||
       connection.processIdentifier == getpid()) {
     [_context cancelRequestWithError:error(@"Invalid donor request nonce/generation/host process")];
@@ -131,41 +144,26 @@ NSDictionary* effectiveEntitlements() {
     return;
   }
   _connection = connection;
+  _probe = probe;
   _effectiveEntitlements = effectiveEntitlements();
   _nonce = [metadata[@"nonce"] copy];
   _generation = [metadata[@"generation"] unsignedLongLongValue];
-  uint64_t requested = [metadata[@"capacityBytes"] unsignedLongLongValue];
-  _capacity = requested;
+  _target = [metadata[@"targetBytes"] unsignedLongLongValue];
+  const uint64_t initial = [metadata[@"initialMaximumBytes"] unsignedLongLongValue];
   _connection.remoteObjectInterface = NeoSwapDonorHostInterface();
   __weak NeoSwapDonorRequestHandler* weakSelf = self;
-  // Only this private auxiliary connection is configured. No Foundation classes
-  // or global codec behavior are changed, and no app-group container is needed.
+  // This is only the own auxiliary connection, whose exported context remains
+  // managed by Foundation. Growth commands arrive in authenticated host replies.
   void (^lost)(void) = ^{
     NeoSwapDonorRequestHandler* self = weakSelf;
     if (self) dispatch_async(self->_queue, ^{ [self finish]; });
   };
   _connection.invalidationHandler = lost;
   _connection.interruptionHandler = lost;
-
-  if (!requested || requested > 256 * MiB || requested % vm_page_size) {
+  if (!_target || _target > 8ULL * 1024 * MiB || _target % vm_page_size ||
+      initial < MiB || initial > 64 * MiB || initial > _target || initial % vm_page_size) {
     [self failStage:@"requested_size" kernel:KERN_INVALID_ARGUMENT];
     return;
-  }
-  _headroom = headroom();
-  if (!probe) {
-    if (!headroomQuery()) {
-      [self failStage:@"headroom_api_unavailable" kernel:KERN_NOT_SUPPORTED];
-      return;
-    }
-    // Sharing extensions can have a much smaller jetsam budget than the app.
-    // Entitlements requested by a signer are not treated as granted headroom.
-    const uint64_t maximum = MIN(requested, 64 * MiB);
-    _capacity = _headroom > 16 * MiB ? MIN(maximum, _headroom - 16 * MiB) : 0;
-    _capacity -= _capacity % vm_page_size;
-    if (_capacity < MiB) {
-      [self failStage:@"insufficient_donor_headroom" kernel:KERN_RESOURCE_SHORTAGE];
-      return;
-    }
   }
   auto measured = neostation::donation::footprint(_baseline);
   if (!measured) {
@@ -173,20 +171,122 @@ NSDictionary* effectiveEntitlements() {
              kernel:measured.kernel_result];
     return;
   }
-  _block = std::make_unique<neostation::donation::Block>();
-  auto allocated = neostation::donation::Block::create_owned(_capacity, *_block);
-  if (!allocated) {
-    [self failStage:[NSString stringWithUTF8String:neostation::donation::stage_name(allocated.stage)]
-             kernel:allocated.kernel_result];
+  _heartbeat = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
+  dispatch_source_set_timer(_heartbeat, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
+                           NSEC_PER_SEC, NSEC_PER_SEC / 10);
+  dispatch_source_set_event_handler(_heartbeat, ^{
+    NeoSwapDonorRequestHandler* self = weakSelf;
+    if (self && !self->_closed && !self->_preparing && self->_proofComplete) [self sendUpdate];
+  });
+  dispatch_resume(_heartbeat);
+  [self prepareChunk:initial];
+}
+
+- (void)stopGrowth:(NSString*)stage requested:(uint64_t)bytes kernel:(int32_t)kernel {
+  if (_pending) {
+    const auto released = _pending->reset();
+    if (!released) {
+      [self failStage:@"growth_mapping_cleanup" kernel:released.kernel_result];
+      return;
+    }
+    _pending.reset();
+  }
+  _preparing = NO;
+  if (_blocks.empty()) { [self failStage:stage kernel:kernel]; return; }
+  _proofComplete = YES;
+  _growthRefused = YES;
+  _growthStage = stage;
+  _refusedBytes = bytes;
+  _chunkBytes = _blocks.back()->size();
+  [self sendUpdate];
+}
+
+- (void)prepareChunk:(uint64_t)maximum {
+  if (_closed || _preparing || _pending || maximum < MiB || maximum > 256 * MiB ||
+      maximum % vm_page_size || maximum > _target - _capacity || _blocks.size() >= 64) {
+    [self failStage:@"chunk_request" kernel:KERN_INVALID_ARGUMENT];
     return;
   }
-  const uint64_t pattern = NeoSwapDonorPattern(_nonce, _generation, NO);
-  auto bytes = static_cast<unsigned char*>(_block->data());
-  for (uint64_t offset = 0; offset < _capacity; offset += vm_page_size)
+  _preparing = YES;
+  _headroom = headroom();
+  if (!_probe && !headroomQuery()) {
+    [self stopGrowth:@"headroom_api_unavailable" requested:maximum kernel:KERN_NOT_SUPPORTED];
+    return;
+  }
+  auto systemStatus = neostation::donation::system_headroom(_system);
+  if (!systemStatus) {
+    [self stopGrowth:[NSString stringWithUTF8String:neostation::donation::stage_name(systemStatus.stage)]
+          requested:maximum kernel:systemStatus.kernel_result];
+    return;
+  }
+  // Process headroom is a jetsam limit; system headroom is shared across every
+  // donor and the emulator. Neither entitlements nor a target create extra RAM.
+  // Keep another MiB for Block/XPC setup before the repeated 16 MiB process
+  // and 512 MiB system margin checks, so a small extension is not refused merely
+  // because its metadata consumed a few pages after the first sample.
+  const uint64_t processBudget = _probe ? maximum : (_headroom > 17 * MiB ? _headroom - 17 * MiB : 0);
+  const uint64_t systemBudget = _system.usable_bytes > MiB ? _system.usable_bytes - MiB : 0;
+  // Growth serves one actual contiguous host buffer. Several smaller memory
+  // entries cannot cover that loan, so refuse before creating an undersized
+  // object while keeping all previously verified chunks alive.
+  if (!_blocks.empty() && (processBudget < maximum || systemBudget < maximum)) {
+    [self stopGrowth:systemBudget < maximum ? @"required_chunk_exceeds_system_headroom"
+                                           : @"required_chunk_exceeds_donor_headroom"
+          requested:maximum kernel:KERN_RESOURCE_SHORTAGE];
+    return;
+  }
+  _chunkBytes = MIN(maximum, MIN(processBudget, systemBudget));
+  _chunkBytes -= _chunkBytes % vm_page_size;
+  if (_chunkBytes < MiB) {
+    [self stopGrowth:systemBudget < MiB ? @"insufficient_system_headroom" : @"insufficient_donor_headroom"
+          requested:maximum kernel:KERN_RESOURCE_SHORTAGE];
+    return;
+  }
+  auto measured = neostation::donation::footprint(_chunkBaseline);
+  if (!measured) {
+    [self failStage:[NSString stringWithUTF8String:neostation::donation::stage_name(measured.stage)]
+             kernel:measured.kernel_result];
+    return;
+  }
+  _pending = std::make_unique<neostation::donation::Block>();
+  auto allocated = neostation::donation::Block::create_owned(_chunkBytes, *_pending);
+  if (!allocated) {
+    [self stopGrowth:[NSString stringWithUTF8String:neostation::donation::stage_name(allocated.stage)]
+          requested:maximum kernel:allocated.kernel_result];
+    return;
+  }
+  const uint64_t index = _blocks.size();
+  const uint64_t pattern = NeoSwapDonorChunkPattern(_nonce, _generation, index, NO);
+  auto bytes = static_cast<unsigned char*>(_pending->data());
+  // Fill the actual pages with varying data, instead of charging zero pages or
+  // presenting an untouched virtual reservation as physical donation.
+  uint64_t random = pattern;
+  for (uint64_t offset = 0; offset < _chunkBytes; offset += vm_page_size) {
+    if (offset % (8 * MiB) == 0) {
+      auto status = neostation::donation::system_headroom(_system);
+      if (!status || _system.usable_bytes < _chunkBytes - offset ||
+          (!_probe && headroom() < _chunkBytes - offset + 16 * MiB)) {
+        [self stopGrowth:!status ? [NSString stringWithUTF8String:neostation::donation::stage_name(status.stage)]
+                                    : @"headroom_changed_during_page_preparation"
+              requested:maximum kernel:!status ? status.kernel_result : KERN_RESOURCE_SHORTAGE];
+        return;
+      }
+    }
+    for (uint64_t word = 0; word < vm_page_size; word += sizeof(uint64_t)) {
+      random += 0x9e3779b97f4a7c15ULL;
+      uint64_t value = random;
+      value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ULL;
+      value = (value ^ (value >> 27)) * 0x94d049bb133111ebULL;
+      value ^= value >> 31;
+      std::memcpy(bytes + offset + word, &value, sizeof(value));
+    }
     std::memcpy(bytes + offset, &pattern, sizeof(pattern));
-  NeoSwapMachHandle* handle = [[NeoSwapMachHandle alloc] initWithMemoryEntry:_block->entry()
-                                                            capacityBytes:_capacity];
+  }
+  _proofComplete = NO;
+  NeoSwapMachHandle* handle = [[NeoSwapMachHandle alloc] initWithMemoryEntry:_pending->entry()
+                                                            capacityBytes:_chunkBytes];
   if (!handle) { [self failStage:@"mach_right_transport" kernel:KERN_NOT_SUPPORTED]; return; }
+  __weak NeoSwapDonorRequestHandler* weakSelf = self;
   id<NeoSwapDonorHostProtocol> host = [_connection remoteObjectProxyWithErrorHandler:^(NSError* failure) {
     (void)failure;
     NeoSwapDonorRequestHandler* self = weakSelf;
@@ -198,9 +298,9 @@ NSDictionary* effectiveEntitlements() {
     dispatch_async(self->_queue, ^{
       if (self->_closed) return;
       if (!accepted) { [self finish]; return; }
-      const uint64_t expected = NeoSwapDonorPattern(self->_nonce, self->_generation, YES);
-      auto bytes = static_cast<unsigned char*>(self->_block->data());
-      for (uint64_t offset = 0; offset < self->_capacity; offset += vm_page_size) {
+      const uint64_t expected = NeoSwapDonorChunkPattern(self->_nonce, self->_generation, index, YES);
+      auto bytes = static_cast<unsigned char*>(self->_pending->data());
+      for (uint64_t offset = 0; offset < self->_chunkBytes; offset += vm_page_size) {
         uint64_t actual = 0;
         std::memcpy(&actual, bytes + offset, sizeof(actual));
         if (actual != expected) {
@@ -215,34 +315,40 @@ NSDictionary* effectiveEntitlements() {
                  kernel:status.kernel_result];
         return;
       }
-      const auto charged = measuredDelta(after, self->_baseline, self->_capacity);
-      const uint64_t tolerance = MIN(MiB, self->_capacity / 16);
-      if (!charged.valid || charged.resident + charged.compressed < self->_capacity - tolerance) {
-        [self failStage:@"donor_kernel_accounting_proof" kernel:KERN_FAILURE];
+      const uint64_t candidate = self->_capacity + self->_chunkBytes;
+      const auto charged = measuredDelta(after, self->_baseline, candidate);
+      const uint64_t before = self->_chunkBaseline.nonvolatile + self->_chunkBaseline.nonvolatile_compressed;
+      const uint64_t now = after.nonvolatile + after.nonvolatile_compressed;
+      self->_chunkAccountedDelta = now > before ? now - before : 0;
+      const uint64_t tolerance = MIN(MiB, self->_chunkBytes / 16);
+      if (!charged.valid || charged.resident + charged.compressed < candidate - tolerance ||
+          self->_chunkAccountedDelta < self->_chunkBytes - tolerance ||
+          self->_chunkAccountedDelta > self->_chunkBytes) {
+        [self failStage:@"donor_incremental_kernel_accounting_proof" kernel:KERN_FAILURE];
         return;
       }
+      self->_capacity = candidate;
+      self->_blocks.push_back(std::move(self->_pending));
+      self->_preparing = NO;
       self->_proofComplete = YES;
       [self sendUpdate];
-      self->_heartbeat = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self->_queue);
-      dispatch_source_set_timer(self->_heartbeat, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
-                               NSEC_PER_SEC, NSEC_PER_SEC / 10);
-      dispatch_source_set_event_handler(self->_heartbeat, ^{
-        NeoSwapDonorRequestHandler* self = weakSelf;
-        if (self && !self->_closed) [self sendUpdate];
-      });
-      dispatch_resume(self->_heartbeat);
     });
   }];
 }
 
 - (NSMutableDictionary*)metadata {
-  return [@{@"version":@1, @"nonce":_nonce ?: @"", @"generation":@(_generation),
-            @"capacityBytes":@(_capacity), @"pid":@(getpid()),
-            @"headroom":@(_headroom), @"headroomAPIAvailable":@(headroomQuery() != nullptr),
+  const uint64_t index = _pending ? _blocks.size() : (_blocks.empty() ? 0 : _blocks.size() - 1);
+  return [@{@"version":@2, @"nonce":_nonce ?: @"", @"generation":@(_generation),
+            @"targetBytes":@(_target), @"capacityBytes":@(_capacity + (_pending ? _chunkBytes : 0)),
+            @"chunkIndex":@(index), @"chunkBytes":@(_chunkBytes), @"verifiedChunkCount":@(_blocks.size()),
+            @"pid":@(getpid()), @"headroom":@(_headroom),
+            @"headroomAPIAvailable":@(headroomQuery() != nullptr),
+            @"systemHeadroomBytes":@(_system.usable_bytes), @"systemPressure":@(static_cast<uint32_t>(_system.pressure)),
             @"effectiveEntitlements":_effectiveEntitlements ?: @{}} mutableCopy];
 }
 
 - (void)sendUpdate {
+  if (_closed || _preparing || _updateInFlight || !_proofComplete) return;
   neostation::donation::Footprint current;
   auto result = neostation::donation::footprint(current);
   if (!result) {
@@ -251,14 +357,15 @@ NSDictionary* effectiveEntitlements() {
     return;
   }
   NSMutableDictionary* metadata = [self metadata];
-  metadata[@"proofComplete"] = @(_proofComplete);
+  metadata[@"proofComplete"] = @YES;
   const auto charged = measuredDelta(current, _baseline, _capacity);
   if (!charged.valid) {
-    [self failStage:@"donor_process_ledger_delta_exceeds_entry" kernel:KERN_FAILURE];
+    [self failStage:@"donor_process_ledger_delta_exceeds_chunks" kernel:KERN_FAILURE];
     return;
   }
   metadata[@"residentDelta"] = @(charged.resident);
   metadata[@"compressedDelta"] = @(charged.compressed);
+  metadata[@"chunkAccountedDelta"] = @(_chunkAccountedDelta);
   metadata[@"baselineNonvolatile"] = @(_baseline.nonvolatile);
   metadata[@"baselineCompressed"] = @(_baseline.nonvolatile_compressed);
   metadata[@"footprint"] = @(current.physical);
@@ -266,13 +373,30 @@ NSDictionary* effectiveEntitlements() {
   metadata[@"compressed"] = @(current.nonvolatile_compressed);
   metadata[@"headroom"] = @(headroom());
   metadata[@"kernelResult"] = @(KERN_SUCCESS);
+  const BOOL refused = _growthRefused;
+  if (refused) {
+    metadata[@"growthRefused"] = @YES;
+    metadata[@"growthStage"] = _growthStage;
+    metadata[@"refusedBytes"] = @(_refusedBytes);
+  }
+  _updateInFlight = YES;
   __weak NeoSwapDonorRequestHandler* weakSelf = self;
   id<NeoSwapDonorHostProtocol> host = [_connection remoteObjectProxyWithErrorHandler:^(NSError* failure) {
     (void)failure;
     NeoSwapDonorRequestHandler* self = weakSelf;
     if (self) dispatch_async(self->_queue, ^{ [self finish]; });
   }];
-  [host donorUpdate:metadata];
+  [host donorUpdate:metadata reply:^(uint64_t nextMaximum) {
+    NeoSwapDonorRequestHandler* self = weakSelf;
+    if (!self) return;
+    dispatch_async(self->_queue, ^{
+      if (self->_closed) return;
+      self->_updateInFlight = NO;
+      if (refused) self->_growthRefused = NO;
+      (void)neostation::donation::retry_cleanup();
+      if (nextMaximum) [self prepareChunk:nextMaximum];
+    });
+  }];
 }
 
 - (void)failStage:(NSString*)stage kernel:(int32_t)kernelResult {
@@ -295,14 +419,15 @@ NSDictionary* effectiveEntitlements() {
   if (_closed) return;
   _closed = YES;
   if (_heartbeat) { dispatch_source_cancel(_heartbeat); _heartbeat = nil; }
-  if (_block) {
-    const auto released = _block->reset();
-    if (released) _block.reset();
+  auto release = [](std::unique_ptr<neostation::donation::Block>& block) {
+    if (!block) return;
+    const auto released = block->reset();
+    if (released) block.reset();
     else NSLog(@"NEOSWAP_DONOR_CLEANUP_PENDING stage=%s kernel=%d",
         neostation::donation::stage_name(released.stage), released.kernel_result);
-    // On failure, retain the block for retry/destructor quarantine; never
-    // substitute a successful cleanup report for a failed Mach operation.
-  }
+  };
+  release(_pending);
+  for (auto& block : _blocks) release(block);
   (void)neostation::donation::retry_cleanup();
   [_connection invalidate];
   _connection = nil;

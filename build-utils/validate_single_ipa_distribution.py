@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the LocalDevVPN-only NeoStation IPA distribution contract.
 
-NeoStation ships as one application with its three JIT helpers and NeoSwap donor.
+NeoStation ships as one application with three JIT helpers and one NeoSwap donor bundle.
 The RemotePairing route is supplied by the separately installed LocalDevVPN;
 the IPA must not contain a packet-tunnel extension or VPN entitlement.
 """
@@ -10,11 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 import plistlib
+import struct
 import tempfile
 import zipfile
 from pathlib import Path
 
-from configure_neoswap_donor import DONOR_CONTRACT, REQUIRED_DONOR_ENTITLEMENTS
+from configure_neoswap_donor import DONOR_CONTRACTS, REQUIRED_DONOR_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
     FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
@@ -39,10 +40,12 @@ EXPECTED_EXTENSIONS = {
         'principalClass': 'Armsx2JITRequestHandler',
         'marker': 'NeoStationARMSX2JITHelper',
     },
-    'NeoSwapDonor.appex': DONOR_CONTRACT,
+    **DONOR_CONTRACTS,
 }
 PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
+DONOR_EXTENSION_POINT = 'com.apple.ar.viewer'
+DONOR_XPC_SERVICE = {'ServiceType': 'Application', '_MultipleInstances': True, '_ProcessType': 'App'}
 MACHO_MAGICS = {
     b'\xcf\xfa\xed\xfe',
     b'\xca\xfe\xba\xbe',
@@ -63,6 +66,41 @@ def load_plist(path: Path) -> dict:
     payload = plistlib.loads(path.read_bytes())
     demand(isinstance(payload, dict), f'Invalid property list: {path}')
     return payload
+
+
+def require_arm64_executable(data: bytes, owner: str) -> None:
+    """Require a real arm64 MH_EXECUTE slice, including its inner header."""
+    demand(data[:4] in MACHO_MAGICS, f'Expected a Mach-O executable: {owner}')
+    if data[:4] in (b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf'):
+        demand(len(data) >= 8, f'{owner} has a truncated Mach-O architecture table')
+        wide = data[:4] == b'\xca\xfe\xba\xbf'
+        count = struct.unpack_from('>I', data, 4)[0]
+        stride = 32 if wide else 20
+        table_end = 8 + count * stride
+        demand(0 < count <= 32 and table_end <= len(data),
+               f'{owner} has an invalid Mach-O architecture table')
+        arm64_slices = []
+        ranges = []
+        for index in range(count):
+            position = 8 + index * stride
+            cpu = struct.unpack_from('>I', data, position)[0]
+            offset, size = struct.unpack_from('>QQ' if wide else '>II', data, position + 8)
+            demand(offset >= table_end and size >= 32 and offset + size <= len(data),
+                   f'{owner} has an invalid Mach-O architecture range')
+            ranges.append((offset, offset + size))
+            if cpu == 0x0100000C:  # CPU_TYPE_ARM64
+                arm64_slices.append(data[offset:offset + size])
+        ranges.sort()
+        demand(all(previous[1] <= current[0]
+                   for previous, current in zip(ranges, ranges[1:])),
+               f'{owner} has overlapping Mach-O architecture ranges')
+        demand(len(arm64_slices) == 1, f'{owner} must contain exactly one arm64 image')
+        data = arm64_slices[0]
+    demand(len(data) >= 32 and data[:4] == b'\xcf\xfa\xed\xfe',
+           f'{owner} must contain a 64-bit Mach-O arm64 executable')
+    cpu, _, filetype = struct.unpack_from('<III', data, 4)
+    demand(cpu == 0x0100000C, f'{owner} executable is not arm64')
+    demand(filetype == 2, f'{owner} arm64 image is not MH_EXECUTE')
 
 
 def executable_entitlements(path: Path) -> dict:
@@ -134,11 +172,12 @@ def validate(ipa: Path) -> dict:
         for extension in extensions:
             contract = EXPECTED_EXTENSIONS[extension.name]
             info = load_plist(extension / 'Info.plist')
+            is_donor = extension.name in DONOR_CONTRACTS
             extension_identifier = str(info.get('CFBundleIdentifier', ''))
-            extension_point = info.get('NSExtension', {}).get(
-                'NSExtensionPointIdentifier'
-            )
-            principal = info.get('NSExtension', {}).get('NSExtensionPrincipalClass')
+            metadata = info.get('NSExtension', {})
+            demand(isinstance(metadata, dict), f'{extension.name} extension metadata is invalid')
+            extension_point = metadata.get('NSExtensionPointIdentifier')
+            principal = metadata.get('NSExtensionPrincipalClass')
             demand(info.get('CFBundlePackageType') == 'XPC!',
                    f'{extension.name} has an invalid package type')
             demand(
@@ -154,7 +193,7 @@ def validate(ipa: Path) -> dict:
                 f'{extension.name} and NeoStation have different marketing versions',
             )
             demand(
-                extension_point == SHARE_EXTENSION_POINT,
+                extension_point == (DONOR_EXTENSION_POINT if is_donor else SHARE_EXTENSION_POINT),
                 f'{extension.name} has an unexpected extension point: '
                 f'{extension_point!r}',
             )
@@ -168,15 +207,36 @@ def validate(ipa: Path) -> dict:
             )
             demand(info.get(contract['marker']) == '1',
                    f'{extension.name} identity marker is missing')
+            if is_donor:
+                donor_index = info.get('NeoStationNeoSwapDonorIndex')
+                demand(isinstance(donor_index, str) and donor_index == contract['index'],
+                       f'{extension.name} donor index is inconsistent')
+                demand(info.get('CFBundleExecutable') == extension.name.removesuffix('.appex'),
+                       f'{extension.name} executable name is inconsistent')
+                demand(info.get('MinimumOSVersion') == '17.4',
+                       f'{extension.name} minimum iOS version is inconsistent')
+                service = info.get('XPCService')
+                demand(isinstance(service, dict) and service == DONOR_XPC_SERVICE and
+                       service.get('_MultipleInstances') is True,
+                       f'{extension.name} multiple-instance metadata is inconsistent')
+                for key in ('NSExtensionContextClass', 'NSExtensionContextHostClass'):
+                    demand(metadata.get(key) == 'NSExtensionContext',
+                           f'{extension.name} {key} is inconsistent')
+                attributes = metadata.get('NSExtensionAttributes', {})
+                demand(isinstance(attributes, dict) and
+                       set(attributes) == {'NSExtensionActivationRule'} and
+                       attributes.get('NSExtensionActivationRule') == 'FALSEPREDICATE',
+                       f'{extension.name} activation rule is inconsistent')
             extension_executable = extension / str(info.get('CFBundleExecutable', ''))
             extension_entitlements = executable_entitlements(extension_executable)
             reject_vpn_entitlements(extension_entitlements, extension.name)
-            if extension.name == 'NeoSwapDonor.appex':
+            if is_donor:
+                require_arm64_executable(extension_executable.read_bytes(), extension.name)
                 require_entitlements(extension_entitlements, REQUIRED_DONOR_ENTITLEMENTS,
-                                     'NeoSwapDonor')
+                                     extension.name.removesuffix('.appex'))
                 unexpected = set(extension_entitlements) - set(REQUIRED_DONOR_ENTITLEMENTS)
                 demand(not unexpected,
-                       'NeoSwapDonor has unexpected embedded entitlements: ' +
+                       extension.name + ' has unexpected embedded entitlements: ' +
                        ', '.join(sorted(unexpected)))
             extension_reports.append({
                 'bundle': extension.name,
@@ -212,6 +272,10 @@ def validate(ipa: Path) -> dict:
             # Embedded requests do not establish provisioning authorization,
             # an effective memory limit, or execution on an iPhone.
             'neoSwapDonorRequestedEntitlements': dict(REQUIRED_DONOR_ENTITLEMENTS),
+            'neoSwapDonorCount': len(DONOR_CONTRACTS),
+            # Bundle metadata requests multiple instances; it does not prove
+            # that iOS launched any distinct donor process.
+            'neoSwapDonorProcessInstancesValidated': False,
             'neoSwapDonorEffectiveDeviceProfileValidated': False,
             'deviceRuntimeTested': False,
             'nestedSigningOrder': [

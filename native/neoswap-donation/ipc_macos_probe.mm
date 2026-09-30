@@ -4,13 +4,30 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <cerrno>
 #include <unistd.h>
 
 namespace {
 constexpr uint64_t MiB = 1024 * 1024;
 NSString* const serviceName = @"com.neogamelab.neostation.neoswap-ipc-probe.donor";
+NSString* reportFile;
+NSMutableDictionary* evidence;
+void saveReport(NSDictionary* report) {
+  NSData* data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
+  if (reportFile && ![data writeToFile:reportFile atomically:YES])
+    std::fprintf(stderr, "FAIL: Could not save IPC evidence report\n");
+}
 void require(bool condition, const char* message) {
-  if (!condition) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
+  if (!condition) {
+    std::fprintf(stderr, "FAIL: %s\n", message);
+    if (evidence) {
+      evidence[@"passed"] = @NO;
+      evidence[@"technicalError"] = [NSString stringWithUTF8String:message];
+      saveReport(evidence);
+    }
+    std::exit(1);
+  }
 }
 }
 
@@ -132,19 +149,48 @@ int main(int argc, const char* argv[]) {
       [listener resume];
       return 2;
     }
+    reportFile = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : nil;
+    evidence = [@{@"schema":@2, @"platform":@"macOS-NSXPC-two-process", @"passed":@NO,
+                  @"iphoneExtensionValidated":@NO, @"capacityBytes":@0, @"preparedBytes":@0,
+                  @"donorResidentBytes":@0, @"donorCompressedBytes":@0} mutableCopy];
+    uint64_t target = 128 * MiB;
+    const char* requestedStress = std::getenv("NEOSWAP_IPC_STRESS_BYTES");
+    const BOOL stress = requestedStress != nullptr;
+    evidence[@"stressRequested"] = @(stress);
+    if (stress) {
+      char* end = nullptr;
+      errno = 0;
+      target = std::strtoull(requestedStress, &end, 10);
+      evidence[@"targetBytes"] = @(target);
+      require(errno == 0 && end && *end == '\0' && requestedStress[0] != '-' &&
+              target >= 128 * MiB && target <= 8ULL * 1024 * MiB && target % vm_page_size == 0,
+              "Invalid opt-in stress target; expected 128 MiB..8 GiB page-aligned bytes");
+      neostation::donation::SystemHeadroom system;
+      const auto available = neostation::donation::system_headroom(system);
+      evidence[@"systemHeadroomBeforeBytes"] = @(system.usable_bytes);
+      evidence[@"systemPressureBefore"] = @(static_cast<uint32_t>(system.pressure));
+      evidence[@"stage"] = @"stress_system_headroom_guard";
+      require(bool(available) && system.usable_bytes >= target + MiB,
+              "Real stress growth refused: measured system headroom cannot cover the target and safety reserve");
+    }
+    evidence[@"targetBytes"] = @(target);
+    evidence[@"requestedBytes"] = @(target);
+    evidence[@"stage"] = @"initial_chunk";
     require([NeoSwapMachHandle isTransportAvailable], "Mach send-right XPC symbols unavailable");
     neostation::donation::Footprint before, after;
     require(bool(neostation::donation::footprint(before)), "Host baseline TASK_VM_INFO failed");
     dispatch_semaphore_t active = dispatch_semaphore_create(0);
     __block NSError* lastError = nil;
-    __block BOOL signaled = NO;
+    __block uint64_t signaledChunks = 0;
     NeoSwapDonorSession* session = [[NeoSwapDonorSession alloc] initWithHelperIdentifier:@"probe"
-        requestedBytes:64 * MiB generation:1 timeout:10
+        requestedBytes:target generation:1 timeout:10
         observer:^(NeoSwapDonorSession* source, NeoSwapDonorSnapshot snapshot, NSError* error) {
       (void)source;
-      if (!signaled && (snapshot.state == NeoSwapDonorStateActive || snapshot.state == NeoSwapDonorStateFailed)) {
+      if (snapshot.state == NeoSwapDonorStateFailed ||
+          (snapshot.state == NeoSwapDonorStateActive &&
+           (snapshot.verifiedChunkCount > signaledChunks || snapshot.growthState == NeoSwapDonorGrowthRefused))) {
         lastError = error;
-        signaled = YES;
+        signaledChunks = snapshot.verifiedChunkCount;
         dispatch_semaphore_signal(active);
       }
     }];
@@ -152,22 +198,112 @@ int main(int argc, const char* argv[]) {
     require(dispatch_semaphore_wait(active, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC)) == 0,
             "Real XPC donor did not complete shared-page verification");
     if (lastError) std::fprintf(stderr, "%s\n", lastError.description.UTF8String);
-    const auto snapshot = [session snapshot];
+    const auto first = [session snapshot];
+    evidence[@"capacityBytes"] = @(first.capacityBytes);
+    evidence[@"preparedBytes"] = @(first.capacityBytes);
+    evidence[@"donorResidentBytes"] = @(first.donatedResidentBytes);
+    evidence[@"donorCompressedBytes"] = @(first.donatedCompressedBytes);
+    evidence[@"diagnostics"] = session.diagnostics;
+    require(first.state == NeoSwapDonorStateActive && first.verifiedChunkCount == 1 &&
+            first.capacityBytes == 64 * MiB, "Initial real chunk was not established");
+    mach_port_t firstRight = [session copyMemoryEntryForChunk:0];
+    neostation::donation::Block firstBorrowed;
+    require(firstRight && bool(neostation::donation::Block::map_borrowed(firstRight, 64 * MiB, firstBorrowed)),
+            "First independently retained real chunk could not be mapped");
+    const uint64_t preservedBytes = stress ? static_cast<uint64_t>(vm_page_size) : 64 * MiB;
+    std::memset(firstBorrowed.data(), 0xa5, preservedBytes);
+    require(![session requestNextChunkWithMaximumBytes:64 * MiB],
+            "Growth was accepted before the host acknowledged adoption");
+    require([session acknowledgeVerifiedChunk:0], "Initial host adoption could not be acknowledged");
+    NSMutableSet<NSNumber*>* rights = [NSMutableSet setWithObject:@(firstRight)];
+    NeoSwapDonorSnapshot snapshot = first;
+    while (snapshot.capacityBytes < target) {
+      const uint64_t maximum = MIN(256 * MiB, target - snapshot.capacityBytes);
+      evidence[@"stage"] = @"incremental_chunk_proof";
+      require([session requestNextChunkWithMaximumBytes:maximum],
+              "The acknowledged donor could not request bounded sequential growth");
+      require(dispatch_semaphore_wait(active, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC)) == 0,
+              "A genuine incremental chunk did not finish its page/ledger proof");
+      snapshot = [session snapshot];
+      evidence[@"capacityBytes"] = @(snapshot.capacityBytes);
+      evidence[@"preparedBytes"] = @(snapshot.capacityBytes);
+      evidence[@"unacquiredBytes"] = @(target - snapshot.capacityBytes);
+      evidence[@"refusedBytes"] = @(snapshot.refusedBytes);
+      evidence[@"donorResidentBytes"] = @(snapshot.donatedResidentBytes);
+      evidence[@"donorCompressedBytes"] = @(snapshot.donatedCompressedBytes);
+      evidence[@"verifiedChunkCount"] = @(snapshot.verifiedChunkCount);
+      evidence[@"diagnostics"] = session.diagnostics;
+      require(snapshot.state == NeoSwapDonorStateActive && snapshot.growthState != NeoSwapDonorGrowthRefused,
+              "Real chunk growth was refused or failed; previous measured capacity is preserved in this report");
+      const uint64_t index = snapshot.verifiedChunkCount - 1;
+      mach_port_t chunkRight = [session copyMemoryEntryForChunk:index];
+      require(chunkRight && ![rights containsObject:@(chunkRight)],
+              "A growth chunk replayed a previously verified memory entry");
+      [rights addObject:@(chunkRight)];
+      mach_port_deallocate(mach_task_self(), chunkRight);
+      for (uint64_t offset = 0; offset < preservedBytes; ++offset)
+        require(static_cast<const unsigned char*>(firstBorrowed.data())[offset] == 0xa5,
+                "Growth proof overwrote prior borrowed data (replay/alias)");
+      require([session acknowledgeVerifiedChunk:index], "Growth adoption could not be acknowledged");
+    }
     require(snapshot.state == NeoSwapDonorStateActive && snapshot.donorPID > 0 &&
-            snapshot.donorPID != getpid() && snapshot.capacityBytes == 64 * MiB &&
-            snapshot.donatedResidentBytes + snapshot.donatedCompressedBytes >= 63 * MiB,
-            "Active donor lacks separate PID and measured resident/compressed ledger evidence");
+            snapshot.donorPID != getpid() && snapshot.capacityBytes == target && snapshot.verifiedChunkCount >= 2 &&
+            snapshot.donatedResidentBytes + snapshot.donatedCompressedBytes >= target - MiB,
+            "Active donor lacks distinct PID and cumulative charged page evidence");
+    if (stress)
+      require(snapshot.donatedResidentBytes >= target - MiB,
+              "The stress target was acquired logically but its final resident ledger does not prove the requested physical pages");
     require(bool(neostation::donation::footprint(after)), "Host after-map TASK_VM_INFO failed");
     const uint64_t hostNonvolatileDelta = after.nonvolatile > before.nonvolatile
         ? after.nonvolatile - before.nonvolatile : 0;
     require(hostNonvolatileDelta < MiB, "Host inherited the donor object's nonvolatile accounting");
-    mach_port_t right = [session copyMemoryEntry];
-    require(right != MACH_PORT_NULL, "Verified donor did not provide an owned copied right");
+    const uint64_t lastIndex = snapshot.verifiedChunkCount - 1;
+    const uint64_t lastBytes = [session chunkCapacityBytes:lastIndex];
+    mach_port_t right = [session copyMemoryEntryForChunk:lastIndex];
+    require(right != MACH_PORT_NULL && right != firstRight,
+            "Last verified chunk did not provide a distinct owned memory entry");
     neostation::donation::Block borrowed;
-    require(bool(neostation::donation::Block::map_borrowed(right, snapshot.capacityBytes, borrowed)),
+    require(bool(neostation::donation::Block::map_borrowed(right, lastBytes, borrowed)),
             "Copied XPC right could not be independently mapped");
-    NeoSwapMachHandle* handle = [[NeoSwapMachHandle alloc] initWithMemoryEntry:right
-                                                             capacityBytes:snapshot.capacityBytes];
+    NeoSwapMachHandle* handle = [[NeoSwapMachHandle alloc] initWithMemoryEntry:right capacityBytes:lastBytes];
+    require(handle != nil, "The copied Mach-right wrapper could not reserve ownership");
+    // Use an isolated real kernel entry for exact reference counts; asynchronous
+    // Foundation message disposal must not influence this cleanup assertion.
+    neostation::donation::Block cleanupObject;
+    require(bool(neostation::donation::Block::create_owned(vm_page_size, cleanupObject)),
+            "Could not create the real cleanup-test memory entry");
+    const mach_port_t cleanupRight = cleanupObject.entry();
+    neostation::donation::CleanupSnapshot cleanupBefore;
+    neostation::donation::cleanup_snapshot(cleanupBefore);
+    mach_port_urefs_t refsBefore = 0, refsQuarantined = 0, refsAfter = 0;
+    require(mach_port_get_refs(mach_task_self(), cleanupRight, MACH_PORT_RIGHT_SEND, &refsBefore) == KERN_SUCCESS,
+            "Could not measure the real wrapper send-right references");
+    {
+      __attribute__((objc_precise_lifetime)) NeoSwapMachHandle* retiring =
+          [[NeoSwapMachHandle alloc] initWithMemoryEntry:cleanupRight capacityBytes:vm_page_size];
+      require(retiring != nil && retiring.memoryEntry == cleanupRight,
+              "The real retiring wrapper did not own its extra send reference");
+      // One explicit dealloc attempt and the holder destructor both fail.
+      // The actual kernel reference must remain quarantined for retry.
+      neostation::donation::test_fail_next_right_releases(2);
+    }
+    neostation::donation::CleanupSnapshot quarantined;
+    neostation::donation::cleanup_snapshot(quarantined);
+    require(quarantined.pending_rights == cleanupBefore.pending_rights + 1 &&
+            mach_port_get_refs(mach_task_self(), cleanupRight, MACH_PORT_RIGHT_SEND, &refsQuarantined) == KERN_SUCCESS &&
+            refsQuarantined == refsBefore + 1,
+            "A failed wrapper release discarded retry ownership of the real kernel reference");
+    require(bool(neostation::donation::retry_cleanup()), "The wrapper's quarantined send reference could not be retired");
+    neostation::donation::CleanupSnapshot cleaned;
+    neostation::donation::cleanup_snapshot(cleaned);
+    require(cleaned.pending_rights == cleanupBefore.pending_rights &&
+            mach_port_get_refs(mach_task_self(), cleanupRight, MACH_PORT_RIGHT_SEND, &refsAfter) == KERN_SUCCESS &&
+            refsAfter == refsBefore,
+            "Retry did not release exactly the quarantined wrapper user reference");
+    require(bool(cleanupObject.reset()), "The real cleanup-test memory entry could not be retired");
+    require(![session requestNextChunkWithMaximumBytes:64 * MiB],
+            "Completed target still accepted further chunk growth");
+    mach_port_deallocate(mach_task_self(), firstRight);
     mach_port_deallocate(mach_task_self(), right);
     BOOL rejectedArchive = NO;
     @try {
@@ -185,11 +321,17 @@ int main(int argc, const char* argv[]) {
     [rejected addObject:checkRejected(BadGenerationSession.class, 3)];
     [rejected addObject:checkRejected(WaitOnlySession.class, 4)];
     [rejected addObject:checkRejected(LateSession.class, 5)];
-    NSDictionary* report = @{ @"schema":@1, @"platform":@"macOS-NSXPC-two-process",
+    NSDictionary* report = @{ @"schema":@2, @"platform":@"macOS-NSXPC-two-process",
       @"iphoneExtensionValidated":@NO, @"hostPID":@(getpid()), @"donorPID":@(snapshot.donorPID),
       @"capacityBytes":@(snapshot.capacityBytes), @"donorResidentBytes":@(snapshot.donatedResidentBytes),
+      @"targetBytes":@(snapshot.targetBytes), @"requestedBytes":@(target),
+      @"verifiedChunkCount":@(snapshot.verifiedChunkCount),
+      @"preparedBytes":@(snapshot.capacityBytes), @"stressRequested":@(stress),
+      @"residentTargetVerified":@(snapshot.donatedResidentBytes >= target - MiB),
+      @"distinctChunkRights":@YES, @"priorBorrowedDataPreserved":@YES,
       @"donorCompressedBytes":@(snapshot.donatedCompressedBytes),
       @"hostNonvolatileDelta":@(hostNonvolatileDelta), @"rejectedArchive":@(rejectedArchive),
+      @"machHandleCleanupRetried":@YES,
       @"rejectedScenarios":rejected, @"passed":@YES };
     NSData* data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
     if (argc > 1) require([data writeToFile:[NSString stringWithUTF8String:argv[1]] atomically:YES],

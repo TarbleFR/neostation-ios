@@ -51,8 +51,8 @@ jobs:
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
-      RPCS3_CORE_HOST_SHA: a30a443723dc144ed5429e8ca23849ec746c396a
-      RPCS3_CORE_RUN_ID: '36619968561'
+      RPCS3_CORE_HOST_SHA: a32f39677bd4d45e1bc4915550dafb6d150e37d9
+      RPCS3_CORE_RUN_ID: '36651573591'
       DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
       HOMEBREW_NO_AUTO_UPDATE: '1'
       BUNDLE_GEMFILE: ${{ github.workspace }}/build-utils/Gemfile.dolphin
@@ -74,8 +74,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,subprocess,time,os,shutil
+          import json,subprocess,time,os,shutil,runpy
           from pathlib import Path
+          validate_simulator=runpy.run_path(str(Path(os.environ['GITHUB_WORKSPACE'])/'test/neoswap_donor_simulator_test.py'))['validate_evidence']
           for workflow in ('neoswap-check.yml','neoswap-donation-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
               deadline=time.monotonic()+3600
               while True:
@@ -106,9 +107,25 @@ jobs:
                                   assert report['realIPhoneValidated'] is False and report['source']==os.environ['GITHUB_SHA']
                               elif phase=='ipc':
                                   assert report['iphoneExtensionValidated'] is False and report['hostPID']!=report['donorPID']
+                                  assert report['schema']==2 and report['verifiedChunkCount']>=2
+                                  assert report['distinctChunkRights'] is True and report['priorBorrowedDataPreserved'] is True
+                                  assert report['machHandleCleanupRetried'] is True
                               else:
-                                  assert report['realIPhoneValidated'] is False and report['hostPID']!=report['donorPID']
-                                  assert report['capacityBytes']>0
+                                  validate_simulator(report)
+                                  for path,digest in report['sourceSHA256'].items():
+                                      import hashlib
+                                      assert hashlib.sha256((Path(os.environ['GITHUB_WORKSPACE'])/path).read_bytes()).hexdigest()==digest,(path,digest)
+                          stress=evidence/'stress'
+                          subprocess.run(['gh','run','download',str(rows[0]['id']),'-n','NeoSwap-donation-stress-'+os.environ['GITHUB_SHA'],'-D',str(stress)],check=True)
+                          assert (stress/'source.txt').read_text().strip()==os.environ['GITHUB_SHA']
+                          stress_report=json.loads((stress/'report.json').read_text())
+                          assert stress_report['iphoneExtensionValidated'] is False
+                          assert stress_report['targetBytes']==8589934592
+                          if stress_report['passed']:
+                              assert stress_report['preparedBytes']==8589934592 and stress_report['residentTargetVerified'] is True
+                              assert stress_report['donorResidentBytes']>=8589934592-1024**2
+                          else:
+                              assert stress_report.get('technicalError'),stress_report
                           (evidence/'identity.json').write_text(json.dumps({'source':os.environ['GITHUB_SHA'],'realIPhoneValidated':False,'validatedPlatforms':['macOS kernel','macOS NSXPC','iOS18Simulator']},indent=2)+'\n')
                       break
                   assert time.monotonic()<deadline,'Candidate evidence did not complete: '+workflow

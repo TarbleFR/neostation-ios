@@ -40,7 +40,7 @@ void main() {
     messenger.setMockMethodCallHandler(channel, null);
   });
   testWidgets(
-    'real virtual reservation is separate from game usage and unsupported donation',
+    'the donation goal never displays a virtual reservation as donated RAM',
     (tester) async {
       messenger.setMockMethodCallHandler(
         channel,
@@ -59,8 +59,24 @@ void main() {
         find.text(
           NeoSwapLocale.get(context, 'virtualReserved', {'size': '8192.0 MiB'}),
         ),
+        findsNothing,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorTarget', {'size': '8192.0 MiB'}),
+        ),
         findsOneWidget,
       );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorPrepared', {
+            'size': '0.0 MiB',
+            'count': '0',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('neoSwapDonorCharge')), findsNothing);
       expect(
         find.text(
           NeoSwapLocale.get(context, 'used', {
@@ -89,7 +105,7 @@ void main() {
     },
   );
   testWidgets(
-    'verified donor charge is distinct from live RPCS3 shared buffers and virtual quota',
+    'verified donor charge is distinct from live RPCS3 shared buffers and the target',
     (tester) async {
       messenger.setMockMethodCallHandler(
         channel,
@@ -101,6 +117,11 @@ void main() {
           'donatedClientBytes': 0,
           'donorFootprintBytes': 40 * 1024 * 1024,
           'donorCapacityBytes': 32 * 1024 * 1024,
+          'donationPreparedBytes': 32 * 1024 * 1024,
+          'donationTargetBytes': 8192 * 1024 * 1024,
+          'donorCount': 1,
+          'donatedResidentBytes': 32 * 1024 * 1024,
+          'donatedCompressedBytes': 0,
           'donorPID': 123,
           'donationState': 2,
           'donorSessionState': 3,
@@ -120,10 +141,7 @@ void main() {
       );
       expect(
         find.text(
-          NeoSwapLocale.get(context, 'donorFootprint', {
-            'pid': '123',
-            'size': '40.0 MiB',
-          }),
+          NeoSwapLocale.get(context, 'donorFootprint', {'size': '40.0 MiB'}),
         ),
         findsOneWidget,
       );
@@ -131,6 +149,111 @@ void main() {
         find.text(NeoSwapLocale.values['en']!['donationUnavailable']!),
         findsNothing,
       );
+      await tester.pumpWidget(const SizedBox());
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets(
+    'multiple donors report measured partial donation and its refused remainder',
+    (tester) async {
+      messenger.setMockMethodCallHandler(
+        channel,
+        (_) async => {
+          ...sample(),
+          'memoryDonationSupported': true,
+          'donatedMemoryBytes': 128 * 1024 * 1024,
+          'donatedClientBytes': 16 * 1024 * 1024,
+          'donationPreparedBytes': 128 * 1024 * 1024,
+          'donationTargetBytes': 8192 * 1024 * 1024,
+          'donatedResidentBytes': 96 * 1024 * 1024,
+          'donatedCompressedBytes': 32 * 1024 * 1024,
+          'donorFootprintBytes': 144 * 1024 * 1024,
+          'donorCount': 2,
+          'donationState': 2,
+          'donationGrowthState': 'limited',
+          'donationRemainingBytes': 8064 * 1024 * 1024,
+          'donationRetainedLiveBytes': 8 * 1024 * 1024,
+        },
+      );
+      await open(tester);
+      final context = tester.element(find.byType(NeoSwapDialog));
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorPrepared', {
+            'size': '128.0 MiB',
+            'count': '2',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorPhysical', {
+            'resident': '96.0 MiB',
+            'compressed': '32.0 MiB',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorUsed', {'size': '16.0 MiB'}),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorLimited', {
+            'remaining': '8064.0 MiB',
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorRetained', {'size': '8.0 MiB'}),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          NeoSwapLocale.get(context, 'donorReady', {'size': '8192.0 MiB'}),
+        ),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets(
+    'idle donors report actual warm pages while waiting for real buffer demand',
+    (tester) async {
+      messenger.setMockMethodCallHandler(channel, (_) async => {
+        ...sample(),
+        'memoryDonationSupported': true,
+        'donatedMemoryBytes': 8 * 1024 * 1024,
+        'donatedClientBytes': 0,
+        'donationPreparedBytes': 8 * 1024 * 1024,
+        'donationTargetBytes': 8192 * 1024 * 1024,
+        'donatedResidentBytes': 8 * 1024 * 1024,
+        'donatedCompressedBytes': 0,
+        'donorCount': 8,
+        'donationState': 2,
+        'donationGrowthState': 'waiting',
+      });
+      await open(tester);
+      final context = tester.element(find.byType(NeoSwapDialog));
+      expect(find.text(NeoSwapLocale.get(context, 'donorWaiting')), findsOneWidget);
+      expect(find.text(NeoSwapLocale.get(context, 'donorPrepared', {
+        'size': '8.0 MiB', 'count': '8',
+      })), findsOneWidget);
+      expect(find.text(NeoSwapLocale.get(context, 'donorReady', {
+        'size': '8.0 MiB',
+      })), findsOneWidget);
+      expect(find.byKey(const ValueKey('neoSwapDonorLimited')), findsNothing);
+      expect(find.text(NeoSwapLocale.get(context, 'donorReady', {
+        'size': '8192.0 MiB',
+      })), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await tester.binding.setSurfaceSize(null);
     },
@@ -295,8 +418,12 @@ void main() {
       expect(calls, ['snapshot']);
       expect(find.text(NeoSwapLocale.values['en']!['scope']!), findsOneWidget);
       expect(
-        tester.widget<Text>(find.byKey(const ValueKey('neoSwapBudget'))).data,
-        '8192 MiB',
+        tester.widget<Text>(find.byKey(const ValueKey('neoSwapTarget'))).data,
+        NeoSwapLocale.get(
+          tester.element(find.byType(NeoSwapDialog)),
+          'donorTarget',
+          {'size': '8192.0 MiB'},
+        ),
       );
       expect(find.byType(DropdownButton<int>), findsOneWidget);
       expect(find.byKey(const ValueKey('neoSwapProbeSize')), findsOneWidget);
@@ -339,7 +466,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
   testWidgets(
-    'failed automatic startup is visible and never shows an active budget',
+    'failed automatic startup displays an unfulfilled target and no donated RAM',
     (tester) async {
       messenger.setMockMethodCallHandler(
         channel,
@@ -347,9 +474,18 @@ void main() {
       );
       await open(tester);
       expect(
-        tester.widget<Text>(find.byKey(const ValueKey('neoSwapBudget'))).data,
-        '0 MiB',
+        tester.widget<Text>(find.byKey(const ValueKey('neoSwapTarget'))).data,
+        NeoSwapLocale.get(
+          tester.element(find.byType(NeoSwapDialog)),
+          'donorTarget',
+          {'size': '8192.0 MiB'},
+        ),
       );
+      expect(find.byKey(const ValueKey('neoSwapDonorCharge')), findsNothing);
+      final sizes = tester.widget<DropdownButton<int>>(
+        find.byKey(const ValueKey('neoSwapProbeSize')),
+      );
+      expect(sizes.items!.every((item) => !item.enabled), isTrue);
       expect(find.text(NeoSwapLocale.values['en']!['failed']!), findsOneWidget);
       expect(find.text('NeoSwap result: -4'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
@@ -379,9 +515,12 @@ void main() {
       await tester.pumpAndSettle();
       pending.complete(sample(capacity: 0));
       await tester.pump();
+      final sizes = tester.widget<DropdownButton<int>>(
+        find.byKey(const ValueKey('neoSwapProbeSize')),
+      );
       expect(
-        tester.widget<Text>(find.byKey(const ValueKey('neoSwapBudget'))).data,
-        '8192 MiB',
+        sizes.items!.singleWhere((item) => item.value == 8192).enabled,
+        isTrue,
       );
       await tester.pumpWidget(const SizedBox());
       await tester.binding.setSurfaceSize(null);

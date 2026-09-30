@@ -23,7 +23,7 @@ PY
 sources=("$root/Broker.cpp" "$root/NeoSwapMachHandle.mm" "$root/NeoSwapDonorIPC.mm"
          "$root/NeoSwapDonorRequestHandler.mm" "$root/ipc_macos_probe.mm")
 xcrun clang++ -x objective-c++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fobjc-arc \
-  -DNEOSWAP_DONATION_PROBE=1 -mmacosx-version-min=13.0 -framework Foundation -framework Security \
+  -DNEOSWAP_DONATION_PROBE=1 -DNEOSWAP_TESTING=1 -mmacosx-version-min=13.0 -framework Foundation -framework Security \
   "${sources[@]}" -o "$app/Contents/MacOS/NeoSwapIPC"
 cp "$app/Contents/MacOS/NeoSwapIPC" "$service/Contents/MacOS/NeoSwapDonor"
 codesign --force --sign - "$service"

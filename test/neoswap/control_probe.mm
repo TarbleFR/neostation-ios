@@ -52,10 +52,10 @@ static void RunProbe(void) {
     Request(@"snapshot",nil,^(NSDictionary* initial) {
         Check([initial[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"automatic8GiB despite previous Off preference");
         Check([initial[@"configResult"] intValue]==0,@"automatic startup configuration");
-        Check([initial[@"reservedVirtualBytes"] unsignedLongLongValue]==8589934592ULL,@"actual automatic PROT_NONE virtual reservation");
+        Check([initial[@"reservedVirtualBytes"] unsignedLongLongValue]==0,@"configuration reserves no synthetic 8GiB address arena");
         Check([initial[@"memoryDonationSupported"] boolValue]==NO,@"helper process donation not misrepresented");
         Check(initial[@"donatedMemoryBytes"]==NSNull.null,@"unsupported donation is unavailable, not fake zero or allocated bytes");
-        Check([initial[@"allocatedDiskBytes"] unsignedLongLongValue]==0,@"unused arena reserves no disk data");
+        Check([initial[@"allocatedDiskBytes"] unsignedLongLongValue]==0,@"configuration reserves no disk data");
         const NeoSwapAPI* api=NeoSwap_GetAPI(1);
         Check(api->enabled(NEOSWAP_RPCS3),@"RPCS3 allocation path enabled without opening settings");
         Check(api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,2*1024*1024,65536,&live)==0,@"automatic live broker allocation");
@@ -68,6 +68,7 @@ static void RunProbe(void) {
                 Check([Owner(probed,@"probe")[@"allocationCount"] unsignedLongLongValue]==1,@"separate diagnostic owner");
                 Check([Owner(probed,@"probe")[@"liveBytes"] unsignedLongLongValue]==0,@"probe fully released");
                 Check([Owner(probed,@"rpcs3")[@"liveBytes"] unsignedLongLongValue]==2*1024*1024,@"game counter unchanged");
+                Check([probed[@"reservedVirtualBytes"] unsignedLongLongValue]==2*1024*1024,@"only the actual live file buffer owns an address region");
                 for(size_t i=0;i<2*1024*1024;i++)if(((unsigned char*)live)[i]!=0x63)Finish(NO,@"live data changed");
                 Check(api->release(live)==0,@"release real block");live=nullptr;
                 Request(@"capacityProbe",@{@"sizeMiB":@64},^(NSDictionary* checked) {
@@ -87,7 +88,7 @@ static void RunProbe(void) {
                                 Check([final[@"capacityBytes"] unsignedLongLongValue]==8589934592ULL,@"automatic policy remains8GiB after diagnostics");
                                 Check(api->enabled(NEOSWAP_RPCS3),@"runtime path remains enabled");
                                 Check([final[@"liveBlocks"] unsignedLongLongValue]==0,@"no leaked blocks");
-                                Check([final[@"reservedVirtualBytes"] unsignedLongLongValue]==8589934592ULL,@"virtual reservation remains after blocks released");
+                                Check([final[@"reservedVirtualBytes"] unsignedLongLongValue]==0,@"released exact allocation regions leave no reserved address arena");
                                 Check([Owner(final,@"probe")[@"allocationCount"] unsignedLongLongValue]==2,@"diagnostic ownership isolated");
                                 NSString* log=[NSString stringWithContentsOfFile:final[@"diagnosticPath"] encoding:NSUTF8StringEncoding error:nil];
                                 Check([log containsString:@"process_start"] && [log containsString:@"capacity_probe"],@"diagnostic events written");

@@ -311,6 +311,8 @@ bool scenario(std::uint64_t generation, bool abrupt) {
                        WIFEXITED(status) && WEXITSTATUS(status) == 0,
                "donor exit status")) return false;
     pool_lost(generation, abrupt ? SIGKILL : 0);
+    if (!check(!pool_donor_restartable(generation, 0),
+               "lost donor cannot restart while its old pointer is borrowed")) return false;
     void* rejected = nullptr;
     std::uint64_t rejected_token = 0;
     if (!check(!pool_acquire(4096, 65536, &rejected, &rejected_token),
@@ -347,6 +349,10 @@ bool scenario(std::uint64_t generation, bool abrupt) {
     if (!check(pool_release(token), "release live loan after helper death") ||
         !check(!pool_release(token), "stale release rejected")) return false;
 #endif
+    if (!check(pool_collect_lost(), "collect released lost mappings") ||
+        !check(pool_donor_restartable(generation, 0), "released donor slot becomes restartable") ||
+        !check(!pool_donor_begin(generation, 0, generation, child),
+               "restart rejects reuse of an old generation")) return false;
     mach_port_deallocate(mach_task_self(), control);
     return true;
   }();
@@ -393,6 +399,30 @@ int main() {
   cleanup_snapshot(cleanup);
   if (!check(!cleanup.pending_blocks && !cleanup.pending_mappings &&
              !cleanup.pending_rights, "cleanup retry releases retained resources")) return 1;
+  Block right_owner;
+  if (!check(Block::create_owned(1024 * 1024, right_owner), "real send-right cleanup object")) return 1;
+  mach_port_urefs_t original_refs = 0, retained_refs = 0, released_refs = 0;
+  if (!check(mach_port_get_refs(mach_task_self(), right_owner.entry(), MACH_PORT_RIGHT_SEND,
+      &original_refs) == KERN_SUCCESS, "measure owned send references")) return 1;
+  {
+    SendRight retiring;
+    if (!check(retiring.prepare(), "reserve send-right retry slot") ||
+        !check(mach_port_mod_refs(mach_task_self(), right_owner.entry(), MACH_PORT_RIGHT_SEND, 1)
+            == KERN_SUCCESS, "copy actual send reference") ||
+        !check(retiring.adopt(right_owner.entry()), "adopt copied send reference")) return 1;
+    test_fail_next_right_releases(1);
+  }
+  cleanup_snapshot(cleanup);
+  if (!check(cleanup.pending_blocks == 1 && !cleanup.pending_mappings &&
+             cleanup.pending_rights == 1 && cleanup.last_stage == Stage::release_entry &&
+             mach_port_get_refs(mach_task_self(), right_owner.entry(), MACH_PORT_RIGHT_SEND,
+                 &retained_refs) == KERN_SUCCESS && retained_refs == original_refs + 1,
+             "failed temporary release retains exactly its actual send reference") ||
+      !check(retry_cleanup(), "retry quarantined send reference") ||
+      !check(mach_port_get_refs(mach_task_self(), right_owner.entry(), MACH_PORT_RIGHT_SEND,
+          &released_refs) == KERN_SUCCESS && released_refs == original_refs,
+          "retry releases only the copied reference") ||
+      !check(right_owner.reset(), "release send-right cleanup object")) return 1;
 #endif
   Footprint before, touched;
   if (!check(footprint(before), "anonymous positive-control baseline")) return 1;

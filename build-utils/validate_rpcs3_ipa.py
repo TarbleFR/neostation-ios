@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 
 from configure_rpcs3_ios_v2 import REQUIRED_RUNTIME_ENTITLEMENTS
-from configure_neoswap_donor import DONOR_CONTRACT, REQUIRED_DONOR_ENTITLEMENTS
+from configure_neoswap_donor import DONOR_CONTRACTS, REQUIRED_DONOR_ENTITLEMENTS
 from embed_rpcs3_host_entitlements import (
     FORBIDDEN_NETWORK_ENTITLEMENTS,
     embedded_entitlements,
@@ -30,6 +30,7 @@ from validate_rpcs3_passive_dlopen import (
     ValidationError as PassiveValidationError,
     validate as validate_passive_dlopen,
 )
+from validate_single_ipa_distribution import DistributionError, require_arm64_executable
 FORBIDDEN_UNDEFINED_SYMBOLS = {
     '_vm_map', '__os_log_default', '__os_log_error_impl', '_os_log_type_enabled'
 }
@@ -45,7 +46,7 @@ CORE_MARKERS = (
     b'505a85e5a8f2cdff1cd63168bd2c56b0f92282bf',
 )
 EXPECTED_HELPERS = {
-    'NeoSwapDonor.appex': DONOR_CONTRACT,
+    **DONOR_CONTRACTS,
     'DolphinJITHelper.appex': {
         'bundleSuffix': '.dolphinjithelper',
         'principalClass': 'DolphinJITRequestHandler',
@@ -64,6 +65,8 @@ EXPECTED_HELPERS = {
 }
 PACKET_TUNNEL_EXTENSION_POINT = 'com.apple.networkextension.packet-tunnel'
 SHARE_EXTENSION_POINT = 'com.apple.share-services'
+DONOR_EXTENSION_POINT = 'com.apple.ar.viewer'
+DONOR_XPC_SERVICE = {'ServiceType': 'Application', '_ProcessType': 'App', '_MultipleInstances': True}
 REQUIRED_CORE_SYMBOLS = (
     '_rpcs3_ios_initialize',
     '_rpcs3_ios_run_llvm_self_test',
@@ -228,6 +231,76 @@ def reject_vpn_entitlements(entitlements: dict, owner: str) -> None:
     )
 
 
+def validate_helper_bundles(app: Path, info: dict, archive_root: Path | None = None) -> dict:
+    """Check each final embedded helper without relying on a sidecar plist."""
+    host_identifier = info.get('CFBundleIdentifier')
+    demand(isinstance(host_identifier, str) and bool(host_identifier.strip()) and '$(' not in host_identifier,
+           'NeoStation has an invalid CFBundleIdentifier')
+    extensions = sorted(path for path in (archive_root or app).rglob('*.appex') if path.is_dir())
+    demand(all(path.parent == app / 'PlugIns' for path in extensions),
+           'Every app extension must be nested in NeoStation/PlugIns')
+    demand({path.name for path in extensions} == set(EXPECTED_HELPERS),
+           'Unexpected app-extension set: expected '
+           f'{sorted(EXPECTED_HELPERS)}, got {sorted(path.name for path in extensions)}')
+    identifiers = {}
+    for extension in extensions:
+        contract = EXPECTED_HELPERS[extension.name]
+        extension_info = plistlib.loads((extension / 'Info.plist').read_bytes())
+        demand(isinstance(extension_info, dict), f'{extension.name} property list is invalid')
+        extension_metadata = extension_info.get('NSExtension', {})
+        demand(isinstance(extension_metadata, dict), f'{extension.name} extension metadata is invalid')
+        point = extension_metadata.get('NSExtensionPointIdentifier')
+        demand(point != PACKET_TUNNEL_EXTENSION_POINT,
+               f'{extension.name} is a forbidden packet-tunnel provider')
+        demand(point == (DONOR_EXTENSION_POINT if extension.name in DONOR_CONTRACTS else SHARE_EXTENSION_POINT),
+               f'{extension.name} has an unexpected extension point: {point!r}')
+        demand(extension_metadata.get('NSExtensionPrincipalClass') == contract['principalClass'],
+               f'{extension.name} principal class is inconsistent')
+        demand(extension_info.get('CFBundlePackageType') == 'XPC!',
+               f'{extension.name} has an invalid package type')
+        demand(extension_info.get(contract['marker']) == '1',
+               f'{extension.name} identity marker is missing')
+        expected_identifier = host_identifier + contract['bundleSuffix']
+        demand(extension_info.get('CFBundleIdentifier') == expected_identifier,
+               f'{extension.name} bundle identifier is inconsistent')
+        for key in ('CFBundleVersion', 'CFBundleShortVersionString'):
+            host_value = info.get(key)
+            demand(isinstance(host_value, str) and host_value and '$(' not in host_value,
+                   f'NeoStation has an invalid {key}')
+            demand(extension_info.get(key) == host_value,
+                   f'{extension.name} and NeoStation have different {key}')
+        executable_name = extension_info.get('CFBundleExecutable')
+        demand(executable_name == extension.name.removesuffix('.appex'),
+               f'{extension.name} executable identity is inconsistent')
+        extension_executable = extension / executable_name
+        demand(extension_executable.is_file(), f'{extension.name} executable is missing')
+        data = extension_executable.read_bytes()
+        require_arm64_executable(data, extension.name)
+        capabilities = embedded_entitlements(data)
+        reject_vpn_entitlements(capabilities, extension.name)
+        if extension.name in DONOR_CONTRACTS:
+            index = extension_info.get('NeoStationNeoSwapDonorIndex')
+            demand(isinstance(index, str) and index == contract['index'],
+                   f'{extension.name} donor index is inconsistent')
+            demand(extension_info.get('MinimumOSVersion') == '17.4',
+                   f'{extension.name} donor minimum iOS version is inconsistent')
+            attributes = extension_metadata.get('NSExtensionAttributes', {})
+            demand(attributes == {'NSExtensionActivationRule': 'FALSEPREDICATE'},
+                   f'{extension.name} donor activation rule is inconsistent')
+            service = extension_info.get('XPCService')
+            demand(isinstance(service, dict) and service == DONOR_XPC_SERVICE
+                   and service.get('_MultipleInstances') is True,
+                   f'{extension.name} donor multiple-instance metadata is inconsistent')
+            for key in ('NSExtensionContextClass', 'NSExtensionContextHostClass'):
+                demand(extension_metadata.get(key) == 'NSExtensionContext',
+                       f'{extension.name} donor {key} is inconsistent')
+            require_entitlements(capabilities, REQUIRED_DONOR_ENTITLEMENTS, extension.name)
+            demand(set(capabilities) == set(REQUIRED_DONOR_ENTITLEMENTS),
+                   f'{extension.name} unexpectedly requests capabilities beyond its three memory/debug keys')
+        identifiers[extension.name] = expected_identifier
+    return identifiers
+
+
 def command_output(*args: str) -> str:
     try:
         return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT)
@@ -288,6 +361,8 @@ def validate_ipa(
         root = Path(temp)
         with zipfile.ZipFile(ipa) as archive:
             safe_members(archive)
+            demand(len(archive.namelist()) == len(set(archive.namelist())),
+                   'IPA contains duplicate ZIP members')
             bad = archive.testzip()
             demand(bad is None, f'Corrupt IPA member: {bad}')
             archive.extractall(root)
@@ -296,6 +371,8 @@ def validate_ipa(
         apps = [path for path in payload.glob('*.app') if path.is_dir()]
         demand(len(apps) == 1, f'Expected exactly one application in Payload, found {len(apps)}')
         app = apps[0]
+        demand(sorted(path for path in root.rglob('*.app') if path.is_dir()) == [app],
+               'A second installable application was packaged with NeoStation')
 
         info_path = app / 'Info.plist'
         demand(info_path.is_file(), 'Packaged app has no Info.plist')
@@ -352,13 +429,19 @@ def validate_ipa(
         # A normal Mach-O dependency would make app startup load the huge core
         # and reintroduce the launch/JIT lifetime regression fixed previously.
         for candidate in app.rglob('*'):
-            if not candidate.is_file() or candidate == core:
+            if not candidate.is_file():
                 continue
             try:
                 kind = command_output('file', str(candidate))
             except ValidationError:
                 continue
             if 'Mach-O' not in kind:
+                continue
+            reject_vpn_entitlements(
+                embedded_entitlements(core_data if candidate == core else candidate.read_bytes()),
+                str(candidate.relative_to(app)),
+            )
+            if candidate == core:
                 continue
             deps = command_output('otool', '-L', str(candidate))
             demand(CORE_NAME not in deps,
@@ -368,72 +451,7 @@ def validate_ipa(
         require_runtime_entitlements(entitlements)
         reject_vpn_entitlements(entitlements, 'NeoStation')
 
-        extensions = sorted(
-            path for path in app.rglob('*.appex') if path.is_dir()
-        )
-        demand(
-            all(path.parent == app / 'PlugIns' for path in extensions),
-            'Every app extension must be nested in NeoStation/PlugIns',
-        )
-        extension_names = {path.name for path in extensions}
-        demand(
-            extension_names == set(EXPECTED_HELPERS),
-            'Unexpected app-extension set: expected '
-            f'{sorted(EXPECTED_HELPERS)}, got {sorted(extension_names)}',
-        )
-        helper_identifiers = {}
-        for extension in extensions:
-            contract = EXPECTED_HELPERS[extension.name]
-            extension_info = plistlib.loads(
-                (extension / 'Info.plist').read_bytes()
-            )
-            extension_point = extension_info.get('NSExtension', {}).get(
-                'NSExtensionPointIdentifier'
-            )
-            demand(
-                extension_point != PACKET_TUNNEL_EXTENSION_POINT,
-                f'{extension.name} is a forbidden packet-tunnel provider',
-            )
-            demand(
-                extension_point == SHARE_EXTENSION_POINT,
-                f'{extension.name} has an unexpected extension point: '
-                f'{extension_point!r}',
-            )
-            demand(
-                extension_info.get('NSExtension', {}).get(
-                    'NSExtensionPrincipalClass'
-                ) == contract['principalClass'],
-                f'{extension.name} principal class is inconsistent',
-            )
-            demand(
-                extension_info.get(contract['marker']) == '1',
-                f'{extension.name} identity marker is missing',
-            )
-            expected_identifier = (
-                f"{info.get('CFBundleIdentifier')}"
-                f"{contract['bundleSuffix']}"
-            )
-            demand(
-                extension_info.get('CFBundleIdentifier') == expected_identifier,
-                f'{extension.name} bundle identifier is inconsistent',
-            )
-            extension_executable = extension / str(
-                extension_info.get('CFBundleExecutable', '')
-            )
-            demand(
-                extension_executable.is_file(),
-                f'{extension.name} executable is missing',
-            )
-            extension_entitlements = embedded_entitlements(
-                extension_executable.read_bytes()
-            )
-            reject_vpn_entitlements(extension_entitlements, extension.name)
-            if extension.name == 'NeoSwapDonor.appex':
-                require_entitlements(extension_entitlements, REQUIRED_DONOR_ENTITLEMENTS,
-                                     'NeoSwapDonor')
-                demand(set(extension_entitlements) == set(REQUIRED_DONOR_ENTITLEMENTS),
-                       'Donor unexpectedly requests capabilities beyond its three memory/debug keys')
-            helper_identifiers[extension.name] = expected_identifier
+        helper_identifiers = validate_helper_bundles(app, info, root)
 
         actual_head = command_output('git', '-C', str(ROOT), 'rev-parse', 'HEAD').strip()
         demand(actual_head == commit,
@@ -452,8 +470,12 @@ def validate_ipa(
                 'fixedHostReservation': False,
             },
             'deviceRuntimeTested': False,
-            'neoSwapDonorRequestedEntitlements': REQUIRED_DONOR_ENTITLEMENTS,
+            'neoSwapDonorRequestedEntitlements': dict(REQUIRED_DONOR_ENTITLEMENTS),
+            'neoSwapDonorBundleIdentifiers': {
+                name: helper_identifiers[name] for name in DONOR_CONTRACTS
+            },
             'neoSwapDonorEffectiveDeviceProfileValidated': False,
+            'neoSwapDonorMultipleInstancesRequested': True,
             'rpcS3RequiredSymbols': list(REQUIRED_CORE_SYMBOLS),
             'rpcS3ForbiddenLoadTimeImports': list(FORBIDDEN_UNDEFINED_SYMBOLS),
             'rpcS3LoadTimeImportsValidated': True,
@@ -489,7 +511,7 @@ def main() -> None:
             ipa, args.build_number, args.commit,
             args.core_identity, args.core_host_commit, args.core_run_id,
         )
-    except (ValidationError, ValueError, plistlib.InvalidFileException) as exc:
+    except (ValidationError, DistributionError, ValueError, plistlib.InvalidFileException) as exc:
         raise SystemExit(f'RPCS3 IPA validation failed: {exc}') from exc
 
     report_path = ROOT / 'dist' / 'rpcs3-ipa-validation.json'

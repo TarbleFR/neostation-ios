@@ -17,6 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
                  validFields:(uint32_t)validFields
                    timestamp:(double)timestampMs;
 - (void)reset;
+// Shared pages, RPCS3 loans, resident/compressed charges and the requested
+// target are separate host counters. No amount is inferred from virtual space.
 - (void)appendNeoSwapWithClient:(const NeoSwapClientStats* _Nullable)client
                           host:(const NeoSwapHostStats* _Nullable)host;
 @end

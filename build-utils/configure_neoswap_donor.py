@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Materialize the canonical donor sources and add only its own iOS target."""
+"""Materialize one canonical donor extension owned by NeoStation."""
 from __future__ import annotations
 
 import os
+import json
 import plistlib
 import shutil
 import subprocess
@@ -18,17 +19,22 @@ REQUIRED_DONOR_ENTITLEMENTS = {
     'com.apple.developer.kernel.increased-memory-limit': True,
     'com.apple.developer.kernel.increased-debugging-memory-limit': True,
 }
-DONOR_CONTRACT = {
-    'bundleSuffix': '.neoswapdonor',
-    'principalClass': 'NeoSwapDonorRequestHandler',
-    'marker': 'NeoStationNeoSwapDonor',
+DONOR_CONTRACTS = {
+    'NeoSwapDonor.appex': {
+        'bundleSuffix': '.neoswapdonor',
+        'principalClass': 'NeoSwapDonorRequestHandler',
+        'marker': 'NeoStationNeoSwapDonor',
+        'index': '0',
+    }
 }
+# Kept for callers which explicitly validate the first donor in isolation.
+DONOR_CONTRACT = DONOR_CONTRACTS['NeoSwapDonor.appex']
+
 
 
 def materialize(root: Path = ROOT) -> None:
     source = root / 'native/neoswap-donation'
     host = root / 'packages/neo_swap/ios/Classes/Donation'
-    helper = root / 'ios/NeoSwapDonor'
     for name in set(HOST_SOURCES + DONOR_SOURCES + HEADERS + ('Info.plist', 'NeoSwapDonor.entitlements')):
         if not (source / name).is_file():
             raise SystemExit('Missing canonical donation source: ' + str(source / name))
@@ -38,10 +44,13 @@ def materialize(root: Path = ROOT) -> None:
         raise SystemExit('Unexpected donation entitlements; no private transfer or app-group capability is authorized')
     # These directories contain generated copies only. Refuse unknown files
     # rather than deleting unrelated work or constructing a second source chain.
-    for destination, names in (
-        (host, HOST_SOURCES + HEADERS),
-        (helper, DONOR_SOURCES + HEADERS + ('Info.plist', 'NeoSwapDonor.entitlements')),
-    ):
+    destinations = [(host, HOST_SOURCES + HEADERS)]
+    destinations += [
+        (root / 'ios' / Path(bundle).stem,
+         DONOR_SOURCES + HEADERS + ('Info.plist', 'NeoSwapDonor.entitlements'))
+        for bundle in DONOR_CONTRACTS
+    ]
+    for destination, names in destinations:
         destination.mkdir(parents=True, exist_ok=True)
         unexpected = {p.name for p in destination.iterdir()} - set(names)
         if unexpected:
@@ -52,63 +61,73 @@ def materialize(root: Path = ROOT) -> None:
 
 RUBY = r'''
 require 'xcodeproj'
+require 'json'
 project = Xcodeproj::Project.open(ARGV.fetch(0))
+specifications = JSON.parse(ARGV.fetch(1))
+expected_names = specifications.map { |item| item.fetch('name') }
 runner = project.targets.find { |target| target.name == 'Runner' }
 raise 'Runner target missing' unless runner
 def snapshot(target)
   [target.to_hash, target.build_phases.map { |phase| [phase.to_hash, phase.files.map(&:to_hash)] },
    target.build_configurations.map(&:to_hash), target.dependencies.map(&:to_hash)]
 end
-protected = project.targets.reject { |target| ['Runner', 'NeoSwapDonor'].include?(target.name) }
+unknown = project.targets.select { |target| target.name.start_with?('NeoSwapDonor') && !expected_names.include?(target.name) }
+raise 'Unknown NeoSwap donor target' unless unknown.empty?
+protected = project.targets.reject { |target| target.name == 'Runner' || expected_names.include?(target.name) }
 before = protected.to_h { |target| [target.uuid, snapshot(target)] }
 runner_phases = runner.build_phases.to_h { |phase| [phase.uuid, phase.to_hash] }
-candidates = project.targets.select { |target| target.name == 'NeoSwapDonor' || target.product_reference&.path == 'NeoSwapDonor.appex' }
-raise 'Ambiguous donor target' if candidates.length > 1
-donor = candidates.first || project.new_target(:app_extension, 'NeoSwapDonor', :ios, '17.4')
-raise 'Unexpected donor product type' unless donor.product_type == 'com.apple.product-type.app-extension'
-raise 'Unexpected donor product' unless donor.product_reference&.path == 'NeoSwapDonor.appex'
-group = project.main_group.find_subpath('NeoSwapDonor', true)
-group.path = 'NeoSwapDonor'
-group.set_source_tree('<group>')
-['Broker.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorRequestHandler.mm'].each do |name|
-  ref = group.files.find { |file| file.path == name } || group.new_file(name)
-  raise "Unresolved donor source: #{name}" unless File.file?(ref.real_path)
-  donor.source_build_phase.add_file_reference(ref, true) unless donor.source_build_phase.files.any? { |file| file.file_ref == ref }
-end
-expected = ['Broker.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorRequestHandler.mm']
-raise 'Unrelated source in donor target' unless donor.source_build_phase.files.map { |file| file.file_ref.path }.sort == expected.sort
 framework_group = project.main_group.groups.find { |g| g.display_name == 'Frameworks' } || project.main_group.new_group('Frameworks')
 foundation_path = 'System/Library/Frameworks/Foundation.framework'
 foundation = project.files.find { |file| file.path == foundation_path && file.source_tree == 'SDKROOT' } || framework_group.new_file(foundation_path, 'SDKROOT')
-donor.frameworks_build_phase.add_file_reference(foundation, true) unless donor.frameworks_build_phase.files.any? { |file| file.file_ref == foundation }
-donor.build_configurations.each do |configuration|
-  s = configuration.build_settings
-  s['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
-  s['CLANG_ENABLE_MODULES'] = 'YES'
-  s['CLANG_ENABLE_OBJC_ARC'] = 'YES'
-  s['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-  s['CODE_SIGN_STYLE'] = 'Automatic'
-  s['CODE_SIGN_ENTITLEMENTS'] = 'NeoSwapDonor/NeoSwapDonor.entitlements'
-  s['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '368')
-  s['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-  s['GENERATE_INFOPLIST_FILE'] = 'NO'
-  s['INFOPLIST_FILE'] = 'NeoSwapDonor/Info.plist'
-  s['IPHONEOS_DEPLOYMENT_TARGET'] = '17.4'
-  s['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
-  s['MARKETING_VERSION'] = '0.0.2'
-  host_id = runner.build_configurations.find { |c| c.name == configuration.name }&.build_settings&.fetch('PRODUCT_BUNDLE_IDENTIFIER', nil)
-  raise 'Concrete Runner bundle identifier missing' unless host_id.is_a?(String) && !host_id.empty? && !host_id.include?('$(')
-  s['PRODUCT_BUNDLE_IDENTIFIER'] = host_id + '.neoswapdonor'
-  s['PRODUCT_NAME'] = '$(TARGET_NAME)'
-  s['SKIP_INSTALL'] = 'YES'
-  s['TARGETED_DEVICE_FAMILY'] = '1,2'
-end
-runner.add_dependency(donor) unless runner.dependencies.any? { |dependency| dependency.target == donor }
 embed = runner.copy_files_build_phases.find { |phase| phase.name == 'Embed App Extensions' } || runner.new_copy_files_build_phase('Embed App Extensions')
 embed.dst_subfolder_spec = '13'
-unless embed.files.any? { |file| file.file_ref == donor.product_reference }
-  file = embed.add_file_reference(donor.product_reference, true)
-  file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+specifications.each do |item|
+  name = item.fetch('name')
+  product = name + '.appex'
+  candidates = project.targets.select { |target| target.name == name || target.product_reference&.path == product }
+  raise 'Ambiguous donor target' if candidates.length > 1
+  donor = candidates.first || project.new_target(:app_extension, name, :ios, '17.4')
+  raise 'Unexpected donor product type' unless donor.product_type == 'com.apple.product-type.app-extension'
+  raise 'Unexpected donor product' unless donor.product_reference&.path == product
+  group = project.main_group.find_subpath(name, true)
+  group.path = name
+  group.set_source_tree('<group>')
+  sources = ['Broker.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorRequestHandler.mm']
+  sources.each do |filename|
+    ref = group.files.find { |file| file.path == filename } || group.new_file(filename)
+    raise "Unresolved donor source: #{filename}" unless File.file?(ref.real_path)
+    donor.source_build_phase.add_file_reference(ref, true) unless donor.source_build_phase.files.any? { |file| file.file_ref == ref }
+  end
+  raise 'Unrelated source in donor target' unless donor.source_build_phase.files.map { |file| file.file_ref.path }.sort == sources.sort
+  donor.frameworks_build_phase.add_file_reference(foundation, true) unless donor.frameworks_build_phase.files.any? { |file| file.file_ref == foundation }
+  donor.build_configurations.each do |configuration|
+    settings = configuration.build_settings
+    settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+    settings['CLANG_ENABLE_MODULES'] = 'YES'
+    settings['CLANG_ENABLE_OBJC_ARC'] = 'YES'
+    settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+    settings['CODE_SIGN_STYLE'] = 'Automatic'
+    settings['CODE_SIGN_ENTITLEMENTS'] = name + '/NeoSwapDonor.entitlements'
+    settings['CURRENT_PROJECT_VERSION'] = ENV.fetch('BUILD_NUMBER', '368')
+    settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+    settings['GENERATE_INFOPLIST_FILE'] = 'NO'
+    settings['INFOPLIST_FILE'] = name + '/Info.plist'
+    settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.4'
+    settings['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
+    settings['MARKETING_VERSION'] = '0.0.2'
+    host_id = runner.build_configurations.find { |c| c.name == configuration.name }&.build_settings&.fetch('PRODUCT_BUNDLE_IDENTIFIER', nil)
+    raise 'Concrete Runner bundle identifier missing' unless host_id.is_a?(String) && !host_id.empty? && !host_id.include?('$(')
+    settings['PRODUCT_BUNDLE_IDENTIFIER'] = host_id + item.fetch('bundleSuffix')
+    settings['NEOSWAP_DONOR_INDEX'] = item.fetch('index')
+    settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
+    settings['SKIP_INSTALL'] = 'YES'
+    settings['TARGETED_DEVICE_FAMILY'] = '1,2'
+  end
+  runner.add_dependency(donor) unless runner.dependencies.any? { |dependency| dependency.target == donor }
+  unless embed.files.any? { |file| file.file_ref == donor.product_reference }
+    file = embed.add_file_reference(donor.product_reference, true)
+    file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+  end
 end
 raise 'Donor modified an unrelated target' unless before == protected.to_h { |target| [target.uuid, snapshot(target)] }
 runner.build_phases.each do |phase|
@@ -118,8 +137,10 @@ runner.build_phases.each do |phase|
 end
 project.save
 reopened = Xcodeproj::Project.open(ARGV.fetch(0))
-raise 'Donor target missing after save' unless reopened.targets.count { |target| target.name == 'NeoSwapDonor' } == 1
-puts 'NeoSwap donor target saved; all existing emulator and JIT targets preserved.'
+expected_names.each do |name|
+  raise 'Donor target missing or duplicated after save' unless reopened.targets.count { |target| target.name == name } == 1
+end
+puts 'One NeoSwap donor target saved; all existing emulator and JIT targets preserved.'
 '''
 
 
@@ -129,7 +150,10 @@ def configure_project() -> None:
     try:
         env = os.environ.copy()
         env['BUNDLE_GEMFILE'] = str(ROOT / 'build-utils/Gemfile.dolphin')
-        subprocess.run(['bundle', 'exec', 'ruby', str(script), str(ROOT / 'ios/Runner.xcodeproj')], cwd=ROOT, env=env, check=True)
+        specifications = [dict(name=Path(bundle).stem, **contract)
+                          for bundle, contract in DONOR_CONTRACTS.items()]
+        subprocess.run(['bundle', 'exec', 'ruby', str(script), str(ROOT / 'ios/Runner.xcodeproj'),
+                        json.dumps(specifications)], cwd=ROOT, env=env, check=True)
     finally:
         script.unlink(missing_ok=True)
 

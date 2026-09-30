@@ -1,4 +1,5 @@
 #include "NeoSwapCapacityProbe.h"
+#include "NeoSwapHost.h"
 #include <cassert>
 #include <cstdlib>
 #include <string>
@@ -16,9 +17,14 @@ int main(int argc,char** argv){
   assert(NeoSwapCapacityHeadroom(0,true));
   NeoSwapConfig config{sizeof(config),1,8192*MiB,0,MiB,1u<<NEOSWAP_PROBE,0};
   assert(NeoSwap_Configure(folder,&config)==0);
+  NeoSwapHostStats host{};assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);
   config.capacity_bytes=8192*MiB+1;assert(NeoSwap_Configure(folder,&config)==NEOSWAP_INVALID);config.capacity_bytes=8192*MiB;
   std::vector<std::string> phases;uint64_t footprintBefore=0,footprintPeak=0;
   auto sample=[&](const char* phase,uint64_t){phases.emplace_back(phase);
+    NeoSwapHostStats currentHost{};assert(!NeoSwap_HostSnapshot(&currentHost));
+    NeoSwapStats current{};current.struct_size=sizeof(current);assert(!NeoSwap_Snapshot(&current));
+    assert(currentHost.reserved_virtual_bytes==current.live_bytes);
+    if(std::string(phase)=="before" || std::string(phase)=="released")assert(!currentHost.reserved_virtual_bytes);
 #ifdef __APPLE__
     task_vm_info_data_t info{};mach_msg_type_number_t count=TASK_VM_INFO_COUNT;
     if(task_info(mach_task_self(),TASK_VM_INFO,reinterpret_cast<task_info_t>(&info),&count)==KERN_SUCCESS){
@@ -43,6 +49,6 @@ int main(int argc,char** argv){
     assert(NeoSwap_Snapshot(&stats)==0 && !stats.live_blocks && stats.peak_bytes==8192*MiB);
     printf("{\"platform\":\"macOS host\",\"verifiedBytes\":8589934592,\"footprintBefore\":%llu,\"footprintPeak\":%llu,\"realIPhoneValidated\":false}\n",(unsigned long long)footprintBefore,(unsigned long long)footprintPeak);
   }
-  config.capacity_bytes=0;assert(NeoSwap_Configure(nullptr,&config)==0);assert(rmdir(folder)==0);
-  puts("PASS: 8GiB budget accepted, >8GiB rejected; 64MiB file data synced/reloaded/verified; pressure and I/O failure release all owned blocks. No iPhone8GiB claim.");
+  config.capacity_bytes=0;assert(NeoSwap_Configure(nullptr,&config)==0);assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);assert(rmdir(folder)==0);
+  puts("PASS: 8GiB quota accepted with zero initial virtual reservation, >8GiB rejected; exact 64MiB file regions synced/reloaded/verified; pressure and I/O failure release all owned regions. No iPhone8GiB claim.");
 }

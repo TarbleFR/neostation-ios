@@ -25,6 +25,10 @@ enum class Stage : std::uint32_t {
   pool_limit,
   pool_not_owned,
   cleanup_limit,
+  system_headroom,
+  memory_pressure,
+  pool_duplicate_pid,
+  snapshot_busy,
 };
 
 struct Result {
@@ -60,10 +64,40 @@ struct CleanupSnapshot {
 // destruction moves those resources to that descriptor for explicit retry.
 Result retry_cleanup() noexcept;
 void cleanup_snapshot(CleanupSnapshot& out) noexcept;
+
+enum class MemoryPressure : std::uint32_t { unobserved, normal, warning, critical };
+struct SystemHeadroom {
+  std::uint64_t free_bytes = 0;
+  std::uint64_t purgeable_bytes = 0;
+  std::uint64_t reclaimable_bytes = 0;
+  std::uint64_t usable_bytes = 0;
+  MemoryPressure pressure = MemoryPressure::unobserved;
+};
+// A kernel sample, not os_proc_available_memory (which is a process limit).
+// free_count already includes speculative pages. Inactive/dirty/compressed
+// pages are deliberately not credited. 512 MiB is kept outside growth.
+Result system_headroom(SystemHeadroom& out) noexcept;
 #if defined(NEOSWAP_TESTING)
 // Negative cleanup test; the object still comes from the real Darwin kernel.
 void test_fail_next_unmaps(std::uint32_t count) noexcept;
+void test_fail_next_right_releases(std::uint32_t count) noexcept;
 #endif
+
+// Reserve retry ownership before copying a task-local send right. This holder
+// adopts exactly one existing user reference and quarantines failed releases.
+class SendRight final {
+ public:
+  SendRight() noexcept = default;
+  ~SendRight();
+  SendRight(const SendRight&) = delete;
+  SendRight& operator=(const SendRight&) = delete;
+  Result prepare() noexcept;
+  Result adopt(std::uint32_t entry) noexcept;
+  Result reset() noexcept;
+ private:
+  std::uint32_t entry_ = 0;
+  std::uint32_t cleanup_slot_ = UINT32_MAX;
+};
 
 class Block final {
  public:
