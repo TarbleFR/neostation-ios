@@ -766,6 +766,7 @@ def main() -> int:
     report = {'schema':2, 'passed':False, 'platform':'iOS18Simulator',
               'realIPhoneValidated':False, 'physicalIphoneValidated':False}
     identifier: str | None = None
+    campaign_started = time.time()
     try:
         if sys.platform != 'darwin':
             raise RuntimeError('A real Apple Simulator runner is required; this proof is not mocked or skipped')
@@ -800,6 +801,8 @@ def main() -> int:
             if not evidence.is_file():
                 raise RuntimeError('Actual Simulator app did not produce extension/allocator proof; launch output: ' + launched[-12000:])
             report.update(json.loads(evidence.read_text()))
+            if report.get('passed') is not True:
+                raise RuntimeError(report.get('technicalError') or 'The actual extension lifecycle failed')
             validate_evidence(report)
             report['runnerStage'] = 'complete'
             print(json.dumps(report, indent=2, ensure_ascii=False))
@@ -809,6 +812,22 @@ def main() -> int:
         report['runnerError'] = str(exception)
         print(str(exception), file=sys.stderr)
         if identifier:
+            # Preserve actual donor startup failures before deleting our device.
+            # Only reports named for this harness and produced during this run
+            # are copied; successful page/ledger assertions remain mandatory.
+            crash_roots = [Path.home() / 'Library/Logs/DiagnosticReports',
+                           Path.home() / 'Library/Developer/CoreSimulator/Devices' /
+                           identifier / 'data/Library/Logs/CrashReporter']
+            for root in crash_roots:
+                for crash in sorted(root.glob('NeoSwapDonor*')):
+                    try:
+                        if (crash.is_file() and crash.suffix in ('.ips', '.crash') and
+                                crash.stat().st_mtime >= campaign_started):
+                            output.mkdir(parents=True, exist_ok=True)
+                            shutil.copyfile(crash, output / crash.name)
+                            report.setdefault('donorCrashReports', []).append(crash.name)
+                    except OSError as crash_error:
+                        report.setdefault('crashCollectionErrors', []).append(str(crash_error))
             try:
                 logs = run(['xcrun', 'simctl', 'spawn', identifier, 'log', 'show', '--last', '2m',
                             '--style', 'compact', '--predicate',
