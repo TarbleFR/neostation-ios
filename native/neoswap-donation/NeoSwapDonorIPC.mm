@@ -117,12 +117,13 @@ BOOL number(NSDictionary* input, NSString* key) {
         std::chrono::duration<double>(now - self->_started).count() > self->_timeout) {
       [self fail:failure(3101, @"Donor launch/shared-page verification timed out")];
     } else if (self->_snapshot.state == NeoSwapDonorStateActive &&
-               std::chrono::duration<double>(now - self->_lastUpdate).count() > 6) {
-      [self fail:failure(3102, @"Donor ledger heartbeat expired")];
-    } else if (self->_snapshot.state == NeoSwapDonorStateActive &&
                self->_snapshot.growthState == NeoSwapDonorGrowthPreparing &&
                std::chrono::duration<double>(now - self->_chunkStarted).count() > self->_timeout) {
       [self fail:failure(3120, @"Donor chunk preparation/shared-page verification timed out")];
+    } else if (self->_snapshot.state == NeoSwapDonorStateActive &&
+               self->_snapshot.growthState != NeoSwapDonorGrowthPreparing &&
+               std::chrono::duration<double>(now - self->_lastUpdate).count() > 6) {
+      [self fail:failure(3102, @"Donor ledger heartbeat expired")];
     }
   });
   dispatch_resume(_timer);

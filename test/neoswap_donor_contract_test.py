@@ -162,6 +162,16 @@ def packaged_helpers(root):
 
 
 class DonorContractTests(unittest.TestCase):
+    def test_chunk_preparation_uses_chunk_deadline_not_idle_heartbeat(self):
+        source = (ROOT / 'native/neoswap-donation/NeoSwapDonorIPC.mm').read_text()
+        timer = source.split('- (void)beginTimer {', 1)[1].split('- (void)start {', 1)[0]
+        chunk_timeout = timer.index('failure(3120, @"Donor chunk preparation/shared-page verification timed out")')
+        heartbeat_timeout = timer.index('failure(3102, @"Donor ledger heartbeat expired")')
+        self.assertLess(chunk_timeout, heartbeat_timeout)
+        heartbeat_guard = timer[max(0, heartbeat_timeout - 450):heartbeat_timeout]
+        self.assertIn('growthState != NeoSwapDonorGrowthPreparing', heartbeat_guard)
+        self.assertIn('now - self->_chunkStarted', timer[:heartbeat_timeout])
+
     def test_simulator_launcher_keeps_native_result_when_cli_stalls(self):
         # Local child exercises orchestration only, never Foundation/donation.
         from neoswap_donor_simulator_test import collect_launch_evidence, validate_evidence
