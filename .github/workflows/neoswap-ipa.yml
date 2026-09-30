@@ -51,8 +51,8 @@ jobs:
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
       ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
-      RPCS3_CORE_HOST_SHA: a32f39677bd4d45e1bc4915550dafb6d150e37d9
-      RPCS3_CORE_RUN_ID: '36651573591'
+      RPCS3_CORE_HOST_SHA: a0ea2464039336a085452a04dae4490ef515a6db
+      RPCS3_CORE_RUN_ID: '36747941196'
       DUSKLIGHT_CORE_HOST_SHA: 94ed2d91e1547e1879fab214b6ef082b642dff84
       DUSKLIGHT_CORE_RUN_ID: '36720032937'
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -84,7 +84,7 @@ jobs:
           import json,subprocess,time,os,shutil,runpy
           from pathlib import Path
           validate_simulator=runpy.run_path(str(Path(os.environ['GITHUB_WORKSPACE'])/'test/neoswap_donor_simulator_test.py'))['validate_evidence']
-          for workflow in ('neoswap-check.yml','neoswap-donation-check.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
+          for workflow in ('neoswap-check.yml','neoswap-donation-check.yml','neoswap-vulkan-proof.yml','dolphin-pacing-check.yml','dolphin-motion-check.yml','cheats-media-check.yml'):
               deadline=time.monotonic()+3600
               while True:
                   endpoint='repos/TarbleFR/neostation-ios/actions/workflows/'+workflow+'/runs?head_sha='+os.environ['GITHUB_SHA']+'&per_page=10'
@@ -93,6 +93,27 @@ jobs:
                   if rows and rows[0]['status']=='completed':
                       assert rows[0]['conclusion']=='success',rows[0]
                       print('Verified exact candidate',workflow,rows[0]['id'])
+                      if workflow=='neoswap-vulkan-proof.yml':
+                          import hashlib
+                          evidence=Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence'/'vulkan';evidence.mkdir(parents=True,exist_ok=True)
+                          subprocess.run(['gh','run','download',str(rows[0]['id']),'-n','NeoSwap-Vulkan-'+os.environ['GITHUB_SHA'],'-D',str(evidence)],check=True)
+                          identity=json.loads((evidence/'identity.json').read_text())
+                          canonical=json.loads(Path('build-utils/rpcs3/canonical-source.json').read_text())
+                          assert identity['source']==os.environ['GITHUB_SHA']
+                          assert identity['moltenVK']=='1.4.2' and identity['moltenVKSHA256']=='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
+                          assert identity['canonicalPatchSHA256']==canonical['patch_sha256']
+                          assert identity['productionImportSHA256']==canonical['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
+                          for path,digest in identity['inputsSHA256'].items():
+                              assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,(path,digest)
+                          report=json.loads((evidence/'report.json').read_text());gpu=report['vulkanDonation']
+                          assert report['passed'] is True and report['residentTargetVerified'] is True
+                          assert report['hostPID']!=report['donorPID'] and report['donorResidentBytes']>=134217728-1024**2
+                          assert gpu['passed'] is True and gpu['importedBytes']==gpu['donatedLiveBytesDuringGPU']==gpu['gpuWrittenBytes']==134217728
+                          assert gpu['gpuToCpuAliasVerified'] is True and gpu['retiredLiveBytes']==0
+                          assert gpu['rendererBudgetDuringGPU']==134217728 and gpu['rendererBudgetAfterRetirement']==0
+                          assert gpu['productionRPCS3ImportPath'] is True and gpu['productionHostBroker'] is True
+                          assert gpu['hostNonvolatileDeltaBytes']<1024**2 and gpu['hostFootprintDeltaBytes']<64*1024**2
+                          assert gpu['realIPhoneValidated'] is False and gpu['realRPCS3GameplayValidated'] is False
                       if workflow=='neoswap-check.yml':
                           # Flutter clean removes build/ after this gate.
                           evidence=Path(os.environ['RUNNER_TEMP'])/'neoswap-evidence';evidence.mkdir(parents=True,exist_ok=True)

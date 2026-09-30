@@ -268,6 +268,8 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['a0ea2464039336a085452a04dae4490ef515a6db']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'36747941196'"]
         assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
         assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
         assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow
@@ -275,6 +277,8 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert "identity['submodules'] == pins['submodules']" in workflow
     else:
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow)
+        for key in ('RPCS3_CORE_HOST_SHA', 'RPCS3_CORE_RUN_ID'):
+            assert re.findall(r'(?m)^      '+key+r': (.+)$', workflow) == re.findall(r'(?m)^      '+key+r': (.+)$', old_workflow)
 workflow = (ROOT / '.github/workflows/neoswap-ipa.yml').read_text()
 assert 'contents: write' not in workflow and 'gh release create' not in workflow
 

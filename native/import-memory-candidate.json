@@ -28,7 +28,7 @@
     "Requested Dolphin/ARMSX2 bulk import: ordinary eight-letter TXT titles and explicit PNACH groups containing comments; damaged code and empty-group rejection retained; no GCT titles invented",
     "KartPad v0.7.3 migration input pins and read-only personal-pack ABI/fingerprint inspection; installed Core remains v0.5.1 until compatible personal input and lifecycle migration",
     "Separate macOS NSXPC 1GiB/Metal feasibility experiment only; no production GPU path, dummy allocation, Core source or physical iPhone/RPCS3 gameplay proof",
-    "Build371: actual Vulkan external-memory capability/type/alignment checks, dedicated imports and buffer-before-memory-before-loan retirement; 1GiB actual iPhone gameplay remains unvalidated"
+    "Build371: canonical coherent Vulkan SYSTEM buffer imports with capability/type/alignment checks, renderer memory budgets and deferred buffer/memory/loan retirement; exact-source macOS MoltenVK 1.4.2 GPU proof required before IPA packaging; actual iPhone gameplay remains unvalidated"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -38,7 +38,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
     ".github/workflows/neoswap-donation-check.yml": "4858ef62cf6f55179e1c97a4e7c145099e8a386e5b2c6e436772fac8935ce03a",
-    ".github/workflows/neoswap-ipa.yml": "13255f2802a4531e6fac7d265549a92983137b9eb5c38c9f21bbe44f97520785",
+    ".github/workflows/neoswap-ipa.yml": "f58a4d896ded508c5ea054c48f8bed7f0a1d7e2a1c42d5d45874eead8c58cf1b",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
     ".github/workflows/rpcs3-core.yml": "eaa0fe3aa43aa527209db4f4ca515c6d349e95d412a57d5926aa34cecce9f8cd",
     ".gitignore": "d8475cd059c3bbda741c6191e3602e7fcec658393a6144ba0e99b8274ac6876c",
@@ -248,7 +248,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "ce45b8e88e924e8e1f3bb54cfc8fa10c1d985db36e1b84e567216ce0fe27f91b",
+    "test/import_memory_candidate_scope_test.py": "483a992249f39053bd860d8aa7a02ed6ed2df6ad3f226e77cebc6f04ace8f2b2",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
     "test/legal_bundle_preflight_test.py": "bdbe0893d50d74003b80e7c7d3359838714ea95414b61468158fbf4afbca745e",
