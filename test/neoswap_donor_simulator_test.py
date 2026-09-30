@@ -527,7 +527,10 @@ def run(arguments: list[str], *, timeout: int = 60, capture: bool = False) -> st
 
 
 def sdk_runtime() -> tuple[str, str, str]:
-    runtimes = json.loads(run(['xcrun', 'simctl', 'list', 'runtimes', '--json'], capture=True))['runtimes']
+    # A fresh hosted runner can spend over a minute initializing CoreSimulator.
+    # This only extends service discovery; every launch/PID/page proof stays required.
+    runtimes = json.loads(run(['xcrun', 'simctl', 'list', 'runtimes', '--json'],
+                             capture=True, timeout=180))['runtimes']
     candidates = [runtime for runtime in runtimes if runtime.get('isAvailable') and
                   runtime.get('version', '').split('.')[0] == '18' and
                   'SimRuntime.iOS-' in runtime['identifier']]

@@ -157,6 +157,13 @@ int main(int argc, const char* argv[]) {
     const char* requestedStress = std::getenv("NEOSWAP_IPC_STRESS_BYTES");
     const BOOL stress = requestedStress != nullptr;
     evidence[@"stressRequested"] = @(stress);
+    neostation::donation::SystemHeadroom startingSystem{};
+    const auto startingStatus = neostation::donation::system_headroom(startingSystem);
+    evidence[@"systemFreeBeforeBytes"] = @(startingSystem.free_bytes);
+    evidence[@"systemPurgeableBeforeBytes"] = @(startingSystem.purgeable_bytes);
+    evidence[@"systemUsableBeforeBytes"] = @(startingSystem.usable_bytes);
+    evidence[@"systemPressureBefore"] = @(static_cast<uint32_t>(startingSystem.pressure));
+    evidence[@"systemSampleKernelResult"] = @(startingStatus.kernel_result);
     if (stress) {
       char* end = nullptr;
       errno = 0;

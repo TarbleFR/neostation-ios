@@ -60,6 +60,8 @@ jobs:
           set -euo pipefail
           mkdir -p build/neoswap-donation/ipc
           printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/ipc/source.txt
+          vm_stat | tee build/neoswap-donation/ipc/system-vm.txt
+          memory_pressure -Q | tee build/neoswap-donation/ipc/system-pressure.txt
           bash native/neoswap-donation/run_ipc_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-donation/ipc/report.json" 2>&1 | tee build/neoswap-donation/ipc/probe.txt
           python3 - <<'PY'
           import json
@@ -100,6 +102,8 @@ jobs:
           set -euo pipefail
           mkdir -p build/neoswap-donation/stress
           printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/stress/source.txt
+          vm_stat | tee build/neoswap-donation/stress/system-vm.txt
+          memory_pressure -Q | tee build/neoswap-donation/stress/system-pressure.txt
           NEOSWAP_IPC_STRESS_BYTES=8589934592 bash native/neoswap-donation/run_ipc_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-donation/stress/report.json" 2>&1 | tee build/neoswap-donation/stress/probe.txt
           python3 - <<'PY'
           import json

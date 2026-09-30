@@ -17,10 +17,15 @@ extern "C" void NeoSwap_TestFailNext(int stage);
 
 #if defined(__APPLE__) && TARGET_OS_OSX
 #include <mach/mach.h>
+#include <mach-o/dyld.h>
+#include <dlfcn.h>
 #include <signal.h>
+#include <spawn.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+extern char** environ;
 
 namespace {
 using namespace neostation::donation;
@@ -139,9 +144,8 @@ bool release_receive_port(mach_port_t port) {
 
 int donor() {
   std::fprintf(stderr, "CHILD pid=%ld stage=begin\n", static_cast<long>(getpid()));
-  // macOS test bootstrap only: inherited registered send rights are documented
-  // in XNU task.defs/ipc_tt.c. iOS integration uses NSExtension auxiliary XPC,
-  // never fork or mach_ports_register to launch the helper.
+  // macOS test bootstrap only: spawn binds the actual host send right through
+  // XNU's registered-port spawn attribute. iOS uses NSExtension auxiliary XPC.
   mach_port_array_t registered = nullptr;
   mach_msg_type_number_t count = 0;
   const auto lookup = mach_ports_lookup(mach_task_self(), &registered, &count);
@@ -198,22 +202,26 @@ int donor() {
 bool scenario(std::uint64_t generation, bool abrupt) {
   mach_port_t host = receive_port();
   if (!check(host != MACH_PORT_NULL, "host receive port")) return false;
-  mach_port_array_t old = nullptr;
-  mach_msg_type_number_t old_count = 0;
-  if (!check(mach_ports_lookup(mach_task_self(), &old, &old_count) == KERN_SUCCESS,
-             "save registered rights")) return false;
+  using RegisterPorts = int (*)(posix_spawnattr_t*, mach_port_t*, std::uint32_t);
+  const auto register_ports = reinterpret_cast<RegisterPorts>(
+      dlsym(RTLD_DEFAULT, "posix_spawnattr_set_registered_ports_np"));
+  if (!check(register_ports != nullptr, "registered-port spawn API")) return false;
+  char executable[4096]{};
+  std::uint32_t executable_size = sizeof(executable);
+  if (!check(_NSGetExecutablePath(executable, &executable_size) == 0,
+             "actual probe executable path")) return false;
+  posix_spawnattr_t attributes{};
+  if (!check(posix_spawnattr_init(&attributes) == 0, "initialize donor spawn")) return false;
   mach_port_t slots[3] = {host, MACH_PORT_NULL, MACH_PORT_NULL};
-  if (!check(mach_ports_register(mach_task_self(), slots, 3) == KERN_SUCCESS,
-             "register child bootstrap")) return false;
-  const pid_t child = fork();
-  if (child == 0) _exit(donor());
-  const auto restore = mach_ports_register(mach_task_self(), old, old_count);
-  for (mach_msg_type_number_t i = 0; i < old_count; ++i)
-    if (old[i]) mach_port_deallocate(mach_task_self(), old[i]);
-  if (old) vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(old),
-                        old_count * sizeof(mach_port_t));
-  if (!check(child > 0, "fork macOS donor") ||
-      !check(restore == KERN_SUCCESS, "restore registered rights")) return false;
+  const auto bound = register_ports(&attributes, slots, 3);
+  pid_t child = -1;
+  char donor_argument[] = "--donor";
+  char* arguments[] = {executable, donor_argument, nullptr};
+  const auto spawned = bound == 0 ? posix_spawn(&child, executable, nullptr,
+      &attributes, arguments, environ) : bound;
+  const auto destroyed = posix_spawnattr_destroy(&attributes);
+  if (!check(spawned == 0 && child > 0, "spawn macOS donor with actual host send right") ||
+      !check(destroyed == 0, "release donor spawn attributes")) return false;
   bool child_alive = true;
   // From this point every error terminates only this known test child.
   bool success = [&] {
@@ -377,7 +385,8 @@ bool scenario(std::uint64_t generation, bool abrupt) {
 }
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  if (argc == 2 && std::strcmp(argv[1], "--donor") == 0) return donor();
   using namespace neostation::donation;
   if (!check(availability(), "Darwin API availability")) return 77;
 #if defined(NEOSWAP_TESTING)

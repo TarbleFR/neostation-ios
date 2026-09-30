@@ -2,6 +2,10 @@
   "schema": 1,
   "claims": [
     {
+      "claim": "The macOS-only kernel probe binds registered Mach send rights explicitly when spawning a fresh donor process, using XNU's registered-port spawn attribute",
+      "source": "https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/spawn/posix_spawn.c"
+    },
+    {
       "claim": "NSXPCCoder provides typed custom encoding and decoding of XPC objects over NSXPCConnection",
       "source": "https://developer.apple.com/documentation/foundation/nsxpccoder"
     },
