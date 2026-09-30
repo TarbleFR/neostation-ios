@@ -1,6 +1,7 @@
 #import "NeoSwapDonorRequestHandler.h"
 #import "NeoSwapDonorIPC.h"
 #include "Broker.h"
+#include "DonorLedger.h"
 
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -22,19 +23,6 @@ HeadroomQuery headroomQuery() {
 uint64_t headroom() {
   HeadroomQuery query = headroomQuery();
   return query ? query() : 0;
-}
-struct LedgerDelta { uint64_t resident; uint64_t compressed; bool valid; };
-LedgerDelta measuredDelta(const neostation::donation::Footprint& current,
-                          const neostation::donation::Footprint& baseline, uint64_t capacity) {
-  // TASK_VM_INFO fields are process-wide. This dedicated helper creates only
-  // its known chunk objects, and only the bounded cumulative increase is shown.
-  const uint64_t resident = current.nonvolatile > baseline.nonvolatile
-      ? current.nonvolatile - baseline.nonvolatile : 0;
-  const uint64_t compressed = current.nonvolatile_compressed > baseline.nonvolatile_compressed
-      ? current.nonvolatile_compressed - baseline.nonvolatile_compressed : 0;
-  const bool valid = resident <= capacity && compressed <= capacity &&
-                     resident <= capacity - compressed;
-  return {resident, compressed, valid};
 }
 NSError* error(NSString* description) {
   return [NSError errorWithDomain:@"NeoSwapDonation" code:3201
@@ -340,12 +328,12 @@ NSDictionary* effectiveEntitlements() {
         return;
       }
       const uint64_t candidate = self->_capacity + self->_chunkBytes;
-      const auto charged = measuredDelta(after, self->_baseline, candidate);
-      const uint64_t before = self->_chunkBaseline.nonvolatile + self->_chunkBaseline.nonvolatile_compressed;
-      const uint64_t now = after.nonvolatile + after.nonvolatile_compressed;
-      self->_chunkAccountedDelta = now > before ? now - before : 0;
+      const auto charged = neostation::donation::measured_ledger_delta(after, self->_baseline, candidate);
+      const auto increment = neostation::donation::measured_ledger_delta(
+          after, self->_chunkBaseline, self->_chunkBytes);
+      self->_chunkAccountedDelta = increment.valid ? increment.resident + increment.compressed : 0;
       const uint64_t tolerance = MIN(MiB, self->_chunkBytes / 16);
-      if (!charged.valid || charged.resident + charged.compressed < candidate - tolerance ||
+      if (!charged.valid || !increment.valid || charged.resident + charged.compressed < candidate - tolerance ||
           self->_chunkAccountedDelta < self->_chunkBytes - tolerance ||
           self->_chunkAccountedDelta > self->_chunkBytes) {
         [self failStage:@"donor_incremental_kernel_accounting_proof" kernel:KERN_FAILURE];
@@ -384,7 +372,7 @@ NSDictionary* effectiveEntitlements() {
   }
   NSMutableDictionary* metadata = [self metadata];
   metadata[@"proofComplete"] = @YES;
-  const auto charged = measuredDelta(current, _baseline, _capacity);
+  const auto charged = neostation::donation::measured_ledger_delta(current, _baseline, _capacity);
   if (!charged.valid) {
     [self failStage:@"donor_process_ledger_delta_exceeds_chunks" kernel:KERN_FAILURE];
     return;

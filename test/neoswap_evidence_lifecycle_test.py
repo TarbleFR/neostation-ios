@@ -68,6 +68,9 @@ donation_reports = {
                   'retainedDataAfterClose': True, 'newLoansBlockedAfterClose': True,
                   'survivingDonorNewLoanPassed': True, 'explicitFileFallbackPassed': True,
                   'releasePassed': True, 'kernelMappingCleanupPassed': True,
+                  'unverifiedDonorErrorRetained': True, 'lateDonorSessionIgnored': True,
+                  'verifiedDonorErrorCleared': True, 'currentDonorErrorRetained': True,
+                  'closedDonorErrorRetained': True,
                   'donors': [
                       {'helperIdentifier': 'com.neogamelab.neostation.neoswap-simulator-proof.neoswapdonor',
                        'helperIndex': '0', 'poolIndex': i, 'pid': 502+i,

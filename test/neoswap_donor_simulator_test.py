@@ -34,6 +34,7 @@ PROBE_DONOR_BYTES = 32 * 1024**2
 HARNESS = r'''
 #import <UIKit/UIKit.h>
 #import "NeoSwapDonorIPC.h"
+#import "NeoSwapPlugin.h"
 #include "Broker.h"
 #include "Pool.h"
 #include "NeoSwap.h"
@@ -44,6 +45,36 @@ HARNESS = r'''
 #include <functional>
 #include <vector>
 #include <unistd.h>
+
+// Flutter messaging alone is stubbed. The donor callback, snapshots, sessions,
+// kernel pool, adoption, verification and acknowledgements are production code.
+NSObject* const FlutterMethodNotImplemented = nil;
+@implementation FlutterMethodCall
+@end
+@implementation FlutterMethodChannel
++ (instancetype)methodChannelWithName:(NSString*)name
+                      binaryMessenger:(NSObject<FlutterBinaryMessenger>*)messenger {
+  (void)name; (void)messenger; return [self new];
+}
+@end
+@interface NeoSwapPlugin (DonorRecoveryProbe)
+@property(nonatomic, strong) NSMutableArray* donorSessions;
+@property(nonatomic, strong) NSMutableArray<NSNumber*>* donorAdoptedChunks;
+@property(nonatomic, strong) NSMutableArray<NSDate*>* donorRetryAfter;
+@property(nonatomic, strong) NSMutableDictionary* donorErrors;
+@property(nonatomic, assign) uint64_t donorEpoch;
+@property(nonatomic, assign) NSInteger donorPendingIndex;
+- (void)donorChanged:(NeoSwapDonorSession*)session index:(NSUInteger)index error:(NSError*)error;
+- (NSDictionary*)snapshot:(NSString*)event;
+- (void)advanceDonors;
+@end
+@interface DonorRecoveryPlugin : NeoSwapPlugin
+@end
+@implementation DonorRecoveryPlugin
+// The harness serializes its two real sessions on the main queue and supplies
+// its bounded growth schedule. Do not launch the production eight-session loop.
+- (void)advanceDonors {}
+@end
 
 namespace {
 using namespace neostation::donation;
@@ -132,6 +163,12 @@ NSString* resultText(Result result) {
   std::vector<HeldLoan> _loans;
   NSString* _cache;
   NSDictionary* _verifiedEvidence;
+  DonorRecoveryPlugin* _plugin;
+  BOOL _unverifiedErrorRetained;
+  BOOL _lateSessionIgnored;
+  BOOL _verifiedErrorCleared;
+  BOOL _currentErrorRetained;
+  BOOL _closedErrorRetained;
 }
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)options {
   (void)application; (void)options;
@@ -179,6 +216,32 @@ NSString* resultText(Result result) {
       return YES;
     }
     [_sessions addObject:session];
+  }
+  // Deliberately allocate without the plugin's scheduler initializer: only its
+  // real donor callback and snapshot are exercised in this existing campaign.
+  _plugin = [DonorRecoveryPlugin alloc];
+  _plugin.donorSessions = _sessions;
+  _plugin.donorAdoptedChunks = [@[@0, @0] mutableCopy];
+  _plugin.donorRetryAfter = [@[NSDate.distantPast, NSDate.distantPast] mutableCopy];
+  _plugin.donorEpoch = epoch;
+  _plugin.donorPendingIndex = -1;
+  NSDictionary* priorError = @{@"domain":@"NeoSwapDonation", @"code":@3116,
+      @"description":@"Prior generation failed its ledger verification"};
+  _plugin.donorErrors = [@{@"0":priorError, @"1":priorError} mutableCopy];
+  [_plugin donorChanged:_sessions[0] index:0 error:nil];
+  _unverifiedErrorRetained = [_plugin.donorErrors[@"0"] isEqual:priorError];
+  NeoSwapDonorSession* retired = [[NeoSwapDonorSession alloc]
+      initWithHelperIdentifier:helper requestedBytes:donorTarget generation:99 timeout:15
+      observer:^(NeoSwapDonorSession* source, NeoSwapDonorSnapshot snapshot, NSError* error) {
+        (void)source; (void)snapshot; (void)error;
+      }];
+  [_plugin donorChanged:retired index:0
+      error:[NSError errorWithDomain:@"LatePriorSession" code:999 userInfo:nil]];
+  _lateSessionIgnored = [_plugin.donorErrors[@"0"] isEqual:priorError];
+  if (!_unverifiedErrorRetained || !_lateSessionIgnored) {
+    fail(@"donor_error_before_current_verification",
+         @"An unverified current session or a retired-session callback erased/replaced the prior failure", nil);
+    return YES;
   }
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
     [self->_sessions[0] start];
@@ -231,11 +294,6 @@ NSString* resultText(Result result) {
     fail(@"actual_chunk_growth_refused", @"The kernel/headroom refused the requested second real chunk", source.diagnostics);
     return;
   }
-  if (!_begun[index]) {
-    auto begun = pool_donor_begin(epoch, static_cast<uint32_t>(index), snapshot.generation, snapshot.donorPID);
-    if (!begun) { fail(@"pool_donor_begin", resultText(begun), source.diagnostics); return; }
-    _begun[index] = YES;
-  }
   const uint64_t previousChunks = _adoptedChunks[index];
   if (snapshot.verifiedChunkCount < previousChunks) {
     fail(@"chunk_count_regressed", @"A live session lost an already verified chunk", source.diagnostics);
@@ -249,26 +307,28 @@ NSString* resultText(Result result) {
       fail(@"verified_chunk_handle", @"A verified indexed chunk lacked its real bounded send right", source.diagnostics);
       return;
     }
-    auto adopted = pool_adopt_donor(epoch, static_cast<uint32_t>(index), snapshot.generation, chunk, right, bytes);
     const auto released = mach_port_deallocate(mach_task_self(), right);
-    if (!adopted || released != KERN_SUCCESS) {
-      fail(@"pool_adopt_chunk_release_right", resultText(adopted), source.diagnostics);
+    if (released != KERN_SUCCESS) {
+      fail(@"pool_chunk_release_right", @"The independent verified-chunk inspection leaked its send right", source.diagnostics);
       return;
     }
   }
-  Footprint footprint{};
-  footprint.physical = snapshot.donorFootprintBytes;
-  footprint.nonvolatile = snapshot.donorNonvolatileBytes;
-  footprint.nonvolatile_compressed = snapshot.donorCompressedBytes;
-  auto verified = pool_verify_donor(epoch, static_cast<uint32_t>(index), snapshot.generation,
-      snapshot.capacityBytes, footprint, snapshot.donatedResidentBytes, snapshot.donatedCompressedBytes);
-  if (!verified) { fail(@"pool_verify_measured_donor", resultText(verified), source.diagnostics); return; }
-  for (uint64_t chunk = previousChunks; chunk < snapshot.verifiedChunkCount; ++chunk) {
-    if (![source acknowledgeVerifiedChunk:chunk]) {
-      fail(@"acknowledge_adopted_chunk", @"The retained pool chunk could not be acknowledged", source.diagnostics);
-      return;
-    }
+  // Exercise the exact production callback against the real NSExtension, Mach
+  // rights and pool, including its adoption/ledger/acknowledgement success path.
+  [_plugin donorChanged:source index:index error:nil];
+  PoolDonorSnapshot verified{};
+  pool_donor_snapshot(static_cast<uint32_t>(index), verified);
+  if (verified.state != PoolState::verified || verified.generation != snapshot.generation ||
+      verified.pid != snapshot.donorPID || verified.prepared_bytes != snapshot.capacityBytes ||
+      verified.verified_chunks != snapshot.verifiedChunkCount ||
+      _plugin.donorAdoptedChunks[index].unsignedLongLongValue != snapshot.verifiedChunkCount ||
+      _plugin.donorErrors[[NSString stringWithFormat:@"%lu", (unsigned long)index]]) {
+    fail(@"production_plugin_verified_error_recovery",
+         @"Production adoption/verification/acknowledgement did not clear only the recovered slot", source.diagnostics);
+    return;
   }
+  _begun[index] = YES;
+  _verifiedErrorCleared = YES;
   _adoptedChunks[index] = snapshot.verifiedChunkCount;
   _samples[index] = snapshot;
   _diagnostics[index] = source.diagnostics;
@@ -312,6 +372,22 @@ NSString* resultText(Result result) {
       pool.resident_bytes != resident || pool.compressed_bytes != compressed ||
       resident > campaignTarget - compressed) {
     fail(@"real_aggregate_accounting", @"The aggregate pool did not equal the two independently measured donors", @{@"donors":_diagnostics});
+    return;
+  }
+  // A current error must stay visible even though earlier prepared pages still
+  // verify. Only the following successful current-session callback recovers it.
+  [_plugin donorChanged:_sessions[0] index:0
+      error:[NSError errorWithDomain:@"CurrentDonorCallback" code:123 userInfo:nil]];
+  _currentErrorRetained = [_plugin.donorErrors[@"0"][@"code"] isEqual:@123];
+  [_plugin donorChanged:_sessions[0] index:0 error:nil];
+  NSDictionary* recovered = [_plugin snapshot:@"verified_recovery_probe"];
+  NSArray* recoveredWorkers = recovered[@"donationWorkers"];
+  if (!_unverifiedErrorRetained || !_lateSessionIgnored || !_verifiedErrorCleared ||
+      !_currentErrorRetained || recovered[@"donationPoolError"] != NSNull.null ||
+      recoveredWorkers.count != 2 || recoveredWorkers[0][@"error"] != NSNull.null ||
+      recoveredWorkers[1][@"error"] != NSNull.null) {
+    fail(@"donor_error_recovery_diagnostics",
+         @"Current error retention or the recovered production diagnostic snapshot was incorrect", recovered);
     return;
   }
   NSMutableArray* evidence = [NSMutableArray new];
@@ -420,6 +496,13 @@ NSString* resultText(Result result) {
   return YES;
 }
 - (void)afterFirstClose {
+  _plugin.donorErrors[@"0"] = @{@"stage":@"closed_session_probe"};
+  [_plugin donorChanged:_sessions[0] index:0 error:nil];
+  _closedErrorRetained = [_plugin.donorErrors[@"0"][@"stage"] isEqual:@"closed_session_probe"];
+  if (!_closedErrorRetained) {
+    fail(@"closed_donor_error_retention", @"A closed session erased an error without current verified donor proof", nil);
+    return;
+  }
   PoolSnapshot pool{}; pool_snapshot(pool);
   PoolDonorSnapshot before{}; pool_donor_snapshot(1, before);
   if (![self retainedContents] || pool.donor_count != 1 || pool.lost_donor_count != 1 ||
@@ -499,7 +582,12 @@ NSString* resultText(Result result) {
       @"realDonationLoanBytes":@(campaignTarget), @"donationDiskBytes":@0,
       @"retainedDataAfterClose":@YES, @"newLoansBlockedAfterClose":@YES,
       @"survivingDonorNewLoanPassed":@YES, @"explicitFileFallbackPassed":@YES,
-      @"releasePassed":@YES, @"kernelMappingCleanupPassed":@YES}];
+      @"releasePassed":@YES, @"kernelMappingCleanupPassed":@YES,
+      @"unverifiedDonorErrorRetained":@(_unverifiedErrorRetained),
+      @"lateDonorSessionIgnored":@(_lateSessionIgnored),
+      @"verifiedDonorErrorCleared":@(_verifiedErrorCleared),
+      @"currentDonorErrorRetained":@(_currentErrorRetained),
+      @"closedDonorErrorRetained":@(_closedErrorRetained)}];
   finish(report);
 }
 @end
@@ -632,7 +720,8 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
     # include a canonical namespace without depending on generated pod files.
     abi = work / 'CanonicalABI'
     abi.mkdir()
-    for name in ('NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h'):
+    for name in ('NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h', 'NeoSwapPlugin.mm',
+                 'NeoSwapPlugin.h', 'NeoSwapCapacityProbe.h'):
         shutil.copyfile(HOST / name, abi / name)
     (abi / 'Donation').symlink_to(DONATION, target_is_directory=True)
     architecture = platform.machine()
@@ -641,11 +730,12 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
     common = ['xcrun', '--sdk', 'iphonesimulator', 'clang++', '-x', 'objective-c++', '-std=c++20',
               '-O1', '-g', '-fobjc-arc', '-Wall', '-Wextra', '-Werror', '-Wno-deprecated-declarations',
               '-isysroot', sdk, '-target', f'{architecture}-apple-ios18.0-simulator',
-              '-I', str(DONATION), '-I', str(abi), '-framework', 'Foundation',
+              '-I', str(DONATION), '-I', str(abi), '-I', str(ROOT / 'test/neoswap'),
+              '-framework', 'Foundation',
               '-framework', 'UIKit', '-framework', 'Security']
     host_sources = [DONATION / name for name in
                     ('Broker.cpp', 'Pool.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorIPC.mm')]
-    host_sources += [abi / 'NeoSwap.cpp', simulator_host]
+    host_sources += [abi / 'NeoSwap.cpp', abi / 'NeoSwapPlugin.mm', simulator_host]
     helper_sources = [DONATION / name for name in
                       ('Broker.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorRequestHandler.mm')]
     run(common + ['-DNEOSWAP_DONATION=1'] + list(map(str, host_sources)) + ['-o', str(app / 'NeoSwapSimulator')], timeout=120)
@@ -729,9 +819,11 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
     })
     source_files = [DONATION / name for name in ('Broker.cpp', 'Broker.h', 'Pool.cpp', 'Pool.h',
                     'NeoSwapMachHandle.mm', 'NeoSwapMachHandle.h', 'NeoSwapDonorIPC.mm', 'NeoSwapDonorIPC.h',
-                    'NeoSwapDonorRequestHandler.mm', 'NeoSwapDonorRequestHandler.h', 'Info.plist',
+                    'NeoSwapDonorRequestHandler.mm', 'NeoSwapDonorRequestHandler.h', 'DonorLedger.h', 'Info.plist',
                     'NeoSwapDonor.entitlements')]
-    source_files += [HOST / name for name in ('NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h')]
+    source_files += [HOST / name for name in ('NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h',
+                    'NeoSwapPlugin.mm', 'NeoSwapPlugin.h', 'NeoSwapCapacityProbe.h')]
+    source_files += [ROOT / 'test/neoswap/Flutter/Flutter.h']
     source_files += [Path(__file__).resolve(), ROOT / 'build-utils/configure_neoswap_donor.py']
     hashes = {str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files}
     return app, hashes
@@ -748,7 +840,9 @@ def validate_evidence(report: dict) -> None:
     if report.get('physicalIphoneValidated') is not False or report.get('realIPhoneValidated') is not False:
         raise RuntimeError('A Simulator report must not claim physical iPhone validation')
     for flag in ('retainedDataAfterClose', 'newLoansBlockedAfterClose', 'survivingDonorNewLoanPassed',
-                 'explicitFileFallbackPassed', 'releasePassed', 'kernelMappingCleanupPassed'):
+                 'explicitFileFallbackPassed', 'releasePassed', 'kernelMappingCleanupPassed',
+                 'unverifiedDonorErrorRetained', 'lateDonorSessionIgnored',
+                 'verifiedDonorErrorCleared', 'currentDonorErrorRetained', 'closedDonorErrorRetained'):
         if report.get(flag) is not True:
             raise RuntimeError(f'The actual Simulator lifecycle proof is missing {flag}')
     host_pid = report.get('hostPID')

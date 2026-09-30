@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'native/neoswap-donation'
 HOST_SOURCES = ('Broker.cpp', 'Pool.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorIPC.mm')
 DONOR_SOURCES = ('Broker.cpp', 'NeoSwapMachHandle.mm', 'NeoSwapDonorRequestHandler.mm')
-HEADERS = ('Broker.h', 'Pool.h', 'NeoSwapMachHandle.h', 'NeoSwapDonorIPC.h', 'NeoSwapDonorRequestHandler.h')
+HEADERS = ('Broker.h', 'Pool.h', 'DonorLedger.h', 'NeoSwapMachHandle.h', 'NeoSwapDonorIPC.h', 'NeoSwapDonorRequestHandler.h')
 REQUIRED_DONOR_ENTITLEMENTS = {
     'get-task-allow': True,
     'com.apple.developer.kernel.increased-memory-limit': True,

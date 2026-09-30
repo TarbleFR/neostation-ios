@@ -338,6 +338,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         }
         if (result) {
             self.donorAdoptedChunks[index] = @(adopted);
+            // A replacement Session clears the slot's old failure only after
+            // its authenticated chunks are retained, verified and acknowledged.
+            // Keep a current callback error or refused growth visible.
+            if (!failure && status.growthState != NeoSwapDonorGrowthRefused)
+                [self.donorErrors removeObjectForKey:errorKey];
             if (self.donorPendingIndex == (NSInteger)index && status.growthState == NeoSwapDonorGrowthRefused)
                 self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
             if (self.donorPendingIndex == (NSInteger)index &&

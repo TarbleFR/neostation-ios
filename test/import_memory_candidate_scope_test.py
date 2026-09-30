@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 369
+assert manifest['target_build'] == 370
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -63,6 +63,7 @@ PRODUCTION_FILES = {
     'native/neoswap/localizations.json',
     'native/neoswap-donation/Broker.cpp',
     'native/neoswap-donation/Broker.h',
+    'native/neoswap-donation/DonorLedger.h',
     'native/neoswap-donation/Info.plist',
     'native/neoswap-donation/NeoSwapDonor.entitlements',
     'native/neoswap-donation/NeoSwapDonorIPC.h',
@@ -110,6 +111,7 @@ SUPPORT_FILES = {
     'docs/dolphin-phone-shake-routing.md',
     'docs/import-memory-build368.md',
     'docs/native-updates-20260930.md',
+    'docs/neoswap-device-analysis-20260930.md',
     'docs/rpcs3-xitrix-v0101-audit.md',
     'test/check_neo_swap_scope.py',
     'test/cheat_bulk_scope_test.py',
@@ -142,6 +144,7 @@ SUPPORT_FILES = {
     'test/neoswap_demand_test.cpp',
     'test/neoswap_evidence_lifecycle_test.py',
     'test/neoswap_donor_contract_test.py',
+    'test/neoswap_donor_ledger_test.cpp',
     'test/neoswap/Flutter/Flutter.h',
     'test/neoswap_donor_simulator_test.py',
     'test/neoswap_test.cpp',
