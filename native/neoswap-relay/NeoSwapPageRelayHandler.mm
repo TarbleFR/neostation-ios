@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 #include <unistd.h>
-#include <mach/mach_vm.h>
+#include <mach/mach.h>
 
 namespace {
 constexpr uint64_t maximumSegment = 512ULL * 1024 * 1024;

@@ -8,7 +8,7 @@
 #include <cstring>
 #include <vector>
 #include <sys/mman.h>
-#include <mach/mach_vm.h>
+#include <mach/mach.h>
 #include <unistd.h>
 
 #if !defined(NEOSWAP_RELAY_EXTENSION)
@@ -17,6 +17,12 @@ constexpr uint64_t MiB = 1024 * 1024;
 NSString* const serviceName = @"com.neogamelab.neostation.relay-probe.NeoSwapPageRelay";
 NSString* reportPath;
 NSMutableDictionary* evidence;
+static_assert(sizeof(vm_address_t) == sizeof(uintptr_t),
+  "NeoSwap relay probe requires native-width vm_address_t");
+static_assert(sizeof(vm_size_t) >= sizeof(uint64_t),
+  "NeoSwap relay probe requires vm_size_t to hold 64-bit relay sizes");
+static_assert(sizeof(vm_offset_t) >= sizeof(uint64_t),
+  "NeoSwap relay probe requires vm_offset_t to hold 64-bit relay offsets");
 void saveReport() {
   NSData* data = [NSJSONSerialization dataWithJSONObject:evidence options:NSJSONWritingPrettyPrinted error:nil];
   if (reportPath && ![data writeToFile:reportPath atomically:YES]) std::fprintf(stderr, "FAIL: evidence write failed\n");
@@ -32,13 +38,13 @@ uint64_t pattern(uint64_t offset, uint64_t segment) {
   x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
   return x ^ (x >> 31);
 }
-void requireReservation(mach_vm_address_t target, mach_vm_size_t bytes) {
-  mach_vm_address_t region = target;
-  mach_vm_size_t size = 0;
+void requireReservation(vm_address_t target, vm_size_t bytes) {
+  vm_address_t region = target;
+  vm_size_t size = 0;
   vm_region_basic_info_data_64_t info{};
   mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
   mach_port_t object = MACH_PORT_NULL;
-  const kern_return_t result = mach_vm_region(mach_task_self(), &region, &size,
+  const kern_return_t result = vm_region_64(mach_task_self(), &region, &size,
     VM_REGION_BASIC_INFO_64, reinterpret_cast<vm_region_info_t>(&info), &count, &object);
   if (object != MACH_PORT_NULL)
     require(mach_port_deallocate(mach_task_self(), object) == KERN_SUCCESS, "Region query right cleanup failed");
@@ -50,8 +56,9 @@ void requireReservation(mach_vm_address_t target, mach_vm_size_t bytes) {
 }
 void checkFixedReservation(const NeoSwapRelayAPI* api) {
   constexpr uint64_t bytes = NEOSWAP_RELAY_ALIGNMENT;
-  mach_vm_address_t reservation = 0;
-  require(mach_vm_map(mach_task_self(), &reservation, bytes, bytes - 1, VM_FLAGS_ANYWHERE,
+  vm_address_t reservation = 0;
+  require(vm_map(mach_task_self(), &reservation, static_cast<vm_size_t>(bytes),
+    static_cast<vm_address_t>(bytes - 1), VM_FLAGS_ANYWHERE,
     MEMORY_OBJECT_NULL, 0, FALSE, VM_PROT_NONE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE) == KERN_SUCCESS,
     "Guest PROT_NONE reservation could not be created");
   requireReservation(reservation, bytes);
@@ -62,25 +69,27 @@ void checkFixedReservation(const NeoSwapRelayAPI* api) {
   require(mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &nonMemoryPort) == KERN_SUCCESS &&
     mach_port_insert_right(mach_task_self(), nonMemoryPort, nonMemoryPort, MACH_MSG_TYPE_MAKE_SEND) == KERN_SUCCESS,
     "Negative fixed-map test could not create a non-memory Mach right");
-  mach_vm_address_t invalidTarget = reservation;
-  const auto invalidMap = mach_vm_map(mach_task_self(), &invalidTarget, bytes, 0,
+  vm_address_t invalidTarget = reservation;
+  const auto invalidMap = vm_map(mach_task_self(), &invalidTarget, static_cast<vm_size_t>(bytes), 0,
     VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, nonMemoryPort, 0, FALSE,
     VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
   require(invalidMap != KERN_SUCCESS, "A non-memory Mach right unexpectedly produced a fixed mapping");
   requireReservation(reservation, bytes);
-  require(mach_port_destroy(mach_task_self(), nonMemoryPort) == KERN_SUCCESS,
-    "Negative fixed-map Mach right cleanup failed");
+  require(mach_port_deallocate(mach_task_self(), nonMemoryPort) == KERN_SUCCESS,
+    "Negative fixed-map Mach send right cleanup failed");
+  require(mach_port_mod_refs(mach_task_self(), nonMemoryPort, MACH_PORT_RIGHT_RECEIVE, -1) == KERN_SUCCESS,
+    "Negative fixed-map Mach receive right cleanup failed");
   uint64_t token = 0;
   void* view = nullptr;
   require(api->create(0, bytes, &token) == 0 &&
     api->map(token, reinterpret_cast<void*>(reservation), NEOSWAP_RELAY_READ_WRITE, &view) == 0 &&
-    reinterpret_cast<mach_vm_address_t>(view) == reservation,
+    reinterpret_cast<vm_address_t>(view) == reservation,
     "Relay did not map into the reserved guest address");
   std::memset(view, 0x6b, bytes);
   require(api->unmap(token, view) == 0, "Fixed relay alias replacement failed");
   requireReservation(reservation, bytes);
   require(api->release(token) == 0, "Fixed relay token retirement failed");
-  require(mach_vm_deallocate(mach_task_self(), reservation, bytes) == KERN_SUCCESS,
+  require(vm_deallocate(mach_task_self(), reservation, static_cast<vm_size_t>(bytes)) == KERN_SUCCESS,
     "Caller could not release its preserved guest reservation");
   evidence[@"fixedReservationPreserved"] = @YES;
   evidence[@"failedFixedMapPreservedReservation"] = @YES;

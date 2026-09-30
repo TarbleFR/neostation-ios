@@ -15,7 +15,6 @@
 #include "../neoswap-donation/Broker.h"
 #endif
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
 #include <sys/mman.h>
 #endif
 
@@ -427,26 +426,35 @@ int Backend::shutdown() noexcept {
 
 namespace {
 #if defined(__APPLE__)
+static_assert(sizeof(vm_address_t) == sizeof(std::uintptr_t),
+    "NeoSwap relay requires native-width vm_address_t");
+static_assert(sizeof(vm_size_t) >= sizeof(std::uint64_t),
+    "NeoSwap relay requires vm_size_t to hold 64-bit relay sizes");
+static_assert(sizeof(vm_offset_t) >= sizeof(std::uint64_t),
+    "NeoSwap relay requires vm_offset_t to hold 64-bit relay offsets");
+
 int retain(void*, std::uint32_t entry) {
     return mach_port_mod_refs(mach_task_self(), entry, MACH_PORT_RIGHT_SEND, 1);
 }
 int drop(void*, std::uint32_t entry) { return mach_port_deallocate(mach_task_self(), entry); }
 int map_pages(void*, std::uint32_t entry, std::uint64_t offset, std::uint64_t bytes,
               std::uintptr_t target, std::uint32_t protection, std::uintptr_t* mapped) {
-    mach_vm_address_t address = target;
-    const auto result = mach_vm_map(mach_task_self(), &address, bytes,
-        target ? 0 : alignment - 1, target ? VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE : VM_FLAGS_ANYWHERE,
-        entry, offset, FALSE, static_cast<vm_prot_t>(protection), VM_PROT_READ | VM_PROT_WRITE,
-        VM_INHERIT_NONE);
+    vm_address_t address = static_cast<vm_address_t>(target);
+    const auto result = vm_map(mach_task_self(), &address, static_cast<vm_size_t>(bytes),
+        target ? 0 : static_cast<vm_address_t>(alignment - 1),
+        target ? VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE : VM_FLAGS_ANYWHERE, entry,
+        static_cast<vm_offset_t>(offset), FALSE, static_cast<vm_prot_t>(protection),
+        VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
     if (result == KERN_SUCCESS) *mapped = static_cast<std::uintptr_t>(address);
     return result;
 }
 int unmap_pages(void*, std::uintptr_t address, std::uint64_t bytes, bool fixed) {
-    if (!fixed) return mach_vm_deallocate(mach_task_self(), address, bytes);
-    mach_vm_address_t destination = address;
+    if (!fixed) return vm_deallocate(mach_task_self(), static_cast<vm_address_t>(address),
+        static_cast<vm_size_t>(bytes));
+    vm_address_t destination = static_cast<vm_address_t>(address);
     // One atomic replacement preserves ownership of the reserved address even
     // if another thread allocates VM regions concurrently with guest teardown.
-    return mach_vm_map(mach_task_self(), &destination, bytes, 0,
+    return vm_map(mach_task_self(), &destination, static_cast<vm_size_t>(bytes), 0,
         VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, MEMORY_OBJECT_NULL, 0, FALSE,
         VM_PROT_NONE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
 }
