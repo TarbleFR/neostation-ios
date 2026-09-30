@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+NS_ASSUME_NONNULL_BEGIN
 typedef void (^FlutterResult)(id _Nullable result);
 FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
 @protocol FlutterBinaryMessenger <NSObject>
@@ -6,7 +7,7 @@ FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
 @class FlutterMethodChannel;
 @interface FlutterMethodCall : NSObject
 @property(nonatomic,copy) NSString* method;
-@property(nonatomic,strong) id arguments;
+@property(nonatomic,strong) id _Nullable arguments;
 @end
 @protocol FlutterPluginRegistrar <NSObject>
 @property(nonatomic,readonly) NSObject<FlutterBinaryMessenger>* messenger;
@@ -19,3 +20,4 @@ FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
 @interface FlutterMethodChannel : NSObject
 + (instancetype)methodChannelWithName:(NSString*)name binaryMessenger:(NSObject<FlutterBinaryMessenger>*)messenger;
 @end
+NS_ASSUME_NONNULL_END

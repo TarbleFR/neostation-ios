@@ -114,10 +114,20 @@ mach_port_t receive_port() {
   if (mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &port) != KERN_SUCCESS)
     return MACH_PORT_NULL;
   if (mach_port_insert_right(mach_task_self(), port, port, MACH_MSG_TYPE_MAKE_SEND) != KERN_SUCCESS) {
-    mach_port_destroy(mach_task_self(), port);
+    check(mach_port_mod_refs(mach_task_self(), port, MACH_PORT_RIGHT_RECEIVE, -1) == KERN_SUCCESS,
+          "release receive right after failed send insertion");
     return MACH_PORT_NULL;
   }
   return port;
+}
+bool release_receive_port(mach_port_t port) {
+  // This test owns exactly one receive right and one local send uref, created
+  // by receive_port(). Release those rights explicitly; never destroy all
+  // rights associated with an arbitrary/recycled task-local port name.
+  if (!check(mach_port_deallocate(mach_task_self(), port) == KERN_SUCCESS,
+             "release owned receive-port send right")) return false;
+  return check(mach_port_mod_refs(mach_task_self(), port, MACH_PORT_RIGHT_RECEIVE, -1) == KERN_SUCCESS,
+               "release owned receive right");
 }
 
 int donor() {
@@ -164,8 +174,9 @@ int donor() {
         !send(host, response)) return 1;
     if (request.phase == disconnect) break;
   }
-  mach_port_destroy(mach_task_self(), control);
-  mach_port_deallocate(mach_task_self(), host);
+  if (!release_receive_port(control) ||
+      !check(mach_port_deallocate(mach_task_self(), host) == KERN_SUCCESS,
+             "release donor host send right")) return 1;
   return check(block.reset(), "donor release own mapping") ? 0 : 1;
 }
 
@@ -317,8 +328,8 @@ bool scenario(std::uint64_t generation, bool abrupt) {
     int status = 0;
     waitpid(child, &status, 0);
   }
-  mach_port_destroy(mach_task_self(), host);
-  return success;
+  const bool closed = release_receive_port(host);
+  return success && closed;
 }
 }  // namespace
 

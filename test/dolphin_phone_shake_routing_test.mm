@@ -24,7 +24,7 @@ extern "C" int32_t neostation_dolphin_menu_apply(const char* text) {
   assert(dispatch_get_specific(&s_runtimeMarker) == &s_runtimeMarker);
   NSDictionary* request = [NSJSONSerialization JSONObjectWithData:[[NSString stringWithUTF8String:text] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
   assert([request[@"kind"] isEqual:@"binding"] && [request[@"wii"] boolValue] && [request[@"slot"] intValue] == 0);
-  assert([@[@"Shake/X", @"Shake/Y", @"Shake/Z"] containsObject:request[@"id"]]);
+  assert(([@[@"Shake/X", @"Shake/Y", @"Shake/Z"] containsObject:request[@"id"]]));
   [s_requests addObject:request];
   if (s_failApply > 0 && --s_failApply == 0) return 0;
   for (NSMutableDictionary* control in s_snapshot[@"controls"])

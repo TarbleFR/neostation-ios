@@ -42,14 +42,19 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     using Copy = CFTypeRef (*)(CFTypeRef, CFStringRef, CFErrorRef*);
     auto create = reinterpret_cast<Create>(dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf"));
     auto copy = reinterpret_cast<Copy>(dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement"));
-    NSArray* keys = @[@"get-task-allow", @"com.apple.developer.kernel.increased-memory-limit",
+    NSArray* keys = @[@"get-task-allow", @"com.apple.developer.kernel.extended-virtual-addressing",
+                      @"com.apple.developer.kernel.increased-memory-limit",
                       @"com.apple.developer.kernel.increased-debugging-memory-limit"];
     NSMutableDictionary* result = [NSMutableDictionary new];
     CFTypeRef task = create ? create(kCFAllocatorDefault) : nullptr;
     for (NSString* key in keys) {
         CFErrorRef error = nullptr;
         CFTypeRef value = task && copy ? copy(task, (__bridge CFStringRef)key, &error) : nullptr;
-        result[key] = value ? CFBridgingRelease(value) : (task && copy && !error ? @NO : NSNull.null);
+        if (value) {
+            result[key] = CFGetTypeID(value) == CFBooleanGetTypeID()
+                ? @((BOOL)CFBooleanGetValue((CFBooleanRef)value)) : NSNull.null;
+            CFRelease(value);
+        } else result[key] = task && copy && !error ? @NO : NSNull.null;
         if (error) CFRelease(error);
     }
     if (task) CFRelease(task);
