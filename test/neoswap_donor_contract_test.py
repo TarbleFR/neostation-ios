@@ -139,7 +139,7 @@ def packaged_helpers(root):
             info['MinimumOSVersion'] = '17.4'
             info['NSExtension']['NSExtensionAttributes'] = {'NSExtensionActivationRule': 'FALSEPREDICATE'}
             info['NSExtension']['NSExtensionPointIdentifier'] = 'com.apple.ar.viewer'
-            info['NSExtension']['NSExtensionContextClass'] = 'NSExtensionContext'
+            info['NSExtension']['NSExtensionContextClass'] = 'NeoSwapDonorContext'
             info['NSExtension']['NSExtensionContextHostClass'] = 'NSExtensionContext'
             info['XPCService'] = {'ServiceType': 'Application', '_ProcessType': 'App', '_MultipleInstances': True}
         (folder / 'Info.plist').write_bytes(plistlib.dumps(info))
@@ -161,7 +161,7 @@ class DonorContractTests(unittest.TestCase):
         extension = info['NSExtension']
         self.assertEqual(extension['NSExtensionPrincipalClass'], 'NeoSwapDonorRequestHandler')
         self.assertEqual(extension['NSExtensionPointIdentifier'], 'com.apple.ar.viewer')
-        self.assertEqual(extension['NSExtensionContextClass'], 'NSExtensionContext')
+        self.assertEqual(extension['NSExtensionContextClass'], 'NeoSwapDonorContext')
         self.assertEqual(extension['NSExtensionContextHostClass'], 'NSExtensionContext')
         self.assertEqual(info['XPCService'], {
             'ServiceType': 'Application', '_ProcessType': 'App', '_MultipleInstances': True})
@@ -330,6 +330,20 @@ class DonorContractTests(unittest.TestCase):
                     info['XPCService'] = invalid
                 path.write_bytes(plistlib.dumps(info))
                 with self.assertRaisesRegex(rpcs3.ValidationError, 'multiple-instance metadata'):
+                    rpcs3.validate_helper_bundles(app, host)
+
+    def test_rpcs3_validator_rejects_unconfigured_donor_context(self):
+        # The base NSExtensionContext has nil auxiliary interfaces. It cannot
+        # accept the listener endpoint used by the production donor launch.
+        import validate_rpcs3_ipa as rpcs3
+        for invalid in ('NSExtensionContext', 'ForeignContext', ''):
+            with self.subTest(context=invalid), tempfile.TemporaryDirectory() as directory:
+                app, host = packaged_helpers(Path(directory))
+                path = app / 'PlugIns/NeoSwapDonor.appex/Info.plist'
+                info = plistlib.loads(path.read_bytes())
+                info['NSExtension']['NSExtensionContextClass'] = invalid
+                path.write_bytes(plistlib.dumps(info))
+                with self.assertRaisesRegex(rpcs3.ValidationError, 'NSExtensionContextClass'):
                     rpcs3.validate_helper_bundles(app, host)
 
     def test_rpcs3_validator_rejects_extra_or_misplaced_donor_attributes(self):

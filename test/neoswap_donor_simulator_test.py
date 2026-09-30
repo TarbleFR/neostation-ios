@@ -93,7 +93,7 @@ NSString* ownedHelper() {
         ![[bundle objectForInfoDictionaryKey:@"NeoStationNeoSwapDonorIndex"] isEqual:@"0"] ||
         ![extension[@"NSExtensionPointIdentifier"] isEqual:@"com.apple.ar.viewer"] ||
         ![extension[@"NSExtensionPrincipalClass"] isEqual:@"NeoSwapDonorRequestHandler"] ||
-        ![extension[@"NSExtensionContextClass"] isEqual:@"NSExtensionContext"] ||
+        ![extension[@"NSExtensionContextClass"] isEqual:@"NeoSwapDonorContext"] ||
         ![extension[@"NSExtensionContextHostClass"] isEqual:@"NSExtensionContext"] ||
         ![service isEqual:expectedService] || ![bundle.bundleIdentifier isEqual:identifier]) return nil;
     found = identifier;
@@ -632,7 +632,7 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
         service = helper_info.get('XPCService')
         expected_service = {'ServiceType':'Application', '_MultipleInstances':True, '_ProcessType':'App'}
         if (not isinstance(metadata, dict) or metadata.get('NSExtensionPointIdentifier') != 'com.apple.ar.viewer' or
-                metadata.get('NSExtensionContextClass') != 'NSExtensionContext' or
+                metadata.get('NSExtensionContextClass') != 'NeoSwapDonorContext' or
                 metadata.get('NSExtensionContextHostClass') != 'NSExtensionContext' or
                 not isinstance(service, dict) or service != expected_service or
                 service.get('_MultipleInstances') is not True):

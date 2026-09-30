@@ -19,7 +19,7 @@
     </dict>
     <key>NSExtensionPointIdentifier</key><string>com.apple.ar.viewer</string>
     <key>NSExtensionPrincipalClass</key><string>NeoSwapDonorRequestHandler</string>
-    <key>NSExtensionContextClass</key><string>NSExtensionContext</string>
+    <key>NSExtensionContextClass</key><string>NeoSwapDonorContext</string>
     <key>NSExtensionContextHostClass</key><string>NSExtensionContext</string>
   </dict>
   <key>XPCService</key><dict>

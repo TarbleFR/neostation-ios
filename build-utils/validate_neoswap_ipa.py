@@ -42,7 +42,7 @@ with zipfile.ZipFile(a.ipa) as z, tempfile.TemporaryDirectory() as tmp:
         assert donor_info['CFBundleIdentifier']==info['CFBundleIdentifier']+contract['bundleSuffix'],bundle
         extension=donor_info['NSExtension']
         assert extension['NSExtensionPointIdentifier']=='com.apple.ar.viewer',bundle
-        assert extension['NSExtensionContextClass']=='NSExtensionContext',bundle
+        assert extension['NSExtensionContextClass']=='NeoSwapDonorContext',bundle
         assert extension['NSExtensionContextHostClass']=='NSExtensionContext',bundle
         assert donor_info['XPCService']=={'ServiceType':'Application','_MultipleInstances':True,'_ProcessType':'App'},bundle
         assert donor_info['XPCService']['_MultipleInstances'] is True,bundle

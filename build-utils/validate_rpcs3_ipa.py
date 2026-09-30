@@ -291,8 +291,9 @@ def validate_helper_bundles(app: Path, info: dict, archive_root: Path | None = N
             demand(isinstance(service, dict) and service == DONOR_XPC_SERVICE
                    and service.get('_MultipleInstances') is True,
                    f'{extension.name} donor multiple-instance metadata is inconsistent')
-            for key in ('NSExtensionContextClass', 'NSExtensionContextHostClass'):
-                demand(extension_metadata.get(key) == 'NSExtensionContext',
+            for key, expected in (('NSExtensionContextClass', 'NeoSwapDonorContext'),
+                                  ('NSExtensionContextHostClass', 'NSExtensionContext')):
+                demand(extension_metadata.get(key) == expected,
                        f'{extension.name} donor {key} is inconsistent')
             require_entitlements(capabilities, REQUIRED_DONOR_ENTITLEMENTS, extension.name)
             demand(set(capabilities) == set(REQUIRED_DONOR_ENTITLEMENTS),

@@ -219,8 +219,9 @@ def validate(ipa: Path) -> dict:
                 demand(isinstance(service, dict) and service == DONOR_XPC_SERVICE and
                        service.get('_MultipleInstances') is True,
                        f'{extension.name} multiple-instance metadata is inconsistent')
-                for key in ('NSExtensionContextClass', 'NSExtensionContextHostClass'):
-                    demand(metadata.get(key) == 'NSExtensionContext',
+                for key, expected in (('NSExtensionContextClass', 'NeoSwapDonorContext'),
+                                  ('NSExtensionContextHostClass', 'NSExtensionContext')):
+                    demand(metadata.get(key) == expected,
                            f'{extension.name} {key} is inconsistent')
                 attributes = metadata.get('NSExtensionAttributes', {})
                 demand(isinstance(attributes, dict) and

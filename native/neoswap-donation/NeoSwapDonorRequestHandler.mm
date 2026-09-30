@@ -3,6 +3,7 @@
 #include "Broker.h"
 
 #import <objc/message.h>
+#import <objc/runtime.h>
 #include <dlfcn.h>
 #include <cstring>
 #include <memory>
@@ -64,6 +65,15 @@ NSDictionary* effectiveEntitlements() {
 }
 }
 
+@implementation NeoSwapDonorContext
++ (NSXPCInterface*)_extensionAuxiliaryHostProtocol {
+  return NeoSwapDonorHostInterface();
+}
++ (NSXPCInterface*)_extensionAuxiliaryVendorProtocol {
+  return [NSXPCInterface interfaceWithProtocol:@protocol(NeoSwapDonorVendorProtocol)];
+}
+@end
+
 @implementation NeoSwapDonorRequestHandler {
   dispatch_queue_t _queue;
   dispatch_source_t _heartbeat;
@@ -116,6 +126,17 @@ NSDictionary* effectiveEntitlements() {
     id connection = reinterpret_cast<Get>(objc_msgSend)(context, getConnection);
     if (![connection isKindOfClass:NSXPCConnection.class]) {
       [context cancelRequestWithError:error(@"NSExtension did not supply an auxiliary XPC connection")];
+      self->_context = nil;
+      self->_closed = YES;
+      return;
+    }
+    NSXPCConnection* auxiliary = connection;
+    Protocol* hostProtocol = auxiliary.remoteObjectInterface.protocol;
+    Protocol* vendorProtocol = auxiliary.exportedInterface.protocol;
+    if (![context isKindOfClass:NeoSwapDonorContext.class] || !hostProtocol || !vendorProtocol ||
+        !protocol_conformsToProtocol(hostProtocol, @protocol(NeoSwapDonorHostProtocol)) ||
+        !protocol_isEqual(vendorProtocol, @protocol(NeoSwapDonorVendorProtocol))) {
+      [context cancelRequestWithError:error(@"Donor auxiliary interfaces were not configured before the request")];
       self->_context = nil;
       self->_closed = YES;
       return;

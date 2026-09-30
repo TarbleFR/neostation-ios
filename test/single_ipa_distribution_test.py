@@ -114,7 +114,7 @@ def complete_ipa_members() -> dict[str, bytes]:
         if name in DONOR_IDENTITIES:
             info['NeoStationNeoSwapDonorIndex'] = contract['index']
             info['XPCService'] = dict(DONOR_SERVICE)
-            info['NSExtension'].update(NSExtensionContextClass='NSExtensionContext',
+            info['NSExtension'].update(NSExtensionContextClass='NeoSwapDonorContext',
                                        NSExtensionContextHostClass='NSExtensionContext')
         prefix = APP + 'PlugIns/' + name + '/'
         members[prefix + 'Info.plist'] = plistlib.dumps(info)
