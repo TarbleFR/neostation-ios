@@ -33,6 +33,7 @@ static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
 static const uint64_t kDonationPrimaryChunkBytes = 512 * kMiB;
 static const uint64_t kDonationFallbackChunkBytes = 256 * kMiB;
 static const NSUInteger kDonationConcurrentGrowths = 2;
+static const NSUInteger kDonationWarmDonorCount = 2;
 
 @interface NeoSwapPlugin ()
 @property(nonatomic, strong) dispatch_queue_t queue;
@@ -329,13 +330,17 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     if (!self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
     (void)neostation::donation::pool_collect_lost();
 
-    while (self.donorLaunchIndex < 8 && self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
+    // Two helpers are enough to establish the warm floor quickly. Additional
+    // donor processes are started only when the active pair cannot satisfy a
+    // real RPCS3 demand or the adaptive target.
+    while (self.donorLaunchIndex < kDonationWarmDonorCount &&
+           self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
         const uint64_t budget = [self nextDonationBudget];
         if (!budget) return;
         const NSUInteger index = self.donorLaunchIndex++;
         [self launchDonor:index budget:budget];
     }
-    if (self.donorLaunchIndex < 8 || self.donorPendingIndexes.count) return;
+    if (self.donorPendingIndexes.count) return;
 
     for (NSUInteger index = 0; index < 8 && self.donorPendingIndexes.count < kDonationConcurrentGrowths; ++index) {
         id object = self.donorSessions[index];
@@ -388,6 +393,14 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                 return;
             }
         }
+        if (self.donorLaunchIndex < 8 &&
+            self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
+            const uint64_t launchBudget = [self nextDonationBudget];
+            if (launchBudget) {
+                const NSUInteger index = self.donorLaunchIndex++;
+                [self launchDonor:index budget:launchBudget];
+            }
+        }
         return;
     }
 
@@ -435,7 +448,14 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                 bestHeadroom = status.donorHeadroomBytes;
             }
         }
-        if (chosen == NSNotFound) break;
+        if (chosen == NSNotFound) {
+            if (self.donorLaunchIndex < 8 &&
+                self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
+                const NSUInteger index = self.donorLaunchIndex++;
+                [self launchDonor:index budget:budget];
+            }
+            break;
+        }
         self.donorCursor = (chosen + 1) % 8;
         NeoSwapDonorSession* session = self.donorSessions[chosen];
         if (![session requestNextChunkWithMaximumBytes:requested]) {
