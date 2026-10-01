@@ -191,8 +191,10 @@ class DonorContractTests(unittest.TestCase):
                         bridge.index('NeoSwap_RegisterClient(NEOSWAP_RPCS3)'))
         self.assertIn('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1)', bridge)
         self.assertIn('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0)', bridge)
-        self.assertLess(bridge.index('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1)'),
-                        bridge.index('self->_api.boot_game(titleId.UTF8String'))
+        launch = bridge.split('if ([call.method isEqualToString:@"launchGame"])', 1)[1].split(
+            'if ([call.method isEqualToString:@"isSessionActive"])', 1)[0]
+        self.assertLess(launch.index('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1)'),
+                        launch.index('self->_api.boot_game(titleId.UTF8String'))
         self.assertIn('NeoSwap_SetOwnerSessionActive', host)
         self.assertIn('NeoSwap_OwnerSessionActive', host)
         self.assertIn('NeoSwap_WaitForDonationReady', host)
