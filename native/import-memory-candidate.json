@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 375,
+  "target_build": 376,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -33,7 +33,8 @@
     "Build372: MIT Guest Page Relay adaptation with authenticated named-memory transport and observed creator exit, 8GiB requested capacity from sixteen 512MiB named objects, shared backing tokens and coherent aliases, bounded cleanup, pressure handling and normal allocation fallback; separate relay ABI v1 and fifth embedded extension; RPCS3 guest data integrated explicitly while native executable JIT pages and other emulator cores remain unchanged; capacity is never reported as resident RAM and physical-iPhone/gameplay remains unvalidated",
     "Build373: reviewed iPhone SDK public native-width vm_* APIs and explicit Mach right cleanup; unchanged relay capacity/lifetime/fallback and all Core inputs; improved real-kernel residency observability with the original 1GiB/1MiB tolerance unchanged; independent mandatory Simulator proof, exact candidate hash lock, new private encryption recipient and correctly numbered test package; no physical-iPhone or gameplay validation claim",
     "Build374: donor growth watchdog distinguishes an in-progress authenticated chunk proof from an idle heartbeat; 8GiB stress keeps the existing per-chunk verification and 60s chunk deadline instead of aborting after six seconds during high-memory verification; Core inputs, relay ABI, quotas and fallback remain unchanged; physical-iPhone/gameplay validation remains pending",
-    "Build375: canonical 1GiB Vulkan provenance keeps every unchanged donor/runtime source pinned to abc9566 and separately pins the exact reviewed Build374 NeoSwapDonorIPC watchdog SHA-256 plus candidate manifest identity; no Vulkan, allocator, relay, Core or gameplay behavior is relaxed"
+    "Build375: canonical 1GiB Vulkan provenance keeps every unchanged donor/runtime source pinned to abc9566 and separately pins the exact reviewed Build374 NeoSwapDonorIPC watchdog SHA-256 plus candidate manifest identity; no Vulkan, allocator, relay, Core or gameplay behavior is relaxed",
+    "Build376: relay CI artifacts replace the prior same-name artifact on workflow reruns so IPA evidence always consumes the successful current attempt; source identity, Simulator behavior, relay capacity, donor runtime, Vulkan path and Core inputs remain unchanged"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -43,8 +44,8 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
     ".github/workflows/neoswap-donation-check.yml": "996c4f70a09243d0a13ffdd1f34f1d7e911adea5036cceb4faa82a7134c62f2e",
-    ".github/workflows/neoswap-ipa.yml": "7379503f523ae22f042948d1050c8730b9bfb249859bb6e33db2ac55f7347056",
-    ".github/workflows/neoswap-relay-check.yml": "e0ba4a7777e5f02114ee32e04d45875e7e90185968d014b6bd3814ac85958ddc",
+    ".github/workflows/neoswap-ipa.yml": "17bf890a8cd6755a6beb3eb69ace0b26a5b7873e5b3068910f5415088e8f21f7",
+    ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "268ea21c1a8b2f238d39ff921af577922643c1a07288c4e103ec8b96a64d883f",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
     ".github/workflows/rpcs3-core.yml": "3f772317a8893b6dd605058e5043f4de938ce5fb07298b27cf77c2bb84c4391d",
@@ -299,7 +300,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "4fd30423b7890c5c7eabe0b4c2ca2820755a5c908bfecaff54c3cb90ebe11ecb",
+    "test/import_memory_candidate_scope_test.py": "f1f48849108ab7187283c5f8f59a43155b2d1d9baab681750625535c8391fdba",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -322,7 +323,7 @@
     "test/neoswap_donor_ledger_test.cpp": "2899342436c91dc26f6336e7786f08b1e25d522e105ff6a8301fbeff3fca713d",
     "test/neoswap_donor_simulator_test.py": "7638244788b66877fa4743bd22ca47ea8e7ca3ddeb183373082415fafbff12fc",
     "test/neoswap_evidence_lifecycle_test.py": "f444c00496fb60095e7d467d16c05256863f228c61b1036edf48bac3ad05fbdd",
-    "test/neoswap_relay_extension_test.py": "75641cfffe5510fe424f55e78b97704debda5f233e9e600247bdc52f8871b41f",
+    "test/neoswap_relay_extension_test.py": "4ddd6047066da01abb902c7e4c688b9f01db8b0827fc7dafea05d571bcf19fc9",
     "test/neoswap_relay_simulator_test.py": "244f58524ab28a3bfde165429fcd5c8b4ef48e8a7c21025b047a1f0eb4ccee8e",
     "test/neoswap_test.cpp": "2237bbff640259d2e7a3b1cd29ff1c95da87ce783eae369afea1c34503f55f02",
     "test/neoswap_usage_policy_test.cpp": "5bb0d65e227f4fdb265e3991533d36248bec96f0099c9763e3a82d41d2c086b3",

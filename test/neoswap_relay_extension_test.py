@@ -179,6 +179,13 @@ def _assert_backend_vm_width_asserts(testcase: unittest.TestCase, backend: str) 
 
 
 class RelayExtensionTests(unittest.TestCase):
+    def test_relay_reruns_replace_same_name_evidence_artifacts(self):
+        workflow = (ROOT / '.github/workflows/neoswap-relay-check.yml').read_text()
+        for artifact in ('NeoSwap-Source-${{ github.sha }}', 'NeoSwap-Relay-${{ github.sha }}'):
+            start = workflow.index('name: ' + artifact)
+            block = workflow[start:start + 450]
+            self.assertIn('overwrite: true', block, artifact)
+
     def test_public_vm_api_guard_cases(self):
         allowed = {
             'comments': '''
