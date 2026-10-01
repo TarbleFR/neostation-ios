@@ -556,6 +556,24 @@ extern "C" int NeoSwap_OwnerSessionActive(uint32_t owner) {
     if (owner >= NEOSWAP_OWNER_COUNT) return 0;
     return (broker().active_session_mask.load(std::memory_order_acquire) & (1u << owner)) ? 1 : 0;
 }
+extern "C" int NeoSwap_WaitForDonationReady(uint64_t minimum_bytes, uint32_t timeout_ms) {
+#if defined(NEOSWAP_DONATION)
+    if (!minimum_bytes || minimum_bytes > 8ULL * 1024 * MiB) return NEOSWAP_INVALID;
+    if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return NEOSWAP_DISABLED;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    for (;;) {
+        neostation::donation::PoolSnapshot pool{};
+        neostation::donation::pool_snapshot(pool);
+        if (pool.state == neostation::donation::PoolState::verified &&
+            pool.prepared_bytes >= minimum_bytes) return NEOSWAP_OK;
+        if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return NEOSWAP_DISABLED;
+        if (!timeout_ms || std::chrono::steady_clock::now() >= deadline) return NEOSWAP_BUSY;
+        ::usleep(20 * 1000);
+    }
+#else
+    (void)minimum_bytes; (void)timeout_ms; return NEOSWAP_DISABLED;
+#endif
+}
 extern "C" int NeoSwap_ClaimDonationDemand(NeoSwapDonationDemand* out) {
     if (!out) return NEOSWAP_INVALID;
     *out = {};
