@@ -37,7 +37,8 @@
     "Build376: relay CI artifacts replace the prior same-name artifact on workflow reruns so IPA evidence always consumes the successful current attempt; source identity, Simulator behavior, relay capacity, donor runtime, Vulkan path and Core inputs remain unchanged",
     "Build378: delivery-only correction; the validated NeoStation IPA is copied unchanged into the private Actions artifact as NeoStation.ipa, the artifact guard requires exactly one raw IPA, and the same SHA-256, validations, runtime, cores and no-public-release policy are preserved",
     "Build379: fix the on-device NeoSwap hookup observed in Build378: RPCS3 waits up to 10s for the retained 8GiB guest relay and refuses Core initialization instead of silently committing guest shared memory to file fallback; donor helpers prewarm a measured 1GiB backing floor in bounded 128MiB chunks subject to real system headroom/pressure, then grow further on actual RPCS3 demand; game-time diagnostics expose relay live/object/alias bytes; no virtual capacity is relabeled as resident RAM",
-    "Build380: preserve the Build379 RPCS3 relay and measured 1GiB donor-floor runtime unchanged; make all donation evidence uploads replace same-name artifacts on workflow reruns so IPA packaging cannot consume stale failed Simulator/stress reports; direct raw IPA delivery remains enabled"
+    "Build380: preserve the Build379 RPCS3 relay and measured 1GiB donor-floor runtime unchanged; make all donation evidence uploads replace same-name artifacts on workflow reruns so IPA packaging cannot consume stale failed Simulator/stress reports; direct raw IPA delivery remains enabled",
+    "Build380 manifest correction: recompute the NeoSwap IPA workflow SHA-256 over UTF-8 bytes so the explicit candidate hash lock matches the workflow containing the bullet character; runtime and delivery behavior are unchanged"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -47,7 +48,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
     ".github/workflows/neoswap-donation-check.yml": "0f59c04f34dccda1ec6c8de06df7b3443453e37fa923fb489e5610607360497a",
-    ".github/workflows/neoswap-ipa.yml": "f028cba50892a3284f5fe95ebd523ea87e11245b09d14adb17a125db7ebafd65",
+    ".github/workflows/neoswap-ipa.yml": "82eea8bbbb759685de1af16bef453818fdedd5e269dee070da9c60a0b07fc12f",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "268ea21c1a8b2f238d39ff921af577922643c1a07288c4e103ec8b96a64d883f",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
