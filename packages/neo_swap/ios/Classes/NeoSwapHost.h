@@ -38,6 +38,11 @@ NEOSWAP_PUBLIC int NeoSwap_StorageSnapshot(NeoSwapHostStats* stats);
 // newly verified block is adopted/acknowledged; later requests stay queued.
 NEOSWAP_PUBLIC int NeoSwap_ClaimDonationDemand(NeoSwapDonationDemand* demand);
 NEOSWAP_PUBLIC int NeoSwap_AcknowledgeDonationDemand(uint64_t sequence);
+// Host-only lifecycle signal. It does not change allocator ABI v1; the donor
+// manager uses it to warm while an emulator session is active and retire
+// verified pages once that session has fully released its loans.
+NEOSWAP_PUBLIC int NeoSwap_SetOwnerSessionActive(uint32_t owner, int active);
+NEOSWAP_PUBLIC int NeoSwap_OwnerSessionActive(uint32_t owner);
 #ifdef __cplusplus
 }
 #endif
