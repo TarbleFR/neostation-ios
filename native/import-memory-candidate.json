@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 390,
+  "target_build": 391,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -56,7 +56,8 @@
     "Build386: preserve the Build385 adaptive 5GiB hard ceiling, 512MiB primary/256MiB fallback donor chunks, two-helper concurrency and FPS/NeoSwap/iPhone-RAM overlay unchanged; move the exact-SHA workflow wait onto ubuntu-latest before acquiring the macOS IPA runner, preventing the IPA evidence gate from starving the donation Simulator jobs it waits for; the macOS build still performs the full evidence validation and direct raw IPA packaging",
     "Build388: keep the 4MiB relay footprint guard and fail-closed validation; after a coherent alias check with both cleanups successful and no memory pressure, allow exactly one 150ms revalidation inside the existing bounded 10s RPCS3 relay wait; repeated or non-retryable failures retain the 30s backoff; physical-iPhone behavior remains unvalidated until this IPA is tested",
     "Build389: preserve the Build388 runtime unchanged; fix only the macOS 8GiB stress evidence shell gate so a fully measured resident+compressed final ledger reaches the existing Python adjudication instead of being preempted by pipefail; unexpected probe failures remain fail-closed",
-    "Build390: preserve the Build388/389 runtime unchanged; fix only the relay regression test selector so it inspects the exerciseManager implementation rather than the earlier interface declaration; the iOS 18 Simulator relay proof for Build388 already completed with ready=true, coherent aliases and passed=true"
+    "Build390: preserve the Build388/389 runtime unchanged; fix only the relay regression test selector so it inspects the exerciseManager implementation rather than the earlier interface declaration; the iOS 18 Simulator relay proof for Build388 already completed with ready=true, coherent aliases and passed=true",
+    "Build391: preserve the Build390 relay fast-retry and the NeoSwap 512MiB adaptive warm target; shorten only RPCS3's degradable preboot donation gate to a 64MiB verified seed with a 1.5s bound so game boot no longer waits up to 8s for the full background pool; donor growth, pressure refusal, file fallback and real-memory accounting remain unchanged"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -66,7 +67,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
     ".github/workflows/neoswap-donation-check.yml": "e6107d34ec2502ab26883636c10aa862d7e425f8516e83c0e0075317e5f08387",
-    ".github/workflows/neoswap-ipa.yml": "c5e8f6d41c99a28ece7a55db31060dc531ee485e9c42973d7095d794df62ca4a",
+    ".github/workflows/neoswap-ipa.yml": "6b7a42a112dfb768d7dfcd6de222a86c9fb956b7ff04c2b2b51c6da3b140fc5c",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "2bb923a0704cd80ae7039bf0af37f6312b0a76d1f73aee60c516dac2ed560d7b",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -175,7 +176,7 @@
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h": "64f30f3de75bf0b737b175ebeed32523a4991717d1298409f57e1d4fe72bd4da",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm": "2b51e72a24bd183aad44c0f7c721f5e3544b206eeb7850fc0de8bdec7d532691",
     "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h": "92e2cf677f222de9607ea00bc976e418f489a22dc3d7a85dd39c7e23dbbf42d7",
-    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "70251acc04fd3f3b640de5622ba1fbfc34349e561db5fc220d7059928cfcc786"
+    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "27ee0632885a9e069525e0af1088815dcb519c8fa020dd7bb082664be500bbc1"
   },
   "git_modes": {
     ".github/workflows/cheats-media-check.yml": "100644",
@@ -322,7 +323,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "4be93767491431b3f916b3f92d5bb6910818ba2bc89e8debc0cbd9e306d98f6d",
+    "test/import_memory_candidate_scope_test.py": "2161e483d81df8d8b7850c8c98b65c22c6924315c5d564c03df5cbb924c516dd",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -341,7 +342,7 @@
     "test/neoswap_capacity_probe_test.cpp": "0bc604d02ec0dfb9d657d9ec0684f7b2b49537106986dca883fcf14b4e67edb8",
     "test/neoswap_client_stats_test.cpp": "49ae0663b43f7f0c307f1636ed9bb78448ff1d4f914c0dfcfb30ac5543def747",
     "test/neoswap_demand_test.cpp": "f602be7e4193533cfde313e3f24b542c74b1745480122d1bec4ca71787e5676f",
-    "test/neoswap_donor_contract_test.py": "7fe447bc419ce5746cf9d0c792dc48bb3becf59fd025fa7275edb346d8792504",
+    "test/neoswap_donor_contract_test.py": "1fee9f881da42ab43632d04ebeb098fb58ece9e309f41fe40e954c6c53516a4e",
     "test/neoswap_donor_ledger_test.cpp": "2899342436c91dc26f6336e7786f08b1e25d522e105ff6a8301fbeff3fca713d",
     "test/neoswap_donor_simulator_test.py": "cd0ef90f0290b8b418551e5050ab92f4f14763783acdbb8c65b13fef41dd7ad8",
     "test/neoswap_evidence_lifecycle_test.py": "f444c00496fb60095e7d467d16c05256863f228c61b1036edf48bac3ad05fbdd",
