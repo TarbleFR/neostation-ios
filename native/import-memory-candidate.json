@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 379,
+  "target_build": 380,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -36,7 +36,8 @@
     "Build375: canonical 1GiB Vulkan provenance keeps every unchanged donor/runtime source pinned to abc9566 and separately pins the exact reviewed Build374 NeoSwapDonorIPC watchdog SHA-256 plus candidate manifest identity; no Vulkan, allocator, relay, Core or gameplay behavior is relaxed",
     "Build376: relay CI artifacts replace the prior same-name artifact on workflow reruns so IPA evidence always consumes the successful current attempt; source identity, Simulator behavior, relay capacity, donor runtime, Vulkan path and Core inputs remain unchanged",
     "Build378: delivery-only correction; the validated NeoStation IPA is copied unchanged into the private Actions artifact as NeoStation.ipa, the artifact guard requires exactly one raw IPA, and the same SHA-256, validations, runtime, cores and no-public-release policy are preserved",
-    "Build379: fix the on-device NeoSwap hookup observed in Build378: RPCS3 waits up to 10s for the retained 8GiB guest relay and refuses Core initialization instead of silently committing guest shared memory to file fallback; donor helpers prewarm a measured 1GiB backing floor in bounded 128MiB chunks subject to real system headroom/pressure, then grow further on actual RPCS3 demand; game-time diagnostics expose relay live/object/alias bytes; no virtual capacity is relabeled as resident RAM"
+    "Build379: fix the on-device NeoSwap hookup observed in Build378: RPCS3 waits up to 10s for the retained 8GiB guest relay and refuses Core initialization instead of silently committing guest shared memory to file fallback; donor helpers prewarm a measured 1GiB backing floor in bounded 128MiB chunks subject to real system headroom/pressure, then grow further on actual RPCS3 demand; game-time diagnostics expose relay live/object/alias bytes; no virtual capacity is relabeled as resident RAM",
+    "Build380: preserve the Build379 RPCS3 relay and measured 1GiB donor-floor runtime unchanged; make all donation evidence uploads replace same-name artifacts on workflow reruns so IPA packaging cannot consume stale failed Simulator/stress reports; direct raw IPA delivery remains enabled"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -45,8 +46,8 @@
     ".github/workflows/ios-ci.yml": "b12b91eb5d31614768df3f2adba2b4e73003eb35c26cc013b552770d0cc267d2",
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
-    ".github/workflows/neoswap-donation-check.yml": "996c4f70a09243d0a13ffdd1f34f1d7e911adea5036cceb4faa82a7134c62f2e",
-    ".github/workflows/neoswap-ipa.yml": "b06cb9111b992ba9638f2aca068dc178960ca86db68ec0b0bc49494d842fde83",
+    ".github/workflows/neoswap-donation-check.yml": "0f59c04f34dccda1ec6c8de06df7b3443453e37fa923fb489e5610607360497a",
+    ".github/workflows/neoswap-ipa.yml": "f028cba50892a3284f5fe95ebd523ea87e11245b09d14adb17a125db7ebafd65",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "268ea21c1a8b2f238d39ff921af577922643c1a07288c4e103ec8b96a64d883f",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -302,7 +303,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "32f926b13e070464404fddc27ad4abc716e8b7b38f59e29c86124207f10ae9f7",
+    "test/import_memory_candidate_scope_test.py": "65737c39764fc38cf4c6ec1afda1a03e2df30f2a7d4a261231a494aec73b0b76",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",

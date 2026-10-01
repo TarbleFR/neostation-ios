@@ -52,6 +52,7 @@ jobs:
           path: build/neoswap-donation/kernel/
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
   ipc:
     runs-on: macos-15
     timeout-minutes: 15
@@ -91,6 +92,7 @@ jobs:
           path: build/neoswap-donation/ipc/
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
   stress:
     # Runner memory is not an iPhone memory budget. An explicit refusal remains
     # visible in this separate report and never passes as an 8 GiB donation.
@@ -130,6 +132,7 @@ jobs:
           path: build/neoswap-donation/stress/
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
   simulator:
     runs-on: macos-15
     timeout-minutes: 30
@@ -167,3 +170,4 @@ jobs:
           path: build/neoswap-donation/simulator/
           if-no-files-found: error
           retention-days: 14
+          overwrite: true

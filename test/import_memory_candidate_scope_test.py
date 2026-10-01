@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 379
+assert manifest['target_build'] == 380
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -37,7 +37,7 @@ assert manifest['relay_target_object_count'] == 16
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
-    # Build379: fail-closed RPCS3 relay handoff, measured 1 GiB donor warm floor, direct private IPA delivery and rerun-safe relay evidence.
+    # Build380: Build379 runtime unchanged; donation evidence artifacts are rerun-safe and direct private IPA delivery is retained.
     'build-utils/private-test-373-recipient.pem',
     '.github/workflows/neoswap-relay-check.yml',
     'NOTICE.md',
