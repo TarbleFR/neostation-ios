@@ -200,7 +200,8 @@ class RelayExtensionTests(unittest.TestCase):
         self.assertIn('if (!fastRetryPending || retryAfter > deadline)', service)
         self.assertIn('if (NSThread.isMainThread || !boundedTimeout)', service)
         harness = (ROOT / 'test/neoswap_relay_simulator_test.py').read_text()
-        manager = harness[harness.index('- (void)exerciseManager'):harness.index('@end', harness.index('- (void)exerciseManager'))]
+        implementation = harness.index('- (void)exerciseManager {')
+        manager = harness[implementation:harness.index('\n}\n', implementation) + 3]
         self.assertEqual(manager.count('NeoSwapRelay_WaitReady(10000)'), 2)
         self.assertNotIn('if (ready != NEOSWAP_RELAY_OK) ready = NeoSwapRelay_WaitReady', manager)
 
