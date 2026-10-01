@@ -175,6 +175,20 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn("'_NeoSwapRelay_Start'", validator)
         self.assertIn("'_NeoSwap_GetRelayAPI'", validator)
 
+    def test_rpcs3_requires_ready_guest_relay_and_measured_one_gib_donor_floor(self):
+        bridge = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
+        plugin = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
+        self.assertIn('NeoSwapRelay_WaitReady(10000)', bridge)
+        self.assertIn('relayReady != NEOSWAP_RELAY_OK', bridge)
+        self.assertIn('RPCS3_NEOSWAP_NOT_READY', bridge)
+        self.assertLess(bridge.index('NeoSwapRelay_WaitReady(10000)'),
+                        bridge.index('NeoSwap_RegisterClient(NEOSWAP_RPCS3)'))
+        self.assertIn('kDonationWarmFloorBytes = 1024 * kMiB', plugin)
+        self.assertIn('kDonationWarmChunkBytes = 128 * kMiB', plugin)
+        self.assertIn('pool.prepared_bytes < kDonationWarmFloorBytes', plugin)
+        self.assertIn('@"donationWarmFloorBytes":@(kDonationWarmFloorBytes)', plugin)
+        self.assertNotIn('Never fill idle device RAM merely to reach the target.', plugin)
+
     def test_chunk_preparation_uses_chunk_deadline_not_idle_heartbeat(self):
         source = (ROOT / 'native/neoswap-donation/NeoSwapDonorIPC.mm').read_text()
         timer = source.split('- (void)beginTimer {', 1)[1].split('- (void)start {', 1)[0]

@@ -20,6 +20,11 @@
 
 static NSString* const kDiagnostic = @"NeoSwap-v1.jsonl";
 static const uint64_t kMiB = 1024 * 1024;
+// A real measured donor floor for RPCS3. This is backing capacity owned by the
+// helper processes, not a virtual-capacity claim. Growth remains bounded by
+// live system headroom and stops immediately when the kernel reports pressure.
+static const uint64_t kDonationWarmFloorBytes = 1024 * kMiB;
+static const uint64_t kDonationWarmChunkBytes = 128 * kMiB;
 
 @interface NeoSwapPlugin ()
 @property(nonatomic, strong) dispatch_queue_t queue;
@@ -273,12 +278,21 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     NeoSwapDonationDemand demand{};
     if (NeoSwap_ClaimDonationDemand(&demand) != NEOSWAP_OK) return;
     self.donorDemand = demand;
-    if (!demand.bytes) {
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    const BOOL warming = !demand.bytes && pool.prepared_bytes < kDonationWarmFloorBytes;
+    if (!demand.bytes && !warming) {
         self.donorGrowthRefusal = nil;
-        return; // Never fill idle device RAM merely to reach the target.
+        return; // The measured 1 GiB floor is ready; grow further only on real demand.
     }
     const uint64_t budget = [self nextDonationBudget];
-    if (budget < demand.bytes) {
+    uint64_t requested = demand.bytes;
+    if (warming) {
+        const uint64_t remainingWarm = kDonationWarmFloorBytes - pool.prepared_bytes;
+        requested = MIN(MIN(kDonationWarmChunkBytes, remainingWarm), budget);
+        requested -= requested % vm_page_size;
+        if (requested < kMiB) return;
+    } else if (budget < demand.bytes) {
         if (budget) self.donorGrowthRefusal = @{@"stage":@"insufficient_headroom_for_requested_buffer",
             @"requestedBytes":@(demand.bytes), @"availableBytes":@(budget),
             @"requestSequence":@(demand.sequence), @"kernelResult":@(KERN_RESOURCE_SHORTAGE)};
@@ -293,7 +307,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         if (status.state != NeoSwapDonorStateActive || status.verifiedChunkCount >= 64 ||
             status.growthState == NeoSwapDonorGrowthComplete ||
             [self.donorRetryAfter[index] timeIntervalSinceNow] > 0) continue;
-        const uint64_t maximum = demand.bytes;
+        const uint64_t maximum = requested;
         if ([session requestNextChunkWithMaximumBytes:maximum]) {
             self.donorPendingIndex = index;
             return;
@@ -491,8 +505,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     donationPoolError = self.donorErrors.count ? self.donorErrors : (id)NSNull.null;
     growthRefusal = self.donorGrowthRefusal ?: NSNull.null;
     remaining = pool.prepared_bytes < target ? target - pool.prepared_bytes : 0;
-    growthState = !remaining ? @"complete" : self.donorPendingIndex >= 0 ? @"growing" :
-        self.donorLaunchIndex >= 8 && pool.donor_count && !self.donorDemand.bytes && !host.donor_pending_demand_bytes
+    const BOOL warmFloorPending = pool.prepared_bytes < kDonationWarmFloorBytes;
+    growthState = !remaining ? @"complete" : self.donorPendingIndex >= 0
+        ? (self.donorDemand.bytes ? @"growing" : @"warming")
+        : warmFloorPending ? (self.donorGrowthRefusal || anyRefused ? @"limited" : @"warming")
+        : self.donorLaunchIndex >= 8 && pool.donor_count && !self.donorDemand.bytes && !host.donor_pending_demand_bytes
             ? @"waiting" : self.donorGrowthRefusal || anyRefused ? @"limited" : @"idle";
     neostation::donation::CleanupSnapshot cleanup{};
     neostation::donation::cleanup_snapshot(cleanup);
@@ -512,7 +529,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         // are different quantities. No amount is inferred from the 8 GiB quota.
         @"memoryDonationSupported":@(donationSupported), @"donatedMemoryBytes":donatedMemory,
         @"donatedClientBytes":@(host.owner_donated_live_bytes[NEOSWAP_RPCS3]),
-        @"donationTargetBytes":@(target), @"donationRemainingBytes":@(remaining),
+        @"donationTargetBytes":@(target), @"donationWarmFloorBytes":@(kDonationWarmFloorBytes),
+        @"donationRemainingBytes":@(remaining),
         @"donorCount":@(host.donor_count), @"donorLostCount":@(host.donor_lost_count),
         @"donationRetainedBytes":@(host.donor_retained_bytes),
         @"donationRetainedLiveBytes":@(host.donor_retained_live_bytes),

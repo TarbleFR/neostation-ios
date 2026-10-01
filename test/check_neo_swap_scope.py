@@ -338,6 +338,9 @@ for source, target in [
 host = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
 assert host.index('rpcs3_ios_set_neoswap_api') < host.index('self->_api.initialize(&options)')
 assert 'NeoSwap_RegisterClient(NEOSWAP_RPCS3)' in host
+assert 'NeoSwapRelay_WaitReady(10000)' in host
+assert 'relayReady != NEOSWAP_RELAY_OK' in host and 'RPCS3_NEOSWAP_NOT_READY' in host
+assert host.index('NeoSwapRelay_WaitReady(10000)') < host.index('NeoSwap_RegisterClient(NEOSWAP_RPCS3)')
 assert 'dlsym(handle, "rpcs3_ios_get_neoswap_client_stats")' in host
 broker = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwap.cpp').read_text()
 assert broker.count('struct Broker {') == 1

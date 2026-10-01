@@ -440,16 +440,29 @@ static void RPCS3Progress(void* context,
   using NeoSwapBinder = int32_t (*)(const NeoSwapAPI*);
   auto bindSwap = reinterpret_cast<NeoSwapBinder>(dlsym(handle, "rpcs3_ios_set_neoswap_api"));
   const int swapResult = bindSwap ? bindSwap(NeoSwap_GetAPI(NEOSWAP_ABI)) : NEOSWAP_INVALID;
-  if (swapResult == NEOSWAP_OK) NeoSwap_RegisterClient(NEOSWAP_RPCS3);
-  // prepare runs independently; a bounded worker wait must not delay the main
-  // thread. Failure keeps ordinary shared-memory files for this guest session.
-  const int relayReady = NeoSwapRelay_WaitReady(2500);
+  // Guest shared-memory objects choose their backing on their first map and
+  // cannot be switched later without breaking g_base/g_sudo alias coherence.
+  // Therefore do not let Core initialization race ahead of relay preparation:
+  // a 2.5 s timeout produced Build378 sessions that permanently fell back to
+  // files even though the 8 GiB relay became ready seconds later.
+  const int relayReady = NeoSwapRelay_WaitReady(10000);
   auto bindRelay = reinterpret_cast<rpcs3_ios_neoswap_relay_binder>(
       dlsym(handle, "rpcs3_ios_set_neoswap_relay_api"));
   const int relayResult = bindRelay ? bindRelay(NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)) : NEOSWAP_RELAY_INVALID;
   RPCS3Diagnostic(@"neoswap_relay_client", [NSString stringWithFormat:
       @"abi=1 prepare_result=%d bind_result=%d scope=GUEST_DATA shared_aliases=1 executable=0",
       relayReady, relayResult]);
+  if (swapResult != NEOSWAP_OK || relayReady != NEOSWAP_RELAY_OK || relayResult != NEOSWAP_RELAY_OK) {
+    if (error) *error = [NSString stringWithFormat:
+        @"RPCS3_NEOSWAP_NOT_READY: allocator=%d relay_prepare=%d relay_bind=%d; retry after NeoSwap preparation completes.",
+        swapResult, relayReady, relayResult];
+    dlclose(handle);
+    memset(&_api, 0, sizeof(_api));
+    self.coreLoadedWithExpandedJit = NO;
+    _neoSwapClientStats = nullptr;
+    return NO;
+  }
+  NeoSwap_RegisterClient(NEOSWAP_RPCS3);
   _neoSwapClientStats = reinterpret_cast<int32_t (*)(NeoSwapClientStats*)>(
       dlsym(handle, "rpcs3_ios_get_neoswap_client_stats"));
   RPCS3Diagnostic(@"neoswap_client", [NSString stringWithFormat:
@@ -646,6 +659,7 @@ static void RPCS3Progress(void* context,
         strongSelf->_neoSwapClientStats(&client) == NEOSWAP_OK;
     NeoSwapHostStats host = {};
     const BOOL hostValid = NeoSwap_HostSnapshot(&host) == NEOSWAP_OK;
+    NSDictionary* relay = NeoSwapRelay_Diagnostics();
     strongSelf->_diagnosticWorstThermalState = MAX(strongSelf->_diagnosticWorstThermalState, thermal);
     strongSelf->_diagnosticMinimumAvailableMemory = MIN(strongSelf->_diagnosticMinimumAvailableMemory, availableMemory);
     if (metrics.valid_fields & rpcs3_ios_performance_memory) {
@@ -660,7 +674,7 @@ static void RPCS3Progress(void* context,
     }
 
     RPCS3Diagnostic(@"performance_sample", [NSString stringWithFormat:
-        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld swap_rpc_total_live=%llu swap_rpc_shared_live=%llu swap_file_ready=%d swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_count=%u donor_lost=%u donor_first_pid=%d donor_generation=%llu donor_target=%llu donor_prepared=%llu donor_shared_live=%llu donor_retained=%llu donor_retained_live=%llu donor_resident=%llu donor_accounted_compressed=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_nonvolatile_compressed=%llu donor_stage=%d donor_kernel=%d",
+        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld swap_rpc_total_live=%llu swap_rpc_shared_live=%llu swap_file_ready=%d swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_count=%u donor_lost=%u donor_first_pid=%d donor_generation=%llu donor_target=%llu donor_prepared=%llu donor_shared_live=%llu donor_retained=%llu donor_retained_live=%llu donor_resident=%llu donor_accounted_compressed=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_nonvolatile_compressed=%llu donor_stage=%d donor_kernel=%d relay_ready=%d relay_live=%llu relay_peak=%llu relay_objects=%llu relay_aliases=%llu relay_mapped=%llu",
         strongSelf.activeTitleId, metrics.valid_fields, metrics.frames_per_second,
         metrics.cpu_usage_percent, metrics.gpu_usage_percent,
         (unsigned long long)metrics.memory_used_bytes,
@@ -685,7 +699,13 @@ static void RPCS3Progress(void* context,
         (unsigned long long)host.donor_footprint_bytes,
         (unsigned long long)host.donor_nonvolatile_bytes,
         (unsigned long long)host.donor_compressed_bytes,
-        host.donation_last_stage, host.donation_last_kernel_result]);
+        host.donation_last_stage, host.donation_last_kernel_result,
+        [relay[@"ready"] boolValue],
+        (unsigned long long)[relay[@"liveBackingBytes"] unsignedLongLongValue],
+        (unsigned long long)[relay[@"peakLiveBackingBytes"] unsignedLongLongValue],
+        (unsigned long long)[relay[@"objectCount"] unsignedLongLongValue],
+        (unsigned long long)[relay[@"aliasCount"] unsignedLongLongValue],
+        (unsigned long long)[relay[@"mappedAliasBytes"] unsignedLongLongValue]]);
   });
   dispatch_resume(timer);
 }
