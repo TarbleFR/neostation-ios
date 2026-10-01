@@ -1465,6 +1465,13 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       result(@{@"success": @NO, @"message": @"RPCS3 is not ready to boot this title with JIT."});
       return;
     }
+    const int sessionResult = NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1);
+    if (sessionResult != NEOSWAP_OK) {
+      result(@{@"success": @NO, @"code": @"RPCS3_NEOSWAP_SESSION_FAILED",
+        @"stage": @"game_boot", @"message": @"NeoSwap could not open the RPCS3 adaptive memory session."});
+      return;
+    }
+    RPCS3Diagnostic(@"neoswap_session", [NSString stringWithFormat:@"active=1 result=%d", sessionResult]);
     __block RPCS3GameViewController* controller = nil;
     // Flutter delivers this handler on the main queue; dispatch_sync to the
     // same queue deadlocks as soon as standard-arena boot is permitted.
@@ -1496,6 +1503,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       self.gameController = nil;
       self.activeTitleId = nil;
       self.activeUiLocale = nil;
+      NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0);
       result(@{@"success": @NO, @"code": @"RPCS3_DISPLAY_SURFACE_FAILED",
         @"stage": @"game_boot", @"message": @"Metal surface could not be created."});
       return;
@@ -1596,6 +1604,8 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       dispatch_async(dispatch_get_main_queue(), ^{ if (result) result(@NO); });
       return; // Keep Metal, controls and audio attached while the save owns Emu.
     }
+    const int sessionResult = NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0);
+    RPCS3Diagnostic(@"neoswap_session", [NSString stringWithFormat:@"active=0 result=%d", sessionResult]);
     [self stopDiagnosticPerformanceSampling];
     if (self->_performanceTimer) {
       dispatch_source_cancel(self->_performanceTimer);
