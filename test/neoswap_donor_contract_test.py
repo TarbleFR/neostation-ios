@@ -215,6 +215,8 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('processFootprintBytes', header)
         self.assertIn('RPCS3ProcessFootprintBytes', bridge)
         self.assertIn('NeoSwap %@ / %@ · iPhone RAM %@', overlay)
+        self.assertIn('host->owner_donated_live_bytes[NEOSWAP_RPCS3]', overlay)
+        self.assertIn('MAX(host->donor_prepared_bytes, kGiB / 2)', overlay)
         self.assertIn('systemCyanColor', overlay)
         self.assertIn('systemOrangeColor', overlay)
 
