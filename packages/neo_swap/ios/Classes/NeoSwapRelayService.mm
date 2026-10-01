@@ -11,6 +11,9 @@ constexpr uint64_t MiB = 1024 * 1024;
 constexpr uint64_t kCapacity = 8 * 1024 * MiB;
 constexpr uint64_t kSegment = 512 * MiB;
 constexpr uint32_t kRPCS3 = 0, kProbe = 5;
+constexpr NSTimeInterval kNormalRetryDelaySeconds = 30.0;
+constexpr NSTimeInterval kFastFootprintRetryDelaySeconds = 0.15;
+constexpr NSUInteger kMaxFastFootprintRetries = 1;
 bool footprint(uint64_t& bytes) {
     task_vm_info_data_t info{};
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
@@ -87,6 +90,8 @@ NSDictionary* capabilityCheck() {
     BOOL _memoryPressureRaised;
     uint64_t _generation;
     NSTimeInterval _retryAfter;
+    NSUInteger _fastFootprintRetryCount;
+    BOOL _fastFootprintRetryPending;
 }
 - (instancetype)init {
     if ((self = [super init])) {
@@ -130,6 +135,7 @@ NSDictionary* capabilityCheck() {
         [_lock unlock]; return;
     }
     _running = YES;
+    _fastFootprintRetryPending = NO;
     _pending = dispatch_group_create();
     dispatch_group_enter(_pending);
     const uint64_t generation = ++_generation;
@@ -173,19 +179,21 @@ NSDictionary* capabilityCheck() {
             generation:(uint64_t)generation expectedGeneration:(uint64_t)expected error:(NSError*)error {
     [_lock lock];
     const BOOL active = _running && _generation == expected;
+    const BOOL pressureRaised = _memoryPressureRaised;
     [_lock unlock];
     if (!active) return;
     NSMutableDictionary* details = [[_session diagnostics] mutableCopy] ?: [NSMutableDictionary new];
     int result = error || generation != expected || pid <= 0 || handles.count != kCapacity / kSegment
         ? NEOSWAP_RELAY_INVALID : NEOSWAP_RELAY_OK;
-    if (self->_memoryPressureRaised) result = NEOSWAP_RELAY_PRESSURE;
+    if (pressureRaised) result = NEOSWAP_RELAY_PRESSURE;
+    NSDictionary* measured = nil;
     for (NeoSwapPageRelayHandle* handle in handles) {
         if (result != 0) break;
         if (handle.capacityBytes != kSegment) { result = NEOSWAP_RELAY_INVALID; break; }
         result = neostation::relay::adopt(handle.memoryEntry, handle.capacityBytes, pid, generation);
     }
     if (result == 0) {
-        NSDictionary* measured = capabilityCheck();
+        measured = capabilityCheck();
         details[@"capabilityCheck"] = measured;
         result = [measured[@"result"] intValue];
     }
@@ -194,7 +202,15 @@ NSDictionary* capabilityCheck() {
         (void)neostation::relay::configure(0, kCapacity);
         const int cleanup = neostation::relay::shutdown();
         details[@"failedPreparationCleanupResult"] = @(cleanup);
-        if (cleanup || self->_memoryPressureRaised) neostation::relay::set_pressure(true);
+        [_lock lock];
+        const BOOL pressureRaisedAfterCleanup = _memoryPressureRaised;
+        [_lock unlock];
+        const BOOL retryableFootprintLimit = result == NEOSWAP_RELAY_LIMIT && measured &&
+            [measured[@"aliasDataVerified"] isEqual:@YES] &&
+            [measured[@"cleanupResult"] intValue] == NEOSWAP_RELAY_OK &&
+            cleanup == NEOSWAP_RELAY_OK && !pressureRaisedAfterCleanup;
+        details[@"retryableFootprintLimit"] = @(retryableFootprintLimit);
+        if (cleanup || pressureRaisedAfterCleanup) neostation::relay::set_pressure(true);
     }
     details[@"state"] = result == 0 ? @"ready" : @"unavailable";
     details[@"result"] = @(result);
@@ -211,7 +227,21 @@ NSDictionary* capabilityCheck() {
     _details = [details copy];
     _ready = ready;
     _running = NO;
-    _retryAfter = ready ? 0 : NSDate.date.timeIntervalSince1970 + 30;
+    const NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    const BOOL fastRetryEligible = !ready && [details[@"retryableFootprintLimit"] isEqual:@YES] &&
+        _fastFootprintRetryCount < kMaxFastFootprintRetries;
+    if (ready) {
+        _fastFootprintRetryCount = 0;
+        _fastFootprintRetryPending = NO;
+        _retryAfter = 0;
+    } else if (fastRetryEligible) {
+        ++_fastFootprintRetryCount;
+        _fastFootprintRetryPending = YES;
+        _retryAfter = now + kFastFootprintRetryDelaySeconds;
+    } else {
+        _fastFootprintRetryPending = NO;
+        _retryAfter = now + kNormalRetryDelaySeconds;
+    }
     dispatch_group_t completed = _pending;
     [_lock unlock];
     _session = nil;
@@ -219,19 +249,35 @@ NSDictionary* capabilityCheck() {
 }
 - (int)waitReady:(uint32_t)timeout {
     [self start];
-    [_lock lock];
-    const BOOL ready = _ready;
-    dispatch_group_t pending = _pending;
-    [_lock unlock];
-    if (ready) return NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)->enabled(kRPCS3)
-        ? NEOSWAP_RELAY_OK : NEOSWAP_RELAY_DISABLED;
-    if (!NSThread.isMainThread && pending && timeout)
-        dispatch_group_wait(pending, dispatch_time(DISPATCH_TIME_NOW, uint64_t(std::min(timeout, 10000u)) * NSEC_PER_MSEC));
-    [_lock lock];
-    const BOOL prepared = _ready;
-    [_lock unlock];
-    return prepared && NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)->enabled(kRPCS3)
-        ? NEOSWAP_RELAY_OK : NEOSWAP_RELAY_DISABLED;
+    const uint32_t boundedTimeout = std::min(timeout, 10000u);
+    const NSTimeInterval deadline = NSDate.date.timeIntervalSince1970 +
+        (static_cast<NSTimeInterval>(boundedTimeout) / 1000.0);
+    for (;;) {
+        [_lock lock];
+        const BOOL ready = _ready;
+        const BOOL running = _running;
+        const BOOL fastRetryPending = _fastFootprintRetryPending;
+        const NSTimeInterval retryAfter = _retryAfter;
+        dispatch_group_t pending = _pending;
+        [_lock unlock];
+        if (ready) return NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)->enabled(kRPCS3)
+            ? NEOSWAP_RELAY_OK : NEOSWAP_RELAY_DISABLED;
+        if (NSThread.isMainThread || !boundedTimeout) return NEOSWAP_RELAY_DISABLED;
+        const NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+        if (now >= deadline) return NEOSWAP_RELAY_DISABLED;
+        if (running && pending) {
+            const NSTimeInterval remaining = deadline - now;
+            dispatch_group_wait(pending, dispatch_time(DISPATCH_TIME_NOW,
+                static_cast<int64_t>(remaining * NSEC_PER_SEC)));
+            continue;
+        }
+        if (!fastRetryPending || retryAfter > deadline) return NEOSWAP_RELAY_DISABLED;
+        if (retryAfter > now) {
+            [NSThread sleepForTimeInterval:std::min(retryAfter - now, deadline - now)];
+            continue;
+        }
+        [self start];
+    }
 }
 - (void)maintain {
     dispatch_async(_queue, ^{
@@ -254,6 +300,8 @@ NSDictionary* capabilityCheck() {
     NSMutableDictionary* result = [_details mutableCopy];
     result[@"ready"] = @(_ready);
     result[@"preparationRunning"] = @(_running);
+    result[@"fastFootprintRetryCount"] = @(_fastFootprintRetryCount);
+    result[@"fastFootprintRetryPending"] = @(_fastFootprintRetryPending);
     [_lock unlock];
     NeoSwapRelayStats stats{}; stats.struct_size = sizeof(stats); stats.abi_version = NEOSWAP_RELAY_ABI;
     NeoSwap_GetRelayAPI(1)->snapshot(&stats);

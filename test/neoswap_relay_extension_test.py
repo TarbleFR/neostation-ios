@@ -186,6 +186,24 @@ class RelayExtensionTests(unittest.TestCase):
             block = workflow[start:start + 450]
             self.assertIn('overwrite: true', block, artifact)
 
+    def test_fast_footprint_retry_is_single_bounded_and_fail_closed(self):
+        service = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm').read_text()
+        self.assertIn('kFastFootprintRetryDelaySeconds = 0.15', service)
+        self.assertIn('kMaxFastFootprintRetries = 1', service)
+        self.assertIn('result == NEOSWAP_RELAY_LIMIT && measured', service)
+        self.assertIn('[measured[@"aliasDataVerified"] isEqual:@YES]', service)
+        self.assertIn('[measured[@"cleanupResult"] intValue] == NEOSWAP_RELAY_OK', service)
+        self.assertIn('cleanup == NEOSWAP_RELAY_OK && !pressureRaisedAfterCleanup', service)
+        self.assertIn('_fastFootprintRetryCount < kMaxFastFootprintRetries', service)
+        self.assertIn('_retryAfter = now + kNormalRetryDelaySeconds', service)
+        self.assertIn('const uint32_t boundedTimeout = std::min(timeout, 10000u)', service)
+        self.assertIn('if (!fastRetryPending || retryAfter > deadline)', service)
+        self.assertIn('if (NSThread.isMainThread || !boundedTimeout)', service)
+        harness = (ROOT / 'test/neoswap_relay_simulator_test.py').read_text()
+        manager = harness[harness.index('- (void)exerciseManager'):harness.index('@end', harness.index('- (void)exerciseManager'))]
+        self.assertEqual(manager.count('NeoSwapRelay_WaitReady(10000)'), 2)
+        self.assertNotIn('if (ready != NEOSWAP_RELAY_OK) ready = NeoSwapRelay_WaitReady', manager)
+
     def test_public_vm_api_guard_cases(self):
         allowed = {
             'comments': '''

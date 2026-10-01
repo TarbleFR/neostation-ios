@@ -216,8 +216,9 @@ bool isReadOnly(void* address) {
     fail(@"production_manager_must_not_block_main_thread", nil); return;
   }
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    // One bounded wait must absorb the manager's single fast footprint revalidation.
+    // The harness must not hide a production regression with an external second launch attempt.
     int ready = NeoSwapRelay_WaitReady(10000);
-    if (ready != NEOSWAP_RELAY_OK) ready = NeoSwapRelay_WaitReady(10000);
     NSDictionary* diagnostics = NeoSwapRelay_Diagnostics();
     NSDictionary* capability = diagnostics[@"capabilityCheck"];
     const NeoSwapRelayAPI* api = NeoSwap_GetRelayAPI(1);
