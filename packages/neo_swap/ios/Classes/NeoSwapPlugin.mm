@@ -249,7 +249,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     NSString* identifier = [bundleID stringByAppendingString:@".neoswapdonor"];
     __weak NeoSwapPlugin* weakSelf = self;
     NeoSwapDonorSession* session = [[NeoSwapDonorSession alloc] initWithHelperIdentifier:identifier
-        requestedBytes:kDonationGoalBytes generation:++self.donorGenerationCounter
+        requestedBytes:kDonationHardLimitBytes generation:++self.donorGenerationCounter
         timeout:60 observer:^(NeoSwapDonorSession* source, NeoSwapDonorSnapshot ignored, NSError* failure) {
         (void)ignored;
         NeoSwapPlugin* strongSelf = weakSelf;
