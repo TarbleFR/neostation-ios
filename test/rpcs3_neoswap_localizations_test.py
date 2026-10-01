@@ -60,7 +60,12 @@ def catalogues() -> dict:
     assert all(values['swapAllocated'] == 'RPCS3' for values in catalogues.values())
     overlay = (CLASSES / "RPCS3PerformanceOverlay.mm").read_text()
     used = set(re.findall(r'@"(swap[A-Z]\w*)"', overlay))
-    assert used == set(KEYS), (used - set(KEYS), set(KEYS) - used)
+    # Build381 deliberately removes the verbose NeoSwap status paragraph from
+    # the on-screen graph. Keep the 12-locale catalogue for compatibility, but
+    # only reject unknown swap keys if any are reintroduced.
+    assert used <= set(KEYS), used - set(KEYS)
+    assert 'NeoSwap %@ / %@ · iPhone RAM %@' in overlay
+    assert 'systemCyanColor' in overlay and 'systemOrangeColor' in overlay
     return catalogues
 
 
@@ -115,7 +120,7 @@ int main() { @autoreleasepool {
 
 if __name__ == "__main__":
     values = catalogues()
-    print("PASS: all 14 shipped NeoSwap overlay keys have explicit values in 12 catalogues; English/French contract and placeholders verified", flush=True)
+    print("PASS: all 14 legacy NeoSwap keys remain valid in 12 catalogues; Build381 simplified FPS/NeoSwap/iPhone-RAM graph contract verified", flush=True)
     if sys.platform == "darwin":
         execute_native_lookup(values)
     else:

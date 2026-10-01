@@ -40,7 +40,8 @@
     "Build380: preserve the Build379 RPCS3 relay and measured 1GiB donor-floor runtime unchanged; make all donation evidence uploads replace same-name artifacts on workflow reruns so IPA packaging cannot consume stale failed Simulator/stress reports; direct raw IPA delivery remains enabled",
     "Build380 manifest correction: recompute the NeoSwap IPA workflow SHA-256 over UTF-8 bytes so the explicit candidate hash lock matches the workflow containing the bullet character; runtime and delivery behavior are unchanged",
     "Build381: grow measured NeoSwap donor backing toward a 5GiB aggregate goal using up to two independent helper processes in parallel, normally 512MiB chunks with an automatic 256MiB fallback after a large-chunk refusal; production donor chunk ceiling is raised to 512MiB and chunk verification timeout to 60s while kernel/system headroom checks, measured resident/compressed accounting and cleanup remain fail-closed",
-    "Build381: simplify the RPCS3 performance overlay to FPS plus a 60-second memory comparison graph: measured NeoSwap donor memory (resident + accounted compressed pages) versus the NeoStation/RPCS3 iPhone process phys_footprint; 5GiB is a donor target, not a claim of simultaneous physical residency"
+    "Build381: simplify the RPCS3 performance overlay to FPS plus a 60-second memory comparison graph: measured NeoSwap donor memory (resident + accounted compressed pages) versus the NeoStation/RPCS3 iPhone process phys_footprint; 5GiB is a donor target, not a claim of simultaneous physical residency",
+    "Build381 follow-up: the legacy 12-locale NeoSwap status catalogue remains validated for compatibility while the simplified performance overlay intentionally stops rendering the old verbose swap-status paragraph; tests now reject unknown reintroduced keys and require the NeoSwap/iPhone-RAM graph contract"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -336,7 +337,7 @@
     "test/neoswap_vulkan_evidence_test.py": "b93d3006845f07ce2b53d53b918187f1bafadb4c7f77ab0124f890f0415a7fd8",
     "test/relay_backend_test.cpp": "431a0f9272d53b6d2bd4ce8021a0443c3a950611ff3606d022c7da0b75fcf903",
     "test/rpcs3_build306_single_path_test.py": "d57dd6f0d2cf6696e0758b353ded44e0339431160192011fcb72417643958847",
-    "test/rpcs3_neoswap_localizations_test.py": "77c3d40b4134a6b6348a8bc2625b5ee18416500df1928171180bd63c78338597",
+    "test/rpcs3_neoswap_localizations_test.py": "97f2dc3d35a6e187a137dcda5cf08e442916444fde322a8d58380b0981798499",
     "test/rpcs3_neoswap_relay_test.py": "e1a56244ddbfa4c73637f39a1f96a2f8680c6c09e012cee3423bd4eeff7106d6",
     "test/rpcs3_neoswap_vulkan_buffer_test.py": "6f694f9fc0538087e5e40f6412c627a342af7b816432ffc06ed77976d2032672",
     "test/rpcs3_xitrix_v0101_native_test.py": "a15f3a5a9a23717b5dd409805bf54af7859ca5e41ed8d93dab5bc052d05c3b0b",
