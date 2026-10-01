@@ -609,8 +609,13 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     id growthRefusal = NSNull.null;
     NSString* growthState = @"unavailable";
     uint64_t target = kDonationHardLimitBytes;
+    // Non-donation builds must not reference the donation-only selector.
+#if defined(NEOSWAP_DONATION)
     uint64_t adaptiveTarget = NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)
         ? [self adaptiveDonationTarget] : 0;
+#else
+    uint64_t adaptiveTarget = 0;
+#endif
     uint64_t remaining = adaptiveTarget;
     uint64_t pendingGrowthCount = 0;
 #if defined(NEOSWAP_DONATION)

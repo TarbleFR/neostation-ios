@@ -161,7 +161,7 @@
     "packages/neo_swap/ios/Classes/NeoSwap.cpp": "673440efdb7a96fb0750a998257c93bc5b3b18e2b1efd4b345150a8f2d2020cd",
     "packages/neo_swap/ios/Classes/NeoSwapClientStats.h": "55e745b85142d109075f2b8f220a288e1a5501f69a79eb8d4de15c7b993902fc",
     "packages/neo_swap/ios/Classes/NeoSwapHost.h": "8382b784e8847f0f59b1244b93d06b8b0c63ef5f86c56b950c53710664a51596",
-    "packages/neo_swap/ios/Classes/NeoSwapPlugin.mm": "db319c2597be6d4ab29d8136d26af37f5f0f18bef3575d8a30ce9baa7eae2982",
+    "packages/neo_swap/ios/Classes/NeoSwapPlugin.mm": "e78e387ba46c5463f031183cfecc8023cde76aec0f4488fb9504d47bb36f2d44",
     "packages/neo_swap/ios/Classes/NeoSwapRelay.h": "c1d727c589dded13993f979ce33683df45728a92d387ee7e2a0533f7dfcf1ecd",
     "packages/neo_swap/ios/Classes/NeoSwapRelayService.h": "10ae623ad9c197f5e2a4c32ff5743e303ebd79d73b22225ba49b189f26330f68",
     "packages/neo_swap/ios/Classes/NeoSwapRelayService.mm": "f37ab8cc99b4d3c1ad7da3e92f3fbcb0268b15bc1de3d9c53eca24e00e17b27c",
