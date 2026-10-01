@@ -48,6 +48,10 @@ struct PoolDonorSnapshot {
 // Eight distinct donor PIDs. One campaign owns the global target/quota. Only
 // chunks confirmed by the IPC page/ledger proof may become new local loans.
 Result pool_campaign_begin(std::uint64_t epoch, std::uint64_t target_bytes) noexcept;
+// End one campaign only after every live loan has been returned. This drops
+// retained host mappings so the donor processes can be closed without
+// carrying unused prepared pages into the next RPCS3 session.
+Result pool_campaign_end(std::uint64_t epoch) noexcept;
 Result pool_donor_begin(std::uint64_t epoch, std::uint32_t index,
     std::uint64_t generation, std::int32_t pid) noexcept;
 Result pool_adopt_donor(std::uint64_t epoch, std::uint32_t index,
