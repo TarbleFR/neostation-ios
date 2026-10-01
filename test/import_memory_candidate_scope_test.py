@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 388
+assert manifest['target_build'] == 389
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -37,7 +37,7 @@ assert manifest['relay_target_object_count'] == 16
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
-    # Build388: Build385 memory policy retained; relay startup adds one bounded fail-closed revalidation and refreshes exact candidate identity.
+    # Build389: Build388 runtime retained; stress CI now adjudicates its written resident+compressed report instead of pipefail aborting before validation.
     'build-utils/private-test-373-recipient.pem',
     '.github/workflows/neoswap-relay-check.yml',
     'NOTICE.md',

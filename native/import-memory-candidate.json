@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 388,
+  "target_build": 389,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -54,7 +54,8 @@
     "Build385 CI fix: launch-order assertion is scoped to the real launchGame handler; the 1GiB proof checks modified broker files against candidate hashes and unchanged ABI/runtime files against the reviewed abc9566 reference.",
     "Build385 retry3: CI guard fixes applied after real runner feedback; no runtime memory policy change from the adaptive-pool candidate.",
     "Build386: preserve the Build385 adaptive 5GiB hard ceiling, 512MiB primary/256MiB fallback donor chunks, two-helper concurrency and FPS/NeoSwap/iPhone-RAM overlay unchanged; move the exact-SHA workflow wait onto ubuntu-latest before acquiring the macOS IPA runner, preventing the IPA evidence gate from starving the donation Simulator jobs it waits for; the macOS build still performs the full evidence validation and direct raw IPA packaging",
-    "Build388: keep the 4MiB relay footprint guard and fail-closed validation; after a coherent alias check with both cleanups successful and no memory pressure, allow exactly one 150ms revalidation inside the existing bounded 10s RPCS3 relay wait; repeated or non-retryable failures retain the 30s backoff; physical-iPhone behavior remains unvalidated until this IPA is tested"
+    "Build388: keep the 4MiB relay footprint guard and fail-closed validation; after a coherent alias check with both cleanups successful and no memory pressure, allow exactly one 150ms revalidation inside the existing bounded 10s RPCS3 relay wait; repeated or non-retryable failures retain the 30s backoff; physical-iPhone behavior remains unvalidated until this IPA is tested",
+    "Build389: preserve the Build388 runtime unchanged; fix only the macOS 8GiB stress evidence shell gate so a fully measured resident+compressed final ledger reaches the existing Python adjudication instead of being preempted by pipefail; unexpected probe failures remain fail-closed"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -63,8 +64,8 @@
     ".github/workflows/ios-ci.yml": "b12b91eb5d31614768df3f2adba2b4e73003eb35c26cc013b552770d0cc267d2",
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
-    ".github/workflows/neoswap-donation-check.yml": "6ce904427e8491a851fa910c8bafa303fcef655df156859cbab2618c8fd03754",
-    ".github/workflows/neoswap-ipa.yml": "f5778c650a79a25616c33828310cf9b80839cb7e2eeacb7d28757307a9c86e30",
+    ".github/workflows/neoswap-donation-check.yml": "e6107d34ec2502ab26883636c10aa862d7e425f8516e83c0e0075317e5f08387",
+    ".github/workflows/neoswap-ipa.yml": "e5351e3c3560d033a67b164cfd5df61896af15723ccf8072ae7d0e91c02ae144",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "2bb923a0704cd80ae7039bf0af37f6312b0a76d1f73aee60c516dac2ed560d7b",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -320,7 +321,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "ed2df51e14f9c9392211b6b6863890e890e4852119596035d97833b35eb24b35",
+    "test/import_memory_candidate_scope_test.py": "8333aa32ddf79fd35f24f5bdb7c30e9fd0cf2b243ed0c38a1a4303c195aa4de0",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",

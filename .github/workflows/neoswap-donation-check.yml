@@ -115,18 +115,26 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > build/neoswap-donation/stress/source.txt
           vm_stat | tee build/neoswap-donation/stress/system-vm.txt
           memory_pressure -Q | tee build/neoswap-donation/stress/system-pressure.txt
+          set +e
           NEOSWAP_IPC_STRESS_BYTES=8589934592 bash native/neoswap-donation/run_ipc_macos_probe.sh "$GITHUB_WORKSPACE/build/neoswap-donation/stress/report.json" 2>&1 | tee build/neoswap-donation/stress/probe.txt
+          probe_status=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$probe_status" > build/neoswap-donation/stress/probe-exit.txt
+          export NEOSWAP_STRESS_PROBE_STATUS="$probe_status"
           python3 - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
           report=json.loads(Path('build/neoswap-donation/stress/report.json').read_text())
+          probe_status=int(os.environ['NEOSWAP_STRESS_PROBE_STATUS'])
           assert report['stressRequested'] is True and report['iphoneExtensionValidated'] is False,report
           assert report['requestedBytes']==8589934592 and report['preparedBytes']==8589934592,report
           accounted=report['donorResidentBytes']+report.get('donorCompressedBytes',0)
           assert accounted>=8589934592-1024**2,report
           if report['residentTargetVerified']:
+              assert probe_status == 0, (probe_status, report)
               assert report['passed'] is True and report['donorResidentBytes']>=8589934592-1024**2,report
           else:
+              assert probe_status != 0, (probe_status, report)
               # macOS may compress verified NONVOLATILE pages before the final
               # sample. Preserve that distinction: full measured backing is
               # acceptable CI evidence, but it is never relabeled as 8 GiB
