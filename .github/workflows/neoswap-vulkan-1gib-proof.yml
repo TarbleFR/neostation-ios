@@ -8,6 +8,7 @@ on:
       - 'native/neoswap-donation/ipc_macos_probe.mm'
       - 'native/neoswap-donation/run_ipc_macos_probe.sh'
       - 'native/neoswap-donation/NeoSwapDonorIPC.mm'
+      - 'native/neoswap-donation/NeoSwapDonorRequestHandler.mm'
       - 'build-utils/validate_neoswap_vulkan_evidence.py'
       - 'test/neoswap_vulkan_evidence_test.py'
       - 'test/neoswap_donor_contract_test.py'
@@ -52,29 +53,32 @@ jobs:
           urllib.request.urlretrieve('https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar',archive)
           assert hashlib.sha256(archive.read_bytes()).hexdigest()=='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
           subprocess.run(['tar','-xf',str(archive),'-C',str(work)],check=True)
-          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','native/neoswap-donation/NeoSwapDonorIPC.mm','packages/neo_swap/ios/Classes/NeoSwap.cpp','build-utils/validate_neoswap_vulkan_evidence.py','test/neoswap_vulkan_evidence_test.py','test/neoswap_donor_contract_test.py','test/import_memory_candidate_scope_test.py','native/import-memory-candidate.json']
+          inputs=['native/neoswap-donation/VulkanDonationProbe.h','native/neoswap-donation/ipc_macos_probe.mm','native/neoswap-donation/run_ipc_macos_probe.sh','native/neoswap-donation/Pool.cpp','native/neoswap-donation/NeoSwapDonorIPC.mm','native/neoswap-donation/NeoSwapDonorRequestHandler.mm','packages/neo_swap/ios/Classes/NeoSwap.cpp','build-utils/validate_neoswap_vulkan_evidence.py','test/neoswap_vulkan_evidence_test.py','test/neoswap_donor_contract_test.py','test/import_memory_candidate_scope_test.py','native/import-memory-candidate.json']
           identity={'source':os.environ['GITHUB_SHA'],'moltenVK':'1.4.2','moltenVKSHA256':hashlib.sha256(archive.read_bytes()).hexdigest(),'canonicalPatchSHA256':pins['patch_sha256'],'productionImportSHA256':pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h'],'inputsSHA256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in inputs},'realIPhoneValidated':False,'realRPCS3GameplayValidated':False}
           identity['targetBytes']=1073741824
           identity['coreInputSHA256']=core_input_hashes()
           identity['productionRuntimeReferenceCommit']='abc9566f1747891534927d58e446bef758a53c2b'
-          # Keep every pre-existing v1 donor/Vulkan runtime input pinned to the
-          # reviewed reference. Build 374 intentionally changes only the donor
-          # watchdog; require both its reviewed candidate hash and exact source.
+          # Keep every unchanged v1 donor/Vulkan runtime input pinned to the
+          # reviewed reference. Build381 intentionally changes only the donor
+          # IPC chunk ceiling and request-handler ceiling; pin both exact hashes.
           runtime_paths=['packages/neo_swap/ios/Classes/'+name for name in ('NeoSwap.cpp','NeoSwap.h','NeoSwapHost.h','NeoSwapCapacityProbe.h','NeoSwapClientStats.h')]
           runtime_paths+=['native/neoswap/NeoSwapClient.h']
-          runtime_paths+=['native/neoswap-donation/'+name for name in ('Broker.cpp','Broker.h','Pool.cpp','Pool.h','DonorLedger.h','NeoSwapMachHandle.mm','NeoSwapMachHandle.h','NeoSwapDonorIPC.h','NeoSwapDonorRequestHandler.mm','NeoSwapDonorRequestHandler.h','Info.plist','NeoSwapDonor.entitlements')]
+          runtime_paths+=['native/neoswap-donation/'+name for name in ('Broker.cpp','Broker.h','Pool.cpp','Pool.h','DonorLedger.h','NeoSwapMachHandle.mm','NeoSwapMachHandle.h','NeoSwapDonorIPC.h','NeoSwapDonorRequestHandler.h','Info.plist','NeoSwapDonor.entitlements')]
           subprocess.run(['git','diff','--exit-code',identity['productionRuntimeReferenceCommit'],'HEAD','--',*runtime_paths],check=True)
-          watchdog_path='native/neoswap-donation/NeoSwapDonorIPC.mm'
-          watchdog_sha='1583f4f2dd4b069deae0d24ea9c33ff0ac8b4284774be25de5b43fb998c4e3a7'
           candidate=json.loads(pathlib.Path('native/import-memory-candidate.json').read_text())
-          actual_watchdog_sha=hashlib.sha256(pathlib.Path(watchdog_path).read_bytes()).hexdigest()
-          assert actual_watchdog_sha==watchdog_sha,(actual_watchdog_sha,watchdog_sha)
-          assert candidate['files_sha256'][watchdog_path]==watchdog_sha,candidate['files_sha256'][watchdog_path]
+          reviewed_deltas={
+              'native/neoswap-donation/NeoSwapDonorIPC.mm':'23b6a0a18c62b657d81bbc42def8bfab99e3a75212dea040d36b3f72c12e92be',
+              'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'b0fa5f58187392927fe3e6286b09cc28230ccabc8164d53f7d00ed5cb7b1b4dd',
+          }
+          for path,digest in reviewed_deltas.items():
+              actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+              assert actual==digest,(path,actual,digest)
+              assert candidate['files_sha256'][path]==digest,(path,candidate['files_sha256'][path],digest)
           reference=json.loads(subprocess.check_output(['git','show',identity['productionRuntimeReferenceCommit']+':build-utils/rpcs3/canonical-source.json']))
           assert pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']==reference['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
-          verified_paths=runtime_paths+[watchdog_path]
+          verified_paths=runtime_paths+list(reviewed_deltas)
           identity['verifiedRuntimeSourceSHA256']={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in verified_paths}
-          identity['productionRuntimeReferenceScope']='v1 donation broker and coherent Vulkan import pinned to abc9566; exact reviewed Build374 donor watchdog delta pinned separately; guest relay validated independently'
+          identity['productionRuntimeReferenceScope']='v1 donation broker and coherent Vulkan import pinned to abc9566; exact reviewed Build381 512MiB donor IPC/request-handler deltas pinned separately; guest relay validated independently'
           pathlib.Path('build/neoswap-vulkan-1gib/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')
@@ -98,3 +102,4 @@ jobs:
           path: build/neoswap-vulkan-1gib/
           if-no-files-found: error
           retention-days: 14
+          overwrite: true

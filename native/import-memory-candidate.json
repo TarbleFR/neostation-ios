@@ -41,7 +41,8 @@
     "Build380 manifest correction: recompute the NeoSwap IPA workflow SHA-256 over UTF-8 bytes so the explicit candidate hash lock matches the workflow containing the bullet character; runtime and delivery behavior are unchanged",
     "Build381: grow measured NeoSwap donor backing toward a 5GiB aggregate goal using up to two independent helper processes in parallel, normally 512MiB chunks with an automatic 256MiB fallback after a large-chunk refusal; production donor chunk ceiling is raised to 512MiB and chunk verification timeout to 60s while kernel/system headroom checks, measured resident/compressed accounting and cleanup remain fail-closed",
     "Build381: simplify the RPCS3 performance overlay to FPS plus a 60-second memory comparison graph: measured NeoSwap donor memory (resident + accounted compressed pages) versus the NeoStation/RPCS3 iPhone process phys_footprint; 5GiB is a donor target, not a claim of simultaneous physical residency",
-    "Build381 follow-up: the legacy 12-locale NeoSwap status catalogue remains validated for compatibility while the simplified performance overlay intentionally stops rendering the old verbose swap-status paragraph; tests now reject unknown reintroduced keys and require the NeoSwap/iPhone-RAM graph contract"
+    "Build381 follow-up: the legacy 12-locale NeoSwap status catalogue remains validated for compatibility while the simplified performance overlay intentionally stops rendering the old verbose swap-status paragraph; tests now reject unknown reintroduced keys and require the NeoSwap/iPhone-RAM graph contract",
+    "Build381 provenance follow-up: the canonical 1GiB Vulkan proof keeps all unchanged donation/Vulkan runtime files pinned to abc9566 and separately pins the exact reviewed Build381 NeoSwapDonorIPC and NeoSwapDonorRequestHandler SHA-256 values for the 512MiB growth ceiling; reruns overwrite same-name evidence artifacts"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -53,7 +54,7 @@
     ".github/workflows/neoswap-donation-check.yml": "0f59c04f34dccda1ec6c8de06df7b3443453e37fa923fb489e5610607360497a",
     ".github/workflows/neoswap-ipa.yml": "c682c327b49de1011e2fc5194b845887905ae364d5a696afa17a3ed02bf273f9",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
-    ".github/workflows/neoswap-vulkan-1gib-proof.yml": "268ea21c1a8b2f238d39ff921af577922643c1a07288c4e103ec8b96a64d883f",
+    ".github/workflows/neoswap-vulkan-1gib-proof.yml": "33e9215dfe979c9f0deaf7ea70531353970aba175fd80fd79ce2fb574c782143",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
     ".github/workflows/rpcs3-core.yml": "3f772317a8893b6dd605058e5043f4de938ce5fb07298b27cf77c2bb84c4391d",
     ".gitignore": "659dba199d7e145774f895bbea9d3f5808b8bde49d27e7ec4369982ff9debd9a",
