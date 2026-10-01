@@ -63,7 +63,9 @@ NSObject* const FlutterMethodNotImplemented = nil;
 @property(nonatomic, strong) NSMutableArray<NSDate*>* donorRetryAfter;
 @property(nonatomic, strong) NSMutableDictionary* donorErrors;
 @property(nonatomic, assign) uint64_t donorEpoch;
-@property(nonatomic, assign) NSInteger donorPendingIndex;
+@property(nonatomic, strong) NSMutableIndexSet* donorPendingIndexes;
+@property(nonatomic, strong) NSMutableArray<NSNumber*>* donorPendingMaximums;
+@property(nonatomic, strong) NSDate* donorFallbackUntil;
 - (void)donorChanged:(NeoSwapDonorSession*)session index:(NSUInteger)index error:(NSError*)error;
 - (NSDictionary*)snapshot:(NSString*)event;
 - (void)advanceDonors;
@@ -224,7 +226,9 @@ NSString* resultText(Result result) {
   _plugin.donorAdoptedChunks = [@[@0, @0] mutableCopy];
   _plugin.donorRetryAfter = [@[NSDate.distantPast, NSDate.distantPast] mutableCopy];
   _plugin.donorEpoch = epoch;
-  _plugin.donorPendingIndex = -1;
+  _plugin.donorPendingIndexes = [NSMutableIndexSet indexSet];
+  _plugin.donorPendingMaximums = [@[@0, @0] mutableCopy];
+  _plugin.donorFallbackUntil = NSDate.distantPast;
   NSDictionary* priorError = @{@"domain":@"NeoSwapDonation", @"code":@3116,
       @"description":@"Prior generation failed its ledger verification"};
   _plugin.donorErrors = [@{@"0":priorError, @"1":priorError} mutableCopy];
