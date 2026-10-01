@@ -58,7 +58,7 @@ struct Broker {
     int directory = -1;
     uint64_t next_name = 1;
     uint64_t file_live_bytes = 0, shared_live_bytes = 0;
-    std::atomic<uint32_t> enabled_mask{0}, live_count{0};
+    std::atomic<uint32_t> enabled_mask{0}, live_count{0}, active_session_mask{0};
 #if defined(NEOSWAP_DONATION)
     std::atomic<uint32_t> donation_enabled_mask{0};
 #endif
@@ -532,6 +532,29 @@ extern "C" void NeoSwap_RegisterClient(uint32_t owner) {
     if (owner >= NEOSWAP_OWNER_COUNT) return;
     auto& b = broker(); std::lock_guard guard(b.mutex);
     b.stats.registered_owner_mask |= 1u << owner;
+}
+extern "C" int NeoSwap_SetOwnerSessionActive(uint32_t owner, int active) {
+    if (owner >= NEOSWAP_OWNER_COUNT) return NEOSWAP_INVALID;
+    auto& b = broker();
+    const uint32_t bit = 1u << owner;
+    if (active) {
+        b.active_session_mask.fetch_or(bit, std::memory_order_release);
+        return NEOSWAP_OK;
+    }
+    b.active_session_mask.fetch_and(static_cast<uint32_t>(~bit), std::memory_order_release);
+#if defined(NEOSWAP_DONATION)
+    if (owner == NEOSWAP_RPCS3) {
+        std::lock_guard guard(b.mutex);
+        b.inflight_demand = {};
+        for (auto& queued : b.pending_demands) queued = {};
+        publish_demands(b);
+    }
+#endif
+    return NEOSWAP_OK;
+}
+extern "C" int NeoSwap_OwnerSessionActive(uint32_t owner) {
+    if (owner >= NEOSWAP_OWNER_COUNT) return 0;
+    return (broker().active_session_mask.load(std::memory_order_acquire) & (1u << owner)) ? 1 : 0;
 }
 extern "C" int NeoSwap_ClaimDonationDemand(NeoSwapDonationDemand* out) {
     if (!out) return NEOSWAP_INVALID;
