@@ -68,7 +68,13 @@ jobs:
           candidate=json.loads(pathlib.Path('native/import-memory-candidate.json').read_text())
           for path in runtime_paths:
               actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
-              assert candidate['files_sha256'][path]==actual,(path,candidate['files_sha256'][path],actual)
+              if path in candidate['files_sha256']:
+                  assert candidate['files_sha256'][path]==actual,(path,candidate['files_sha256'][path],actual)
+              else:
+                  reference_bytes=subprocess.check_output(
+                      ['git','show',identity['productionRuntimeReferenceCommit']+':'+path])
+                  expected=hashlib.sha256(reference_bytes).hexdigest()
+                  assert actual==expected,(path,actual,expected)
           reviewed_deltas={
               'native/neoswap-donation/NeoSwapDonorIPC.mm':'23b6a0a18c62b657d81bbc42def8bfab99e3a75212dea040d36b3f72c12e92be',
               'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'b0fa5f58187392927fe3e6286b09cc28230ccabc8164d53f7d00ed5cb7b1b4dd',
