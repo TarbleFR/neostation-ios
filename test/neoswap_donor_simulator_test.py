@@ -632,12 +632,14 @@ def sdk_runtime() -> tuple[str, str, str]:
     return sdk, runtime['identifier'], sdk_version
 
 
-def collect_launch_evidence(arguments: list[str], evidence: Path, *, timeout: float = 240) -> dict:
+def collect_launch_evidence(arguments: list[str], evidence: Path, *, timeout: float = 480) -> dict:
     """Observe the actual app independently of a stalled simctl client.
 
-    The deadline equals the previous 180s launch + 60s evidence limits. A
-    successful command without native proof still fails. Only this CLI process
-    is terminated after evidence; the native report must pass all checks later.
+    Hosted macOS-15 runners can spend several minutes in first-boot data
+    migration before SpringBoard accepts the app launch. Keep the native proof
+    mandatory, but allow that infrastructure delay instead of killing a valid
+    campaign at four minutes. Only the simctl client is terminated after
+    evidence; the native report must still pass all checks later.
     """
     if evidence.exists():
         raise RuntimeError('Refusing pre-existing Simulator evidence')
