@@ -200,8 +200,9 @@ int main(int argc, const char* argv[]) {
     dispatch_semaphore_t active = dispatch_semaphore_create(0);
     __block NSError* lastError = nil;
     __block uint64_t signaledChunks = 0;
+    const uint64_t perChunkDeadlineSeconds = stress ? 75 : 20;
     NeoSwapDonorSession* session = [[NeoSwapDonorSession alloc] initWithHelperIdentifier:@"probe"
-        requestedBytes:target generation:1 timeout:10
+        requestedBytes:target generation:1 timeout:(stress ? 60 : 10)
         observer:^(NeoSwapDonorSession* source, NeoSwapDonorSnapshot snapshot, NSError* error) {
       (void)source;
 #if defined(NEOSWAP_VULKAN_PROBE)
@@ -217,7 +218,8 @@ int main(int argc, const char* argv[]) {
       }
     }];
     [session startWithServiceNameForProbe:serviceName];
-    require(dispatch_semaphore_wait(active, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC)) == 0,
+    require(dispatch_semaphore_wait(active, dispatch_time(DISPATCH_TIME_NOW,
+                perChunkDeadlineSeconds * NSEC_PER_SEC)) == 0,
             "Real XPC donor did not complete shared-page verification");
     if (lastError) std::fprintf(stderr, "%s\n", lastError.description.UTF8String);
     const auto first = [session snapshot];
@@ -245,7 +247,8 @@ int main(int argc, const char* argv[]) {
       evidence[@"stage"] = @"incremental_chunk_proof";
       require([session requestNextChunkWithMaximumBytes:maximum],
               "The acknowledged donor could not request bounded sequential growth");
-      require(dispatch_semaphore_wait(active, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC)) == 0,
+      require(dispatch_semaphore_wait(active, dispatch_time(DISPATCH_TIME_NOW,
+                  perChunkDeadlineSeconds * NSEC_PER_SEC)) == 0,
               "A genuine incremental chunk did not finish its page/ledger proof");
       snapshot = [session snapshot];
       evidence[@"capacityBytes"] = @(snapshot.capacityBytes);

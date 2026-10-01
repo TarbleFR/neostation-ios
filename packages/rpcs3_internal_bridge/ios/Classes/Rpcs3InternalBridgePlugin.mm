@@ -164,8 +164,8 @@ static UIViewController* RPCS3RootViewController(void) {
     [performance.heightAnchor constraintEqualToConstant:44],
     [self.performanceOverlay.leadingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:8],
     [self.performanceOverlay.topAnchor constraintEqualToAnchor:menu.topAnchor],
-    [self.performanceOverlay.widthAnchor constraintEqualToConstant:310],
-    [self.performanceOverlay.heightAnchor constraintEqualToConstant:210],
+    [self.performanceOverlay.widthAnchor constraintEqualToConstant:320],
+    [self.performanceOverlay.heightAnchor constraintEqualToConstant:250],
   ]];
 }
 - (void)viewDidAppear:(BOOL)animated {

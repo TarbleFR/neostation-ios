@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 382,
+  "target_build": 383,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -43,7 +43,8 @@
     "Build381: simplify the RPCS3 performance overlay to FPS plus a 60-second memory comparison graph: measured NeoSwap donor memory (resident + accounted compressed pages) versus the NeoStation/RPCS3 iPhone process phys_footprint; 5GiB is a donor target, not a claim of simultaneous physical residency",
     "Build381 follow-up: the legacy 12-locale NeoSwap status catalogue remains validated for compatibility while the simplified performance overlay intentionally stops rendering the old verbose swap-status paragraph; tests now reject unknown reintroduced keys and require the NeoSwap/iPhone-RAM graph contract",
     "Build381 provenance follow-up: the canonical 1GiB Vulkan proof keeps all unchanged donation/Vulkan runtime files pinned to abc9566 and separately pins the exact reviewed Build381 NeoSwapDonorIPC and NeoSwapDonorRequestHandler SHA-256 values for the 512MiB growth ceiling; reruns overwrite same-name evidence artifacts",
-    "Build382: preserve the Build381 5GiB/512MiB/256MiB runtime and FPS/NeoSwap/iPhone-RAM overlay unchanged; make stress evidence accept a fully verified 8GiB resident+compressed ledger without falsely claiming simultaneous 8GiB residency, and extend only the hosted iOS18 Simulator launch-evidence deadline to survive slow first-boot data migration"
+    "Build382: preserve the Build381 5GiB/512MiB/256MiB runtime and FPS/NeoSwap/iPhone-RAM overlay unchanged; make stress evidence accept a fully verified 8GiB resident+compressed ledger without falsely claiming simultaneous 8GiB residency, and extend only the hosted iOS18 Simulator launch-evidence deadline to survive slow first-boot data migration",
+    "Build383: preserve the Build381 5GiB donor/runtime policy and Build382 evidence semantics; extend only the macOS stress-probe session/chunk deadline for late high-capacity verification, and resize the native RPCS3 performance overlay to 320x250 so the FPS graph and NeoSwap-versus-iPhone-RAM graph are fully visible"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -53,7 +54,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
     ".github/workflows/neoswap-donation-check.yml": "6ce904427e8491a851fa910c8bafa303fcef655df156859cbab2618c8fd03754",
-    ".github/workflows/neoswap-ipa.yml": "7679214a67c1db51573860c6dc9dba92be679d5e8f8599eb343f975f87e38f05",
+    ".github/workflows/neoswap-ipa.yml": "76ae330dc15e64f8c635ce79045a71573c482566e9293096429542205835e3a5",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "33e9215dfe979c9f0deaf7ea70531353970aba175fd80fd79ce2fb574c782143",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -112,7 +113,7 @@
     "native/neoswap-donation/Pool.cpp": "fd3601252dc881cd3d21586ceea3586e4207dfc324724a57ec937d4118fa91e4",
     "native/neoswap-donation/Pool.h": "12944770ba6a841c88054092aab2ce908c8d814e230aabfe81bddd5f83c5356c",
     "native/neoswap-donation/VulkanDonationProbe.h": "9d132c146da2c0c21dc3d33627dbedc6e9c4a0f1414943a1ad7b211b699824bc",
-    "native/neoswap-donation/ipc_macos_probe.mm": "dd8df9f0448825ce40ba3bb2c10efeb7cd70f8368572a0865744751b6cadd868",
+    "native/neoswap-donation/ipc_macos_probe.mm": "bb1529d816ceba0cc7f07c35bd81e0b719951ab535876e7f88e4b8f489ce497f",
     "native/neoswap-donation/macOS_probe.cpp": "3da6343d9c5ef79d4b3e5064304c2ffb0ead9b7cb549bc79571374d6be939784",
     "native/neoswap-donation/references.json": "d9f6721c74daf5476e37288e72f22e95620c994cb75b52a6513e56afbc550092",
     "native/neoswap-donation/run_ipc_macos_probe.sh": "f42424c1ea8b89f8314b046211244fc00fb7825eef70da06c3c2f59bfbd503e0",
@@ -162,7 +163,7 @@
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h": "64f30f3de75bf0b737b175ebeed32523a4991717d1298409f57e1d4fe72bd4da",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm": "21b526e56d10b5cd7b19f539a3bd2e2e02cf15ec0a9b7eca636708a02447cb64",
     "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h": "92e2cf677f222de9607ea00bc976e418f489a22dc3d7a85dd39c7e23dbbf42d7",
-    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "de36823e1c9469ce3ba59bce76136e05bcb70e46a780bf5a8b84f0724cc1d51c"
+    "packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm": "ce453ad00cd32833696676e9ba70e1874990fcc6bc989e67ff5cb682bc7960ca"
   },
   "git_modes": {
     ".github/workflows/cheats-media-check.yml": "100644",
@@ -309,7 +310,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "4fb5d8f06432bc16f4f023114a3c85d3017f0a0d50417a940f4aefc48ca38837",
+    "test/import_memory_candidate_scope_test.py": "9ae90c6721337a76444d315f92fe6b9d68b52e8a6ef55703fa5165452a4bf5f8",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
