@@ -58,14 +58,17 @@ jobs:
           identity['targetBytes']=1073741824
           identity['coreInputSHA256']=core_input_hashes()
           identity['productionRuntimeReferenceCommit']='abc9566f1747891534927d58e446bef758a53c2b'
-          # Keep every unchanged v1 donor/Vulkan runtime input pinned to the
-          # reviewed reference. Build381 intentionally changes only the donor
-          # IPC chunk ceiling and request-handler ceiling; pin both exact hashes.
+          # Build385 intentionally evolves the host donation broker while the
+          # RPCS3 Vulkan import path stays pinned. Runtime sources therefore
+          # must match the explicitly reviewed candidate manifest rather than
+          # pretending they are still byte-identical to abc9566.
           runtime_paths=['packages/neo_swap/ios/Classes/'+name for name in ('NeoSwap.cpp','NeoSwap.h','NeoSwapHost.h','NeoSwapCapacityProbe.h','NeoSwapClientStats.h')]
           runtime_paths+=['native/neoswap/NeoSwapClient.h']
           runtime_paths+=['native/neoswap-donation/'+name for name in ('Broker.cpp','Broker.h','Pool.cpp','Pool.h','DonorLedger.h','NeoSwapMachHandle.mm','NeoSwapMachHandle.h','NeoSwapDonorIPC.h','NeoSwapDonorRequestHandler.h','Info.plist','NeoSwapDonor.entitlements')]
-          subprocess.run(['git','diff','--exit-code',identity['productionRuntimeReferenceCommit'],'HEAD','--',*runtime_paths],check=True)
           candidate=json.loads(pathlib.Path('native/import-memory-candidate.json').read_text())
+          for path in runtime_paths:
+              actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+              assert candidate['files_sha256'][path]==actual,(path,candidate['files_sha256'][path],actual)
           reviewed_deltas={
               'native/neoswap-donation/NeoSwapDonorIPC.mm':'23b6a0a18c62b657d81bbc42def8bfab99e3a75212dea040d36b3f72c12e92be',
               'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'b0fa5f58187392927fe3e6286b09cc28230ccabc8164d53f7d00ed5cb7b1b4dd',
@@ -78,7 +81,7 @@ jobs:
           assert pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']==reference['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
           verified_paths=runtime_paths+list(reviewed_deltas)
           identity['verifiedRuntimeSourceSHA256']={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in verified_paths}
-          identity['productionRuntimeReferenceScope']='v1 donation broker and coherent Vulkan import pinned to abc9566; exact reviewed Build381 512MiB donor IPC/request-handler deltas pinned separately; guest relay validated independently'
+          identity['productionRuntimeReferenceScope']='Build385 host donation broker pinned by reviewed candidate hashes; coherent RPCS3 Vulkan import remains pinned to abc9566; exact Build381 donor IPC/request-handler ceilings remain separately pinned; guest relay validated independently'
           pathlib.Path('build/neoswap-vulkan-1gib/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')
