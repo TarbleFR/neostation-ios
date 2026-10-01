@@ -48,7 +48,8 @@
     "Build384: preserve the Build381/383 5GiB runtime, 512/256MiB two-helper growth and FPS/NeoSwap/iPhone-RAM overlay; fix only the iOS18 Simulator proof harness so its private NeoSwapPlugin category and manually seeded state use donorPendingIndexes, donorPendingMaximums and donorFallbackUntil instead of the removed single donorPendingIndex property",
     "Build385: replace eager 5GiB donor warmup with a session-scoped adaptive RPCS3 pool: 512MiB warm floor, 512MiB reserve, 128MiB growth quantization and a 5GiB hard limit; grow only with actual routed demand, pause growth under measured system pressure, retain prepared pages while the session is active, retire after all loans are released, and display active RPCS3 donor loans against the currently prepared pool",
     "Build385 CI candidate: adaptive pool source is ready for hosted validation; physical-iPhone donation, pressure behavior and gameplay remain explicitly unvalidated until this IPA is tested on device",
-    "Build385 final candidate: two warm donor instances seed 16MiB each, establish the 512MiB verified warm floor before RPCS3 boot when possible (8s bounded wait), add helpers only when existing donors cannot satisfy real demand, and preserve file fallback if warmup is pressure-limited"
+    "Build385 final candidate: two warm donor instances seed 16MiB each, establish the 512MiB verified warm floor before RPCS3 boot when possible (8s bounded wait), add helpers only when existing donors cannot satisfy real demand, and preserve file fallback if warmup is pressure-limited",
+    "Build385 CI follow-up: the canonical 1GiB Vulkan proof now pins the intentionally evolved host donation broker to the candidate manifest hashes while preserving the exact RPCS3 Vulkan import and donor IPC/request-handler proof requirements"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -60,7 +61,7 @@
     ".github/workflows/neoswap-donation-check.yml": "6ce904427e8491a851fa910c8bafa303fcef655df156859cbab2618c8fd03754",
     ".github/workflows/neoswap-ipa.yml": "3a4b2f3178d80d4d5797b2086f9ce3ca054f09d3a304a8546671a709ffd8641f",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
-    ".github/workflows/neoswap-vulkan-1gib-proof.yml": "33e9215dfe979c9f0deaf7ea70531353970aba175fd80fd79ce2fb574c782143",
+    ".github/workflows/neoswap-vulkan-1gib-proof.yml": "f15d3511610a50361794d10580314f4ceae2a19f669ef6d820a4d5f8657a286f",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
     ".github/workflows/rpcs3-core.yml": "3f772317a8893b6dd605058e5043f4de938ce5fb07298b27cf77c2bb84c4391d",
     ".gitignore": "659dba199d7e145774f895bbea9d3f5808b8bde49d27e7ec4369982ff9debd9a",
