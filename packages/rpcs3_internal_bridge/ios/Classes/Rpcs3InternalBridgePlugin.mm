@@ -26,6 +26,8 @@
 
 static NSString* const kRpcs3Channel = @"neostation/rpcs3_internal";
 static const uint32_t kExpectedAbi = 30;
+static const uint64_t kNeoSwapWarmFloorBytes = 512ULL * 1024 * 1024;
+static const uint32_t kNeoSwapWarmWaitMs = 8000;
 
 extern "C" {
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
@@ -1513,6 +1515,20 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     CGFloat scale = screen.scale;
     float refreshRate = (float)screen.maximumFramesPerSecond;
     dispatch_async(_runtimeQueue, ^{
+      // Give the adaptive donor manager a bounded head start so the first
+      // eligible RSX/CPU buffers do not all fall through to file backing.
+      // A timeout is degradable: RPCS3 can still boot and later allocations
+      // will use verified donor pages as they arrive.
+      const int warmResult = NeoSwap_WaitForDonationReady(
+          kNeoSwapWarmFloorBytes, kNeoSwapWarmWaitMs);
+      NeoSwapHostStats warmHost = {};
+      const int warmSnapshot = NeoSwap_HostSnapshot(&warmHost);
+      RPCS3Diagnostic(@"neoswap_warm_pool", [NSString stringWithFormat:
+          @"result=%d snapshot=%d prepared=%llu target=%llu donor_count=%u",
+          warmResult, warmSnapshot,
+          (unsigned long long)warmHost.donor_prepared_bytes,
+          (unsigned long long)warmHost.donor_target_bytes,
+          (unsigned)warmHost.donor_count]);
       if (!self.llvmSelfTestPassed) {
         typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
         auto selfTest = reinterpret_cast<SelfTest>(
