@@ -175,19 +175,32 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn("'_NeoSwapRelay_Start'", validator)
         self.assertIn("'_NeoSwap_GetRelayAPI'", validator)
 
-    def test_rpcs3_requires_ready_guest_relay_and_measured_one_gib_donor_floor(self):
+    def test_rpcs3_requires_ready_relay_and_targets_five_gib_with_two_adaptive_helpers(self):
         bridge = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
         plugin = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
+        ipc = (ROOT / 'native/neoswap-donation/NeoSwapDonorIPC.mm').read_text()
+        handler = (ROOT / 'native/neoswap-donation/NeoSwapDonorRequestHandler.mm').read_text()
+        overlay = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.mm').read_text()
+        header = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h').read_text()
         self.assertIn('NeoSwapRelay_WaitReady(10000)', bridge)
         self.assertIn('relayReady != NEOSWAP_RELAY_OK', bridge)
         self.assertIn('RPCS3_NEOSWAP_NOT_READY', bridge)
         self.assertLess(bridge.index('NeoSwapRelay_WaitReady(10000)'),
                         bridge.index('NeoSwap_RegisterClient(NEOSWAP_RPCS3)'))
-        self.assertIn('kDonationWarmFloorBytes = 1024 * kMiB', plugin)
-        self.assertIn('kDonationWarmChunkBytes = 128 * kMiB', plugin)
-        self.assertIn('pool.prepared_bytes < kDonationWarmFloorBytes', plugin)
-        self.assertIn('@"donationWarmFloorBytes":@(kDonationWarmFloorBytes)', plugin)
-        self.assertNotIn('Never fill idle device RAM merely to reach the target.', plugin)
+        self.assertIn('kDonationGoalBytes = 5 * kGiB', plugin)
+        self.assertIn('kDonationPrimaryChunkBytes = 512 * kMiB', plugin)
+        self.assertIn('kDonationFallbackChunkBytes = 256 * kMiB', plugin)
+        self.assertIn('kDonationConcurrentGrowths = 2', plugin)
+        self.assertIn('NSMutableIndexSet* donorPendingIndexes', plugin)
+        self.assertIn('timeout:60', plugin)
+        self.assertIn('@"donationGoalBytes":@(kDonationGoalBytes)', plugin)
+        self.assertIn('bytes > 512ULL * 1024 * 1024', ipc)
+        self.assertIn('maximum > 512 * MiB', handler)
+        self.assertIn('processFootprintBytes', header)
+        self.assertIn('RPCS3ProcessFootprintBytes', bridge)
+        self.assertIn('NeoSwap %@ / %@ · iPhone RAM %@', overlay)
+        self.assertIn('systemCyanColor', overlay)
+        self.assertIn('systemOrangeColor', overlay)
 
     def test_chunk_preparation_uses_chunk_deadline_not_idle_heartbeat(self):
         source = (ROOT / 'native/neoswap-donation/NeoSwapDonorIPC.mm').read_text()

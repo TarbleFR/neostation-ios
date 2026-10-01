@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "RPCS3PerformanceOverlay.h"
 #import "RPCS3InGameLocalization.h"
-#import <neo_swap/NeoSwap.h>
-#include "NeoSwapUsagePolicy.h"
 
 #include <array>
 #include <cmath>
@@ -11,13 +9,16 @@ namespace {
 constexpr NSUInteger kCapacity = 120;
 constexpr double kWindowMs = 60000.0;
 constexpr uint32_t kFPSValid = 1u << 0;
-constexpr uint32_t kCPUValid = 1u << 1;
-constexpr uint32_t kGPUValid = 1u << 2;
-constexpr uint32_t kMemoryValid = 1u << 3;
+constexpr uint64_t kGiB = 1024ULL * 1024 * 1024;
 
 struct Sample {
   double timestampMs = 0;
-  double frameTimeMs = 0;
+  double fps = 0;
+  uint64_t neoSwapBytes = 0;
+  uint64_t iphoneBytes = 0;
+  bool fpsValid = false;
+  bool neoSwapValid = false;
+  bool iphoneValid = false;
 };
 
 NSString* MemoryText(uint64_t value) {
@@ -31,16 +32,15 @@ NSString* MemoryText(uint64_t value) {
   std::array<Sample, kCapacity> _samples;
   NSUInteger _sampleStart;
   NSUInteger _sampleCount;
+  uint64_t _donationTargetBytes;
 }
 @property(nonatomic, strong) UILabel* ratesLabel;
 @property(nonatomic, strong) UILabel* memoryLabel;
-@property(nonatomic, strong) UILabel* swapLabel;
 @property(nonatomic, strong) UILabel* graphLabel;
 @property(nonatomic, copy) NSString* localeIdentifier;
 @end
 
 @implementation RPCS3PerformanceOverlay
-
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (!self) return nil;
@@ -52,26 +52,20 @@ NSString* MemoryText(uint64_t value) {
   self.isAccessibilityElement = YES;
   self.accessibilityTraits = UIAccessibilityTraitStaticText;
   self.accessibilityIdentifier = @"rpcs3.performance.overlay";
-
-  self.ratesLabel = [self newLabelWithSize:13 weight:UIFontWeightSemibold];
+  self.ratesLabel = [self newLabelWithSize:14 weight:UIFontWeightSemibold];
   self.memoryLabel = [self newLabelWithSize:11 weight:UIFontWeightRegular];
-  self.swapLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
-  self.swapLabel.numberOfLines = 3;
   self.graphLabel = [self newLabelWithSize:10 weight:UIFontWeightRegular];
   self.graphLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
   [self setLocaleIdentifier:NSLocale.preferredLanguages.firstObject ?: @"en"];
   [self reset];
   return self;
 }
-
 - (void)setLocaleIdentifier:(NSString*)localeIdentifier {
   _localeIdentifier = RPCS3CanonicalLocale(localeIdentifier);
   self.accessibilityLabel = RPCS3LocalizedString(@"performance", _localeIdentifier);
-  self.graphLabel.text = [NSString stringWithFormat:@"%@ · 60 s",
-      RPCS3LocalizedString(@"frameTime", _localeIdentifier)];
+  self.graphLabel.text = @"FPS · NeoSwap · iPhone RAM · 60 s";
   if (self.ratesLabel) [self reset];
 }
-
 - (UILabel*)newLabelWithSize:(CGFloat)size weight:(UIFontWeight)weight {
   UILabel* label = [UILabel new];
   label.font = [UIFont monospacedDigitSystemFontOfSize:size weight:weight];
@@ -82,31 +76,23 @@ NSString* MemoryText(uint64_t value) {
   [self addSubview:label];
   return label;
 }
-
-- (CGSize)intrinsicContentSize { return CGSizeMake(310, 210); }
-
+- (CGSize)intrinsicContentSize { return CGSizeMake(320, 250); }
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGFloat width = MAX(0.0, self.bounds.size.width - 20.0);
-  self.ratesLabel.frame = CGRectMake(10, 8, width, 18);
-  self.memoryLabel.frame = CGRectMake(10, 29, width, 16);
-  self.swapLabel.frame = CGRectMake(10, 47, width, 48);
-  self.graphLabel.frame = CGRectMake(10, 101, width, 14);
+  self.ratesLabel.frame = CGRectMake(10, 8, width, 19);
+  self.memoryLabel.frame = CGRectMake(10, 30, width, 17);
+  self.graphLabel.frame = CGRectMake(10, 51, width, 14);
   [self setNeedsDisplay];
 }
-
 - (void)reset {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
-  _sampleStart = 0;
-  _sampleCount = 0;
-  self.ratesLabel.text = @"FPS — · CPU — · RSX —";
-  self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
-      RPCS3LocalizedString(@"memory", self.localeIdentifier)];
-  self.swapLabel.text = @"NeoSwap —";
+  _sampleStart = 0; _sampleCount = 0; _donationTargetBytes = 5 * kGiB;
+  self.ratesLabel.text = @"FPS —";
+  self.memoryLabel.text = @"NeoSwap — / 5.00 GiB · iPhone RAM —";
   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
   [self setNeedsDisplay];
 }
-
 - (void)appendMetricsWithFPS:(double)fps
                          cpu:(double)cpu
                          gpu:(double)gpu
@@ -116,117 +102,93 @@ NSString* MemoryText(uint64_t value) {
                    timestamp:(double)timestampMs {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
   if (self.hidden || !std::isfinite(timestampMs)) return;
-
-  NSString* fpsText = (validFields & kFPSValid) && std::isfinite(fps) && fps >= 0
-      ? [NSString stringWithFormat:@"%.1f", fps] : @"—";
-  NSString* cpuText = (validFields & kCPUValid) && std::isfinite(cpu) && cpu >= 0
-      ? [NSString stringWithFormat:@"%.0f%%", cpu] : @"—";
-  NSString* gpuText = (validFields & kGPUValid) && std::isfinite(gpu) && gpu >= 0
-      ? [NSString stringWithFormat:@"%.0f%%", gpu] : @"—";
-  self.ratesLabel.text = [NSString stringWithFormat:@"FPS %@ · CPU %@ · RSX %@", fpsText, cpuText, gpuText];
-
-  if ((validFields & kMemoryValid) && memoryTotal > 0 && memoryUsed <= memoryTotal) {
-    self.memoryLabel.text = [NSString stringWithFormat:@"%@ %@ / %@",
-        RPCS3LocalizedString(@"memory", self.localeIdentifier),
-        MemoryText(memoryUsed), MemoryText(memoryTotal)];
-  } else {
-    self.memoryLabel.text = [NSString stringWithFormat:@"%@ —",
-        RPCS3LocalizedString(@"memory", self.localeIdentifier)];
+  (void)cpu; (void)gpu; (void)memoryUsed; (void)memoryTotal;
+  const bool fpsValid = (validFields & kFPSValid) && std::isfinite(fps) && fps >= 0;
+  self.ratesLabel.text = fpsValid ? [NSString stringWithFormat:@"FPS %.1f", fps] : @"FPS —";
+  while (_sampleCount && timestampMs - _samples[_sampleStart].timestampMs > kWindowMs) {
+    _sampleStart = (_sampleStart + 1) % kCapacity; --_sampleCount;
   }
-
-  if ((validFields & kFPSValid) && std::isfinite(fps) && fps > 0) {
-    while (_sampleCount && timestampMs - _samples[_sampleStart].timestampMs > kWindowMs) {
-      _sampleStart = (_sampleStart + 1) % kCapacity;
-      --_sampleCount;
+  NSUInteger next = (_sampleStart + _sampleCount) % kCapacity;
+  _samples[next] = {timestampMs, fps, 0, 0, fpsValid, false, false};
+  if (_sampleCount < kCapacity) ++_sampleCount; else _sampleStart = (_sampleStart + 1) % kCapacity;
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
+  [self setNeedsDisplay];
+}
+- (void)appendNeoSwapWithClient:(const NeoSwapClientStats*)client
+                          host:(const NeoSwapHostStats*)host
+         processFootprintBytes:(uint64_t)processFootprintBytes
+                     timestamp:(double)timestampMs {
+  NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
+  if (self.hidden) return;
+  (void)client;
+  const bool donorMeasured = host && host->donation_state == 2 && host->donor_count && host->donor_prepared_bytes;
+  const uint64_t donatedBytes = donorMeasured ? host->donor_resident_bytes + host->donor_accounted_compressed_bytes : 0;
+  _donationTargetBytes = host && host->donor_target_bytes ? host->donor_target_bytes : 5 * kGiB;
+  self.memoryLabel.text = [NSString stringWithFormat:@"NeoSwap %@ / %@ · iPhone RAM %@",
+      donorMeasured ? MemoryText(donatedBytes) : @"—", MemoryText(_donationTargetBytes),
+      processFootprintBytes ? MemoryText(processFootprintBytes) : @"—"];
+  if (_sampleCount) {
+    const NSUInteger index = (_sampleStart + _sampleCount - 1) % kCapacity;
+    Sample& sample = _samples[index];
+    if (std::fabs(sample.timestampMs - timestampMs) < 1000.0) {
+      sample.neoSwapBytes = donatedBytes; sample.iphoneBytes = processFootprintBytes;
+      sample.neoSwapValid = donorMeasured; sample.iphoneValid = processFootprintBytes != 0;
     }
-    const double frameTime = 1000.0 / fps;
-    NSUInteger next = (_sampleStart + _sampleCount) % kCapacity;
-    _samples[next] = {timestampMs, frameTime};
-    if (_sampleCount < kCapacity) ++_sampleCount;
-    else _sampleStart = (_sampleStart + 1) % kCapacity;
   }
   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
   [self setNeedsDisplay];
 }
-
-- (void)appendNeoSwapWithClient:(const NeoSwapClientStats*)client host:(const NeoSwapHostStats*)host {
-  NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
-  if (self.hidden) return;
-  const uint64_t live = NeoSwap_LiveBytes(NEOSWAP_RPCS3);
-  NSString* key = @"swapWaiting";
-  switch (NeoSwapUsage(live, client, host)) {
-    case NeoSwapUsageStatus::unavailable: key = @"swapUnavailable"; break;
-    case NeoSwapUsageStatus::clientUnavailable: key = @"swapClientUnavailable"; break;
-    case NeoSwapUsageStatus::disabled: key = @"swapDisabled"; break;
-    case NeoSwapUsageStatus::waiting: key = @"swapWaiting"; break;
-    case NeoSwapUsageStatus::small: key = @"swapSmall"; break;
-    case NeoSwapUsageStatus::rejected: key = @"swapRejected"; break;
-    case NeoSwapUsageStatus::released: key = @"swapReleased"; break;
-    case NeoSwapUsageStatus::active: key = @"swapActive"; break;
-  }
-  // An unavailable or busy donor sample is not a measurement of zero charge.
-  // Retained RPCS3 loans remain independent of the active donor-page proof.
-  const BOOL donorMeasured = NeoSwapDonorMeasured(host);
-  self.swapLabel.text = [NSString stringWithFormat:@"NeoSwap · %@ %@ · %@ %@\n%@ %@ · %@ %@\n%@ %@ · %@ %@ · %@",
-      RPCS3LocalizedString(@"swapDonor", self.localeIdentifier),
-      donorMeasured ? MemoryText(host->donor_prepared_bytes) : @"—",
-      RPCS3LocalizedString(@"swapAllocated", self.localeIdentifier),
-      host ? MemoryText(host->owner_donated_live_bytes[NEOSWAP_RPCS3]) : @"—",
-      RPCS3LocalizedString(@"swapResident", self.localeIdentifier),
-      donorMeasured ? MemoryText(host->donor_resident_bytes) : @"—",
-      RPCS3LocalizedString(@"swapCompressed", self.localeIdentifier),
-      donorMeasured ? MemoryText(host->donor_accounted_compressed_bytes) : @"—",
-      RPCS3LocalizedString(@"swapTarget", self.localeIdentifier),
-      host && host->donor_target_bytes ? MemoryText(host->donor_target_bytes) : @"—",
-      RPCS3LocalizedString(@"swapDonors", self.localeIdentifier),
-      host && host->donation_state ? [NSString stringWithFormat:@"%u", (unsigned)host->donor_count] : @"—",
-      RPCS3LocalizedString(key, self.localeIdentifier)];
-  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
-      self.ratesLabel.text, self.memoryLabel.text, self.swapLabel.text];
-}
-
 - (void)drawRect:(CGRect)rect {
   [super drawRect:rect];
   CGContextRef context = UIGraphicsGetCurrentContext();
   if (!context) return;
-  CGRect graph = CGRectMake(40, 120, MAX(0.0, self.bounds.size.width - 50.0),
-                            MAX(0.0, self.bounds.size.height - 145.0));
-  if (graph.size.width <= 0 || graph.size.height <= 0) return;
-
-  double maximum = 33.4;
-  for (NSUInteger index = 0; index < _sampleCount; ++index)
-    maximum = MAX(maximum, _samples[(_sampleStart + index) % kCapacity].frameTimeMs);
-  maximum = std::ceil(maximum / 10.0) * 10.0;
-  NSDictionary* attrs = @{
-    NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:9 weight:UIFontWeightRegular],
-    NSForegroundColorAttributeName: [UIColor colorWithWhite:0.75 alpha:1.0],
+  const CGFloat left = 44.0, right = 10.0;
+  const CGFloat graphWidth = MAX(0.0, self.bounds.size.width - left - right);
+  CGRect fpsGraph = CGRectMake(left, 78, graphWidth, 62);
+  CGRect memoryGraph = CGRectMake(left, 166, graphWidth, 62);
+  if (graphWidth <= 0) return;
+  NSDictionary* attrs = @{NSFontAttributeName:[UIFont monospacedDigitSystemFontOfSize:9 weight:UIFontWeightRegular],
+                           NSForegroundColorAttributeName:[UIColor colorWithWhite:0.75 alpha:1.0]};
+  void (^drawGrid)(CGRect) = ^(CGRect graph) {
+    for (NSUInteger row = 0; row < 3; ++row) {
+      const CGFloat y = CGRectGetMinY(graph) + graph.size.height * row / 2.0;
+      CGContextSetStrokeColorWithColor(context, [UIColor colorWithWhite:1 alpha:0.16].CGColor);
+      CGContextSetLineWidth(context, 0.5);
+      CGContextMoveToPoint(context, graph.origin.x, y);
+      CGContextAddLineToPoint(context, CGRectGetMaxX(graph), y);
+      CGContextStrokePath(context);
+    }
   };
-  for (NSUInteger index = 0; index < 3; ++index) {
-    CGFloat y = CGRectGetMinY(graph) + graph.size.height * index / 2.0;
-    CGContextSetStrokeColorWithColor(context, [UIColor colorWithWhite:1 alpha:0.16].CGColor);
-    CGContextSetLineWidth(context, 0.5);
-    CGContextMoveToPoint(context, graph.origin.x, y);
-    CGContextAddLineToPoint(context, CGRectGetMaxX(graph), y);
-    CGContextStrokePath(context);
-    [[NSString stringWithFormat:@"%.0f", maximum * (1.0 - index / 2.0)]
-        drawAtPoint:CGPointMake(8, y - 5) withAttributes:attrs];
+  drawGrid(fpsGraph); drawGrid(memoryGraph);
+  double fpsMaximum = 60.0;
+  uint64_t memoryMaximum = MAX(_donationTargetBytes, kGiB);
+  for (NSUInteger n = 0; n < _sampleCount; ++n) {
+    const auto& sample = _samples[(_sampleStart + n) % kCapacity];
+    if (sample.fpsValid) fpsMaximum = MAX(fpsMaximum, sample.fps);
+    if (sample.iphoneValid) memoryMaximum = MAX(memoryMaximum, sample.iphoneBytes);
   }
-  [@"−60 s" drawAtPoint:CGPointMake(graph.origin.x, CGRectGetMaxY(graph) + 4) withAttributes:attrs];
-  [@"0 s" drawAtPoint:CGPointMake(CGRectGetMaxX(graph) - 18, CGRectGetMaxY(graph) + 4) withAttributes:attrs];
+  fpsMaximum = std::ceil(fpsMaximum / 30.0) * 30.0;
+  const double memoryMaximumGiB = std::ceil((double)memoryMaximum / kGiB * 2.0) / 2.0;
+  memoryMaximum = (uint64_t)(memoryMaximumGiB * kGiB);
+  [[NSString stringWithFormat:@"%.0f", fpsMaximum] drawAtPoint:CGPointMake(8, CGRectGetMinY(fpsGraph)-5) withAttributes:attrs];
+  [@"0" drawAtPoint:CGPointMake(28, CGRectGetMaxY(fpsGraph)-5) withAttributes:attrs];
+  [[NSString stringWithFormat:@"%.1f", (double)memoryMaximum/kGiB] drawAtPoint:CGPointMake(8, CGRectGetMinY(memoryGraph)-5) withAttributes:attrs];
+  [@"0" drawAtPoint:CGPointMake(28, CGRectGetMaxY(memoryGraph)-5) withAttributes:attrs];
   if (!_sampleCount) return;
-
-  double latest = _samples[(_sampleStart + _sampleCount - 1) % kCapacity].timestampMs;
-  UIBezierPath* line = [UIBezierPath bezierPath];
-  for (NSUInteger index = 0; index < _sampleCount; ++index) {
-    const auto& sample = _samples[(_sampleStart + index) % kCapacity];
-    CGFloat x = CGRectGetMaxX(graph) - graph.size.width * (latest - sample.timestampMs) / kWindowMs;
-    CGFloat y = CGRectGetMaxY(graph) - graph.size.height * sample.frameTimeMs / maximum;
-    if (index == 0) [line moveToPoint:CGPointMake(x, y)];
-    else [line addLineToPoint:CGPointMake(x, y)];
+  const double latest = _samples[(_sampleStart + _sampleCount - 1) % kCapacity].timestampMs;
+  UIBezierPath* fpsLine=[UIBezierPath bezierPath]; UIBezierPath* swapLine=[UIBezierPath bezierPath]; UIBezierPath* iphoneLine=[UIBezierPath bezierPath];
+  bool fpsStarted=false, swapStarted=false, iphoneStarted=false;
+  for (NSUInteger n=0;n<_sampleCount;++n) {
+    const auto& sample=_samples[(_sampleStart+n)%kCapacity];
+    const CGFloat x=CGRectGetMaxX(fpsGraph)-graphWidth*(latest-sample.timestampMs)/kWindowMs;
+    if(sample.fpsValid){const CGFloat y=CGRectGetMaxY(fpsGraph)-fpsGraph.size.height*sample.fps/fpsMaximum;if(!fpsStarted){[fpsLine moveToPoint:CGPointMake(x,y)];fpsStarted=true;}else[fpsLine addLineToPoint:CGPointMake(x,y)];}
+    if(sample.neoSwapValid){const CGFloat y=CGRectGetMaxY(memoryGraph)-memoryGraph.size.height*std::min((double)sample.neoSwapBytes/memoryMaximum,1.0);if(!swapStarted){[swapLine moveToPoint:CGPointMake(x,y)];swapStarted=true;}else[swapLine addLineToPoint:CGPointMake(x,y)];}
+    if(sample.iphoneValid){const CGFloat y=CGRectGetMaxY(memoryGraph)-memoryGraph.size.height*std::min((double)sample.iphoneBytes/memoryMaximum,1.0);if(!iphoneStarted){[iphoneLine moveToPoint:CGPointMake(x,y)];iphoneStarted=true;}else[iphoneLine addLineToPoint:CGPointMake(x,y)];}
   }
-  [UIColor.systemGreenColor setStroke];
-  line.lineWidth = 1.5;
-  [line stroke];
+  [UIColor.systemGreenColor setStroke]; fpsLine.lineWidth=1.5; [fpsLine stroke];
+  [UIColor.systemCyanColor setStroke]; swapLine.lineWidth=1.5; [swapLine stroke];
+  [UIColor.systemOrangeColor setStroke]; iphoneLine.lineWidth=1.5; [iphoneLine stroke];
+  [@"−60 s" drawAtPoint:CGPointMake(memoryGraph.origin.x,CGRectGetMaxY(memoryGraph)+4) withAttributes:attrs];
+  [@"0 s" drawAtPoint:CGPointMake(CGRectGetMaxX(memoryGraph)-18,CGRectGetMaxY(memoryGraph)+4) withAttributes:attrs];
 }
-
 @end

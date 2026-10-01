@@ -19,6 +19,7 @@
 #import <Security/Security.h>
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
+#import <mach/mach.h>
 #import <os/lock.h>
 #import <os/proc.h>
 #import <unistd.h>
@@ -56,6 +57,14 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
   if (value != NULL) CFRelease(value);
   CFRelease(task);
   return enabled;
+}
+
+static uint64_t RPCS3ProcessFootprintBytes(void) {
+  task_vm_info_data_t info = {};
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS ||
+      count < TASK_VM_INFO_REV1_COUNT) return 0;
+  return info.phys_footprint;
 }
 
 static UIViewController* RPCS3RootViewController(void) {
@@ -609,6 +618,7 @@ static void RPCS3Progress(void* context,
           strongSelf->_neoSwapClientStats(&client) == NEOSWAP_OK;
       NeoSwapHostStats host = {};
       const BOOL hostValid = NeoSwap_HostSnapshot(&host) == NEOSWAP_OK;
+      const uint64_t processFootprintBytes = RPCS3ProcessFootprintBytes();
       const double timestamp = CACurrentMediaTime() * 1000.0;
       dispatch_async(dispatch_get_main_queue(), ^{
         RPCS3GameViewController* owner = strongSelf.gameController;
@@ -621,7 +631,9 @@ static void RPCS3Progress(void* context,
                                            validFields:metrics.valid_fields
                                              timestamp:timestamp];
         [owner.performanceOverlay appendNeoSwapWithClient:clientValid ? &client : nullptr
-                                                    host:hostValid ? &host : nullptr];
+                                                    host:hostValid ? &host : nullptr
+                                   processFootprintBytes:processFootprintBytes
+                                               timestamp:timestamp];
       });
     });
     dispatch_resume(timer);
