@@ -43,6 +43,9 @@ NEOSWAP_PUBLIC int NeoSwap_AcknowledgeDonationDemand(uint64_t sequence);
 // verified pages once that session has fully released its loans.
 NEOSWAP_PUBLIC int NeoSwap_SetOwnerSessionActive(uint32_t owner, int active);
 NEOSWAP_PUBLIC int NeoSwap_OwnerSessionActive(uint32_t owner);
+// Bounded host-side readiness wait used off the main thread before emulator
+// boot. It observes only verified donor capacity and never creates memory.
+NEOSWAP_PUBLIC int NeoSwap_WaitForDonationReady(uint64_t minimum_bytes, uint32_t timeout_ms);
 #ifdef __cplusplus
 }
 #endif
