@@ -49,7 +49,8 @@
     "Build385: replace eager 5GiB donor warmup with a session-scoped adaptive RPCS3 pool: 512MiB warm floor, 512MiB reserve, 128MiB growth quantization and a 5GiB hard limit; grow only with actual routed demand, pause growth under measured system pressure, retain prepared pages while the session is active, retire after all loans are released, and display active RPCS3 donor loans against the currently prepared pool",
     "Build385 CI candidate: adaptive pool source is ready for hosted validation; physical-iPhone donation, pressure behavior and gameplay remain explicitly unvalidated until this IPA is tested on device",
     "Build385 final candidate: two warm donor instances seed 16MiB each, establish the 512MiB verified warm floor before RPCS3 boot when possible (8s bounded wait), add helpers only when existing donors cannot satisfy real demand, and preserve file fallback if warmup is pressure-limited",
-    "Build385 CI follow-up: the canonical 1GiB Vulkan proof now pins the intentionally evolved host donation broker to the candidate manifest hashes while preserving the exact RPCS3 Vulkan import and donor IPC/request-handler proof requirements"
+    "Build385 CI follow-up: the canonical 1GiB Vulkan proof now pins the intentionally evolved host donation broker to the candidate manifest hashes while preserving the exact RPCS3 Vulkan import and donor IPC/request-handler proof requirements",
+    "Build385 compilation trigger: adaptive memory manager, preboot warm floor and updated 1GiB proof gate are frozen for this candidate; real-device behavior remains to be validated from the resulting IPA"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
