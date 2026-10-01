@@ -30,6 +30,7 @@ static const uint64_t kDonationHardLimitBytes = 5 * kGiB;
 static const uint64_t kDonationWarmFloorBytes = 512 * kMiB;
 static const uint64_t kDonationReserveBytes = 512 * kMiB;
 static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
+static const uint64_t kDonationInitialChunkBytes = 16 * kMiB;
 static const uint64_t kDonationPrimaryChunkBytes = 512 * kMiB;
 static const uint64_t kDonationFallbackChunkBytes = 256 * kMiB;
 static const NSUInteger kDonationConcurrentGrowths = 2;
@@ -257,7 +258,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         if (!strongSelf) return;
         dispatch_async(strongSelf.queue, ^{ [strongSelf donorChanged:source index:index error:failure]; });
     }];
-    const uint64_t first = MIN(budget, kMiB);
+    const uint64_t first = MIN(budget, kDonationInitialChunkBytes);
     if (![session setInitialChunkMaximumBytes:first]) {
         self.donorErrors[[NSString stringWithFormat:@"%lu", (unsigned long)index]] =
             @{@"stage":@"initial_chunk_budget", @"bytes":@(first)};
@@ -537,7 +538,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                 [self.donorErrors removeObjectForKey:errorKey];
             if (pending && status.growthState == NeoSwapDonorGrowthRefused) {
                 self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
-                if (self.donorPendingMaximums[index].unsignedLongLongValue >= kDonationPrimaryChunkBytes)
+                if (self.donorPendingMaximums[index].unsignedLongLongValue > kDonationFallbackChunkBytes)
                     self.donorFallbackUntil = [NSDate dateWithTimeIntervalSinceNow:30];
             }
             if (pending && status.growthState != NeoSwapDonorGrowthRequested &&
