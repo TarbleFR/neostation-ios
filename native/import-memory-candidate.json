@@ -51,7 +51,8 @@
     "Build385 final candidate: two warm donor instances seed 16MiB each, establish the 512MiB verified warm floor before RPCS3 boot when possible (8s bounded wait), add helpers only when existing donors cannot satisfy real demand, and preserve file fallback if warmup is pressure-limited",
     "Build385 CI follow-up: the canonical 1GiB Vulkan proof now pins the intentionally evolved host donation broker to the candidate manifest hashes while preserving the exact RPCS3 Vulkan import and donor IPC/request-handler proof requirements",
     "Build385 compilation trigger: adaptive memory manager, preboot warm floor and updated 1GiB proof gate are frozen for this candidate; real-device behavior remains to be validated from the resulting IPA",
-    "Build385 CI fix: launch-order assertion is scoped to the real launchGame handler; the 1GiB proof checks modified broker files against candidate hashes and unchanged ABI/runtime files against the reviewed abc9566 reference."
+    "Build385 CI fix: launch-order assertion is scoped to the real launchGame handler; the 1GiB proof checks modified broker files against candidate hashes and unchanged ABI/runtime files against the reviewed abc9566 reference.",
+    "Build385 retry3: CI guard fixes applied after real runner feedback; no runtime memory policy change from the adaptive-pool candidate."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
