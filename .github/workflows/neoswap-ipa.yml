@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-378
+  group: neostation-neoswap-private-377
   cancel-in-progress: true
 
 jobs:
