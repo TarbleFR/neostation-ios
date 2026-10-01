@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "baseline": "3ccde925351b3e59985ba466e013e87a857d6ad0",
-  "target_build": 376,
+  "target_build": 377,
   "real_device_8gib_validated": false,
   "real_device_donation_validated": false,
   "real_device_dolphin_motion_validated": false,
@@ -34,7 +34,8 @@
     "Build373: reviewed iPhone SDK public native-width vm_* APIs and explicit Mach right cleanup; unchanged relay capacity/lifetime/fallback and all Core inputs; improved real-kernel residency observability with the original 1GiB/1MiB tolerance unchanged; independent mandatory Simulator proof, exact candidate hash lock, new private encryption recipient and correctly numbered test package; no physical-iPhone or gameplay validation claim",
     "Build374: donor growth watchdog distinguishes an in-progress authenticated chunk proof from an idle heartbeat; 8GiB stress keeps the existing per-chunk verification and 60s chunk deadline instead of aborting after six seconds during high-memory verification; Core inputs, relay ABI, quotas and fallback remain unchanged; physical-iPhone/gameplay validation remains pending",
     "Build375: canonical 1GiB Vulkan provenance keeps every unchanged donor/runtime source pinned to abc9566 and separately pins the exact reviewed Build374 NeoSwapDonorIPC watchdog SHA-256 plus candidate manifest identity; no Vulkan, allocator, relay, Core or gameplay behavior is relaxed",
-    "Build376: relay CI artifacts replace the prior same-name artifact on workflow reruns so IPA evidence always consumes the successful current attempt; source identity, Simulator behavior, relay capacity, donor runtime, Vulkan path and Core inputs remain unchanged"
+    "Build376: relay CI artifacts replace the prior same-name artifact on workflow reruns so IPA evidence always consumes the successful current attempt; source identity, Simulator behavior, relay capacity, donor runtime, Vulkan path and Core inputs remain unchanged",
+    "Build377: delivery-only change; the already validated NeoStation IPA is copied unchanged into the private Actions artifact as NeoStation.ipa instead of CMS ciphertext, with the same SHA-256, validations, runtime, cores and no public release"
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -44,7 +45,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "8bb72a89a147056a88de71f6ea13ec84975934973a01c5b6fe207fb614211eb2",
     ".github/workflows/neoswap-donation-check.yml": "996c4f70a09243d0a13ffdd1f34f1d7e911adea5036cceb4faa82a7134c62f2e",
-    ".github/workflows/neoswap-ipa.yml": "17bf890a8cd6755a6beb3eb69ace0b26a5b7873e5b3068910f5415088e8f21f7",
+    ".github/workflows/neoswap-ipa.yml": "776203fe5e86be980ddb089aae6a68e7fb6932eafbc143433a517c6b70cfe556",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "268ea21c1a8b2f238d39ff921af577922643c1a07288c4e103ec8b96a64d883f",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -300,7 +301,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "f1f48849108ab7187283c5f8f59a43155b2d1d9baab681750625535c8391fdba",
+    "test/import_memory_candidate_scope_test.py": "7b40011582e55892ada8814ce5ef6c7e7d429bb470f7cedd7d734971ac3d5463",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",

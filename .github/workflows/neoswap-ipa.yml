@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 376
-run-name: NeoStation NeoSwap private • Build 376 • ${{ github.sha }}
+name: NeoStation NeoSwap private • Build 377
+run-name: NeoStation NeoSwap private • Build 377 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '376'
+        default: '377'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private-376
+  group: neostation-neoswap-private-377
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (376)
+    name: Neostation iOS 0.0.2 private IPA (377)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '376' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '377' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-376-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-Build-377-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -1212,12 +1212,12 @@ jobs:
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
-      - name: Encrypt private test IPA before artifact upload
+      - name: Prepare direct private IPA artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/private-test
-          openssl cms -encrypt -binary -aes256 -in "dist/$IPA_NAME.ipa" -out build/private-test/NeoStation.ipa.p7m -outform DER build-utils/private-test-373-recipient.pem
+          cp "dist/$IPA_NAME.ipa" build/private-test/NeoStation.ipa
           shasum -a 256 "dist/$IPA_NAME.ipa" > build/private-test/NeoStation.ipa.sha256
           cp dist/stikjit-compatibility.json build/private-test/
           cp dist/cheat-bulk-validation.json build/private-test/
