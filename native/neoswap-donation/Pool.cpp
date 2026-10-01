@@ -173,6 +173,26 @@ Result pool_campaign_begin(std::uint64_t epoch, std::uint64_t target) noexcept {
   return {};
 }
 
+Result pool_campaign_end(std::uint64_t epoch) noexcept {
+  auto& p = pool();
+  std::lock_guard guard(p.mutex);
+  if (!epoch || epoch != p.stats.generation)
+    return fail(p, Stage::invalid_argument);
+  if (p.stats.live_blocks)
+    return fail(p, Stage::pool_unready);
+  for (auto& entry : p.entries) if (entry.block) {
+    if (auto result = entry.block->reset(); !result)
+      return fail(p, result.stage, result.kernel_result);
+    entry = {};
+  }
+  p.donors = {};
+  p.stats.target_bytes = 0;
+  p.stats.last_stage = Stage::none;
+  p.stats.last_kernel_result = 0;
+  publish(p);
+  return {};
+}
+
 Result pool_donor_begin(std::uint64_t epoch, std::uint32_t index,
     std::uint64_t generation, std::int32_t pid) noexcept {
   auto& p = pool();
