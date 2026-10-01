@@ -87,9 +87,9 @@ NSString* MemoryText(uint64_t value) {
 }
 - (void)reset {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
-  _sampleStart = 0; _sampleCount = 0; _donationTargetBytes = 5 * kGiB;
+  _sampleStart = 0; _sampleCount = 0; _donationTargetBytes = kGiB / 2;
   self.ratesLabel.text = @"FPS —";
-  self.memoryLabel.text = @"NeoSwap — / 5.00 GiB · iPhone RAM —";
+  self.memoryLabel.text = @"NeoSwap — / 512 MiB · iPhone RAM —";
   self.accessibilityValue = [NSString stringWithFormat:@"%@. %@", self.ratesLabel.text, self.memoryLabel.text];
   [self setNeedsDisplay];
 }
@@ -122,8 +122,10 @@ NSString* MemoryText(uint64_t value) {
   if (self.hidden) return;
   (void)client;
   const bool donorMeasured = host && host->donation_state == 2 && host->donor_count && host->donor_prepared_bytes;
-  const uint64_t donatedBytes = donorMeasured ? host->donor_resident_bytes + host->donor_accounted_compressed_bytes : 0;
-  _donationTargetBytes = host && host->donor_target_bytes ? host->donor_target_bytes : 5 * kGiB;
+  // First number is memory actively borrowed by RPCS3. The second is the
+  // currently prepared verified pool, not the 5 GiB hard ceiling.
+  const uint64_t donatedBytes = donorMeasured ? host->owner_donated_live_bytes[NEOSWAP_RPCS3] : 0;
+  _donationTargetBytes = donorMeasured ? MAX(host->donor_prepared_bytes, kGiB / 2) : kGiB / 2;
   self.memoryLabel.text = [NSString stringWithFormat:@"NeoSwap %@ / %@ · iPhone RAM %@",
       donorMeasured ? MemoryText(donatedBytes) : @"—", MemoryText(_donationTargetBytes),
       processFootprintBytes ? MemoryText(processFootprintBytes) : @"—"];
