@@ -21,10 +21,15 @@
 static NSString* const kDiagnostic = @"NeoSwap-v1.jsonl";
 static const uint64_t kMiB = 1024 * 1024;
 static const uint64_t kGiB = 1024 * kMiB;
-// Build381 target: up to 5 GiB of measured backing in donor processes. Growth
-// stays fail-closed under kernel/system pressure; this is never a virtual-RAM
-// claim. Two helpers may prepare one bounded chunk each at the same time.
-static const uint64_t kDonationGoalBytes = 5 * kGiB;
+// Build385 adaptive policy: 5 GiB is a hard ceiling, not a startup target.
+// Begin with a measured 512 MiB warm floor, then keep roughly 512 MiB of
+// verified donor headroom above actual RPCS3-routed buffers. Growth remains
+// fail-closed under kernel/system pressure and prepared pages are retained
+// only for the lifetime of the active RPCS3 session.
+static const uint64_t kDonationHardLimitBytes = 5 * kGiB;
+static const uint64_t kDonationWarmFloorBytes = 512 * kMiB;
+static const uint64_t kDonationReserveBytes = 512 * kMiB;
+static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
 static const uint64_t kDonationPrimaryChunkBytes = 512 * kMiB;
 static const uint64_t kDonationFallbackChunkBytes = 256 * kMiB;
 static const NSUInteger kDonationConcurrentGrowths = 2;
@@ -37,6 +42,7 @@ static const NSUInteger kDonationConcurrentGrowths = 2;
 @property(nonatomic, assign) NSInteger capacityMiB;
 @property(nonatomic, assign) int configResult;
 @property(nonatomic, assign) uint64_t lastAllocationCount;
+@property(nonatomic, assign) NSUInteger maintenanceTick;
 #if defined(NEOSWAP_RELAY)
 @property(nonatomic, assign) uint64_t lastRelayLiveBytes;
 @property(nonatomic, copy) NSString* lastRelayState;
@@ -130,14 +136,13 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         // cannot be created. A genuine donor does not require an 8 GiB arena.
         self.configResult = [self configure:self.capacityMiB];
         if (!created && self.configResult == NEOSWAP_OK) self.configResult = NEOSWAP_STORAGE;
-#if defined(NEOSWAP_DONATION)
-        [self startDonors];
-#endif
         [self appendRecord:[self snapshot:@"process_start"]];
     });
     self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self.queue);
-    dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, 2*NSEC_PER_SEC),
-        2*NSEC_PER_SEC, NSEC_PER_SEC/4);
+    // Donation maintenance needs to react before the first heavy RPCS3 buffer
+    // request, while diagnostics keep their original ~2 s cadence.
+    dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC/4),
+        NSEC_PER_SEC/4, NSEC_PER_SEC/20);
     __weak NeoSwapPlugin* weakSelf = self;
     dispatch_source_set_event_handler(self.timer, ^{
         NeoSwapPlugin* strongSelf = weakSelf;
@@ -145,11 +150,17 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @autoreleasepool {
 #if defined(NEOSWAP_DONATION)
             (void)neostation::donation::retry_cleanup();
-            [strongSelf advanceDonors];
+            if (NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) {
+                if (!strongSelf.donorSessions) [strongSelf startDonors];
+                [strongSelf advanceDonors];
+            } else {
+                [strongSelf retireDonorsIfIdle];
+            }
 #endif
 #if defined(NEOSWAP_RELAY)
             NeoSwapRelay_Maintain();
 #endif
+            if ((++strongSelf.maintenanceTick % 8) != 0) return;
             NSDictionary* row = [strongSelf snapshot:@"sample"];
             uint64_t count = [row[@"allocationCount"] unsignedLongLongValue];
             BOOL record = [row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount;
@@ -174,8 +185,12 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 }
 #if defined(NEOSWAP_DONATION)
 - (void)startDonors {
-    if (self.donorSessions) return;
-    self.donorEpoch = 1;
+    if (self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+    if (self.donorEpoch >= UINT64_MAX / 16) {
+        self.donorGrowthRefusal = @{@"stage":@"donor_epoch_exhausted"};
+        return;
+    }
+    ++self.donorEpoch;
     self.donorGenerationCounter = self.donorEpoch * 16;
     self.donorPendingIndexes = [NSMutableIndexSet indexSet];
     self.donorPendingMaximums = [NSMutableArray new];
@@ -190,7 +205,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         [self.donorRetryAfter addObject:NSDate.distantPast];
         [self.donorPendingMaximums addObject:@0];
     }
-    auto begun = neostation::donation::pool_campaign_begin(self.donorEpoch, kDonationGoalBytes);
+    auto begun = neostation::donation::pool_campaign_begin(self.donorEpoch, kDonationHardLimitBytes);
     if (!begun) {
         self.donorGrowthRefusal = @{@"stage":[NSString stringWithUTF8String:
             neostation::donation::stage_name(begun.stage)], @"kernelResult":@(begun.kernel_result)};
@@ -266,8 +281,52 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     }];
     return total;
 }
+- (uint64_t)adaptiveDonationTarget {
+    if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return 0;
+    const uint64_t live = NeoSwap_LiveBytes(NEOSWAP_RPCS3);
+    uint64_t desired = kDonationWarmFloorBytes;
+    if (live >= kDonationHardLimitBytes) {
+        desired = kDonationHardLimitBytes;
+    } else {
+        const uint64_t reserve = MIN(kDonationReserveBytes, kDonationHardLimitBytes - live);
+        desired = MAX(desired, live + reserve);
+    }
+    if (desired < kDonationHardLimitBytes) {
+        const uint64_t rounded = ((desired + kDonationGrowthQuantumBytes - 1) /
+            kDonationGrowthQuantumBytes) * kDonationGrowthQuantumBytes;
+        desired = MIN(rounded, kDonationHardLimitBytes);
+    }
+    return desired;
+}
+- (void)retireDonorsIfIdle {
+    if (!self.donorSessions || NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    if (pool.last_stage == neostation::donation::Stage::snapshot_busy || pool.live_blocks) return;
+    const auto ended = neostation::donation::pool_campaign_end(self.donorEpoch);
+    if (!ended) {
+        self.donorGrowthRefusal = @{@"stage":[NSString stringWithUTF8String:
+            neostation::donation::stage_name(ended.stage)], @"kernelResult":@(ended.kernel_result)};
+        return;
+    }
+    NSArray* sessions = [self.donorSessions copy];
+    self.donorSessions = nil;
+    self.donorAdoptedChunks = nil;
+    self.donorRetryAfter = nil;
+    self.donorErrors = nil;
+    self.donorPendingIndexes = nil;
+    self.donorPendingMaximums = nil;
+    self.donorDemand = (NeoSwapDonationDemand){};
+    self.donorLaunchIndex = 0;
+    self.donorCursor = 0;
+    self.donorGrowthRefusal = nil;
+    self.donorFallbackUntil = NSDate.distantPast;
+    for (id object in sessions)
+        if ([object isKindOfClass:NeoSwapDonorSession.class]) [(NeoSwapDonorSession*)object close];
+    [self appendRecord:[self snapshot:@"donation_session_end"]];
+}
 - (void)advanceDonors {
-    if (!self.donorSessions) return;
+    if (!self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
     (void)neostation::donation::pool_collect_lost();
 
     while (self.donorLaunchIndex < 8 && self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
@@ -334,8 +393,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 
     neostation::donation::PoolSnapshot pool{};
     neostation::donation::pool_snapshot(pool);
+    const uint64_t adaptiveTarget = [self adaptiveDonationTarget];
     uint64_t pending = [self pendingDonationBytes];
-    if (pool.prepared_bytes + pending >= kDonationGoalBytes) {
+    if (!adaptiveTarget || pool.prepared_bytes + pending >= adaptiveTarget) {
         self.donorGrowthRefusal = nil;
         return;
     }
@@ -344,8 +404,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     if (!budget) return;
     while (self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
         const uint64_t accounted = pool.prepared_bytes + pending;
-        if (accounted >= kDonationGoalBytes) break;
-        uint64_t remaining = kDonationGoalBytes - accounted;
+        if (accounted >= adaptiveTarget) break;
+        uint64_t remaining = adaptiveTarget - accounted;
         const BOOL fallback = [self.donorFallbackUntil timeIntervalSinceNow] > 0;
         uint64_t requested = fallback ? kDonationFallbackChunkBytes : kDonationPrimaryChunkBytes;
         if (remaining < requested) requested = remaining;
@@ -527,8 +587,10 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     id donationWorkers = @[];
     id growthRefusal = NSNull.null;
     NSString* growthState = @"unavailable";
-    uint64_t target = kDonationGoalBytes;
-    uint64_t remaining = target;
+    uint64_t target = kDonationHardLimitBytes;
+    uint64_t adaptiveTarget = NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)
+        ? [self adaptiveDonationTarget] : 0;
+    uint64_t remaining = adaptiveTarget;
     uint64_t pendingGrowthCount = 0;
 #if defined(NEOSWAP_DONATION)
     NSMutableArray* workers = [NSMutableArray new];
@@ -582,10 +644,10 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     donorDiagnostics = @{@"workers":workers};
     donationPoolError = self.donorErrors.count ? self.donorErrors : (id)NSNull.null;
     growthRefusal = self.donorGrowthRefusal ?: NSNull.null;
-    remaining = pool.prepared_bytes < target ? target - pool.prepared_bytes : 0;
+    remaining = pool.prepared_bytes < adaptiveTarget ? adaptiveTarget - pool.prepared_bytes : 0;
     pendingGrowthCount = self.donorPendingIndexes.count;
-    const BOOL goalPending = pool.prepared_bytes < kDonationGoalBytes;
-    growthState = !remaining ? @"complete" : self.donorPendingIndexes.count
+    const BOOL goalPending = adaptiveTarget && pool.prepared_bytes < adaptiveTarget;
+    growthState = !adaptiveTarget ? @"idle" : !remaining ? @"ready" : self.donorPendingIndexes.count
         ? (self.donorDemand.bytes ? @"growing" : @"warming")
         : goalPending ? (self.donorGrowthRefusal || anyRefused ? @"limited" : @"warming")
         : @"waiting";
@@ -607,8 +669,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         // are different quantities. No amount is inferred from the 8 GiB quota.
         @"memoryDonationSupported":@(donationSupported), @"donatedMemoryBytes":donatedMemory,
         @"donatedClientBytes":@(host.owner_donated_live_bytes[NEOSWAP_RPCS3]),
-        @"donationTargetBytes":@(target), @"donationGoalBytes":@(kDonationGoalBytes),
-        @"donationWarmFloorBytes":@(kDonationGoalBytes),
+        @"donationTargetBytes":@(adaptiveTarget), @"donationGoalBytes":@(target),
+        @"donationHardLimitBytes":@(kDonationHardLimitBytes),
+        @"donationWarmFloorBytes":@(kDonationWarmFloorBytes),
+        @"donationReserveBytes":@(kDonationReserveBytes),
+        @"donationGrowthQuantumBytes":@(kDonationGrowthQuantumBytes),
         @"donationPrimaryChunkBytes":@(kDonationPrimaryChunkBytes),
         @"donationFallbackChunkBytes":@(kDonationFallbackChunkBytes),
         @"donationConcurrentGrowths":@(kDonationConcurrentGrowths),
