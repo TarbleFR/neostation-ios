@@ -62,7 +62,8 @@
     "Build393: repair the Build392 device-log 480MiB invalid_argument growth refusal using one 256MiB block limit shared by broker, transport, IPC and helper; 64MiB initial chunks meet the unchanged 64MiB/1.5s boot seed, 128MiB fallback and outstanding-request reservations retain measured system-pressure guards and the 5GiB aggregate ceiling; no additional RAM or faster gameplay is claimed before device validation.",
     "Build393: render only two memory series in decimal GB (French Go): active RPCS3 donor loans plus unique guest-relay live backing, and the NeoStation/RPCS3 resident task counter; exclude prepared pools, file fallback, capacity and duplicate aliases. Add 12-locale labels, executable arithmetic/bounds regressions and actual UIKit arm64 syntax preflight; retain all Core, JIT and relay lifecycle identities.",
     "Build394: fix reproducible published-relay alias refusal under pressure without granting new backing; retain first-map admission, lifetime/fixed-range/alias-count/kernel-error safety; add pressure diagnostics and real-kernel plus injected-OS tests. Restore live FPS above the two decimal-GB series. Prepare two verified 256MiB donor seeds for a 384MiB/1.5s degradable boot gate; steady target uses actual donor loans plus 128MiB reserve, not immovable file-backed buffers; 512MiB floor and 5GiB ceiling retained. Deduplicate unchanged donor heartbeat logs; no physical-iPhone crash fix, 5GiB residency or FPS gain claimed before testing.",
-    "Build395 first coverage experiment: opt-in God of War III RSX CPU aligned buffers 64KiB-1MiB can use real verified donor pages; separate 768 small and 256 retained large slots, 512MiB live small cap, no small file fallback, explicit title/pressure/lifecycle gates, cumulative size/live/fallback telemetry; only the CPU allocator call and client helper change inside RPCS3, all prior Vulkan/JIT/VM/PPU/SPU policies retained. Source-only until a matching Core artifact is validated; no iPad kernel swap or 5GiB physical gameplay result claimed."
+    "Build395 first coverage experiment: opt-in God of War III RSX CPU aligned buffers 64KiB-1MiB can use real verified donor pages; separate 768 small and 256 retained large slots, 512MiB live small cap, no small file fallback, explicit title/pressure/lifecycle gates, cumulative size/live/fallback telemetry; only the CPU allocator call and client helper change inside RPCS3, all prior Vulkan/JIT/VM/PPU/SPU policies retained. Source-only until a matching Core artifact is validated; no iPad kernel swap or 5GiB physical gameplay result claimed.",
+    "Build395 packaging: exact new Core source f73ac8f / run37022595373 required before IPA assembly; host loan-gap search uses ordered fixed-slot links rather than a repeated global rescan, with injected-OS fragmentation/lifetime/cleanup regression plus unchanged mandatory real-kernel proof. Other cores, JIT, relay lifetime and memory ceilings preserved; no game speed or iPad swap activation claim."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -70,9 +71,9 @@
     ".github/workflows/dusklight-core.yml": "1d4f3b08745eb853830ee29710b387dbc0bb98acbc2cb7f8a3d7ed61bdd092d2",
     ".github/workflows/ios-ci.yml": "b12b91eb5d31614768df3f2adba2b4e73003eb35c26cc013b552770d0cc267d2",
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
-    ".github/workflows/neoswap-check.yml": "d3e766f780b7dea808d70cc19755ea47f5479b9e31b2985e9b62dcd1309ae6d4",
+    ".github/workflows/neoswap-check.yml": "90053561e0ccfa8f813e741acb4e43630afe2e2139878511ab10677d74d7412c",
     ".github/workflows/neoswap-donation-check.yml": "e6107d34ec2502ab26883636c10aa862d7e425f8516e83c0e0075317e5f08387",
-    ".github/workflows/neoswap-ipa.yml": "c641dfcb40775c288349bdcac633ef3e9110650a70924706be38ed7ed9e1899c",
+    ".github/workflows/neoswap-ipa.yml": "b0313dd86e188030c13039cfb80ed8bc29f01cc867e4431826f4c65a876ed8d4",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "c16f335960c4d3c758acc772bfdcae80ad8062282adf5596d9019aece9b84122",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -128,7 +129,7 @@
     "native/neoswap-donation/NeoSwapDonorRequestHandler.mm": "fc617606e9501c7514d0f8bfd798698de751626906950af0f44c8e19d5a23be4",
     "native/neoswap-donation/NeoSwapMachHandle.h": "e0d93550ce3ed5a0322530eb0cf031a5ab02b091060ea5a2ab6675ceaaa4b290",
     "native/neoswap-donation/NeoSwapMachHandle.mm": "67e3bfc1dca1abd29f6e05e8da21d11dc4064bb1b835f9a5a2ec1b5893b7e58b",
-    "native/neoswap-donation/Pool.cpp": "40fd7b80ec79f2de92b8bb313d7bdc9b10a8ce33403bcd1b453ada4917fd2a7a",
+    "native/neoswap-donation/Pool.cpp": "bbec5fb0bcf78062d08fbe2d4a1b4cb128eecff47dbc5181b5157897da6f41d4",
     "native/neoswap-donation/Pool.h": "d4c82c21f08f6c6bdef5fded28b611ab4e9af2719ca96ca73e3b964245677a64",
     "native/neoswap-donation/VulkanDonationProbe.h": "9d132c146da2c0c21dc3d33627dbedc6e9c4a0f1414943a1ad7b211b699824bc",
     "native/neoswap-donation/ipc_macos_probe.mm": "bb1529d816ceba0cc7f07c35bd81e0b719951ab535876e7f88e4b8f489ce497f",
@@ -306,7 +307,7 @@
     "docs/dolphin-phone-shake-routing.md": "a7efae79d52bd0af21058997d6517bbd5c7ec201b659dcfa1b991fccf24be0e9",
     "docs/import-memory-build368.md": "1fd3cc6fb5495f0533eef457bce889b1dd687884ada7f8797cf1be9cc82a175e",
     "docs/native-updates-20260930.md": "151fd8f2992f95caaaf25ead252f5689c10f9dc31d684e0536ecdee6b45032fb",
-    "docs/neoswap-device-analysis-20260930.md": "0863e6091ef5b3e3351fe393f8c5ca29a0a799c290f97434891c3bc484d74d5b",
+    "docs/neoswap-device-analysis-20260930.md": "7c62f1a5954a283d2967b95138897ad493a3c525acce43f27fc829a8ee85ce68",
     "docs/neoswap-guest-relay-build372.md": "3792130b2940cb0234834d580c8591a266fd37e7fcc5335019e0b8527704d48f",
     "docs/neoswap-guest-relay-build373.md": "31b578cb42cd1934be25b46c796a8eab18eee6e65166e72668261fc507345e34",
     "docs/rpcs3-xitrix-v0101-audit.md": "72397b8ac63a1ae4948104df0159f685319235cc513031acaef25a0af12bb82a",
@@ -328,7 +329,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "2672ef7abca65b4c1a650f4fd35931a3004695cf8410dfbc33de0c616aba0c29",
+    "test/import_memory_candidate_scope_test.py": "9ba51959bdfaac002f741139ebf89df13ffe8cd7e72dd01a1a363f821d8e51b3",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -364,7 +365,8 @@
     "test/rpcs3_xitrix_v0101_native_test.py": "a15f3a5a9a23717b5dd409805bf54af7859ca5e41ed8d93dab5bc052d05c3b0b",
     "test/single_ipa_distribution_test.py": "1fc29fc48038b42549588c28a5cfc2a4d3881dc347257a3ee49faacf39218d77",
     "test/stikjit_scoped_host_test.py": "d5a397c7c17453a5584cac5ecb2390f099b2f2edd35649cb8522a9bba74e4717",
-    "test/neoswap_cpu_buffers_test.cpp": "f6c9793a7f115cc39913bdd70ba375666a8446ab23883c2566bfa77934b7f779"
+    "test/neoswap_cpu_buffers_test.cpp": "f6c9793a7f115cc39913bdd70ba375666a8446ab23883c2566bfa77934b7f779",
+    "test/neoswap_pool_fragmentation_test.cpp": "72f3ff56fb29b805a082b8aa52be7c5531351ad6b331cad2aafa850573601daf"
   },
   "support_git_modes": {
     "docs/dolphin-phone-shake-routing.md": "100644",
@@ -428,7 +430,8 @@
     "test/rpcs3_xitrix_v0101_native_test.py": "100644",
     "test/single_ipa_distribution_test.py": "100644",
     "test/stikjit_scoped_host_test.py": "100644",
-    "test/neoswap_cpu_buffers_test.cpp": "100644"
+    "test/neoswap_cpu_buffers_test.cpp": "100644",
+    "test/neoswap_pool_fragmentation_test.cpp": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "08c84e3ae4b2201fc540bc5963e16f7627064652a50987b090fac9ec59e04263",

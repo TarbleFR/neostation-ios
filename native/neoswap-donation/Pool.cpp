@@ -23,11 +23,13 @@ struct Entry {
   std::unique_ptr<Block> block;
   std::uint64_t generation = 0, chunk = 0;
   std::size_t donor = 0, loans = 0;
+  std::size_t first_loan = max_loans;
   bool verified = false;
 };
 struct Loan {
   std::uint64_t token = 0, bytes = 0, offset = 0;
   std::size_t entry = 0;
+  std::size_t previous = max_loans, next = max_loans;
 };
 struct Donor {
   PoolDonorSnapshot stats;
@@ -362,9 +364,10 @@ Result pool_acquire(std::uint64_t bytes, std::uint64_t alignment,
     return fail(p, Stage::invalid_argument);
   if (p.next_token == std::numeric_limits<std::uint64_t>::max())
     return fail(p, Stage::pool_limit);
-  Loan* loan = nullptr;
-  for (auto& candidate : p.loans) if (!candidate.token) { loan = &candidate; break; }
-  if (!loan) return fail(p, Stage::pool_limit);
+  std::size_t slot = max_loans;
+  for (std::size_t i = 0; i < p.loans.size(); ++i)
+    if (!p.loans[i].token) { slot = i; break; }
+  if (slot == max_loans) return fail(p, Stage::pool_limit);
   for (std::size_t index = 0; index < p.entries.size(); ++index) {
     auto& e = p.entries[index];
     const auto& donor = p.donors[e.donor].stats;
@@ -372,24 +375,34 @@ Result pool_acquire(std::uint64_t bytes, std::uint64_t alignment,
         e.generation != donor.generation) continue;
     const auto base = reinterpret_cast<std::uintptr_t>(e.block->data());
     const std::uint64_t size = e.block->size();
-    std::uint64_t offset = (alignment - (base & (alignment - 1))) & (alignment - 1);
-    while (offset <= size && bytes <= size - offset) {
-      std::uint64_t next = offset;
-      for (const auto& live : p.loans) if (live.token && live.entry == index &&
-          offset < live.offset + live.bytes && live.offset < offset + bytes)
-        next = std::max(next, live.offset + live.bytes);
-      if (next == offset) {
-        *loan = {p.next_token++, bytes, offset, index};
-        ++e.loans;
-        p.stats.live_bytes += bytes; ++p.stats.live_blocks;
-        p.stats.peak_live_bytes = std::max(p.stats.peak_live_bytes, p.stats.live_bytes);
-        p.stats.last_stage = Stage::none; p.stats.last_kernel_result = 0;
-        *out = reinterpret_cast<void*>(base + offset); *token = loan->token;
-        publish(p);
-        return {};
-      }
-      offset = (next + alignment - 1) & ~(alignment - 1);
+    auto align_offset = [base, alignment](std::uint64_t offset) {
+      return offset + ((alignment - ((base + offset) & (alignment - 1))) & (alignment - 1));
+    };
+    std::uint64_t offset = align_offset(0);
+    std::size_t previous = max_loans, next = e.first_loan;
+    // Fixed-slot intrusive list, sorted by offset within this entry. Search
+    // each live interval once instead of rescanning all loans for every gap.
+    // No allocation, IPC or page writes are introduced on this hot path.
+    while (next != max_loans) {
+      const auto& live = p.loans[next];
+      if (offset <= live.offset && bytes <= live.offset - offset) break;
+      offset = align_offset(live.offset + live.bytes);
+      previous = next;
+      next = live.next;
     }
+    if (offset > size || bytes > size - offset) continue;
+    auto& loan = p.loans[slot];
+    loan = {p.next_token++, bytes, offset, index, previous, next};
+    if (previous == max_loans) e.first_loan = slot;
+    else p.loans[previous].next = slot;
+    if (next != max_loans) p.loans[next].previous = slot;
+    ++e.loans;
+    p.stats.live_bytes += bytes; ++p.stats.live_blocks;
+    p.stats.peak_live_bytes = std::max(p.stats.peak_live_bytes, p.stats.live_bytes);
+    p.stats.last_stage = Stage::none; p.stats.last_kernel_result = 0;
+    *out = reinterpret_cast<void*>(base + offset); *token = loan.token;
+    publish(p);
+    return {};
   }
   return fail(p, Stage::pool_quota);
 }
@@ -398,7 +411,11 @@ Result pool_release(std::uint64_t token) noexcept {
   auto& p = pool();
   std::lock_guard guard(p.mutex);
   for (auto& loan : p.loans) if (token && loan.token == token) {
-    --p.entries[loan.entry].loans;
+    auto& entry = p.entries[loan.entry];
+    if (loan.previous == max_loans) entry.first_loan = loan.next;
+    else p.loans[loan.previous].next = loan.next;
+    if (loan.next != max_loans) p.loans[loan.next].previous = loan.previous;
+    --entry.loans;
     p.stats.live_bytes -= loan.bytes; --p.stats.live_blocks;
     loan = {};
     publish(p);

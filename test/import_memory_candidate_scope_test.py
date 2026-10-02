@@ -159,6 +159,7 @@ PRODUCTION_FILES = {
 }
 SUPPORT_FILES = {
     'test/neoswap_cpu_buffers_test.cpp',
+    'test/neoswap_pool_fragmentation_test.cpp',
     'docs/neoswap-guest-relay-build373.md',
     'docs/neoswap-guest-relay-build372.md',
     # Relay ownership/alias/error checks and exact Core identity fixture.
@@ -323,8 +324,8 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['f9daa7a4e30f8e7931159c384c852b20291da92a']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'36773409861'"]
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['f73ac8f26953fcdd244003981936b74482482626']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37022595373'"]
         assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
         assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
         assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow
