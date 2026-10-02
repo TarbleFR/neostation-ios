@@ -86,6 +86,15 @@ def core_input_hashes(root: Path = ROOT) -> dict[str, str]:
     return result
 
 
+def validate_core_scheduling(workflow: str) -> None:
+    require(re.search(r'^concurrency:', workflow, re.M) is None,
+            'Workflow-level concurrency can cancel a pinned Core even when the build job is skipped')
+    require('    concurrency:\n      group: neostation-rpcs3-core-${{ github.sha }}\n      cancel-in-progress: false\n' in workflow,
+            'Core job must preserve running builds and isolate immutable source SHAs')
+    require("    if: ${{ !contains(github.event.head_commit.message, '[rpcs3-host-integration]') }}" in workflow,
+            'Host-only integration must not rebuild the referenced Core')
+
+
 def validate_source_contract(root: Path = ROOT, source_root: Path | None = None) -> None:
     core_input_hashes(root)
     manifest = json.loads((root / 'build-utils/rpcs3/canonical-source.json').read_text())
@@ -126,6 +135,7 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
     require('test/rpcs3_xitrix_v0101_native_test.py' in recipe, 'Missing production native regressions')
     require('test/rpcs3_neoswap_relay_test.py' in recipe, 'Missing actual shared-memory relay regressions')
     core_workflow = (root / '.github/workflows/rpcs3-core.yml').read_text()
+    validate_core_scheduling(core_workflow)
     require('_rpcs3_ios_get_neoswap_client_stats' in core_workflow, 'Getter export must be verified')
     require('_rpcs3_ios_set_neoswap_relay_api' in core_workflow, 'Relay setter export must be verified')
     require("'neoswap_relay_abi':1" in core_workflow, 'Missing relay identity ABI')

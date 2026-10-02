@@ -37,14 +37,16 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: neostation-rpcs3-core-recovery
-  cancel-in-progress: true
 jobs:
   build:
     # The host integration reuses the already built, provenance-checked Core;
     # ios-ci validates its unchanged source, recipe, ABI, and binary identity.
     if: ${{ !contains(github.event.head_commit.message, '[rpcs3-host-integration]') }}
+    # A host-only push must not cancel the exact Core referenced by its IPA.
+    # Keep distinct source revisions independent and never cancel a running build.
+    concurrency:
+      group: neostation-rpcs3-core-${{ github.sha }}
+      cancel-in-progress: false
     name: RPCS3 Core arm64 with NeoSwap client
     runs-on: macos-15
     timeout-minutes: 180
