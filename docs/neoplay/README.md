@@ -48,3 +48,13 @@ Windows viewport changes are reported back to iOS and debounced before restartin
 For Chromecast HLS, the advertised window contains up to six one-second segments while the encoded ring retains up to 24 segments / 24 MiB, including recently unlisted payloads. Target duration stays fixed; unusually long fragments are rejected rather than silently changing the stream contract. This does not establish a real TV playback or latency result.
 
 A private manual IPA workflow is configured only on this branch. The isolated native harness compiles the native capture/Cast implementation, but it is **not a complete NeoStation IPA build**. Device acceptance additionally requires the full host/plugin build and manual tests on iPhone plus each destination.
+
+External emulator applications are outside the scope of this app-screen capture. Moving NeoStation to the background ends its NeoPlay stream; it does not capture another application's screen.
+
+Before any public binary distribution, review the Google Cast SDK terms, required notices and compatibility with the project's distribution obligations. Only the SDK dependency declaration is committed here; there is no public NeoPlay binary release or completed license review.
+
+## Recorded software verification — 2026-10-02
+
+`validation-2026-10-02.json` binds the tested code commit, GitHub Actions run, generated media hashes and local Windows measurements. All four jobs passed: frontend, native iOS simulator, Windows protocol and Windows playback. The same production-encoder fixture was also decoded successfully in Edge on the owner's Windows PC, with nonzero audio samples, video frames, aspect containment, playback acknowledgement and disconnection checks. Local Windows mDNS publication/discovery passed separately.
+
+These are **software and simulator results**, not an iPhone-to-TV acceptance result. The passive Chromecast probe found no receiver visible from the PC at that time. Physical iPhone/Windows Wi-Fi gameplay, actual Chromecast playback, game-only viewport integration, full IPA compilation, sustained thermal/memory testing and measured interactive latency remain open.
