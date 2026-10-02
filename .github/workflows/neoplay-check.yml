@@ -20,8 +20,24 @@ jobs:
       - name: Test Windows receiver independently
         working-directory: tools/neoplay-receiver
         run: |
-          npm install --ignore-scripts
+          npm ci --ignore-scripts
           npm test
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Validate all NeoPlay languages and dialog lifecycle
+        run: |
+          dart analyze lib/l10n/neoplay_locale.dart lib/widgets/neoplay_dialog.dart packages/neoplay_bridge/lib/neoplay_bridge.dart lib/screens/settings_screen/new_settings_options/tools_settings_content.dart
+          flutter test test/neoplay_locale_test.dart test/neoplay_dialog_test.dart
+          python3 test/neoplay_config_test.py
   native:
     runs-on: macos-15
     env:
@@ -31,15 +47,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Generate isolated native harness
         run: |
+          xcodebuild -version
           gem install xcodeproj --no-document --user-install
           export GEM_HOME="$(ruby -e 'puts Gem.user_dir')"
           ruby build-utils/neoplay_native_project.rb
           pod install --project-directory=build/neoplay-native
-      - name: Compile real Cast SDK and test native lifecycle and Chromecast HLS contracts
+      - name: Compile Cast SDK and independently test both production encoders
         run: |
-          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for a in d["devices"].values() for x in a if "iPhone" in x["name"]))')
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for k,a in d["devices"].items() if "iOS-18" in k for x in a if "iPhone" in x["name"]))')
+          echo "$DEVICE" > build/neoplay-native/device.txt
           set -o pipefail
           xcodebuild test -workspace build/neoplay-native/NPCheck.xcworkspace -scheme NPCheck -destination "id=$DEVICE" -resultBundlePath build/neoplay-native/Results.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/neoplay-native/build.log
+          DATA=$(xcrun simctl get_app_container "$DEVICE" org.neostation.npcheck data)
+          cp -R "$DATA/Documents/NeoPlayFixtures" build/neoplay-native/fixtures
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -47,4 +67,35 @@ jobs:
           path: |
             build/neoplay-native/build.log
             build/neoplay-native/Results.xcresult
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeoPlay-encoded-fixtures-${{ github.sha }}
+          path: build/neoplay-native/fixtures
+          if-no-files-found: error
+          retention-days: 7
+  windows-playback:
+    needs: native
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: NeoPlay-encoded-fixtures-${{ github.sha }}
+          path: build/neoplay-fixtures
+      - name: Decode real iOS-encoded picture and sound in Windows Edge
+        working-directory: tools/neoplay-receiver
+        run: |
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.63.0
+          node playback-smoke.mjs ../../build/neoplay-fixtures/windows.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoPlay-Windows-playback-${{ github.sha }}
+          path: tools/neoplay-receiver/test-output
           retention-days: 7
