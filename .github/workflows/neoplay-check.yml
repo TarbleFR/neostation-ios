@@ -1,0 +1,48 @@
+name: NeoPlay isolated integration checks
+on:
+  push:
+    branches: [feature/neoplay]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoplay-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test Windows receiver independently
+        working-directory: tools/neoplay-receiver
+        run: |
+          npm install --ignore-scripts
+          npm test
+  native:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate isolated native harness
+        run: |
+          gem install xcodeproj --no-document --user-install
+          export GEM_HOME="$(ruby -e 'puts Gem.user_dir')"
+          ruby build-utils/neoplay_native_project.rb
+          pod install --project-directory=build/neoplay-native
+      - name: Compile real Cast SDK and test native lifecycle and Chromecast HLS contracts
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for a in d["devices"].values() for x in a if "iPhone" in x["name"]))')
+          set -o pipefail
+          xcodebuild test -workspace build/neoplay-native/NPCheck.xcworkspace -scheme NPCheck -destination "id=$DEVICE" -resultBundlePath build/neoplay-native/Results.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/neoplay-native/build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoPlay-native-evidence-${{ github.sha }}
+          path: |
+            build/neoplay-native/build.log
+            build/neoplay-native/Results.xcresult
+          retention-days: 7
