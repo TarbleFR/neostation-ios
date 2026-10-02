@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: MIT
+// Production UIKit service in an iOS simulator app, not RPCS3 gameplay.
+#import <UIKit/UIKit.h>
+#import "NeoSwapStorageService.h"
+#include <chrono>
+#include <cstring>
+#include <thread>
+#include <vector>
+#include <stdexcept>
+using namespace std::chrono_literals;
+static void require(bool b,const char* m){if(!b)throw std::runtime_error(m);}
+template<class F> static bool until(F f,int seconds=15){for(int i=0;i<seconds*100;++i){if(f())return true;std::this_thread::sleep_for(10ms);}return false;}
+static void runTest(){@autoreleasepool {
+    NSMutableDictionary* result=[@{@"passed":@NO,@"physicalIPhoneValidated":@NO,@"realRPCS3GameplayValidated":@NO} mutableCopy];
+    try{
+        const auto* api=NeoSwapStorage_GetAPI(1);require(api!=nullptr,"ABI unavailable");NeoSwapStorage_SetBinderResult(NS_STORAGE_OK);
+        NeoSwapStorage_SetPreference(NO);NeoSwapStorage_BeginSession(@"BCES00510");
+        require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"disabled"];}),"default-off session");require(api->session()==0,"disabled epoch");
+        NeoSwapStorage_SetPreference(YES);NeoSwapStorage_BeginSession(@"BLES00113");
+        require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"unsupported_title"];}),"title restriction");require(api->session()==0,"unsupported epoch");
+        NeoSwapStorage_BeginSession(@"BCES00510");require(until([&]{return api->session()!=0;}),"enabled setup");
+        const uint64_t epoch=api->session();std::vector<uint32_t> words(256*1024,0x10101);
+        words[0]=0x07230203;words[1]=0x00010500;words[3]=64;words[4]=0;
+        for(unsigned i=1;i<=16;++i){uint8_t key[32]{};key[0]=i;uint32_t random=i;
+            for(size_t n=5;n<words.size();++n){random^=random<<13;random^=random>>17;random^=random<<5;words[n]=random;}words[5]=i;
+            require(until([&]{return api->publish(epoch,key,words.data(),words.size()*4)==NS_STORAGE_OK;}),"bounded publication");}
+        require(until([&]{return [NeoSwapStorage_Diagnostics()[@"cache"][@"diskOnlyLogicalBytes"] unsignedLongLongValue]>0;}),"disk-only eviction");
+        uint8_t key[32]{};key[0]=1;NeoSwapStorageView view{};
+        require(until([&]{return api->acquire(epoch,key,&view)==NS_STORAGE_OK;}),"real file restoration");require(view.byte_count==words.size()*4&&view.words[5]==1,"restored identity");
+        NeoSwapStorage_EndSession();require(api->session()==0,"immediate epoch invalidation");
+        NeoSwapStorageView stale{};require(api->acquire(epoch,key,&stale)==NS_STORAGE_DISABLED,"stale request accepted");
+        std::this_thread::sleep_for(300ms);require(view.words[5]==1,"lease lost after shutdown");api->release(&view);
+        NeoSwapStorage_BeginSession(@"BCES00510");require(until([&]{return api->session()!=0&&api->session()!=epoch;}),"restart");
+        const uint64_t next=api->session();require(api->acquire(epoch,key,&stale)==NS_STORAGE_DISABLED,"old generation leaked");
+        [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationDidEnterBackgroundNotification object:nil];
+        require(until([&]{return api->session()==0;}),"background pause");
+        [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationWillEnterForegroundNotification object:nil];
+        require(until([&]{return api->session()==next;}),"foreground resume");
+        [NSNotificationCenter.defaultCenter postNotificationName:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+        require(until([&]{return [NeoSwapStorage_Diagnostics()[@"cache"][@"pressure"] intValue]==2;}),"pressure propagation");
+        require(api->publish(next,key,words.data(),words.size()*4)!=NS_STORAGE_OK,"optional publication under pressure");
+        NeoSwapStorage_EndSession();NeoSwapStorage_SetPreference(NO);
+        require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"session_ended"];}),"end diagnostics");
+        result[@"passed"]=@YES;result[@"realIOSSimulatorServiceExecuted"]=@YES;
+        result[@"privateFileRoundTrip"]=@YES;result[@"epochIsolation"]=@YES;result[@"leaseSurvivedSessionEnd"]=@YES;
+        result[@"lifecycleNotificationsInjected"]=@YES;result[@"pressureNotificationInjected"]=@YES;
+        result[@"diagnostics"]=NeoSwapStorage_Diagnostics();
+    }catch(const std::exception& e){result[@"error"]=[NSString stringWithUTF8String:e.what()];}
+    NSString* path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"shader-service-runtime.json"];
+    NSData* data=[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil];
+    [data writeToFile:path atomically:YES];
+}}
+@interface StorageTestDelegate : UIResponder <UIApplicationDelegate>
+@property(nonatomic,strong) UIWindow* window;
+@end
+@implementation StorageTestDelegate
+- (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)options {
+    (void)app;(void)options;self.window=[[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];self.window.rootViewController=[UIViewController new];[self.window makeKeyAndVisible];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{runTest();});return YES;
+}
+@end
+int main(int argc,char** argv){@autoreleasepool{return UIApplicationMain(argc,argv,nil,NSStringFromClass(StorageTestDelegate.class));}}

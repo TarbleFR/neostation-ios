@@ -8,6 +8,10 @@ class NeoSwap {
 
   static Future<Map<String, dynamic>> snapshot() => _call('snapshot');
   static Future<Map<String, dynamic>> probe() => _call('probe');
+
+  /// Optional regenerable shader cache; applies on the next game launch.
+  static Future<Map<String, dynamic>> setShaderStorage(bool enabled) =>
+      _call('setShaderStorage', {'enabled': enabled});
   static Future<Map<String, dynamic>> capacityProbe(int sizeMiB) {
     if (!probeSizesMiB.contains(sizeMiB)) {
       throw ArgumentError.value(sizeMiB, 'sizeMiB');

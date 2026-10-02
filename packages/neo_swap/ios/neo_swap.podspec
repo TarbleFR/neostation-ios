@@ -8,16 +8,16 @@ Pod::Spec.new do |s|
   s.author = { 'NeoStation iOS' => 'TarbleFR' }
   s.source = { :path => '.' }
   s.source_files = 'Classes/**/*'
-  s.public_header_files = 'Classes/NeoSwap.h', 'Classes/NeoSwapPlugin.h', 'Classes/NeoSwapHost.h', 'Classes/NeoSwapClientStats.h', 'Classes/NeoSwapRelay.h', 'Classes/NeoSwapRelayService.h'
-  s.private_header_files = 'Classes/NeoSwapCapacityProbe.h', 'Classes/Donation/*.h', 'Classes/Relay/*.h'
+  s.public_header_files = 'Classes/NeoSwap.h', 'Classes/NeoSwapPlugin.h', 'Classes/NeoSwapHost.h', 'Classes/NeoSwapClientStats.h', 'Classes/NeoSwapRelay.h', 'Classes/NeoSwapRelayService.h', 'Classes/NeoSwapStorageService.h', 'Classes/StorageABI.h'
+  s.private_header_files = 'Classes/NeoSwapCapacityProbe.h', 'Classes/Donation/*.h', 'Classes/Relay/*.h', 'Classes/Storage/*.h'
   s.exclude_files = 'Classes/Donation/NeoSwapDonorRequestHandler.h'
   s.dependency 'Flutter'
   s.platform = :ios, '17.4'
-  s.frameworks = 'Foundation'
-  s.libraries = 'c++'
+  s.frameworks = 'Foundation', 'UIKit'
+  s.libraries = 'c++', 'compression', 'z'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
-    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) NEOSWAP_DONATION=1 NEOSWAP_RELAY=1'
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) NEOSWAP_DONATION=1 NEOSWAP_RELAY=1 NEOSWAP_STORAGE=1'
   }
 end

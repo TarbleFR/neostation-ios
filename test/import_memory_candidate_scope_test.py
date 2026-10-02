@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 395
+assert manifest['target_build'] == 396
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -37,6 +37,17 @@ assert manifest['relay_target_object_count'] == 16
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Reviewed shader-storage host additions.
+    'build-utils/configure_neoswap_storage.py',
+    'packages/neo_swap/lib/neo_swap.dart',
+    'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',
+    'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',
+    'packages/neo_swap/ios/Classes/StorageABI.h',
+    'native/neoswap-storage/ShaderCache.h',
+    'native/neoswap-storage/ShaderCache.cpp',
+    'native/neoswap-storage/ShaderPolicy.h',
+    'native/neoswap-storage/SessionSlot.h',
+
     # Build392: keep the Build391 launch runtime unchanged; correct candidate hashes from canonical Git blobs rather than Windows CRLF bytes.
     'build-utils/private-test-373-recipient.pem',
     '.github/workflows/neoswap-relay-check.yml',
@@ -158,6 +169,16 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    # Exact consumer/service/GPU evidence.
+    'build-utils/validate_shader_storage_evidence.py',
+    'native/neoswap-storage/run_shader_validation.py',
+    'native/neoswap-storage/tests/shader_cache_test.cpp',
+    'native/neoswap-storage/tests/vulkan_shader_storage.cpp',
+    'native/neoswap-storage/tests/service_runtime.mm',
+    'test/neoswap_shader_storage_test.dart',
+    'test/neoswap_shader_storage_host_test.py',
+    'docs/neoswap-storage-build396.md',
+
     'native/neoswap-storage/StorageABI.h',
     'native/neoswap-storage/Client.h',
     'native/neoswap-storage/ShaderKey.h',
@@ -300,6 +321,8 @@ assert (ROOT / '.gitignore').read_bytes() == before('.gitignore') + (
     b'/packages/neo_swap/ios/Classes/Donation/\n'
     b'# Materialized from the canonical guest relay sources before CocoaPods installation.\n'
     b'/packages/neo_swap/ios/Classes/Relay/\n'
+    b'\n# Canonical storage host copies, generated before CocoaPods.\n'
+    b'packages/neo_swap/ios/Classes/Storage/\n'
 ), 'Unrelated source/build exclusions changed'
 
 
@@ -310,13 +333,16 @@ for path in (
     'native/rpcs3_internal_helper/Info.plist',
     'native/armsx2_internal_helper/Info.plist',
     'packages/neo_swap/ios/Classes/NeoSwap.h',
-    'packages/neo_swap/lib/neo_swap.dart',
     'lib/services/kartpad_internal_service.dart',
     'build-utils/armsx2/source.json',
     'build-utils/kartpad/source.json',
     'build-utils/stikjit/source.json',
 ):
     assert (ROOT / path).read_bytes() == before(path), 'Protected helper/core/ABI/routing changed: ' + path
+
+# Original allocator/probe API unchanged: only one boolean preference.
+storage_method = "\n  /// Optional regenerable shader cache; applies on the next game launch.\n  static Future<Map<String, dynamic>> setShaderStorage(bool enabled) =>\n      _call('setShaderStorage', {'enabled': enabled});\n"
+assert (ROOT/'packages/neo_swap/lib/neo_swap.dart').read_text().replace(storage_method,'') == before('packages/neo_swap/lib/neo_swap.dart').decode('utf-8')
 
 # The requested Dusklight update replaces only its reviewed upstream pins.
 # Keep its disc routing and SDL source identical to the preceding candidate.
@@ -341,8 +367,8 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['600c4a99de90e56d7ed81327df24600fe4bc4ab9']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37039104291'"]
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['43dac44766c10714fe41baf45badcec926dffcd8']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37058087412'"]
         assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
         assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
         assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow

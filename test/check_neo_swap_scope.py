@@ -157,7 +157,7 @@ for line in extra_header_lines:
     header_changes.remove(line)
 assert header_changes == header_edits(before_sections[header]), 'Main Core ABI fields changed'
 assert candidate['manifest']['abi'] == {
-    'rpcs3_runtime': 30, 'neoswap_allocator': 1, 'neoswap_client_stats': 1, 'neoswap_relay': 1,
+    'rpcs3_runtime': 30, 'neoswap_allocator': 1, 'neoswap_client_stats': 1, 'neoswap_relay': 1, 'neoswap_storage': 1,
 }
 # CI also executes this check against the actual materialized production header.
 native_test = (ROOT / 'test/rpcs3_xitrix_v0101_native_test.py').read_text()
@@ -188,7 +188,9 @@ RELAY_ADDED_CORE_FILES = {
 AUDITED_CORE_FILES = LEGACY_AUDITED_CORE_FILES | RELAY_CORE_FILES
 ADDED_CORE_FILES = LEGACY_ADDED_CORE_FILES | RELAY_ADDED_CORE_FILES
 CPU_BASE = '7a900c93c80cf09a1ea01a9f85f72496025e88b2'
-active_manifest = json.loads((ROOT / 'build-utils/rpcs3/canonical-source.json').read_text())
+STORAGE_BASE = 'e960e163749994d14de863bb101ed19f897cd624'
+active_manifest = json.loads(original('build-utils/rpcs3/canonical-source.json', STORAGE_BASE))
+storage_manifest = json.loads((ROOT / 'build-utils/rpcs3/canonical-source.json').read_text())
 current = json.loads(original('build-utils/rpcs3/canonical-source.json', CPU_BASE))
 assert set(current) == set(new) | {'neoswap_guest_relay'}
 for key in set(new) - {'files_sha256', 'patch_sha256', 'policy'}:
@@ -328,7 +330,7 @@ for old_hunk, relay_hunk in zip(old_header, relay_header):
 # Build395 authorizes no JIT/PPU/SPU/VM/graphics-policy change. It adds a
 # donor-only sub-MiB request helper and changes one RSX CPU call site.
 CPU_CORE_FILES = {'rpcs3/ios/NeoSwapClient.h', 'rpcs3/Emu/RSX/Common/aligned_malloc.hpp'}
-active_patch = (ROOT / 'build-utils/rpcs3/embedded-core.patch').read_bytes()
+active_patch = original('build-utils/rpcs3/embedded-core.patch', STORAGE_BASE)
 assert hashlib.sha256(active_patch).hexdigest() == active_manifest['patch_sha256']
 active_sections = sections(active_patch)
 assert set(active_sections) == set(current_sections)
@@ -351,7 +353,43 @@ end = client.index(b'inline int snapshot(')
 assert hashlib.sha256(client[start:end]).hexdigest() == '5763595637829460a470729cf2c4c51d86d44d4fccb44a8f8bee4bf6bbb72d72'
 assert client[:start] + client[end:] == postimage_lines(current_sections['rpcs3/ios/NeoSwapClient.h'])
 AUDITED_CORE_FILES |= CPU_CORE_FILES
-current = active_manifest
+# Build396 preserves the entire historical audit above, adding seven reviewed postimages.
+STORAGE_FILES = {
+    'rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp', 'rpcs3/Emu/RSX/VK/VKProgramPipeline.h',
+    'rpcs3/ios/RPCS3IOS.cpp', 'rpcs3/ios/RPCS3IOS.exports',
+    'rpcs3/ios/NeoSwapStorage/Client.h', 'rpcs3/ios/NeoSwapStorage/ShaderKey.h',
+    'rpcs3/ios/NeoSwapStorage/StorageABI.h',
+}
+STORAGE_ADDED = STORAGE_FILES - {'rpcs3/ios/RPCS3IOS.cpp','rpcs3/ios/RPCS3IOS.exports'}
+assert set(storage_manifest)==set(active_manifest)|{'neoswap_shader_storage'}
+for key in set(active_manifest)-{'files_sha256','patch_sha256','policy'}:
+    assert storage_manifest[key]==active_manifest[key], 'Historical policy changed by storage: '+key
+assert set(storage_manifest['files_sha256'])==set(active_manifest['files_sha256'])|STORAGE_ADDED
+assert {p for p,h in storage_manifest['files_sha256'].items() if active_manifest['files_sha256'].get(p)!=h}==STORAGE_FILES
+storage_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+assert hashlib.sha256(storage_patch).hexdigest()==storage_manifest['patch_sha256']
+storage_sections=sections(storage_patch)
+assert set(storage_sections)==set(active_sections)|STORAGE_ADDED
+for path in set(active_sections)-STORAGE_FILES:
+    assert hunks(storage_sections[path])==hunks(active_sections[path]), 'Unrelated source hunk changed by storage: '+path
+runtime=postimage_lines(storage_sections[cpp])
+expected_runtime=postimage_lines(active_sections[cpp])
+include=b'#include "NeoSwapStorage/Client.h"\n'
+assert runtime.count(include)==1
+runtime=runtime.replace(include,b'')
+setter=(b'\n// Optional host-owned regenerable bytecode cache; installing it does no I/O.\n'
+        b'extern "C" RPCS3_IOS_EXPORT int32_t rpcs3_ios_set_storage_cache_api(const NeoSwapStorageAPI* api) noexcept\n'
+        b'{\n    return neostation::storage_client::install(api);\n}\n')
+assert runtime.endswith(setter), 'Storage setter implementation changed'
+assert runtime[:-len(setter)].rstrip()==expected_runtime.rstrip(), 'Storage changed Core lifecycle/JIT'
+assert postimage_lines(storage_sections[exports]).rstrip()==postimage_lines(active_sections[exports]).rstrip()+b'\n_rpcs3_ios_set_storage_cache_api'
+for name in ('Client.h','ShaderKey.h','StorageABI.h'):
+    assert hashlib.sha256((ROOT/'native/neoswap-storage'/name).read_bytes()).hexdigest()==storage_manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
+assert storage_manifest['neoswap_shader_storage']['abi']==1
+assert storage_manifest['neoswap_shader_storage']['host_owned'] is True
+assert storage_manifest['neoswap_shader_storage']['device_runtime_tested'] is False
+AUDITED_CORE_FILES |= STORAGE_FILES
+current = storage_manifest
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'
@@ -384,5 +422,5 @@ assert broker.count('Broker& broker() { static Broker b; return b; }') == 1
 catalog = json.loads((ROOT / 'native/neoswap/localizations.json').read_text())
 assert set(catalog) == {'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt', 'fr', 'de', 'it', 'id', 'ja', 'ko'}
 print('PASS NeoSwap scope: historical Vulkan/Core changes retained; seventeen reviewed postimages; '
-      'guest-data mappings/aliases only, JIT/PPU/SPU and allocator v1 unchanged; '
+      'optional shader CPU cache; JIT/PPU/SPU and allocator v1 unchanged; '
       'runtime ABI30/relay ABI1; one host broker; no physical iPhone validation claim')

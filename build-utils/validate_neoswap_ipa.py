@@ -28,10 +28,16 @@ with zipfile.ZipFile(a.ipa) as z, tempfile.TemporaryDirectory() as tmp:
         digests[key]=hashlib.sha256(data).hexdigest()
         assert subprocess.check_output(['lipo','-archs',str(path)],text=True).strip()=='arm64',key
     required={'_NeoSwap_GetAPI','_NeoSwap_GetRelayAPI','_NeoSwapRelay_Start','_NeoSwapRelay_WaitReady','_OBJC_CLASS_$_NeoSwapPageRelaySession','_NeoSwap_Configure','_NeoSwap_Snapshot','_NeoSwap_LiveBytes','_NeoSwap_RegisterClient','_NeoSwap_HostSnapshot','_NeoSwap_StorageSnapshot','_NeoSwap_ClaimDonationDemand','_NeoSwap_AcknowledgeDonationDemand','_OBJC_CLASS_$_NeoSwapPlugin','_OBJC_CLASS_$_NeoSwapDonorSession','_OBJC_CLASS_$_NeoSwapMachHandle'}
+    required |= {'_NeoSwapStorage_GetAPI','_NeoSwapStorage_BeginSession','_NeoSwapStorage_EndSession',
+                 '_NeoSwapStorage_Diagnostics','_NeoSwapStorage_SetBinderResult','_NeoSwapStorage_SetPreference'}
     assert required<=exports['broker'],required-exports['broker']
     assert '_rpcs3_ios_set_neoswap_api' in exports['core']
     assert '_rpcs3_ios_get_neoswap_client_stats' in exports['core']
     assert '_rpcs3_ios_set_neoswap_relay_api' in exports['core']
+    assert '_rpcs3_ios_set_storage_cache_api' in exports['core']
+    assert b'NEOSTATION_STORAGE_SHADER_CACHE_V1' in paths['broker'].read_bytes()
+    assert b'NeoSwapShaderStorageEnabled.v1' in paths['broker'].read_bytes()
+    assert not any('test_store' in name or '5Store6inject' in name for name in exports['broker']), 'Storage fault hooks in deliverable'
     assert not (required & exports['core']), 'Core must borrow the broker, not link a duplicate'
     assert not any('_NeoSwap_Test' in name for name in exports['broker']), 'Test hooks in deliverable'
     deps=subprocess.check_output(['otool','-L',str(paths['bridge'])],text=True)
@@ -42,6 +48,7 @@ with zipfile.ZipFile(a.ipa) as z, tempfile.TemporaryDirectory() as tmp:
     # it must not own or directly start a second relay lifecycle.
     bridge_imports={'_NeoSwap_GetAPI','_NeoSwap_GetRelayAPI','_NeoSwapRelay_WaitReady',
                     '_NeoSwap_LiveBytes','_NeoSwap_HostSnapshot','_NeoSwap_RegisterClient'}
+    bridge_imports |= {'_NeoSwapStorage_GetAPI','_NeoSwapStorage_BeginSession','_NeoSwapStorage_EndSession','_NeoSwapStorage_SetBinderResult'}
     missing_bridge_imports=bridge_imports-undefined
     assert not missing_bridge_imports, 'Missing shared NeoSwap bridge imports: '+str(sorted(missing_bridge_imports))
     assert '_NeoSwapRelay_Start' not in undefined, 'RPCS3 bridge must not start a second relay lifecycle'
@@ -84,7 +91,9 @@ with zipfile.ZipFile(a.ipa) as z, tempfile.TemporaryDirectory() as tmp:
         assert not any(name.startswith('_NeoSwap_Test') for name in relay_exports), 'Test hooks in relay deliverable'
         undefined=set(subprocess.check_output(['nm','-u',str(relay_path)],text=True).split())
         assert not (eager_mach & undefined), 'Optional relay Mach APIs must be resolved at runtime'
-report={'build':a.build_number,'neoswap_abi':1,'single_host_broker':True,'rpc_client_export':True,
+report={'shader_storage_abi':1,'shader_storage_host_present':True,'shader_storage_real_core_consumer_present':True,
+ 'shader_storage_default_enabled':False,'shader_storage_scope':'regenerable CPU shader bytecode; not guest/JIT/GPU storage',
+ 'build':a.build_number,'neoswap_abi':1,'single_host_broker':True,'rpc_client_export':True,
  'client_stats_abi':1,'client_stats_export':True,'host_snapshot_exports':True,
  'donation_backend_present':True,'donor_host_launcher_separated':True,'effective_device_profile_validated':False,
  'donor_binaries_sha256':donor_hashes,'packaged_donor_count':len(DONOR_CONTRACTS),

@@ -5,6 +5,7 @@
 #import <neo_swap/NeoSwap.h>
 #import <neo_swap/NeoSwapRelay.h>
 #import <neo_swap/NeoSwapRelayService.h>
+#import <neo_swap/NeoSwapStorageService.h>
 #import "Rpcs3Diagnostics.h"
 #import "Rpcs3EarlyLoaderDiagnostics.h"
 #import "Rpcs3EarlyAddressSpaceEscrow.h"
@@ -479,6 +480,13 @@ static void RPCS3Progress(void* context,
     _neoSwapClientStats = nullptr;
     return NO;
   }
+  using StorageBinder = int32_t (*)(const NeoSwapStorageAPI*);
+  auto bindStorage = reinterpret_cast<StorageBinder>(dlsym(handle, "rpcs3_ios_set_storage_cache_api"));
+  const int storageResult = bindStorage ? bindStorage(NeoSwapStorage_GetAPI(NEOSWAP_STORAGE_ABI)) : NS_STORAGE_DISABLED;
+  NeoSwapStorage_SetBinderResult(storageResult);
+  RPCS3Diagnostic(@"neoswap_shader_storage", [NSString stringWithFormat:
+      @"abi=1 bind=%d requested=%d scope=regenerable_SPIRV cache_miss=recompile_no_disk_wait",
+      storageResult, NeoSwapStorage_GetPreference()]);
   NeoSwap_RegisterClient(NEOSWAP_RPCS3);
   _neoSwapClientStats = reinterpret_cast<int32_t (*)(NeoSwapClientStats*)>(
       dlsym(handle, "rpcs3_ios_get_neoswap_client_stats"));
@@ -1486,6 +1494,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       return;
     }
     NeoSwap_SetCPUBufferExperiment(NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
+    NeoSwapStorage_BeginSession(titleId);
     RPCS3Diagnostic(@"neoswap_cpu_buffers", [NSString stringWithFormat:
         @"title=%@ enabled=%d minimum_bytes=65536 maximum_exclusive=1048576 disk_fallback=0",
         titleId, NeoSwapCPUBufferTitle(titleId.UTF8String ?: "")]);
@@ -1521,6 +1530,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       self.gameController = nil;
       self.activeTitleId = nil;
       self.activeUiLocale = nil;
+      NeoSwapStorage_EndSession();
       NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0);
       result(@{@"success": @NO, @"code": @"RPCS3_DISPLAY_SURFACE_FAILED",
         @"stage": @"game_boot", @"message": @"Metal surface could not be created."});
@@ -1638,6 +1648,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       dispatch_async(dispatch_get_main_queue(), ^{ if (result) result(@NO); });
       return; // Keep Metal, controls and audio attached while the save owns Emu.
     }
+    NeoSwapStorage_EndSession();
     const int sessionResult = NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0);
     RPCS3Diagnostic(@"neoswap_session", [NSString stringWithFormat:@"active=0 result=%d", sessionResult]);
     [self stopDiagnosticPerformanceSampling];

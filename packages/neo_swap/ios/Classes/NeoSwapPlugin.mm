@@ -2,6 +2,9 @@
 #import "NeoSwap.h"
 #include "NeoSwapHost.h"
 #include "NeoSwapCapacityProbe.h"
+#if defined(NEOSWAP_STORAGE)
+#import "NeoSwapStorageService.h"
+#endif
 #if defined(NEOSWAP_RELAY)
 #import "NeoSwapRelayService.h"
 #endif
@@ -797,6 +800,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #if defined(NEOSWAP_RELAY)
         @"guestRelay":NeoSwapRelay_Diagnostics(),
 #endif
+#if defined(NEOSWAP_STORAGE)
+        @"shaderStorage":NeoSwapStorage_Diagnostics(),
+#endif
         @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"",
         @"diagnosticErrno":@(self.diagnosticErrno)};
 }
@@ -824,6 +830,22 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     close(fd);
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+#if defined(NEOSWAP_STORAGE)
+    if ([call.method isEqualToString:@"setShaderStorage"]) {
+        id flag = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments[@"enabled"] : nil;
+        if (![flag isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)flag) != CFBooleanGetTypeID()) {
+            result([FlutterError errorWithCode:@"invalid_argument" message:@"enabled must be a boolean" details:nil]);
+            return;
+        }
+        dispatch_async(self.queue, ^{
+            NeoSwapStorage_SetPreference([flag boolValue]);
+            NSMutableDictionary* response = [[self snapshot:@"shader_storage_preference"] mutableCopy];
+            response[@"result"] = @0; [self appendRecord:response];
+            dispatch_async(dispatch_get_main_queue(), ^{ result(response); });
+        });
+        return;
+    }
+#endif
     if (![call.method isEqualToString:@"snapshot"] &&
         ![call.method isEqualToString:@"probe"] && ![call.method isEqualToString:@"capacityProbe"]) { result(FlutterMethodNotImplemented); return; }
     dispatch_async(self.queue, ^{
