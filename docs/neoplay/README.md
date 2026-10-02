@@ -12,7 +12,7 @@ The receiver announces `_neoplay._tcp` over Bonjour/mDNS. No account, external s
 
 ## Chromecast
 
-The separately integrated Google Cast iOS SDK discovers video-capable Cast receivers and starts Google's default media receiver. No Windows PC and no extra app on a conventional Chromecast are required. The iPhone serves a token-scoped H.264/AAC fragmented-MP4 HLS stream from a bounded RAM ring.
+The separately integrated Google Cast iOS SDK discovers video-capable Cast receivers and starts Google's default media receiver. No Windows PC and no extra app on a conventional Chromecast are required. The iPhone serves a token-scoped H.264/AAC fragmented-MP4 HLS stream from a bounded RAM ring with a fixed HLS target duration and separately retained recent payloads.
 The media stays on the LAN, but Google's receiver/SDK initialization may need internet access. This is not a promise of fully offline Google Cast.
 The default receiver does not expose the attached television's EDID or pixel dimensions to the sender. The compatibility profile is capped at 720p/60; the receiver scales to the destination with aspect preservation. Exact TV-resolution feedback and adaptive bitrate are **not implemented in this first candidate**.
 The HLS path has a higher buffering delay than the Windows path. No claim of competitive-gaming latency is made. A future native Google TV receiver can use a lower-latency transport; that is not the same as a classic Chromecast.
@@ -34,3 +34,17 @@ The integration is **not finished** until the two routes have separate physical-
 - CI success is not physical-device success. No public release, stable-baseline promotion or merge is authorized by this implementation.
 
 Primary API references: Apple ReplayKit `RPScreenRecorder.startCapture`, AVFoundation segmented `AVAssetWriter`; Google Cast iOS integration, supported media and iOS local-network permissions; W3C Media Source Extensions.
+
+## First-candidate boundaries and diagnostics
+
+The current image source is the **application screen**, not an emulator's isolated framebuffer. Consequently, letterboxing already rendered on the phone is preserved inside the shared picture. Removing that extra border without cropping the game requires an explicit game-viewport/render integration; it is not yet implemented. Do not advertise perfect game-only screen filling from these tests.
+
+The Tools dialog can connect before launching a game. The native pass-through overlay disconnects a running stream. Opening a first receiver-selection UI from every already-running embedded emulator is a separate integration task and has not been validated.
+
+Windows viewport changes are reported back to iOS and debounced before restarting only the encoder when its output dimensions must change. This is not an emulator restart. There is no HEVC mode or network-adaptive bitrate controller in this candidate.
+
+`Documents/NeoPlay.jsonl` records connection/stop events, encoder dimensions and underlying error domains/codes on a utility queue. It rotates at 512 KiB to `NeoPlay.jsonl.previous`. Pairing codes, receiver addresses, URL capabilities and game paths are not logged.
+
+For Chromecast HLS, the advertised window contains up to six one-second segments while the encoded ring retains up to 24 segments / 24 MiB, including recently unlisted payloads. Target duration stays fixed; unusually long fragments are rejected rather than silently changing the stream contract. This does not establish a real TV playback or latency result.
+
+A private manual IPA workflow is configured only on this branch. The isolated native harness compiles the native capture/Cast implementation, but it is **not a complete NeoStation IPA build**. Device acceptance additionally requires the full host/plugin build and manual tests on iPhone plus each destination.

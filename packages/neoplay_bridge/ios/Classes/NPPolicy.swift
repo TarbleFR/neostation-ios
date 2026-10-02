@@ -35,14 +35,14 @@ final class NPSegmentStore {
     private var nextSequence = 0
     private let maxBytes: Int
     private let maxSegments: Int
-    init(maxBytes: Int = 24 * 1024 * 1024, maxSegments: Int = 12) { self.maxBytes = maxBytes; self.maxSegments = maxSegments }
+    init(maxBytes: Int = 24 * 1024 * 1024, maxSegments: Int = 24) { self.maxBytes = maxBytes; self.maxSegments = maxSegments }
     func initialize(_ data: Data) throws {
         guard !data.isEmpty, data.count <= NPPolicy.maxPacket else { throw NPError.encoder }
         lock.lock(); defer { lock.unlock() }; epoch += 1; initializations[epoch] = data
         prune()
     }
     func append(_ data: Data, duration: Double) throws {
-        guard !data.isEmpty, data.count <= NPPolicy.maxPacket, duration.isFinite, duration > 0, duration <= 5 else { throw NPError.encoder }
+        guard !data.isEmpty, data.count <= NPPolicy.maxPacket, duration.isFinite, duration > 0, duration < 1.5 else { throw NPError.encoder }
         lock.lock(); defer { lock.unlock() }
         guard epoch >= 0 else { throw NPError.encoder }
         segments.append(Segment(sequence: nextSequence, epoch: epoch, duration: duration, bytes: data)); nextSequence += 1
@@ -54,15 +54,18 @@ final class NPSegmentStore {
         }
         let needed = Set(segments.map(\.epoch) + [epoch]); initializations = initializations.filter { needed.contains($0.key) }
     }
+    var isReady: Bool { lock.lock(); defer { lock.unlock() }; let visible = segments.suffix(6); return visible.count >= 3 && visible.reduce(0, {$0 + $1.duration}) >= 3 }
     var count: Int { lock.lock(); defer { lock.unlock() }; return segments.count }
     var byteCount: Int { lock.lock(); defer { lock.unlock() }; return segments.reduce(0, {$0 + $1.bytes.count}) + initializations.values.reduce(0, {$0 + $1.count}) }
     func response(_ resource: String) -> (Int, String, Data) {
         lock.lock(); defer { lock.unlock() }
         if resource == "index.m3u8" {
-            guard let first = segments.first, segments.count >= 3 else { return (503, "text/plain", Data()) }
-            var lines = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:\(Int(ceil(segments.map(\.duration).max() ?? 1)))", "#EXT-X-MEDIA-SEQUENCE:\(first.sequence)", "#EXT-X-DISCONTINUITY-SEQUENCE:\(first.epoch)"]
+            // RFC 8216: fixed target duration; retain older payloads after playlist eviction.
+            let advertised = Array(segments.suffix(6))
+            guard let first = advertised.first, advertised.count >= 3, advertised.reduce(0, {$0 + $1.duration}) >= 3 else { return (503, "text/plain", Data()) }
+            var lines = ["#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:1", "#EXT-X-MEDIA-SEQUENCE:\(first.sequence)", "#EXT-X-DISCONTINUITY-SEQUENCE:\(first.epoch)"]
             var previous: Int?
-            for item in segments {
+            for item in advertised {
                 if item.epoch != previous {
                     if previous != nil { lines.append("#EXT-X-DISCONTINUITY") }
                     lines.append("#EXT-X-MAP:URI=\"init-\(item.epoch).mp4\""); previous = item.epoch

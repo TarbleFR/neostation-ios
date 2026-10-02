@@ -64,7 +64,7 @@ final class NPController {
             do {
                 if let store { if initial { try store.initialize(data) } else { try store.append(data, duration: duration) } }
                 windows?.send(data, initial: initial)
-                if castRoute && (store?.count ?? 0) >= 3 {
+                if castRoute && store?.isReady == true {
                     DispatchQueue.main.async { guard let self, self.fence.accepts(token), !self.didLoadCast, let url = self.mediaURL else { return }; self.didLoadCast = true; self.cast.load(url) }
                 }
             } catch { DispatchQueue.main.async { if self?.fence.accepts(token) == true { self?.stop(error: .encoder) } } }
