@@ -35,6 +35,8 @@ final class NeoPlayEncodedMediaTests: XCTestCase {
         guard let vt = videoTracks.first, let at = audioTracks.first else { return }
         XCTAssertEqual(vt.naturalSize, CGSize(width: 640, height: 480))
         let v = try timing(asset, track: vt), a = try timing(asset, track: at)
+        print("NEOPLAY_TRACK_TIMING cast=\(cast) video=\(v) audio=\(a)")
+        // A compressed audio CMSampleBuffer can contain multiple AAC packets.
         XCTAssertGreaterThan(v.count, 100); XCTAssertGreaterThan(a.count, 100)
         XCTAssertLessThan(abs(v.start - a.start), 0.1)
         XCTAssertLessThan(abs(v.end - a.end), 0.1)
@@ -52,7 +54,7 @@ final class NeoPlayEncodedMediaTests: XCTestCase {
         while let sample = output.copyNextSampleBuffer() {
             let pts = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
             let duration = CMTimeGetSeconds(CMSampleBufferGetDuration(sample))
-            start = min(start, pts); end = max(end, pts + (duration.isFinite ? duration : 0)); count += 1
+            start = min(start, pts); end = max(end, pts + (duration.isFinite ? duration : 0)); count += CMSampleBufferGetNumSamples(sample)
         }
         XCTAssertEqual(reader.status, .completed)
         return (start, end, count)

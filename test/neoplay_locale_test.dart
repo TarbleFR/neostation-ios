@@ -12,7 +12,7 @@ void main() {
     }
   });
   testWidgets('Traditional Chinese uses the Traditional catalogue', (tester) async {
-    await tester.pumpWidget(Localizations(locale: const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'), delegates: const [], child: Directionality(textDirection: TextDirection.ltr, child: Builder(builder: (context) => Text(NeoPlayLocale.get(context, 'subtitle'))))));
+    await tester.pumpWidget(Localizations(locale: const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'), delegates: const [DefaultWidgetsLocalizations.delegate], child: Directionality(textDirection: TextDirection.ltr, child: Builder(builder: (context) => Text(NeoPlayLocale.get(context, 'subtitle'))))));
     expect(find.text('在另一個螢幕上遊玩'), findsOneWidget);
   });
 }

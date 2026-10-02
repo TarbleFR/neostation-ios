@@ -57,7 +57,7 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
         if mediaStatus?.playerState == .playing { onPlayback?() }
         if mediaStatus?.playerState == .idle && mediaStatus?.idleReason == .error { onError?(.cast) }
     }
-    func request(_ request: GCKRequest, didFailWithError error: GCKError) { if ownsSession { onError?(.cast) } }
+    func request(_ request: GCKRequest, didFailWithError error: GCKError) { if ownsSession { NPLog.error("cast.request", error); onError?(.cast) } }
     func sessionManager(_ sessionManager: GCKSessionManager, didFailToStart session: GCKCastSession, withError error: Error) {
         guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; cancelling = false; onError?(.cast)
     }

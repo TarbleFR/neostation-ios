@@ -14,6 +14,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     private var ownsRecorder = false
     private var pending = false
     private var previousMicrophone = false
+    private weak var previousDelegate: RPScreenRecorderDelegate?
     var onSegment: ((Data, Bool, Double) -> Void)?
     var onError: ((NPError) -> Void)?
     var onStarted: (() -> Void)?
@@ -25,14 +26,14 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     func start() {
         let recorder = RPScreenRecorder.shared()
         guard !pending, !ownsRecorder, recorder.isAvailable, !recorder.isRecording else { onError?(.unavailable); return }
-        requested = true; pending = true; previousMicrophone = recorder.isMicrophoneEnabled
+        requested = true; pending = true; previousMicrophone = recorder.isMicrophoneEnabled; previousDelegate = recorder.delegate
         recorder.isMicrophoneEnabled = false; recorder.delegate = self
         let display = self.display, cast = self.cast
         queue.sync { generation += 1; lastSampleAt = Date() }
         let token = queue.sync { generation }
         recorder.startCapture(handler: { [weak self] sample, kind, error in
             guard let self else { return }
-            if error != nil { DispatchQueue.main.async { if self.requested { self.onError?(.capture) } }; return }
+            if error != nil { NPLog.error("capture.sample", error); DispatchQueue.main.async { if self.requested { self.onError?(.capture) } }; return }
             guard kind == .video || kind == .audioApp else { return }
             let slots = kind == .video ? self.videoSlots : self.audioSlots
             guard slots.wait(timeout: .now()) == .success else { return }
@@ -63,7 +64,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         }, completionHandler: { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }; self.pending = false
-                if error != nil { let notify = self.requested; self.requested = false; self.restoreRecorder(); if notify { self.onError?(.capture) }; self.onStopped?(); return }
+                if error != nil { NPLog.error("capture.start", error); let notify = self.requested; self.requested = false; self.restoreRecorder(); if notify { self.onError?(.capture) }; self.onStopped?(); return }
                 self.ownsRecorder = true
                 guard self.requested else { self.stop(); return }
                 self.onStarted?()
@@ -81,6 +82,6 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         guard ownsRecorder else { onStopped?(); return }; ownsRecorder = false
         RPScreenRecorder.shared().stopCapture { [weak self] _ in DispatchQueue.main.async { self?.restoreRecorder(); self?.onStopped?() } }
     }
-    private func restoreRecorder() { let recorder = RPScreenRecorder.shared(); if recorder.delegate === self { recorder.delegate = nil; recorder.isMicrophoneEnabled = previousMicrophone } }
+    private func restoreRecorder() { let recorder = RPScreenRecorder.shared(); if recorder.delegate === self { recorder.delegate = previousDelegate; previousDelegate = nil; recorder.isMicrophoneEnabled = previousMicrophone } }
     func screenRecorder(_ screenRecorder: RPScreenRecorder, didStopRecordingWith previewViewController: RPPreviewViewController?, error: Error?) { if requested { onError?(.capture) } }
 }

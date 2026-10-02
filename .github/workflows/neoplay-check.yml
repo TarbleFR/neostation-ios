@@ -58,8 +58,15 @@ jobs:
           echo "$DEVICE" > build/neoplay-native/device.txt
           set -o pipefail
           xcodebuild test -workspace build/neoplay-native/NPCheck.xcworkspace -scheme NPCheck -destination "id=$DEVICE" -resultBundlePath build/neoplay-native/Results.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/neoplay-native/build.log
-          DATA=$(xcrun simctl get_app_container "$DEVICE" org.neostation.npcheck data)
-          cp -R "$DATA/Documents/NeoPlayFixtures" build/neoplay-native/fixtures
+      - name: Collect encoded fixtures even when a media assertion fails
+        if: always()
+        run: |
+          test -f build/neoplay-native/device.txt || exit 0
+          DEVICE=$(cat build/neoplay-native/device.txt)
+          DATA=$(xcrun simctl get_app_container "$DEVICE" org.neostation.npcheck data 2>/dev/null) || exit 0
+          if [ -d "$DATA/Documents/NeoPlayFixtures" ]; then
+            cp -R "$DATA/Documents/NeoPlayFixtures" build/neoplay-native/fixtures
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -69,6 +76,7 @@ jobs:
             build/neoplay-native/Results.xcresult
           retention-days: 7
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: NeoPlay-encoded-fixtures-${{ github.sha }}
           path: build/neoplay-native/fixtures

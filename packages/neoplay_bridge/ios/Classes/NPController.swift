@@ -29,9 +29,10 @@ final class NPController {
     func stopDiscovery() { discovery.stop(); cast.stopDiscovery() }
     func connect(id: String, pin: String, stopLabel: String) throws {
         guard !isStopping, let token = fence.begin() else { throw NPError.busy }
+        NPLog.record("session.connect", ["kind": id.hasPrefix("cast:") ? "cast" : "windows"])
         state = "connecting"; failure = nil; selected = id; didLoadCast = false; publish()
         let fail: (NPError) -> Void = { [weak self] error in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.stop(error: error) } }
-        let playing: () -> Void = { [weak self] in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.state = "streaming"; self.startTimer?.invalidate(); self.startTimer = nil; self.publish() } }
+        let playing: () -> Void = { [weak self] in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.state = "streaming"; NPLog.record("receiver.playing"); self.startTimer?.invalidate(); self.startTimer = nil; self.publish() } }
         startTimer = Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { _ in fail(.timeout) }
         if id.hasPrefix("windows:"), let service = discovery.services[id], let host = service.hostName {
             let transport = NPWindowsTransport(); windows = transport; transport.onError = fail; transport.onPlayback = playing
@@ -71,6 +72,7 @@ final class NPController {
         capture.start()
     }
     func stop(error: NPError? = nil) {
+        NPLog.record("session.stop", ["reason": error?.rawValue ?? "user"])
         fence.stop(); startTimer?.invalidate(); startTimer = nil
         failure = error?.rawValue; state = error == nil ? "idle" : "failed"; selected = nil
         windows?.stop(); windows = nil; cast.stop(); http?.stop(); http = nil; store = nil; mediaURL = nil

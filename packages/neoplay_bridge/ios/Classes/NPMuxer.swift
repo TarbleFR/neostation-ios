@@ -37,7 +37,8 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
         super.init()
         guard writer.canAdd(video), writer.canAdd(audio) else { throw NPError.encoder }
         writer.add(video); writer.add(audio); writer.delegate = self
-        guard writer.startWriting() else { throw NPError.encoder }
+        guard writer.startWriting() else { NPLog.error("encoder.start", writer.error); throw NPError.encoder }
+        NPLog.record("encoder.config", ["cast": cast, "width": output.width, "height": output.height, "fragmentSeconds": interval])
         writer.startSession(atSourceTime: .zero)
     }
     static func image(_ sample: CMSampleBuffer) -> CIImage? {
@@ -46,7 +47,7 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
         return CIImage(cvPixelBuffer: pixel).oriented(forExifOrientation: orientation)
     }
     func append(_ sample: CMSampleBuffer, video isVideo: Bool) {
-        guard writer.status == .writing else { onError?(.encoder); return }
+        guard writer.status == .writing else { NPLog.error("encoder.status", writer.error); onError?(.encoder); return }
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
         guard timestamp.isNumeric else { return }
         if origin == nil { guard isVideo else { return }; origin = timestamp }
@@ -63,7 +64,7 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
             let normalized = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             let centered = normalized.transformed(by: CGAffineTransform(translationX: (bounds.width - normalized.extent.width)/2, y: (bounds.height - normalized.extent.height)/2))
             context.render(centered.composited(over: CIImage(color: .black).cropped(to: bounds)), to: pixel, bounds: bounds, colorSpace: CGColorSpaceCreateDeviceRGB())
-            if adaptor.append(pixel, withPresentationTime: time) { lastVideo = time } else { onError?(.encoder) }
+            if adaptor.append(pixel, withPresentationTime: time) { lastVideo = time } else { NPLog.error("encoder.video", writer.error); onError?(.encoder) }
         } else {
             guard audio.isReadyForMoreMediaData, !lastAudio.isNumeric || time > lastAudio else { return }
             var count = 0
@@ -76,7 +77,7 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
             }
             var adjusted: CMSampleBuffer?
             guard CMSampleBufferCreateCopyWithNewTiming(allocator: kCFAllocatorDefault, sampleBuffer: sample, sampleTimingEntryCount: count, sampleTimingArray: &timing, sampleBufferOut: &adjusted) == noErr, let adjusted else { return }
-            if audio.append(adjusted) { lastAudio = time } else { onError?(.encoder) }
+            if audio.append(adjusted) { lastAudio = time } else { NPLog.error("encoder.audio", writer.error); onError?(.encoder) }
         }
     }
     func finish(_ completion: @escaping () -> Void) {

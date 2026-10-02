@@ -1,12 +1,15 @@
 // Actual browser decode of fixtures emitted by the production iOS NPMuxer.
 // This is not an iPhone radio/ReplayKit/Chromecast hardware test.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
 import { chromium } from 'playwright';
 import { createReceiver } from './server.mjs';
-const fixture = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const fixtureBytes = await readFile(process.argv[2]);
+const fixture = JSON.parse(fixtureBytes.toString('utf8'));
+const fixtureSha256 = createHash('sha256').update(fixtureBytes).digest('hex');
 const receiver = await createReceiver({port:0, host:'127.0.0.1', advertise:false});
 let browser, sender;
 try {
@@ -46,7 +49,7 @@ try {
   assert.equal((await (await fetch(`http://127.0.0.1:${receiver.port}/v1/info`)).json()).available,true);
   assert.deepEqual(failures,[]);
   await mkdir('test-output',{recursive:true});
-  const report = {platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,physicalIPhone:false,physicalChromecast:false};
+  const report = {fixtureSha256,codeCommit:process.env.GITHUB_SHA || process.env.NEOPLAY_SOURCE_SHA || null,platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,physicalIPhone:false,physicalChromecast:false};
   await writeFile('test-output/playback.json', JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 } finally { sender?.terminate(); await browser?.close(); await receiver.close(); }
