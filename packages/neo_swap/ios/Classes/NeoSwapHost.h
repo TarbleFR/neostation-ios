@@ -23,6 +23,17 @@ typedef struct NeoSwapHostStats {
     uint64_t donor_pending_demand_count, donor_demand_overflow_count;
 } NeoSwapHostStats;
 
+// Host-only counters, not additions to the immutable emulator API/stats ABI.
+// Sub-MiB borrowing is an experiment with actual CPU buffers, not a capacity test.
+// Counts are cumulative independent atomic observations; live/peak are byte counts.
+typedef struct NeoSwapCPUBufferStats {
+    uint64_t requests, requested_bytes, successful_allocations, fallback_count;
+    uint64_t live_bytes, peak_bytes, live_blocks, allocated_bytes;
+    uint64_t pressure_refusals, policy_refusals, pool_misses;
+    uint64_t request_bins[4], donated_bins[4];
+    uint32_t enabled, pressure_raised;
+} NeoSwapCPUBufferStats;
+
 typedef struct NeoSwapDonationDemand {
     uint64_t sequence, bytes;
 } NeoSwapDonationDemand;
@@ -31,6 +42,10 @@ typedef struct NeoSwapDonationDemand {
 extern "C" {
 #endif
 NEOSWAP_PUBLIC int NeoSwap_HostSnapshot(NeoSwapHostStats* stats);
+// These settings never migrate or free an existing allocation. Disable on exit.
+NEOSWAP_PUBLIC void NeoSwap_SetCPUBufferExperiment(int enabled);
+NEOSWAP_PUBLIC void NeoSwap_SetCPUBufferPressure(int raised);
+NEOSWAP_PUBLIC int NeoSwap_CPUBufferSnapshot(NeoSwapCPUBufferStats* stats);
 // Refresh disk-capacity fields on a background diagnostics queue. The fast
 // HostSnapshot getter only copies cached fields and never queries filesystem.
 NEOSWAP_PUBLIC int NeoSwap_StorageSnapshot(NeoSwapHostStats* stats);

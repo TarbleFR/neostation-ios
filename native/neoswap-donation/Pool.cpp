@@ -15,7 +15,9 @@ namespace neostation::donation {
 namespace {
 constexpr std::size_t max_donors = 8;
 constexpr std::size_t max_entries = 512;
-constexpr std::size_t max_loans = 256;
+// 256 legacy large allocations plus 768 bounded CPU sub-MiB allocations.
+// The host keeps the slot classes separate so small data cannot starve large buffers.
+constexpr std::size_t max_loans = 1024;
 constexpr std::uint64_t max_capacity = 8ULL * 1024 * 1024 * 1024;
 struct Entry {
   std::unique_ptr<Block> block;

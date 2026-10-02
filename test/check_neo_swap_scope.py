@@ -187,7 +187,9 @@ RELAY_ADDED_CORE_FILES = {
 }
 AUDITED_CORE_FILES = LEGACY_AUDITED_CORE_FILES | RELAY_CORE_FILES
 ADDED_CORE_FILES = LEGACY_ADDED_CORE_FILES | RELAY_ADDED_CORE_FILES
-current = json.loads((ROOT / 'build-utils/rpcs3/canonical-source.json').read_text())
+CPU_BASE = '7a900c93c80cf09a1ea01a9f85f72496025e88b2'
+active_manifest = json.loads((ROOT / 'build-utils/rpcs3/canonical-source.json').read_text())
+current = json.loads(original('build-utils/rpcs3/canonical-source.json', CPU_BASE))
 assert set(current) == set(new) | {'neoswap_guest_relay'}
 for key in set(new) - {'files_sha256', 'patch_sha256', 'policy'}:
     assert current[key] == new[key], 'Unrelated canonical contract changed by relay: ' + key
@@ -195,16 +197,14 @@ assert set(current['files_sha256']) == set(new['files_sha256']) | RELAY_ADDED_CO
 relay_changed = {path for path, value in current['files_sha256'].items()
                  if new['files_sha256'].get(path) != value}
 assert relay_changed == RELAY_CORE_FILES, 'Unaudited relay postimages: ' + str(relay_changed ^ RELAY_CORE_FILES)
-assert candidate['manifest']['rpcs3_postimages_sha256'] == {
-    path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
-}, 'Candidate/Core postimage identity drift'
+# Candidate postimages are checked below after the new CPU-only delta.
 relay_contract = current['neoswap_guest_relay']
 assert relay_contract['client_abi'] == 1
 assert relay_contract['broker_compiled_into_host_only'] is True
 assert relay_contract['real_iphone_validated'] is False
 assert 'guest data' in relay_contract['scope'] and 'alias' in relay_contract['scope']
 
-current_patch = (ROOT / 'build-utils/rpcs3/embedded-core.patch').read_bytes()
+current_patch = original('build-utils/rpcs3/embedded-core.patch', CPU_BASE)
 assert hashlib.sha256(current_patch).hexdigest() == current['patch_sha256']
 current_sections = sections(current_patch)
 assert set(current_sections) == set(after_sections) | RELAY_ADDED_CORE_FILES
@@ -323,6 +323,42 @@ for old_hunk, relay_hunk in zip(old_header, relay_header):
     assert relay_hunk[2] == old_hunk[2] + offset, 'Relay moved an unrelated ABI hunk'
     assert relay_hunk[5] == expected, 'Relay changed existing runtime ABI source'
     offset += len(expected.splitlines()) - old_hunk[3]
+
+
+# Build395 authorizes no JIT/PPU/SPU/VM/graphics-policy change. It adds a
+# donor-only sub-MiB request helper and changes one RSX CPU call site.
+CPU_CORE_FILES = {'rpcs3/ios/NeoSwapClient.h', 'rpcs3/Emu/RSX/Common/aligned_malloc.hpp'}
+active_patch = (ROOT / 'build-utils/rpcs3/embedded-core.patch').read_bytes()
+assert hashlib.sha256(active_patch).hexdigest() == active_manifest['patch_sha256']
+active_sections = sections(active_patch)
+assert set(active_sections) == set(current_sections)
+assert {p for p in active_sections if active_sections[p] != current_sections[p]} == CPU_CORE_FILES
+for p in set(current_sections) - CPU_CORE_FILES:
+    assert active_sections[p] == current_sections[p], 'Unrelated Core section changed by CPU experiment: ' + p
+assert set(active_manifest) == set(current) | {'neoswap_cpu_buffers'}
+for key in set(current) - {'files_sha256', 'patch_sha256', 'policy'}:
+    assert active_manifest[key] == current[key], 'Existing Core policy changed: ' + key
+assert set(active_manifest['files_sha256']) == set(current['files_sha256'])
+assert {p for p in active_manifest['files_sha256'] if active_manifest['files_sha256'][p] != current['files_sha256'][p]} == CPU_CORE_FILES
+aligned = 'rpcs3/Emu/RSX/Common/aligned_malloc.hpp'
+expected = current_sections[aligned].replace(
+    b'neostation::swap::try_allocate(NEOSWAP_RPCS3, size, Align)',
+    b'neostation::swap::try_allocate_cpu(NEOSWAP_RPCS3, size, Align)')
+assert active_sections[aligned] == expected, 'CPU allocator changed beyond the opt-in call'
+client = postimage_lines(active_sections['rpcs3/ios/NeoSwapClient.h'])
+start = client.index(b'// RSX CPU data only.')
+end = client.index(b'inline int snapshot(')
+assert hashlib.sha256(client[start:end]).hexdigest() == '5763595637829460a470729cf2c4c51d86d44d4fccb44a8f8bee4bf6bbb72d72'
+assert client[:start] + client[end:] == postimage_lines(current_sections['rpcs3/ios/NeoSwapClient.h'])
+AUDITED_CORE_FILES |= CPU_CORE_FILES
+current = active_manifest
+assert candidate['manifest']['rpcs3_postimages_sha256'] == {
+    path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
+}, 'Candidate/Core postimage identity drift'
+assert current['neoswap_cpu_buffers']['minimum_bytes'] == 65536
+assert current['neoswap_cpu_buffers']['maximum_exclusive_bytes'] == 1048576
+assert current['neoswap_cpu_buffers']['generic_vulkan_threshold_unchanged'] is True
+assert current['neoswap_cpu_buffers']['device_runtime_tested'] is False
 
 abi_path = 'packages/neo_swap/ios/Classes/NeoSwap.h'
 assert (ROOT / abi_path).read_bytes() == original(abi_path), 'Allocator v1 ABI changed'

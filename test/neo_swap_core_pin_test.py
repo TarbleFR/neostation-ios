@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = 'ea93b436b545674c93624c8a0438fa34270201d19ee9b0d566d4667257509791'
+PATCH_SHA256 = '9164f6ca957d811cd59f2eb97630ce8fdcec03d1a11bcfee5d194f4661b4c433'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -44,6 +44,7 @@ CORE_INPUTS = (
     'native/neoswap/NeoSwapClient.h',
     'test/neo_swap_core_pin_test.py',
     'test/neoswap_rpcs3_allocator_test.cpp',
+    'test/neoswap_cpu_buffers_test.cpp',
     'test/rpcs3_neoswap_vulkan_buffer_test.py',
     'test/native/rpcs3_neoswap_vulkan_buffer_test.cpp',
     'test/rpcs3_neoswap_relay_test.py',

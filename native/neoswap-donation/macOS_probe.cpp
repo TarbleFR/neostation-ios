@@ -265,8 +265,40 @@ bool scenario(std::uint64_t generation, bool abrupt) {
     if (!check(NeoSwap_Configure("/neoswap-test-missing-directory", &config) == NEOSWAP_STORAGE,
                "file backend failure is explicit") ||
         !check(NeoSwap_GetAPI(1)->enabled(NEOSWAP_RPCS3) != 0,
-               "donor enables RPCS3 despite unavailable file backend") ||
-        !check(NeoSwap_GetAPI(1)->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA,
+               "donor enables RPCS3 despite unavailable file backend")) return false;
+    // Real helper-owned pages through the new sub-MiB CPU path, not test malloc.
+    NeoSwap_SetCPUBufferExperiment(1);
+    NeoSwap_SetCPUBufferPressure(0);
+    void* cpu_pointer = nullptr;
+    if (!check(NeoSwap_GetAPI(1)->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_CACHE,
+            65536, 65536, &cpu_pointer) == NEOSWAP_OK && cpu_pointer,
+            "real 64KiB CPU donor loan")) return false;
+    // The pool starts at the beginning of the donor object. A second genuine
+    // named-object view must observe writes, and the old full checksum is restored.
+    Block cpu_alias;
+    if (!check(Block::map_borrowed(entry, bytes, cpu_alias), "CPU donor alias proof")) return false;
+    auto* cpu_data = static_cast<unsigned char*>(cpu_pointer);
+    auto* alias_data = static_cast<unsigned char*>(cpu_alias.data());
+    const unsigned char old_first = cpu_data[0], old_last = cpu_data[65535];
+    cpu_data[0] = 0x39; cpu_data[65535] = 0xE8;
+    if (!check(alias_data[0] == 0x39 && alias_data[65535] == 0xE8,
+               "sub-MiB loan shares the real donor object")) return false;
+    cpu_data[0] = old_first; cpu_data[65535] = old_last;
+    NeoSwapCPUBufferStats cpu_stats{};
+    if (!check(NeoSwap_CPUBufferSnapshot(&cpu_stats) == NEOSWAP_OK &&
+               cpu_stats.live_bytes == 65536 && cpu_stats.live_blocks == 1,
+               "sub-MiB live counters contain only the borrowed interval")) return false;
+    NeoSwap_SetCPUBufferPressure(1);
+    void* denied = nullptr;
+    if (!check(NeoSwap_GetAPI(1)->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_CACHE,
+            65536, 65536, &denied) == NEOSWAP_DISABLED && !denied,
+            "new small CPU loan refused under pressure") ||
+        !check(cpu_data[0] == old_first && cpu_data[65535] == old_last,
+            "existing small CPU data survives pressure") ||
+        !check(NeoSwap_GetAPI(1)->release(cpu_pointer) == NEOSWAP_OK,
+            "small CPU donor release") || !check(cpu_alias.reset(), "small CPU alias cleanup")) return false;
+    NeoSwap_SetCPUBufferExperiment(0);
+    if (!check(NeoSwap_GetAPI(1)->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA,
             bytes, 65536, &address) == NEOSWAP_OK, "production RPCS3 donor allocation")) return false;
     NeoSwapStats initial_stats{};
     initial_stats.struct_size = sizeof(initial_stats);

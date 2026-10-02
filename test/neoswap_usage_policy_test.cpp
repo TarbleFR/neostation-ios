@@ -3,6 +3,10 @@
 #include <cstdio>
 
 int main() {
+  for (auto title : {"BCES00510", "BCES00799", "BCUS98111", "BCJS37001", "BCAS25003", "BCKS15003"})
+    assert(NeoSwapCPUBufferTitle(title));
+  assert(!NeoSwapCPUBufferTitle("BLES00113") && !NeoSwapCPUBufferTitle("BCES00510-extra") &&
+         !NeoSwapCPUBufferTitle(""));
   assert(NeoSwapFPSValid(60.0, 1));
   assert(NeoSwapFPSValid(0.0, 1));
   assert(NeoSwapFPSValid(120.0, 1));

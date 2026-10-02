@@ -43,6 +43,8 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
 @interface NeoSwapPlugin ()
 @property(nonatomic, strong) dispatch_queue_t queue;
 @property(nonatomic, strong) dispatch_source_t timer;
+@property(nonatomic, strong) dispatch_source_t cpuBufferPressureSource;
+@property(nonatomic, assign) BOOL cpuBufferPressureRaised;
 @property(nonatomic, copy) NSString* directory;
 @property(nonatomic, copy) NSString* diagnosticPath;
 @property(nonatomic, assign) NSInteger capacityMiB;
@@ -151,6 +153,19 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC/4),
         NSEC_PER_SEC/4, NSEC_PER_SEC/20);
     __weak NeoSwapPlugin* weakSelf = self;
+#if defined(NEOSWAP_DONATION)
+    self.cpuBufferPressureSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
+        DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
+        self.queue);
+    dispatch_source_set_event_handler(self.cpuBufferPressureSource, ^{
+        NeoSwapPlugin* strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.cpuBufferPressureRaised = (dispatch_source_get_data(strongSelf.cpuBufferPressureSource) &
+            (DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL)) != 0;
+        if (strongSelf.cpuBufferPressureRaised) NeoSwap_SetCPUBufferPressure(1);
+    });
+    dispatch_resume(self.cpuBufferPressureSource);
+#endif
     dispatch_source_set_event_handler(self.timer, ^{
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
@@ -331,6 +346,12 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 }
 - (void)advanceDonors {
     if (!self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+    neostation::donation::SystemHeadroom cacheHeadroom{};
+    const auto cacheSample = neostation::donation::system_headroom(cacheHeadroom);
+    // Cached quarter-second admission signal, never query the kernel on every
+    // small renderer allocation. Dispatch warnings below also close it at once.
+    NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised || !cacheSample ||
+        cacheHeadroom.usable_bytes < 128 * kMiB);
     (void)neostation::donation::pool_collect_lost();
 
     // Two helpers are enough to establish the warm floor quickly. Additional
@@ -702,7 +723,23 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"stage":[NSString stringWithUTF8String:neostation::donation::stage_name(cleanup.last_stage)],
         @"kernelResult":@(cleanup.last_kernel_result)};
 #endif
+    NeoSwapCPUBufferStats cpuBuffers{};
+    NeoSwap_CPUBufferSnapshot(&cpuBuffers);
     return @{@"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
+        @"cpuBufferExperiment":@{
+            @"enabled":@(cpuBuffers.enabled), @"pressureRaised":@(cpuBuffers.pressure_raised),
+            @"minimumBytes":@65536, @"maximumExclusiveBytes":@1048576,
+            @"liveBudgetBytes":@(512 * kMiB), @"slotBudget":@768, @"diskFallback":@NO,
+            @"requests":@(cpuBuffers.requests), @"requestedBytes":@(cpuBuffers.requested_bytes),
+            @"successfulAllocations":@(cpuBuffers.successful_allocations),
+            @"fallbackCount":@(cpuBuffers.fallback_count), @"liveBytes":@(cpuBuffers.live_bytes),
+            @"peakBytes":@(cpuBuffers.peak_bytes), @"liveBlocks":@(cpuBuffers.live_blocks),
+            @"allocatedBytes":@(cpuBuffers.allocated_bytes), @"pressureRefusals":@(cpuBuffers.pressure_refusals),
+            @"policyRefusals":@(cpuBuffers.policy_refusals), @"poolMisses":@(cpuBuffers.pool_misses),
+            @"requestBins":@[@(cpuBuffers.request_bins[0]), @(cpuBuffers.request_bins[1]),
+                @(cpuBuffers.request_bins[2]), @(cpuBuffers.request_bins[3])],
+            @"donatedBins":@[@(cpuBuffers.donated_bins[0]), @(cpuBuffers.donated_bins[1]),
+                @(cpuBuffers.donated_bins[2]), @(cpuBuffers.donated_bins[3])]},
         @"pid":@(getpid()), @"build":NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"unknown",
         @"capacityMiB":@(self.capacityMiB), @"configResult":@(self.configResult),
         @"capacityBytes":@(stats.capacity_bytes), @"liveBytes":@(stats.live_bytes),

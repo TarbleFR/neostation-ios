@@ -7520,7 +7520,7 @@ index 2ca59c3cf..50d6d7c86 100644
 +		{
 +#ifdef RPCS3_IOS
 +			// NEOSTATION_NEOSWAP_RSX_CPU_V1: all titles, explicit CPU data only.
-+			if (void* data = neostation::swap::try_allocate(NEOSWAP_RPCS3, size, Align)) return data;
++			if (void* data = neostation::swap::try_allocate_cpu(NEOSWAP_RPCS3, size, Align)) return data;
 +#endif
 +#if defined(_WIN32)
 +			return _aligned_malloc(size, Align);
@@ -11686,7 +11686,7 @@ new file mode 100644
 index 000000000..6cae2f0b2
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapClient.h
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,89 @@
 +#pragma once
 +#include "NeoSwap.h"
 +#include "NeoSwapClientStats.h"
@@ -11730,6 +11730,32 @@ index 000000000..6cae2f0b2
 +    if (result == NEOSWAP_OK && ptr) {
 +        successful_allocations.fetch_add(1, std::memory_order_relaxed);
 +        return ptr;
++    }
++    failed_allocations.fetch_add(1, std::memory_order_relaxed);
++    return nullptr;
++}
++// RSX CPU data only. Vulkan retains try_allocate() and its 1 MiB threshold.
++// The host decides whether this title may borrow sub-MiB buffers. A refusal
++// returns to the original aligned heap allocator, never to a per-buffer file.
++inline void* try_allocate_cpu(uint32_t owner, size_t bytes, size_t alignment) noexcept {
++    if (bytes >= 1024 * 1024 || bytes < 64 * 1024)
++        return try_allocate(owner, bytes, alignment);
++    const auto* api = client_api.load(std::memory_order_acquire);
++    if (!api) {
++        missing_api.fetch_add(1, std::memory_order_relaxed);
++        return nullptr;
++    }
++    if (!api->enabled(owner)) {
++        disabled.fetch_add(1, std::memory_order_relaxed);
++        return nullptr;
++    }
++    void* pointer = nullptr;
++    eligible_attempts.fetch_add(1, std::memory_order_relaxed);
++    const int result = api->allocate(owner, NEOSWAP_CPU_CACHE, bytes, alignment, &pointer);
++    last_result.store(result, std::memory_order_relaxed);
++    if (result == NEOSWAP_OK && pointer) {
++        successful_allocations.fetch_add(1, std::memory_order_relaxed);
++        return pointer;
 +    }
 +    failed_allocations.fetch_add(1, std::memory_order_relaxed);
 +    return nullptr;

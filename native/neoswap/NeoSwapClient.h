@@ -45,6 +45,32 @@ inline void* try_allocate(uint32_t owner, size_t bytes, size_t alignment) noexce
     failed_allocations.fetch_add(1, std::memory_order_relaxed);
     return nullptr;
 }
+// RSX CPU data only. Vulkan retains try_allocate() and its 1 MiB threshold.
+// The host decides whether this title may borrow sub-MiB buffers. A refusal
+// returns to the original aligned heap allocator, never to a per-buffer file.
+inline void* try_allocate_cpu(uint32_t owner, size_t bytes, size_t alignment) noexcept {
+    if (bytes >= 1024 * 1024 || bytes < 64 * 1024)
+        return try_allocate(owner, bytes, alignment);
+    const auto* api = client_api.load(std::memory_order_acquire);
+    if (!api) {
+        missing_api.fetch_add(1, std::memory_order_relaxed);
+        return nullptr;
+    }
+    if (!api->enabled(owner)) {
+        disabled.fetch_add(1, std::memory_order_relaxed);
+        return nullptr;
+    }
+    void* pointer = nullptr;
+    eligible_attempts.fetch_add(1, std::memory_order_relaxed);
+    const int result = api->allocate(owner, NEOSWAP_CPU_CACHE, bytes, alignment, &pointer);
+    last_result.store(result, std::memory_order_relaxed);
+    if (result == NEOSWAP_OK && pointer) {
+        successful_allocations.fetch_add(1, std::memory_order_relaxed);
+        return pointer;
+    }
+    failed_allocations.fetch_add(1, std::memory_order_relaxed);
+    return nullptr;
+}
 inline int snapshot(NeoSwapClientStats* out) noexcept {
     if (!out || out->struct_size != sizeof(*out) ||
         out->abi_version != NEOSWAP_CLIENT_STATS_ABI) return NEOSWAP_INVALID;

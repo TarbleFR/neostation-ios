@@ -1,4 +1,5 @@
 #pragma once
+#include <string_view>
 #include <cmath>
 #include <neo_swap/NeoSwapClientStats.h>
 #include <neo_swap/NeoSwapHost.h>
@@ -58,4 +59,9 @@ constexpr double NeoSwapDecimalGB(uint64_t bytes) noexcept {
 // Zero FPS is a valid stalled-frame sample, not an unavailable measurement.
 inline bool NeoSwapFPSValid(double fps, uint32_t validFields) noexcept {
     return (validFields & 1U) && std::isfinite(fps) && fps >= 0.0;
+}
+
+inline bool NeoSwapCPUBufferTitle(std::string_view title) noexcept {
+    return title == "BCES00510" || title == "BCES00799" || title == "BCUS98111" ||
+        title == "BCJS37001" || title == "BCAS25003" || title == "BCKS15003";
 }

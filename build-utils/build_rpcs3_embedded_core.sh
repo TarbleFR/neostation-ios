@@ -132,6 +132,14 @@ env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O2 -Wall -Wex
   "$PWD/packages/neo_swap/ios/Classes/NeoSwap.cpp" "$PWD/test/neoswap_rpcs3_allocator_test.cpp" \
   -o "$WORK_ROOT/neoswap-rpcs3-allocator-test"
 "$WORK_ROOT/neoswap-rpcs3-allocator-test"
+mkdir -p "$WORK_ROOT/cpu-buffer-test-include"
+ln -sfn "$PWD/native/neoswap-donation" "$WORK_ROOT/cpu-buffer-test-include/Donation"
+env -u SDKROOT "$HOST_CXX" -isysroot "$HOST_MACOS_SDK" -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread \
+  -DNEOSWAP_DONATION=1 -DNEOSWAP_CPU_WITH_CORE=1 -fsanitize=address,undefined \
+  -I "$SRC" -I "$SRC/rpcs3" -I "$PWD/packages/neo_swap/ios/Classes" -I "$WORK_ROOT/cpu-buffer-test-include" \
+  "$PWD/packages/neo_swap/ios/Classes/NeoSwap.cpp" "$PWD/test/neoswap_cpu_buffers_test.cpp" \
+  -o "$WORK_ROOT/neoswap-cpu-buffers-test"
+"$WORK_ROOT/neoswap-cpu-buffers-test"
 env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \
   python3 "$PWD/test/rpcs3_neoswap_vulkan_buffer_test.py" "$SRC"
 env -u SDKROOT CXX="$HOST_CXX" HOST_MACOS_SDK="$HOST_MACOS_SDK" \

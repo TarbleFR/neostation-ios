@@ -10,6 +10,7 @@
 #import "Rpcs3EarlyAddressSpaceEscrow.h"
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
+#include "NeoSwapUsagePolicy.h"
 #import "RPCS3InGameLocalization.h"
 #import "Rpcs3SessionMenu.h"
 
@@ -1484,6 +1485,10 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         @"stage": @"game_boot", @"message": @"NeoSwap could not open the RPCS3 adaptive memory session."});
       return;
     }
+    NeoSwap_SetCPUBufferExperiment(NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
+    RPCS3Diagnostic(@"neoswap_cpu_buffers", [NSString stringWithFormat:
+        @"title=%@ enabled=%d minimum_bytes=65536 maximum_exclusive=1048576 disk_fallback=0",
+        titleId, NeoSwapCPUBufferTitle(titleId.UTF8String ?: "")]);
     RPCS3Diagnostic(@"neoswap_session", [NSString stringWithFormat:@"active=1 result=%d", sessionResult]);
     __block RPCS3GameViewController* controller = nil;
     // Flutter delivers this handler on the main queue; dispatch_sync to the

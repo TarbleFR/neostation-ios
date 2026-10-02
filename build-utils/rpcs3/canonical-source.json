@@ -54,7 +54,7 @@
     "rpcs3/Emu/Memory/VMReservationRange.h": "fb7059ce339b836dd5a4da5d0eb5b71bcb72b385abb6bfed4cac6ffe095c2f23",
     "rpcs3/Emu/Memory/vm.cpp": "2d5e0d452f73a2762221caf0fad184eec242bd2c1d05be24265278a17f0422a9",
     "rpcs3/Emu/RSX/Common/BufferUtils.cpp": "c2f2f5ad09c543af26d5ed633e6ea1aa1f225cc4d3ff5cf98e057ae62a7c1b65",
-    "rpcs3/Emu/RSX/Common/aligned_malloc.hpp": "4b7d898d130fb8934590177dae5f25247f64ba7d7b8c4e4e0c202111a8d239f4",
+    "rpcs3/Emu/RSX/Common/aligned_malloc.hpp": "70fcf5afdfb765593a38ddff7ddefce5895480a62003e0f1a4b9cd6cb9d9f26d",
     "rpcs3/Emu/RSX/Common/sampler_invalidation.h": "b487df3b5ac2907349b6988cb758e52a81cd8649269486c404f3921ccb7072c4",
     "rpcs3/Emu/RSX/Common/surface_store.h": "663ce011d1b06631b965ba323e49fda59c3280d6aa61ef5b56a7623f9ed68500",
     "rpcs3/Emu/RSX/Common/texture_cache.h": "3ec3f7a237782202e88d321a6f6f55f6f97d78267f987e5fa875e82c98c538c9",
@@ -114,7 +114,7 @@
     "rpcs3/ios/NeoStationSavestateIO.h": "d82e1fae306e025e580954e24f35b3aaa3a782dcfeea2f16722d1dbf9b1dd6e6",
     "rpcs3/ios/NeoStationSavestateStatus.h": "b5d4b1597563ef978433fa0a2f19543d4d51ba32775c4add8bc228de9bbd7692",
     "rpcs3/ios/NeoSwap.h": "542cba8717bac3335765f5e76ee6e6a66a93b421253a315eda6d6ad0d2680666",
-    "rpcs3/ios/NeoSwapClient.h": "aae1fae7785b6bc524762ffda0d9988300d37088e20cf31f300fa7fb1c258be5",
+    "rpcs3/ios/NeoSwapClient.h": "84e07cfcb69a49f4aef1595462ce3a863dac2ae6418c5cfe876b262dc9cde757",
     "rpcs3/ios/NeoSwapClientStats.h": "55e745b85142d109075f2b8f220a288e1a5501f69a79eb8d4de15c7b993902fc",
     "rpcs3/ios/NeoSwapRelay.h": "c1d727c589dded13993f979ce33683df45728a92d387ee7e2a0533f7dfcf1ecd",
     "rpcs3/ios/NeoSwapRelayClient.h": "76b7af80eca16c70e8f62f9c65f5b76ccb92f32e7cd59db2861089b10e655a58",
@@ -136,8 +136,8 @@
     "rpcs3/util/vm.hpp": "ac58df153ca5e9b1e9f69511879035493338265ee2de96656072ab777a07ecbc",
     "rpcs3/util/vm_native.cpp": "2c8c9547fc4ae1b6c7d2b39d19475c64b6922d4ac21b193cbded859fc2796a8c"
   },
-  "patch_sha256": "ea93b436b545674c93624c8a0438fa34270201d19ee9b0d566d4667257509791",
-  "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping",
+  "patch_sha256": "9164f6ca957d811cd59f2eb97630ce8fdcec03d1a11bcfee5d194f4661b4c433",
+  "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping; Build395: measured God of War III opt-in for RSX CPU aligned buffers 64KiB-1MiB via verified donor loans only, fixed metadata budgets, fast pressure gate and original heap fallback; no JIT/VM/GPU/private allocations redirected",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",
   "upstream_repository": "XITRIX/rpcs3",
@@ -174,5 +174,14 @@
     "maximum_capacity_bytes": 8589934592,
     "real_iphone_validated": false,
     "real_gameplay_validated": false
+  },
+  "neoswap_cpu_buffers": {
+    "minimum_bytes": 65536,
+    "maximum_exclusive_bytes": 1048576,
+    "scope": "RSX aligned CPU buffers only, donor-only host opt-in for six God of War III title IDs; no small file fallback",
+    "host_live_budget_bytes": 536870912,
+    "host_slot_budget": 768,
+    "generic_vulkan_threshold_unchanged": true,
+    "device_runtime_tested": false
   }
 }

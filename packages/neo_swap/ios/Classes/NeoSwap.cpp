@@ -21,7 +21,22 @@
 
 namespace {
 constexpr uint64_t MiB = 1024 * 1024;
-constexpr size_t max_blocks = 256;
+constexpr size_t large_block_slots = 256;
+constexpr size_t small_block_slots = 768;
+constexpr size_t max_blocks = large_block_slots + small_block_slots;
+constexpr uint64_t small_cpu_budget = 512 * MiB;
+constexpr uint64_t small_cpu_minimum = 64 * 1024;
+// Four diagnostic size bins: [64,128), [128,256), [256,512), [512,1024) KiB.
+unsigned cpu_size_bin(uint64_t bytes) noexcept {
+    return bytes < 128 * 1024 ? 0 : bytes < 256 * 1024 ? 1 : bytes < 512 * 1024 ? 2 : 3;
+}
+struct CPUBufferCounters {
+    std::atomic<uint64_t> requests{0}, requested_bytes{0}, successful_allocations{0}, fallback_count{0};
+    std::atomic<uint64_t> live_bytes{0}, peak_bytes{0}, live_blocks{0}, allocated_bytes{0};
+    std::atomic<uint64_t> pressure_refusals{0}, policy_refusals{0}, pool_misses{0};
+    std::array<std::atomic<uint64_t>, 4> request_bins{}, donated_bins{};
+    std::atomic<bool> enabled{false}, pressure_raised{true};
+};
 constexpr uint64_t max_block_bytes = 8 * 1024 * MiB;
 [[maybe_unused]] constexpr uint64_t max_donation_block_bytes = 256 * MiB;
 struct Block {
@@ -30,6 +45,7 @@ struct Block {
     uint32_t owner = 0;
     int fd = -1;
     uint64_t donation_token = 0;
+    bool small_cpu = false;
     // A file allocation owns only this exact region. A rejected allocation
     // whose cleanup failed keeps it here, without exposing a client pointer.
     void* region = nullptr;
@@ -55,6 +71,7 @@ struct Broker {
 #endif
     NeoSwapStats stats{};
     HostCounters host_stats{};
+    CPUBufferCounters cpu_buffers{};
     int directory = -1;
     uint64_t next_name = 1;
     uint64_t file_live_bytes = 0, shared_live_bytes = 0;
@@ -307,6 +324,31 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     if (!out) return NEOSWAP_INVALID;
     *out = nullptr;
     auto& b = broker();
+    const bool small_cpu = owner == NEOSWAP_RPCS3 && kind == NEOSWAP_CPU_CACHE &&
+        bytes >= small_cpu_minimum && bytes < MiB;
+    if (small_cpu && (!power_of_two(alignment) || alignment > 65536))
+        return NEOSWAP_INVALID;
+    auto& cpu = b.cpu_buffers;
+    // Title-disabled requests must not add a mutex/file/extension wait to the
+    // old heap path. Validate the public API before accepting any borrowed data.
+    if (small_cpu) {
+        cpu.requests.fetch_add(1, std::memory_order_relaxed);
+        cpu.requested_bytes.fetch_add(bytes, std::memory_order_relaxed);
+        cpu.request_bins[cpu_size_bin(bytes)].fetch_add(1, std::memory_order_relaxed);
+        if (!cpu.enabled.load(std::memory_order_acquire) || cpu.pressure_raised.load(std::memory_order_acquire)) {
+            cpu.fallback_count.fetch_add(1, std::memory_order_relaxed);
+            if (cpu.pressure_raised.load(std::memory_order_relaxed))
+                cpu.pressure_refusals.fetch_add(1, std::memory_order_relaxed);
+            else cpu.policy_refusals.fetch_add(1, std::memory_order_relaxed);
+            return NEOSWAP_DISABLED;
+        }
+    }
+    // One accounting path includes every refusal, not only absent donors.
+    struct CPUAttempt {
+        CPUBufferCounters* counters;
+        bool success = false;
+        ~CPUAttempt() { if (counters && !success) counters->fallback_count.fetch_add(1, std::memory_order_relaxed); }
+    } attempt{small_cpu ? &cpu : nullptr};
     std::lock_guard guard(b.mutex);
     if (owner >= NEOSWAP_OWNER_COUNT || (kind != NEOSWAP_CPU_DATA && kind != NEOSWAP_CPU_CACHE) ||
         !bytes || !power_of_two(alignment) || alignment > 65536 || bytes > max_block_bytes)
@@ -324,6 +366,15 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
 #if defined(NEOSWAP_DONATION)
     if (donor_enabled) minimum = b.donation_config.minimum_allocation_bytes;
 #endif
+    if (small_cpu) {
+        // Small CPU data borrows verified RAM only; never create hundreds of
+        // small swap files or consume the 256 legacy large-allocation slots.
+        if (!cpu.enabled.load(std::memory_order_acquire) || cpu.pressure_raised.load(std::memory_order_acquire)) {
+            cpu.pressure_refusals.fetch_add(1, std::memory_order_relaxed);
+            return NEOSWAP_DISABLED;
+        }
+        minimum = small_cpu_minimum;
+    }
     if (bytes < minimum) return reject(b, owner, NEOSWAP_TOO_SMALL);
     const long page_long = ::sysconf(_SC_PAGESIZE);
     if (page_long <= 0 || !power_of_two(static_cast<uint64_t>(page_long)))
@@ -334,7 +385,17 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     if (b.stats.live_bytes > capacity || rounded > capacity - b.stats.live_bytes)
         return reject(b, owner, NEOSWAP_QUOTA);
     Block* slot = nullptr;
-    for (auto& item : b.blocks) if (!item.address && !item.region) { slot = &item; break; }
+    if (small_cpu && (cpu.live_bytes.load(std::memory_order_relaxed) > small_cpu_budget ||
+        rounded > small_cpu_budget - cpu.live_bytes.load(std::memory_order_relaxed))) {
+        cpu.policy_refusals.fetch_add(1, std::memory_order_relaxed);
+        return reject(b, owner, NEOSWAP_QUOTA);
+    }
+    const size_t first_slot = small_cpu ? large_block_slots : 0;
+    const size_t last_slot = small_cpu ? max_blocks : large_block_slots;
+    for (size_t i = first_slot; i < last_slot; ++i) {
+        auto& item = b.blocks[i];
+        if (!item.address && !item.region) { slot = &item; break; }
+    }
     if (!slot || b.next_name == std::numeric_limits<uint64_t>::max()) return reject(b, owner, NEOSWAP_LIMIT);
     const auto started = std::chrono::steady_clock::now();
 #if defined(NEOSWAP_DONATION)
@@ -344,17 +405,30 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
         void* donated = nullptr;
         uint64_t token = 0;
         const auto acquired = neostation::donation::pool_acquire(rounded, std::max(alignment, page), &donated, &token);
-        if (acquired)
+        if (acquired) {
+            if (small_cpu) {
+                slot->small_cpu = true;
+                const uint64_t live = cpu.live_bytes.fetch_add(rounded, std::memory_order_relaxed) + rounded;
+                cpu.peak_bytes.store(std::max(live, cpu.peak_bytes.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+                cpu.live_blocks.fetch_add(1, std::memory_order_relaxed);
+                cpu.allocated_bytes.fetch_add(rounded, std::memory_order_relaxed);
+                cpu.successful_allocations.fetch_add(1, std::memory_order_relaxed);
+                cpu.donated_bins[cpu_size_bin(bytes)].fetch_add(1, std::memory_order_relaxed);
+                attempt.success = true;
+            }
             return record_allocation(b, *slot, donated, rounded, owner, -1, token, started, out);
+        }
+        if (small_cpu) cpu.pool_misses.fetch_add(1, std::memory_order_relaxed);
         if (acquired.stage == neostation::donation::Stage::pool_quota ||
             acquired.stage == neostation::donation::Stage::pool_unready)
-            request_donation(b, rounded);
+            request_donation(b, small_cpu ? std::max<uint64_t>(MiB, rounded) : rounded);
     } else if (owner == NEOSWAP_RPCS3 && b.donation_config.capacity_bytes &&
         (b.donation_config.enabled_owner_mask & (1u << owner)) &&
-        rounded >= b.donation_config.minimum_allocation_bytes) {
-        request_donation(b, rounded); // first request may precede helper proof
+        (small_cpu || rounded >= b.donation_config.minimum_allocation_bytes)) {
+        request_donation(b, small_cpu ? std::max<uint64_t>(MiB, rounded) : rounded); // first request may precede helper proof
     }
 #endif
+    if (small_cpu) return reject(b, owner, NEOSWAP_DISABLED); // no disk fallback for sub-MiB CPU requests
     if (!file_enabled) return reject(b, owner, NEOSWAP_DISABLED);
     if (cleanup_rejected_regions(b)) return reject(b, owner, NEOSWAP_MAPPING, errno);
     if (b.file_live_bytes > b.config.capacity_bytes || rounded > b.config.capacity_bytes - b.file_live_bytes)
@@ -424,6 +498,10 @@ int release(void* p) {
         }
         }
         const int fd = block.fd;
+        if (block.small_cpu) {
+            b.cpu_buffers.live_bytes.fetch_sub(block.size, std::memory_order_relaxed);
+            b.cpu_buffers.live_blocks.fetch_sub(1, std::memory_order_relaxed);
+        }
         if (block.donation_token) {
             b.shared_live_bytes -= block.size;
             b.owner_donated_bytes[block.owner].fetch_sub(block.size, std::memory_order_relaxed);
@@ -542,6 +620,7 @@ extern "C" int NeoSwap_SetOwnerSessionActive(uint32_t owner, int active) {
         return NEOSWAP_OK;
     }
     b.active_session_mask.fetch_and(static_cast<uint32_t>(~bit), std::memory_order_release);
+    if (owner == NEOSWAP_RPCS3) b.cpu_buffers.enabled.store(false, std::memory_order_release);
 #if defined(NEOSWAP_DONATION)
     if (owner == NEOSWAP_RPCS3) {
         std::lock_guard guard(b.mutex);
@@ -652,3 +731,27 @@ extern "C" int NeoSwap_TestVerifyFile(void* p, const void* expected, size_t byte
     return 0;
 }
 #endif
+
+extern "C" void NeoSwap_SetCPUBufferExperiment(int enabled) {
+    broker().cpu_buffers.enabled.store(enabled != 0, std::memory_order_release);
+}
+extern "C" void NeoSwap_SetCPUBufferPressure(int raised) {
+    broker().cpu_buffers.pressure_raised.store(raised != 0, std::memory_order_release);
+}
+extern "C" int NeoSwap_CPUBufferSnapshot(NeoSwapCPUBufferStats* output) {
+    if (!output) return NEOSWAP_INVALID;
+    const auto& c = broker().cpu_buffers;
+#define COPY_CPU_FIELD(name) output->name = c.name.load(std::memory_order_relaxed)
+    COPY_CPU_FIELD(requests); COPY_CPU_FIELD(requested_bytes);
+    COPY_CPU_FIELD(successful_allocations); COPY_CPU_FIELD(fallback_count);
+    COPY_CPU_FIELD(live_bytes); COPY_CPU_FIELD(peak_bytes); COPY_CPU_FIELD(live_blocks);
+    COPY_CPU_FIELD(allocated_bytes); COPY_CPU_FIELD(pressure_refusals);
+    COPY_CPU_FIELD(policy_refusals); COPY_CPU_FIELD(pool_misses);
+    COPY_CPU_FIELD(enabled); COPY_CPU_FIELD(pressure_raised);
+#undef COPY_CPU_FIELD
+    for (size_t i = 0; i < 4; ++i) {
+        output->request_bins[i] = c.request_bins[i].load(std::memory_order_relaxed);
+        output->donated_bins[i] = c.donated_bins[i].load(std::memory_order_relaxed);
+    }
+    return NEOSWAP_OK;
+}

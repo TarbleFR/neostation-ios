@@ -242,6 +242,14 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes', plugin)
         self.assertIn('systemCyanColor', overlay)
         self.assertIn('systemOrangeColor', overlay)
+        self.assertIn('NeoSwap_SetCPUBufferExperiment(NeoSwapCPUBufferTitle', bridge)
+        self.assertIn('cpuBufferExperiment', plugin)
+        self.assertIn('NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised', plugin)
+        self.assertIn('DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL', plugin)
+        self.assertIn('diskFallback":@NO', plugin)
+        client = (ROOT / 'native/neoswap/NeoSwapClient.h').read_text()
+        self.assertIn('inline void* try_allocate_cpu(', client)
+        self.assertIn('bytes >= 1024 * 1024 || bytes < 64 * 1024', client)
 
     def test_chunk_preparation_uses_chunk_deadline_not_idle_heartbeat(self):
         source = (ROOT / 'native/neoswap-donation/NeoSwapDonorIPC.mm').read_text()
