@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <neo_swap/NeoSwapClientStats.h>
 #include <neo_swap/NeoSwapHost.h>
 
@@ -52,4 +53,9 @@ inline NeoSwapMemoryGraphPoint NeoSwapMemoryGraph(const NeoSwapHostStats* host,
 }
 constexpr double NeoSwapDecimalGB(uint64_t bytes) noexcept {
     return static_cast<double>(bytes) / 1000000000.0;
+}
+
+// Zero FPS is a valid stalled-frame sample, not an unavailable measurement.
+inline bool NeoSwapFPSValid(double fps, uint32_t validFields) noexcept {
+    return (validFields & 1U) && std::isfinite(fps) && fps >= 0.0;
 }

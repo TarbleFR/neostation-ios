@@ -72,6 +72,9 @@ def catalogues() -> dict:
     assert 'NeoSwapMemoryGraph(' in overlay and 'NeoSwapDecimalGB(' in overlay
     assert 'fpsLine' not in overlay and 'donor_prepared_bytes' not in overlay
     assert 'memoryUsedBytes' not in overlay
+    assert 'NeoSwapFPSValid(fps, validFields)' in overlay
+    assert '@"FPS %.1f"' in overlay and '@"FPS —"' in overlay
+    assert 'self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text' in overlay
     assert 'systemCyanColor' in overlay and 'systemOrangeColor' in overlay
     return catalogues
 

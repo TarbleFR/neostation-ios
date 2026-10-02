@@ -317,6 +317,25 @@ int main(int argc, const char* argv[]) {
     require(footprintDelta < 64 * MiB && nonvolatileDelta < MiB, "Relay pages were charged to the host like ordinary RAM");
     require(api->snapshot(&stats) == 0 && stats.live_bytes == target && stats.alias_count == 4 &&
         stats.mapped_alias_bytes == target * 2, "Relay live token/alias accounting is incorrect");
+    // New allocation admission remains closed, but already published bytes
+    // must keep coherent additional aliases during a pressure transition.
+    neostation::relay::set_pressure(true);
+    uint64_t refusedToken = 0;
+    require(api->create(0, 65536, &refusedToken) == NEOSWAP_RELAY_PRESSURE && !refusedToken,
+      "Pressure did not block new relay backing");
+    void* pressureView = nullptr;
+    require(api->map(tokens[0], nullptr, NEOSWAP_RELAY_READ, &pressureView) == 0 && pressureView,
+      "Already published backing lost its alias path under pressure");
+    const auto* original = static_cast<const uint64_t*>(views[0][0]);
+    const auto* additional = static_cast<const uint64_t*>(pressureView);
+    for (uint64_t offset = 0; offset < 512 * MiB / sizeof(uint64_t); offset += vm_page_size / sizeof(uint64_t))
+      require(original[offset] == additional[offset], "Pressure alias points at different backing");
+    require(api->snapshot(&stats) == 0 && stats.live_bytes == target && stats.alias_count == 5,
+      "Pressure alias incorrectly increased live backing");
+    require(api->unmap(tokens[0], pressureView) == 0, "Pressure alias cleanup failed");
+    neostation::relay::set_pressure(false);
+    evidence[@"existingBackingAliasesUnderPressure"] = @YES;
+    evidence[@"newBackingRefusedUnderPressure"] = @YES;
     for (unsigned segment = 0; segment < 2; ++segment) {
       require(api->release(tokens[segment]) == NEOSWAP_RELAY_BUSY, "Relay released a token with a live alias");
       for (void* view : views[segment]) require(api->unmap(tokens[segment], view) == 0, "Relay alias retirement failed");

@@ -31,6 +31,12 @@ struct Operations {
     std::uint64_t (*headroom)(void*);
 };
 
+// Host diagnostics only: never copied into the pinned NeoSwapRelayStats ABI.
+struct PressureDiagnostics {
+    std::uint64_t transitions = 0, existing_alias_maps = 0;
+    std::uint64_t create_refusals = 0, first_map_refusals = 0, map_failures = 0;
+    int last_map_result = 0, last_map_os_error = 0;
+};
 class Backend final {
 public:
     explicit Backend(const Operations&, void* context = nullptr) noexcept;
@@ -58,6 +64,7 @@ public:
     int collect() noexcept;
     int enabled(std::uint32_t owner) noexcept;
     int snapshot(NeoSwapRelayStats*) noexcept;
+    PressureDiagnostics pressure_diagnostics() noexcept;
     // Refuses active objects, then retires every cleaning window/right. Failed
     // cleanup remains tracked and a later shutdown call retries just that work.
     int shutdown() noexcept;

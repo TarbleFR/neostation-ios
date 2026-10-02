@@ -171,7 +171,7 @@ NSDictionary* effectiveEntitlements() {
   _connection.invalidationHandler = lost;
   _connection.interruptionHandler = lost;
   if (!_target || _target > 8ULL * 1024 * MiB || _target % vm_page_size ||
-      initial < MiB || initial > 64 * MiB || initial > _target || initial % vm_page_size) {
+      initial < MiB || initial > neostation::donation::max_chunk_bytes || initial > _target || initial % vm_page_size) {
     [self failStage:@"requested_size" kernel:KERN_INVALID_ARGUMENT];
     return;
   }

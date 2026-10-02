@@ -21,6 +21,23 @@ constexpr std::uint64_t pending_headroom_budget(std::uint64_t available,
 }
 
 
+// Pure policy: a larger hard ceiling is capacity, not a preallocation request.
+constexpr std::uint64_t adaptive_donation_target(std::uint64_t live,
+    std::uint64_t floor, std::uint64_t reserve, std::uint64_t quantum,
+    std::uint64_t limit) noexcept {
+  if (!limit || !quantum) return 0;
+  if (live >= limit) return limit;
+  const auto room = limit - live;
+  auto desired = live + (reserve < room ? reserve : room);
+  if (desired < floor) desired = floor < limit ? floor : limit;
+  const auto remainder = desired % quantum;
+  if (remainder) {
+    const auto rounding = quantum - remainder;
+    desired = rounding > limit - desired ? limit : desired + rounding;
+  }
+  return desired;
+}
+
 enum class Stage : std::uint32_t {
   none,
   unavailable,

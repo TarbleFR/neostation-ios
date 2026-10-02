@@ -25,6 +25,16 @@ static void expect(const Footprint& current, const Footprint& baseline,
 }
 
 int main() {
+  constexpr std::uint64_t floor = 512 * MiB, reserve = 128 * MiB, quantum = 128 * MiB, limit = 5ULL << 30;
+  assert(adaptive_donation_target(135266304, floor, reserve, quantum, limit) == floor);
+  assert(adaptive_donation_target(354418688, floor, reserve, quantum, limit) == floor);
+  assert(adaptive_donation_target(512 * MiB, floor, reserve, quantum, limit) == 640 * MiB);
+  assert(adaptive_donation_target(4ULL << 30, floor, reserve, quantum, limit) == (4ULL << 30) + reserve);
+  assert(adaptive_donation_target(limit - MiB, floor, reserve, quantum, limit) == limit);
+  assert(adaptive_donation_target(UINT64_MAX, floor, reserve, quantum, limit) == limit);
+  assert(adaptive_donation_target(0, floor, reserve, 0, limit) == 0);
+  assert(adaptive_donation_target(0, floor, reserve, quantum, 0) == 0);
+  assert(adaptive_donation_target(0, UINT64_MAX, UINT64_MAX, quantum, limit) == limit);
   // Build392 requested 480 MiB from a backend accepting at most 256 MiB.
   assert(valid_chunk_size(64 * MiB, page));
   assert(valid_chunk_size(max_chunk_bytes, page));

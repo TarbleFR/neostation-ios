@@ -3,6 +3,13 @@
 #include <cstdio>
 
 int main() {
+  assert(NeoSwapFPSValid(60.0, 1));
+  assert(NeoSwapFPSValid(0.0, 1));
+  assert(NeoSwapFPSValid(120.0, 1));
+  assert(!NeoSwapFPSValid(60.0, 0));
+  assert(!NeoSwapFPSValid(-1.0, 1));
+  assert(!NeoSwapFPSValid(NAN, 1));
+  assert(!NeoSwapFPSValid(INFINITY, 1));
   {
     NeoSwapHostStats graphHost{};
     graphHost.owner_donated_live_bytes[NEOSWAP_RPCS3] = 51380224;

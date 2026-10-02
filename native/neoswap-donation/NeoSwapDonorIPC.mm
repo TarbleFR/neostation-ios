@@ -684,7 +684,7 @@ BOOL number(NSDictionary* input, NSString* key) {
   __block BOOL accepted = NO;
   void (^configure)(void) = ^{
     if (self->_snapshot.state == NeoSwapDonorStateIdle && bytes >= 1024 * 1024 &&
-        bytes <= 64ULL * 1024 * 1024 && bytes <= self->_requested && bytes % vm_page_size == 0) {
+        bytes <= neostation::donation::max_chunk_bytes && bytes <= self->_requested && bytes % vm_page_size == 0) {
       self->_initialMaximum = bytes;
       self->_diagnostics[@"initialMaximumBytes"] = @(bytes);
       accepted = YES;

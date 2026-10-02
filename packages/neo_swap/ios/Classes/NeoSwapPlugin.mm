@@ -22,22 +22,22 @@ static NSString* const kDiagnostic = @"NeoSwap-v1.jsonl";
 static const uint64_t kMiB = 1024 * 1024;
 static const uint64_t kGiB = 1024 * kMiB;
 // Build385 adaptive policy: 5 GiB is a hard ceiling, not a startup target.
-// Begin with a measured 512 MiB warm floor, then keep roughly 512 MiB of
-// verified donor headroom above actual RPCS3-routed buffers. Growth remains
+// Start two verified 256 MiB chunks for real boot buffers, then retain only
+// 128 MiB reserve above active donor loans (not file-backed buffers). Growth remains
 // fail-closed under kernel/system pressure and prepared pages are retained
 // only for the lifetime of the active RPCS3 session.
 static const uint64_t kDonationHardLimitBytes = 5 * kGiB;
 static const uint64_t kDonationWarmFloorBytes = 512 * kMiB;
-static const uint64_t kDonationReserveBytes = 512 * kMiB;
+static const uint64_t kDonationReserveBytes = 128 * kMiB;
 static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
-static const uint64_t kDonationInitialChunkBytes = 64 * kMiB;
+static const uint64_t kDonationInitialChunkBytes = 256 * kMiB;
 static const uint64_t kDonationPrimaryChunkBytes = 256 * kMiB;
 static const uint64_t kDonationFallbackChunkBytes = 128 * kMiB;
 static const NSUInteger kDonationConcurrentGrowths = 2;
 static const NSUInteger kDonationWarmDonorCount = 2;
 #if defined(NEOSWAP_DONATION)
 static_assert(kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes);
-static_assert(kDonationInitialChunkBytes >= 64 * kMiB);
+static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_bytes);
 #endif
 
 @interface NeoSwapPlugin ()
@@ -60,6 +60,7 @@ static_assert(kDonationInitialChunkBytes >= 64 * kMiB);
 @property(nonatomic, strong) NSMutableArray<NSNumber*>* donorAdoptedChunks;
 @property(nonatomic, strong) NSMutableArray<NSDate*>* donorRetryAfter;
 @property(nonatomic, strong) NSMutableDictionary* donorErrors;
+@property(nonatomic, strong) NSMutableDictionary* donorLoggedStates;
 @property(nonatomic, strong) NSDictionary* donorGrowthRefusal;
 @property(nonatomic, assign) uint64_t donorEpoch;
 @property(nonatomic, strong) NSMutableIndexSet* donorPendingIndexes;
@@ -291,20 +292,14 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 }
 - (uint64_t)adaptiveDonationTarget {
     if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return 0;
-    const uint64_t live = NeoSwap_LiveBytes(NEOSWAP_RPCS3);
-    uint64_t desired = kDonationWarmFloorBytes;
-    if (live >= kDonationHardLimitBytes) {
-        desired = kDonationHardLimitBytes;
-    } else {
-        const uint64_t reserve = MIN(kDonationReserveBytes, kDonationHardLimitBytes - live);
-        desired = MAX(desired, live + reserve);
-    }
-    if (desired < kDonationHardLimitBytes) {
-        const uint64_t rounded = ((desired + kDonationGrowthQuantumBytes - 1) /
-            kDonationGrowthQuantumBytes) * kDonationGrowthQuantumBytes;
-        desired = MIN(rounded, kDonationHardLimitBytes);
-    }
-    return desired;
+    neostation::donation::PoolSnapshot pool{};
+    neostation::donation::pool_snapshot(pool);
+    if (pool.last_stage == neostation::donation::Stage::snapshot_busy) return 0;
+    // Existing file allocations cannot become donor loans by filling an idle
+    // pool. Only real donor use and the separate demand queue justify growth.
+    return neostation::donation::adaptive_donation_target(pool.live_bytes,
+        kDonationWarmFloorBytes, kDonationReserveBytes, kDonationGrowthQuantumBytes,
+        kDonationHardLimitBytes);
 }
 - (void)retireDonorsIfIdle {
     if (!self.donorSessions || NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
@@ -322,6 +317,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     self.donorAdoptedChunks = nil;
     self.donorRetryAfter = nil;
     self.donorErrors = nil;
+    self.donorLoggedStates = nil;
     self.donorPendingIndexes = nil;
     self.donorPendingMaximums = nil;
     self.donorDemand = (NeoSwapDonationDemand){};
@@ -568,7 +564,18 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
         if (pending) [self clearPendingDonor:index];
     }
-    [self appendRecord:[self snapshot:@"donor_state"]];
+    // Ledger heartbeats still update the pool each second. Persist structural
+    // changes immediately, not two full identical ~9-KiB records per second;
+    // regular samples retain resident/compressed movement every two seconds.
+    if (!self.donorLoggedStates) self.donorLoggedStates = [NSMutableDictionary new];
+    NSDictionary* logState = @{@"generation":@(status.generation), @"state":@(status.state),
+        @"growth":@(status.growthState), @"chunks":@(status.verifiedChunkCount),
+        @"capacity":@(status.capacityBytes), @"refused":@(status.refusedBytes),
+        @"kernel":@(status.kernelResult), @"error":self.donorErrors[errorKey] ?: NSNull.null};
+    if (![logState isEqual:self.donorLoggedStates[errorKey]]) {
+        self.donorLoggedStates[errorKey] = logState;
+        [self appendRecord:[self snapshot:@"donor_state"]];
+    }
     [self advanceDonors];
 }
 #endif
@@ -696,7 +703,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"kernelResult":@(cleanup.last_kernel_result)};
 #endif
     return @{@"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
-        @"pid":@(getpid()), @"capacityMiB":@(self.capacityMiB), @"configResult":@(self.configResult),
+        @"pid":@(getpid()), @"build":NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"unknown",
+        @"capacityMiB":@(self.capacityMiB), @"configResult":@(self.configResult),
         @"capacityBytes":@(stats.capacity_bytes), @"liveBytes":@(stats.live_bytes),
         @"peakBytes":@(stats.peak_bytes), @"allocatedDiskBytes":@(stats.allocated_disk_bytes),
         @"reservedVirtualBytes":@(host.reserved_virtual_bytes),
@@ -710,6 +718,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"donationHardLimitBytes":@(kDonationHardLimitBytes),
         @"donationWarmFloorBytes":@(kDonationWarmFloorBytes),
         @"donationReserveBytes":@(kDonationReserveBytes),
+        @"donationTargetBasis":@"active_donor_loans_plus_bounded_reserve",
+        @"donationUnusedPreparedBytes":@(host.donor_prepared_bytes -
+            MIN(host.donor_prepared_bytes, host.donated_live_bytes)),
         @"donationGrowthQuantumBytes":@(kDonationGrowthQuantumBytes),
         @"donationPrimaryChunkBytes":@(kDonationPrimaryChunkBytes),
         @"donationFallbackChunkBytes":@(kDonationFallbackChunkBytes),

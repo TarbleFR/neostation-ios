@@ -20,6 +20,7 @@ struct Sample {
   NSUInteger _sampleStart;
   NSUInteger _sampleCount;
 }
+@property(nonatomic, strong) UILabel* ratesLabel;
 @property(nonatomic, strong) UILabel* allocationLabel;
 @property(nonatomic, strong) UILabel* residentLabel;
 @property(nonatomic, strong) UILabel* graphLabel;
@@ -39,6 +40,7 @@ struct Sample {
   self.isAccessibilityElement = YES;
   self.accessibilityTraits = UIAccessibilityTraitStaticText;
   self.accessibilityIdentifier = @"rpcs3.performance.overlay";
+  self.ratesLabel = [self newLabelWithSize:15];
   self.allocationLabel = [self newLabelWithSize:12];
   self.allocationLabel.textColor = UIColor.systemCyanColor;
   self.residentLabel = [self newLabelWithSize:12];
@@ -74,9 +76,10 @@ struct Sample {
 - (void)layoutSubviews {
   [super layoutSubviews];
   const CGFloat width = MAX(0.0, self.bounds.size.width - 20.0);
-  self.allocationLabel.frame = CGRectMake(10, 8, width, 22);
-  self.residentLabel.frame = CGRectMake(10, 32, width, 22);
-  self.graphLabel.frame = CGRectMake(10, 57, width, 14);
+  self.ratesLabel.frame = CGRectMake(10, 7, width, 21);
+  self.allocationLabel.frame = CGRectMake(10, 32, width, 22);
+  self.residentLabel.frame = CGRectMake(10, 56, width, 22);
+  self.graphLabel.frame = CGRectMake(10, 81, width, 14);
   [self setNeedsDisplay];
 }
 - (NSString*)memoryText:(uint64_t)bytes valid:(BOOL)valid {
@@ -91,13 +94,14 @@ struct Sample {
   self.residentLabel.text = [NSString stringWithFormat:@"%@: %@",
       RPCS3LocalizedString(@"memoryPhysical", _localeIdentifier),
       [self memoryText:point.resident valid:point.residentValid]];
-  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@",
-      self.allocationLabel.text, self.residentLabel.text];
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
+      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text];
 }
 - (void)reset {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
   _sampleStart = 0;
   _sampleCount = 0;
+  self.ratesLabel.text = @"FPS —";
   [self showPoint:NeoSwapMemoryGraphPoint{}];
   [self setNeedsDisplay];
 }
@@ -105,10 +109,14 @@ struct Sample {
                   memoryUsed:(uint64_t)memoryUsed memoryTotal:(uint64_t)memoryTotal
                  validFields:(uint32_t)validFields timestamp:(double)timestampMs {
   NSAssert(NSThread.isMainThread, @"RPCS3 performance UI must run on the main thread");
-  (void)fps; (void)cpu; (void)gpu; (void)memoryUsed; (void)memoryTotal; (void)validFields;
+  (void)cpu; (void)gpu; (void)memoryUsed; (void)memoryTotal;
   if (self.hidden || !std::isfinite(timestampMs)) return;
   if (_sampleCount && timestampMs < _samples[(_sampleStart + _sampleCount - 1) % kCapacity].timestampMs)
     [self reset];
+  self.ratesLabel.text = NeoSwapFPSValid(fps, validFields)
+      ? [NSString localizedStringWithFormat:@"FPS %.1f", fps] : @"FPS —";
+  self.accessibilityValue = [NSString stringWithFormat:@"%@. %@. %@",
+      self.ratesLabel.text, self.allocationLabel.text, self.residentLabel.text];
   while (_sampleCount && timestampMs - _samples[_sampleStart].timestampMs > kWindowMs) {
     _sampleStart = (_sampleStart + 1) % kCapacity;
     --_sampleCount;
@@ -140,8 +148,8 @@ struct Sample {
   [super drawRect:rect];
   CGContextRef context = UIGraphicsGetCurrentContext();
   if (!context) return;
-  const CGRect graph = CGRectMake(44, 86, MAX(0.0, self.bounds.size.width - 54),
-      MAX(0.0, self.bounds.size.height - 110));
+  const CGRect graph = CGRectMake(44, 110, MAX(0.0, self.bounds.size.width - 54),
+      MAX(0.0, self.bounds.size.height - 134));
   if (graph.size.width <= 0 || graph.size.height <= 0) return;
   double maximumGB = 0.5;
   for (NSUInteger n = 0; n < _sampleCount; ++n) {

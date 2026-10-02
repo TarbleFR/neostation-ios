@@ -319,6 +319,16 @@ NSDictionary* capabilityCheck() {
     result[@"pressureRaised"] = @(stats.pressure_raised);
     result[@"lastResult"] = @(stats.last_result);
     result[@"lastOSError"] = @(stats.last_os_error);
+    result[@"rejectionCount"] = @(stats.rejection_count);
+    result[@"osErrorCount"] = @(stats.os_error_count);
+    const auto pressure = neostation::relay::backend().pressure_diagnostics();
+    result[@"pressureTransitions"] = @(pressure.transitions);
+    result[@"existingAliasMapsUnderPressure"] = @(pressure.existing_alias_maps);
+    result[@"createPressureRefusals"] = @(pressure.create_refusals);
+    result[@"firstMapPressureRefusals"] = @(pressure.first_map_refusals);
+    result[@"mapFailureCount"] = @(pressure.map_failures);
+    result[@"lastMapFailureResult"] = @(pressure.last_map_result);
+    result[@"lastMapFailureOSError"] = @(pressure.last_map_os_error);
     if (stats.quarantined_fixed_alias_count) {
         result[@"ready"] = @NO;
         result[@"state"] = @"fixed_alias_quarantined";

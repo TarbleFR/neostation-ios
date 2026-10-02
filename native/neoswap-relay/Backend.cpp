@@ -60,6 +60,7 @@ struct Backend::State {
         std::uint32_t entry = 0, owner = 0, aliases = 0;
         bool retiring = false;
         int quarantine_error = 0;
+        bool published = false;
     };
     struct Alias {
         std::uint64_t token = 0, bytes = 0;
@@ -67,6 +68,7 @@ struct Backend::State {
         bool fixed = false;
         bool quarantined = false;
     };
+    PressureDiagnostics pressure_diagnostics;
     const Operations ops;
     void* context;
     std::mutex mutex;
@@ -235,6 +237,8 @@ int Backend::adopt(std::uint32_t port, std::uint64_t bytes, std::int32_t pid,
 void Backend::set_pressure(bool raised) noexcept {
     if (!state_) return;
     std::lock_guard<std::mutex> guard(state_->mutex);
+    if (state_->stats.pressure_raised != (raised ? 1U : 0U))
+        ++state_->pressure_diagnostics.transitions;
     state_->stats.pressure_raised = raised ? 1U : 0U;
 }
 int Backend::create(std::uint32_t owner, std::uint64_t bytes, std::uint64_t* token) noexcept {
@@ -247,7 +251,10 @@ int Backend::create(std::uint32_t owner, std::uint64_t bytes, std::uint64_t* tok
     if (!(s.stats.enabled_owner_mask & (1U << owner)) || !s.stats.capacity_bytes || s.closing ||
         s.stats.quarantined_fixed_alias_count)
         return s.fail(NEOSWAP_RELAY_DISABLED);
-    if (s.stats.pressure_raised || s.ops.headroom(s.context) < bytes) return s.fail(NEOSWAP_RELAY_PRESSURE);
+    if (s.stats.pressure_raised || s.ops.headroom(s.context) < bytes) {
+        ++s.pressure_diagnostics.create_refusals;
+        return s.fail(NEOSWAP_RELAY_PRESSURE);
+    }
     if (bytes > s.stats.capacity_bytes - s.stats.live_bytes) return s.fail(NEOSWAP_RELAY_QUOTA);
     if (s.next_serial > (std::numeric_limits<std::uint64_t>::max() >> token_shift))
         return s.fail(NEOSWAP_RELAY_LIMIT);
@@ -292,10 +299,18 @@ int Backend::map(std::uint64_t token, void* target, std::uint32_t protection, vo
     if (!mapped || (protection != NEOSWAP_RELAY_NONE && protection != NEOSWAP_RELAY_READ &&
                     protection != NEOSWAP_RELAY_READ_WRITE) || (address && !valid_range(address, object->bytes)))
         return s.fail(NEOSWAP_RELAY_INVALID);
-    // Existing tokens survive pressure and retain all lifetime guarantees. No
-    // new aliases are published under pressure; callers can use their fallback.
-    if (s.stats.pressure_raised || s.ops.headroom(s.context) < object->bytes)
+    // Admission guards apply to NEW backing / its first published view. Once
+    // RPCS3 has seen a view, file fallback would split g_base/g_sudo/map_self
+    // into different objects. A later alias reuses the same retained bytes;
+    // do not charge the full object against free memory again. This also holds
+    // after temporary removal of every alias. Kernel map failure, fixed-range
+    // validation, alias limits and retirement guards remain mandatory below.
+    if (!object->published && (s.stats.pressure_raised || s.ops.headroom(s.context) < object->bytes)) {
+        ++s.pressure_diagnostics.first_map_refusals;
+        s.pressure_diagnostics.last_map_result = NEOSWAP_RELAY_PRESSURE;
+        s.pressure_diagnostics.last_map_os_error = 0;
         return s.fail(NEOSWAP_RELAY_PRESSURE);
+    }
     std::size_t alias_index = maximum_aliases;
     for (std::size_t i = 0; i < maximum_aliases; ++i) {
         const auto index = (s.next_alias + i) % maximum_aliases;
@@ -313,7 +328,15 @@ int Backend::map(std::uint64_t token, void* target, std::uint32_t protection, vo
     std::uintptr_t destination = 0;
     const int result = s.ops.map(s.context, entry.port, object->offset, object->bytes,
                                  address, protection, &destination);
-    if (result) return s.fail(NEOSWAP_RELAY_MAPPING, result);
+    if (result) {
+        ++s.pressure_diagnostics.map_failures;
+        s.pressure_diagnostics.last_map_result = NEOSWAP_RELAY_MAPPING;
+        s.pressure_diagnostics.last_map_os_error = result;
+        return s.fail(NEOSWAP_RELAY_MAPPING, result);
+    }
+    if (object->published && s.stats.pressure_raised)
+        ++s.pressure_diagnostics.existing_alias_maps;
+    object->published = true;
     // Darwin guarantees aligned ANYWHERE and exact FIXED results. A mock must
     // honor the same contract; bookkeeping uses the returned live address.
     s.aliases[alias_index] = {token, object->bytes, destination, address != 0, false};
@@ -404,6 +427,11 @@ int Backend::snapshot(NeoSwapRelayStats* output) noexcept {
     if (!output || output->struct_size < sizeof(NeoSwapRelayStats)) return s.fail(NEOSWAP_RELAY_INVALID);
     *output = s.stats;
     return NEOSWAP_RELAY_OK;
+}
+PressureDiagnostics Backend::pressure_diagnostics() noexcept {
+    if (!state_) return {};
+    std::lock_guard<std::mutex> guard(state_->mutex);
+    return state_->pressure_diagnostics;
 }
 int Backend::shutdown() noexcept {
     if (!state_) return NEOSWAP_RELAY_DISABLED;

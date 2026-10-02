@@ -460,7 +460,54 @@ static void eight_gibibyte_capacity_keeps_bounded_tokens_and_wide_counters() {
     assert(backend.shutdown() == 0 && os.mappings.empty());
     for (const auto& item : os.entries) assert(item.second.refs == 1 && item.second.data.empty());
 }
+static void published_backing_survives_pressure() {
+    Fixture f;
+    const auto token = f.create(2 * page);
+    void *writer = nullptr, *reader = nullptr;
+    assert(f.backend.map(token, nullptr, NEOSWAP_RELAY_READ_WRITE, &writer) == 0);
+    f.os.write(writer, 0, 0xA1);
+    f.os.write(writer, 2 * page - 1, 0xE9);
+    // Reproduces Build393: an already published object cannot switch to file
+    // fallback, but its second map was rejected by the pressure/headroom gate.
+    f.backend.set_pressure(true);
+    f.os.budget = 0;
+    const auto before = f.stats();
+    assert(f.backend.map(token, nullptr, NEOSWAP_RELAY_READ, &reader) == 0);
+    assert(f.os.read(reader, 0) == 0xA1 && f.os.read(reader, 2 * page - 1) == 0xE9);
+    assert(f.stats().live_bytes == before.live_bytes && f.stats().object_count == before.object_count);
+    assert(f.stats().alias_count == before.alias_count + 1);
+    std::uint64_t fresh = 99;
+    assert(f.backend.create(0, page, &fresh) == NEOSWAP_RELAY_PRESSURE && !fresh);
+    assert(!f.backend.enabled(0)); // Pressure still blocks new backing.
+    void* failed = reinterpret_cast<void*>(1);
+    f.os.fail_map = 1;
+    assert(f.backend.map(token, nullptr, NEOSWAP_RELAY_READ, &failed) == NEOSWAP_RELAY_MAPPING && !failed);
+    assert(f.stats().last_os_error == 104 && f.stats().alias_count == before.alias_count + 1);
+    assert(f.os.read(writer, 0) == 0xA1); // Kernel failure did not corrupt old data.
+    assert(f.backend.unmap(token, reader) == 0 && f.backend.unmap(token, writer) == 0);
+    // Temporarily having no view must NOT turn a published object back into
+    // an uncommitted allocation. Remapping the same retained backing is valid.
+    assert(f.backend.map(token, nullptr, NEOSWAP_RELAY_READ, &reader) == 0);
+    assert(f.os.read(reader, 2 * page - 1) == 0xE9);
+    assert(f.backend.unmap(token, reader) == 0 && f.backend.release(token) == 0);
+    f.backend.set_pressure(false);
+    f.os.budget = 4 * page;
+    const auto replacement = f.create();
+    f.backend.set_pressure(true);
+    // A reused slot has a new token and must pass its first-map admission gate.
+    assert(f.backend.map(replacement, nullptr, 3, &reader) == NEOSWAP_RELAY_PRESSURE && !reader);
+    assert(f.backend.release(replacement) == 0);
+    const auto evidence = f.backend.pressure_diagnostics();
+    assert(evidence.transitions == 3 && evidence.existing_alias_maps == 2);
+    assert(evidence.create_refusals == 1 && evidence.first_map_refusals == 1);
+    assert(evidence.map_failures == 1);
+    // A later success/refusal cannot erase the original kernel mapping error
+    // count. The last failure remains typed as a first-map pressure refusal.
+    assert(evidence.last_map_result == NEOSWAP_RELAY_PRESSURE && evidence.last_map_os_error == 0);
+}
+
 int main() {
+    published_backing_survives_pressure();
     alias_identity_and_lifetime();
     failures_do_not_free_live_ranges();
     guards_and_pressure();

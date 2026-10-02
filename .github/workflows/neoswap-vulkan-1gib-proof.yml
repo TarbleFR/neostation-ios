@@ -76,8 +76,8 @@ jobs:
                   expected=hashlib.sha256(reference_bytes).hexdigest()
                   assert actual==expected,(path,actual,expected)
           reviewed_deltas={
-              'native/neoswap-donation/NeoSwapDonorIPC.mm':'35a625f03aef01177c25adbd9a5ab8a3ca6b56e466636b3f67323d329081cac3',
-              'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'a423232d5fb8ae032977def871f4a01da7afef4fddfc0b045aef56eb6bdc05c6',
+              'native/neoswap-donation/NeoSwapDonorIPC.mm':'c30fca1e7701e80d922d952f7b7bde8a2ad79011a35f961c9f8104bacc22ede5',
+              'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'fc617606e9501c7514d0f8bfd798698de751626906950af0f44c8e19d5a23be4',
           }
           for path,digest in reviewed_deltas.items():
               actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()

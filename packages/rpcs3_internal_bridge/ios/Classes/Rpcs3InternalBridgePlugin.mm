@@ -29,7 +29,7 @@ static const uint32_t kExpectedAbi = 30;
 // Keep the 512 MiB adaptive pool target in NeoSwapPlugin, but do not block
 // game boot on reaching the full floor. A small verified seed is enough to
 // route early eligible buffers while donor growth continues in the background.
-static const uint64_t kNeoSwapBootMinimumBytes = 64ULL * 1024 * 1024;
+static const uint64_t kNeoSwapBootMinimumBytes = 384ULL * 1024 * 1024;
 static const uint32_t kNeoSwapBootWaitMs = 1500;
 
 extern "C" {
