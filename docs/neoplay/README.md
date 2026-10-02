@@ -27,7 +27,7 @@ Transport data in this prototype is **not encrypted**. Pairing and per-session r
 
 ## Validation status
 
-The integration is **not finished** until the two routes have separate physical-device evidence.
+The integration is **not finished** until Windows, Chromecast and Apple TV have separate physical-device evidence, and controller battery behavior is checked during actual gameplay.
 - Windows: automated protocol, authentication, geometry and lifecycle tests; real iPhone game/audio playback still pending.
 - Chromecast: real SDK compilation and native HLS/lifecycle contract tests; actual Chromecast playback, TV scaling and latency still pending.
 - Required: 4:3/16:9/ultrawide/portrait; audio-video synchronization; connect/disconnect/reconnect during each embedded emulator; receiver disappearance; local-network denial; 30-minute thermal/pressure run; confirm game and saves remain intact.
@@ -58,3 +58,9 @@ Before any public binary distribution, review the Google Cast SDK terms, require
 `validation-2026-10-02.json` binds the tested code commit, GitHub Actions run, generated media hashes and local Windows measurements. All four jobs passed: frontend, native iOS simulator, Windows protocol and Windows playback. The same production-encoder fixture was also decoded successfully in Edge on the owner's Windows PC, with nonzero audio samples, video frames, aspect containment, playback acknowledgement and disconnection checks. Local Windows mDNS publication/discovery passed separately.
 
 These are **software and simulator results**, not an iPhone-to-TV acceptance result. The passive Chromecast probe found no receiver visible from the PC at that time. Physical iPhone/Windows Wi-Fi gameplay, actual Chromecast playback, game-only viewport integration, full IPA compilation, sustained thermal/memory testing and measured interactive latency remain open.
+
+## Apple TV and independent controller battery HUD
+
+See `APPLE_TV_AND_CONTROLLER_BATTERY.md` for the native iOS screen-mirroring path, explicit audio/video status distinctions, and the independent GameController battery overlay beside existing native game menus. The iOS system, not an audio route picker or a private API, selects the Apple TV.
+
+`companion-validation-2026-10-02.json` records the dedicated companion checks and their exact source commit separately from the initial prototype report. Physical Apple TV/Chromecast playback and controller readings remain unvalidated; no full IPA or stable release is claimed.

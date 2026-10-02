@@ -1,0 +1,93 @@
+{
+  "status": "software-checks-passed-physical-acceptance-pending",
+  "recordedAt": "2026-10-02T21:22:36.323Z",
+  "branch": "feature/neoplay",
+  "codeCommit": "9de76e5b662d7c915bff1485fe02dfc2b90c9961",
+  "baseReleaseCommit": "f4583c6a3083b8aed358da28b2f8f849256e0e8b",
+  "ci": {
+    "runId": 37065962240,
+    "url": "https://github.com/TarbleFR/neostation-ios/actions/runs/37065962240",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 111033692980,
+        "name": "windows",
+        "conclusion": "success"
+      },
+      {
+        "id": 111033693259,
+        "name": "frontend",
+        "conclusion": "success"
+      },
+      {
+        "id": 111033693294,
+        "name": "native",
+        "conclusion": "success"
+      },
+      {
+        "id": 111034890289,
+        "name": "windows-playback",
+        "conclusion": "success"
+      }
+    ],
+    "nativeTests": 11
+  },
+  "windowsPC": {
+    "fixtureSha256": "0f72be88bdfd9dd2c01c8fd6fc8998621a1af8d718d869dc09728fa47182e17e",
+    "codeCommit": "9de76e5b662d7c915bff1485fe02dfc2b90c9961",
+    "platform": "win32",
+    "browser": "154.0.4258.48",
+    "time": 4.994627,
+    "width": 640,
+    "height": 480,
+    "frames": 138,
+    "audioRms": 0.17588882610934287,
+    "fit": "contain",
+    "error": null,
+    "acknowledged": true,
+    "audioRenderedSilently": true,
+    "physicalIPhone": false,
+    "physicalChromecast": false
+  },
+  "passiveTVProbe": {
+    "time": "2026-10-02T21:12:06.238Z",
+    "scope": "passive Windows LAN discovery only",
+    "chromecast": 0,
+    "airplayReceivers": 0,
+    "appleTVModels": 0,
+    "playbackAttempted": false
+  },
+  "battery": {
+    "independentOfStreaming": true,
+    "source": "GCController.battery",
+    "unknownValuesRemainUnknown": true,
+    "maximumVisibleControllers": 4,
+    "wirelessVersusWiredInferred": false,
+    "controllerFixturesOnly": true,
+    "physicalControllerBatteryValidated": false
+  },
+  "appleTV": {
+    "selection": "iOS Control Center screen mirroring",
+    "extraReceiverAppRequired": false,
+    "programmaticScreenSelection": false,
+    "audioRouteNotVideoProof": true,
+    "exactReceiverInferred": false,
+    "physicalPlaybackValidated": false
+  },
+  "unchangedRuntimePaths": [
+    "native",
+    "packages/armsx2_internal_bridge",
+    "packages/dolphin_internal_bridge",
+    "packages/rpcs3_internal_bridge",
+    "packages/dusklight_internal_bridge",
+    "packages/kartpad_internal_bridge",
+    "packages/stikjit_bridge",
+    "lib/services"
+  ],
+  "physicalIPhoneToWindowsValidated": false,
+  "physicalIPhoneToChromecastValidated": false,
+  "fullIPACompiled": false,
+  "emulatorHardwareRegressionMatrixPassed": false,
+  "publicReleaseCreated": false,
+  "experimentalBranchModifiedByThisWork": false
+}
