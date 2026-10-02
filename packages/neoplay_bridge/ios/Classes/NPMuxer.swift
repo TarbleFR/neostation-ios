@@ -79,6 +79,10 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
             if audio.append(adjusted) { lastAudio = time } else { onError?(.encoder) }
         }
     }
+    func finish(_ completion: @escaping () -> Void) {
+        guard writer.status == .writing else { completion(); return }
+        video.markAsFinished(); audio.markAsFinished(); writer.finishWriting(completionHandler: completion)
+    }
     func cancel() { onSegment = nil; onError = nil; writer.cancelWriting() }
     func assetWriter(_ writer: AVAssetWriter, didOutputSegmentData data: Data, segmentType: AVAssetSegmentType, segmentReport: AVAssetSegmentReport?) {
         let initial = segmentType == .initialization

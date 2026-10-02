@@ -1,10 +1,7 @@
-name: Neostation iOS 0.0.2 private • Build 365
-run-name: Neostation iOS 0.0.2 private • Build 365 • ${{ github.sha }}
+name: NeoPlay private IPA (manual only)
+run-name: NeoPlay private IPA • ${{ github.sha }}
 
 on:
-  push:
-    branches:
-      - experimental
   workflow_dispatch:
     inputs:
       build_number:
@@ -29,21 +26,21 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: ${{ contains(github.event.head_commit.message, '[rpcs3-host-only]') && format('neostation-host-check-{0}', github.sha) || 'neostation-ios-private-365' }}
+  group: neoplay-ipa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
-    if: ${{ !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
+    if: ${{ github.ref == 'refs/heads/feature/neoplay' && !contains(github.event.head_commit.message, '[armsx2-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-core-only]') && !contains(github.event.head_commit.message, '[rpcs3-host-only]') && !contains(github.event.head_commit.message, '[dolphin-core-only]') && !contains(github.event.head_commit.message, '[dusklight-core-only]') && !contains(github.event.head_commit.message, '[kartpad-ui-only]') && !contains(github.event.head_commit.message, '[kartpad-bridge-only]') && !contains(github.event.head_commit.message, '[kartpad-core-only]') }}
     name: Neostation iOS 0.0.2 private IPA (365)
     runs-on: macos-15
     timeout-minutes: 90
     env:
       BUILD_NUMBER: ${{ inputs.build_number || '365' }}
-      IPA_NAME: NeoStation
-      ARTIFACT_NAME: Neostation-iOS-0.0.2-Build-365-Private
+      IPA_NAME: NeoStation-NeoPlay
+      ARTIFACT_NAME: NeoPlay-Private-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -784,6 +781,7 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
           python3 build-utils/configure_rpcs3_ios_v2.py
           python3 build-utils/configure_armsx2_ios.py
+          python3 build-utils/configure_neoplay_ios.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.

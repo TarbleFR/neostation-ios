@@ -24,6 +24,7 @@ test('authenticated pairing, live media relay, disconnect and restart', async t 
   const pair = (pin, extra={}) => fetch(base+'/v1/pair',{method:'POST',headers:{'Content-Type':'application/json',...extra},body:JSON.stringify({v:1,pin})});
   assert.equal((await (await fetch(base+'/v1/info')).json()).available,false);
   assert.equal((await pair('000000')).status,403);
+  assert.equal((await pair('éééééé')).status,403);
   assert.equal((await pair(receiver.pin, {Origin:'https://untrusted.example'})).status,403);
   const viewer = new WebSocket(wsbase+'/v1/view?token='+receiver.viewerToken); t.after(() => viewer.terminate());
   const state = message(viewer); await once(viewer,'open'); await state;
@@ -36,6 +37,8 @@ test('authenticated pairing, live media relay, disconnect and restart', async t 
   await new Promise(resolve => setTimeout(resolve,25));
   const media = message(viewer); const bytes=Buffer.from([1,0,0,0,8,102,116,121,112]); sender.send(bytes);
   assert.deepEqual((await media).data,bytes);
+  const playback = message(sender); viewer.send(JSON.stringify({type:'playback',playing:true}));
+  assert.equal(JSON.parse((await playback).data).playing,true);
   const closed=once(sender,'close'); viewer.send(JSON.stringify({type:'stop'})); await closed;
   assert.equal((await (await fetch(base+'/v1/info')).json()).available,true);
 });

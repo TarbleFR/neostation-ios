@@ -51,17 +51,17 @@ class _NeoPlayDialogState extends State<NeoPlayDialog> {
     final receivers = (snapshot['receivers'] as List? ?? const []).whereType<Map>().toList();
     return AlertDialog(
       title: const Text('NeoPlay'),
-      content: SizedBox(width: 620, height: MediaQuery.sizeOf(context).height * 0.6, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      content: SizedBox(width: 620, height: MediaQuery.sizeOf(context).height * 0.6, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(text('description')), const SizedBox(height: 10), Text(text('windows')), const SizedBox(height: 6), Text(text('cast')),
         const SizedBox(height: 10), Text(text(state)),
         if (error) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(text('error'), style: TextStyle(color: Theme.of(context).colorScheme.error))),
         if (!searching) TextButton.icon(onPressed: () { setState(() => searching = true); action(NeoPlayBridge.discover); }, icon: const Icon(Icons.cast), label: Text(text('discover'))),
-        Expanded(child: receivers.isEmpty ? Center(child: Text(text('empty'))) : ListView.builder(itemCount: receivers.length, itemBuilder: (context,index) {
+        receivers.isEmpty ? Center(child: Text(text('empty'))) : ListView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: receivers.length, itemBuilder: (context,index) {
           final receiver = receivers[index];
           return ListTile(leading: Icon(receiver['kind'] == 'windows' ? Icons.desktop_windows : Icons.cast), title: Text(receiver['name'] as String? ?? 'NeoPlay'), selected: snapshot['selected'] == receiver['id'], enabled: !busy, onTap: () => connect(receiver));
-        })),
+        }),
         Text(text('prototype'), style: Theme.of(context).textTheme.bodySmall),
-      ])),
+      ]))),
       actions: [if (busy) TextButton(onPressed: () => action(NeoPlayBridge.disconnect), child: Text(text('disconnect'))), TextButton(onPressed: () => Navigator.pop(context), child: Text(text('close')))],
     );
   }

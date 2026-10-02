@@ -6,6 +6,7 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
     private var initialized = false
     private var selected: String?
     private var ownsSession = false
+    private var cancelling = false
     var changed: (() -> Void)?
     var onReady: (() -> Void)?
     var onPlayback: (() -> Void)?
@@ -38,7 +39,9 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
     }
     func sessionManager(_ sessionManager: GCKSessionManager, didStart session: GCKCastSession) {
         guard selected == session.device.uniqueID else { return }
-        ownsSession = true; session.remoteMediaClient?.add(self); onReady?(); onReady = nil
+        ownsSession = true
+        if cancelling { sessionManager.endSessionAndStopCasting(true); return }
+        session.remoteMediaClient?.add(self); onReady?(); onReady = nil
     }
     func load(_ url: URL) {
         guard ownsSession, let session = context.sessionManager.currentCastSession, selected == session.device.uniqueID else { onError?(.cast); return }
@@ -56,10 +59,10 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
     }
     func request(_ request: GCKRequest, didFailWithError error: GCKError) { if ownsSession { onError?(.cast) } }
     func sessionManager(_ sessionManager: GCKSessionManager, didFailToStart session: GCKCastSession, withError error: Error) {
-        guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; onError?(.cast)
+        guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; cancelling = false; onError?(.cast)
     }
     func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKCastSession, withError error: Error?) {
-        guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; onError?(.network)
+        guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; cancelling = false; onError?(.network)
     }
     func stop() {
         onReady = nil; onPlayback = nil; onError = nil
@@ -67,6 +70,7 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
         let matches = context.sessionManager.currentCastSession?.device.uniqueID == selected
         context.sessionManager.currentCastSession?.remoteMediaClient?.remove(self)
         if matches && ownsSession { context.sessionManager.endSessionAndStopCasting(true) }
-        selected = nil; ownsSession = false
+        if ownsSession { selected = nil; ownsSession = false; cancelling = false }
+        else if selected != nil { cancelling = true }
     }
 }

@@ -26,7 +26,7 @@ end
 File.write(File.join(output,'App.swift'), "import UIKit\n@main class HarnessApp: UIResponder, UIApplicationDelegate { var window: UIWindow?; func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool { window = UIWindow(frame: UIScreen.main.bounds); window?.rootViewController = UIViewController(); window?.makeKeyAndVisible(); return true } }\n")
 Dir.glob(File.join(root,'packages/neoplay_bridge/ios/Classes/*.swift')).reject { |f| f.end_with?('/NeoPlayBridgePlugin.swift') }.each { |f| app.add_file_references([project.main_group.new_file(f)]) }
 app.add_file_references([project.main_group.new_file(File.join(output,'App.swift'))])
-tests.add_file_references([project.main_group.new_file(File.join(root,'test/neoplay/native_tests.swift'))])
+Dir.glob(File.join(root,'test/neoplay/*_tests.swift')).each { |file| tests.add_file_references([project.main_group.new_file(file)]) }
 project.save
 scheme = Xcodeproj::XCScheme.new
 scheme.add_build_target(app); scheme.add_test_target(tests); scheme.set_launch_target(app)
