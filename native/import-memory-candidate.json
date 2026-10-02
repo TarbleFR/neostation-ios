@@ -74,7 +74,8 @@
     "Build396 packaging recovery: rename the colliding feature macro to NEOSWAP_SHADER_STORAGE while preserving NEOSWAP_STORAGE=-4 and the exact existing Core. Compile production podspec defines in host preflight and reject the reproduced old macro/enum collision; no cache policy, JIT or unrelated emulator change.",
     "Build398: remove the embedded RPCS3 PS touch button and route physical Home/PS or Select+Start to the single NeoStation session menu with edge gating; retain Core ABI, JIT, guest memory, donation, shader storage and emulator settings; replace obsolete three-tool assertion with platform-aware navigation behavior and keep all candidate evidence gates",
     "Build398 research: new device logs establish small shader-storage workload and an RSX/video stall without observed memory pressure; iPadOS kernel swap and MeloNX Mach JIT accounting were evaluated; select explicit owner-managed cold-data storage as the next framework direction, with no unverified guest/JIT/GPU paging enabled and no physical 8GiB or gameplay-gain claim",
-    "Build398 managed-swap stage1: explicit owned mutable CPU objects with bounded chunks, generations and scoped leases; synchronized verified checkpoints release owned mappings and restore exact contents on demand. Independent C ABI v1 is materialized in NeoSwap and exercised with native and Swift/Apple SDK evidence gates. Existing Store/shader/Core/JIT/relay runtime retained; no new RPCS3 consumer, automatic guest paging or physical/gameplay gain claim."
+    "Build398 managed-swap stage1: explicit owned mutable CPU objects with bounded chunks, generations and scoped leases; synchronized verified checkpoints release owned mappings and restore exact contents on demand. Independent C ABI v1 is materialized in NeoSwap and exercised with native and Swift/Apple SDK evidence gates. Existing Store/shader/Core/JIT/relay runtime retained; no new RPCS3 consumer, automatic guest paging or physical/gameplay gain claim.",
+    "Build398 CI harness correction: retain the unchanged production Store and all content, quota, pressure, priority and fault assertions; utility test/benchmark submissions retry only transient Busy for at most one second, while hot TryAcquire assertions remain immediate. Local sanitized Store tests and the five paired benchmarks pass; no Core rebuild or IPA requested."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -457,10 +458,10 @@
     "native/neoswap-storage/Store.h": "e65745ea27975190992bf14ae84f02edad2ccfa97355514a3277c4308290459c",
     "native/neoswap-storage/run_shader_validation.py": "c8f97b2122a5985991247c2641a3a149391276c1c00341c392d139986c4e6f70",
     "native/neoswap-storage/run_validation.py": "b09327615e3935d787a9a908b0062cecfe344a183cd1c40dcfa014999f17c9a6",
-    "native/neoswap-storage/tests/benchmark.cpp": "1c44d157fa494b8e0a75c75f714a08d26526aa0c874afb0e2ffbecc32371c1b0",
+    "native/neoswap-storage/tests/benchmark.cpp": "7eb8f77967d4ba663442bca2d62499a8aaa23715c3960a5a3b3ac7f1582ade51",
     "native/neoswap-storage/tests/service_runtime.mm": "31ef14f082b2ea98449c2a2e0e49f4d09978f900c9ba8f51d966259198dc2317",
     "native/neoswap-storage/tests/shader_cache_test.cpp": "5470044e6ebe90b011e2c8e8382d127415c893e545b631a6fcfc9a0d61f961ba",
-    "native/neoswap-storage/tests/store_test.cpp": "3d4830744a4d85619e782798a9de23b5dadd7b4e774184f07fb6e319154a4621",
+    "native/neoswap-storage/tests/store_test.cpp": "d4ce262da84beb7b1a905f6412ae7ebe7601d7b14333e1614a58631faf6ac468",
     "native/neoswap-storage/tests/vulkan_shader_storage.cpp": "aeea5cac0ac5109dcbf10f03de3798c062b45b463f5b55fa460dfb933df2ed50",
     "test/cheat_bulk_parser_test.cpp": "67d74ac4eb358f568bb76e8427b36135b533861cc70a9ec6ffd029131a64d205",
     "test/cheat_bulk_scope_test.py": "e33132d2d8a540b29843fab06773464b077d398a9d62629e1d8843569fe562d5",
@@ -499,7 +500,7 @@
     "test/neoplay/companion_tests.swift": "c3440c4d02e0bac7abb08bc25888cbc1d0640ddab3a9e71498e16d66f530ca33",
     "test/neoplay/encoded_media_tests.swift": "20921397f11f71c70a170e91ceda90fa4e8ca6658ec0a1cdab47644e95cfeefc",
     "test/neoplay/native_tests.swift": "fec85eba650f4b51910953786f28dbb34d408583a8b145821de17d0c5946cb94",
-    "test/neoplay_build397_integration_test.py": "3be8645bbd0e7f1e8afa79fb99d9add0807053412eb93bea83f5bebd5fb6f936",
+    "test/neoplay_build397_integration_test.py": "07b04939b20aa393d24579fa2140d907625437b236cb903535201c4d136d2425",
     "test/neoplay_companion_contract_test.py": "d71354f2c791a94cd3b89a3164a5221cf6719f5cbd1ca007e6920093856b3154",
     "test/neoplay_companion_test.dart": "70480905495e95c5b8f0703386b1014f4af7290741af3f333247cfd52cb99ce6",
     "test/neoplay_config_test.py": "68a059469dba5a8b812ff22162caf8e9b215cc842c1900d1021c53efd8069343",
@@ -541,7 +542,7 @@
     "native/neoswap-storage/tests/managed_swap_test.cpp": "5b8944d8d21dfbfa5be590e80e3ab134ffeb7346311d47f74a92c8cbed94d254",
     "native/neoswap-storage/tests/managed_swap_abi_test.cpp": "5c1012d5626a2e9b9a46e32a5491e358274106a874dedbf01f71ca3f3772e799",
     "native/neoswap-storage/tests/managed_swap_swift_test.swift": "010a3793557f5e048173dd32e0e7895535f2695ef651ebb6916456e50b764db2",
-    "docs/neoswap-managed-swap-stage1.md": "e086ef5f8c8a3877a4be06373066baa0f68d69149307fa173212d69e526c4193",
+    "docs/neoswap-managed-swap-stage1.md": "b4c6d9ad55a47d79deb0753cddaea455f3f2b0883e30e34db50d64bce47835a9",
     "docs/neoswap-managed-swap-stage1-linux-proof.json": "b8c8a42da32f44b7ae2f515b50fc6e197983b9f4a2d670a2dfb5d3dfb0ae506f",
     "build-utils/validate_managed_swap_evidence.py": "8855adf9000db4c35f8538b9e30f74d67feb9098b773079f659bbb9041f2c6b9",
     "test/neoswap_managed_swap_host_test.py": "16a89bce53ce4aee39be3dddf00b4ce531d191f10ead44946c55004c3c23644d"

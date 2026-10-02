@@ -24,6 +24,8 @@ APPROVED_MANAGED_SWAP_FILES = frozenset({
     'native/neoswap-storage/tests/managed_swap_test.cpp',
     'native/neoswap-storage/tests/managed_swap_abi_test.cpp',
     'native/neoswap-storage/tests/managed_swap_swift_test.swift',
+    'native/neoswap-storage/tests/store_test.cpp',
+    'native/neoswap-storage/tests/benchmark.cpp',
     'packages/neo_swap/ios/Classes/ManagedSwapABI.h',
     'packages/neo_swap/ios/neo_swap.podspec',
 })

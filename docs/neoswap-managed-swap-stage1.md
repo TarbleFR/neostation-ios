@@ -89,6 +89,13 @@ Les preuves CI ultérieures portent le SHA du commit testé. LeakSanitizer est
 indisponible dans le conteneur local ; ASAN et UBSAN restent actifs. La CI garde
 ses réglages de sanitizer habituels.
 
+Le premier passage CI Linux du commit `2cf8c787` a refusé un ancien test du
+Store avant d'exécuter la nouvelle suite. Son admission utilitaire pouvait
+renvoyer `busy` pendant que le worker détenait le verrou. Le harness conserve
+les assertions d'intégrité, quota et pression, et borne les nouvelles tentatives
+de ces admissions ; le moteur Store reste inchangé. Les accès rapides restent
+testés sans attente. Ce correctif du harness nécessite sa propre validation CI.
+
 ## Intégration RPCS3 suivante
 
 L'audit des sources exactes `22f1152783cef1f7e04af7b1c895173e28fd5b03`, après
