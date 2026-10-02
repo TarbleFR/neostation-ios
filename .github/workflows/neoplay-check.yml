@@ -2,6 +2,9 @@ name: NeoPlay isolated integration checks
 on:
   push:
     branches: [feature/neoplay]
+    paths-ignore:
+      - 'tools/neoplay-receiver/windows/**'
+      - '.github/workflows/neoplay-windows.yml'
   workflow_dispatch:
 permissions:
   contents: read

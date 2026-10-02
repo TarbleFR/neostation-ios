@@ -1,0 +1,83 @@
+name: NeoPlay Receiver Windows executable
+on:
+  push:
+    branches: [feature/neoplay]
+    paths:
+      - 'tools/neoplay-receiver/windows/**'
+      - 'tools/neoplay-receiver/protocol.mjs'
+      - '.github/workflows/neoplay-windows.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoplay-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    defaults:
+      run:
+        working-directory: tools/neoplay-receiver/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.401'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build self-contained Windows x64 executable
+        run: |
+          dotnet restore NeoPlayReceiver.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed' }
+          dotnet publish NeoPlayReceiver.csproj -c Release --no-restore -o publish
+          if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
+      - name: Test compiled receiver protocol and actual DNS-SD
+        run: |
+          npm ci --ignore-scripts --prefix ..
+          if ($LASTEXITCODE -ne 0) { throw 'Test dependency installation failed' }
+          node Tests/native-protocol.mjs 'publish/NeoPlay Receiver.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Native protocol test failed' }
+      - name: Verify production fixture and test native WebView2 audio/video window
+        run: |
+          New-Item -ItemType Directory -Force -Path test-output/native-window | Out-Null
+          $input = [IO.File]::OpenRead((Resolve-Path Tests/Fixtures/windows.json.gz))
+          $gzip = New-Object IO.Compression.GZipStream($input, [IO.Compression.CompressionMode]::Decompress)
+          $output = [IO.File]::Create((Join-Path $PWD 'test-output/windows.json'))
+          $gzip.CopyTo($output); $output.Dispose(); $gzip.Dispose(); $input.Dispose()
+          $identity = Get-Content Tests/Fixtures/identity.json -Raw | ConvertFrom-Json
+          if ((Get-FileHash test-output/windows.json -Algorithm SHA256).Hash -ne $identity.decompressedSha256) { throw 'Fixture identity mismatch' }
+          $fixture = (Resolve-Path test-output/windows.json).Path
+          $result = (Resolve-Path test-output/native-window).Path
+          $p = Start-Process -FilePath 'publish/NeoPlay Receiver.exe' -ArgumentList @('--self-test',('"'+$fixture+'"'),('"'+$result+'"')) -PassThru
+          if (!$p.WaitForExit(60000)) { $p.Kill(); throw 'Native window test timed out' }
+          if ($p.ExitCode -ne 0 -or !(Test-Path test-output/native-window/report.json)) { Get-Content test-output/native-window/error.txt -ErrorAction SilentlyContinue; throw 'Native audio/video test failed' }
+      - name: Stamp and package the tested executable
+        run: |
+          New-Item -ItemType Directory -Force -Path delivery | Out-Null
+          Copy-Item 'publish/NeoPlay Receiver.exe' 'delivery/NeoPlay Receiver.exe'
+          Copy-Item README.md delivery/README.md
+          $file = Get-Item 'delivery/NeoPlay Receiver.exe'
+          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path $PWD 'delivery/NeoPlay Receiver.sha256'), $hash+'  NeoPlay Receiver.exe'+[Environment]::NewLine)
+          $report = @{version='0.1.0';commit=$env:GITHUB_SHA;run=$env:GITHUB_RUN_ID;sha256=$hash;bytes=$file.Length;architecture='win-x64';selfContained=$true;webView2Required=$true;nodeRequired=$false;authenticodeSigned=$false;physicalIPhoneValidated=$false;nativeWindowTest=Get-Content test-output/native-window/report.json -Raw | ConvertFrom-Json;nativeHost=Get-Content test-output/native-window/host.json -Raw | ConvertFrom-Json}
+          $report | ConvertTo-Json -Depth 6 | Set-Content delivery/identity.json -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NeoPlay-Receiver-Windows-x64-${{ github.sha }}
+          path: tools/neoplay-receiver/windows/delivery/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NeoPlay-Receiver-Windows-tests-${{ github.sha }}
+          path: |
+            tools/neoplay-receiver/windows/test-output/native-window/
+            tools/neoplay-receiver/windows/test-output/protocol/*-report.json
+          if-no-files-found: warn
+          retention-days: 7
