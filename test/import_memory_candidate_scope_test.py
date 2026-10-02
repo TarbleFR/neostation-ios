@@ -158,6 +158,18 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    # Isolated native storage module; no production Core or IPA hookup.
+    ".github/workflows/neoswap-storage-prototype.yml",
+    "docs/neoswap-storage-prototype.md",
+    "native/neoswap-storage/ApplePressure.cpp",
+    "native/neoswap-storage/ApplePressure.h",
+    "native/neoswap-storage/CacheEntry.h",
+    "native/neoswap-storage/Metrics.cpp",
+    "native/neoswap-storage/Store.cpp",
+    "native/neoswap-storage/Store.h",
+    "native/neoswap-storage/run_validation.py",
+    "native/neoswap-storage/tests/benchmark.cpp",
+    "native/neoswap-storage/tests/store_test.cpp",
     'test/neoswap_cpu_buffers_test.cpp',
     'test/neoswap_pool_fragmentation_test.cpp',
     'docs/neoswap-guest-relay-build373.md',

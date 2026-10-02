@@ -65,7 +65,8 @@
     "Build395 first coverage experiment: opt-in God of War III RSX CPU aligned buffers 64KiB-1MiB can use real verified donor pages; separate 768 small and 256 retained large slots, 512MiB live small cap, no small file fallback, explicit title/pressure/lifecycle gates, cumulative size/live/fallback telemetry; only the CPU allocator call and client helper change inside RPCS3, all prior Vulkan/JIT/VM/PPU/SPU policies retained. Source-only until a matching Core artifact is validated; no iPad kernel swap or 5GiB physical gameplay result claimed.",
     "Build395 packaging: exact new Core source f73ac8f / run37022595373 required before IPA assembly; host loan-gap search uses ordered fixed-slot links rather than a repeated global rescan, with injected-OS fragmentation/lifetime/cleanup regression plus unchanged mandatory real-kernel proof. Other cores, JIT, relay lifetime and memory ceilings preserved; no game speed or iPad swap activation claim.",
     "Build395 CI recovery: prevent host-only integration pushes from cancelling their pinned Core prerequisite. Job-scoped per-SHA concurrency never cancels a running build; regression contract rejects the old global scheduler. Runtime and emulator postimages unchanged; rebuild exact Core inputs and repin only after validation.",
-    "Build395 CI recovery packaging: require protected Core source 600c4a99 and run 37039104291. The successful-run gate, full Core input hash validation and artifact identity remain mandatory; no cancelled/older Core or incomplete binary accepted."
+    "Build395 CI recovery packaging: require protected Core source 600c4a99 and run 37039104291. The successful-run gate, full Core input hash validation and artifact identity remain mandatory; no cancelled/older Core or incomplete binary accepted.",
+    "Isolated storage-backed module: checked immutable CPU leases, async POSIX I/O, conditional LZ4, bounded hot/warm/cold cache, reusable coalesced disk extents, deferred ownership retirement and independent Linux/macOS plus iPhoneOS ARM64 SDK validation. Not linked into production RPCS3/IPA; no kernel swap, five-GB or gameplay improvement claimed."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -331,7 +332,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "339af08cf995bced5830c1804c2a11e2c51fcc4c8b828e28159a95adba8f9e27",
+    "test/import_memory_candidate_scope_test.py": "4e00ac6aef17d7a281e4edb86c1a7f0c5fd4e45ca66461f44e68b5d3ee2bfc70",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -368,7 +369,18 @@
     "test/single_ipa_distribution_test.py": "1fc29fc48038b42549588c28a5cfc2a4d3881dc347257a3ee49faacf39218d77",
     "test/stikjit_scoped_host_test.py": "d5a397c7c17453a5584cac5ecb2390f099b2f2edd35649cb8522a9bba74e4717",
     "test/neoswap_cpu_buffers_test.cpp": "f6c9793a7f115cc39913bdd70ba375666a8446ab23883c2566bfa77934b7f779",
-    "test/neoswap_pool_fragmentation_test.cpp": "72f3ff56fb29b805a082b8aa52be7c5531351ad6b331cad2aafa850573601daf"
+    "test/neoswap_pool_fragmentation_test.cpp": "72f3ff56fb29b805a082b8aa52be7c5531351ad6b331cad2aafa850573601daf",
+    ".github/workflows/neoswap-storage-prototype.yml": "e8ad9108d3288ca6e333dc1f325882fe6b313f735e533bc3d076718db8f2a0ee",
+    "docs/neoswap-storage-prototype.md": "e693fb132754ea1bd8e7b954b92ee644225dd68cd2f2416d62e2775f35e74df6",
+    "native/neoswap-storage/ApplePressure.cpp": "e5682f3dad24ef1a0f337c1ed44b546e9635451f0849e0ce872724d3a8c149a1",
+    "native/neoswap-storage/ApplePressure.h": "26df1ac418f45ade43b4aa6a33057196c68ae7650710f9167827d36cd1b0b7d3",
+    "native/neoswap-storage/CacheEntry.h": "e503c5bafd3a4311a14b3ed09bc470331344ba2791aaa014ecbbbe914e1205bb",
+    "native/neoswap-storage/Metrics.cpp": "058a7e1fa32c56bff17e302985d5989355333d49717b83abc4de2625b1fe0614",
+    "native/neoswap-storage/Store.cpp": "127c266c74a37c06bc92972c840745e5318a98d3321bf3ebd18777931edb98fe",
+    "native/neoswap-storage/Store.h": "e65745ea27975190992bf14ae84f02edad2ccfa97355514a3277c4308290459c",
+    "native/neoswap-storage/run_validation.py": "b09327615e3935d787a9a908b0062cecfe344a183cd1c40dcfa014999f17c9a6",
+    "native/neoswap-storage/tests/benchmark.cpp": "1c44d157fa494b8e0a75c75f714a08d26526aa0c874afb0e2ffbecc32371c1b0",
+    "native/neoswap-storage/tests/store_test.cpp": "3d4830744a4d85619e782798a9de23b5dadd7b4e774184f07fb6e319154a4621"
   },
   "support_git_modes": {
     "docs/dolphin-phone-shake-routing.md": "100644",
@@ -433,7 +445,18 @@
     "test/single_ipa_distribution_test.py": "100644",
     "test/stikjit_scoped_host_test.py": "100644",
     "test/neoswap_cpu_buffers_test.cpp": "100644",
-    "test/neoswap_pool_fragmentation_test.cpp": "100644"
+    "test/neoswap_pool_fragmentation_test.cpp": "100644",
+    ".github/workflows/neoswap-storage-prototype.yml": "100644",
+    "docs/neoswap-storage-prototype.md": "100644",
+    "native/neoswap-storage/ApplePressure.cpp": "100644",
+    "native/neoswap-storage/ApplePressure.h": "100644",
+    "native/neoswap-storage/CacheEntry.h": "100644",
+    "native/neoswap-storage/Metrics.cpp": "100644",
+    "native/neoswap-storage/Store.cpp": "100644",
+    "native/neoswap-storage/Store.h": "100644",
+    "native/neoswap-storage/run_validation.py": "100644",
+    "native/neoswap-storage/tests/benchmark.cpp": "100644",
+    "native/neoswap-storage/tests/store_test.cpp": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "08c84e3ae4b2201fc540bc5963e16f7627064652a50987b090fac9ec59e04263",

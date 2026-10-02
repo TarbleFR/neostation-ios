@@ -1,0 +1,47 @@
+name: NeoSwap storage-backed prototype validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [experimental]
+    paths:
+      - 'native/neoswap-storage/**'
+      - '.github/workflows/neoswap-storage-prototype.yml'
+permissions:
+  contents: read
+# Independent checks: no global concurrency group and no changes to Core/IPA.
+jobs:
+  storage:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Linux compression development dependency
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y liblz4-dev zlib1g-dev clang
+      - name: Select Xcode 16.4
+        if: runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - name: Real file tests, sanitized lifetime tests and paired benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            python3 native/neoswap-storage/run_validation.py --output "$RUNNER_TEMP/storage-proof" --ios-sdk
+          else
+            python3 native/neoswap-storage/run_validation.py --output "$RUNNER_TEMP/storage-proof"
+          fi
+      - name: Preserve exact-source evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoSwap-storage-prototype-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/storage-proof
+          if-no-files-found: error
+          retention-days: 14
