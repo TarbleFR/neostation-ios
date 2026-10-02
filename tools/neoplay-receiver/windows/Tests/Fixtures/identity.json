@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "senderCodeCommit": "9de76e5b662d7c915bff1485fe02dfc2b90c9961",
+  "sourceRun": 37065962240,
+  "sourceTest": "test/neoplay/encoded_media_tests.swift",
+  "productionEncoder": "packages/neoplay_bridge/ios/Classes/NPMuxer.swift",
+  "protocol": 1,
+  "decompressedSha256": "0f72be88bdfd9dd2c01c8fd6fc8998621a1af8d718d869dc09728fa47182e17e",
+  "content": "Five seconds of synthetic 640x480 colour pattern and stereo 440 Hz test tone, generated on iOS simulator",
+  "containsGameContent": false,
+  "physicalIPhoneValidated": false
+}

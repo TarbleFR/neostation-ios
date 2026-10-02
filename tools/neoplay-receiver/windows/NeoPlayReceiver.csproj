@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms><EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>NeoPlay Receiver</AssemblyName><RootNamespace>NeoPlayReceiver</RootNamespace>
+    <Version>0.1.0</Version><Product>NeoPlay Receiver</Product><Company>NeoStation</Company>
+    <Description>Local NeoStation game streaming receiver for Windows</Description>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile><IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile><DebugType>embedded</DebugType>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon><ApplicationManifest>app.manifest</ApplicationManifest><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <EmbeddedResource Include="Assets\*" />
+    <EmbeddedResource Include="..\protocol.mjs" LogicalName="NeoPlayReceiver.Assets.protocol.mjs" />
+    <EmbeddedResource Include="..\..\..\LICENSE.md" LogicalName="NeoPlayReceiver.Assets.LICENSE.txt" />
+  </ItemGroup>
+<Target Name="RemoveUnusedWpfWebView" BeforeTargets="ResolveAssemblyReferences"><ItemGroup><Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" /></ItemGroup></Target></Project>

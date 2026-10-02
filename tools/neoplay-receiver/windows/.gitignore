@@ -1,0 +1,5 @@
+bin/
+obj/
+publish/
+test-output/
+delivery/
