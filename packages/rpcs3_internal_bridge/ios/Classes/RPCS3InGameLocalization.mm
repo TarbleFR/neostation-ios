@@ -37,6 +37,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Last allocation rejected",
         @"swapReleased": @"Temporary buffers released",
         @"swapActive": @"Buffers in use",
+        @"memoryMicroprocess": @"Microprocess RAM",
+        @"memoryPhysical": @"Physical RAM used",
+        @"memoryUnitGB": @"GB",
       },
       @"fr": @{
         @"stateDone": @"Savestate créée et rechargée.", @"stateFailed": @"Échec de l’opération de savestate.",
@@ -68,6 +71,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Dernière allocation refusée",
         @"swapReleased": @"Buffers temporaires libérés",
         @"swapActive": @"Buffers utilisés",
+        @"memoryMicroprocess": @"RAM microprocessus",
+        @"memoryPhysical": @"RAM physique utilisée",
+        @"memoryUnitGB": @"Go",
       },
       @"de": @{
         @"stateDone": @"Spielstand erstellt und wiederhergestellt.", @"stateFailed": @"Spielstandvorgang fehlgeschlagen.",
@@ -99,6 +105,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Letzte Zuweisung abgelehnt",
         @"swapReleased": @"Temporäre Puffer freigegeben",
         @"swapActive": @"Puffer in Verwendung",
+        @"memoryMicroprocess": @"Mikroprozess-RAM",
+        @"memoryPhysical": @"Genutzter physischer RAM",
+        @"memoryUnitGB": @"GB",
       },
       @"es": @{
         @"stateDone": @"Estado creado y restaurado.", @"stateFailed": @"Falló la operación del estado de guardado.",
@@ -130,6 +139,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Última asignación rechazada",
         @"swapReleased": @"Búferes temporales liberados",
         @"swapActive": @"Búferes en uso",
+        @"memoryMicroprocess": @"RAM de microprocesos",
+        @"memoryPhysical": @"RAM física utilizada",
+        @"memoryUnitGB": @"GB",
       },
       @"it": @{
         @"stateDone": @"Stato creato e ripristinato.", @"stateFailed": @"Operazione sullo stato non riuscita.",
@@ -161,6 +173,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Ultima allocazione rifiutata",
         @"swapReleased": @"Buffer temporanei rilasciati",
         @"swapActive": @"Buffer in uso",
+        @"memoryMicroprocess": @"RAM dei microprocessi",
+        @"memoryPhysical": @"RAM fisica utilizzata",
+        @"memoryUnitGB": @"GB",
       },
       @"pt": @{
         @"stateDone": @"Estado criado e restaurado.", @"stateFailed": @"A operação do estado falhou.",
@@ -192,6 +207,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Última alocação rejeitada",
         @"swapReleased": @"Buffers temporários libertados",
         @"swapActive": @"Buffers em uso",
+        @"memoryMicroprocess": @"RAM dos microprocessos",
+        @"memoryPhysical": @"RAM física utilizada",
+        @"memoryUnitGB": @"GB",
       },
       @"id": @{
         @"stateDone": @"Status permainan dibuat dan dipulihkan.", @"stateFailed": @"Operasi status permainan gagal.",
@@ -223,6 +241,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Alokasi terakhir ditolak",
         @"swapReleased": @"Buffer sementara dilepas",
         @"swapActive": @"Buffer sedang digunakan",
+        @"memoryMicroprocess": @"RAM mikroproses",
+        @"memoryPhysical": @"RAM fisik terpakai",
+        @"memoryUnitGB": @"GB",
       },
       @"ru": @{
         @"stateDone": @"Состояние сохранено и восстановлено.", @"stateFailed": @"Операция с сохранением состояния не удалась.",
@@ -254,6 +275,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"Последнее выделение отклонено",
         @"swapReleased": @"Временные буферы освобождены",
         @"swapActive": @"Буферы используются",
+        @"memoryMicroprocess": @"ОЗУ микропроцессов",
+        @"memoryPhysical": @"Физическая ОЗУ занята",
+        @"memoryUnitGB": @"ГБ",
       },
       @"ja": @{
         @"stateDone": @"ステートを保存して復元しました。", @"stateFailed": @"ステート操作に失敗しました。",
@@ -285,6 +309,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"直前の割り当てが拒否されました",
         @"swapReleased": @"一時バッファを解放済み",
         @"swapActive": @"バッファ使用中",
+        @"memoryMicroprocess": @"マイクロプロセスのRAM",
+        @"memoryPhysical": @"使用中の物理RAM",
+        @"memoryUnitGB": @"GB",
       },
       @"ko": @{
         @"stateDone": @"상태를 저장하고 복원했습니다.", @"stateFailed": @"상태 저장 작업에 실패했습니다.",
@@ -316,6 +343,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"마지막 할당 거부됨",
         @"swapReleased": @"임시 버퍼 해제됨",
         @"swapActive": @"버퍼 사용 중",
+        @"memoryMicroprocess": @"마이크로프로세스 RAM",
+        @"memoryPhysical": @"사용 중인 물리 RAM",
+        @"memoryUnitGB": @"GB",
       },
       @"zh": @{
         @"stateDone": @"即时存档已创建并恢复。", @"stateFailed": @"即时存档操作失败。",
@@ -347,6 +377,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"上次分配被拒绝",
         @"swapReleased": @"临时缓冲区已释放",
         @"swapActive": @"缓冲区使用中",
+        @"memoryMicroprocess": @"微进程分配内存",
+        @"memoryPhysical": @"实际使用物理内存",
+        @"memoryUnitGB": @"GB",
       },
       @"zh_Hant": @{
         @"stateDone": @"即時存檔已建立並還原。", @"stateFailed": @"即時存檔操作失敗。",
@@ -378,6 +411,9 @@ NSDictionary<NSString*, NSDictionary<NSString*, NSString*>*>* Translations() {
         @"swapRejected": @"上次分配遭拒",
         @"swapReleased": @"暫存緩衝區已釋放",
         @"swapActive": @"緩衝區使用中",
+        @"memoryMicroprocess": @"微程序配置記憶體",
+        @"memoryPhysical": @"實際使用實體記憶體",
+        @"memoryUnitGB": @"GB",
       },
     };
   });

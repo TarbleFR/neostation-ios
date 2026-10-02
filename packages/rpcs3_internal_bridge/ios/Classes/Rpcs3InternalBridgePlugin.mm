@@ -64,12 +64,14 @@ static BOOL RPCS3HostHasEntitlement(CFStringRef entitlement) {
   return enabled;
 }
 
-static uint64_t RPCS3ProcessFootprintBytes(void) {
+static uint64_t RPCS3ProcessResidentBytes(void) {
   task_vm_info_data_t info = {};
   mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
   if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS ||
       count < TASK_VM_INFO_REV1_COUNT) return 0;
-  return info.phys_footprint;
+  // Resident task pages, not phys_footprint (which also accounts compression).
+  // Do not add donor RSS: shared mappings would be counted again.
+  return info.resident_size;
 }
 
 static UIViewController* RPCS3RootViewController(void) {
@@ -623,7 +625,10 @@ static void RPCS3Progress(void* context,
           strongSelf->_neoSwapClientStats(&client) == NEOSWAP_OK;
       NeoSwapHostStats host = {};
       const BOOL hostValid = NeoSwap_HostSnapshot(&host) == NEOSWAP_OK;
-      const uint64_t processFootprintBytes = RPCS3ProcessFootprintBytes();
+      const uint64_t processResidentBytes = RPCS3ProcessResidentBytes();
+      NSDictionary* relay = NeoSwapRelay_Diagnostics();
+      const BOOL relayMeasured = [relay[@"liveBackingBytes"] isKindOfClass:NSNumber.class];
+      const uint64_t relayLiveBytes = relayMeasured ? [relay[@"liveBackingBytes"] unsignedLongLongValue] : 0;
       const double timestamp = CACurrentMediaTime() * 1000.0;
       dispatch_async(dispatch_get_main_queue(), ^{
         RPCS3GameViewController* owner = strongSelf.gameController;
@@ -637,7 +642,9 @@ static void RPCS3Progress(void* context,
                                              timestamp:timestamp];
         [owner.performanceOverlay appendNeoSwapWithClient:clientValid ? &client : nullptr
                                                     host:hostValid ? &host : nullptr
-                                   processFootprintBytes:processFootprintBytes
+                                          relayLiveBytes:relayLiveBytes
+                                           relayMeasured:relayMeasured
+                                    processResidentBytes:processResidentBytes
                                                timestamp:timestamp];
       });
     });
@@ -691,7 +698,7 @@ static void RPCS3Progress(void* context,
     }
 
     RPCS3Diagnostic(@"performance_sample", [NSString stringWithFormat:
-        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld swap_rpc_total_live=%llu swap_rpc_shared_live=%llu swap_file_ready=%d swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_count=%u donor_lost=%u donor_first_pid=%d donor_generation=%llu donor_target=%llu donor_prepared=%llu donor_shared_live=%llu donor_retained=%llu donor_retained_live=%llu donor_resident=%llu donor_accounted_compressed=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_nonvolatile_compressed=%llu donor_stage=%d donor_kernel=%d relay_ready=%d relay_live=%llu relay_peak=%llu relay_objects=%llu relay_aliases=%llu relay_mapped=%llu",
+        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld swap_rpc_total_live=%llu swap_rpc_shared_live=%llu swap_file_ready=%d swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_count=%u donor_lost=%u donor_first_pid=%d donor_generation=%llu donor_target=%llu donor_prepared=%llu donor_shared_live=%llu donor_retained=%llu donor_retained_live=%llu donor_resident=%llu donor_accounted_compressed=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_nonvolatile_compressed=%llu donor_stage=%d donor_kernel=%d relay_ready=%d relay_live=%llu relay_peak=%llu relay_objects=%llu relay_aliases=%llu relay_mapped=%llu process_resident=%llu",
         strongSelf.activeTitleId, metrics.valid_fields, metrics.frames_per_second,
         metrics.cpu_usage_percent, metrics.gpu_usage_percent,
         (unsigned long long)metrics.memory_used_bytes,
@@ -722,7 +729,8 @@ static void RPCS3Progress(void* context,
         (unsigned long long)[relay[@"peakLiveBackingBytes"] unsignedLongLongValue],
         (unsigned long long)[relay[@"objectCount"] unsignedLongLongValue],
         (unsigned long long)[relay[@"aliasCount"] unsignedLongLongValue],
-        (unsigned long long)[relay[@"mappedAliasBytes"] unsignedLongLongValue]]);
+        (unsigned long long)[relay[@"mappedAliasBytes"] unsignedLongLongValue],
+        (unsigned long long)RPCS3ProcessResidentBytes()]);
   });
   dispatch_resume(timer);
 }

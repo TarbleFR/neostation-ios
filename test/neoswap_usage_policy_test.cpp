@@ -3,6 +3,26 @@
 #include <cstdio>
 
 int main() {
+  {
+    NeoSwapHostStats graphHost{};
+    graphHost.owner_donated_live_bytes[NEOSWAP_RPCS3] = 51380224;
+    graphHost.donor_prepared_bytes = 939524096;
+    graphHost.reserved_virtual_bytes = 303038464;
+    auto point = NeoSwapMemoryGraph(&graphHost, 1020788736, true, 2264317952);
+    assert(point.allocatedValid && point.allocated == 1072168960);
+    assert(point.residentValid && point.resident == 2264317952);
+    assert(NeoSwapDecimalGB(1000000000) == 1.0);
+    assert(NeoSwapDecimalGB(500000000) == 0.5);
+    // Lost creators/readiness must not hide allocations still owned by RPCS3.
+    graphHost.donation_state = 3;
+    assert(NeoSwapMemoryGraph(&graphHost, 1020788736, true, 1).allocated == point.allocated);
+    assert(!NeoSwapMemoryGraph(nullptr, 1, true, 1).allocatedValid);
+    assert(!NeoSwapMemoryGraph(&graphHost, 1, false, 1).allocatedValid);
+    assert(!NeoSwapMemoryGraph(&graphHost, UINT64_MAX, true, 1).allocatedValid);
+    graphHost = {};
+    point = NeoSwapMemoryGraph(&graphHost, 0, true, 0);
+    assert(point.allocatedValid && point.allocated == 0 && !point.residentValid);
+  }
   NeoSwapHostStats host = {};
   NeoSwapClientStats client = {};
   assert(!NeoSwapDonorMeasured(nullptr));

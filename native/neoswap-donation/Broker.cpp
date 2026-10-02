@@ -159,8 +159,7 @@ kern_return_t release_right(std::uint32_t entry) noexcept {
 
 bool valid_size(std::size_t bytes) noexcept {
   // Deliberately bounded proof blocks, not a request to fill the device RAM.
-  constexpr std::size_t max = 256ULL * 1024 * 1024;
-  return bytes && bytes <= max && bytes % vm_page_size == 0;
+  return valid_chunk_size(bytes, vm_page_size);
 }
 }  // namespace
 #endif

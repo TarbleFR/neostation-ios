@@ -18,9 +18,8 @@ const Transport& transport() {
   static const Transport instance;
   return instance;
 }
-constexpr uint64_t maximumCapacity = 256ULL * 1024 * 1024;
 bool validCapacity(uint64_t bytes) {
-  return bytes && bytes <= maximumCapacity && bytes % vm_page_size == 0;
+  return neostation::donation::valid_chunk_size(bytes, vm_page_size);
 }
 }
 

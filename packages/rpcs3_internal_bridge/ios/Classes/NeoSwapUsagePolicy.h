@@ -27,3 +27,29 @@ inline NeoSwapUsageStatus NeoSwapUsage(uint64_t live, const NeoSwapClientStats* 
     if (!client->eligible_attempts && client->skipped_small) return NeoSwapUsageStatus::small;
     return NeoSwapUsageStatus::waiting;
 }
+
+// Distinct live objects only. Prepared pools, file fallback and VM aliases are
+// not extra microprocess allocations. This is not a physical-residency sum.
+struct NeoSwapMemoryGraphPoint {
+    uint64_t allocated = 0;
+    uint64_t resident = 0;
+    bool allocatedValid = false;
+    bool residentValid = false;
+};
+inline NeoSwapMemoryGraphPoint NeoSwapMemoryGraph(const NeoSwapHostStats* host,
+    uint64_t relayLiveBacking, bool relayMeasured, uint64_t processResident) noexcept {
+    NeoSwapMemoryGraphPoint point{};
+    point.resident = processResident;
+    point.residentValid = processResident != 0;
+    if (host && relayMeasured) {
+        const uint64_t loans = host->owner_donated_live_bytes[NEOSWAP_RPCS3];
+        if (relayLiveBacking <= UINT64_MAX - loans) {
+            point.allocated = loans + relayLiveBacking;
+            point.allocatedValid = true;
+        }
+    }
+    return point;
+}
+constexpr double NeoSwapDecimalGB(uint64_t bytes) noexcept {
+    return static_cast<double>(bytes) / 1000000000.0;
+}

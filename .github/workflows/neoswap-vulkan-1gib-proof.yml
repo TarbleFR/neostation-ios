@@ -76,8 +76,8 @@ jobs:
                   expected=hashlib.sha256(reference_bytes).hexdigest()
                   assert actual==expected,(path,actual,expected)
           reviewed_deltas={
-              'native/neoswap-donation/NeoSwapDonorIPC.mm':'23b6a0a18c62b657d81bbc42def8bfab99e3a75212dea040d36b3f72c12e92be',
-              'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'b0fa5f58187392927fe3e6286b09cc28230ccabc8164d53f7d00ed5cb7b1b4dd',
+              'native/neoswap-donation/NeoSwapDonorIPC.mm':'35a625f03aef01177c25adbd9a5ab8a3ca6b56e466636b3f67323d329081cac3',
+              'native/neoswap-donation/NeoSwapDonorRequestHandler.mm':'a423232d5fb8ae032977def871f4a01da7afef4fddfc0b045aef56eb6bdc05c6',
           }
           for path,digest in reviewed_deltas.items():
               actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
@@ -87,7 +87,7 @@ jobs:
           assert pins['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']==reference['files_sha256']['rpcs3/ios/NeoSwapVulkanBuffer.h']
           verified_paths=runtime_paths+list(reviewed_deltas)
           identity['verifiedRuntimeSourceSHA256']={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in verified_paths}
-          identity['productionRuntimeReferenceScope']='Build385 host donation broker pinned by reviewed candidate hashes; coherent RPCS3 Vulkan import remains pinned to abc9566; exact Build381 donor IPC/request-handler ceilings remain separately pinned; guest relay validated independently'
+          identity['productionRuntimeReferenceScope']='Build385 host donation broker pinned by reviewed candidate hashes; coherent RPCS3 Vulkan import remains pinned to abc9566; exact Build393 donor IPC/request-handler shared 256MiB ceiling remains separately pinned; guest relay validated independently'
           pathlib.Path('build/neoswap-vulkan-1gib/identity.json').write_text(json.dumps(identity,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('NEOSWAP_RPCS3_SOURCE='+str(source)+'\n')

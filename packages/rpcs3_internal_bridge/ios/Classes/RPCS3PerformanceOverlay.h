@@ -17,11 +17,13 @@ NS_ASSUME_NONNULL_BEGIN
                  validFields:(uint32_t)validFields
                    timestamp:(double)timestampMs;
 - (void)reset;
-// Shared pages, RPCS3 loans, resident/compressed charges and the requested
-// target are separate host counters. No amount is inferred from virtual space.
+// Two separate measures: unique active donor/relay backing and the host task
+// resident counter. No capacity, target, disk bytes or aliases are added.
 - (void)appendNeoSwapWithClient:(const NeoSwapClientStats* _Nullable)client
                           host:(const NeoSwapHostStats* _Nullable)host
-         processFootprintBytes:(uint64_t)processFootprintBytes
+                relayLiveBytes:(uint64_t)relayLiveBytes
+                 relayMeasured:(BOOL)relayMeasured
+          processResidentBytes:(uint64_t)processResidentBytes
                      timestamp:(double)timestampMs;
 @end
 

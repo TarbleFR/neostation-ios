@@ -30,11 +30,15 @@ static const uint64_t kDonationHardLimitBytes = 5 * kGiB;
 static const uint64_t kDonationWarmFloorBytes = 512 * kMiB;
 static const uint64_t kDonationReserveBytes = 512 * kMiB;
 static const uint64_t kDonationGrowthQuantumBytes = 128 * kMiB;
-static const uint64_t kDonationInitialChunkBytes = 16 * kMiB;
-static const uint64_t kDonationPrimaryChunkBytes = 512 * kMiB;
-static const uint64_t kDonationFallbackChunkBytes = 256 * kMiB;
+static const uint64_t kDonationInitialChunkBytes = 64 * kMiB;
+static const uint64_t kDonationPrimaryChunkBytes = 256 * kMiB;
+static const uint64_t kDonationFallbackChunkBytes = 128 * kMiB;
 static const NSUInteger kDonationConcurrentGrowths = 2;
 static const NSUInteger kDonationWarmDonorCount = 2;
+#if defined(NEOSWAP_DONATION)
+static_assert(kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes);
+static_assert(kDonationInitialChunkBytes >= 64 * kMiB);
+#endif
 
 @interface NeoSwapPlugin ()
 @property(nonatomic, strong) dispatch_queue_t queue;
@@ -224,8 +228,10 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     // phys_footprint includes uncompressed-page equivalents of compressed
     // memory. It is a diagnostic ledger, not free physical RAM to subtract.
     uint64_t available = sampled ? system.usable_bytes : 0;
-    available = MIN(available, pool.target_bytes - pool.retained_bytes);
-    available -= available % vm_page_size;
+    // Reserve outstanding requests too: their pages may not yet appear in
+    // the kernel sample. Never grant the same headroom to concurrent helpers.
+    available = neostation::donation::pending_headroom_budget(available,
+        pool.target_bytes - pool.retained_bytes, [self pendingDonationBytes], vm_page_size);
     if (available < kMiB) {
         self.donorGrowthRefusal = @{@"stage":sampled ? @"insufficient_system_headroom" :
             [NSString stringWithUTF8String:neostation::donation::stage_name(sampled.stage)],
@@ -266,7 +272,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     }
     self.donorSessions[index] = session;
     self.donorAdoptedChunks[index] = @0;
-    self.donorPendingMaximums[index] = @0;
+    self.donorPendingMaximums[index] = @(first);
     [self.donorPendingIndexes addIndex:index];
     [session start];
 }
@@ -537,6 +543,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             if (!failure && status.growthState != NeoSwapDonorGrowthRefused)
                 [self.donorErrors removeObjectForKey:errorKey];
             if (pending && status.growthState == NeoSwapDonorGrowthRefused) {
+                NSDictionary* diagnostics = [session diagnostics];
+                self.donorErrors[errorKey] = @{
+                    @"stage":diagnostics[@"growthStage"] ?: @"growth_refused",
+                    @"requestedBytes":@(status.refusedBytes),
+                    @"generation":@(status.generation)};
                 self.donorRetryAfter[index] = [NSDate dateWithTimeIntervalSinceNow:30];
                 if (self.donorPendingMaximums[index].unsignedLongLongValue > kDonationFallbackChunkBytes)
                     self.donorFallbackUntil = [NSDate dateWithTimeIntervalSinceNow:30];

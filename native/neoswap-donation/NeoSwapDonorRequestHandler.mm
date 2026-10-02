@@ -212,7 +212,7 @@ NSDictionary* effectiveEntitlements() {
 }
 
 - (void)prepareChunk:(uint64_t)maximum {
-  if (_closed || _preparing || _pending || maximum < MiB || maximum > 512 * MiB ||
+  if (_closed || _preparing || _pending || maximum < MiB || maximum > neostation::donation::max_chunk_bytes ||
       maximum % vm_page_size || maximum > _target - _capacity || _blocks.size() >= 64) {
     [self failStage:@"chunk_request" kernel:KERN_INVALID_ARGUMENT];
     return;

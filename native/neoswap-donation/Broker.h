@@ -7,6 +7,20 @@
 // routing without changing NeoSwap API v1. Reservations/disk are not donation.
 namespace neostation::donation {
 
+// One shared native limit: larger aggregate pools use multiple verified blocks.
+inline constexpr std::uint64_t max_chunk_bytes = 256ULL * 1024 * 1024;
+constexpr bool valid_chunk_size(std::uint64_t bytes, std::uint64_t page) noexcept {
+  return page && bytes && bytes <= max_chunk_bytes && bytes % page == 0;
+}
+constexpr std::uint64_t pending_headroom_budget(std::uint64_t available,
+    std::uint64_t remaining, std::uint64_t pending, std::uint64_t page) noexcept {
+  const auto bound = available < remaining ? available : remaining;
+  if (!page || bound <= pending) return 0;
+  const auto budget = bound - pending;
+  return budget - budget % page;
+}
+
+
 enum class Stage : std::uint32_t {
   none,
   unavailable,

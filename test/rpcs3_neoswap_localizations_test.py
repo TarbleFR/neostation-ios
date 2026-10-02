@@ -16,6 +16,7 @@ KEYS = (
     "swapDisabled", "swapWaiting", "swapSmall", "swapRejected", "swapReleased",
     "swapActive",
 )
+MEMORY_KEYS = ("memoryMicroprocess", "memoryPhysical", "memoryUnitGB")
 LOCALES = {"en", "es", "ru", "zh", "zh_Hant", "pt", "fr", "de", "it", "id", "ja", "ko"}
 ENGLISH = (
     "RPCS3", "Shared", "Target", "Resident", "Compressed", "Donors",
@@ -49,14 +50,15 @@ def catalogues() -> dict:
         values = dict(parsed)
         assert 'swapReserved' not in values, f"Obsolete virtual-reserve label: {locale}"
         assert set(KEYS) <= values.keys(), (locale, set(KEYS) - values.keys())
-        selected = {key: values[key] for key in KEYS}
+        assert set(MEMORY_KEYS) <= values.keys(), locale
+        selected = {key: values[key] for key in KEYS + MEMORY_KEYS}
         for key, value in selected.items():
             assert value.strip() and value != key, (locale, key)
             # These short status labels introduce no interpolation parameters.
             assert not re.findall(r"\{\w+\}|%(?:\d+\$)?[-+.#\d]*[a-zA-Z@]", value), (locale, key)
         catalogues[locale] = selected
-    assert tuple(catalogues["en"].values()) == ENGLISH
-    assert tuple(catalogues["fr"].values()) == FRENCH
+    assert tuple(catalogues["en"][key] for key in KEYS) == ENGLISH
+    assert tuple(catalogues["fr"][key] for key in KEYS) == FRENCH
     assert all(values['swapAllocated'] == 'RPCS3' for values in catalogues.values())
     overlay = (CLASSES / "RPCS3PerformanceOverlay.mm").read_text()
     used = set(re.findall(r'@"(swap[A-Z]\w*)"', overlay))
@@ -64,7 +66,12 @@ def catalogues() -> dict:
     # the on-screen graph. Keep the 12-locale catalogue for compatibility, but
     # only reject unknown swap keys if any are reintroduced.
     assert used <= set(KEYS), used - set(KEYS)
-    assert 'NeoSwap %@ / %@ · iPhone RAM %@' in overlay
+    assert all('@"' + key + '"' in overlay for key in MEMORY_KEYS)
+    assert catalogues['fr']['memoryUnitGB'] == 'Go'
+    assert catalogues['en']['memoryUnitGB'] == 'GB'
+    assert 'NeoSwapMemoryGraph(' in overlay and 'NeoSwapDecimalGB(' in overlay
+    assert 'fpsLine' not in overlay and 'donor_prepared_bytes' not in overlay
+    assert 'memoryUsedBytes' not in overlay
     assert 'systemCyanColor' in overlay and 'systemOrangeColor' in overlay
     return catalogues
 
@@ -103,8 +110,8 @@ int main() { @autoreleasepool {
   Check([RPCS3CanonicalLocale(@"unsupported") isEqualToString:@"en"], @"Unknown locale");
   for (NSString* key in expected[@"en"])
     Check([RPCS3LocalizedString(key, nil) isEqualToString:expected[@"en"][key]], @"Missing locale");
-  Check(checks == 168, @"All twelve catalogues were exercised");
-  std::puts("PASS: production Foundation lookup executes 168 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
+  Check(checks == 204, @"All twelve catalogues were exercised");
+  std::puts("PASS: production Foundation lookup executes 204 NeoSwap translations plus traditional Chinese variants and locale fallback; no iPhone runtime claim");
 } return 0; }
 '''.replace("EXPECTED_CATALOGUES", expected)
     with tempfile.TemporaryDirectory(prefix="rpcs3-neoswap-locales-") as temporary:
@@ -116,11 +123,20 @@ int main() { @autoreleasepool {
                         "-Wall", "-Wextra", "-Werror", "-I" + str(CLASSES), str(SOURCE),
                         str(harness), "-framework", "Foundation", "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
+        # Compile the actual UIKit view, not just the label catalogue.
+        # This catches missing Sample fields before starting the IPA build.
+        (folder / "neo_swap").symlink_to(ROOT / "packages/neo_swap/ios/Classes", target_is_directory=True)
+        sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
+        subprocess.run(["xcrun", "--sdk", "iphoneos", "clang++", "-std=c++20",
+                        "-fobjc-arc", "-fblocks", "-fsyntax-only", "-Wall", "-Wextra", "-Werror",
+                        "-arch", "arm64", "-isysroot", sdk, "-miphoneos-version-min=18.0",
+                        "-I" + str(folder), "-I" + str(CLASSES),
+                        str(CLASSES / "RPCS3PerformanceOverlay.mm")], check=True)
 
 
 if __name__ == "__main__":
     values = catalogues()
-    print("PASS: all 14 legacy NeoSwap keys remain valid in 12 catalogues; Build381 simplified FPS/NeoSwap/iPhone-RAM graph contract verified", flush=True)
+    print("PASS: all 14 legacy NeoSwap keys remain valid in 12 catalogues; two-series decimal-GB memory graph and three new labels verified", flush=True)
     if sys.platform == "darwin":
         execute_native_lookup(values)
     else:

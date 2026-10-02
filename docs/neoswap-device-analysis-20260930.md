@@ -114,3 +114,14 @@ utilisée par RPCS3. L'exigence résidente est conservée. L'essai Metal est ram
 à 128 Mio pour examiner séparément la compatibilité graphique. Le script
 optionnel est aussi corrigé pour ne pas développer un tableau vide sous le
 `nounset` du Bash 3.2 de macOS ; le chemin NSXPC habituel est revérifié.
+
+
+## 2026-10-02 — Build392 logs / Build393 corrective candidate
+
+The exported RPCS3 journal mixes Builds 380, 384, 386 and 392. This correction is based on Build392 PID 94933 and the matching NeoSwap journal; older relay failures are not attributed to this session.
+
+Confirmed: a 480 MiB growth request was accepted by the manager/IPC but refused by the 256 MiB broker. Two 16 MiB startup seeds were below the 64 MiB boot threshold; both recorded waits expired after 1.5 seconds with 48 MiB prepared. The candidate uses 64 MiB seeds, a shared native 256 MiB block bound, 128 MiB fallback, and reserves outstanding requests against the real system budget. The aggregate ceiling remains 5 GiB, not a preallocation or residency claim.
+
+A GoW3 sample contains 51,380,224 bytes of live donor loans, 303,038,464 bytes of file fallback, 939,524,096 bytes of prepared pool and 1,020,788,736 bytes of unique live relay backing. The relay reports physical residency as unknown. The two-series graph therefore reports 1.072168960 decimal GB allocated through microprocess backends and 2.264317952 GB in the host resident counter for that sample. It does not add alias mappings, unused capacity, pool preparation or compressed-page equivalents. The curves are separate measures, not additive physical-RAM totals across processes.
+
+The 113-sample GoW3 summary mixes loading/menus/gameplay and is not a benchmark. Its recorded manual exit warning is not proof of an out-of-memory crash. All actual emulator cores and relay/JIT lifecycle sources stay unchanged. On-device improvement, full 5 GiB residency and FPS gains remain unvalidated.

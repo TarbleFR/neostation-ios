@@ -666,7 +666,7 @@ BOOL number(NSDictionary* input, NSString* key) {
     if (self->_snapshot.state != NeoSwapDonorStateActive || self->_handle || self->_nextMaximum ||
         self->_snapshot.growthState == NeoSwapDonorGrowthPreparing ||
         self->_acknowledgedChunks != self->_handles.count ||
-        self->_handles.count >= 64 || bytes < 1024 * 1024 || bytes > 512ULL * 1024 * 1024 ||
+        self->_handles.count >= 64 || bytes < 1024 * 1024 || bytes > neostation::donation::max_chunk_bytes ||
         bytes % vm_page_size || self->_snapshot.capacityBytes >= self->_requested ||
         self->_requested - self->_snapshot.capacityBytes < 1024 * 1024) return;
     self->_nextMaximum = MIN(bytes, self->_requested - self->_snapshot.capacityBytes);

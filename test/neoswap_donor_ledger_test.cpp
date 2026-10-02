@@ -25,6 +25,26 @@ static void expect(const Footprint& current, const Footprint& baseline,
 }
 
 int main() {
+  // Build392 requested 480 MiB from a backend accepting at most 256 MiB.
+  assert(valid_chunk_size(64 * MiB, page));
+  assert(valid_chunk_size(max_chunk_bytes, page));
+  assert(!valid_chunk_size(480 * MiB, page));
+  assert(!valid_chunk_size(max_chunk_bytes + page, page));
+  assert(!valid_chunk_size(MiB + 1, page));
+  assert(!valid_chunk_size(0, page) && !valid_chunk_size(MiB, 0));
+  assert(pending_headroom_budget(512 * MiB, 5ULL << 30, 128 * MiB, page) == 384 * MiB);
+  assert(pending_headroom_budget(512 * MiB, 64 * MiB, 64 * MiB, page) == 0);
+  assert(pending_headroom_budget(64 * MiB, 5ULL << 30, 128 * MiB, page) == 0);
+  assert(pending_headroom_budget(UINT64_MAX, 5ULL << 30, UINT64_MAX, page) == 0);
+  assert(pending_headroom_budget(5 * page + 1, UINT64_MAX, page, page) == 4 * page);
+  assert(pending_headroom_budget(MiB, MiB, 0, 0) == 0);
+  // The per-block limit does not cap the aggregate at 256 MiB.
+  uint64_t aggregate = 0;
+  for (unsigned n = 0; n < 20; ++n) {
+    assert(valid_chunk_size(max_chunk_bytes, page));
+    aggregate += max_chunk_bytes;
+  }
+  assert(aggregate == (5ULL << 30));
   // Actual device logs use a 32 KiB nonvolatile baseline and 1 MiB objects.
   // Compressing those baseline pages must not add fictitious donated pages.
   const auto deviceBaseline = ledger(2 * page, 0);
