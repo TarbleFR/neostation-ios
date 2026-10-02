@@ -65,3 +65,16 @@ The IPA gate rejects missing evidence, wrong hashes, old Core, duplicate brokers
 or test hooks. Compare switch off/on with the same game sequence and settings:
 launch time, frame-time tails, footprint, hit/eviction counts and I/O. A small
 or zero-hit cache is evidence to disable or retarget, not increase quotas.
+
+## Packaging correction: feature macro versus result enum
+
+IPA run 37061989078 failed while compiling NeoSwapPlugin.mm: the new
+NEOSWAP_STORAGE=1 feature define replaced the existing NEOSWAP_STORAGE=-4
+result enum with an integer. Rename only the CocoaPods feature define and
+its three plugin guards to NEOSWAP_SHADER_STORAGE. Keep the public error
+code, donor/storage ABIs, Core input hashes and runtime cache algorithms
+unchanged. The host preflight now compiles both ABI headers using the actual
+podspec defines, preserves the -4 result, verifies enabled plugin guards and
+executes a negative compiler case with the old conflicting flag. The failure
+was reproduced before the rename; the corrected gate passes. This repairs
+build integration, not an iPhone gameplay crash.

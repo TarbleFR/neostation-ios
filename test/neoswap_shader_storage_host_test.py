@@ -6,6 +6,36 @@ sys.path.insert(0,str(ROOT/'build-utils'))
 from configure_neoswap_storage import materialize
 from validate_shader_storage_evidence import validate
 materialize()
+# Compile the public ABI headers under the exact feature defines used by
+# CocoaPods. A standalone service build does not exercise NeoSwapPlugin.mm's
+# guarded branches; the Build396 macro/enum collision escaped that check.
+import os, re, shlex, shutil, subprocess
+pod=(ROOT/'packages/neo_swap/ios/neo_swap.podspec').read_text()
+match=re.search(r"'GCC_PREPROCESSOR_DEFINITIONS'\s*=>\s*'([^']+)'",pod)
+assert match, 'Missing production CocoaPods preprocessor configuration'
+flags=[value for value in shlex.split(match[1]) if value!='$(inherited)']
+compiler=shutil.which('clang++') or shutil.which('c++')
+assert compiler, 'A native compiler is required for the actual feature-flag gate'
+environment=dict(os.environ); environment.pop('SDKROOT',None)
+probe=('#include "NeoSwap.h"\n#include "StorageABI.h"\n'
+       'static_assert(NEOSWAP_STORAGE == -4, "Existing result ABI changed");\n'
+       'static_assert(NEOSWAP_STORAGE_ABI == 1, "Storage ABI changed");\n')
+command=[compiler,'-std=c++20','-fsyntax-only','-x','c++','-I',
+         str(ROOT/'packages/neo_swap/ios/Classes')]
+compiled=subprocess.run(command+['-D'+flag for flag in flags]+['-'],input=probe,
+                        text=True,capture_output=True,env=environment,timeout=30)
+assert compiled.returncode==0, 'Production CocoaPods defines break public ABI:\n'+compiled.stderr
+assert 'NEOSWAP_SHADER_STORAGE=1' in flags, 'Shader feature must remain compiled in'
+plugin=(ROOT/'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
+assert plugin.count('#if defined(NEOSWAP_SHADER_STORAGE)')==3
+assert '#if defined(NEOSWAP_STORAGE)' not in plugin
+# Keep a negative compiler regression: the old flag really must fail, rather
+# than merely checking a renamed string or suppressing a warning.
+old_flags=[flag for flag in flags if flag!='NEOSWAP_SHADER_STORAGE=1']+['NEOSWAP_STORAGE=1']
+rejected=subprocess.run(command+['-D'+flag for flag in old_flags]+['-'],input=probe,
+                       text=True,capture_output=True,env=environment,timeout=30)
+assert rejected.returncode!=0, 'Old feature flag unexpectedly accepted'
+print('PASS actual CocoaPods defines, preserved -4 error ABI, enabled shader branches; old collision rejected')
 service=(ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm').read_text()
 bridge=(ROOT/'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
 policy=(ROOT/'native/neoswap-storage/ShaderPolicy.h').read_text()

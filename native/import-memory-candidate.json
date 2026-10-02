@@ -69,7 +69,8 @@
     "Build395 CI recovery packaging: require protected Core source 600c4a99 and run 37039104291. The successful-run gate, full Core input hash validation and artifact identity remain mandatory; no cancelled/older Core or incomplete binary accepted.",
     "Isolated storage-backed module: checked immutable CPU leases, async POSIX I/O, conditional LZ4, bounded hot/warm/cold cache, reusable coalesced disk extents, deferred ownership retirement and independent Linux/macOS plus iPhoneOS ARM64 SDK validation. Not linked into production RPCS3/IPA; no kernel swap, five-GB or gameplay improvement claimed.",
     "Build396 Core source step: host-borrowed storage ABI1 for real Vulkan shader-module creation, SHA256 source/stage/environment keys, retained bytecode release only after module creation/cache admission, nonblocking cache misses rebuild original GLSL, cached invalid-shader fallback and no retry after OOM. No guest, driver resource, JIT or user data moves. Host activation is a separate candidate step.",
-    "Build396 opt-in God of War III shader CPU bytecode storage: real compilation/module consumer, nonblocking miss uses existing compiler, epoch isolation, bounded 8MiB RAM/128MiB disk, conditional compression and strict device-independent evidence; no kernel swap or gameplay performance claim."
+    "Build396 opt-in God of War III shader CPU bytecode storage: real compilation/module consumer, nonblocking miss uses existing compiler, epoch isolation, bounded 8MiB RAM/128MiB disk, conditional compression and strict device-independent evidence; no kernel swap or gameplay performance claim.",
+    "Build396 packaging recovery: rename the colliding feature macro to NEOSWAP_SHADER_STORAGE while preserving NEOSWAP_STORAGE=-4 and the exact existing Core. Compile production podspec defines in host preflight and reject the reproduced old macro/enum collision; no cache policy, JIT or unrelated emulator change."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -178,11 +179,11 @@
     "packages/neo_swap/ios/Classes/NeoSwap.cpp": "9587dc85f0a9e7be861c80021d274f450f81d38267ffef88ec10fe326abba84f",
     "packages/neo_swap/ios/Classes/NeoSwapClientStats.h": "55e745b85142d109075f2b8f220a288e1a5501f69a79eb8d4de15c7b993902fc",
     "packages/neo_swap/ios/Classes/NeoSwapHost.h": "d96e572c108a8e5904b6d349d2ccb299f9c941afb6b8290192d8c8d287050803",
-    "packages/neo_swap/ios/Classes/NeoSwapPlugin.mm": "e9cbfe2a8692086665542b83bcda5f515ff32ea707d79bc8221855b0f113c053",
+    "packages/neo_swap/ios/Classes/NeoSwapPlugin.mm": "2e16a1a19fdf7ff2af7b50a5d4589e0e5c2f039841180d1259206258ac4d5ea3",
     "packages/neo_swap/ios/Classes/NeoSwapRelay.h": "c1d727c589dded13993f979ce33683df45728a92d387ee7e2a0533f7dfcf1ecd",
     "packages/neo_swap/ios/Classes/NeoSwapRelayService.h": "10ae623ad9c197f5e2a4c32ff5743e303ebd79d73b22225ba49b189f26330f68",
     "packages/neo_swap/ios/Classes/NeoSwapRelayService.mm": "2db5aff421d6392d6d23ab10ab3b5b169cf3f6fa7219245dc90743f8eedbce22",
-    "packages/neo_swap/ios/neo_swap.podspec": "5d7f4e9264a58ecbf0a0a2ea695bbc1e4ed207b69896548768918f8bda147020",
+    "packages/neo_swap/ios/neo_swap.podspec": "9f0f22726512cc1be61b11c87c54d1fa388b6816fff57313ee418381cdddd7ba",
     "packages/rpcs3_internal_bridge/ios/Classes/NeoSwapUsagePolicy.h": "b414b01fce1dc219f8da9195009942315e396613d0cc0625061c47e2cd52f362",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3InGameLocalization.mm": "963d5549fe203fa56f1214bfc5ec543d75b1cfa5b2d9a0c1b3656a5109023dbd",
     "packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceOverlay.h": "83d470a7938601d8190bce624ec325d48c27b2de6f2bbc370d2c8c2a4242f796",
@@ -413,8 +414,8 @@
     "native/neoswap-storage/tests/vulkan_shader_storage.cpp": "aeea5cac0ac5109dcbf10f03de3798c062b45b463f5b55fa460dfb933df2ed50",
     "native/neoswap-storage/tests/service_runtime.mm": "31ef14f082b2ea98449c2a2e0e49f4d09978f900c9ba8f51d966259198dc2317",
     "test/neoswap_shader_storage_test.dart": "8bbca9ed3acccef0434e3e16cc5f85ab0aa1f8d641e6f388270e60f731aad6b7",
-    "test/neoswap_shader_storage_host_test.py": "bbf21bf66959ce15a2fc265f49323b1b5a1d55bdaef4b48a52d6fde955c68f15",
-    "docs/neoswap-storage-build396.md": "d1ef235729e6805df47a8146736900c085e65126bbc60bd7eaad166d7a147826"
+    "test/neoswap_shader_storage_host_test.py": "e4af77b0da817ff3ae03a518839ded2a554bc1ad5849062b42247d9c8694d448",
+    "docs/neoswap-storage-build396.md": "d2d4390540516fcccb4659d748d737359c7ae5b4fdb0ef1c52afb6e3bdc036d0"
   },
   "support_git_modes": {
     "docs/dolphin-phone-shake-routing.md": "100644",

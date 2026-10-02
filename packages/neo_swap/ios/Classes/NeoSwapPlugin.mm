@@ -2,7 +2,7 @@
 #import "NeoSwap.h"
 #include "NeoSwapHost.h"
 #include "NeoSwapCapacityProbe.h"
-#if defined(NEOSWAP_STORAGE)
+#if defined(NEOSWAP_SHADER_STORAGE)
 #import "NeoSwapStorageService.h"
 #endif
 #if defined(NEOSWAP_RELAY)
@@ -800,7 +800,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #if defined(NEOSWAP_RELAY)
         @"guestRelay":NeoSwapRelay_Diagnostics(),
 #endif
-#if defined(NEOSWAP_STORAGE)
+#if defined(NEOSWAP_SHADER_STORAGE)
         @"shaderStorage":NeoSwapStorage_Diagnostics(),
 #endif
         @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"",
@@ -830,7 +830,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     close(fd);
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-#if defined(NEOSWAP_STORAGE)
+#if defined(NEOSWAP_SHADER_STORAGE)
     if ([call.method isEqualToString:@"setShaderStorage"]) {
         id flag = [call.arguments isKindOfClass:NSDictionary.class] ? call.arguments[@"enabled"] : nil;
         if (![flag isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)flag) != CFBooleanGetTypeID()) {
