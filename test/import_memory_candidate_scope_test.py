@@ -33,10 +33,29 @@ assert manifest['required_relay_checks'] == [
 assert manifest['relay_capacity_is_resident_ram'] is False
 assert manifest['relay_target_capacity_bytes'] == 8 * 1024 ** 3
 assert manifest['relay_target_object_count'] == 16
+assert manifest['abi']['neoswap_managed'] == 1
+managed = manifest['managed_swap']
+assert managed['stage'] == 'owned CPU framework, explicit caller lifecycle'
+assert managed['integrated_rpcs3_consumers'] == []
+assert managed['physical_iPhone_validated'] is False
+assert managed['gameplay_validated'] is False
+assert managed['automatic_guest_paging_activated'] is False
+assert managed['required_evidence'] == [
+    'exact-source sanitized mutable RAM-storage-RAM cycle',
+    'C ABI content, errors, generations and leases after context destruction',
+    'executed macOS Swift ABI client',
+    'materialized iPhone arm64 library linkage and iOS18 Swift typecheck',
+]
 
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Build398: bounded owned CPU swap module; Core and shader ABI retained.
+    'native/neoswap-storage/ManagedSwap.h',
+    'native/neoswap-storage/ManagedSwap.cpp',
+    'native/neoswap-storage/ManagedSwapABI.h',
+    'native/neoswap-storage/ManagedSwapABI.cpp',
+    'packages/neo_swap/ios/Classes/ManagedSwapABI.h',
     # Build398: the embedded RPCS3 menu is owned by NeoStation.
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3EmbeddedMenuInput.h',
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.h',
@@ -173,6 +192,15 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    # Actual mutable block/file cycle, C boundary and Swift interop proofs.
+    'native/neoswap-storage/run_managed_validation.py',
+    'native/neoswap-storage/tests/managed_swap_test.cpp',
+    'native/neoswap-storage/tests/managed_swap_abi_test.cpp',
+    'native/neoswap-storage/tests/managed_swap_swift_test.swift',
+    'docs/neoswap-managed-swap-stage1.md',
+    'docs/neoswap-managed-swap-stage1-linux-proof.json',
+    'build-utils/validate_managed_swap_evidence.py',
+    'test/neoswap_managed_swap_host_test.py',
     # Build398: menu behavior, NeoPlay navigation regression, and device evidence.
     'test/native/rpcs3_embedded_menu_input_test.cpp',
     'test/rpcs3_input_bridge_test.py',

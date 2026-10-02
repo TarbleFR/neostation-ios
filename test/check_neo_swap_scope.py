@@ -158,6 +158,7 @@ for line in extra_header_lines:
 assert header_changes == header_edits(before_sections[header]), 'Main Core ABI fields changed'
 assert candidate['manifest']['abi'] == {
     'rpcs3_runtime': 30, 'neoswap_allocator': 1, 'neoswap_client_stats': 1, 'neoswap_relay': 1, 'neoswap_storage': 1,
+    'neoswap_managed': 1,
 }
 # CI also executes this check against the actual materialized production header.
 native_test = (ROOT / 'test/rpcs3_xitrix_v0101_native_test.py').read_text()

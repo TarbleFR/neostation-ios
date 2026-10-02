@@ -1140,6 +1140,10 @@ jobs:
           validate(evidence,sha)
           (Path('build/fast-diagnostics')).mkdir(parents=True,exist_ok=True)
           (Path('build/fast-diagnostics')/'shader-storage-evidence.json').write_text(json.dumps(evidence,indent=2))
+          from validate_managed_swap_evidence import validate as validate_managed
+          managed=json.loads((folder/'managed-swap.json').read_text())
+          validate_managed(managed,sha)
+          (Path('build/fast-diagnostics')/'managed-swap-evidence.json').write_text(json.dumps(managed,indent=2))
           print('Exact storage consumer/host/sdk/simulator/GPU evidence verified:',run['id'])
           PYSTORAGE
 

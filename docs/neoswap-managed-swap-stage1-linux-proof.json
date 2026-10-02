@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "sourceCommit": null,
+  "platform": "Linux",
+  "machine": "x86_64",
+  "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0",
+  "legacyStoreGCCDiagnosticExceptions": [
+    "-Wno-error=misleading-indentation",
+    "-Wno-error=unused-result"
+  ],
+  "physicalIPhoneValidated": false,
+  "realRPCS3GameplayValidated": false,
+  "kernelSwapPorted": false,
+  "automaticGuestPagingActivated": false,
+  "iosARM64Linked": false,
+  "swiftInteropExecuted": false,
+  "swiftIOSInteropTypechecked": false,
+  "faultsAreInjected": true,
+  "sanitizers": {
+    "address": true,
+    "undefined": true,
+    "leakCheckDisabledByEnvironment": true
+  },
+  "managedBudgetIsMappedBytesNotGlobalPhysicalResidency": true,
+  "osFileCacheAndUnrelatedProcessAllocationsExcludedFromManagedBudget": true,
+  "core": {
+    "schemaVersion": 1,
+    "passed": true,
+    "logicalTouchedBytes": 67108864,
+    "byteIdentityVerified": true,
+    "ramStorageRamCycleVerified": true,
+    "managedMappedPeakBytes": 2097152,
+    "managedMappedLimitBytes": 8388608,
+    "backendWorkspaceBoundBytes": 4194304,
+    "releasedOwnedBytes": 67108864,
+    "restoredBytes": 67108864,
+    "diskReadBytes": 134222848,
+    "diskWriteBytes": 67111424,
+    "diskAllocatedBytes": 67371008,
+    "residentAfterEvictionBytes": 0,
+    "faultCases": {
+      "write": true,
+      "sync": true,
+      "read": true,
+      "corrupt": true,
+      "truncate": true,
+      "quota": true,
+      "allocationException": true
+    },
+    "leaseAfterClose": true,
+    "pressurePreservesDirtyAndPinned": true,
+    "boundedBackpressureRetryVerified": true,
+    "processBefore": {
+      "residentValid": true,
+      "residentBytes": 9547776,
+      "footprintValid": false,
+      "footprintBytes": 0
+    },
+    "processAfterCold": {
+      "residentValid": true,
+      "residentBytes": 22986752,
+      "footprintValid": false,
+      "footprintBytes": 0
+    }
+  },
+  "abi": {
+    "passed": true,
+    "cABIExecuted": true,
+    "contentVerified": true,
+    "leaseAfterContextDestroy": true,
+    "staleGenerationRejected": true,
+    "invalidArgumentsRejected": true,
+    "logicalBytes": 67108864,
+    "checkpointedBytes": 68157440,
+    "restoredBytes": 69206016,
+    "residentMappedPeak": 2097152,
+    "residentLimitBytes": 12582912
+  },
+  "inputSHA256": {
+    ".github/workflows/neoswap-storage-prototype.yml": "4f4ccc3670b66300f4314ed5e9ec1fee26b7331d6790829e4fe058d0b1eda555",
+    "build-utils/configure_neoswap_storage.py": "e362ae26aded3db5f0ebfe7ecffdb0721f9f698de9769e2ae4c9f69f7e719670",
+    "build-utils/validate_managed_swap_evidence.py": "8855adf9000db4c35f8538b9e30f74d67feb9098b773079f659bbb9041f2c6b9",
+    "native/neoswap-storage/ManagedSwap.cpp": "1221ad2d606687debaca39f65858027554fd5548a3b8a0af80bed98199b70564",
+    "native/neoswap-storage/ManagedSwap.h": "92466b8076496c0c1171769959f3df98a2c9aa9d554d7860d0fbec7366e047df",
+    "native/neoswap-storage/ManagedSwapABI.cpp": "65f6a58743d232a0643821743f4a55a9e633ab2c28e369dca323a7c6cd2eb3b8",
+    "native/neoswap-storage/ManagedSwapABI.h": "26b42d1208fd8e70d8a188a6d62175917a4be99cca57774372cc7e2063de9627",
+    "native/neoswap-storage/Metrics.cpp": "058a7e1fa32c56bff17e302985d5989355333d49717b83abc4de2625b1fe0614",
+    "native/neoswap-storage/StorageABI.h": "561696eecc439a6c55a685b4c456c944411fa689f822a13b709ed652032d7b7c",
+    "native/neoswap-storage/Store.cpp": "127c266c74a37c06bc92972c840745e5318a98d3321bf3ebd18777931edb98fe",
+    "native/neoswap-storage/Store.h": "e65745ea27975190992bf14ae84f02edad2ccfa97355514a3277c4308290459c",
+    "native/neoswap-storage/run_managed_validation.py": "8fdadacfbf088bb30eb02d7784e8d9cee686cba46f15a0bd23e6e907744c22ce",
+    "native/neoswap-storage/run_validation.py": "b09327615e3935d787a9a908b0062cecfe344a183cd1c40dcfa014999f17c9a6",
+    "native/neoswap-storage/tests/managed_swap_abi_test.cpp": "5c1012d5626a2e9b9a46e32a5491e358274106a874dedbf01f71ca3f3772e799",
+    "native/neoswap-storage/tests/managed_swap_swift_test.swift": "010a3793557f5e048173dd32e0e7895535f2695ef651ebb6916456e50b764db2",
+    "native/neoswap-storage/tests/managed_swap_test.cpp": "5b8944d8d21dfbfa5be590e80e3ab134ffeb7346311d47f74a92c8cbed94d254",
+    "packages/neo_swap/ios/Classes/ManagedSwapABI.h": "26b42d1208fd8e70d8a188a6d62175917a4be99cca57774372cc7e2063de9627",
+    "packages/neo_swap/ios/Classes/StorageABI.h": "561696eecc439a6c55a685b4c456c944411fa689f822a13b709ed652032d7b7c",
+    "packages/neo_swap/ios/neo_swap.podspec": "35a7a96f750a3c1ba290b1a5cb1d2eb018bee678a5147bebf6191f559880c623"
+  },
+  "passed": true
+}

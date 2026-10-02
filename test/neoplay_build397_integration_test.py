@@ -1,4 +1,4 @@
-"""Build398 preserves NeoPlay and Build396 runtime except approved embedded menu routing."""
+"""Build398 preserves unrelated runtime while adding reviewed menu and owned swap modules."""
 from pathlib import Path
 import json
 import re
@@ -15,14 +15,31 @@ APPROVED_RPCS3_MENU_FILES = frozenset({
     'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm',
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 })
+APPROVED_MANAGED_SWAP_FILES = frozenset({
+    'native/neoswap-storage/ManagedSwap.h',
+    'native/neoswap-storage/ManagedSwap.cpp',
+    'native/neoswap-storage/ManagedSwapABI.h',
+    'native/neoswap-storage/ManagedSwapABI.cpp',
+    'native/neoswap-storage/run_managed_validation.py',
+    'native/neoswap-storage/tests/managed_swap_test.cpp',
+    'native/neoswap-storage/tests/managed_swap_abi_test.cpp',
+    'native/neoswap-storage/tests/managed_swap_swift_test.swift',
+    'packages/neo_swap/ios/Classes/ManagedSwapABI.h',
+    'packages/neo_swap/ios/neo_swap.podspec',
+})
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
 
 class Build398Integration(unittest.TestCase):
-    def test_runtime_jit_storage_and_launch_preserved_except_approved_menu_routing(self):
+    def test_unrelated_runtime_preserved_except_approved_menu_and_managed_swap(self):
         protected = ['native', 'packages/neo_swap', 'packages/dolphin_internal_bridge', 'packages/armsx2_internal_bridge', 'packages/rpcs3_internal_bridge', 'packages/dusklight_internal_bridge', 'packages/kartpad_internal_bridge', 'packages/stikjit_bridge', 'lib/services', 'build-utils/rpcs3', '.github/workflows/ios-ci.yml', ':(exclude)native/import-memory-candidate.json']
         changed = set(subprocess.check_output(['git', 'diff', '--name-only', BASE, '--', *protected], cwd=ROOT).decode().splitlines())
-        self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES, set(), 'Only the explicitly reviewed embedded RPCS3 menu input files may differ from Build396')
+        self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES - APPROVED_MANAGED_SWAP_FILES, set(),
+                         'Only the explicitly reviewed menu and owned CPU swap module may differ from Build396')
+        for path in ('native/neoswap-storage/Store.h', 'native/neoswap-storage/Store.cpp',
+                     'native/neoswap-storage/StorageABI.h', 'native/neoswap-storage/Client.h',
+                     'native/neoswap-storage/ShaderCache.h', 'native/neoswap-storage/ShaderCache.cpp'):
+            self.assertEqual((ROOT / path).read_bytes(), original(path), path)
 
     def test_approved_menu_routing_preserves_core_abi_and_passes_input_behavior(self):
         for path in (

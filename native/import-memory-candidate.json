@@ -15,7 +15,8 @@
     "neoswap_allocator": 1,
     "neoswap_client_stats": 1,
     "neoswap_relay": 1,
-    "neoswap_storage": 1
+    "neoswap_storage": 1,
+    "neoswap_managed": 1
   },
   "scope": [
     "Ports display-only Mario Kart Pad identity; Wii scraper/gameID/save/launch routing retained",
@@ -72,7 +73,8 @@
     "Build396 opt-in God of War III shader CPU bytecode storage: real compilation/module consumer, nonblocking miss uses existing compiler, epoch isolation, bounded 8MiB RAM/128MiB disk, conditional compression and strict device-independent evidence; no kernel swap or gameplay performance claim.",
     "Build396 packaging recovery: rename the colliding feature macro to NEOSWAP_SHADER_STORAGE while preserving NEOSWAP_STORAGE=-4 and the exact existing Core. Compile production podspec defines in host preflight and reject the reproduced old macro/enum collision; no cache policy, JIT or unrelated emulator change.",
     "Build398: remove the embedded RPCS3 PS touch button and route physical Home/PS or Select+Start to the single NeoStation session menu with edge gating; retain Core ABI, JIT, guest memory, donation, shader storage and emulator settings; replace obsolete three-tool assertion with platform-aware navigation behavior and keep all candidate evidence gates",
-    "Build398 research: new device logs establish small shader-storage workload and an RSX/video stall without observed memory pressure; iPadOS kernel swap and MeloNX Mach JIT accounting were evaluated; select explicit owner-managed cold-data storage as the next framework direction, with no unverified guest/JIT/GPU paging enabled and no physical 8GiB or gameplay-gain claim"
+    "Build398 research: new device logs establish small shader-storage workload and an RSX/video stall without observed memory pressure; iPadOS kernel swap and MeloNX Mach JIT accounting were evaluated; select explicit owner-managed cold-data storage as the next framework direction, with no unverified guest/JIT/GPU paging enabled and no physical 8GiB or gameplay-gain claim",
+    "Build398 managed-swap stage1: explicit owned mutable CPU objects with bounded chunks, generations and scoped leases; synchronized verified checkpoints release owned mappings and restore exact contents on demand. Independent C ABI v1 is materialized in NeoSwap and exercised with native and Swift/Apple SDK evidence gates. Existing Store/shader/Core/JIT/relay runtime retained; no new RPCS3 consumer, automatic guest paging or physical/gameplay gain claim."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -83,7 +85,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "4a24a39983eefb7e62c496a851320486c8c31444c9b8430a8bfb1299825e0345",
     ".github/workflows/neoswap-donation-check.yml": "e6107d34ec2502ab26883636c10aa862d7e425f8516e83c0e0075317e5f08387",
-    ".github/workflows/neoswap-ipa.yml": "4660a8fe644c345384abf7508ec045c5f98d0fa2e35626bac76ba4dc72aa02dc",
+    ".github/workflows/neoswap-ipa.yml": "18a42603e7901f1676f8fee5f60b25ddfac9333ee2d4201cc1827735c526afa9",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "c16f335960c4d3c758acc772bfdcae80ad8062282adf5596d9019aece9b84122",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -96,7 +98,7 @@
     "build-utils/configure_neoplay_ios.py": "8c6c614f6596deeadd45b2c8820f51f3f00cfe25dcae70a9ce3ea350a5d3cceb",
     "build-utils/configure_neoswap_donor.py": "d7a2031c2b64dadfbeddfe62724e32c3fcb915f479056831d438ef2608b9c19f",
     "build-utils/configure_neoswap_relay.py": "faa6c957ccda639dd31e577edfddd389a6e4b1c874762ca1029a12b4c79eece5",
-    "build-utils/configure_neoswap_storage.py": "22ed267901e331509fde4ddf561b6a092ef310e6fab1d4ba29bdb06f4e6386b0",
+    "build-utils/configure_neoswap_storage.py": "e362ae26aded3db5f0ebfe7ecffdb0721f9f698de9769e2ae4c9f69f7e719670",
     "build-utils/dolphin_motion_localizations.py": "b71573742ab59cc1f237950e3d2c5d4905ec77b8c2adcf1a8e8a117ff3d74ac2",
     "build-utils/dusklight/build_core.py": "cc8eef77afab471f556062469fae01505f6c2f97034ecd930b67ff2b281f5164",
     "build-utils/dusklight/source.json": "d9798612296b24d9ae95beade73299adf7266ae7e6698b22319e91b200f15681",
@@ -206,7 +208,7 @@
     "packages/neo_swap/ios/Classes/NeoSwapStorageService.h": "68e6c44d027b13ab2a37741b4149c51a76ecd62708b8ff50c508d2f3503f869b",
     "packages/neo_swap/ios/Classes/NeoSwapStorageService.mm": "2dea55e2ea7c5c0a22d3cabc171783130d19c50eafc6598df49baf64a6fca48e",
     "packages/neo_swap/ios/Classes/StorageABI.h": "561696eecc439a6c55a685b4c456c944411fa689f822a13b709ed652032d7b7c",
-    "packages/neo_swap/ios/neo_swap.podspec": "9f0f22726512cc1be61b11c87c54d1fa388b6816fff57313ee418381cdddd7ba",
+    "packages/neo_swap/ios/neo_swap.podspec": "35a7a96f750a3c1ba290b1a5cb1d2eb018bee678a5147bebf6191f559880c623",
     "packages/neo_swap/lib/neo_swap.dart": "9ad686ac73eefc968ab7ee94a8df6f425cf072fcbec9a5af89c4c47e4c138c8b",
     "packages/neoplay_bridge/ios/Classes/NPAirPlayMonitor.swift": "4606e9544c69917b0d5ee2f68c91904dba3831e84168243e282eda6a5c1b6684",
     "packages/neoplay_bridge/ios/Classes/NPCapture.swift": "f42ba60ca8135d9c71ed06195592504289356e0224753a2149dbc476174e4bc3",
@@ -242,7 +244,12 @@
     "tools/neoplay-receiver/package.json": "607813400e0407821c7a6dd7f3e7b0425fae638897dfe3abe6626309a2afbf38",
     "tools/neoplay-receiver/player.mjs": "7f022999f6bf6fd1f55636618ace448d206a65e0cbbcc48ce0f3158e03b5528e",
     "tools/neoplay-receiver/protocol.mjs": "899167bf1d3f79c83bf9e8e3d360fb582bf6699b36526a28cb0b5c0871c1c487",
-    "tools/neoplay-receiver/server.mjs": "08c81a0151cc5f741d31154d67e5ca10ee0d31df5d72df421dce3e2422b668e8"
+    "tools/neoplay-receiver/server.mjs": "08c81a0151cc5f741d31154d67e5ca10ee0d31df5d72df421dce3e2422b668e8",
+    "native/neoswap-storage/ManagedSwap.h": "92466b8076496c0c1171769959f3df98a2c9aa9d554d7860d0fbec7366e047df",
+    "native/neoswap-storage/ManagedSwap.cpp": "1221ad2d606687debaca39f65858027554fd5548a3b8a0af80bed98199b70564",
+    "native/neoswap-storage/ManagedSwapABI.h": "26b42d1208fd8e70d8a188a6d62175917a4be99cca57774372cc7e2063de9627",
+    "native/neoswap-storage/ManagedSwapABI.cpp": "65f6a58743d232a0643821743f4a55a9e633ab2c28e369dca323a7c6cd2eb3b8",
+    "packages/neo_swap/ios/Classes/ManagedSwapABI.h": "26b42d1208fd8e70d8a188a6d62175917a4be99cca57774372cc7e2063de9627"
   },
   "git_modes": {
     ".github/workflows/cheats-media-check.yml": "100644",
@@ -412,10 +419,15 @@
     "tools/neoplay-receiver/package.json": "100644",
     "tools/neoplay-receiver/player.mjs": "100644",
     "tools/neoplay-receiver/protocol.mjs": "100644",
-    "tools/neoplay-receiver/server.mjs": "100644"
+    "tools/neoplay-receiver/server.mjs": "100644",
+    "native/neoswap-storage/ManagedSwap.h": "100644",
+    "native/neoswap-storage/ManagedSwap.cpp": "100644",
+    "native/neoswap-storage/ManagedSwapABI.h": "100644",
+    "native/neoswap-storage/ManagedSwapABI.cpp": "100644",
+    "packages/neo_swap/ios/Classes/ManagedSwapABI.h": "100644"
   },
   "support_files_sha256": {
-    ".github/workflows/neoswap-storage-prototype.yml": "3c05d9ffa2ca0760f2967b743ecaadd30f86d6787055ed0e666652b9a0a46245",
+    ".github/workflows/neoswap-storage-prototype.yml": "4f4ccc3670b66300f4314ed5e9ec1fee26b7331d6790829e4fe058d0b1eda555",
     "build-utils/neoplay/collect_fixtures.py": "92d1f08dfd2975796c9a8596fc87b1babab1618525c8d47080b27082e22aecc6",
     "build-utils/validate_shader_storage_evidence.py": "3ae1c59e20d589b579d8177b8ca8c944e48430c35c26b48815d8f14649805f27",
     "docs/dolphin-phone-shake-routing.md": "a7efae79d52bd0af21058997d6517bbd5c7ec201b659dcfa1b991fccf24be0e9",
@@ -428,7 +440,7 @@
     "docs/neoplay/validation-2026-10-02.json": "a23800691d99310c9ede9e6e21b600f6aa5c8dc53550669d04d2d74fa6c41e1a",
     "docs/neoswap-build396-findings.md": "7b892c8cb3d2aa40be2218416e838bba91e66176fc645e4dbbadf8a56ecaba3d",
     "docs/neoswap-device-analysis-20260930.md": "eabc558b24871e0ac0ba9b584222db4ce6c3c4f06b025ed50a682bccfe955cb4",
-    "docs/neoswap-framework-direction.md": "0d9f2bcd199b9dc0e4fd8b9f41b9d068abcce1fe92bf2da059ebc389323eb66b",
+    "docs/neoswap-framework-direction.md": "52459643ce0a2ae061b9febc8363bbfac04e33096514d2bcd7f279368bc5dc7a",
     "docs/neoswap-guest-relay-build372.md": "3792130b2940cb0234834d580c8591a266fd37e7fcc5335019e0b8527704d48f",
     "docs/neoswap-guest-relay-build373.md": "31b578cb42cd1934be25b46c796a8eab18eee6e65166e72668261fc507345e34",
     "docs/neoswap-storage-build396.md": "d2d4390540516fcccb4659d748d737359c7ae5b4fdb0ef1c52afb6e3bdc036d0",
@@ -454,7 +466,7 @@
     "test/cheat_bulk_scope_test.py": "e33132d2d8a540b29843fab06773464b077d398a9d62629e1d8843569fe562d5",
     "test/cheat_bulk_store_test.mm": "4c68e862f0e822f3aed0ec66e15f8473bb7264aef373b08a1bb98e1dd2bbd2b9",
     "test/cheat_editor361_ui_test.py": "ff795cc017a3920c6cef22efdd48eda640cb01b91d252a6561bb8e7a0ce99f0a",
-    "test/check_neo_swap_scope.py": "35c1f72c105ef40f651541300053e52a0a566a04664b0c0bccbb4e09e198275d",
+    "test/check_neo_swap_scope.py": "e6f2f962a0ed4bc351a90920f2abfb22509003cfc61ed67e96d56da739c49a66",
     "test/dolphin_account_267_test.py": "17a9a3c775346d205173ab89d527e0e75e63739f26d10bf36fd4ed615e567080",
     "test/dolphin_motion_localizations_test.py": "5cca6690f55e4392464cbebcb6125a55f56f7b99afd658349cc808255164eac4",
     "test/dolphin_pacing362_ui_test.py": "7ec78a9b14f0ae56f0144508984d9014433f3be0b95cc09839415de7706518be",
@@ -468,7 +480,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "4974edb8c40167b795d2ad03ea361b4030d804839807a11b624708f0c7a75769",
+    "test/import_memory_candidate_scope_test.py": "cf878d937a6b0e5c98a7d48ecb0b9e12db1d259269257b5538218f2b21dbce5d",
     "test/jit_backend_preference_service_test.dart": "b177003e238cb3f16b16327fb2b89b6634f663b991e711bc7120a3bc2fec0bed",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -487,7 +499,7 @@
     "test/neoplay/companion_tests.swift": "c3440c4d02e0bac7abb08bc25888cbc1d0640ddab3a9e71498e16d66f530ca33",
     "test/neoplay/encoded_media_tests.swift": "20921397f11f71c70a170e91ceda90fa4e8ca6658ec0a1cdab47644e95cfeefc",
     "test/neoplay/native_tests.swift": "fec85eba650f4b51910953786f28dbb34d408583a8b145821de17d0c5946cb94",
-    "test/neoplay_build397_integration_test.py": "55f7246430a739e7e99b76961dc3f06c0736781ac03802b1e98509de3f637dcc",
+    "test/neoplay_build397_integration_test.py": "3be8645bbd0e7f1e8afa79fb99d9add0807053412eb93bea83f5bebd5fb6f936",
     "test/neoplay_companion_contract_test.py": "d71354f2c791a94cd3b89a3164a5221cf6719f5cbd1ca007e6920093856b3154",
     "test/neoplay_companion_test.dart": "70480905495e95c5b8f0703386b1014f4af7290741af3f333247cfd52cb99ce6",
     "test/neoplay_config_test.py": "68a059469dba5a8b812ff22162caf8e9b215cc842c1900d1021c53efd8069343",
@@ -524,7 +536,15 @@
     "test/single_ipa_distribution_test.py": "1fc29fc48038b42549588c28a5cfc2a4d3881dc347257a3ee49faacf39218d77",
     "test/stikjit_scoped_host_test.py": "d5a397c7c17453a5584cac5ecb2390f099b2f2edd35649cb8522a9bba74e4717",
     "tools/neoplay-receiver/playback-smoke.mjs": "ad40475613cedc232da7a5aa3924c4ee0bb2d2ade4f0fc2a977b60a5fed406d4",
-    "tools/neoplay-receiver/test/receiver.test.mjs": "ae38975a2340d88a74f955916111af2841ff282cb1ec44d6c9c18c8a37ff2f16"
+    "tools/neoplay-receiver/test/receiver.test.mjs": "ae38975a2340d88a74f955916111af2841ff282cb1ec44d6c9c18c8a37ff2f16",
+    "native/neoswap-storage/run_managed_validation.py": "8fdadacfbf088bb30eb02d7784e8d9cee686cba46f15a0bd23e6e907744c22ce",
+    "native/neoswap-storage/tests/managed_swap_test.cpp": "5b8944d8d21dfbfa5be590e80e3ab134ffeb7346311d47f74a92c8cbed94d254",
+    "native/neoswap-storage/tests/managed_swap_abi_test.cpp": "5c1012d5626a2e9b9a46e32a5491e358274106a874dedbf01f71ca3f3772e799",
+    "native/neoswap-storage/tests/managed_swap_swift_test.swift": "010a3793557f5e048173dd32e0e7895535f2695ef651ebb6916456e50b764db2",
+    "docs/neoswap-managed-swap-stage1.md": "e086ef5f8c8a3877a4be06373066baa0f68d69149307fa173212d69e526c4193",
+    "docs/neoswap-managed-swap-stage1-linux-proof.json": "b8c8a42da32f44b7ae2f515b50fc6e197983b9f4a2d670a2dfb5d3dfb0ae506f",
+    "build-utils/validate_managed_swap_evidence.py": "8855adf9000db4c35f8538b9e30f74d67feb9098b773079f659bbb9041f2c6b9",
+    "test/neoswap_managed_swap_host_test.py": "16a89bce53ce4aee39be3dddf00b4ce531d191f10ead44946c55004c3c23644d"
   },
   "support_git_modes": {
     ".github/workflows/neoswap-storage-prototype.yml": "100644",
@@ -636,7 +656,15 @@
     "test/single_ipa_distribution_test.py": "100644",
     "test/stikjit_scoped_host_test.py": "100644",
     "tools/neoplay-receiver/playback-smoke.mjs": "100644",
-    "tools/neoplay-receiver/test/receiver.test.mjs": "100644"
+    "tools/neoplay-receiver/test/receiver.test.mjs": "100644",
+    "native/neoswap-storage/run_managed_validation.py": "100644",
+    "native/neoswap-storage/tests/managed_swap_test.cpp": "100644",
+    "native/neoswap-storage/tests/managed_swap_abi_test.cpp": "100644",
+    "native/neoswap-storage/tests/managed_swap_swift_test.swift": "100644",
+    "docs/neoswap-managed-swap-stage1.md": "100644",
+    "docs/neoswap-managed-swap-stage1-linux-proof.json": "100644",
+    "build-utils/validate_managed_swap_evidence.py": "100644",
+    "test/neoswap_managed_swap_host_test.py": "100644"
   },
   "rpcs3_postimages_sha256": {
     "rpcs3/Emu/Cell/SPUCommonRecompiler.cpp": "08c84e3ae4b2201fc540bc5963e16f7627064652a50987b090fac9ec59e04263",
@@ -690,6 +718,24 @@
     "preserved_neoswap_base": "d3d5681cc8b10af1cd503ea72a4886c82faaa3ef",
     "previous_build_run_id": 37065639799,
     "physical_device_validation": false,
-    "scope": "NeoPlay, Apple TV system route and controller battery HUD retained; only reviewed embedded RPCS3 menu input routing differs from Build396; NeoSwap, Core, JIT and launch behavior unchanged"
+    "scope": "NeoPlay, Apple TV system route and controller battery HUD retained; reviewed embedded RPCS3 menu input routing and new explicit owned CPU managed-swap module differ from Build396; active Core, JIT, shader storage, relay and launch behavior retained"
+  },
+  "managed_swap": {
+    "stage": "owned CPU framework, explicit caller lifecycle",
+    "integrated_rpcs3_consumers": [],
+    "physical_iPhone_validated": false,
+    "gameplay_validated": false,
+    "automatic_guest_paging_activated": false,
+    "required_evidence": [
+      "exact-source sanitized mutable RAM-storage-RAM cycle",
+      "C ABI content, errors, generations and leases after context destruction",
+      "executed macOS Swift ABI client",
+      "materialized iPhone arm64 library linkage and iOS18 Swift typecheck"
+    ],
+    "local_proof": "docs/neoswap-managed-swap-stage1-linux-proof.json",
+    "local_proof_source_commit": null,
+    "logical_test_bytes": 67108864,
+    "managed_mapping_limit_test_bytes": 8388608,
+    "budget_is_global_physical_residency": false
   }
 }

@@ -12,10 +12,17 @@ L'intégration doit appartenir à chaque cache de l'émulateur, avec une durée 
 vie et des points d'acquisition/libération connus. Augmenter le quota seul ne
 constitue pas cette intégration.
 
+La piste iPadOS désigne l'imitation de son cycle RAM → stockage → RAM dans
+NeoSwap. Le mainteneur a confirmé que l'objectif n'est pas d'activer une API
+du système sur iPhone. Les primitives de stockage et restauration sont déjà
+présentes ; le chantier ajoute maintenant des blocs CPU modifiables, segmentés
+et protégés par des leases. Voir [l'étape réalisée](neoswap-managed-swap-stage1.md).
+
 Conserver les mécanismes donor, GuestPageRelay et les imports Vulkan existants.
 Leur capacité, leurs prêts vivants et leurs mesures de résidence restent des
-indicateurs distincts. Aucun nouvel algorithme mémoire n'est activé par ce
-correctif. Aucun cache froid massif et sûr n'a encore été identifié dans les
+indicateurs distincts. Le nouveau moteur géré est matérialisé dans le framework
+sans activer de nouveau consommateur RPCS3 dans ce correctif. Aucun cache froid
+massif et sûr n'a encore été identifié dans les
 sources examinées. La première étape du chantier suivant est son inventaire,
 puis une preuve d'éviction/relecture sur la première cible effectivement trouvée.
 
@@ -98,6 +105,9 @@ sessions, quantités et limites de preuve.
   trois ailleurs. Les contrôles pairing, fallback JIT et NeoSwap restent requis.
 - Test réel de la politique d'entrée C++ rendu obligatoire dans la CI. Identité
   du candidat et préservation des sources non concernées restent contrôlées.
+- Moteur de blocs CPU possédés et modifiables, checkpoint vérifié avant
+  éviction, restauration, budgets bornés et ABI C utilisable depuis Swift.
+  Preuves natives, Swift et SDK intégrées aux gates ; consommateur Core à suivre.
 - Cœurs, JIT, réglages d'émulation, bibliothèques et données utilisateur conservés.
 
 Ces corrections ne sont pas une revendication de nouveau swap de plusieurs
