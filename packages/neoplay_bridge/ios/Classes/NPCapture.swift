@@ -9,6 +9,8 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
     private let audioSlots = DispatchSemaphore(value: 16)
     private let outputSlots = DispatchSemaphore(value: 8)
     private var generation = 0 // queue-confined
+    private var activeDisplay = NPSize(width: 1280, height: 720)
+    private var displayRevision = 0
     private var muxer: NPMuxer?
     private var requested = false // main-thread state
     private var ownsRecorder = false
@@ -29,7 +31,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
         requested = true; pending = true; previousMicrophone = recorder.isMicrophoneEnabled; previousDelegate = recorder.delegate
         recorder.isMicrophoneEnabled = false; recorder.delegate = self
         let display = self.display, cast = self.cast
-        queue.sync { generation += 1; lastSampleAt = Date() }
+        queue.sync { generation += 1; activeDisplay = display; lastSampleAt = Date() }
         let token = queue.sync { generation }
         recorder.startCapture(handler: { [weak self] sample, kind, error in
             guard let self else { return }
@@ -45,7 +47,7 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
                         let size = NPSize(width: Int(image.extent.width), height: Int(image.extent.height))
                         if self.muxer?.source != size {
                             self.muxer?.cancel()
-                            let muxer = try NPMuxer(source: size, display: display, cast: cast); self.muxer = muxer
+                            let muxer = try NPMuxer(source: size, display: self.activeDisplay, cast: cast); self.muxer = muxer
                             muxer.onError = { [weak self] error in DispatchQueue.main.async { if self?.requested == true { self?.onError?(error) } } }
                             muxer.onSegment = { [weak self, weak muxer] bytes, initial, duration in
                                 guard let self else { return }
@@ -74,6 +76,20 @@ final class NPCapture: NSObject, RPScreenRecorderDelegate {
                 }
             }
         })
+    }
+    func updateDisplay(_ size: NPSize) {
+        queue.async {
+            self.displayRevision += 1
+            let revision = self.displayRevision, token = self.generation
+            self.queue.asyncAfter(deadline: .now() + 0.5) {
+                guard self.generation == token, self.displayRevision == revision else { return }
+                self.activeDisplay = size
+                guard let muxer = self.muxer, NPPolicy.encodeSize(source: muxer.source, display: size) != muxer.output else { return }
+                // Only restart the encoder after a settled viewport change, never the game.
+                NPLog.record("display.resize", ["width": size.width, "height": size.height])
+                muxer.cancel(); self.muxer = nil
+            }
+        }
     }
     func stop() {
         requested = false; watchdog?.invalidate(); watchdog = nil

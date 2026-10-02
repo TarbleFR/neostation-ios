@@ -9,6 +9,7 @@ final class NPWindowsTransport {
     private var sending = false
     private var stopped = false
     var onReady: ((NPSize) -> Void)?
+    var onDisplay: ((NPSize) -> Void)?
     var onError: ((NPError) -> Void)?
     var onPlayback: (() -> Void)?
     init() {
@@ -47,6 +48,10 @@ final class NPWindowsTransport {
                     let width = min(7680, max(2, object["width"] as? Int ?? 1280)), height = min(4320, max(2, object["height"] as? Int ?? 720))
                     self.onReady?(NPSize(width: width, height: height)); self.onReady = nil
                 }
+                if object["type"] as? String == "display" {
+                    let width = min(7680, max(2, object["width"] as? Int ?? 1280)), height = min(4320, max(2, object["height"] as? Int ?? 720))
+                    self.onDisplay?(NPSize(width: width, height: height))
+                }
                 if object["type"] as? String == "playback", object["playing"] as? Bool == true { self.onPlayback?() }
                 self.receive()
             }
@@ -67,5 +72,5 @@ final class NPWindowsTransport {
             self.queue.async { self.bytes -= packet.count; self.sending = false; if error != nil && !self.stopped { self.onError?(.network) }; if !self.stopped { self.pump() } }
         }
     }
-    func stop() { queue.async { [self] in stopped = true; onReady = nil; onError = nil; onPlayback = nil; socket?.cancel(with: .normalClosure, reason: nil); socket = nil; packets.removeAll(); session.invalidateAndCancel() } }
+    func stop() { queue.async { [self] in stopped = true; onReady = nil; onDisplay = nil; onError = nil; onPlayback = nil; socket?.cancel(with: .normalClosure, reason: nil); socket = nil; packets.removeAll(); session.invalidateAndCancel() } }
 }

@@ -37,6 +37,8 @@ test('authenticated pairing, live media relay, disconnect and restart', async t 
   await new Promise(resolve => setTimeout(resolve,25));
   const media = message(viewer); const bytes=Buffer.from([1,0,0,0,8,102,116,121,112]); sender.send(bytes);
   assert.deepEqual((await media).data,bytes);
+  const display = message(sender); viewer.send(JSON.stringify({type:'display',width:3440,height:1440,supported:true}));
+  const resized = JSON.parse((await display).data); assert.equal(resized.type,'display'); assert.equal(resized.width,3440);
   const playback = message(sender); viewer.send(JSON.stringify({type:'playback',playing:true}));
   assert.equal(JSON.parse((await playback).data).playing,true);
   const closed=once(sender,'close'); viewer.send(JSON.stringify({type:'stop'})); await closed;

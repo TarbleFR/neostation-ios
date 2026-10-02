@@ -37,6 +37,7 @@ final class NPController {
         if id.hasPrefix("windows:"), let service = discovery.services[id], let host = service.hostName {
             let transport = NPWindowsTransport(); windows = transport; transport.onError = fail; transport.onPlayback = playing
             transport.onReady = { [weak self] size in DispatchQueue.main.async { self?.startCapture(token: token, size: size, castRoute: false, stopLabel: stopLabel) } }
+            transport.onDisplay = { [weak self] size in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.capture?.updateDisplay(size) } }
             transport.connect(host: host, port: service.port, pin: pin)
         } else if id.hasPrefix("cast:") {
             let store = NPSegmentStore(); self.store = store; let http = NPHTTPServer(store: store); self.http = http

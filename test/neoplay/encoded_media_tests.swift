@@ -25,6 +25,7 @@ final class NeoPlayEncodedMediaTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(output.filter { !$0.initial }.count, cast ? 4 : 10)
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("NeoPlayFixtures")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        print("NEOPLAY_FIXTURE_PATH:\(directory.path)")
         let name = cast ? "chromecast" : "windows"
         try JSONEncoder().encode(output).write(to: directory.appendingPathComponent(name + ".json"))
         let merged = output.reduce(into: Data()) { $0.append(Data(base64Encoded: $1.data)!) }

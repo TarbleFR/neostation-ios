@@ -24,7 +24,8 @@ try {
     const video = document.querySelector('video');
     window.probeAudio = new AudioContext();
     const source = window.probeAudio.createMediaElementSource(video), analyser = window.probeAudio.createAnalyser();
-    source.connect(analyser); analyser.connect(window.probeAudio.destination); analyser.fftSize = 512;
+    const silent = window.probeAudio.createGain(); silent.gain.value = 0;
+    source.connect(analyser); analyser.connect(silent); silent.connect(window.probeAudio.destination); analyser.fftSize = 512;
     window.peakRms = 0;
     window.probeTimer = setInterval(() => { const bytes = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(bytes); const rms = Math.sqrt(bytes.reduce((sum,v) => sum+v*v,0)/bytes.length); window.peakRms = Math.max(window.peakRms,rms); },50);
     window.probeAudio.resume();
@@ -39,7 +40,7 @@ try {
     await new Promise((resolve,reject) => sender.send(Buffer.concat([Buffer.from([part.initial?1:2]),Buffer.from(part.data,'base64')]), error => error?reject(error):resolve()));
     if(!part.initial) await new Promise(resolve => setTimeout(resolve,part.duration*1000));
   }
-  await page.waitForFunction(() => document.querySelector('video').currentTime > 3, {timeout:15000});
+  await page.waitForFunction(() => document.querySelector('video').currentTime > 3, null, {timeout:15000});
   const measured = await page.evaluate(() => { const v=document.querySelector('video'); return {time:v.currentTime,width:v.videoWidth,height:v.videoHeight,frames:v.getVideoPlaybackQuality().totalVideoFrames,audioRms:window.peakRms,fit:getComputedStyle(v).objectFit,error:v.error?.message ?? null}; });
   assert.equal(measured.width,640); assert.equal(measured.height,480); assert.equal(measured.fit,'contain'); assert.equal(measured.error,null);
   assert.ok(measured.frames>60); assert.ok(measured.audioRms>0.01); assert.ok(acknowledged);
@@ -49,7 +50,7 @@ try {
   assert.equal((await (await fetch(`http://127.0.0.1:${receiver.port}/v1/info`)).json()).available,true);
   assert.deepEqual(failures,[]);
   await mkdir('test-output',{recursive:true});
-  const report = {fixtureSha256,codeCommit:process.env.GITHUB_SHA || process.env.NEOPLAY_SOURCE_SHA || null,platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,physicalIPhone:false,physicalChromecast:false};
+  const report = {fixtureSha256,codeCommit:process.env.GITHUB_SHA || process.env.NEOPLAY_SOURCE_SHA || null,platform:process.platform,browser:await browser.version(),fixture:process.argv[2],...measured,acknowledged,audioRenderedSilently:true,physicalIPhone:false,physicalChromecast:false};
   await writeFile('test-output/playback.json', JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 } finally { sender?.terminate(); await browser?.close(); await receiver.close(); }
