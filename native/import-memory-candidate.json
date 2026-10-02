@@ -64,7 +64,8 @@
     "Build394: fix reproducible published-relay alias refusal under pressure without granting new backing; retain first-map admission, lifetime/fixed-range/alias-count/kernel-error safety; add pressure diagnostics and real-kernel plus injected-OS tests. Restore live FPS above the two decimal-GB series. Prepare two verified 256MiB donor seeds for a 384MiB/1.5s degradable boot gate; steady target uses actual donor loans plus 128MiB reserve, not immovable file-backed buffers; 512MiB floor and 5GiB ceiling retained. Deduplicate unchanged donor heartbeat logs; no physical-iPhone crash fix, 5GiB residency or FPS gain claimed before testing.",
     "Build395 first coverage experiment: opt-in God of War III RSX CPU aligned buffers 64KiB-1MiB can use real verified donor pages; separate 768 small and 256 retained large slots, 512MiB live small cap, no small file fallback, explicit title/pressure/lifecycle gates, cumulative size/live/fallback telemetry; only the CPU allocator call and client helper change inside RPCS3, all prior Vulkan/JIT/VM/PPU/SPU policies retained. Source-only until a matching Core artifact is validated; no iPad kernel swap or 5GiB physical gameplay result claimed.",
     "Build395 packaging: exact new Core source f73ac8f / run37022595373 required before IPA assembly; host loan-gap search uses ordered fixed-slot links rather than a repeated global rescan, with injected-OS fragmentation/lifetime/cleanup regression plus unchanged mandatory real-kernel proof. Other cores, JIT, relay lifetime and memory ceilings preserved; no game speed or iPad swap activation claim.",
-    "Build395 CI recovery: prevent host-only integration pushes from cancelling their pinned Core prerequisite. Job-scoped per-SHA concurrency never cancels a running build; regression contract rejects the old global scheduler. Runtime and emulator postimages unchanged; rebuild exact Core inputs and repin only after validation."
+    "Build395 CI recovery: prevent host-only integration pushes from cancelling their pinned Core prerequisite. Job-scoped per-SHA concurrency never cancels a running build; regression contract rejects the old global scheduler. Runtime and emulator postimages unchanged; rebuild exact Core inputs and repin only after validation.",
+    "Build395 CI recovery packaging: require protected Core source 600c4a99 and run 37039104291. The successful-run gate, full Core input hash validation and artifact identity remain mandatory; no cancelled/older Core or incomplete binary accepted."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -74,7 +75,7 @@
     ".github/workflows/neoswap-1gib-proof.yml": "a7cdc9223d0d230de76eb3f10a80c2a52c30bb019070cebce3941d8aca1e3f36",
     ".github/workflows/neoswap-check.yml": "90053561e0ccfa8f813e741acb4e43630afe2e2139878511ab10677d74d7412c",
     ".github/workflows/neoswap-donation-check.yml": "e6107d34ec2502ab26883636c10aa862d7e425f8516e83c0e0075317e5f08387",
-    ".github/workflows/neoswap-ipa.yml": "b0313dd86e188030c13039cfb80ed8bc29f01cc867e4431826f4c65a876ed8d4",
+    ".github/workflows/neoswap-ipa.yml": "737328dcdba3a5c3a05a851f0b30267e097a59bc53e6a87b8b4b348a2d493cca",
     ".github/workflows/neoswap-relay-check.yml": "407971543e254bfb2df1d71be656a11a6b0818c705734e6d7a52da30b7236925",
     ".github/workflows/neoswap-vulkan-1gib-proof.yml": "c16f335960c4d3c758acc772bfdcae80ad8062282adf5596d9019aece9b84122",
     ".github/workflows/neoswap-vulkan-proof.yml": "da1faae71b9d1434252371044b3f16488acd5083048ade2fba072c1fe87c9f0e",
@@ -330,7 +331,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "9ba51959bdfaac002f741139ebf89df13ffe8cd7e72dd01a1a363f821d8e51b3",
+    "test/import_memory_candidate_scope_test.py": "339af08cf995bced5830c1804c2a11e2c51fcc4c8b828e28159a95adba8f9e27",
     "test/neoswap_bridge_syntax_stub_test.py": "2b6455aeffdffa9191c577c68dd905299fe4cb513f3fb9dd2fd420779d02a674",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",

@@ -324,8 +324,8 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['f73ac8f26953fcdd244003981936b74482482626']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37022595373'"]
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['600c4a99de90e56d7ed81327df24600fe4bc4ab9']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37039104291'"]
         assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
         assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
         assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow
