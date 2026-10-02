@@ -767,6 +767,11 @@ jobs:
             test/native/rpcs3_vk_conditional_render_test.cpp \
             test/native/rpcs3_neoswap_stats_getter_test.cpp \
             .github/workflows/rpcs3-core.yml
+            native/neoswap-storage/StorageABI.h \
+            native/neoswap-storage/Client.h \
+            native/neoswap-storage/ShaderKey.h \
+            test/rpcs3_shader_storage_test.py \
+            test/native/rpcs3_shader_storage_client_test.cpp \
           # RPCS3_CORE_INPUTS_END
           # The independent host broker/donation is rebuilt by this IPA job.
           # Only the Core source, client ABI, recipe and native tests are pinned.

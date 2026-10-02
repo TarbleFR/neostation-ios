@@ -158,6 +158,11 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'native/neoswap-storage/StorageABI.h',
+    'native/neoswap-storage/Client.h',
+    'native/neoswap-storage/ShaderKey.h',
+    'test/rpcs3_shader_storage_test.py',
+    'test/native/rpcs3_shader_storage_client_test.cpp',
     # Isolated native storage module; no production Core or IPA hookup.
     ".github/workflows/neoswap-storage-prototype.yml",
     "docs/neoswap-storage-prototype.md",

@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = '9164f6ca957d811cd59f2eb97630ce8fdcec03d1a11bcfee5d194f4661b4c433'
+PATCH_SHA256 = '7a271185860fabc70b2823e5ea79d02cacdaec35a4fa990c421e88b79d169f3b'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -27,6 +27,11 @@ BACKPORTS = (
 # Core source, recipe, ABI and native acceptance evidence. NeoSwap.cpp,
 # NeoSwapHost.h, donation helpers and broker-only tests belong to the host.
 CORE_INPUTS = (
+    'native/neoswap-storage/StorageABI.h',
+    'native/neoswap-storage/Client.h',
+    'native/neoswap-storage/ShaderKey.h',
+    'test/rpcs3_shader_storage_test.py',
+    'test/native/rpcs3_shader_storage_client_test.cpp',
     'build-utils/build_rpcs3_embedded_core.sh',
     'build-utils/materialize_rpcs3_core.py',
     'build-utils/apply_rpcs3_llvm_patch.py',
@@ -130,6 +135,9 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'Unexpected diagnostics ABI')
     require('NEOSWAP_RELAY_ABI = 1' in (root / 'packages/neo_swap/ios/Classes/NeoSwapRelay.h').read_text(),
             'Unexpected page-relay ABI')
+    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h'):
+        payload = (root/'native/neoswap-storage'/name).read_bytes()
+        require(hashlib.sha256(payload).hexdigest() == manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name], 'Storage Core contract differs: '+name)
     recipe = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
     require('RPCS3_IOS_ABI="${RPCS3_IOS_ABI:-30}"' in recipe, 'Unexpected main Core ABI')
     require('test/rpcs3_xitrix_v0101_native_test.py' in recipe, 'Missing production native regressions')
