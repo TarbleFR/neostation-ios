@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,11 +41,12 @@ class RPCS3InputBridgeTests(unittest.TestCase):
         self.assertIn('rpcs3_ios_pad_square, pad.buttonX.isPressed', text)
         self.assertIn('rpcs3_ios_pad_triangle, pad.buttonY.isPressed', text)
         self.assertIn('state.connected = 1;', text)
-        self.assertIn('_api->set_pad_state(0, state);', text)
+        self.assertIn('_api->set_pad_state(0, &gameplayState);', text)
 
     def test_touch_is_connected_virtual_pad(self):
         text = INPUT.read_text()
-        self.assertIn('BOOL showTouch = self.started && self.physicalController == nil;', text)
+        # The existing touch toggle is also part of visibility policy.
+        self.assertIn('BOOL showTouch = self.started && self.physicalController == nil && self.touchControlsEnabled;', text)
         self.assertIn('if (showTouch) [self sendTouchState];', text)
         self.assertIn('_touchState.connected = 1;', text)
         self.assertIn('_touchState.l2 = 1.0f;', text)
@@ -56,6 +60,28 @@ class RPCS3InputBridgeTests(unittest.TestCase):
 
     def test_gamecontroller_framework(self):
         self.assertIn("'GameController'", PODSPEC.read_text())
+
+    def test_embedded_menu_routing_behavior(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            executable = Path(temporary) / 'rpcs3_embedded_menu_input_test'
+            subprocess.run([
+                os.environ.get('CXX', 'c++'), '-std=c++20', '-Wall', '-Wextra', '-Werror',
+                '-I', str(INPUT.parent),
+                str(ROOT / 'test/native/rpcs3_embedded_menu_input_test.cpp'),
+                '-o', str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True, timeout=10)
+
+    def test_only_neostation_menu_is_wired(self):
+        text = INPUT.read_text()
+        self.assertNotIn('psButton', text)
+        self.assertNotIn('makeButton:@"PS"', text)
+        self.assertIn('_menuInput.consume(gameplayState)', text)
+        self.assertIn('if (openMenu && self.started && self.menuRequested) self.menuRequested();', text)
+        plugin = PLUGIN.read_text()
+        self.assertIn('controller.inputController.menuRequested = controller.menuHandler;', plugin)
+        self.assertIn('controller.menuHandler = ^{ [weakSelf showGameMenu]; };', plugin)
+        self.assertIn('if (!controller || controller.presentedViewController) return;', plugin)
 
 if __name__ == '__main__':
     unittest.main()

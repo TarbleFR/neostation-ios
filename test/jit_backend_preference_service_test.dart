@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/screens/settings_screen/new_settings_options/tools_settings_content.dart';
 import 'package:neostation/services/jit_backend_preference_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,18 +24,16 @@ void main() {
   });
 
   test('global fallback remains scoped to the legacy MeloNX shortcut path', () {
-    final launcher = File(
-      'lib/services/ios_shortcut_jit_launch_service.dart',
-    ).readAsStringSync();
+    final launcher = File('lib/services/ios_shortcut_jit_launch_service.dart')
+        .readAsStringSync();
 
     expect(
       launcher,
       contains('JitBackendPreferenceService.useStikDebugFallback()'),
     );
     expect(
-      RegExp(
-        r'!useStikDebugFallback\s*&&\s*shortcutName == melonxShortcutName',
-      ).hasMatch(launcher),
+      RegExp(r'!useStikDebugFallback\s*&&\s*shortcutName == melonxShortcutName')
+          .hasMatch(launcher),
       isTrue,
     );
     expect(launcher, isNot(contains('armsx2ShortcutName')));
@@ -41,17 +41,43 @@ void main() {
     expect(launcher, contains('final shortcutUri = buildRunUri'));
   });
 
-  test('Tools preserves pairing and one fallback switch alongside NeoSwap', () {
+  test('Tools counts the iOS NeoPlay entry for controller navigation', () {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    for (final platform in TargetPlatform.values) {
+      debugDefaultTargetPlatformOverride = platform;
+      final state =
+          const ToolsSettingsContent(
+                isContentFocused: true,
+                selectedContentIndex: 0,
+              ).createState()
+              as ToolsSettingsContentState;
+
+      expect(
+        state.getItemCount(),
+        platform == TargetPlatform.iOS ? 4 : 3,
+        reason:
+            'Controller navigation must match the visible tools on $platform',
+      );
+    }
+  });
+
+  test('Tools preserves pairing and one fallback switch alongside NeoSwap and NeoPlay', () {
     final tools = File(
       'lib/screens/settings_screen/new_settings_options/'
       'tools_settings_content.dart',
     ).readAsStringSync();
 
-    expect(tools, contains('int getItemCount() => 3;'));
     expect(tools, contains('if (index == 0)'));
     expect(tools, contains('if (index == 1 && _jitFallbackStateLoaded'));
     expect(tools, contains('if (index == 2)'));
     expect(tools, contains('builder: (_) => const NeoSwapDialog()'));
+    expect(
+      tools,
+      contains(
+        'if (index == 3 && defaultTargetPlatform == TargetPlatform.iOS)',
+      ),
+    );
+    expect(tools, contains('showNeoPlayDialog(context)'));
     expect(RegExp(r'CustomToggleSwitch\(').allMatches(tools).length, 1);
     expect(tools, isNot(contains('LocalJitTunnel')));
     expect(tools, isNot(contains('VPN')));

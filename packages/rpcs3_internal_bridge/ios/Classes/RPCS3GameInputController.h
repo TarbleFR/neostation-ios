@@ -16,6 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)start;
 - (void)stop;
 @property(nonatomic, assign, getter=isTouchControlsEnabled) BOOL touchControlsEnabled;
+// Home / PS and Select+Start use the same NeoStation menu as the on-screen
+// action button. The embedded input path never opens a second native menu.
+@property(nonatomic, copy, nullable) dispatch_block_t menuRequested;
 - (void)layoutControlsInBounds:(CGRect)bounds safeAreaInsets:(UIEdgeInsets)insets;
 
 @end

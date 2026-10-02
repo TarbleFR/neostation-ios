@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 397
+assert manifest['target_build'] == 398
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -37,6 +37,10 @@ assert manifest['relay_target_object_count'] == 16
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Build398: the embedded RPCS3 menu is owned by NeoStation.
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3EmbeddedMenuInput.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm',
     # Reviewed shader-storage host additions.
     'build-utils/configure_neoswap_storage.py',
     'packages/neo_swap/lib/neo_swap.dart',
@@ -169,6 +173,12 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    # Build398: menu behavior, NeoPlay navigation regression, and device evidence.
+    'test/native/rpcs3_embedded_menu_input_test.cpp',
+    'test/rpcs3_input_bridge_test.py',
+    'test/jit_backend_preference_service_test.dart',
+    'docs/neoswap-build396-findings.md',
+    'docs/neoswap-framework-direction.md',
     # Exact consumer/service/GPU evidence.
     'build-utils/validate_shader_storage_evidence.py',
     'native/neoswap-storage/run_shader_validation.py',

@@ -1,21 +1,41 @@
-"""Build397 must add NeoPlay without rolling back any Build396 runtime or NeoSwap path."""
+"""Build398 preserves NeoPlay and Build396 runtime except approved embedded menu routing."""
 from pathlib import Path
 import json
 import re
 import subprocess
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 'd3d5681cc8b10af1cd503ea72a4886c82faaa3ef'
 FEATURE = 'f4b65f09d5a71ad2e0c72ab347b3df285c98b0f7'
+APPROVED_RPCS3_MENU_FILES = frozenset({
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3EmbeddedMenuInput.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3GameInputController.mm',
+    'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
+})
 def original(path, revision=BASE):
     return subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
 
-class Build397Integration(unittest.TestCase):
-    def test_runtime_jit_storage_and_launch_sources_identical_to_build396(self):
+class Build398Integration(unittest.TestCase):
+    def test_runtime_jit_storage_and_launch_preserved_except_approved_menu_routing(self):
         protected = ['native', 'packages/neo_swap', 'packages/dolphin_internal_bridge', 'packages/armsx2_internal_bridge', 'packages/rpcs3_internal_bridge', 'packages/dusklight_internal_bridge', 'packages/kartpad_internal_bridge', 'packages/stikjit_bridge', 'lib/services', 'build-utils/rpcs3', '.github/workflows/ios-ci.yml', ':(exclude)native/import-memory-candidate.json']
-        result = subprocess.check_output(['git', 'diff', '--name-only', BASE, '--', *protected], cwd=ROOT).decode().strip()
-        self.assertEqual(result, '', 'NeoPlay must not replace the current swap or emulator implementation')
+        changed = set(subprocess.check_output(['git', 'diff', '--name-only', BASE, '--', *protected], cwd=ROOT).decode().splitlines())
+        self.assertEqual(changed - APPROVED_RPCS3_MENU_FILES, set(), 'Only the explicitly reviewed embedded RPCS3 menu input files may differ from Build396')
+
+    def test_approved_menu_routing_preserves_core_abi_and_passes_input_behavior(self):
+        for path in (
+            'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h',
+            'build-utils/rpcs3/embedded-core.patch',
+        ):
+            self.assertEqual((ROOT / path).read_bytes(), original(path), path)
+        plugin_path = 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
+        plugin = (ROOT / plugin_path).read_bytes()
+        callback = b'      controller.inputController.menuRequested = controller.menuHandler;\n'
+        self.assertEqual(plugin.count(callback), 1)
+        self.assertEqual(plugin.replace(callback, b''), original(plugin_path), 'Menu callback wiring must be the only bridge plugin change')
+        subprocess.run([sys.executable, str(ROOT / 'test/rpcs3_input_bridge_test.py')], cwd=ROOT, check=True, timeout=30)
     def test_both_tools_are_present_at_distinct_gamepad_indices(self):
         text = (ROOT/'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart').read_text()
         self.assertIn('TargetPlatform.iOS ? 4 : 3', text)
@@ -28,10 +48,10 @@ class Build397Integration(unittest.TestCase):
         for name in ('neo_swap', 'neoplay_bridge'):
             self.assertIn('  - packages/' + name, pubspec)
             self.assertIn('  ' + name + ':\n    path: packages/' + name, pubspec)
-        self.assertIn('version: 0.0.2+397', pubspec)
+        self.assertIn('version: 0.0.2+398', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build397', text)
+        self.assertIn('neostation-neoswap-neoplay-build398', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
         self.assertIn('run_id = 37065639799', text)
         self.assertIn("run['conclusion'] == 'success'", text)
@@ -52,7 +72,7 @@ class Build397Integration(unittest.TestCase):
             self.assertEqual((ROOT/file).read_bytes(), original(file, FEATURE), file)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 397)
+        self.assertEqual(data['target_build'], 398)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)
         self.assertFalse(data['neoplay_integration']['physical_device_validation'])

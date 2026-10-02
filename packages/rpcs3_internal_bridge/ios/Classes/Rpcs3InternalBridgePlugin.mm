@@ -1513,6 +1513,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       controller.performanceToggleHandler = ^(BOOL visible) { [weakSelf setPerformanceSamplingEnabled:visible]; };
       [controller loadViewIfNeeded];
       controller.inputController = [[RPCS3GameInputController alloc] initWithHostView:controller.view api:&self->_api];
+      controller.inputController.menuRequested = controller.menuHandler;
       [controller.inputController start];
       [controller.inputController layoutControlsInBounds:controller.view.bounds safeAreaInsets:controller.view.safeAreaInsets];
       [root presentViewController:controller animated:NO completion:nil];

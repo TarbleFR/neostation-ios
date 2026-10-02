@@ -1,4 +1,5 @@
 #import "RPCS3GameInputController.h"
+#include "RPCS3EmbeddedMenuInput.h"
 
 #import <GameController/GameController.h>
 #import <QuartzCore/QuartzCore.h>
@@ -117,7 +118,9 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 - (void)touchesCancelled:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event { [self endTracking]; }
 @end
 
-@interface RPCS3GameInputController ()
+@interface RPCS3GameInputController () {
+  RPCS3EmbeddedMenuInput _menuInput;
+}
 @property(nonatomic, weak) UIView* hostView;
 @property(nonatomic, assign) rpcs3_ios_api* api;
 @property(nonatomic, strong) RPCS3InputPassthroughView* touchOverlay;
@@ -139,7 +142,6 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 @property(nonatomic, strong) UIButton* r2;
 @property(nonatomic, strong) UIButton* selectButton;
 @property(nonatomic, strong) UIButton* startButton;
-@property(nonatomic, strong) UIButton* psButton;
 @property(nonatomic, strong) RPCS3TouchStickView* leftStick;
 @property(nonatomic, strong) RPCS3TouchStickView* rightStick;
 @end
@@ -204,7 +206,6 @@ typedef void (^RPCS3StickChanged)(float x, float y);
   self.r2 = [self makeButton:@"R2" bit:rpcs3_ios_pad_r2 accessibility:@"R2"];
   self.selectButton = [self makeButton:@"SELECT" bit:rpcs3_ios_pad_select accessibility:@"Select"];
   self.startButton = [self makeButton:@"START" bit:rpcs3_ios_pad_start accessibility:@"Start"];
-  self.psButton = [self makeButton:@"PS" bit:rpcs3_ios_pad_ps accessibility:@"PS"];
 
   self.leftStick = [[RPCS3TouchStickView alloc] initWithFrame:CGRectZero];
   self.leftStick.accessibilityLabel = @"Left analog stick";
@@ -415,10 +416,14 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 
 - (void)sendState:(const rpcs3_ios_pad_state*)state {
   if (!state || !_api || !_api->set_pad_state) return;
-  _api->set_pad_state(0, state);
+  rpcs3_ios_pad_state gameplayState = *state;
+  const bool openMenu = _menuInput.consume(gameplayState);
+  _api->set_pad_state(0, &gameplayState);
+  if (openMenu && self.started && self.menuRequested) self.menuRequested();
 }
 
 - (void)clearCorePadState {
+  _menuInput.reset();
   rpcs3_ios_pad_state state = {};
   state.size = sizeof(state);
   state.connected = 0;
@@ -492,7 +497,6 @@ typedef void (^RPCS3StickChanged)(float x, float y);
 
   CGFloat centerY = top + miniHeight * 0.5;
   [self setFrameForView:self.selectButton center:CGPointMake(width * 0.5 - miniWidth - 12.0, centerY) size:CGSizeMake(miniWidth, miniHeight)];
-  [self setFrameForView:self.psButton center:CGPointMake(width * 0.5, centerY) size:CGSizeMake(miniHeight, miniHeight)];
   [self setFrameForView:self.startButton center:CGPointMake(width * 0.5 + miniWidth + 12.0, centerY) size:CGSizeMake(miniWidth, miniHeight)];
 }
 
