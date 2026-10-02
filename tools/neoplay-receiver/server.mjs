@@ -7,7 +7,7 @@ import { Bonjour } from 'bonjour-service';
 import { WebSocketServer, WebSocket } from 'ws';
 import { VERSION, MAX_PACKET, MAX_BUFFERED, displayLimits, validatePacket } from './protocol.mjs';
 const local = address => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
-const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const same = (a, b) => { if (typeof a !== 'string' || typeof b !== 'string') return false; const x=Buffer.from(a), y=Buffer.from(b); return x.length === y.length && timingSafeEqual(x,y); };
 const token = () => randomBytes(24).toString('hex');
 export async function createReceiver({port = 17642, host = '0.0.0.0', advertise = true, name = `NeoPlay — ${hostname()}`} = {}) {
   const viewerToken = token(), receiverId = token();
@@ -39,7 +39,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
         grant = {token:token(), address, until:now+30000};
         return json(res, 200, {v:VERSION, token:grant.token, ...limits});
       }
-      if (!local(req.socket.remoteAddress)) return json(res, 403, {error:'local_ui_only'});
+      if (!local(req.socket.remoteAddress) || !['localhost','127.0.0.1','[::1]'].some(h => req.headers.host === `${h}:${server.address().port}`)) return json(res, 403, {error:'local_ui_only'});
       const assets = {'/':'index.html', '/player.mjs':'player.mjs', '/protocol.mjs':'protocol.mjs'};
       if (req.method !== 'GET' || !assets[url.pathname]) return json(res, 404, {error:'not_found'});
       let data = await readFile(new URL(assets[url.pathname], import.meta.url), 'utf8');
@@ -63,6 +63,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
             const message = JSON.parse(data);
             if (message.type === 'display') { limits = displayLimits(message); ready = message.supported === true; send(sender, {type:'display', ...limits}); }
             if (message.type === 'new_pin' && !sender) { resetPin(); send(ws, uiState()); }
+            if (message.type === 'playback') send(sender, {type:'playback', playing:message.playing === true});
             if (message.type === 'stop') sender?.close(1000, 'receiver_stop');
           } catch { ws.close(1008); }
         });

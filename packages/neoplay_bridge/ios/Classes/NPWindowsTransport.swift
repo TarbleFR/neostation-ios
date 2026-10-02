@@ -13,7 +13,7 @@ final class NPWindowsTransport {
     var onPlayback: (() -> Void)?
     init() {
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 8; config.timeoutIntervalForResource = 15
+        config.timeoutIntervalForRequest = 8; config.timeoutIntervalForResource = 3600
         config.waitsForConnectivity = false; config.urlCache = nil
         session = URLSession(configuration: config)
     }

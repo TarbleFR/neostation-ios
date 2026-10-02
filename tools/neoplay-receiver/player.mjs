@@ -47,6 +47,7 @@ function synchronize() {
   if (started) say(`Receiving · buffer ${Math.max(0, lag).toFixed(2)} s · ${video.videoWidth}×${video.videoHeight} · aspect preserved`);
 }
 video.addEventListener('timeupdate', synchronize);
+video.addEventListener('playing', () => { if (socket?.readyState === WebSocket.OPEN && video.readyState >= 2) socket.send(JSON.stringify({type:'playback', playing:true})); });
 document.querySelector('#ready').onclick = () => {
   if (socket?.readyState === WebSocket.OPEN) { video.play().catch(() => {}); report(); socket.send(JSON.stringify({type:'new_pin'})); return; }
   const auth = document.querySelector('#auth').dataset.token;

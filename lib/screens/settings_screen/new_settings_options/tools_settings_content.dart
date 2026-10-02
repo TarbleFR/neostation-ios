@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:neostation/l10n/neoplay_locale.dart';
+import 'package:neostation/widgets/neoplay_dialog.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -48,11 +51,15 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     _refreshJitFallbackState();
   }
 
-  int getItemCount() => 2;
+  int getItemCount() => defaultTargetPlatform == TargetPlatform.iOS ? 3 : 2;
 
   void scrollToIndex(int index) {}
 
   void selectItem(int index) {
+    if (index == 2 && defaultTargetPlatform == TargetPlatform.iOS) {
+      showNeoPlayDialog(context);
+      return;
+    }
     if (index == 0) {
       _importOrReplacePairingFile();
       return;
@@ -311,6 +318,15 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                         ),
                       ),
               ),
+              if (defaultTargetPlatform == TargetPlatform.iOS)
+                SettingsCardRow(
+                  icon: Symbols.cast_rounded,
+                  title: 'NeoPlay',
+                  subtitle: NeoPlayLocale.get(context, 'subtitle'),
+                  selected: widget.isContentFocused && widget.selectedContentIndex == 2,
+                  onTap: () => showNeoPlayDialog(context),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
             ],
           ),
         ),
