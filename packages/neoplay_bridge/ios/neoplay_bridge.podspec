@@ -12,6 +12,6 @@ Pod::Spec.new do |s|
   s.dependency 'google-cast-sdk', '4.8.6'
   s.platform = :ios, '18.0'
   s.swift_version = '5.0'
-  s.frameworks = 'ReplayKit', 'AVFoundation', 'CoreMedia', 'CoreImage', 'Network', 'UniformTypeIdentifiers'
+  s.frameworks = 'ReplayKit', 'AVFoundation', 'CoreMedia', 'CoreImage', 'Network', 'UniformTypeIdentifiers', 'GameController'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'GCC_OPTIMIZATION_LEVEL' => 's' }
 end

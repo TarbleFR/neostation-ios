@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:neostation/l10n/neoplay_companion_locale.dart';
+import 'package:neostation/widgets/neoplay_apple_tv_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:neoplay_bridge/neoplay_bridge.dart';
@@ -53,6 +55,9 @@ class _NeoPlayDialogState extends State<NeoPlayDialog> {
       title: const Text('NeoPlay'),
       content: SizedBox(width: 620, height: MediaQuery.sizeOf(context).height * 0.6, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(text('description')), const SizedBox(height: 10), Text(text('windows')), const SizedBox(height: 6), Text(text('cast')),
+        const SizedBox(height: 10),
+        NeoPlayAppleTVCard(facts: Map<String,dynamic>.from(snapshot['appleTV'] as Map? ?? const {}),streamBusy:busy),
+        Text(NeoPlayCompanionLocale.get(context,'batteryHelp')),
         const SizedBox(height: 10), Text(text(state)),
         if (error) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(text('error'), style: TextStyle(color: Theme.of(context).colorScheme.error))),
         if (!searching) TextButton.icon(onPressed: () { setState(() => searching = true); action(NeoPlayBridge.discover); }, icon: const Icon(Icons.cast), label: Text(text('discover'))),

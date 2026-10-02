@@ -3,6 +3,7 @@ import Foundation
 
 public final class NeoPlayBridgePlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     private let controller = NPController()
+    private let gameHUD = NPGameHUD()
     private var sink: FlutterEventSink?
     public static func register(with registrar: FlutterPluginRegistrar) {
         let plugin = NeoPlayBridgePlugin()
@@ -12,6 +13,9 @@ public final class NeoPlayBridgePlugin: NSObject, FlutterPlugin, FlutterStreamHa
     }
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "configureGameHUD":
+            guard let args = call.arguments as? [String:Any], let active = args["active"] as? Bool, let labels = args["labels"] as? [String:String], ["battery","controller","percent","unavailable","charging","low"].allSatisfy({ !(labels[$0] ?? "").isEmpty }) else { result(FlutterError(code:"arguments",message:nil,details:nil)); return }
+            gameHUD.configure(active:active,labels:labels); result(nil)
         case "snapshot": result(controller.snapshot)
         case "discover": controller.discover(); result(nil)
         case "stopDiscovery": controller.stopDiscovery(); result(nil)

@@ -31,6 +31,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'dart:async';
+import 'package:neostation/widgets/neoplay_game_hud_host.dart';
 import 'dart:io';
 
 import 'package:fullscreen_window/fullscreen_window.dart';
@@ -1082,7 +1083,7 @@ class _MyAppState extends State<MyApp> {
                               maxScaleFactor: 1.4,
                             ),
                           ),
-                          child: child!,
+                          child: NeoPlayGameHUDHost(child: child!),
                         );
                       },
                       theme: themeProvider.currentTheme.copyWith(
