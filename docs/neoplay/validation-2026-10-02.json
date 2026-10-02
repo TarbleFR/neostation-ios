@@ -1,0 +1,88 @@
+{
+  "status": "initial-integration-software-checks-passed-device-validation-pending",
+  "recordedAt": "2026-10-02T20:52:58.461Z",
+  "branch": "feature/neoplay",
+  "baseCommit": "f4583c6a3083b8aed358da28b2f8f849256e0e8b",
+  "codeCommit": "2c55107d86ba929639f99318b391df628b3b1752",
+  "ci": {
+    "runId": 37062356082,
+    "url": "https://github.com/TarbleFR/neostation-ios/actions/runs/37062356082",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 111021777292,
+        "name": "frontend",
+        "conclusion": "success"
+      },
+      {
+        "id": 111021777704,
+        "name": "native",
+        "conclusion": "success"
+      },
+      {
+        "id": 111021777709,
+        "name": "windows",
+        "conclusion": "success"
+      },
+      {
+        "id": 111024430195,
+        "name": "windows-playback",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "windowsPC": {
+    "fixtureSha256": "c1d6cb16cfc6ae2f8cd1e4034c5b6fbeece156789d192cfa6d237ddf594835b6",
+    "codeCommit": "2c55107d86ba929639f99318b391df628b3b1752",
+    "platform": "win32",
+    "browser": "154.0.4258.48",
+    "time": 4.757332,
+    "width": 640,
+    "height": 480,
+    "frames": 138,
+    "audioRms": 0.17602203345114034,
+    "fit": "contain",
+    "error": null,
+    "acknowledged": true,
+    "audioRenderedSilently": true,
+    "physicalIPhone": false,
+    "physicalChromecast": false
+  },
+  "windowsLocalMDNS": {
+    "time": "2026-10-02T20:49:41.319Z",
+    "scope": "Windows local mDNS publication and discovery, not an iPhone LAN test",
+    "found": true,
+    "correctPort": true,
+    "protocol": "tcp",
+    "version": "1",
+    "kind": "windows"
+  },
+  "chromecastProbe": {
+    "time": "2026-10-02T20:23:06.017Z",
+    "visibleReceivers": 0,
+    "playbackAttempted": false
+  },
+  "portablePolicyChecks": {
+    "platform": "Linux x86_64",
+    "swift": "6.2.1",
+    "testsPassed": 4,
+    "policyBlob": "1e44f80856acf99dfd9f2c4507a7fc76b97f422f",
+    "testBlob": "504ee746451ee0c57481b78dff4bf341c805a2f8",
+    "exactBlobsVerified": true
+  },
+  "unchangedRuntimePaths": [
+    "native",
+    "packages/armsx2_internal_bridge",
+    "packages/dolphin_internal_bridge",
+    "packages/rpcs3_internal_bridge",
+    "packages/dusklight_internal_bridge",
+    "packages/kartpad_internal_bridge",
+    "lib/services"
+  ],
+  "physicalIPhoneToWindowsValidated": false,
+  "physicalIPhoneToChromecastValidated": false,
+  "fullIPACompiled": false,
+  "realGameLatencyMeasured": false,
+  "emulatorDeviceRegressionMatrixPassed": false,
+  "publicBinaryReleased": false
+}

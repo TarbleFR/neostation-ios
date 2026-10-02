@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { WebSocket } from 'ws';
+import { createReceiver } from '../server.mjs';
+import { fit, displayLimits, validatePacket, mp4Mime } from '../protocol.mjs';
+const message = ws => new Promise(resolve => ws.once('message', (data, binary) => resolve({data, binary})));
+test('aspect-fit: 4:3, ultrawide, portrait, and invalid dimensions', () => {
+  assert.deepEqual(fit(640,480,1920,1080), {width:1440,height:1080,x:240,y:0});
+  assert.deepEqual(fit(1920,1080,3440,1440), {width:2560,height:1440,x:440,y:0});
+  assert.equal(fit(1080,1920,1920,1080).height,1080);
+  assert.throws(() => fit(0,480,1920,1080));
+  assert.equal(displayLimits({width:Infinity, height:40000}).height,4320);
+});
+test('malformed protocol packets and codec metadata are rejected', () => {
+  assert.throws(() => validatePacket(Buffer.alloc(2)));
+  assert.throws(() => validatePacket(Buffer.alloc(10)));
+  assert.throws(() => mp4Mime(new Uint8Array(20)));
+  assert.equal(validatePacket(Buffer.from([1,0,0,0,8,102,116,121,112])),1);
+});
+test('authenticated pairing, live media relay, disconnect and restart', async t => {
+  const receiver = await createReceiver({port:0,host:'127.0.0.1',advertise:false}); t.after(() => receiver.close());
+  const base = `http://127.0.0.1:${receiver.port}`, wsbase = `ws://127.0.0.1:${receiver.port}`;
+  const pair = (pin, extra={}) => fetch(base+'/v1/pair',{method:'POST',headers:{'Content-Type':'application/json',...extra},body:JSON.stringify({v:1,pin})});
+  assert.equal((await (await fetch(base+'/v1/info')).json()).available,false);
+  assert.equal((await pair('000000')).status,403);
+  assert.equal((await pair('éééééé')).status,403);
+  assert.equal((await pair(receiver.pin, {Origin:'https://untrusted.example'})).status,403);
+  const viewer = new WebSocket(wsbase+'/v1/view?token='+receiver.viewerToken); t.after(() => viewer.terminate());
+  const state = message(viewer); await once(viewer,'open'); await state;
+  viewer.send(JSON.stringify({type:'display',width:2560,height:1440,supported:true}));
+  await new Promise(resolve => setTimeout(resolve,25));
+  const response = await pair(receiver.pin); assert.equal(response.status,200); const grant = await response.json();
+  assert.equal(grant.width,2560);
+  const sender = new WebSocket(wsbase+'/v1/sender',{headers:{Authorization:`Bearer ${grant.token}`}}); t.after(() => sender.terminate());
+  const ready = message(sender); await once(sender,'open'); assert.equal(JSON.parse((await ready).data).type,'ready');
+  await new Promise(resolve => setTimeout(resolve,25));
+  const media = message(viewer); const bytes=Buffer.from([1,0,0,0,8,102,116,121,112]); sender.send(bytes);
+  assert.deepEqual((await media).data,bytes);
+  const display = message(sender); viewer.send(JSON.stringify({type:'display',width:3440,height:1440,supported:true}));
+  const resized = JSON.parse((await display).data); assert.equal(resized.type,'display'); assert.equal(resized.width,3440);
+  const playback = message(sender); viewer.send(JSON.stringify({type:'playback',playing:true}));
+  assert.equal(JSON.parse((await playback).data).playing,true);
+  const closed=once(sender,'close'); viewer.send(JSON.stringify({type:'stop'})); await closed;
+  assert.equal((await (await fetch(base+'/v1/info')).json()).available,true);
+});

@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap private • Build 396
-run-name: NeoStation NeoSwap private • Build 396 • ${{ github.sha }}
+name: NeoStation NeoSwap + NeoPlay private • Build 397
+run-name: NeoStation NeoSwap + NeoPlay private • Build 397 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '396'
+        default: '397'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-private
+  group: neostation-neoswap-neoplay-build397
   cancel-in-progress: true
 
 jobs:
@@ -40,10 +40,36 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
     name: Wait for exact candidate evidence
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Require completed Build 396 without cancelling its run
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PREVIOUS'
+          import json, subprocess, time
+          repo = 'TarbleFR/neostation-ios'
+          run_id = 37065639799
+          expected_sha = 'd3d5681cc8b10af1cd503ea72a4886c82faaa3ef'
+          deadline = time.monotonic() + 3600
+          while True:
+              run = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}']))
+              assert run['head_sha'] == expected_sha and run['path'] == '.github/workflows/neoswap-ipa.yml'
+              if run['status'] == 'completed':
+                  assert run['conclusion'] == 'success', 'Build396 did not succeed; inspect it before packaging Build397'
+                  break
+              if time.monotonic() >= deadline:
+                  raise SystemExit('Timed out waiting for Build396; no build was cancelled')
+              print('Build396 is still running; Build397 packaging remains gated', flush=True)
+              time.sleep(30)
+          artifacts = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100']))['artifacts']
+          expected = 'NeoStation-NeoSwap-Build-396-' + expected_sha
+          assert any(a['name'] == expected and not a['expired'] for a in artifacts), 'Build396 IPA artifact is absent'
+          print('Build396 completed successfully; its IPA artifact is preserved', flush=True)
+          PREVIOUS
+
       - name: Wait for exact-SHA validation workflows
         shell: bash
         run: |
@@ -59,6 +85,7 @@ jobs:
               'dolphin-motion-check.yml',
               'cheats-media-check.yml',
               'neoswap-storage-prototype.yml',
+              'neoplay-check.yml',
           )
           sha = os.environ['GITHUB_SHA']
           deadline = time.monotonic() + 5100
@@ -85,13 +112,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (396)
+    name: Neostation iOS 0.0.2 private IPA (397)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '396' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '397' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-Build-396-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-397-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -376,10 +403,10 @@ jobs:
             build-utils/kartpad/patch_donor_session_bridge.py \
             test/kartpad_flutter_probe.dart test/kartpad_flutter_probe.mm test/kartpad_menu_probe.swift
 
-      - name: Select Xcode 16.4
+      - name: Select Xcode 26.3 for NeoPlay and Google Cast
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.4'
+          xcode-version: '26.3'
 
       - name: Set up Flutter 3.47.2
         uses: subosito/flutter-action@v2
@@ -403,6 +430,7 @@ jobs:
               Path('lib'),
               Path('native'),
               Path('packages/stikjit_bridge'),
+              Path('packages/neoplay_bridge'),
               Path('packages/rpcs3_internal_bridge'),
               Path('packages/armsx2_internal_bridge'),
               Path('packages/dusklight_internal_bridge'),
@@ -1129,6 +1157,7 @@ jobs:
           python3 build-utils/configure_rpcs3_ios_v2.py
           python3 build-utils/configure_armsx2_ios.py
           python3 build-utils/configure_neoswap_donor.py
+          python3 build-utils/configure_neoplay_ios.py
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
@@ -1185,6 +1214,22 @@ jobs:
             DEVELOPMENT_TEAM='' PROVISIONING_PROFILE_SPECIFIER='' \
             COMPILER_INDEX_STORE_ENABLE=NO build \
             2>&1 | tee "$RUNNER_TEMP/neostation-fast-xcodebuild.log"
+
+      - name: Embed NeoPlay source identity and dependency acknowledgements
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'NEOPLAY'
+          import json, os, shutil
+          from pathlib import Path
+          app = Path('build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app')
+          assert app.is_dir()
+          identity = {'build': os.environ['BUILD_NUMBER'], 'commit': os.environ['GITHUB_SHA'], 'physicalTVValidation': False, 'physicalControllerValidation': False}
+          (app / 'NeoPlay-build-identity.json').write_text(json.dumps(identity, indent=2))
+          notices = Path('ios/Pods/Target Support Files/Pods-Runner/Pods-Runner-acknowledgements.plist')
+          assert notices.is_file(), 'CocoaPods acknowledgement inventory is missing'
+          shutil.copyfile(notices, app / 'NeoPlay-Pods-acknowledgements.plist')
+          NEOPLAY
 
       - name: Embed verified RPCS3 Core and signing metadata
         shell: bash
@@ -1290,6 +1335,7 @@ jobs:
           fi
           cp build/fast-native/identity.json dist/fast-native-identity.json
           cp build/fast-native/rpcs3-core-identity.json dist/rpcs3-core-identity.json
+          python3 build-utils/validate_neoplay_ipa.py "dist/$IPA_NAME.ipa" --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA" --report dist/neoplay-validation.json
           shasum -a 256 dist/*.ipa | tee "dist/$IPA_NAME.sha256"
           ls -lah dist
 
@@ -1307,6 +1353,8 @@ jobs:
           cp docs/neoswap-guest-relay-build373.md build/private-test/Notes-NeoSwap-Relay-Build373.md
           cp dist/dusklight/identity.json build/private-test/dusklight-native-identity.json
           cp dist/neoswap-validation.json build/private-test/
+          cp dist/neoplay-validation.json build/private-test/
+          cp docs/neoplay/BUILD397.md build/private-test/Notes-NeoPlay-Build397.md
           cp "$RUNNER_TEMP/neoswap-evidence/capacity-8GiB-macOS.json" build/private-test/
           cp -R "$RUNNER_TEMP/neoswap-evidence/donation" build/private-test/donation-evidence
           cp -R "$RUNNER_TEMP/neoswap-evidence/vulkan" build/private-test/vulkan-evidence

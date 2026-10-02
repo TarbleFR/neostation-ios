@@ -16,8 +16,9 @@ workspace:
   - packages/rpcs3_internal_bridge
   - packages/dusklight_internal_bridge
   - packages/kartpad_internal_bridge
+  - packages/neoplay_bridge
 
-version: 0.0.2+366
+version: 0.0.2+397
 environment:
   sdk: '>=3.9.2'
 
@@ -47,6 +48,8 @@ dependencies:
     path: packages/dusklight_internal_bridge
   kartpad_internal_bridge:
     path: packages/kartpad_internal_bridge
+  neoplay_bridge:
+    path: packages/neoplay_bridge
     
   file_picker: 12.0.0-beta.3
   device_info_plus: ^13.2.0

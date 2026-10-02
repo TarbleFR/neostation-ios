@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 396
+assert manifest['target_build'] == 397
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -262,6 +262,70 @@ SUPPORT_FILES = {
     'test/single_ipa_distribution_test.py',
     'test/stikjit_scoped_host_test.py',
 }
+# Build397: explicitly owner-authorized NeoPlay, Apple TV guidance and battery HUD.
+# Preserve every Build396 allocator/Core assertion below; add only these reviewed paths.
+PRODUCTION_FILES |= {
+    '.github/workflows/neoplay-check.yml',
+    'build-utils/configure_neoplay_ios.py',
+    'build-utils/neoplay/local-network.json',
+    'build-utils/neoplay_native_project.rb',
+    'build-utils/neoplay_resources.rb',
+    'build-utils/validate_neoplay_ipa.py',
+    'lib/l10n/neoplay_companion_locale.dart',
+    'lib/l10n/neoplay_locale.dart',
+    'lib/main.dart',
+    'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart',
+    'lib/widgets/neoplay_apple_tv_card.dart',
+    'lib/widgets/neoplay_dialog.dart',
+    'lib/widgets/neoplay_game_hud_host.dart',
+    'packages/neoplay_bridge/ios/Classes/NPAirPlayMonitor.swift',
+    'packages/neoplay_bridge/ios/Classes/NPCapture.swift',
+    'packages/neoplay_bridge/ios/Classes/NPCompanionPolicy.swift',
+    'packages/neoplay_bridge/ios/Classes/NPController.swift',
+    'packages/neoplay_bridge/ios/Classes/NPControllerBatteryMonitor.swift',
+    'packages/neoplay_bridge/ios/Classes/NPDiagnostics.swift',
+    'packages/neoplay_bridge/ios/Classes/NPDiscovery.swift',
+    'packages/neoplay_bridge/ios/Classes/NPGameHUD.swift',
+    'packages/neoplay_bridge/ios/Classes/NPGameHUDAnchor.swift',
+    'packages/neoplay_bridge/ios/Classes/NPGoogleCast.swift',
+    'packages/neoplay_bridge/ios/Classes/NPHTTPServer.swift',
+    'packages/neoplay_bridge/ios/Classes/NPMuxer.swift',
+    'packages/neoplay_bridge/ios/Classes/NPPolicy.swift',
+    'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift',
+    'packages/neoplay_bridge/ios/Classes/NeoPlayBridgePlugin.swift',
+    'packages/neoplay_bridge/ios/neoplay_bridge.podspec',
+    'packages/neoplay_bridge/lib/neoplay_bridge.dart',
+    'packages/neoplay_bridge/pubspec.yaml',
+    'pubspec.yaml',
+    'tools/neoplay-receiver/.gitignore',
+    'tools/neoplay-receiver/index.html',
+    'tools/neoplay-receiver/package-lock.json',
+    'tools/neoplay-receiver/package.json',
+    'tools/neoplay-receiver/player.mjs',
+    'tools/neoplay-receiver/protocol.mjs',
+    'tools/neoplay-receiver/server.mjs',
+}
+SUPPORT_FILES |= {
+    'build-utils/neoplay/collect_fixtures.py',
+    'docs/neoplay/APPLE_TV_AND_CONTROLLER_BATTERY.md',
+    'docs/neoplay/BUILD397.md',
+    'docs/neoplay/README.md',
+    'docs/neoplay/companion-validation-2026-10-02.json',
+    'docs/neoplay/validation-2026-10-02.json',
+    'test/neoplay/companion_tests.swift',
+    'test/neoplay/encoded_media_tests.swift',
+    'test/neoplay/native_tests.swift',
+    'test/neoplay_build397_integration_test.py',
+    'test/neoplay_companion_contract_test.py',
+    'test/neoplay_companion_test.dart',
+    'test/neoplay_config_test.py',
+    'test/neoplay_dialog_test.dart',
+    'test/neoplay_ipa_packaging_test.py',
+    'test/neoplay_locale_test.dart',
+    'tools/neoplay-receiver/playback-smoke.mjs',
+    'tools/neoplay-receiver/test/receiver.test.mjs',
+}
+
 approved = set(manifest['files_sha256'])
 assert approved == PRODUCTION_FILES, 'Production whitelist/manifest mismatch: ' + str(approved ^ PRODUCTION_FILES)
 assert set(manifest['git_modes']) == approved
