@@ -25,7 +25,7 @@ void main() {
   });
   testWidgets('Game battery UI is independent of streaming and follows launch/exit without capture calls', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    try {
     final active = ValueNotifier(false), calls = <MethodCall>[];
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(const MethodChannel('neostation/neoplay'),(call) async { calls.add(call); return null; });
@@ -38,6 +38,7 @@ void main() {
     expect((calls[1].arguments as Map)['labels']['unavailable'],isNotEmpty);
     await tester.pumpWidget(const SizedBox()); await tester.pumpAndSettle();
     expect((calls.last.arguments as Map)['active'],false);
+    } finally { debugDefaultTargetPlatformOverride = null; }
   });
   testWidgets('Apple TV entry explains system selection and never mistakes audio for game video', (tester) async {
     await tester.pumpWidget(const MaterialApp(home:Scaffold(body:NeoPlayAppleTVCard(facts:{'status':'audioOnly'},streamBusy:true))));

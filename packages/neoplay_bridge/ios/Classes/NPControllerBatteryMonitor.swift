@@ -47,11 +47,11 @@ final class NPControllerBatteryMonitor {
         }.sorted { $0.player < $1.player }
         if next != readings { readings = next; changed?(next) }
     }
-    func stop() {
+    func stop(resetIdentity: Bool = true) {
         precondition(Thread.isMainThread)
         timer?.invalidate(); timer = nil
         observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
-        readings = []; slots.removeAll(); changed?([])
+        readings = []; if resetIdentity { slots.removeAll() }; changed?([])
     }
     deinit { timer?.invalidate(); observers.forEach(NotificationCenter.default.removeObserver) }
 }

@@ -66,7 +66,7 @@ final class NPGameHUD {
     }
     private func reconcile() {
         guard active && foreground else {
-            timer?.invalidate(); timer = nil; monitor.stop(); anchor = nil; hud.removeFromSuperview(); return
+            timer?.invalidate(); timer = nil; monitor.stop(resetIdentity: !active); anchor = nil; hud.removeFromSuperview(); return
         }
         monitor.start()
         if timer == nil {
@@ -101,5 +101,9 @@ final class NPGameHUD {
         hud.frame = frame
         if parent.subviews.last !== hud { parent.bringSubviewToFront(hud) }
     }
-    deinit { timer?.invalidate(); observers.forEach(NotificationCenter.default.removeObserver) }
+    deinit {
+        timer?.invalidate(); observers.forEach(NotificationCenter.default.removeObserver)
+        let view = hud
+        if Thread.isMainThread { view.removeFromSuperview() } else { DispatchQueue.main.async { view.removeFromSuperview() } }
+    }
 }
