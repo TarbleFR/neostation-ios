@@ -481,8 +481,14 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['43dac44766c10714fe41baf45badcec926dffcd8']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37058087412'"]
+        # Related owned-GLSL consumer requires this exact newly built Core;
+        # success and complete identity remain mandatory before IPA assembly.
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['eb8138fdcbfe3aa157a6412a38ef26e26c441821']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37099421495'"]
+        assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
+        assert "assert result['conclusion']=='success'" in workflow
+        assert 'validate_core_input_identity(identity)' in workflow
+        assert "assert identity['neoswap_source_archive_abi'] == 1" in workflow
         assert re.findall(pattern, workflow) == ['94ed2d91e1547e1879fab214b6ef082b642dff84']
         assert re.findall(r'(?m)^      DUSKLIGHT_CORE_RUN_ID: (.+)$', workflow) == ["'36720032937'"]
         assert "identity['source_release'] == pins['release'] == 'v2.0.3'" in workflow
