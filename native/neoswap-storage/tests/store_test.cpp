@@ -58,7 +58,11 @@ void test_cycle(const std::string& dir){
     CHECK(request(s,{ids[0].session+1,ids[0].id}).code==Code::missing);
 }
 void test_hot_pinned(const std::string& dir){
-    auto c=config();c.ram_bytes=2*MiB;c.warm_bytes=0;Store s(dir,c);
+    auto c=config();CHECK(c.prefetch_latency_limit_us==8000);
+    // This case asserts successful eligible prefetch, lease and pressure
+    // semantics, not the speed of a shared CI disk. Test the latency guard
+    // independently below; production's 8ms default stays unchanged.
+    c.prefetch_latency_limit_us=UINT32_MAX;c.ram_bytes=2*MiB;c.warm_bytes=0;Store s(dir,c);
     auto a=put(s,make_blob(MiB,1),Heat::hot);auto b=put(s,make_blob(MiB,2),Heat::cold);auto d=put(s,make_blob(MiB,3),Heat::hot);
     CHECK(s.try_acquire(b).code==Code::busy);auto held=acquire(s,a);CHECK(held.code==Code::ok);
     s.set_pressure(Pressure::critical);CHECK(wait(trim(s)).code==Code::ok);CHECK(verify(held.lease,MiB,1));
@@ -68,7 +72,23 @@ void test_hot_pinned(const std::string& dir){
     held.lease.bytes.reset();CHECK(wait(trim(s)).code==Code::ok);CHECK(s.snapshot().raw_ram_bytes==0);
     auto demand=acquire(s,d);CHECK(demand.code==Code::ok);CHECK(verify(demand.lease,MiB,3));
     demand.lease.bytes.reset();CHECK(wait(trim(s)).code==Code::ok);s.set_pressure(Pressure::normal);
-    CHECK(acquire(s,d,true).code==Code::ok);auto pref=acquire(s,d);CHECK(verify(pref.lease,MiB,3));CHECK(s.snapshot().prefetch_used==1);
+    const auto prefetched=acquire(s,d,true);
+    if(prefetched.code!=Code::ok)std::cerr<<"prefetch refused code="<<static_cast<int>(prefetched.code)<<" read_p95_us="<<s.snapshot().read_p95_us<<" threshold_us="<<c.prefetch_latency_limit_us<<" pressure="<<static_cast<int>(s.snapshot().pressure)<<"\n";
+    CHECK(prefetched.code==Code::ok);auto pref=acquire(s,d);CHECK(verify(pref.lease,MiB,3));CHECK(s.snapshot().prefetch_used==1);
+}
+void test_prefetch_latency_refusal(const std::string& dir){
+    auto c=config();CHECK(c.prefetch_latency_limit_us==8000);
+    // A strict test-only threshold makes a measured real-file read ineligible
+    // without depending on whether this machine happens to cross 8ms today.
+    c.prefetch_latency_limit_us=0;Store s(dir,c);
+    auto h=put(s,make_blob(MiB,781));CHECK(wait(trim(s)).code==Code::ok);
+    {auto demand=acquire(s,h);CHECK(demand.code==Code::ok&&verify(demand.lease,MiB,781));}
+    auto before=s.snapshot();CHECK(before.pressure==Pressure::normal);
+    CHECK(before.disk_hits==1&&before.read_p95_us>c.prefetch_latency_limit_us);
+    CHECK(request(s,h,true).code==Code::pressure);
+    auto after=s.snapshot();CHECK(after.prefetch_cancelled==before.prefetch_cancelled+1);
+    CHECK(after.pressure==Pressure::normal&&after.io_errors==0);
+    auto demand=acquire(s,h);CHECK(demand.code==Code::ok&&verify(demand.lease,MiB,781));
 }
 void test_compression(const std::string& dir){
     auto c=config();c.compression=true;c.compression_budget_us=1000000;Store s(dir,c);
@@ -174,7 +194,7 @@ void test_cache_entry(const std::string& dir){
 int main(int argc,char** argv){
     CHECK(argc==2);std::filesystem::create_directories(argv[1]);
 #define RUN_CASE(name) do {current_case.store(#name);name(argv[1]);}while(0)
-    RUN_CASE(test_cycle);RUN_CASE(test_hot_pinned);RUN_CASE(test_compression);RUN_CASE(test_errors);RUN_CASE(test_boundaries);RUN_CASE(test_concurrency);RUN_CASE(test_priority);RUN_CASE(test_recycle_and_merge);RUN_CASE(test_discard_pending_and_pinned);RUN_CASE(test_cache_entry);
+    RUN_CASE(test_cycle);RUN_CASE(test_hot_pinned);RUN_CASE(test_prefetch_latency_refusal);RUN_CASE(test_compression);RUN_CASE(test_errors);RUN_CASE(test_boundaries);RUN_CASE(test_concurrency);RUN_CASE(test_priority);RUN_CASE(test_recycle_and_merge);RUN_CASE(test_discard_pending_and_pinned);RUN_CASE(test_cache_entry);
 #undef RUN_CASE
-    std::cout<<"PASS: real POSIX file round trips, larger-than-RAM working set, hot/cold, compression, lease safety, pressure, read priority, quotas, short I/O, ENOSPC, sync/read failures, corruption, truncation, concurrency, teardown, reusable extents, coalescing, stale IDs, deferred ownership retirement\n";
+    std::cout<<"PASS: real POSIX file round trips, larger-than-RAM working set, hot/cold, compression, lease safety, pressure, eligible prefetch and measured-latency refusal with demand fallback, read priority, quotas, short I/O, ENOSPC, sync/read failures, corruption, truncation, concurrency, teardown, reusable extents, coalescing, stale IDs, deferred ownership retirement\n";
 }

@@ -84,7 +84,8 @@ The mandatory Apple pipeline also executes the frame test against pinned
 FFmpeg 8.1.1, links the actual host on arm64, runs source-domain-3 private-file
 roundtrips/lifecycle failures in iOS18 Simulator, and syntax-checks the complete
 `cellVdec.cpp` with the actual iOS Core compiler flags before the full build.
-Those Apple results and a new private IPA are still pending at this checkpoint.
+Those Apple results and a new private IPA were still pending at that initial
+checkpoint; the exact final Core evidence is recorded below.
 
 The first Apple Core preflight at `899dafb81a62f30d4150a604125730ac629be965`
 stopped while configuring its **host test dependency**, before compiling the
@@ -123,6 +124,45 @@ producer capacity/restore failure tests remain required, and the source test
 rejects unconditionally delaying warm/default-off consumption. The earlier
 clock-only candidate `f6dbdce904e13e72971d3baf9f4a930a45813891` is superseded
 and must not provide the final IPA's Core or validation evidence.
+
+The macOS storage baseline test at `7bcc52854d6f5bd9c4bb67acdff676f74eee8318`
+also exposed an older test assumption: it required successful speculative
+prefetch after a real demand read even though the engine intentionally refuses
+prefetch above its measured 8ms read-p95 threshold. Delaying only real POSIX
+`pread` calls by 20ms reproduces the original assertion failure locally:
+`Code::pressure`, measured read p95 20,544us, threshold 8,000us, test Store
+pressure still normal. This is not evidence of corrupted pixels or memory OOM.
+The production Store is byte-identical and its 8ms default remains unchanged.
+The success/lease/pressure test now explicitly supplies an eligible test-only
+latency budget; a separate strict-budget case asserts measured-latency refusal,
+the cancellation counter and exact demand-read fallback. Both retain the
+original content, pin, quota and priority assertions. This is host acceptance
+evidence, not a changed Core input or an emulator timing adjustment.
+
+## Verified final Core, before private IPA packaging
+
+The final Core is `7bcc52854d6f5bd9c4bb67acdff676f74eee8318`, built by
+workflow run `37120654954`, successful job `111195937578`. Its real Apple
+FFmpeg 8.1.1 proof archived 52 of 60 old 720p pictures, actually unmapped
+74,973,184 bytes, preserved exact decoded pixel contents, and passed with
+four decoder workers. The actual 17-unit iOS SDK/compiler gate passed at
+12:04:39 UTC on 3 October 2026; the full arm64 Core subsequently linked.
+Command-contract simulations are not counted as this SDK result.
+
+Downloaded artifact `11274522445` has ZIP SHA-256
+`3493899fc809906d8a23b399d9c3f5c37e649576e01dc1cd391d114e90b42f84`.
+All five ZIP entries passed CRC verification. The 75,388,976-byte dylib has
+SHA-256 `b65eef55912bada9adf7a13ddbf15a4e3a96c6ddf72427c907e2a77fe917bb58`.
+Local Mach-O, passive-dlopen and exact-input pin validations passed. All
+57 Core inputs match this revision, with main ABI 30 and source ABI 1 intact.
+Static passive-dlopen validation reports no forbidden direct-call reachability,
+but explicitly does not claim device runtime validation.
+
+The packaging commit changes only the reviewed host pin, acceptance-test
+repair and evidence/manifest files. It must obtain its own complete exact-SHA
+host regression results; the earlier macOS prefetch-test failure and simulator
+boot timeout at the Core revision are not treated as successful host gates.
+No final private IPA or device gameplay result is claimed at this checkpoint.
 
 ## Observability and honest presentation
 

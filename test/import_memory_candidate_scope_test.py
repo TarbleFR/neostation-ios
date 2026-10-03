@@ -499,8 +499,8 @@ for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/io
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
         # Related owned-GLSL consumer requires this exact newly built Core;
         # success and complete identity remain mandatory before IPA assembly.
-        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['2e18a46d3f7733ed7ae8f237615e2c7a4fd2501d']
-        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37103098994'"]
+        assert re.findall(r'(?m)^      RPCS3_CORE_HOST_SHA: (.+)$', workflow) == ['7bcc52854d6f5bd9c4bb67acdff676f74eee8318']
+        assert re.findall(r'(?m)^      RPCS3_CORE_RUN_ID: (.+)$', workflow) == ["'37120654954'"]
         assert "assert result['head_sha']==os.environ['RPCS3_CORE_HOST_SHA']" in workflow
         assert "assert result['conclusion']=='success'" in workflow
         assert 'validate_core_input_identity(identity)' in workflow
