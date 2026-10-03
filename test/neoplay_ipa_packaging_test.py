@@ -2,6 +2,7 @@ from pathlib import Path
 import importlib.util
 import json
 import plistlib
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -13,15 +14,20 @@ spec.loader.exec_module(validator)
 SHA = 'a' * 40
 
 class NeoPlayPackagingTests(unittest.TestCase):
-    def fixture(self, root, omit='', build='397', native_minimum='18.0'):
+    def fixture(self, root, omit='', build='397', native_minimum='18.0', missing_marker=b'', dynamic=False, filetype=2):
         app = 'Payload/Runner.app/'
+        version = int(native_minimum.split('.')[0]) << 16 | int(native_minimum.split('.')[1]) << 8
+        command = struct.pack('<IIIIII', 0x32, 24, 2, version, 26 << 16, 0)
+        binary = struct.pack('<IiiIIIII', 0xfeedfacf, 0x0100000c, 0, filetype, 1, len(command), 0, 0) + command
+        binary += b' '.join(marker for marker in validator.MARKERS if marker != missing_marker)
         members = {
-            'Info.plist': plistlib.dumps({'CFBundleVersion': build, 'NSBonjourServices': list(validator.SERVICES), 'NSLocalNetworkUsageDescription': 'Local screens', 'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True}}),
-            'Frameworks/neoplay_bridge.framework/neoplay_bridge': b'\xcf\xfa\xed\xfe' + b' '.join(validator.MARKERS),
-            'Frameworks/neoplay_bridge.framework/Info.plist': plistlib.dumps({'MinimumOSVersion': native_minimum}),
-            'NeoPlay-build-identity.json': json.dumps({'build': '397', 'commit': SHA, 'physicalTVValidation': False}).encode(),
+            'Info.plist': plistlib.dumps({'CFBundleVersion': build, 'CFBundleExecutable': 'Runner', 'MinimumOSVersion': native_minimum, 'NSBonjourServices': list(validator.SERVICES), 'NSLocalNetworkUsageDescription': 'Local screens', 'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True}}),
+            'Runner': binary,
+            'NeoPlay-build-identity.json': json.dumps({'build': '397', 'commit': SHA, 'physicalTVValidation': False, 'nativeLinkage': 'static_framework', 'castSDK': '4.8.6'}).encode(),
             'NeoPlay-Pods-acknowledgements.plist': plistlib.dumps({}),
         }
+        if dynamic:
+            members['Frameworks/neoplay_bridge.framework/neoplay_bridge'] = binary
         members.update({language + '.lproj/InfoPlist.strings': plistlib.dumps({'NSLocalNetworkUsageDescription': 'Local'}) for language in validator.LANGUAGES})
         file = Path(root) / 'candidate.ipa'
         with zipfile.ZipFile(file, 'w') as archive:
@@ -36,7 +42,7 @@ class NeoPlayPackagingTests(unittest.TestCase):
             self.assertFalse(result['physicalTVValidation'])
 
     def test_rejects_absent_plugin_localization_identity_and_notices(self):
-        for missing in ('Frameworks/neoplay_bridge.framework/neoplay_bridge', 'zh-Hant.lproj/InfoPlist.strings', 'NeoPlay-build-identity.json', 'NeoPlay-Pods-acknowledgements.plist'):
+        for missing in ('Runner', 'zh-Hant.lproj/InfoPlist.strings', 'NeoPlay-build-identity.json', 'NeoPlay-Pods-acknowledgements.plist'):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as root:
                 with self.assertRaises((AssertionError, KeyError)):
                     validator.validate(self.fixture(root, omit=missing), '397', SHA)
@@ -49,6 +55,18 @@ class NeoPlayPackagingTests(unittest.TestCase):
                 validator.validate(self.fixture(root), '397', 'b' * 40)
             with self.assertRaises(AssertionError):
                 validator.validate(self.fixture(root, native_minimum='26.0'), '397', SHA)
+
+    def test_each_native_implementation_is_required_in_the_actual_host(self):
+        for marker in validator.MARKERS:
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as root:
+                with self.assertRaises(AssertionError):
+                    validator.validate(self.fixture(root, missing_marker=marker), '397', SHA)
+
+    def test_rejects_duplicate_dynamic_wrapper_or_dylib_in_place_of_host(self):
+        for options in ({'dynamic': True}, {'filetype': 6}):
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as root:
+                with self.assertRaises(AssertionError):
+                    validator.validate(self.fixture(root, **options), '397', SHA)
 
 if __name__ == '__main__':
     unittest.main()

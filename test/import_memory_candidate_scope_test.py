@@ -201,6 +201,7 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'test/neoplay_pod_graph_test.py',
     'test/neoswap_memory_samples_test.cpp',
     'test/neoplay_deployment_project_test.py',
     'test/check_neo_swap_simulator.py',

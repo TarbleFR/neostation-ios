@@ -10,6 +10,7 @@ Pod::Spec.new do |s|
   s.source_files = 'Classes/**/*.swift'
   s.dependency 'Flutter'
   s.dependency 'google-cast-sdk', '4.8.6'
+  s.static_framework = true
   s.platform = :ios, '18.0'
   s.swift_version = '5.0'
   s.frameworks = 'ReplayKit', 'AVFoundation', 'CoreMedia', 'CoreImage', 'Network', 'UniformTypeIdentifiers', 'GameController'

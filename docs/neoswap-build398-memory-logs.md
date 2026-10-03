@@ -54,3 +54,26 @@ chargement, quelques minutes dans une zone reproductible, retour au menu,
 puis relancement. Comparer les pics/headroom, événements de pression,
 archivages/restaurations et refus entre ces phases. Aucun apprentissage
 automatique ni changement autonome de politique n'est activé.
+
+## Deuxième blocage de packaging : liaison Cast
+
+Le workflow `37107499950` (commit `45462a72d1ac5962f84e2ec47f87d31d7faf8a93`)
+a passé l'alignement iOS 18, puis CocoaPods a refusé la dépendance transitive
+du framework dynamique NeoPlay vers le binaire statique Google Cast 4.8.6.
+La correction canonique ajoute uniquement `s.static_framework = true` au
+pod NeoPlay. Le SDK reste 4.8.6, toutes les sources Swift restent identiques,
+et `use_frameworks!` / les autres composants ne sont pas convertis globalement.
+
+Le test du véritable graphe CocoaPods reproduit le refus avec l'ancien
+podspec, puis exige le succès du nouveau sans contourner TargetValidator.
+Flutter et un autre pod dynamique y sont des fixtures de métadonnées ; ce
+test ne prétend pas exécuter Flutter ou l'appareil. La compilation IPA réelle
+reste obligatoire. Puisque NeoPlay est désormais lié dans l'exécutable du
+host, le contrôle de livraison exige ce Mach-O arm64/iOS, ses versions
+minimales, toutes les implémentations NeoPlay/Cast, l'identité et les notices.
+Une ancienne copie dynamique de NeoPlay ou une implémentation manquante
+sont refusées. Le contrat retiré de framework dynamique embarqué est ainsi
+remplacé par le contrat réel de liaison statique, sans retirer de fonctionnalité.
+
+Sources primaires : [Google Cast iOS](https://developers.google.com/cast/docs/ios_sender)
+et [attribut CocoaPods static_framework](https://guides.cocoapods.org/syntax/podspec.html#static_framework).

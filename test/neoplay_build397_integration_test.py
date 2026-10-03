@@ -118,7 +118,17 @@ class Build398Integration(unittest.TestCase):
         files = subprocess.check_output(['git','ls-tree','-r','--name-only',FEATURE,'--','packages/neoplay_bridge'],cwd=ROOT).decode().splitlines()
         self.assertTrue(files)
         for file in files:
-            self.assertEqual((ROOT/file).read_bytes(), original(file, FEATURE), file)
+            actual = (ROOT/file).read_bytes()
+            if file == 'packages/neoplay_bridge/ios/neoplay_bridge.podspec':
+                # Only this linkage declaration resolves the demonstrated
+                # static Cast / dynamic wrapper dependency conflict.
+                addition = b'  s.static_framework = true\n'
+                self.assertEqual(actual.count(addition), 1)
+                actual = actual.replace(addition, b'')
+            self.assertEqual(actual, original(file, FEATURE), file)
+        workflow = (ROOT / '.github/workflows/neoplay-check.yml').read_text()
+        self.assertIn('python3 test/neoplay_pod_graph_test.py', workflow)
+        self.assertIn('build/neoplay-native/pod-graph.json', workflow)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
         self.assertEqual(data['target_build'], 398)

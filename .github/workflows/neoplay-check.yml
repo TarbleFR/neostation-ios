@@ -59,6 +59,7 @@ jobs:
           python3 test/neoplay_deployment_project_test.py
           ruby build-utils/neoplay_native_project.rb
           pod install --project-directory=build/neoplay-native
+          python3 test/neoplay_pod_graph_test.py
       - name: Compile Cast SDK and independently test both production encoders
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for k,a in d["devices"].items() if "iOS-18" in k for x in a if "iPhone" in x["name"]))')
@@ -75,6 +76,7 @@ jobs:
           name: NeoPlay-native-evidence-${{ github.sha }}
           path: |
             build/neoplay-native/build.log
+            build/neoplay-native/pod-graph.json
             build/neoplay-native/Results.xcresult
           retention-days: 7
       - uses: actions/upload-artifact@v4

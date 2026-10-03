@@ -1243,7 +1243,7 @@ jobs:
           from pathlib import Path
           app = Path('build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app')
           assert app.is_dir()
-          identity = {'build': os.environ['BUILD_NUMBER'], 'commit': os.environ['GITHUB_SHA'], 'physicalTVValidation': False, 'physicalControllerValidation': False}
+          identity = {'build': os.environ['BUILD_NUMBER'], 'commit': os.environ['GITHUB_SHA'], 'physicalTVValidation': False, 'physicalControllerValidation': False, 'nativeLinkage': 'static_framework', 'castSDK': '4.8.6'}
           (app / 'NeoPlay-build-identity.json').write_text(json.dumps(identity, indent=2))
           notices = Path('ios/Pods/Target Support Files/Pods-Runner/Pods-Runner-acknowledgements.plist')
           assert notices.is_file(), 'CocoaPods acknowledgement inventory is missing'
