@@ -17,10 +17,14 @@ class SyntaxGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             entries = []
+            exception_flags = {}
             for name in sorted(gate.UNITS):
+                exception_flags[name] = (['-fno-exceptions', '-fexceptions'] if name == 'SourceClient.cpp'
+                    else ['-fno-exceptions'] if name in ('fsr_pass.cpp', 'VKProgramPipeline.cpp')
+                    else ['-fexceptions'])
                 entries.append({'file': name, 'directory': temp, 'arguments': [
                     'clang++', '--target=arm64-apple-ios16.3', '-std=c++23',
-                    '-fexceptions', '-DREQUIRED=1', '-c', name, '-o', name+'.o',
+                    *exception_flags[name], '-DREQUIRED=1', '-c', name, '-o', name+'.o',
                     '-MD', '-MF', name+'.d', '@'+name+'.o.modmap']})
             database = root / 'compile_commands.json'
             database.write_text(json.dumps(entries))
@@ -35,7 +39,9 @@ class SyntaxGateTests(unittest.TestCase):
                     self.assertEqual((root/response).read_text(), '-DGENERATED_MODULE_MAP=1')
                     self.assertIn('--target=arm64-apple-ios16.3', args)
                     self.assertIn('-DREQUIRED=1', args)
-                    self.assertIn('-fexceptions', args)
+                    unit = next(name for name in gate.UNITS if name in args)
+                    self.assertEqual([arg for arg in args if arg in ('-fno-exceptions', '-fexceptions')],
+                                     exception_flags[unit])
                     self.assertIn('-fsyntax-only', args)
                     self.assertNotIn('-o', args)
                     self.assertNotIn('-c', args)
@@ -44,6 +50,9 @@ class SyntaxGateTests(unittest.TestCase):
                 gate.main(database)
             self.assertEqual(calls[0][0], 'cmake')
             self.assertEqual(len(calls), len(gate.UNITS) + 1)
+
+    def test_cold_source_consumer_and_no_exception_upscaler_are_required_early(self):
+        self.assertTrue({'VKProgramPipeline.cpp', 'fsr_pass.cpp', 'SourceClient.cpp'} <= gate.UNITS)
 
     def test_missing_translation_units_are_an_error(self):
         with tempfile.TemporaryDirectory() as temp:

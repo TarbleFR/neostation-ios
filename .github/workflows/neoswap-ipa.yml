@@ -803,6 +803,7 @@ jobs:
             test/native/rpcs3_shader_storage_client_test.cpp \
             native/neoswap-storage/SourceABI.h \
             native/neoswap-storage/SourceClient.h \
+            native/neoswap-storage/SourceClient.cpp \
             test/rpcs3_source_archive_test.py \
             test/native/rpcs3_source_archive_client_test.cpp
           # RPCS3_CORE_INPUTS_END

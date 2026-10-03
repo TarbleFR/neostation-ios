@@ -38,7 +38,7 @@ def main():
         store=work/'store.o'
         execute(common+legacy+['-c',str(HERE/'Store.cpp'),'-o',str(store)],out,'source-retained-store-build')
         exe=work/'source-test'
-        execute(common+[str(HERE/name) for name in ('Metrics.cpp','ManagedSwap.cpp','SourceArchive.cpp')]+
+        execute(common+[str(HERE/name) for name in ('Metrics.cpp','ManagedSwap.cpp','SourceArchive.cpp','SourceClient.cpp')]+
                 [str(store),str(HERE/'tests/source_archive_test.cpp')]+libraries+['-o',str(exe)],out,'source-archive-build')
         result=execute([str(exe),str(cache)],out,'source-archive-run')
         report['core']=json.loads(next(line for line in reversed(result.splitlines()) if line.startswith('{')))

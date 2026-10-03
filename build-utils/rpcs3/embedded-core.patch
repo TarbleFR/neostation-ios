@@ -1511,7 +1511,7 @@ index 9b6c752..e53815e 100644
  	std::atomic_bool m_operational = false;
  };
 diff --git a/rpcs3/Emu/CMakeLists.txt b/rpcs3/Emu/CMakeLists.txt
-index 9bb3ea1..c58ec79 100644
+index 9bb3ea11d968a105a0845652d936f5acd0ab69d0..d3d05cdc67e7ce54b85b2ac86894c6224a0d0889 100644
 --- a/rpcs3/Emu/CMakeLists.txt
 +++ b/rpcs3/Emu/CMakeLists.txt
 @@ -25,6 +25,13 @@ if(USE_LTO)
@@ -1528,7 +1528,20 @@ index 9bb3ea1..c58ec79 100644
  if(USE_ASAN)
      set_source_files_properties(../../Utilities/Thread.cpp PROPERTIES COMPILE_DEFINITIONS USE_ASAN)
  endif()
-@@ -721,9 +728,14 @@ if(TARGET 3rdparty_vulkan)
+@@ -100,7 +107,12 @@ if(APPLE)
+ endif()
+ 
+ if(RPCS3_FRONTEND STREQUAL "IOS")
++    set_source_files_properties("../ios/NeoSwapStorage/SourceClient.cpp" PROPERTIES
++        COMPILE_OPTIONS -fexceptions
++        SKIP_PRECOMPILE_HEADERS ON
++    )
+     target_sources(rpcs3_emu PRIVATE
++        ../ios/NeoSwapStorage/SourceClient.cpp
+         Io/IOS/IOSPadHandler.cpp
+         Io/IOS/IOSPadHandler.h
+         ../../Utilities/JITArenaAllocator.h
+@@ -721,9 +733,14 @@ if(TARGET 3rdparty_vulkan)
  
      if(RPCS3_FRONTEND STREQUAL "IOS")
          target_sources(rpcs3_emu PRIVATE
@@ -12304,12 +12317,51 @@ index 0000000..b50f81e
 +}
 +#endif
 +#endif
+diff --git a/rpcs3/ios/NeoSwapStorage/SourceClient.cpp b/rpcs3/ios/NeoSwapStorage/SourceClient.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..624c465bcabb264d3ec3517242c8cead941a8640
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapStorage/SourceClient.cpp
+@@ -0,0 +1,33 @@
++// SPDX-License-Identifier: MIT
++#include "SourceClient.h"
++#if !defined(__cpp_exceptions)
++#error "NeoSwap SourceClient.cpp requires exceptions in this dedicated unit"
++#endif
++namespace neostation::source_client {
++bool ColdSource::offload(std::string& source,uint32_t domain) noexcept {
++    if(reference_ || source.empty())return false;
++    const auto* api=installed.load();if(!api)return false;
++    const auto session=api->session();if(!session)return false;
++    try {
++        auto ref=std::make_shared<Reference>(); // Before host ownership transfer.
++        ref->api=api;ref->session=session;ref->bytes=source.size();
++        uint64_t object=0;
++        if(api->admit(session,domain,source.data(),source.size(),&object)!=NS_SOURCE_OK || !object)
++            return false;
++        ref->object=object;reference_=std::move(ref);
++        const auto capacity=source.capacity();std::string().swap(source);
++        api->released(session,capacity);
++        return true;
++    }catch(...){return false;}
++}
++int ColdSource::restore(std::string& output,int& os_error) const noexcept {
++    os_error=0;output.clear();if(!reference_)return NS_SOURCE_MISSING;
++    const auto& ref=*reference_;
++    try {
++        output.resize(static_cast<size_t>(ref.bytes));
++        const auto result=ref.api->read(ref.session,ref.object,output.data(),ref.bytes,&os_error);
++        if(result!=NS_SOURCE_OK)output.clear();
++        return result;
++    }catch(...){output.clear();return NS_SOURCE_BUSY;}
++}
++}
 diff --git a/rpcs3/ios/NeoSwapStorage/SourceClient.h b/rpcs3/ios/NeoSwapStorage/SourceClient.h
 new file mode 100644
-index 0000000..c652c93
+index 0000000000000000000000000000000000000000..313e75b104dfb01d0ac353fa08751cb74d26bf9f
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapStorage/SourceClient.h
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,35 @@
 +// SPDX-License-Identifier: MIT
 +#pragma once
 +#include "SourceABI.h"
@@ -12337,32 +12389,10 @@ index 0000000..c652c93
 +public:
 +    void reset() noexcept { reference_.reset(); }
 +    bool archived() const noexcept { return bool(reference_); }
-+    bool offload(std::string& source,uint32_t domain) noexcept {
-+        if(reference_ || source.empty())return false;
-+        const auto* api=installed.load();if(!api)return false;
-+        const auto session=api->session();if(!session)return false;
-+        try {
-+            auto ref=std::make_shared<Reference>(); // Before host ownership transfer.
-+            ref->api=api;ref->session=session;ref->bytes=source.size();
-+            uint64_t object=0;
-+            if(api->admit(session,domain,source.data(),source.size(),&object)!=NS_SOURCE_OK || !object)
-+                return false;
-+            ref->object=object;reference_=std::move(ref);
-+            const auto capacity=source.capacity();std::string().swap(source);
-+            api->released(session,capacity);
-+            return true;
-+        }catch(...){return false;}
-+    }
-+    int restore(std::string& output,int& os_error) const noexcept {
-+        os_error=0;output.clear();if(!reference_)return NS_SOURCE_MISSING;
-+        const auto& ref=*reference_;
-+        try {
-+            output.resize(static_cast<size_t>(ref.bytes));
-+            const auto result=ref.api->read(ref.session,ref.object,output.data(),ref.bytes,&os_error);
-+            if(result!=NS_SOURCE_OK)output.clear();
-+            return result;
-+        }catch(...){output.clear();return NS_SOURCE_BUSY;}
-+    }
++    // Definitions live in one exception-enabled unit. This header is also
++    // included by RPCS3 units compiled with -fno-exceptions.
++    bool offload(std::string& source,uint32_t domain) noexcept;
++    int restore(std::string& output,int& os_error) const noexcept;
 +private:
 +    std::shared_ptr<Reference> reference_;
 +};

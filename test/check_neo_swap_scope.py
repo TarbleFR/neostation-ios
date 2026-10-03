@@ -394,11 +394,14 @@ AUDITED_CORE_FILES |= STORAGE_FILES
 # Preserve the entire prior shader audit; independently bound the owned-source
 # extension. Unrelated postimages and hunks remain byte-identical.
 SOURCE_FILES = {
+    'rpcs3/Emu/CMakeLists.txt',
     'rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp', 'rpcs3/Emu/RSX/VK/VKProgramPipeline.h',
     'rpcs3/ios/RPCS3IOS.cpp', 'rpcs3/ios/RPCS3IOS.exports',
     'rpcs3/ios/NeoSwapStorage/SourceABI.h', 'rpcs3/ios/NeoSwapStorage/SourceClient.h',
+    'rpcs3/ios/NeoSwapStorage/SourceClient.cpp',
 }
-SOURCE_ADDED = {'rpcs3/ios/NeoSwapStorage/SourceABI.h', 'rpcs3/ios/NeoSwapStorage/SourceClient.h'}
+SOURCE_ADDED = {'rpcs3/ios/NeoSwapStorage/SourceABI.h', 'rpcs3/ios/NeoSwapStorage/SourceClient.h',
+                'rpcs3/ios/NeoSwapStorage/SourceClient.cpp'}
 current = json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
 assert set(current)==set(storage_manifest)|{'neoswap_source_archive'}
 for key in set(storage_manifest)-{'files_sha256','patch_sha256'}:
@@ -411,6 +414,30 @@ source_sections=sections(source_patch)
 assert set(source_sections)==set(storage_sections)|SOURCE_ADDED
 for path in set(storage_sections)-SOURCE_FILES:
     assert hunks(source_sections[path])==hunks(storage_sections[path]), 'Unrelated source hunk changed by archive: '+path
+cmake_path='rpcs3/Emu/CMakeLists.txt'
+cmake_source=postimage_lines(source_sections[cmake_path])
+cmake_unit=(b'    set_source_files_properties("../ios/NeoSwapStorage/SourceClient.cpp" PROPERTIES\n'
+            b'        COMPILE_OPTIONS -fexceptions\n        SKIP_PRECOMPILE_HEADERS ON\n    )\n')
+cmake_entry=b'        ../ios/NeoSwapStorage/SourceClient.cpp\n'
+assert cmake_source.count(cmake_unit)==cmake_source.count(cmake_entry)==1
+old_cmake_hunks={h[:2]:h for h in hunks(storage_sections[cmake_path])}
+new_cmake_hunks={h[:2]:h for h in hunks(source_sections[cmake_path])}
+assert set(old_cmake_hunks)<=set(new_cmake_hunks)
+unit_hunks=[h for k,h in new_cmake_hunks.items() if k not in old_cmake_hunks]
+assert len(unit_hunks)==1, 'Only one dedicated cold-source CMake hunk is permitted'
+unit_hunk=unit_hunks[0]
+unit_preimage=(b'endif()\n\nif(RPCS3_FRONTEND STREQUAL "IOS")\n'
+               b'    target_sources(rpcs3_emu PRIVATE\n'
+               b'        Io/IOS/IOSPadHandler.cpp\n        Io/IOS/IOSPadHandler.h\n'
+               b'        ../../Utilities/JITArenaAllocator.h\n')
+assert unit_hunk[4]==unit_preimage
+assert unit_hunk[5].replace(cmake_unit,b'').replace(cmake_entry,b'')==unit_preimage
+assert unit_hunk[3]-unit_hunk[1]==5
+for key,old_hunk in old_cmake_hunks.items():
+    new_hunk=new_cmake_hunks[key]
+    assert new_hunk[3:]==old_hunk[3:], 'Existing CMake source or compiler flags changed'
+    assert new_hunk[2]==old_hunk[2]+(5 if old_hunk[0]>unit_hunk[0] else 0), \
+        'Unexpected CMake hunk position change'
 runtime=postimage_lines(source_sections[cpp])
 include=b'#include "NeoSwapStorage/SourceClient.h"\n'
 assert runtime.count(include)==1
@@ -421,7 +448,7 @@ setter=(b'\n// Independent host archive ABI. No main ABI layout or JIT/guest/GPU
 assert runtime.endswith(setter)
 assert runtime[:-len(setter)].rstrip()==postimage_lines(storage_sections[cpp]).rstrip(), 'Archive changed Core lifecycle/JIT'
 assert postimage_lines(source_sections[exports]).rstrip()==postimage_lines(storage_sections[exports]).rstrip()+b'\n_rpcs3_ios_set_source_archive_api'
-for name in ('SourceABI.h','SourceClient.h'):
+for name in ('SourceABI.h','SourceClient.h','SourceClient.cpp'):
     assert hashlib.sha256((ROOT/'native/neoswap-storage'/name).read_bytes()).hexdigest()==current['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
 assert current['neoswap_source_archive']['abi']==1
 assert current['neoswap_source_archive']['host_owned'] is True
@@ -458,6 +485,6 @@ assert broker.count('struct Broker {') == 1
 assert broker.count('Broker& broker() { static Broker b; return b; }') == 1
 catalog = json.loads((ROOT / 'native/neoswap/localizations.json').read_text())
 assert set(catalog) == {'en', 'es', 'ru', 'zh', 'zh_Hant', 'pt', 'fr', 'de', 'it', 'id', 'ja', 'ko'}
-print('PASS NeoSwap scope: historical Vulkan/Core changes retained; nineteen reviewed postimages; '
+print('PASS NeoSwap scope: historical Vulkan/Core changes retained; explicitly reviewed postimages; '
       'optional shader CPU cache and owned GLSL source archive; JIT/PPU/SPU and allocator v1 unchanged; '
       'runtime ABI30/relay ABI1; one host broker; no physical iPhone validation claim')

@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = 'b9b5e31730f94e34f32b84f0c2cfacff3bc3d02f03f3d716b192596315009f70'
+PATCH_SHA256 = '555139f6eef778523384a4580e4d714af6f141c6d223336436c42333c015b94c'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -34,6 +34,7 @@ CORE_INPUTS = (
     'test/native/rpcs3_shader_storage_client_test.cpp',
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
+    'native/neoswap-storage/SourceClient.cpp',
     'test/rpcs3_source_archive_test.py',
     'test/native/rpcs3_source_archive_client_test.cpp',
     'build-utils/build_rpcs3_embedded_core.sh',
@@ -139,7 +140,7 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'Unexpected diagnostics ABI')
     require('NEOSWAP_RELAY_ABI = 1' in (root / 'packages/neo_swap/ios/Classes/NeoSwapRelay.h').read_text(),
             'Unexpected page-relay ABI')
-    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h', 'SourceABI.h', 'SourceClient.h'):
+    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h', 'SourceABI.h', 'SourceClient.h', 'SourceClient.cpp'):
         payload = (root/'native/neoswap-storage'/name).read_bytes()
         require(hashlib.sha256(payload).hexdigest() == manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name], 'Storage Core contract differs: '+name)
     recipe = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()

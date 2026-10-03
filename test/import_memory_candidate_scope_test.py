@@ -53,6 +53,7 @@ assert managed['required_evidence'] == [
 PRODUCTION_FILES = {
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
+    'native/neoswap-storage/SourceClient.cpp',
     'native/neoswap-storage/SourceArchive.h',
     'native/neoswap-storage/SourceArchive.cpp',
     'packages/neo_swap/ios/Classes/SourceABI.h',
@@ -203,6 +204,7 @@ SUPPORT_FILES = {
     'build-utils/validate_source_archive_evidence.py',
     'test/neoswap_source_archive_host_test.py',
     'test/rpcs3_source_archive_test.py',
+    'test/rpcs3_core_syntax_gate_test.py',
     'test/native/rpcs3_source_archive_client_test.cpp',
     # Actual mutable block/file cycle, C boundary and Swift interop proofs.
     'native/neoswap-storage/run_managed_validation.py',

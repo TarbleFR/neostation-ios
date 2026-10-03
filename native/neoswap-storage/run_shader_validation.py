@@ -17,7 +17,7 @@ def simulator_service(work, out, sources):
     command=['xcrun','--sdk','iphonesimulator','clang++','-std=c++20','-O1','-Wall','-Wextra','-Werror',
              '-fobjc-arc','-fblocks','-x','objective-c++','-target','arm64-apple-ios18.0-simulator','-isysroot',sdk,
              '-I',str(HERE),'-I',str(service.parent)]
-    execute(command+sources+[str(HERE/'Metrics.cpp'),str(service),str(HERE/'tests/service_runtime.mm'),
+    execute(command+sources+[str(HERE/'SourceClient.cpp'),str(HERE/'Metrics.cpp'),str(service),str(HERE/'tests/service_runtime.mm'),
             '-framework','Foundation','-framework','UIKit','-lcompression','-lz','-o',str(exe)],out,'shader-simulator-build')
     bundle='com.neostation.storage.service.test'
     with (app/'Info.plist').open('wb') as f:

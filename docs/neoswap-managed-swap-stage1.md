@@ -129,6 +129,17 @@ troncature, les sessions périmées et la retraite partagée sont couverts. La C
 doit encore compiler le vrai consommateur Vulkan dans le nouveau Core et
 exécuter le service UIKit en simulateur avant packaging IPA.
 
+### Correction du contrat de compilation du client
+
+Le premier build du Core de cette étape a détecté des `try/catch` dans le
+header partagé, inclus aussi par l'upscaler compilé avec `-fno-exceptions`.
+Les opérations sont désormais définies dans `SourceClient.cpp`, seule nouvelle
+unité compilée avec `-fexceptions`, sans modifier les flags des autres unités.
+Le header et le setter sont testés sans exceptions ; le contrôle syntaxique
+iOS exige maintenant le client, le consommateur Vulkan et l'upscaler avec leurs
+véritables flags avant la compilation complète. Les preuves doivent être
+regénérées sur la révision corrigée ; l'ancien build en échec n'est pas réutilisé.
+
 ### Audit initial conservé
 
 L'audit des sources exactes `22f1152783cef1f7e04af7b1c895173e28fd5b03`, après

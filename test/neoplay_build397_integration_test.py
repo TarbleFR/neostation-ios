@@ -19,6 +19,7 @@ APPROVED_MANAGED_SWAP_FILES = frozenset({
     'native/neoswap/localizations.json',
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
+    'native/neoswap-storage/SourceClient.cpp',
     'native/neoswap-storage/SourceArchive.h',
     'native/neoswap-storage/SourceArchive.cpp',
     'native/neoswap-storage/run_source_validation.py',

@@ -10,6 +10,7 @@ REQUIRED_INPUTS=frozenset({
     'native/neoswap-storage/ManagedSwap.cpp','native/neoswap-storage/ManagedSwap.h',
     'native/neoswap-storage/SourceArchive.cpp','native/neoswap-storage/SourceArchive.h',
     'native/neoswap-storage/SourceABI.h','native/neoswap-storage/SourceClient.h',
+    'native/neoswap-storage/SourceClient.cpp',
     'native/neoswap-storage/Metrics.cpp',
     'native/neoswap-storage/tests/source_archive_test.cpp',
     'native/neoswap-storage/run_source_validation.py',
