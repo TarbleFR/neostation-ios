@@ -6,6 +6,7 @@ import 'package:neostation/l10n/rpcs3_library_locale.dart';
 import 'package:neostation/l10n/dusklight_locale.dart';
 import 'package:neostation/l10n/dolphin_import_locale.dart';
 import 'package:neostation/l10n/ports_locale.dart';
+import 'package:neostation/l10n/retroarch_locale.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,10 @@ import 'package:neostation/services/rpcs3_launch_service.dart';
 import '../dolphin_internal_v2_service.dart';
 import '../dusklight_internal_service.dart';
 import '../kartpad_internal_service.dart';
+import '../retroarch_internal_service.dart';
+import '../retroarch_core_catalog.dart';
+import '../retroarch_game_core_selection.dart';
+import '../retroarch_migration_service.dart';
 // DOLPHIN_ISOLATION_END: launcher_import
 import 'package:neostation/services/logger_service.dart';
 
@@ -105,6 +110,17 @@ class GameLaunchService {
     GameModel game,
   ) async {
     try {
+      // A failed first-frame handoff can still be tearing down its native
+      // renderer. It owns the process foreground until STOPPED is confirmed,
+      // including when the next requested game belongs to another emulator.
+      if (Platform.isIOS && RetroArchInternalService.hasSession) {
+        return GameLaunchResult.failure(
+          RetroArchLocale.launchError(
+            Localizations.localeOf(context), 'RETROARCH_SESSION_ACTIVE',
+          ),
+          'RetroArch still owns its native session.',
+        );
+      }
       if (Platform.isAndroid && (system.folderName == 'android')) {
         if (game.romPath == null) {
           return GameLaunchResult.failure(
@@ -145,6 +161,7 @@ class GameLaunchService {
           Rpcs3LibraryService.isVirtualLibraryPath(game.romPath!);
 
       bool romExists = false;
+      bool retroArchCacheOnly = false;
       if (game.romPath != null) {
         if (isArmsx2VirtualRom || isMeloNXVirtualRom || isRpcs3VirtualRom) {
           // External iOS library imports are represented by direct-launch URLs
@@ -161,6 +178,7 @@ class GameLaunchService {
               romExists = await RetroArchLibraryService.hasGameForRomPath(
                 game.romPath!,
               );
+              retroArchCacheOnly = romExists;
             } catch (_) {
               // A missing/invalid TestFlight cache remains a normal not-found.
             }
@@ -220,6 +238,12 @@ class GameLaunchService {
       if (Platform.isIOS && system.folderName.toLowerCase() == 'ports') {
         final locale = Localizations.localeOf(context);
         final gamePath = game.romPath;
+        if (retroArchCacheOnly) {
+          return GameLaunchResult.failure(
+            RetroArchLocale.launchError(locale, 'RETROARCH_GAME_IMPORT_REQUIRED'),
+            'Cached external RetroArch entry has no readable game file: $gamePath',
+          );
+        }
         if (gamePath == null || gamePath.isEmpty) {
           return GameLaunchResult.failure(
             DusklightLocale.launchError(locale, 'DUSKLIGHT_GAME_UNREADABLE'),
@@ -289,6 +313,63 @@ class GameLaunchService {
           system,
           game,
           'ios_dusklight_internal',
+        );
+        await FavoritesService.recordGamePlayed(game);
+        return GameLaunchResult.success();
+      }
+
+      // Curated embedded RetroArch systems have a hard routing boundary.
+      // A native startup error stays an error for this chosen core; it must
+      // never quietly open the external TestFlight app instead.
+      if (Platform.isIOS &&
+          RetroArchMigrationService.instance.usesEmbedded &&
+          RetroArchCoreCatalog.supportsSystem(system.folderName)) {
+        final locale = Localizations.localeOf(context);
+        final gamePath = game.romPath;
+        if (gamePath == null || gamePath.isEmpty) {
+          return GameLaunchResult.failure(
+            RetroArchLocale.launchError(locale, 'RETROARCH_GAME_UNREADABLE'),
+            system.folderName,
+          );
+        }
+        final RetroArchCoreDescriptor core;
+        try {
+          core = await RetroArchGameCoreSelection.resolve(
+            systemFolderName: system.folderName,
+            systemId: system.id,
+            romname: game.romname,
+            legacyEmulatorId: game.emulatorName,
+            legacyCoreId: game.coreName,
+          );
+        } catch (error) {
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+          return GameLaunchResult.failure(
+            RetroArchLocale.launchError(locale, 'RETROARCH_CORE_UNAVAILABLE'),
+            '$error',
+          );
+        }
+        final report = await RetroArchInternalService.launch(
+          systemFolderName: system.folderName,
+          coreId: core.identifier,
+          gamePath: gamePath,
+          gameTitle: game.name,
+          locale: locale.toLanguageTag(),
+          uiText: RetroArchLocale.nativeUI(locale),
+        );
+        if (!report.success) {
+          if (!context.mounted) return GameLaunchResult.failure('', '');
+          return GameLaunchResult.failure(
+            RetroArchLocale.launchError(locale, report.errorCode),
+            report.technicalDetails,
+          );
+        }
+        // A native session can end between its first frame and this future's
+        // completion. Register first so the launch monitor can immediately
+        // close that matching ended session without leaking menu playback.
+        GameSessionManager.registerGameLaunch(
+          system,
+          game,
+          RetroArchInternalService.sessionExecutable,
         );
         await FavoritesService.recordGamePlayed(game);
         return GameLaunchResult.success();

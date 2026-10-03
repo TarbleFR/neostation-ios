@@ -19,7 +19,7 @@ target.build_phases.to_a.each do |phase|
     phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
 end
 adapter = project.main_group.new_group('NeoStation', '../../neostation')
-['NeoRetroArchCore.m', 'NeoRetroArchNoJIT.c'].each do |name|
+['NeoRetroArchCore.m', 'NeoRetroArchNoJIT.c', 'NeoRetroArchStateImport.c'].each do |name|
   target.source_build_phase.add_file_reference(adapter.new_file(name))
 end
 # The pinned iOS11 project predates the WebDAV source addition: Cocoa lifecycle
@@ -46,10 +46,13 @@ end
   settings = configuration.build_settings
   settings.keys.grep(/OTHER_CFLAGS/).each do |key|
     flags = Array(settings[key])
-    flags.reject! { |f| %w[-DHAVE_ONLINE_UPDATER -DHAVE_UPDATE_ASSETS -DHAVE_UPDATE_CORES -DHAVE_NETWORKGAMEPAD].include?(f) }
-    settings[key] = flags + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DNEOSTATION_EMBEDDED_RETROARCH=1']
+    # GLES3 keeps GLES2 core contexts supported, but defining both feature
+    # levels selects GLES3 SDK headers with GLES2-only OES enum branches in
+    # gl2.c. Use the coherent GLES3 path needed by the reviewed N64 donor.
+    flags.reject! { |f| %w[-DHAVE_ONLINE_UPDATER -DHAVE_UPDATE_ASSETS -DHAVE_UPDATE_CORES -DHAVE_NETWORKGAMEPAD -DHAVE_OPENGLES2].include?(f) }
+    settings[key] = flags + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DHAVE_ZLIB','-DNEOSTATION_EMBEDDED_RETROARCH=1']
   end
-  settings['OTHER_CFLAGS'] = Array(settings['OTHER_CFLAGS']) + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DNEOSTATION_EMBEDDED_RETROARCH=1']
+  settings['OTHER_CFLAGS'] = Array(settings['OTHER_CFLAGS']) + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DHAVE_ZLIB','-DNEOSTATION_EMBEDDED_RETROARCH=1']
   # Keep existing upstream headers and include its repository-pinned WebDAV
   # directory, which is missing from the original iOS11 project's header map.
   settings['HEADER_SEARCH_PATHS'] = Array(settings['HEADER_SEARCH_PATHS']) + ['$(inherited)', '$(SRCROOT)/../..', '$(SRCROOT)/../../libretro-common/include',
@@ -84,4 +87,15 @@ end
     PROVISIONING_PROFILE LD_NO_PIE].each { |key| settings.delete(key) }
 end
 project.save
+# Inspect the saved Xcode graph too: conditional flags may otherwise override
+# the generic setting and silently restore the contradictory GLES2 level.
+saved = Xcodeproj::Project.open(path)
+saved_target = saved.targets.find { |t| t.name == 'RetroArchCore' }
+(saved.build_configurations + saved_target.build_configurations).each do |configuration|
+  configuration.build_settings.keys.grep(/OTHER_CFLAGS/).each do |key|
+    flags = Array(configuration.build_settings[key])
+    raise "Contradictory GLES2 feature flag in #{configuration.name}/#{key}" if flags.include?('-DHAVE_OPENGLES2')
+    raise "GLES3 feature flag missing in #{configuration.name}/#{key}" unless flags.include?('-DHAVE_OPENGLES3')
+  end
+end
 puts "Configured #{path}: RetroArchCore arm64 iOS 18 dylib"

@@ -14,6 +14,9 @@ import 'package:neostation/widgets/shimmering_logo.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:video_player/video_player.dart';
 import '../../services/frontend_media_gate.dart';
+import '../../services/retroarch_core_catalog.dart';
+import '../../services/retroarch_migration_service.dart';
+import '../../widgets/retroarch_library_actions.dart';
 import 'package:provider/provider.dart';
 
 import 'dart:io';
@@ -120,6 +123,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ps2';
   bool get _isPortsLibrary =>
       Platform.isIOS && widget.system.folderName.toLowerCase() == 'ports';
+  bool get _isRetroArchLibrary =>
+      Platform.isIOS &&
+      RetroArchMigrationService.instance.usesEmbedded &&
+      RetroArchCoreCatalog.supportsSystem(widget.system.folderName);
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -228,6 +235,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   @override
   void initState() {
     super.initState();
+    RetroArchMigrationService.instance.addListener(_onRetroArchModeChanged);
     _fileProvider = widget.fileProvider;
     _backButtonFocusNode = FocusNode(skipTraversal: true);
     _loadGames();
@@ -265,6 +273,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
     super.didChangeDependencies();
   }
 
+  void _onRetroArchModeChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onSecondaryDisplayChanged() {
     if (mounted) {
       setState(() {});
@@ -274,6 +286,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   @override
   void dispose() {
+    RetroArchMigrationService.instance.removeListener(_onRetroArchModeChanged);
     FrontendMediaGate.instance.unregister(this);
     FrontendMediaGate.instance.removeListener(_onFrontendMediaGateChanged);
     // Detach listeners before disposal.
@@ -678,6 +691,24 @@ class _SystemGamesListState extends State<SystemGamesList> {
               _buildLetterIndicator(),
             if (!_isRpcs3Library || _rpcs3FirmwareReady) GameViewModeDropdown(),
 
+            if (!_isGameLaunching && _isRetroArchLibrary)
+              Consumer<SqliteConfigProvider>(
+                builder: (context, config, child) {
+                  final mode = config.config.gameViewMode;
+                  if (!_isLoading &&
+                      _games.isNotEmpty &&
+                      _selectedGame != null &&
+                      mode != 'grid' &&
+                      mode != 'carousel') {
+                    return const SizedBox.shrink();
+                  }
+                  return Positioned(
+                    top: 8.r,
+                    right: 10.r,
+                    child: SafeArea(child: _buildRetroArchImportAction()),
+                  );
+                },
+              ),
             // DOLPHIN_ISOLATION_BEGIN: playlist_actions
             if (!_isGameLaunching &&
                 Platform.isIOS &&
@@ -800,6 +831,27 @@ class _SystemGamesListState extends State<SystemGamesList> {
       ),
     );
   }
+
+  Widget _buildRetroArchImportAction({bool embedded = false}) =>
+      RetroArchLibraryActions(
+        embedded: embedded,
+        systemFolder: widget.system.folderName,
+        onInteractionChanged: (active) {
+          if (!mounted) return;
+          if (active) {
+            _gamepadNav.deactivate();
+          } else {
+            _gamepadNav.activate();
+          }
+        },
+        onLibraryChanged: () async {
+          if (!mounted) return;
+          await context
+              .read<SqliteConfigProvider>()
+              .refreshRetroArchInternalLibrary(widget.system.folderName);
+          if (mounted) await _loadGames();
+        },
+      );
 
   // DOLPHIN_ISOLATION_BEGIN: import_action_builder
   Widget _buildDolphinImportAction() => DolphinInternalPlaylistActions(
@@ -1740,8 +1792,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
     return GameDetailsCardList(
       // DOLPHIN_ISOLATION_BEGIN: import_action_in_tabs
-      importAction:
-          Platform.isIOS &&
+      importActionWidth: _isRetroArchLibrary ? 180.r : null,
+      importAction: _isRetroArchLibrary
+          ? _buildRetroArchImportAction(embedded: true)
+          : Platform.isIOS &&
               DolphinInternalV2Service.isDolphinSystem(widget.system.folderName)
           ? _buildEmbeddedDolphinImportAction()
           : _isArmsx2Library

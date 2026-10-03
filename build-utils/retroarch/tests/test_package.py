@@ -46,18 +46,59 @@ class PackageValidation(unittest.TestCase):
         link=zipfile.ZipInfo('assets/link');link.external_attr=0o120777<<16
         with self.assertRaises(ValueError):package.safe_name(link)
 
-    def test_manifest_has_exact_conservative_subset_and_identity(self):
+    def test_manifest_has_exact_reviewed_catalogue_and_pinned_supplement(self):
+        audit=json.loads((SCRIPT.parent/'appstore-candidate-audit.json').read_text())
+        candidates={c['id']:c for c in audit['softwareCandidatePins']}
         ids={c['id'] for c in package.PINS['cores']}
-        self.assertEqual(ids,{'fceumm','nestopia','snes9x','gambatte','sameboy','mgba','genesis_plus_gx','picodrive','mednafen_pce_fast','pcsx_rearmed','mednafen_psx'})
+        self.assertEqual(ids,set(candidates)|{'ppsspp','mupen64plus_next'})
+        self.assertEqual(len(candidates),85)
+        self.assertEqual([c['id'] for c in package.PINS['cores'][:11]],
+            ['fceumm','nestopia','snes9x','gambatte','sameboy','mgba','genesis_plus_gx','picodrive','mednafen_pce_fast','pcsx_rearmed','mednafen_psx'])
         self.assertFalse(ids & package.FORBIDDEN)
         self.assertEqual(package.PINS['frontend']['commit'],'3a6a1e9c4fb4e90044945f84138ae7fad687e1a4')
         for c in package.PINS['cores']:
             self.assertRegex(c['sha256'],r'^[a-f0-9]{64}$')
             self.assertEqual(c['binary'].split('/')[0],'Frameworks')
+            if c['id'] in candidates:
+                for key,value in candidates[c['id']].items():self.assertEqual(c[key],value)
+                self.assertEqual(c['input'],'sourceIpa')
+        psp=next(c for c in package.PINS['cores'] if c['id']=='ppsspp')
+        self.assertEqual(psp['input'],'supplemental-ppsspp')
+        self.assertEqual(psp['forcedOptions'],{'ppsspp_cpu_core':'Interpreter','ppsspp_backend':'opengl'})
+        self.assertEqual(psp['sha256'],package.psp_tool().PINS['coreArchive']['binarySha256'])
         systems={s for c in package.PINS['cores'] for s in c['systemIds']}
         self.assertNotIn('3ds',systems)
-        self.assertNotIn('n64',systems)
-        self.assertNotIn('psp',systems)
-        self.assertNotIn('nds',systems)
+        self.assertTrue({'ds','psp','pspminis','n64'}<=systems)
+
+    def test_hardware_profile_rejects_dynarec_and_other_renderers(self):
+        mupen=next(c for c in package.PINS['cores'] if c['id']=='mupen64plus_next')
+        data=b'3.0-Vulkan 12edd2c\0'
+        parsed={'hw_render':'true'}
+        package.check_hardware_profile(mupen,parsed,data)
+        for key,value in [('mupen64plus-cpucore','dynamic_recompiler'),('mupen64plus-rdp-plugin','parallel'),('mupen64plus-rsp-plugin','parallel')]:
+            changed={**mupen,'forcedOptions':{**mupen['forcedOptions'],key:value}}
+            with self.assertRaises(ValueError):package.check_hardware_profile(changed,parsed,data)
+        with self.assertRaises(ValueError):package.check_hardware_profile(mupen,parsed,b'3.0-Vulkan unknown\0')
+        with self.assertRaises(ValueError):package.check_hardware_profile({'id':'other'},parsed,data)
+
+    def test_optional_dynarecs_and_dos_voodoo_remain_constrained(self):
+        cores={c['id']:c for c in package.PINS['cores']}
+        self.assertEqual(cores['mednafen_saturn']['forcedOptions'],
+            {'beetle_saturn_sh2_jit':'disabled','beetle_saturn_jit_scu':'disabled','beetle_saturn_jit_scsp':'disabled'})
+        self.assertEqual(cores['dosbox_pure']['forcedOptions'],
+            {'dosbox_pure_cpu_core':'normal','dosbox_pure_voodoo_perf':'auto'})
+        self.assertIs(cores['dosbox_pure']['runtimeProfile']['hardwareRenderingAllowed'],False)
+        self.assertIs(cores['dosbox_pure']['runtimeProfile']['iosDynarecCompiled'],False)
+
+    def test_numeric_firmware_required_and_optional_metadata(self):
+        parsed=package.parse_info(b'firmware_count = 2\nfirmware0_path = "scph5500.bin"\nfirmware0_desc = "JP BIOS"\nfirmware0_opt = "false"\nfirmware1_path = "bios_CD_U.bin"\nfirmware1_opt = "true"\n')
+        self.assertEqual(parsed['firmware_count'],'2')
+        self.assertEqual(package.firmware_entries(parsed),[
+            {'path':'scph5500.bin','description':'JP BIOS','optional':False},
+            {'path':'bios_CD_U.bin','description':'bios_CD_U.bin','optional':True}])
+        with self.assertRaises(ValueError):package.firmware_entries({'firmware_count':'1','firmware0_path':'../BIOS.bin'})
+        pins={c['id']:c for c in package.PINS['cores']}
+        self.assertEqual(len(pins['bsnes']['firmware']),20)
+        self.assertTrue(any(not f['optional'] for f in pins['mednafen_psx']['firmware']))
 
 if __name__=='__main__':unittest.main()

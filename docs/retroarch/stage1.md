@@ -12,11 +12,14 @@ Work is isolated on `feature/retroarch-embedded`, starting from NeoStation
   the actual IPA frontend's Git version and resolved to its full upstream SHA.
 - The standalone application executable is excluded. The hosted frontend is
   built from these sources and exposes only the versioned NeoStation ABI.
-- Eleven pinned core frameworks are **smoke-test inputs for this stage**, not
-  the final user catalogue. The complete compatible App Store subset, including
-  alternate cores per console, is being inventoried separately. PSP requires a
-  supplementary pinned core because the supplied IPA has its metadata but no
-  PPSSPP core binary.
+- The original eleven frameworks were smoke-test inputs. The current candidate
+  contains 87 pinned cores mapped to 84 existing library identifiers: 85 reviewed
+  software cores from the donor, its GLES Mupen64Plus-Next core and supplementary
+  PPSSPP. The App Store allowlist alone does not qualify a core on an iPhone.
+- PPSSPP's immutable binary, matching source and support assets are pinned under
+  `native/retroarch/psp`. The supplied IPA includes its metadata but no binary.
+  PSP uses Interpreter/OpenGL; N64 uses Pure Interpreter/GLideN64/HLE, without a
+  threaded renderer. These are initial non-JIT profiles, not performance claims.
 
 ## Native boundary
 
@@ -37,24 +40,25 @@ non-JIT configuration before being offered.
 
 ## Verification
 
-Local checks passed for the exact IPA hash and all eleven core binary hashes,
+Local checks passed for the exact IPA hash and all selected core binary hashes,
 curation/source tool tests, shared ABI validation and controller-menu chord
 consumption. `retroarch-embedded-stage1.yml` adds actual Apple SDK compilation of
 the production bridge, an isolated UIKit lifecycle probe with a controllable
 test backend, and compilation/linking of the real hosted RetroArch frontend.
 
 The controlled backend verifies host state transitions and does not stand in
-for RetroArch gameplay. Apple CI compilation and physical iPhone gameplay are
-not yet claimed at this checkpoint. A complete corresponding-source archive
-accompanies the GPL frontend artifact.
+for RetroArch gameplay. Earlier Apple runs compiled the production UIKit
+bridge, but their simulator selection script failed before executing the
+lifecycle harness. The success status on those workflow steps was misleading;
+it is not simulator lifecycle evidence. The next candidate removes the faulty
+shell substitution and independently requires the simulator's JSON report for
+the exact host SHA. Frontend compilation, generated-host configuration,
+simulator execution and device qualification remain separate gates. A complete
+corresponding-source archive accompanies the GPL frontend artifact.
 
-## Subsequent stages
+## Application integration
 
-1. Expand and pin the reviewed catalogue and PSP supplementary input.
-2. Attach the native runtime to the Flutter launch path and first-run console
-   picker, including per-console core selection and later changes.
-3. Connect imports, the uniform game menu and optional external-to-embedded
-   migration. The migration uses only the application's selected locale and
-   copies user-selected files without deleting the originals.
-4. Run full host checks and device validation before proposing integration
-   into `experimental`.
+The next candidate includes the library picker, per-console and per-game core
+choices, launch routing, user file imports and optional migration. See
+[`stage2.md`](stage2.md) for the behavior and remaining qualification gates.
+There has been no merge into `experimental`.

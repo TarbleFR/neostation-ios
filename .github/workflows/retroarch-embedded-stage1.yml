@@ -24,6 +24,30 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate curation and source tooling
         run: python3 -m unittest discover -s build-utils/retroarch/tests -v
+      - name: Validate pinned PSP profile and packaging policy
+        run: python3 -m unittest discover -s build-utils/retroarch/psp/tests -v
+      - name: Reject missing or stale Apple lifecycle evidence
+        run: python3 packages/retroarch_internal_bridge/ci/test_apple_evidence.py
+      - name: Fetch pinned source for genuine state decoder checks
+        run: |
+          commit="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["frontend"]["commit"])')"
+          git init "$RUNNER_TEMP/retroarch-state-source"
+          git -C "$RUNNER_TEMP/retroarch-state-source" remote add origin https://github.com/libretro/RetroArch.git
+          git -C "$RUNNER_TEMP/retroarch-state-source" fetch --depth 1 origin "$commit"
+          git -C "$RUNNER_TEMP/retroarch-state-source" checkout --detach FETCH_HEAD
+      - name: Exercise actual RZIP and RASTATE decoders with sanitizers
+        run: |
+          python3 build-utils/retroarch/run_state_import_checks.py \
+            --upstream "$RUNNER_TEMP/retroarch-state-source" \
+            --sanitizers address,undefined --report "$RUNNER_TEMP/retroarch-state-import-checks.json"
+      - name: Preserve state import behavior evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-State-Import-Checks-${{ github.sha }}
+          path: ${{ runner.temp }}/retroarch-state-import-checks.json
+          if-no-files-found: warn
+          retention-days: 14
 
   apple-native:
     runs-on: macos-15
@@ -36,7 +60,11 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
       - name: Compile bridge and verify simulated lifecycle
-        run: bash packages/retroarch_internal_bridge/ci/run_apple_checks.sh "$RUNNER_TEMP/retroarch-host-checks"
+        run: |
+          set -euo pipefail
+          bash packages/retroarch_internal_bridge/ci/run_apple_checks.sh "$RUNNER_TEMP/retroarch-host-checks"
+          python3 packages/retroarch_internal_bridge/ci/verify_apple_evidence.py \
+            "$RUNNER_TEMP/retroarch-host-checks" "$GITHUB_SHA" --require-completion
       - name: Preserve native host lifecycle evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,6 +75,16 @@ jobs:
           retention-days: 14
       - name: Install Xcode project editor
         run: gem install --user-install xcodeproj --version 1.27.0 --no-document
+      - name: Verify generated Runner metadata with the actual project editor
+        run: bash build-utils/retroarch/ci/run_host_configuration_checks.sh "$RUNNER_TEMP/retroarch-host-configuration-checks"
+      - name: Preserve generated host configuration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-Host-Configuration-${{ github.sha }}
+          path: ${{ runner.temp }}/retroarch-host-configuration-checks
+          if-no-files-found: warn
+          retention-days: 14
       - name: Fetch exact matching RetroArch frontend source
         run: |
           commit="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["frontend"]["commit"])')"
@@ -60,6 +98,9 @@ jobs:
           curl --fail --location --retry 3 --connect-timeout 30 "$url" --output "$RUNNER_TEMP/2026-10-03_RetroArch.ipa"
       - name: Build actual hosted frontend and curated signed core package
         run: |
+          python3 test/retroarch_curation_test.py \
+            --ipa "$RUNNER_TEMP/2026-10-03_RetroArch.ipa" \
+            --upstream "$RUNNER_TEMP/retroarch-upstream" --require-package
           bash build-utils/retroarch/build_core.sh \
             --upstream "$RUNNER_TEMP/retroarch-upstream" \
             --ipa "$RUNNER_TEMP/2026-10-03_RetroArch.ipa" \

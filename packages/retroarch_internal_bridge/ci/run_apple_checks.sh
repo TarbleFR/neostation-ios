@@ -2,27 +2,43 @@
 # Apple SDK verification of production host/menu code and isolated UIKit
 # lifecycle behavior. The fake backend proves host lifecycle only; it does not
 # substitute for the separate real RetroArch frontend/gameplay validation.
-set -euo pipefail
+set -Eeuo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$PROJECT_DIR"
 EVIDENCE_DIR="${1:-$PWD/build/retroarch-apple-checks}"
 mkdir -p "$EVIDENCE_DIR"
+# Never accept evidence left by a previous invocation or interrupted run.
+rm -f "$EVIDENCE_DIR/host-probe.json" "$EVIDENCE_DIR/host-checks-complete.json" "$EVIDENCE_DIR/host-checks-failed.json"
 git rev-parse HEAD > "$EVIDENCE_DIR/source.txt"
 BRIDGE_DIR="$PWD/packages/retroarch_internal_bridge"
 PROBE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/retroarch-host-probe.XXXXXX")"
 APP_DIR="$PROBE_DIR/Probe.app"
 mkdir -p "$APP_DIR/Frameworks" "$APP_DIR/RetroArchResources/overlays"
 DEVICE_ID=""
+LAUNCH_PID=""
 cleanup() {
+  local original_status=$?
   if [[ -n "$DEVICE_ID" ]]; then
     xcrun simctl spawn "$DEVICE_ID" log show --last 3m --style compact \
       --predicate 'process == "Probe"' > "$EVIDENCE_DIR/simulator-system.log" 2>&1 || true
     xcrun simctl shutdown "$DEVICE_ID" >/dev/null 2>&1 || true
     xcrun simctl delete "$DEVICE_ID" >/dev/null 2>&1 || true
   fi
+  if [[ -n "$LAUNCH_PID" ]] && kill -0 "$LAUNCH_PID" 2>/dev/null; then
+    kill "$LAUNCH_PID" >/dev/null 2>&1 || true
+    wait "$LAUNCH_PID" >/dev/null 2>&1 || true
+  fi
   rm -rf "$PROBE_DIR"
+  return "$original_status"
 }
 trap cleanup EXIT
+fail() {
+  local original_status=$?
+  trap - ERR
+  printf '{"success":false,"exitStatus":%s,"line":%s}\n' "$original_status" "${BASH_LINENO[0]}" > "$EVIDENCE_DIR/host-checks-failed.json"
+  exit "$original_status"
+}
+trap fail ERR
 SDK_DIR="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 ARCH="$(uname -m)"
 # Compile and execute the shared production ABI and menu chord policy.
@@ -69,7 +85,10 @@ codesign --force --sign - "$APP_DIR"
 xcrun simctl list runtimes --json > "$EVIDENCE_DIR/runtimes.json"
 xcrun simctl list devicetypes --json > "$EVIDENCE_DIR/device-types.json"
 xcrun simctl list devices available --json > "$EVIDENCE_DIR/available-devices.json"
-read -r RUNTIME_ID TYPE_ID < <(python3 - "$EVIDENCE_DIR" <<'PY'
+# macOS /bin/bash 3.2 can misparse a heredoc nested in process substitution,
+# then exit zero before running the simulator. Keep Python synchronous and
+# persist the selection before a separate, status-checked read.
+python3 - "$EVIDENCE_DIR" <<'PY'
 import json, pathlib, sys
 p=pathlib.Path(sys.argv[1])
 runtimes={r['identifier']:r for r in json.load(open(p/'runtimes.json'))['runtimes']
@@ -96,27 +115,36 @@ if not pairs:
     raise SystemExit('No compatible available iPhone/iOS 18+ simulator pair installed')
 _,runtime_id,type_id,name=max(pairs)
 (p/'selected-device.json').write_text(json.dumps({'runtime':runtime_id,'deviceType':type_id,'name':name},indent=2)+'\n')
+(p/'selected-device.ids').write_text(runtime_id+' '+type_id+'\n')
 print(runtime_id,type_id)
 PY
-)
+read -r RUNTIME_ID TYPE_ID < "$EVIDENCE_DIR/selected-device.ids"
+[[ -n "$RUNTIME_ID" && -n "$TYPE_ID" ]]
 DEVICE_ID="$(xcrun simctl create RetroArchHostProbe "$TYPE_ID" "$RUNTIME_ID")"
 xcrun simctl boot "$DEVICE_ID"
 xcrun simctl bootstatus "$DEVICE_ID" -b
 xcrun simctl install "$DEVICE_ID" "$APP_DIR"
 DATA_DIR="$(xcrun simctl get_app_container "$DEVICE_ID" com.neostation.retroarch.host-probe data)"
 xcrun simctl launch --console "$DEVICE_ID" com.neostation.retroarch.host-probe > "$EVIDENCE_DIR/probe-console.log" 2>&1 &
+LAUNCH_PID=$!
 for attempt in $(seq 1 60); do
   if [[ -f "$DATA_DIR/Documents/retroarch-host-probe.json" ]]; then break; fi
+  if ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+    if wait "$LAUNCH_PID"; then
+      echo 'Simulator console exited before the lifecycle report was produced.' >&2
+      exit 1
+    else
+      launch_status=$?
+      echo "Simulator launch failed with status $launch_status." >&2
+      exit "$launch_status"
+    fi
+  fi
   sleep 1
 done
+if [[ ! -s "$DATA_DIR/Documents/retroarch-host-probe.json" ]]; then
+  echo 'Simulator lifecycle probe timed out without a report.' >&2
+  exit 1
+fi
 cp "$DATA_DIR/Documents/retroarch-host-probe.json" "$EVIDENCE_DIR/host-probe.json"
-python3 - "$EVIDENCE_DIR/host-probe.json" "$SOURCE_SHA" <<'PY'
-import json,sys
-report=json.load(open(sys.argv[1]))
-assert report['sourceSHA']==sys.argv[2],report
-assert report['success'],report
-assert report['testRuntimeOnly'] and not report['realRetroArchGameplayValidated'],report
-assert report['cycles']==10 and report['starts']==12 and report['stops']==12 and report['endedEvents']==12,report
-assert report['firstFrameTimeoutRetainedOwnership'] and report['lateCallbackIgnored'] and report['stopAcknowledgementRequired'],report
-print(json.dumps(report,indent=2))
-PY
+python3 "$BRIDGE_DIR/ci/verify_apple_evidence.py" "$EVIDENCE_DIR" "$SOURCE_SHA" --write-completion
+exit 0

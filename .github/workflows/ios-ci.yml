@@ -452,6 +452,41 @@ jobs:
           echo "BUNDLE_PATH=$BUNDLE_PATH" >> "$GITHUB_ENV"
           bundle install
 
+      - name: Validate RetroArch libraries, migration and translations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 test/retroarch_localization_test.py
+          python3 -m unittest discover -s build-utils/retroarch/tests -v
+          python3 -m unittest discover -s build-utils/retroarch/psp/tests -v
+          flutter test --no-pub test/retroarch_*_test.dart \
+            test/library_visibility_service_test.dart test/console_library_picker_test.dart
+
+      - name: Build the pinned hosted RetroArch frontend and curated cores
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["frontend"]["commit"])')"
+          url="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["sourceIpa"]["url"])')"
+          git init "$RUNNER_TEMP/retroarch-upstream"
+          git -C "$RUNNER_TEMP/retroarch-upstream" remote add origin https://github.com/libretro/RetroArch.git
+          git -C "$RUNNER_TEMP/retroarch-upstream" fetch --depth 1 origin "$commit"
+          git -C "$RUNNER_TEMP/retroarch-upstream" checkout --detach FETCH_HEAD
+          curl --fail --location --retry 3 --connect-timeout 30 "$url" \
+            --output "$RUNNER_TEMP/2026-10-03_RetroArch.ipa"
+          bundle exec bash build-utils/retroarch/build_core.sh \
+            --upstream "$RUNNER_TEMP/retroarch-upstream" \
+            --ipa "$RUNNER_TEMP/2026-10-03_RetroArch.ipa" \
+            --work "$RUNNER_TEMP/retroarch-build" --output dist/retroarch-native
+
+      - name: Retain exact RetroArch corresponding source and build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-Source-and-Evidence-${{ github.sha }}
+          path: dist/retroarch-native
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Generate iOS host
         shell: bash
         run: |
@@ -788,6 +823,7 @@ jobs:
           python3 packages/dolphin_internal_bridge/ci/build_support.py configure
           python3 build-utils/configure_rpcs3_ios_v2.py
           python3 build-utils/configure_armsx2_ios.py
+          bundle exec python3 build-utils/retroarch/configure_host.py --ios-root ios
           dart run flutter_launcher_icons
           bash build-utils/force_ios_fork_icon.sh
           # Fallback PNGs are generated in ios/Runner and referenced from the same Xcode group.
@@ -851,6 +887,16 @@ jobs:
           set -euo pipefail
           python3 build-utils/embed_rpcs3_core_lazy.py
           python3 build-utils/embed_rpcs3_host_entitlements.py
+
+      - name: Embed the validated RetroArch runtime and resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build-utils/retroarch/embed_package.py embed \
+            --package dist/retroarch-native \
+            --app build/ios/DolphinDerivedData/Build/Products/Release-iphoneos/Runner.app \
+            --frontend-host-commit "$GITHUB_SHA" --host-commit "$GITHUB_SHA" \
+            --report build/retroarch-embedded-identity.json
 
       - name: Embed lazy-loaded ARMSX2 Core framework
         shell: bash
@@ -924,6 +970,10 @@ jobs:
           set -euo pipefail
           git diff --check
           python3 packages/dolphin_internal_bridge/ci/build_support.py package
+          python3 build-utils/retroarch/embed_package.py verify-ipa \
+            --package dist/retroarch-native --ipa "dist/$IPA_NAME.ipa" \
+            --frontend-host-commit "$GITHUB_SHA" --host-commit "$GITHUB_SHA" \
+            --report dist/retroarch-validation.json
           python3 build-utils/validate_legal_bundle_ipa.py "dist/$IPA_NAME.ipa" \
             --build-number "$BUILD_NUMBER" --commit "$GITHUB_SHA"
           python3 build-utils/validate_rpcs3_ipa.py \

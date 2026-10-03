@@ -6,6 +6,7 @@ abstract final class EmbeddedIOSSessionStatus {
   static const _channels = {
     'ios_dolphin_internal': MethodChannel('neostation/dolphin_internal'),
     'ios_rpcs3_internal': MethodChannel('neostation/rpcs3_internal'),
+    'ios_retroarch_internal': MethodChannel('neostation/retroarch_internal'),
   };
   static bool handles(String? name) => _channels.containsKey(name);
   static Future<bool> isActive(String name) async {

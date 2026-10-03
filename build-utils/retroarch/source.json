@@ -21,12 +21,15 @@
       "id": "fceumm",
       "binary": "Frameworks/fceumm.libretro.framework/fceumm.libretro",
       "systemIds": [
-        "nes"
+        "fc",
+        "fds",
+        "nes",
+        "nes-hacks"
       ],
       "sha256": "2438988bb2d719aaf02e4fa7fe260daf3557bd965d532a815b94dc5d443e0cd3",
       "infoSha256": "eda6fbfdc1fda5ea80c2caed205345b0cbbfa9427acf3626e0cffd6ee5a96721",
       "info": "info/fceumm_libretro.info",
-      "title": "Nintendo - NES / Famicom (FCEUmm)",
+      "title": "FCEUmm",
       "license": "GPLv2",
       "savestate": true,
       "cheats": true,
@@ -36,18 +39,38 @@
         "unif",
         "unf"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "disksys.rom",
+          "description": "disksys.rom (Family Computer Disk System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "nes.pal",
+          "description": "nes.pal (custom NES Palette)",
+          "optional": true
+        },
+        {
+          "path": "gamegenie.nes",
+          "description": "gamegenie.nes (Game Genie add-on cartridge)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "nestopia",
       "binary": "Frameworks/nestopia.libretro.framework/nestopia.libretro",
       "systemIds": [
-        "nes"
+        "fc",
+        "fds",
+        "nes",
+        "nes-hacks"
       ],
       "sha256": "a35f2cf94a76e0583b049337d14354c4b9336ddeeda2fecc75304e9a1411e279",
       "infoSha256": "bce8d791385b01639ef282d370e218f814519c964d6f4c747bd9d2e6e0b1e35b",
       "info": "info/nestopia_libretro.info",
-      "title": "Nintendo - NES / Famicom (Nestopia)",
+      "title": "Nestopia",
       "license": "GPLv2",
       "savestate": true,
       "cheats": true,
@@ -58,18 +81,29 @@
         "unif",
         "nsf"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "disksys.rom",
+          "description": "disksys.rom (Family Computer Disk System BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "snes9x",
       "binary": "Frameworks/snes9x.libretro.framework/snes9x.libretro",
       "systemIds": [
-        "snes"
+        "satellaview",
+        "sfc",
+        "sfc-hacks",
+        "snes",
+        "snes-hacks"
       ],
       "sha256": "08f38b5db9911e67206daffe1414017ea493136404a5b994ed522892061085ff",
       "infoSha256": "fa62b78d58bc4c30f4e0a4a581f0cb3252447b7f198b55bd6ebe2e4b9bde5cc2",
       "info": "info/snes9x_libretro.info",
-      "title": "Nintendo - SNES / SFC (Snes9x)",
+      "title": "Snes9x",
       "license": "Non-commercial",
       "savestate": true,
       "cheats": true,
@@ -81,19 +115,33 @@
         "bs",
         "st"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "BS-X.bin",
+          "description": "BS-X.bin (BS-X - Sore wa Namae o Nusumareta Machi no Monogatari (Japan) (Rev 1))",
+          "optional": true
+        },
+        {
+          "path": "STBIOS.bin",
+          "description": "STBIOS.bin (Sufami Turbo (Japan))",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "gambatte",
       "binary": "Frameworks/gambatte.libretro.framework/gambatte.libretro",
       "systemIds": [
         "gb",
-        "gbc"
+        "gb-hacks",
+        "gbc",
+        "gbc-hacks"
       ],
       "sha256": "6248e4362948b29a32f15b1364e9342c5c03416e41b2d5996db55387cd9326b8",
       "infoSha256": "084975942c06a658972890c12a8251fe8d0f6c7ffd2b268850458628bbbe68f4",
       "info": "info/gambatte_libretro.info",
-      "title": "Nintendo - Game Boy / Color (Gambatte)",
+      "title": "Gambatte",
       "license": "GPLv2",
       "savestate": true,
       "cheats": false,
@@ -102,19 +150,33 @@
         "gbc",
         "dmg"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "gb_bios.bin",
+          "description": "gb_bios.bin (Game Boy BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gbc_bios.bin",
+          "description": "gbc_bios.bin (Game Boy Color BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "sameboy",
       "binary": "Frameworks/sameboy.libretro.framework/sameboy.libretro",
       "systemIds": [
         "gb",
-        "gbc"
+        "gb-hacks",
+        "gbc",
+        "gbc-hacks"
       ],
       "sha256": "2f1ddcea9d6aa79fe33814555bf2ca12cfda471daaf2a23a426faf2afc4089e0",
       "infoSha256": "41aa5359b594f26a08254f944b3244c801338c85ddfc14797f5e67ae68ad2ca6",
       "info": "info/sameboy_libretro.info",
-      "title": "Nintendo - Game Boy / Color (SameBoy)",
+      "title": "SameBoy",
       "license": "MIT",
       "savestate": false,
       "cheats": false,
@@ -122,18 +184,35 @@
         "gb",
         "gbc"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "dmg_boot.bin",
+          "description": "dmg_boot.bin (Game Boy boot ROM)",
+          "optional": true
+        },
+        {
+          "path": "cgb_boot.bin",
+          "description": "cgb_boot.bin (Game Boy Color boot ROM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "mgba",
       "binary": "Frameworks/mgba.libretro.framework/mgba.libretro",
       "systemIds": [
-        "gba"
+        "gb",
+        "gb-hacks",
+        "gba",
+        "gba-hacks",
+        "gbc",
+        "gbc-hacks"
       ],
       "sha256": "2ad6359e46ab61ed8c1fe54817c2199475c7fddaab707df7ef69c47371bb971b",
       "infoSha256": "64444beb8268d3a57d53a45564c55049f39ff621315401fef86e82f3849042d6",
       "info": "info/mgba_libretro.info",
-      "title": "Nintendo - Game Boy Advance (mGBA)",
+      "title": "mGBA",
       "license": "MPLv2.0",
       "savestate": true,
       "cheats": true,
@@ -142,22 +221,51 @@
         "gbc",
         "gba"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "gba_bios.bin",
+          "description": "gba_bios.bin (Game Boy Advance BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gb_bios.bin",
+          "description": "gb_bios.bin (Game Boy BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gbc_bios.bin",
+          "description": "gbc_bios.bin (Game Boy Color BIOS)",
+          "optional": true
+        },
+        {
+          "path": "sgb_bios.bin",
+          "description": "sgb_bios.bin (Super Game Boy BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "genesis_plus_gx",
       "binary": "Frameworks/genesis.plus.gx.libretro.framework/genesis.plus.gx.libretro",
       "systemIds": [
-        "md",
+        "gen-hacks",
         "genesis",
-        "sms",
         "gg",
-        "mcd"
+        "gg-hacks",
+        "mark3",
+        "mcd",
+        "md",
+        "md-hacks",
+        "pico",
+        "scd",
+        "sg1k",
+        "sms"
       ],
       "sha256": "bf273d3b99d78f5f9401f995dea1e304ee6847855e30d2ba68e12b0886428658",
       "infoSha256": "9793bff8d9e298a7ee0c94c0511dab242200ca60fbe87e3720eb9231a3e0166a",
       "info": "info/genesis_plus_gx_libretro.info",
-      "title": "Sega - MS/GG/MD/CD (Genesis Plus GX)",
+      "title": "Genesis Plus GX",
       "license": "Non-commercial",
       "savestate": true,
       "cheats": true,
@@ -178,21 +286,91 @@
         "chd",
         "m3u"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "bios_MD.bin",
+          "description": "bios_MD.bin (Mega Drive startup ROM)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_E.bin",
+          "description": "bios_CD_E.bin (MegaCD EU BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_U.bin",
+          "description": "bios_CD_U.bin (SegaCD US BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_J.bin",
+          "description": "bios_CD_J.bin (MegaCD JP BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_E.sms",
+          "description": "bios_E.sms (MasterSystem EU BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_U.sms",
+          "description": "bios_U.sms (MasterSystem US BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_J.sms",
+          "description": "bios_J.sms (MasterSystem JP BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios.gg",
+          "description": "bios.gg (GameGear BIOS)",
+          "optional": true
+        },
+        {
+          "path": "sk.bin",
+          "description": "sk.bin (Sonic & Knuckles ROM)",
+          "optional": true
+        },
+        {
+          "path": "sk2chip.bin",
+          "description": "sk2chip.bin (Sonic & Knuckles UPMEM ROM)",
+          "optional": true
+        },
+        {
+          "path": "areplay.bin",
+          "description": "areplay.bin (Action Replay ROM)",
+          "optional": true
+        },
+        {
+          "path": "ggenie.bin",
+          "description": "ggenie.bin (Game Genie ROM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "picodrive",
       "binary": "Frameworks/picodrive.libretro.framework/picodrive.libretro",
       "systemIds": [
-        "md",
+        "32x",
+        "gen-hacks",
         "genesis",
-        "sms",
-        "mcd"
+        "gg",
+        "gg-hacks",
+        "mark3",
+        "mcd",
+        "md",
+        "md-hacks",
+        "pico",
+        "scd",
+        "sms"
       ],
       "sha256": "727b62280603b676321699fe6a005c68088adaaf2c1d7a6296a0aa4a84616190",
       "infoSha256": "35cef57b4b61d95a86e1ceee3a7c325d9d16bbdc136b4b3a556e808864de06c5",
       "info": "info/picodrive_libretro.info",
-      "title": "Sega - MS/GG/MD/CD/32X (PicoDrive)",
+      "title": "PicoDrive",
       "license": "MAME",
       "savestate": true,
       "cheats": true,
@@ -214,18 +392,38 @@
         "sgd",
         "pco"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "bios_CD_E.bin",
+          "description": "bios_CD_E.bin (MegaCD EU BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_U.bin",
+          "description": "bios_CD_U.bin (SegaCD US BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_J.bin",
+          "description": "bios_CD_J.bin (MegaCD JP BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "mednafen_pce_fast",
       "binary": "Frameworks/mednafen.pce.fast.libretro.framework/mednafen.pce.fast.libretro",
       "systemIds": [
-        "pce"
+        "pccd",
+        "pce",
+        "tg16",
+        "tgcd"
       ],
       "sha256": "4384606257b6ce413f54ead76524e6fe3280c383e0103764bf1e343a53d62f46",
       "infoSha256": "b75e4f64518d4161bef48068f6d4be24c4ea0f478431b749b490251430d8ec35",
       "info": "info/mednafen_pce_fast_libretro.info",
-      "title": "NEC - PC Engine / CD (Beetle PCE FAST)",
+      "title": "Beetle PCE Fast",
       "license": "GPLv2",
       "savestate": true,
       "cheats": false,
@@ -237,7 +435,29 @@
         "toc",
         "m3u"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "syscard3.pce",
+          "description": "syscard3.pce (PCE-CD BIOS)",
+          "optional": true
+        },
+        {
+          "path": "syscard2.pce",
+          "description": "syscard2.pce (PCE-CD BIOS)",
+          "optional": true
+        },
+        {
+          "path": "syscard1.pce",
+          "description": "syscard1.pce (PCE-CD BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gexpress.pce",
+          "description": "gexpress.pce (PCE-CD BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "pcsx_rearmed",
@@ -248,7 +468,7 @@
       "sha256": "67861db07413cce87a570a029994e483812cc1f3896287d489eee73bbcd44a25",
       "infoSha256": "83e98e7b7068b99330db52741a369f217ebadcdbd1eb182a5a435c76ab6ae704",
       "info": "info/pcsx_rearmed_libretro.info",
-      "title": "Sony - PlayStation (PCSX ReARMed)",
+      "title": "PCSX-ReARMed",
       "license": "GPLv2",
       "savestate": true,
       "cheats": true,
@@ -266,7 +486,29 @@
         "iso",
         "exe"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "scph5500.bin",
+          "description": "scph5500.bin (PS1 JP BIOS)",
+          "optional": true
+        },
+        {
+          "path": "scph5501.bin",
+          "description": "scph5501.bin (PS1 US BIOS)",
+          "optional": true
+        },
+        {
+          "path": "scph5502.bin",
+          "description": "scph5502.bin (PS1 EU BIOS)",
+          "optional": true
+        },
+        {
+          "path": "psxonpsp660.bin",
+          "description": "psxonpsp660.bin (PSP PSX Emu BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
     },
     {
       "id": "mednafen_psx",
@@ -277,7 +519,7 @@
       "sha256": "d4723a64f0bc4822abdae113abd152801f18526c1c4374964a1993844cd88771",
       "infoSha256": "c10863c3a6cba7f013712633fc49d52b77bc5648d374024f3d4d09c120528f2b",
       "info": "info/mednafen_psx_libretro.info",
-      "title": "Sony - PlayStation (Beetle PSX)",
+      "title": "Beetle PSX",
       "license": "GPLv2",
       "savestate": true,
       "cheats": true,
@@ -291,7 +533,3626 @@
         "chd",
         "bin"
       ],
-      "firmware": []
+      "firmware": [
+        {
+          "path": "scph5500.bin",
+          "description": "scph5500.bin (PS1 JP BIOS)",
+          "optional": false
+        },
+        {
+          "path": "scph5501.bin",
+          "description": "scph5501.bin (PS1 US BIOS)",
+          "optional": false
+        },
+        {
+          "path": "scph5502.bin",
+          "description": "scph5502.bin (PS1 EU BIOS)",
+          "optional": false
+        },
+        {
+          "path": "psxonpsp660.bin",
+          "description": "psxonpsp660.bin (PSP PS1 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "ps1_rom.bin",
+          "description": "ps1_rom.bin (PS3 PS1 BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "DoubleCherryGB",
+      "binary": "Frameworks/DoubleCherryGB.libretro.framework/DoubleCherryGB.libretro",
+      "systemIds": [
+        "gb",
+        "gb-hacks",
+        "gbc",
+        "gbc-hacks"
+      ],
+      "sha256": "8bb9582340139e685e0310de3b61fbc6c8d2bd3e4b7dfce0050ae380e0ce0540",
+      "infoSha256": "bc5738b4b0031a59186ef40caa59031c179c06a5bb519858919a2b40ed20545b",
+      "info": "info/DoubleCherryGB_libretro.info",
+      "title": "DoubleCherryGB",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "cgb",
+        "dmg",
+        "gb",
+        "gbc",
+        "sgb"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "a5200",
+      "binary": "Frameworks/a5200.libretro.framework/a5200.libretro",
+      "systemIds": [
+        "5200"
+      ],
+      "sha256": "38ed6d0207c77921e01c57a0da90a7c11ced7b3d77577ce11542a95e0473df27",
+      "infoSha256": "e707b742d0c12e87483986742e316ea530b2592ce74aaa74f5617267a9abafab",
+      "info": "info/a5200_libretro.info",
+      "title": "a5200",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "a52",
+        "bin"
+      ],
+      "firmware": [
+        {
+          "path": "5200.rom",
+          "description": "5200.rom (5200 BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "amiarcadia",
+      "binary": "Frameworks/amiarcadia.libretro.framework/amiarcadia.libretro",
+      "systemIds": [
+        "a2001"
+      ],
+      "sha256": "6e6fcd4026217434b23a4dd6c80b608a7ae402531eb4f9050844c83d911056a8",
+      "infoSha256": "3112656d2916ba1713011ebd988008287aba8bdc4a8c3370e48d5e4447d57bf5",
+      "info": "info/amiarcadia_libretro.info",
+      "title": "AmiArcadia",
+      "license": "Non-commercial",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "bin",
+        "tvc"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "applewin",
+      "binary": "Frameworks/applewin.libretro.framework/applewin.libretro",
+      "systemIds": [
+        "a2"
+      ],
+      "sha256": "ef16470777aad618013f06e53ea93f5606fc98c94a51e050b2907b939743be30",
+      "infoSha256": "bcf72c8e61843457bd92f87de1e553cc6bf7465eeb9d37a2ccc09eb4dae828a4",
+      "info": "info/applewin_libretro.info",
+      "title": "applewin",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "bin",
+        "do",
+        "dsk",
+        "nib",
+        "po",
+        "gz",
+        "woz",
+        "zip",
+        "2mg",
+        "2img",
+        "iie",
+        "apl",
+        "hdv",
+        "yaml",
+        "m3u"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "ardens",
+      "binary": "Frameworks/ardens.libretro.framework/ardens.libretro",
+      "systemIds": [
+        "ard"
+      ],
+      "sha256": "601eb36b563767ec9fd41e3a7263ba899a1c0e7cf632c891ad350b057ef3fb39",
+      "infoSha256": "58dac1d776f5539d88c5bbeef94df80de377d3e7a261aacb4f3c258592559a0e",
+      "info": "info/ardens_libretro.info",
+      "title": "Ardens",
+      "license": "MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "hex",
+        "arduboy"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "atari800",
+      "binary": "Frameworks/atari800.libretro.framework/atari800.libretro",
+      "systemIds": [
+        "5200"
+      ],
+      "sha256": "97759f7b7f7bce879ec33ef5ab2d606b6e4d7fd192bca59f64482d36a0b7b83a",
+      "infoSha256": "4b56fa399760a8c48e6ac8b08ecc2ae2f7163bbfb34f3f08351bc7e092602e5e",
+      "info": "info/atari800_libretro.info",
+      "title": "Atari800",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "xfd",
+        "atr",
+        "dcm",
+        "cas",
+        "bin",
+        "a52",
+        "zip",
+        "atx",
+        "car",
+        "rom",
+        "com",
+        "xex",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "5200.rom",
+          "description": "5200.rom (Atari 5200 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "ATARIBAS.ROM",
+          "description": "ATARIBAS.ROM (Atari BASIC)",
+          "optional": true
+        },
+        {
+          "path": "ATARIOSA.ROM",
+          "description": "ATARIOSA.ROM (Atari 400/800 OS A)",
+          "optional": true
+        },
+        {
+          "path": "ATARIOSB.ROM",
+          "description": "ATARIOSB.ROM (Atari 400/800 OS B)",
+          "optional": true
+        },
+        {
+          "path": "ATARIXL.ROM",
+          "description": "ATARIXL.ROM (Atari XL/XE OS)",
+          "optional": true
+        },
+        {
+          "path": "BB01R4_OS.ROM",
+          "description": "BB01R4_OS.ROM (Atari XL/XE/XEGS OS v4)",
+          "optional": true
+        },
+        {
+          "path": "XEGAME.ROM",
+          "description": "XEGAME.ROM (Atari XEGS Missile Command)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "bluemsx",
+      "binary": "Frameworks/bluemsx.libretro.framework/bluemsx.libretro",
+      "systemIds": [
+        "cv",
+        "msx",
+        "sg1k"
+      ],
+      "sha256": "7478044628fbd7afa33ff3a461a386ca44cbd62d363910934890ec4de69e0917",
+      "infoSha256": "e3840e08ff90f8567beedc9f96ee3597d48ea7a568cfd51aadca20850800257e",
+      "info": "info/bluemsx_libretro.info",
+      "title": "blueMSX",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "rom",
+        "ri",
+        "mx1",
+        "mx2",
+        "dsk",
+        "col",
+        "sg",
+        "sc",
+        "sf",
+        "cas",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "Databases/msxromdb.xml",
+          "description": "'Databases' folder",
+          "optional": false
+        },
+        {
+          "path": "Machines/Shared Roms/MSX.rom",
+          "description": "'Machines' folder",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "bsnes",
+      "binary": "Frameworks/bsnes.libretro.framework/bsnes.libretro",
+      "systemIds": [
+        "gb",
+        "gbc",
+        "satellaview",
+        "sfc",
+        "sfc-hacks",
+        "snes",
+        "snes-hacks"
+      ],
+      "sha256": "0238a7f9edd62f3f11dcbf17e30ebc01c8dd2667540cd4e2c77ea6ab6cfdfcf6",
+      "infoSha256": "fc6f9bb67e99848bfcad99e5e4bb028a9ce998d3bbd0195fded36edef5ed1506",
+      "info": "info/bsnes_libretro.info",
+      "title": "bsnes",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "smc",
+        "sfc",
+        "swc",
+        "fig",
+        "gb",
+        "gbc",
+        "bs"
+      ],
+      "firmware": [
+        {
+          "path": "dsp1.data.rom",
+          "description": "dsp1.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1.program.rom",
+          "description": "dsp1.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1b.data.rom",
+          "description": "dsp1b.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1b.program.rom",
+          "description": "dsp1b.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp2.data.rom",
+          "description": "dsp2.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp2.program.rom",
+          "description": "dsp2.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp3.data.rom",
+          "description": "dsp3.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp3.program.rom",
+          "description": "dsp3.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp4.data.rom",
+          "description": "dsp4.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp4.program.rom",
+          "description": "dsp4.program.rom",
+          "optional": true
+        },
+        {
+          "path": "cx4.data.rom",
+          "description": "cx4.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st010.data.rom",
+          "description": "st010.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st010.program.rom",
+          "description": "st010.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st011.data.rom",
+          "description": "st011.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st011.program.rom",
+          "description": "st011.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st018.data.rom",
+          "description": "st018.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st018.program.rom",
+          "description": "st018.program.rom",
+          "optional": true
+        },
+        {
+          "path": "SGB1.sfc",
+          "description": "SGB1.sfc (SGB Boot Image)",
+          "optional": true
+        },
+        {
+          "path": "SGB2.sfc",
+          "description": "SGB2.sfc (SGB Boot Image)",
+          "optional": true
+        },
+        {
+          "path": "BS-X.bin",
+          "description": "BS-X.bin (BS-X - Sore wa Namae o Nusumareta Machi no Monogatari (Japan) (Rev 1))",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "bsnes-jg",
+      "binary": "Frameworks/bsnes-jg.libretro.framework/bsnes-jg.libretro",
+      "systemIds": [
+        "satellaview",
+        "sfc",
+        "sfc-hacks",
+        "snes",
+        "snes-hacks"
+      ],
+      "sha256": "a6f456fd699afba1c47fddb1f27204c818f39ffcef5fe86ca2d0683103cc72fd",
+      "infoSha256": "a3b93921896a86217645ba7d560fbe7bb76efbc925729c16e1e94cb9d7845d21",
+      "info": "info/bsnes-jg_libretro.info",
+      "title": "bsnes-jg",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "smc",
+        "sfc",
+        "st",
+        "gb",
+        "gbc",
+        "bs"
+      ],
+      "firmware": [
+        {
+          "path": "dsp1.data.rom",
+          "description": "dsp1.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1.program.rom",
+          "description": "dsp1.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1b.data.rom",
+          "description": "dsp1b.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1b.program.rom",
+          "description": "dsp1b.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp2.data.rom",
+          "description": "dsp2.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp2.program.rom",
+          "description": "dsp2.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp3.data.rom",
+          "description": "dsp3.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp3.program.rom",
+          "description": "dsp3.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp4.data.rom",
+          "description": "dsp4.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp4.program.rom",
+          "description": "dsp4.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st010.data.rom",
+          "description": "st010.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st010.program.rom",
+          "description": "st010.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st011.data.rom",
+          "description": "st011.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st011.program.rom",
+          "description": "st011.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st018.data.rom",
+          "description": "st018.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st018.program.rom",
+          "description": "st018.program.rom",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "cap32",
+      "binary": "Frameworks/cap32.libretro.framework/cap32.libretro",
+      "systemIds": [
+        "cpc"
+      ],
+      "sha256": "43d6a4bfb2996524d8d575941bb999746ca3466a62cab9825d0dbe6651923384",
+      "infoSha256": "7ef5d3ad67d195a5dc87ed62d9edf6732169cbde6da045583cc81a1264aad6fb",
+      "info": "info/cap32_libretro.info",
+      "title": "Caprice32",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "dsk",
+        "sna",
+        "zip",
+        "tap",
+        "cdt",
+        "voc",
+        "cpr",
+        "m3u"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "clownmdemu",
+      "binary": "Frameworks/clownmdemu.libretro.framework/clownmdemu.libretro",
+      "systemIds": [
+        "gen-hacks",
+        "genesis",
+        "mcd",
+        "md",
+        "md-hacks",
+        "scd"
+      ],
+      "sha256": "39dfba0217586f99b465c89518cc6d0b70a01012185aa5a161938a2e9551a634",
+      "infoSha256": "758261302c816b320ca5ad9dfdcad19cedd9a4e5b60bc01aea670c8bd312a488",
+      "info": "info/clownmdemu_libretro.info",
+      "title": "ClownMDEmu",
+      "license": "AGPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "bin",
+        "md",
+        "gen",
+        "cue",
+        "iso",
+        "chd"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "crocods",
+      "binary": "Frameworks/crocods.libretro.framework/crocods.libretro",
+      "systemIds": [
+        "cpc"
+      ],
+      "sha256": "998423cc3ce3cc021c09a4d0a8fa68d509e984c2ce6fe9018e14a35b0764ab8f",
+      "infoSha256": "4bf12dc021fcb628de8d14542a9e5b0ee8aa69828a99adda85346fe54c879cf8",
+      "info": "info/crocods_libretro.info",
+      "title": "CrocoDS",
+      "license": "MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "dsk",
+        "sna",
+        "kcr"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "dosbox_pure",
+      "binary": "Frameworks/dosbox.pure.libretro.framework/dosbox.pure.libretro",
+      "systemIds": [
+        "dos"
+      ],
+      "sha256": "aab5269457699ddff3ff44d28b6dbe6886b4365ca96a555da4fe136e09042f3a",
+      "infoSha256": "e59629d975653c3c2a9ec64a112c524efe5aa16b7cf4093c2085222262fb88dd",
+      "info": "info/dosbox_pure_libretro.info",
+      "title": "DOSBox-pure",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "zip",
+        "dosz",
+        "exe",
+        "com",
+        "bat",
+        "iso",
+        "chd",
+        "cue",
+        "ins",
+        "img",
+        "ima",
+        "vhd",
+        "jrc",
+        "tc",
+        "m3u",
+        "m3u8",
+        "conf",
+        "/"
+      ],
+      "firmware": [],
+      "input": "sourceIpa",
+      "forcedOptions": {
+        "dosbox_pure_cpu_core": "normal",
+        "dosbox_pure_voodoo_perf": "auto"
+      },
+      "runtimeProfile": {
+        "sourceRepository": "https://github.com/schellingb/dosbox-pure.git",
+        "reviewedSourceCommit": "a4a0bab7f8931433588f2fcad9045c85b277373d",
+        "embeddedVersion": "1.0-preview6",
+        "infoVersion": "0.9.9",
+        "hardwareRenderingAllowed": false,
+        "jitEnabled": false,
+        "iosDynarecCompiled": false,
+        "deviceValidated": false,
+        "sourceFileSha256": {
+          "Makefile": "5173c065012911a306f9554212b0fb40fb5f51eda462b33b410ce9d15e31122b",
+          "include/config.h": "b9badaa2b6b161f38af942e5c20143ed17af8cbbd1c3a61ffadab0d3ea265014",
+          "core_options.h": "c4db6d223bf2076fa8f282638bd5ae96253824ac23cf78a2a927006dd39fb3a3",
+          "dosbox_pure_libretro.cpp": "c64b4553b2168576212e5f551f4fcfb3fa2aa5294a0d436950ba69ad54e584bb",
+          "src/cpu/cpu.cpp": "8d39f5522fbfc6c92153e214fb0c8dc4d621a2ccc1656675c919e032eb647373",
+          "dosbox_pure_ver.h": "b8560b1f15d7f5b8da2acebce1c9e39246fc16fdd4a8eb073854d42775f8a1d3"
+        }
+      }
+    },
+    {
+      "id": "easyrpg",
+      "binary": "Frameworks/easyrpg.libretro.framework/easyrpg.libretro",
+      "systemIds": [
+        "rpgmaker"
+      ],
+      "sha256": "444327af6836022387bafe46ae93b1d63fd824385bdecb081d87e61aac6097d1",
+      "infoSha256": "07cf58719c3f52306f786564e74dc146f80c5f8b43220587071b61e946bc7a05",
+      "info": "info/easyrpg_libretro.info",
+      "title": "EasyRPG Player",
+      "license": "GPLv3",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "ldb",
+        "zip",
+        "lzh",
+        "easyrpg"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "fbneo",
+      "binary": "Frameworks/fbneo.libretro.framework/fbneo.libretro",
+      "systemIds": [
+        "arc",
+        "cps1",
+        "cps2",
+        "cps3",
+        "cv",
+        "fbneo",
+        "fc",
+        "gen-hacks",
+        "genesis",
+        "gg",
+        "gg-hacks",
+        "mark3",
+        "md",
+        "md-hacks",
+        "msx",
+        "neogeo",
+        "nes",
+        "nes-hacks",
+        "ngcd",
+        "ngp",
+        "ngpc",
+        "pce",
+        "sfc",
+        "sfc-hacks",
+        "sg1k",
+        "sms",
+        "snes",
+        "snes-hacks",
+        "tg16",
+        "zxspectrum"
+      ],
+      "sha256": "568707adfec8ea8c1c0487d36b2b3a975cb495214b8a03bba95a88837668e2a5",
+      "infoSha256": "c95c3e177d61adf6662af7adf7361d7fefd9cd87ab0773d105a97818767e5815",
+      "info": "info/fbneo_libretro.info",
+      "title": "FinalBurn Neo",
+      "license": "Non-commercial",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "zip",
+        "7z",
+        "cue",
+        "ccd"
+      ],
+      "firmware": [
+        {
+          "path": "fbneo/neogeo.zip",
+          "description": "fbneo/neogeo.zip (Neo Geo BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/neocdz.zip",
+          "description": "fbneo/neocdz.zip (Neo Geo CDZ System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/decocass.zip",
+          "description": "fbneo/decocass.zip (DECO Cassette System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/isgsm.zip",
+          "description": "fbneo/isgsm.zip (ISG Selection Master Type 2006 System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/midssio.zip",
+          "description": "fbneo/midssio.zip (Midway SSIO Sound Board Internal ROM)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/nmk004.zip",
+          "description": "fbneo/nmk004.zip (NMK004 Internal ROM)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/pgm.zip",
+          "description": "fbneo/pgm.zip (PGM System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/skns.zip",
+          "description": "fbneo/skns.zip (Super Kaneko Nova System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/ym2608.zip",
+          "description": "fbneo/ym2608.zip (YM2608 Internal ROM)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/cchip.zip",
+          "description": "fbneo/cchip.zip (C-Chip Internal ROM)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/bubsys.zip",
+          "description": "fbneo/bubsys.zip (Bubble System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/namcoc69.zip",
+          "description": "fbneo/namcoc69.zip (Namco C69 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/namcoc70.zip",
+          "description": "fbneo/namcoc70.zip (Namco C70 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/namcoc75.zip",
+          "description": "fbneo/namcoc75.zip (Namco C75 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/coleco.zip",
+          "description": "fbneo/coleco.zip (ColecoVision System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/fdsbios.zip",
+          "description": "fbneo/fdsbios.zip (FDS System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/msx.zip",
+          "description": "fbneo/msx.zip (MSX1 System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/ngp.zip",
+          "description": "fbneo/ngp.zip (NeoGeo Pocket BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/spectrum.zip",
+          "description": "fbneo/spectrum.zip (ZX Spectrum BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/spec128.zip",
+          "description": "fbneo/spec128.zip (ZX Spectrum 128 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/spec1282a.zip",
+          "description": "fbneo/spec1282a.zip (ZX Spectrum 128 +2a BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/channelf.zip",
+          "description": "fbneo/channelf.zip (Fairchild Channel F BIOS)",
+          "optional": true
+        },
+        {
+          "path": "fbneo/hiscore.dat",
+          "description": "fbneo/hiscore.dat (High Score support database)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "freechaf",
+      "binary": "Frameworks/freechaf.libretro.framework/freechaf.libretro",
+      "systemIds": [
+        "chf"
+      ],
+      "sha256": "45334837810773bef82320cff30fe090c5fecab3c2bd03947c5a753f631f4169",
+      "infoSha256": "d66cf527d20808993234f05b59c410c37ed349f310360ffc5c9dcc0973840e9b",
+      "info": "info/freechaf_libretro.info",
+      "title": "FreeChaF",
+      "license": "GPLv3",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "bin",
+        "chf"
+      ],
+      "firmware": [
+        {
+          "path": "sl31253.bin",
+          "description": "sl31253.bin",
+          "optional": false
+        },
+        {
+          "path": "sl31254.bin",
+          "description": "sl31254.bin",
+          "optional": false
+        },
+        {
+          "path": "sl90025.bin",
+          "description": "sl90025.bin",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "freeintv",
+      "binary": "Frameworks/freeintv.libretro.framework/freeintv.libretro",
+      "systemIds": [
+        "intv"
+      ],
+      "sha256": "938cfd145b3f642a722befe1f12263254cd280ffaa69baae3d9f01688b23ab71",
+      "infoSha256": "8a688f4c8aa5048d9086451dd8d33873cef34b4458d5766593d911ffa60eda52",
+      "info": "info/freeintv_libretro.info",
+      "title": "FreeIntv",
+      "license": "GPLv2+",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "int",
+        "bin",
+        "rom"
+      ],
+      "firmware": [
+        {
+          "path": "exec.bin",
+          "description": "exec.bin",
+          "optional": false
+        },
+        {
+          "path": "grom.bin",
+          "description": "grom.bin",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "fuse",
+      "binary": "Frameworks/fuse.libretro.framework/fuse.libretro",
+      "systemIds": [
+        "zxspectrum"
+      ],
+      "sha256": "b854e7ceabf4f96a106ab94a3802edfa0e6b81814d9c2c9a926d627ccf924abe",
+      "infoSha256": "a87806db8485cbb186f3704d33b04fab7bd4a56da6af538a33af315072f59519",
+      "info": "info/fuse_libretro.info",
+      "title": "Fuse",
+      "license": "GPLv3",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "tzx",
+        "tap",
+        "z80",
+        "rzx",
+        "scl",
+        "trd",
+        "dsk",
+        "dck",
+        "sna",
+        "szx",
+        "zip",
+        "ipf"
+      ],
+      "firmware": [
+        {
+          "path": "fuse/128p-0.rom",
+          "description": "128p-0.rom (Pentagon machines)",
+          "optional": true
+        },
+        {
+          "path": "fuse/128p-1.rom",
+          "description": "128p-1.rom (Pentagon machines)",
+          "optional": true
+        },
+        {
+          "path": "fuse/trdos.rom",
+          "description": "trdos.rom (Pentagon machines)",
+          "optional": true
+        },
+        {
+          "path": "fuse/gluck.rom",
+          "description": "gluck.rom (Pentagon 512K / 1024)",
+          "optional": true
+        },
+        {
+          "path": "fuse/256s-0.rom",
+          "description": "256s-0.rom (Scorpion 256K)",
+          "optional": true
+        },
+        {
+          "path": "fuse/256s-1.rom",
+          "description": "256s-1.rom (Scorpion 256K)",
+          "optional": true
+        },
+        {
+          "path": "fuse/256s-2.rom",
+          "description": "256s-2.rom (Scorpion 256K)",
+          "optional": true
+        },
+        {
+          "path": "fuse/256s-3.rom",
+          "description": "256s-3.rom (Scorpion 256K)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "gearboy",
+      "binary": "Frameworks/gearboy.libretro.framework/gearboy.libretro",
+      "systemIds": [
+        "gb",
+        "gb-hacks",
+        "gbc",
+        "gbc-hacks"
+      ],
+      "sha256": "158a71022f017569b08335404bb1a169f464bec37e938b59683ee6191e0d3460",
+      "infoSha256": "de8704813970be46d973aa67141d21ee4c318f7dcf9030ec72f9ca0d014e8724",
+      "info": "info/gearboy_libretro.info",
+      "title": "Gearboy",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "gb",
+        "dmg",
+        "gbc",
+        "cgb",
+        "sgb"
+      ],
+      "firmware": [
+        {
+          "path": "dmg_boot.bin",
+          "description": "dmg_boot.bin (Game Boy boot ROM)",
+          "optional": true
+        },
+        {
+          "path": "cgb_boot.bin",
+          "description": "cgb_boot.bin (Game Boy Color boot ROM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "gearcoleco",
+      "binary": "Frameworks/gearcoleco.libretro.framework/gearcoleco.libretro",
+      "systemIds": [
+        "cv"
+      ],
+      "sha256": "e33957075b7f80dc304246c084774dba398ddcd95ed61f1ef95366b8e7726866",
+      "infoSha256": "ebc7293724350790b31ef0245c4e0fe790c5876438a7eb830076e6a16dc80ecf",
+      "info": "info/gearcoleco_libretro.info",
+      "title": "Gearcoleco",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "col",
+        "cv",
+        "bin",
+        "rom",
+        "zip",
+        "ddp",
+        "dsk",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "colecovision.rom",
+          "description": "colecovision.rom (ColecoVision / ADAM OS-7 BIOS)",
+          "optional": false
+        },
+        {
+          "path": "eos.rom",
+          "description": "eos.rom (required for ADAM)",
+          "optional": true
+        },
+        {
+          "path": "writer.rom",
+          "description": "writer.rom (required for ADAM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "geargrafx",
+      "binary": "Frameworks/geargrafx.libretro.framework/geargrafx.libretro",
+      "systemIds": [
+        "pccd",
+        "pce",
+        "tg16",
+        "tgcd"
+      ],
+      "sha256": "6de0a13b8851441ee63d7eefd6f8afb6ca3020bd024d31f37ddefd492c77af39",
+      "infoSha256": "07d7793d7d5bc8b174e9e7e284da9c02b5964bb9760535220a2c5acd5db201fa",
+      "info": "info/geargrafx_libretro.info",
+      "title": "Geargrafx",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "pce",
+        "sgx",
+        "hes",
+        "cue",
+        "chd",
+        "mmi"
+      ],
+      "firmware": [
+        {
+          "path": "syscard3.pce",
+          "description": "syscard3.pce (Super CD-ROM2 System V3.xx)",
+          "optional": true
+        },
+        {
+          "path": "syscard2.pce",
+          "description": "syscard2.pce (CD-ROM System V2.xx)",
+          "optional": true
+        },
+        {
+          "path": "syscard1.pce",
+          "description": "syscard1.pce (CD-ROM System V1.xx)",
+          "optional": true
+        },
+        {
+          "path": "gexpress.pce",
+          "description": "gexpress.pce (Game Express CD Card)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "gearlynx",
+      "binary": "Frameworks/gearlynx.libretro.framework/gearlynx.libretro",
+      "systemIds": [
+        "lynx"
+      ],
+      "sha256": "8afa750f4307e664fb9d50165746b6dfc59e2231ce6a0842fef311a7bfaad5ef",
+      "infoSha256": "1008c5a2dbf36278aef63da0a21af7a5b253088b580de90d140a641c82363f30",
+      "info": "info/gearlynx_libretro.info",
+      "title": "Gearlynx",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "lnx",
+        "lyx",
+        "o",
+        "bin"
+      ],
+      "firmware": [
+        {
+          "path": "lynxboot.img",
+          "description": "lynxboot.img (Lynx Boot Image)",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "gearsystem",
+      "binary": "Frameworks/gearsystem.libretro.framework/gearsystem.libretro",
+      "systemIds": [
+        "gg",
+        "gg-hacks",
+        "mark3",
+        "sg1k",
+        "sms"
+      ],
+      "sha256": "df4a67f9cc21333c43aa8d3ed9b549ac4c9e4e7eee8062f205ca153071b19323",
+      "infoSha256": "6f9235b2f18242b1865850243e6e8581dc05a548e5af95f1f2bd6e3409edd32e",
+      "info": "info/gearsystem_libretro.info",
+      "title": "Gearsystem",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "sms",
+        "gg",
+        "sg",
+        "mv",
+        "bin",
+        "rom"
+      ],
+      "firmware": [
+        {
+          "path": "bios.sms",
+          "description": "bios.sms (Master System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios.gg",
+          "description": "bios.gg (Game Gear BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "genesis_plus_gx_wide",
+      "binary": "Frameworks/genesis.plus.gx.wide.libretro.framework/genesis.plus.gx.wide.libretro",
+      "systemIds": [
+        "gen-hacks",
+        "genesis",
+        "gg",
+        "gg-hacks",
+        "mark3",
+        "mcd",
+        "md",
+        "md-hacks",
+        "pico",
+        "scd",
+        "sg1k",
+        "sms"
+      ],
+      "sha256": "68547fece225f8e84eeb247f39b74b304e1ddfa01153d587d717983cd99d9bfd",
+      "infoSha256": "8aa2205e8a3ea2cf2ed04d5ae83eed52c4e9ca6b8d2722afa2bb853a9939357c",
+      "info": "info/genesis_plus_gx_wide_libretro.info",
+      "title": "Genesis Plus GX Wide",
+      "license": "Non-commercial",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "mdx",
+        "md",
+        "smd",
+        "gen",
+        "bin",
+        "cue",
+        "iso",
+        "sms",
+        "bms",
+        "gg",
+        "sg",
+        "68k",
+        "sgd",
+        "chd",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "bios_MD.bin",
+          "description": "bios_MD.bin (Mega Drive startup ROM)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_E.bin",
+          "description": "bios_CD_E.bin (MegaCD EU BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_U.bin",
+          "description": "bios_CD_U.bin (SegaCD US BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_CD_J.bin",
+          "description": "bios_CD_J.bin (MegaCD JP BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_E.sms",
+          "description": "bios_E.sms (MasterSystem EU BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_U.sms",
+          "description": "bios_U.sms (MasterSystem US BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios_J.sms",
+          "description": "bios_J.sms (MasterSystem JP BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios.gg",
+          "description": "bios.gg (GameGear BIOS)",
+          "optional": true
+        },
+        {
+          "path": "sk.bin",
+          "description": "sk.bin (Sonic & Knuckles ROM)",
+          "optional": true
+        },
+        {
+          "path": "sk2chip.bin",
+          "description": "sk2chip.bin (Sonic & Knuckles UPMEM ROM)",
+          "optional": true
+        },
+        {
+          "path": "areplay.bin",
+          "description": "areplay.bin (Action Replay ROM)",
+          "optional": true
+        },
+        {
+          "path": "ggenie.bin",
+          "description": "ggenie.bin (Game Genie ROM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "geolith",
+      "binary": "Frameworks/geolith.libretro.framework/geolith.libretro",
+      "systemIds": [
+        "neogeo"
+      ],
+      "sha256": "5f75792549aecd854316c9eaed3a7bd165b5e2fffc91fe3bf6cd7938e3ef83dd",
+      "infoSha256": "ea1e87cb760d8b5f575b0e48751b86ba00e6923494796c8baf7e284924a5ef22",
+      "info": "info/geolith_libretro.info",
+      "title": "Geolith",
+      "license": "BSD-3-Clause, MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "neo",
+        "cue",
+        "chd"
+      ],
+      "firmware": [
+        {
+          "path": "aes.zip",
+          "description": "aes.zip (Neo Geo AES System ROM)",
+          "optional": false
+        },
+        {
+          "path": "neogeo.zip",
+          "description": "neogeo.zip (Neo Geo MVS System ROM)",
+          "optional": false
+        },
+        {
+          "path": "neocd.zip",
+          "description": "neocd.zip (Neo Geo CD System ROM)",
+          "optional": false
+        },
+        {
+          "path": "neocdz.zip",
+          "description": "neocdz.zip (Neo Geo CDZ System ROM)",
+          "optional": false
+        },
+        {
+          "path": "irrmaze.zip",
+          "description": "irrmaze.zip (The Irritating Maze)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "gpsp",
+      "binary": "Frameworks/gpsp.libretro.framework/gpsp.libretro",
+      "systemIds": [
+        "gba",
+        "gba-hacks"
+      ],
+      "sha256": "f5bc907079e1f535e8d9382ac165ba8826eb547adf65727573cc514591352b7a",
+      "infoSha256": "ec099aafce4e72b9fb41a92ff2d72c4fac2e107c0dd8521b1541c72e60b36307",
+      "info": "info/gpsp_libretro.info",
+      "title": "gpSP",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "gba",
+        "bin"
+      ],
+      "firmware": [
+        {
+          "path": "gba_bios.bin",
+          "description": "gba_bios.bin (Game Boy Advance BIOS)",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "gw",
+      "binary": "Frameworks/gw.libretro.framework/gw.libretro",
+      "systemIds": [
+        "gw"
+      ],
+      "sha256": "d1966ba617b0d072bae28da802f240f5e4d0a6b831d117cacda512bf0a9ea6c4",
+      "infoSha256": "d3b7f032de94344fc07f368aa6f1686ca8abd5c6acb25dba7449105e8127c5f8",
+      "info": "info/gw_libretro.info",
+      "title": "GW",
+      "license": "zlib",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "mgw"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "handy",
+      "binary": "Frameworks/handy.libretro.framework/handy.libretro",
+      "systemIds": [
+        "lynx"
+      ],
+      "sha256": "d4c61ea971c2a5ce0aa030c3cd2ec734999c4a0b3193e6cc33a0da7b458076f1",
+      "infoSha256": "a059661e377deb24ede5a77c725fbbdd4829666d0996f30bb9c2c9a10ee0461d",
+      "info": "info/handy_libretro.info",
+      "title": "Handy",
+      "license": "Zlib",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "lnx",
+        "lyx",
+        "o"
+      ],
+      "firmware": [
+        {
+          "path": "lynxboot.img",
+          "description": "lynxboot.img (Lynx Boot Image)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "holani",
+      "binary": "Frameworks/holani.libretro.framework/holani.libretro",
+      "systemIds": [
+        "lynx"
+      ],
+      "sha256": "574f335dfed431e5fe5dd0b8c8d59809ba72d1184d8133dca7f311fbcfb5f58a",
+      "infoSha256": "f48d70ba872955623e73ce2542b0c6b6771e76c4a85d6d9933f83e4d83216a85",
+      "info": "info/holani_libretro.info",
+      "title": "Holani",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "lnx",
+        "o"
+      ],
+      "firmware": [
+        {
+          "path": "lynxboot.img",
+          "description": "lynxboot.img (Lynx Boot Image)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "jollycv",
+      "binary": "Frameworks/jollycv.libretro.framework/jollycv.libretro",
+      "systemIds": [
+        "cv"
+      ],
+      "sha256": "6a3997c55a2af497b3b4aff15fb4880f8dd0f0b5adc26d65352ea95811669af7",
+      "infoSha256": "99a1d6cdf7dd05605c5964d996420d54d9dcd62c5906005ea5db3c3627856801",
+      "info": "info/jollycv_libretro.info",
+      "title": "JollyCV",
+      "license": "BSD-3-Clause, MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "col",
+        "rom",
+        "myv",
+        "bin"
+      ],
+      "firmware": [
+        {
+          "path": "coleco.rom",
+          "description": "coleco.rom (ColecoVision BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bioscv.rom",
+          "description": "bioscv.rom (CreatiVision BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mednafen_ngp",
+      "binary": "Frameworks/mednafen.ngp.libretro.framework/mednafen.ngp.libretro",
+      "systemIds": [
+        "ngp",
+        "ngpc"
+      ],
+      "sha256": "b039d67bf79c1af0fbba42a1a6c779686bdc2144efb36f6c68f00c1686544cf9",
+      "infoSha256": "1e7485277cffaf01ae4c4c5406a7dfc6f85f4d2a6949273feae5634781ec396b",
+      "info": "info/mednafen_ngp_libretro.info",
+      "title": "Beetle NeoPop",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "ngp",
+        "ngc",
+        "ngpc",
+        "npc"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mednafen_pce",
+      "binary": "Frameworks/mednafen.pce.libretro.framework/mednafen.pce.libretro",
+      "systemIds": [
+        "pccd",
+        "pce",
+        "tg16",
+        "tgcd"
+      ],
+      "sha256": "c9b7cc14511c7925d6af7c07ae385d19e38ee085053306beaca7a06818397a4a",
+      "infoSha256": "ec52873e28177fb250108ec69ae889a7a258dc352c9d946c051345cc69fbe1db",
+      "info": "info/mednafen_pce_libretro.info",
+      "title": "Beetle PCE",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "pce",
+        "sgx",
+        "cue",
+        "ccd",
+        "chd",
+        "toc",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "syscard3.pce",
+          "description": "syscard3.pce (Super CD-ROM2 System V3.xx)",
+          "optional": true
+        },
+        {
+          "path": "syscard2.pce",
+          "description": "syscard2.pce (CD-ROM System V2.xx)",
+          "optional": true
+        },
+        {
+          "path": "syscard1.pce",
+          "description": "syscard1.pce (CD-ROM System V1.xx)",
+          "optional": true
+        },
+        {
+          "path": "gexpress.pce",
+          "description": "gexpress.pce (Game Express CD Card)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mednafen_pcfx",
+      "binary": "Frameworks/mednafen.pcfx.libretro.framework/mednafen.pcfx.libretro",
+      "systemIds": [
+        "pcfx"
+      ],
+      "sha256": "40d14d4e635eaf0e9e454ed8f6b1a5499dccc17cc7c15eb59f6972ec2bfacf71",
+      "infoSha256": "d352e83266f1d965e1b0fcb190dc3300158f419985b8d77374a2994d00f38f19",
+      "info": "info/mednafen_pcfx_libretro.info",
+      "title": "Beetle PC-FX",
+      "license": "GPLv2",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "cue",
+        "ccd",
+        "toc",
+        "chd"
+      ],
+      "firmware": [
+        {
+          "path": "pcfx.rom",
+          "description": "pcfx.rom (PC-FX BIOS v1.00 - 2 Sep 1994)",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mednafen_saturn",
+      "binary": "Frameworks/mednafen.saturn.libretro.framework/mednafen.saturn.libretro",
+      "systemIds": [
+        "sat"
+      ],
+      "sha256": "910484b603e3e3d8a8660270130a5c00265477b13529f677b48d1c68d26ab149",
+      "infoSha256": "ec7785e6a9efd3000f730c463f6711273c1f7d28e87b73f8ee7e2ab6751fc779",
+      "info": "info/mednafen_saturn_libretro.info",
+      "title": "Beetle Saturn",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "ccd",
+        "chd",
+        "cue",
+        "toc",
+        "m3u",
+        "zip"
+      ],
+      "firmware": [
+        {
+          "path": "sega_101.bin",
+          "description": "sega_101.bin (Saturn JP BIOS)",
+          "optional": false
+        },
+        {
+          "path": "mpr-17933.bin",
+          "description": "mpr-17933.bin (Saturn US/EU BIOS)",
+          "optional": false
+        },
+        {
+          "path": "mpr-18811-mx.ic1",
+          "description": "mpr-18811-mx.ic1 (The King of Fighters '95 ROM Cartridge)",
+          "optional": true
+        },
+        {
+          "path": "mpr-19367-mx.ic1",
+          "description": "mpr-19367-mx.ic1 (Ultraman: Hikari no Kyojin Densetsu ROM Cartridge)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa",
+      "forcedOptions": {
+        "beetle_saturn_sh2_jit": "disabled",
+        "beetle_saturn_jit_scu": "disabled",
+        "beetle_saturn_jit_scsp": "disabled"
+      }
+    },
+    {
+      "id": "mednafen_supergrafx",
+      "binary": "Frameworks/mednafen.supergrafx.libretro.framework/mednafen.supergrafx.libretro",
+      "systemIds": [
+        "pccd",
+        "pce",
+        "tg16",
+        "tgcd"
+      ],
+      "sha256": "aafeaba2d8466d42dcfab804c1f3ed34fcbf1d8635f321601d733ab9c6db0575",
+      "infoSha256": "ab7f73bbfe0f8c94413f1db6981ec51c82f772f8278cd4564c839124c2a3411c",
+      "info": "info/mednafen_supergrafx_libretro.info",
+      "title": "Beetle SuperGrafx",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "pce",
+        "sgx",
+        "cue",
+        "ccd",
+        "chd"
+      ],
+      "firmware": [
+        {
+          "path": "syscard3.pce",
+          "description": "syscard3.pce (Super CD-ROM2 System V3.xx)",
+          "optional": true
+        },
+        {
+          "path": "syscard2.pce",
+          "description": "syscard2.pce (CD-ROM System V2.xx)",
+          "optional": true
+        },
+        {
+          "path": "syscard1.pce",
+          "description": "syscard1.pce (CD-ROM System V1.xx)",
+          "optional": true
+        },
+        {
+          "path": "gexpress.pce",
+          "description": "gexpress.pce (Game Express CD Card)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mednafen_vb",
+      "binary": "Frameworks/mednafen.vb.libretro.framework/mednafen.vb.libretro",
+      "systemIds": [
+        "vb"
+      ],
+      "sha256": "94971f959fe9ba390e92cdeb03230cfcd4243b0c2532d382237cc7700a59472e",
+      "infoSha256": "425e0ef983f72b7e938af8cc170d2ddc1cb6b0a19a98aa4fce49bb2957567236",
+      "info": "info/mednafen_vb_libretro.info",
+      "title": "Beetle VB",
+      "license": "GPLv2",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "vb",
+        "vboy",
+        "bin"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mednafen_wswan",
+      "binary": "Frameworks/mednafen.wswan.libretro.framework/mednafen.wswan.libretro",
+      "systemIds": [
+        "ws",
+        "wsc"
+      ],
+      "sha256": "18197619eaf9034fc0fb100018b33c8f82d54dd249f19fba38b96a9303732940",
+      "infoSha256": "07f595bdc27cf7ee145091ae226b2dc37eeefa499ef9720b64d5384e54ac5ac1",
+      "info": "info/mednafen_wswan_libretro.info",
+      "title": "Beetle WonderSwan",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "ws",
+        "wsc",
+        "pc2",
+        "pcv2"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mesen",
+      "binary": "Frameworks/mesen.libretro.framework/mesen.libretro",
+      "systemIds": [
+        "fc",
+        "fds",
+        "nes",
+        "nes-hacks"
+      ],
+      "sha256": "4cbeb96c1ebbe6d4e68b50e3a9756ba700c3e147a64ac28f5a04256c8aa7e4e7",
+      "infoSha256": "bb868f0271704aaaa1c7e6a518e876df8d8a37f944486d61d9e2e9fd808180ee",
+      "info": "info/mesen_libretro.info",
+      "title": "Mesen",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "nes",
+        "fds",
+        "unf",
+        "unif"
+      ],
+      "firmware": [
+        {
+          "path": "disksys.rom",
+          "description": "disksys.rom (Family Computer Disk System BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mesen-s",
+      "binary": "Frameworks/mesen-s.libretro.framework/mesen-s.libretro",
+      "systemIds": [
+        "gb",
+        "gb-hacks",
+        "gbc",
+        "gbc-hacks",
+        "satellaview",
+        "sfc",
+        "sfc-hacks",
+        "snes",
+        "snes-hacks"
+      ],
+      "sha256": "2259d90e44065d17d0146fe0a46a494cc3bc3fe10e7596f0b2f742d414ef486f",
+      "infoSha256": "38d0d5ba95285f4149a7e708b2d81c9fddd53fec5640422d979553e682830635",
+      "info": "info/mesen-s_libretro.info",
+      "title": "Mesen-S",
+      "license": "GPLv3",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "sfc",
+        "smc",
+        "fig",
+        "swc",
+        "bs",
+        "gb",
+        "gbc"
+      ],
+      "firmware": [
+        {
+          "path": "dsp1.data.rom",
+          "description": "dsp1.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1.program.rom",
+          "description": "dsp1.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1b.data.rom",
+          "description": "dsp1b.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp1b.program.rom",
+          "description": "dsp1b.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp2.data.rom",
+          "description": "dsp2.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp2.program.rom",
+          "description": "dsp2.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp3.data.rom",
+          "description": "dsp3.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp3.program.rom",
+          "description": "dsp3.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp4.data.rom",
+          "description": "dsp4.data.rom",
+          "optional": true
+        },
+        {
+          "path": "dsp4.program.rom",
+          "description": "dsp4.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st010.data.rom",
+          "description": "st010.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st010.program.rom",
+          "description": "st010.program.rom",
+          "optional": true
+        },
+        {
+          "path": "st011.data.rom",
+          "description": "st011.data.rom",
+          "optional": true
+        },
+        {
+          "path": "st011.program.rom",
+          "description": "st011.program.rom",
+          "optional": true
+        },
+        {
+          "path": "dmg_boot.bin",
+          "description": "dmg_boot.bin (GB Boot Image)",
+          "optional": true
+        },
+        {
+          "path": "cgb_boot.bin",
+          "description": "cgb_boot.bin (GBC Boot Image)",
+          "optional": true
+        },
+        {
+          "path": "sgb_boot.bin",
+          "description": "sgb_boot.bin (SGB Boot Image)",
+          "optional": true
+        },
+        {
+          "path": "sgb2_boot.bin",
+          "description": "sgb2_boot.bin (SGB2 Boot Image)",
+          "optional": true
+        },
+        {
+          "path": "SGB1.sfc",
+          "description": "SGB1.sfc (SGB ROM)",
+          "optional": true
+        },
+        {
+          "path": "SGB2.sfc",
+          "description": "SGB2.sfc (SGB2 ROM)",
+          "optional": true
+        },
+        {
+          "path": "BS-X.bin",
+          "description": "BS-X.bin (Satellaview Boot ROM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "mu",
+      "binary": "Frameworks/mu.libretro.framework/mu.libretro",
+      "systemIds": [
+        "palm"
+      ],
+      "sha256": "56a312f770ac8f1d09a87df5022e5f9157eb54f23f41896d403662e209280a52",
+      "infoSha256": "894ca6749fe1131595e0301a3e1bfc36e74b63364c532dcc7601a7a5cc7affda",
+      "info": "info/mu_libretro.info",
+      "title": "Mu",
+      "license": "CC BY-NC 3.0 US (Non-commercial)",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "prc",
+        "pqa",
+        "img",
+        "pdb",
+        "zip"
+      ],
+      "firmware": [
+        {
+          "path": "palmos40-en-m500.rom",
+          "description": "palmos40-en-m500.rom (Palm OS 4.0)",
+          "optional": true
+        },
+        {
+          "path": "palmos41-en-m515.rom",
+          "description": "palmos41-en-m515.rom (Palm OS 4.1)",
+          "optional": false
+        },
+        {
+          "path": "palmos52-en-t3.rom",
+          "description": "palmos52-en-t3.rom (Palm OS 5.2.1)",
+          "optional": true
+        },
+        {
+          "path": "palmos60-en-t3.rom",
+          "description": "palmos60-en-t3.rom (Palm OS 6.0)",
+          "optional": true
+        },
+        {
+          "path": "bootloader-dbvz.rom",
+          "description": "bootloader-dbvz.rom (MC68VZ328 UART Bootloader)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "neocd",
+      "binary": "Frameworks/neocd.libretro.framework/neocd.libretro",
+      "systemIds": [
+        "ngcd"
+      ],
+      "sha256": "028ed0d2f03c7f539b5e2ea67a5ae93fe21aeb8f53d5badad0f141881f9d232a",
+      "infoSha256": "6ea290bc3814131091c08eec089386492264fc3aaa3f678b7b130874cac0cc37",
+      "info": "info/neocd_libretro.info",
+      "title": "NeoCD",
+      "license": "LGPLv3",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "cue",
+        "chd"
+      ],
+      "firmware": [
+        {
+          "path": "neocd/neocd_f.rom",
+          "description": "neocd/neocd_f.rom (Front Loader BIOS)",
+          "optional": true
+        },
+        {
+          "path": "neocd/neocd_sf.rom",
+          "description": "neocd/neocd_sf.rom (Front Loader BIOS (SMKDAN))",
+          "optional": true
+        },
+        {
+          "path": "neocd/front-sp1.bin",
+          "description": "neocd/front-sp1.bin (Front Loader BIOS (MAME))",
+          "optional": true
+        },
+        {
+          "path": "neocd/neocd_t.rom",
+          "description": "neocd/neocd_t.rom (Top Loader BIOS))",
+          "optional": true
+        },
+        {
+          "path": "neocd/neocd_st.rom",
+          "description": "neocd/neocd_st.rom (Top Loader BIOS (SMKDAN))",
+          "optional": true
+        },
+        {
+          "path": "neocd/top-sp1.bin",
+          "description": "neocd/top-sp1.bin (Top Loader BIOS (MAME))",
+          "optional": true
+        },
+        {
+          "path": "neocd/neocd_z.rom",
+          "description": "neocd/neocd_z.rom (CDZ BIOS)",
+          "optional": true
+        },
+        {
+          "path": "neocd/neocd_sz.rom",
+          "description": "neocd/neocd_sz.rom (CDZ BIOS (SMKDAN))",
+          "optional": true
+        },
+        {
+          "path": "neocd/neocd.bin",
+          "description": "neocd/neocd.bin (CDZ BIOS (MAME))",
+          "optional": true
+        },
+        {
+          "path": "neocd/ng-lo.rom",
+          "description": "neocd/ng-lo.rom (Y-ZOOM ROM)",
+          "optional": true
+        },
+        {
+          "path": "neocd/000-lo.lo",
+          "description": "neocd/000-lo.lo (Y-ZOOM ROM (MAME))",
+          "optional": true
+        },
+        {
+          "path": "neocd/uni-bioscd.rom",
+          "description": "neocd/uni-bioscd.rom (Universe BIOS 3.2)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "noods",
+      "binary": "Frameworks/noods.libretro.framework/noods.libretro",
+      "systemIds": [
+        "ds"
+      ],
+      "sha256": "b966ce565509126ae942672ac39ec6ca9fbcdec656017f525fcd0b482837b709",
+      "infoSha256": "617bc83f61cfe1efa54f9fdfd2b15199d091e18173a4c37dc676a40c6e77f9c3",
+      "info": "info/noods_libretro.info",
+      "title": "NooDS",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "nds",
+        "gba"
+      ],
+      "firmware": [
+        {
+          "path": "firmware.bin",
+          "description": "firmware.bin (NDS Firmware)",
+          "optional": true
+        },
+        {
+          "path": "bios7.bin",
+          "description": "bios7.bin (ARM7 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "bios9.bin",
+          "description": "bios9.bin (ARM9 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gba_bios.bin",
+          "description": "gba_bios.bin (Game Boy Advance BIOS)",
+          "optional": true
+        },
+        {
+          "path": "nds_sd_card.bin",
+          "description": "nds_sd_card.bin (NDS SD card)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "np2kai",
+      "binary": "Frameworks/np2kai.libretro.framework/np2kai.libretro",
+      "systemIds": [
+        "pc98"
+      ],
+      "sha256": "5af0a7462e3f8bd584e0004760088e4928da880540500ad2c8f321ef4181c007",
+      "infoSha256": "b68e1c4aa673840f6bb8f6c29838430d2c5af15b7fb7315deb5a36a5945b490e",
+      "info": "info/np2kai_libretro.info",
+      "title": "Neko Project II Kai",
+      "license": "MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "d98",
+        "zip",
+        "98d",
+        "fdi",
+        "fdd",
+        "2hd",
+        "tfd",
+        "d88",
+        "88d",
+        "hdm",
+        "xdf",
+        "dup",
+        "cmd",
+        "hdi",
+        "thd",
+        "nhd",
+        "hdd",
+        "hdn"
+      ],
+      "firmware": [
+        {
+          "path": "np2kai/font.bmp",
+          "description": "np2kai/font.bmp (needed to display text)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/FONT.ROM",
+          "description": "np2kai/FONT.ROM (alt font file)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/bios.rom",
+          "description": "np2kai/bios.rom",
+          "optional": true
+        },
+        {
+          "path": "np2kai/itf.rom",
+          "description": "np2kai/itf.rom",
+          "optional": true
+        },
+        {
+          "path": "np2kai/sound.rom",
+          "description": "np2kai/sound.rom",
+          "optional": true
+        },
+        {
+          "path": "np2kai/2608_BD.WAV",
+          "description": "np2kai/2608_BD.WAV (YM2608 rhythm sample)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/2608_SD.WAV",
+          "description": "np2kai/2608_SD.WAV (YM2608 rhythm sample)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/2608_TOP.WAV",
+          "description": "np2kai/2608_TOP.WAV (YM2608 rhythm sample)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/2608_HH.WAV",
+          "description": "np2kai/2608_HH.WAV (YM2608 rhythm sample)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/2608_TOM.WAV",
+          "description": "np2kai/2608_TOM.WAV (YM2608 rhythm sample)",
+          "optional": true
+        },
+        {
+          "path": "np2kai/2608_RIM.WAV",
+          "description": "np2kai/2608_RIM.WAV (YM2608 rhythm sample)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "o2em",
+      "binary": "Frameworks/o2em.libretro.framework/o2em.libretro",
+      "systemIds": [
+        "mo2"
+      ],
+      "sha256": "3d6a5428c32d3cd903f99809f241baecd8b845c293e571107ed048a64c809224",
+      "infoSha256": "d8cbfb38f736448d16817a4b2f17d61843e43c1b8bf64fae228a9d9e95e48378",
+      "info": "info/o2em_libretro.info",
+      "title": "O2EM",
+      "license": "Artistic License",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "bin"
+      ],
+      "firmware": [
+        {
+          "path": "o2rom.bin",
+          "description": "o2rom.bin (Odyssey2 BIOS - G7000 model)",
+          "optional": false
+        },
+        {
+          "path": "c52.bin",
+          "description": "c52.bin (Videopac French BIOS - G7000 model)",
+          "optional": false
+        },
+        {
+          "path": "g7400.bin",
+          "description": "g7400.bin (Videopac+ European BIOS - G7400 model)",
+          "optional": false
+        },
+        {
+          "path": "jopac.bin",
+          "description": "jopac.bin (Videopac+ French BIOS - G7400 model)",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "opera",
+      "binary": "Frameworks/opera.libretro.framework/opera.libretro",
+      "systemIds": [
+        "3do"
+      ],
+      "sha256": "35eb9f7588a2f312365403a3253ee4c0854a0894c4e07925af0831b1806370e1",
+      "infoSha256": "3edce84cd4bd8afba0727a07a70fef7ccc44e7db7e1e0f00897ed6805087d94f",
+      "info": "info/opera_libretro.info",
+      "title": "Opera",
+      "license": "LGPL/Non-commercial",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "iso",
+        "bin",
+        "chd",
+        "cue"
+      ],
+      "firmware": [
+        {
+          "path": "panafz1.bin",
+          "description": "panafz1.bin (Panasonic FZ-1 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "panafz10.bin",
+          "description": "panafz10.bin (Panasonic FZ-10 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "panafz10-norsa.bin",
+          "description": "panafz10-norsa.bin (Panasonic FZ-10 BIOS [Encryption Check Disabled])",
+          "optional": true
+        },
+        {
+          "path": "panafz10e-anvil.bin",
+          "description": "panafz10e-anvil.bin (Panasonic FZ-10E ANVIL BIOS)",
+          "optional": true
+        },
+        {
+          "path": "panafz10e-anvil-norsa.bin",
+          "description": "panafz10e-anvil-norsa.bin (Panasonic FZ-10E ANVIL BIOS [Encryption Check Disabled])",
+          "optional": true
+        },
+        {
+          "path": "goldstar.bin",
+          "description": "goldstar.bin (Goldstar GDO-101M BIOS)",
+          "optional": true
+        },
+        {
+          "path": "sanyotry.bin",
+          "description": "sanyotry.bin (Sanyo Try IMP-21J BIOS)",
+          "optional": true
+        },
+        {
+          "path": "3do_arcade_saot.bin",
+          "description": "3do_arcade_saot.bin (Shootout At Old Tucson BIOS)",
+          "optional": true
+        },
+        {
+          "path": "panafz1-kanji.bin",
+          "description": "panafz1-kanji.bin (Panasonic FZ-1 Kanji Font ROM)",
+          "optional": true
+        },
+        {
+          "path": "panafz10ja-anvil-kanji.bin",
+          "description": "panafz10ja-anvil-kanji.bin (Panasonic FZ-10JA Kanji Font ROM)",
+          "optional": true
+        },
+        {
+          "path": "panafz1j.bin",
+          "description": "panafz1j.bin (Panasonic FZ-1J BIOS)",
+          "optional": true
+        },
+        {
+          "path": "panafz1j-norsa.bin",
+          "description": "panafz1j-norsa.bin (Panasonic FZ-1J BIOS [Encryption Check Disabled])",
+          "optional": true
+        },
+        {
+          "path": "panafz1j-kanji.bin",
+          "description": "panafz1j-kanji.bin (Panasonic FZ-1J Kanji Font ROM)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "pokemini",
+      "binary": "Frameworks/pokemini.libretro.framework/pokemini.libretro",
+      "systemIds": [
+        "mini"
+      ],
+      "sha256": "563230c9386c8dfc490545143a37df0bbd4b057eade05bf0d218c2198d1147ea",
+      "infoSha256": "514da066db31dd673aabf9c0e54b1b24e485775615217a02ac7de635d621b8b2",
+      "info": "info/pokemini_libretro.info",
+      "title": "PokeMini",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "min"
+      ],
+      "firmware": [
+        {
+          "path": "bios.min",
+          "description": "bios.min (Pokemon Mini BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "potator",
+      "binary": "Frameworks/potator.libretro.framework/potator.libretro",
+      "systemIds": [
+        "wsv"
+      ],
+      "sha256": "64ca61fb2462bfb04457f5fc11c12d981d3f68c3cb3d901ae581c05ca4cb9e08",
+      "infoSha256": "1e7155841e4dcdb7feef31018432d2e259cbfd2b349add6d4731165cee8ede1a",
+      "info": "info/potator_libretro.info",
+      "title": "Potator",
+      "license": "Public Domain",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "bin",
+        "sv"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "prosystem",
+      "binary": "Frameworks/prosystem.libretro.framework/prosystem.libretro",
+      "systemIds": [
+        "7800"
+      ],
+      "sha256": "98a4b6df2e5148be11be28c2ef536d415253152f84fcf6633ec3585d94e4cef0",
+      "infoSha256": "22e9bc148612082f41147b4de167bb7ade705ec5f4642b8b70c0eb9ad1971681",
+      "info": "info/prosystem_libretro.info",
+      "title": "ProSystem",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "a78",
+        "bin",
+        "cdf"
+      ],
+      "firmware": [
+        {
+          "path": "7800 BIOS (U).rom",
+          "description": "7800 BIOS (U).rom (7800 BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "puae",
+      "binary": "Frameworks/puae.libretro.framework/puae.libretro",
+      "systemIds": [
+        "amiga"
+      ],
+      "sha256": "445eeaeb502eaf43e68fd8d30570dd230fd513f52a64423e1cd574b0d1872bc6",
+      "infoSha256": "fc400817a4e304fe2721b9c7fbe3b4a0dfe7d9429366938abe48946aa56b43a3",
+      "info": "info/puae_libretro.info",
+      "title": "PUAE",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "adf",
+        "adz",
+        "dms",
+        "fdi",
+        "ipf",
+        "hdf",
+        "hdz",
+        "lha",
+        "slave",
+        "info",
+        "cue",
+        "ccd",
+        "nrg",
+        "mds",
+        "iso",
+        "chd",
+        "uae",
+        "m3u",
+        "zip",
+        "7z",
+        "rp9",
+        "/"
+      ],
+      "firmware": [
+        {
+          "path": "kick33180.A500",
+          "description": "kick33180.A500 | amiga-os-120.rom (A500-A2000 KS v1.2 rev 33.180)",
+          "optional": true
+        },
+        {
+          "path": "kick34005.A500",
+          "description": "kick34005.A500 | amiga-os-130.rom (A500-A2000-CDTV KS v1.3 rev 34.005)",
+          "optional": false
+        },
+        {
+          "path": "kick37175.A500",
+          "description": "kick37175.A500 | amiga-os-204.rom (A500+ KS v2.04 rev 37.175)",
+          "optional": true
+        },
+        {
+          "path": "kick37350.A600",
+          "description": "kick37350.A600 | amiga-os-205-a600.rom (A600 KS v2.05 rev 37.350)",
+          "optional": true
+        },
+        {
+          "path": "kick40063.A600",
+          "description": "kick40063.A600 | amiga-os-310-a600.rom (A600-A2000 KS v3.1 rev 40.063)",
+          "optional": true
+        },
+        {
+          "path": "kick39106.A1200",
+          "description": "kick39106.A1200 | amiga-os-300-a1200.rom (A1200 KS v3.0 rev 39.106)",
+          "optional": true
+        },
+        {
+          "path": "kick40068.A1200",
+          "description": "kick40068.A1200 | amiga-os-310-a1200.rom (A1200 KS v3.1 rev 40.068)",
+          "optional": false
+        },
+        {
+          "path": "kick39106.A4000",
+          "description": "kick39106.A4000 | amiga-os-300-a4000.rom (A4000 KS v3.0 rev 39.106)",
+          "optional": true
+        },
+        {
+          "path": "kick40068.A4000",
+          "description": "kick40068.A4000 | amiga-os-310-a4000.rom (A4000 KS v3.1 rev 40.068)",
+          "optional": true
+        },
+        {
+          "path": "kick34005.CDTV",
+          "description": "kick34005.CDTV | amiga-os-130-cdtv-ext.rom (CDTV extended ROM v1.0)",
+          "optional": true
+        },
+        {
+          "path": "kick40060.CD32",
+          "description": "kick40060.CD32 | amiga-os-310-cd32.rom (CD32 KS v3.1 rev 40.060)",
+          "optional": false
+        },
+        {
+          "path": "kick40060.CD32.ext",
+          "description": "kick40060.CD32.ext | amiga-os-310-cd32-ext.rom (CD32 extended ROM rev 40.060)",
+          "optional": false
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "px68k",
+      "binary": "Frameworks/px68k.libretro.framework/px68k.libretro",
+      "systemIds": [
+        "sharpx68000"
+      ],
+      "sha256": "7de7c39dbbd66ef4793a6c83670b7cc219cdaa1c2ebe0c24ecadd399f4fcc009",
+      "infoSha256": "9b4aae3ac3721bdcc11394a9a855a3fee1a7de787cee935aa568057c2684c915",
+      "info": "info/px68k_libretro.info",
+      "title": "PX68k",
+      "license": "Custom Non-Commercial",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "dim",
+        "img",
+        "d88",
+        "88d",
+        "hdm",
+        "dup",
+        "2hd",
+        "xdf",
+        "hdf",
+        "cmd",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "keropi/iplrom.dat",
+          "description": "iplrom.dat (X68000 BIOS)",
+          "optional": false
+        },
+        {
+          "path": "keropi/cgrom.dat",
+          "description": "cgrom.dat (X68000 BIOS 2)",
+          "optional": false
+        },
+        {
+          "path": "keropi/iplrom30.dat",
+          "description": "iplrom30.dat (X68000 BIOS 3)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "quicknes",
+      "binary": "Frameworks/quicknes.libretro.framework/quicknes.libretro",
+      "systemIds": [
+        "fc",
+        "nes",
+        "nes-hacks"
+      ],
+      "sha256": "93192de08c208469bb22b377ec82fee65313c28a36f709a8a051a56094af87da",
+      "infoSha256": "0bfb8cb8ad1eea544fdd1c55c8ef8310eb90e33aaf723ad12524a499288f4484",
+      "info": "info/quicknes_libretro.info",
+      "title": "QuickNES",
+      "license": "LGPLv2.1+",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "nes"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "race",
+      "binary": "Frameworks/race.libretro.framework/race.libretro",
+      "systemIds": [
+        "ngp",
+        "ngpc"
+      ],
+      "sha256": "4ae15b2f1e6c8dea56aa49d221a68b20684d68f92e28db30d739f6c94505f950",
+      "infoSha256": "41e1bc89e77d30ea387af20997364cee068f936399b4ea2aa192c5d4afd12453",
+      "info": "info/race_libretro.info",
+      "title": "RACE",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "ngp",
+        "ngc",
+        "ngpc",
+        "npc"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "rustynes",
+      "binary": "Frameworks/rustynes.libretro.framework/rustynes.libretro",
+      "systemIds": [
+        "fc",
+        "fds",
+        "nes",
+        "nes-hacks"
+      ],
+      "sha256": "3bae3d4743550123332eef382f487d7f7879571a1ac379fe206f1440f32df5f3",
+      "infoSha256": "8ae47cd8dc36ac5af6a16e3fa31458c6f01b5ceec1d5a8219950ff20ab932897",
+      "info": "info/rustynes_libretro.info",
+      "title": "RustyNES",
+      "license": "GPLv3+",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "nes",
+        "fds"
+      ],
+      "firmware": [
+        {
+          "path": "disksys.rom",
+          "description": "disksys.rom (Family Computer Disk System BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "sameduck",
+      "binary": "Frameworks/sameduck.libretro.framework/sameduck.libretro",
+      "systemIds": [
+        "duck"
+      ],
+      "sha256": "eb0dde9b374e83ba381fb365301f26950f91360787b8e2b770418577ba27e0fa",
+      "infoSha256": "1b0844ec4fbbcc595ada875c7f1e80de467d8e0b2713119f6e41ec8bd5b4fd29",
+      "info": "info/sameduck_libretro.info",
+      "title": "SameDuck",
+      "license": "MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "bin",
+        "duck"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "scummvm",
+      "binary": "Frameworks/scummvm.libretro.framework/scummvm.libretro",
+      "systemIds": [
+        "scummvm"
+      ],
+      "sha256": "c8c3ef6b4ed644c43d009451005cd3b5dd6ca6294cfb8d3f04be69ee10148817",
+      "infoSha256": "dfd544230a99cda60eb907b93b3387419b5b1eda9c582beba2120b0c29f8899c",
+      "info": "info/scummvm_libretro.info",
+      "title": "ScummVM",
+      "license": "GPLv3",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "scummvm"
+      ],
+      "firmware": [
+        {
+          "path": "scummvm/theme/scummclassic.zip",
+          "description": "scummclassic.zip",
+          "optional": true
+        },
+        {
+          "path": "scummvm/theme/scummmodern.zip",
+          "description": "scummmodern.zip",
+          "optional": true
+        },
+        {
+          "path": "scummvm/theme/scummremastered.zip",
+          "description": "scummremastered.zip",
+          "optional": true
+        },
+        {
+          "path": "scummvm/theme/residualvm.zip",
+          "description": "residualvm.zip",
+          "optional": true
+        },
+        {
+          "path": "scummvm/theme/gui-icons.dat",
+          "description": "gui-icons.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/theme/shaders.dat",
+          "description": "shaders.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/theme/translations.dat",
+          "description": "translations.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/achievements.dat",
+          "description": "achievements.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/encoding.dat",
+          "description": "encoding.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/freescape.dat",
+          "description": "freescape.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/grim-patch.lab",
+          "description": "grim-patch.lab",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/monkey4-patch.m4b",
+          "description": "monkey4-patch.m4b",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/myst3.dat",
+          "description": "myst3.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/fonts.dat",
+          "description": "fonts.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/macgui.dat",
+          "description": "macgui.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/access.dat",
+          "description": "access.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/cryo.dat",
+          "description": "cryo.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/cryomni3d.dat",
+          "description": "cryomni3d.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/drascula.dat",
+          "description": "drascula.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/hadesch_translations.dat",
+          "description": "hadesch_translations.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/hugo.dat",
+          "description": "hugo.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/kyra.dat",
+          "description": "kyra.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/lure.dat",
+          "description": "lure.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/macventure.dat",
+          "description": "macventure.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/mort.dat",
+          "description": "mort.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/nancy.dat",
+          "description": "nancy.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/neverhood.dat",
+          "description": "neverhood.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/queen.tbl",
+          "description": "queen.tbl",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/sky.cpt",
+          "description": "sky.cpt",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/supernova.dat",
+          "description": "supernova.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/teenagent.dat",
+          "description": "teenagent.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/titanic.dat",
+          "description": "titanic.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/tony.dat",
+          "description": "tony.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/toon.dat",
+          "description": "toon.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/ultima.dat",
+          "description": "ultima.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/wintermute.zip",
+          "description": "wintermute.zip",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/mm.dat",
+          "description": "mm.dat",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/vkeybd_default.zip",
+          "description": "vkeybd_default.zip",
+          "optional": true
+        },
+        {
+          "path": "scummvm/extra/Roland_SC-55.sf2",
+          "description": "Roland_SC-55.sf2",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "skyemu",
+      "binary": "Frameworks/skyemu.libretro.framework/skyemu.libretro",
+      "systemIds": [
+        "ds",
+        "gb",
+        "gb-hacks",
+        "gba",
+        "gba-hacks"
+      ],
+      "sha256": "7e04b0c8992e85a9dca3573daa0516e7fdfa5a4362cc9109647482d3a98adf04",
+      "infoSha256": "3ecadcde20980510bc8ef5223d0ed7b0549c81908328f761fab3b7103330956c",
+      "info": "info/skyemu_libretro.info",
+      "title": "SkyEmu",
+      "license": "MIT",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "gb",
+        "gbx",
+        "gba",
+        "nds"
+      ],
+      "firmware": [
+        {
+          "path": "cgb_boot.bin",
+          "description": "cgb_boot.bin (GBC BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gbc_bios.bin",
+          "description": "gbc_bios.bin (GBC BIOS)",
+          "optional": true
+        },
+        {
+          "path": "cgb0_boot.bin",
+          "description": "cgb0_boot.bin (GBC BIOS)",
+          "optional": true
+        },
+        {
+          "path": "cgb_agb_boot.bin",
+          "description": "cgb_agb_boot.bin (GBC BIOS)",
+          "optional": true
+        },
+        {
+          "path": "dmg_rom.bin",
+          "description": "dmg_rom.bin (DMG BIOS)",
+          "optional": true
+        },
+        {
+          "path": "dmg0_rom.bin",
+          "description": "dmg0_rom.bin (DMG BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gba_bios.bin",
+          "description": "gba_bios.bin (GBA BIOS)",
+          "optional": true
+        },
+        {
+          "path": "nds7.bin",
+          "description": "nds7.bin (NDS ARM7 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "nds9.bin",
+          "description": "nds9.bin (NDS ARM9 BIOS)",
+          "optional": true
+        },
+        {
+          "path": "firmware.bin",
+          "description": "firmware.bin (NDS FIRMWARE)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "smsplus",
+      "binary": "Frameworks/smsplus.libretro.framework/smsplus.libretro",
+      "systemIds": [
+        "gg",
+        "gg-hacks",
+        "mark3",
+        "sms"
+      ],
+      "sha256": "10ed460f8fb2993f0fb98f34ea5d142e58c4c5b73dc2f7db135174646fe7e615",
+      "infoSha256": "041fd38a307095402dafa6a3654a3eae22088976f326f14d8fdb3402d937a519",
+      "info": "info/smsplus_libretro.info",
+      "title": "SMS Plus GX",
+      "license": "GPLv2",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "sms",
+        "bin",
+        "rom",
+        "col",
+        "gg",
+        "sg"
+      ],
+      "firmware": [
+        {
+          "path": "bios.sms",
+          "description": "bios.sms (Master System BIOS)",
+          "optional": true
+        },
+        {
+          "path": "BIOS.col",
+          "description": "BIOS.col (Colecovision BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "snes9x2010",
+      "binary": "Frameworks/snes9x2010.libretro.framework/snes9x2010.libretro",
+      "systemIds": [
+        "satellaview",
+        "sfc",
+        "sfc-hacks",
+        "snes",
+        "snes-hacks"
+      ],
+      "sha256": "46919802350f2c823b8c3b7d3c3cac7f71c0439d5f11cdb52371e358017a1b67",
+      "infoSha256": "233ceaaec8a7302a4477055c2a8c15f2060e71b509918d83cbe5d8632b3052e1",
+      "info": "info/snes9x2010_libretro.info",
+      "title": "Snes9x 2010",
+      "license": "Non-commercial",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "smc",
+        "fig",
+        "sfc",
+        "gd3",
+        "gd7",
+        "dx2",
+        "bsx",
+        "swc"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "stella",
+      "binary": "Frameworks/stella.libretro.framework/stella.libretro",
+      "systemIds": [
+        "2600"
+      ],
+      "sha256": "5cb07877e342a52ab181b2bde71563fd18ef95964b4c730cb4a6eceab8fd7236",
+      "infoSha256": "ad01fae0d3c0b620a97fe84c5879ee96d241024f58f3d609cabb98eef6f67a35",
+      "info": "info/stella_libretro.info",
+      "title": "Stella",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "a26",
+        "bin"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "stella2014",
+      "binary": "Frameworks/stella2014.libretro.framework/stella2014.libretro",
+      "systemIds": [
+        "2600"
+      ],
+      "sha256": "148212b1e80e71d62d7be4fe06889a05cd342f1286d65e60fcc9446f5f3975e0",
+      "infoSha256": "d3e08071f6c19ec9ae72d83fe377b35d5da824c4a5f7819a8ee31e1379bdc17d",
+      "info": "info/stella2014_libretro.info",
+      "title": "Stella 2014",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "a26",
+        "bin"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "stella2023",
+      "binary": "Frameworks/stella2023.libretro.framework/stella2023.libretro",
+      "systemIds": [
+        "2600"
+      ],
+      "sha256": "9fddbbbe0b067201914bd79e78d71af2b93382f70f7076b4905155805aa3cb0e",
+      "infoSha256": "5e35f6dff6e6b6670fe096cd9606d54afbfce089fc53719437f2beaa940f73b9",
+      "info": "info/stella2023_libretro.info",
+      "title": "Stella 2023",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "a26",
+        "bin"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "tgbdual",
+      "binary": "Frameworks/tgbdual.libretro.framework/tgbdual.libretro",
+      "systemIds": [
+        "gb",
+        "gb-hacks",
+        "gbc",
+        "gbc-hacks"
+      ],
+      "sha256": "b18b857f3ad0cbe711f82a1a7db56589e6aded89f60cb583637385bd2eb3555e",
+      "infoSha256": "1a58735e8a305d82684bd402e92fbf0195b78f12b80883bd602f93eed28f28ef",
+      "info": "info/tgbdual_libretro.info",
+      "title": "TGB Dual",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "cgb",
+        "dmg",
+        "gb",
+        "gbc",
+        "sgb"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "tia",
+      "binary": "Frameworks/tia.libretro.framework/tia.libretro",
+      "systemIds": [
+        "2600"
+      ],
+      "sha256": "7d386ce8200f2a3669d544816acde313ddb97888f0a8e6448d2264b7b512acf3",
+      "infoSha256": "cc6480682e4ac6ab5be6bd21f313256462ca48927c3ee942da935a5d6cc17ac8",
+      "info": "info/tia_libretro.info",
+      "title": "Tia",
+      "license": "GPLv2+",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "a26",
+        "bin"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "uzem",
+      "binary": "Frameworks/uzem.libretro.framework/uzem.libretro",
+      "systemIds": [
+        "uze"
+      ],
+      "sha256": "dfd10dbd2d7e26f5ae38d6ff9aa0fe536a73734689c3068efc503776849705f9",
+      "infoSha256": "ad1e429e11e0084b5844493f72fbb0164c570b333c9707ccb91faef415a998cc",
+      "info": "info/uzem_libretro.info",
+      "title": "uzem",
+      "license": "MIT",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "uze"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vba_next",
+      "binary": "Frameworks/vba.next.libretro.framework/vba.next.libretro",
+      "systemIds": [
+        "gba",
+        "gba-hacks"
+      ],
+      "sha256": "8e074b7d7f0bd746c530a652aaf819f2cd4b497c7e88d61327dc9e6c5891584b",
+      "infoSha256": "d432d2bea1bf3e4dea50104d6078f766eaee2b7fb6b40ba1e3715b6b78b53071",
+      "info": "info/vba_next_libretro.info",
+      "title": "VBA Next",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "gba"
+      ],
+      "firmware": [
+        {
+          "path": "gba_bios.bin",
+          "description": "gba_bios.bin (Game Boy Advance BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vbam",
+      "binary": "Frameworks/vbam.libretro.framework/vbam.libretro",
+      "systemIds": [
+        "gb",
+        "gb-hacks",
+        "gba",
+        "gba-hacks",
+        "gbc",
+        "gbc-hacks"
+      ],
+      "sha256": "5e7a865c0c69c2ce26cbcd7733e19c3572d8b9057d9d77fa97d4c4fe11602d7e",
+      "infoSha256": "d686a4f765edd75fbc93da14f02b2a37ff9df688568838c668c8393b0b1c64e7",
+      "info": "info/vbam_libretro.info",
+      "title": "VBA-M",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "dmg",
+        "gb",
+        "gbc",
+        "cgb",
+        "sgb",
+        "gba"
+      ],
+      "firmware": [
+        {
+          "path": "gba_bios.bin",
+          "description": "gba_bios.bin (Game Boy Advance BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gb_bios.bin",
+          "description": "gb_bios.bin (Game Boy BIOS)",
+          "optional": true
+        },
+        {
+          "path": "gbc_bios.bin",
+          "description": "gbc_bios.bin (Game Boy Color BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vice_x64",
+      "binary": "Frameworks/vice.x64.libretro.framework/vice.x64.libretro",
+      "systemIds": [
+        "c64"
+      ],
+      "sha256": "e1e42aff0824af49b1b30be34cdb960c8bfae32496ac5b75f5aefe5f347976a0",
+      "infoSha256": "5b3f59e050c260e53d29e4a13a3983e9b77e77b7b3b4512dded8e313d756b168",
+      "info": "info/vice_x64_libretro.info",
+      "title": "VICE x64",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "d64",
+        "d71",
+        "d80",
+        "d81",
+        "d82",
+        "g64",
+        "g41",
+        "x64",
+        "t64",
+        "tap",
+        "prg",
+        "p00",
+        "crt",
+        "bin",
+        "zip",
+        "gz",
+        "d6z",
+        "d7z",
+        "d8z",
+        "g6z",
+        "g4z",
+        "x6z",
+        "cmd",
+        "m3u",
+        "vfl",
+        "vsf",
+        "nib",
+        "nbz",
+        "d2m",
+        "d4m",
+        "/"
+      ],
+      "firmware": [
+        {
+          "path": "vice/JiffyDOS_C64.bin",
+          "description": "vice/JiffyDOS_C64.bin (JiffyDOS C64 Kernal)",
+          "optional": true
+        },
+        {
+          "path": "vice/JiffyDOS_1541-II.bin",
+          "description": "vice/JiffyDOS_1541-II.bin (JiffyDOS 1541 drive BIOS)",
+          "optional": true
+        },
+        {
+          "path": "vice/JiffyDOS_1571_repl310654.bin",
+          "description": "vice/JiffyDOS_1571_repl310654.bin (JiffyDOS 1571 drive BIOS)",
+          "optional": true
+        },
+        {
+          "path": "vice/JiffyDOS_1581.bin",
+          "description": "vice/JiffyDOS_1581.bin (JiffyDOS 1581 drive BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vice_x64sc",
+      "binary": "Frameworks/vice.x64sc.libretro.framework/vice.x64sc.libretro",
+      "systemIds": [
+        "c64"
+      ],
+      "sha256": "2081520546a1e4bd272384ab42ff54deba85cdb8067117bbc61a75037907f348",
+      "infoSha256": "944370dcfe24e575a3ecf2d21b9324284b885e32311bce9d1c28492e036cf4fb",
+      "info": "info/vice_x64sc_libretro.info",
+      "title": "VICE x64sc",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "d64",
+        "d71",
+        "d80",
+        "d81",
+        "d82",
+        "g64",
+        "g41",
+        "x64",
+        "t64",
+        "tap",
+        "prg",
+        "p00",
+        "crt",
+        "bin",
+        "zip",
+        "gz",
+        "d6z",
+        "d7z",
+        "d8z",
+        "g6z",
+        "g4z",
+        "x6z",
+        "cmd",
+        "m3u",
+        "vfl",
+        "vsf",
+        "nib",
+        "nbz",
+        "d2m",
+        "d4m",
+        "/"
+      ],
+      "firmware": [
+        {
+          "path": "vice/JiffyDOS_C64.bin",
+          "description": "vice/JiffyDOS_C64.bin (JiffyDOS C64 Kernal)",
+          "optional": true
+        },
+        {
+          "path": "vice/JiffyDOS_1541-II.bin",
+          "description": "vice/JiffyDOS_1541-II.bin (JiffyDOS 1541 drive BIOS)",
+          "optional": true
+        },
+        {
+          "path": "vice/JiffyDOS_1571_repl310654.bin",
+          "description": "vice/JiffyDOS_1571_repl310654.bin (JiffyDOS 1571 drive BIOS)",
+          "optional": true
+        },
+        {
+          "path": "vice/JiffyDOS_1581.bin",
+          "description": "vice/JiffyDOS_1581.bin (JiffyDOS 1581 drive BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vice_xpet",
+      "binary": "Frameworks/vice.xpet.libretro.framework/vice.xpet.libretro",
+      "systemIds": [
+        "pet"
+      ],
+      "sha256": "cb999477907acda2577e6035e4a6fd233758ebd437120ea5e92212d191d00cc9",
+      "infoSha256": "38da60f07b51374dc997101f0423d050d58a9a130ee61708febac0c9debf4e0f",
+      "info": "info/vice_xpet_libretro.info",
+      "title": "VICE xpet",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "d64",
+        "d71",
+        "d80",
+        "d81",
+        "d82",
+        "g64",
+        "g41",
+        "x64",
+        "t64",
+        "tap",
+        "prg",
+        "p00",
+        "crt",
+        "bin",
+        "zip",
+        "gz",
+        "d6z",
+        "d7z",
+        "d8z",
+        "g6z",
+        "g4z",
+        "x6z",
+        "cmd",
+        "m3u",
+        "vfl",
+        "vsf",
+        "nib",
+        "nbz",
+        "d2m",
+        "d4m",
+        "/"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vice_xplus4",
+      "binary": "Frameworks/vice.xplus4.libretro.framework/vice.xplus4.libretro",
+      "systemIds": [
+        "plus4"
+      ],
+      "sha256": "563d2a8e1287148fa2153cd211a64fb23764ad265e35d92c3f08cae0b2eec25f",
+      "infoSha256": "759a836bcdd2ae1bcb33404c4dbe9eeab6feceb48d1b3337f0a307ecdce4b597",
+      "info": "info/vice_xplus4_libretro.info",
+      "title": "VICE xplus4",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "d64",
+        "d71",
+        "d80",
+        "d81",
+        "d82",
+        "g64",
+        "g41",
+        "x64",
+        "t64",
+        "tap",
+        "prg",
+        "p00",
+        "crt",
+        "bin",
+        "zip",
+        "gz",
+        "d6z",
+        "d7z",
+        "d8z",
+        "g6z",
+        "g4z",
+        "x6z",
+        "cmd",
+        "m3u",
+        "vfl",
+        "vsf",
+        "nib",
+        "nbz",
+        "d2m",
+        "d4m",
+        "/"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "vice_xvic",
+      "binary": "Frameworks/vice.xvic.libretro.framework/vice.xvic.libretro",
+      "systemIds": [
+        "vic20"
+      ],
+      "sha256": "83f88b27f55f73342a857878852e2dc8311ae3447fc2213f8c1e0e9fbbc29100",
+      "infoSha256": "98e64ee0e0400726cbc0e35bbea7df4107ee51fd4602de58c1c7b0d6a3a5fce4",
+      "info": "info/vice_xvic_libretro.info",
+      "title": "VICE xvic",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "d64",
+        "d71",
+        "d80",
+        "d81",
+        "d82",
+        "g64",
+        "g41",
+        "x64",
+        "t64",
+        "tap",
+        "prg",
+        "p00",
+        "crt",
+        "bin",
+        "zip",
+        "gz",
+        "d6z",
+        "d7z",
+        "d8z",
+        "g6z",
+        "g4z",
+        "x6z",
+        "cmd",
+        "m3u",
+        "vfl",
+        "vsf",
+        "nib",
+        "nbz",
+        "d2m",
+        "d4m",
+        "20",
+        "40",
+        "60",
+        "a0",
+        "b0",
+        "rom",
+        "/"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "virtualjaguar",
+      "binary": "Frameworks/virtualjaguar.libretro.framework/virtualjaguar.libretro",
+      "systemIds": [
+        "jag"
+      ],
+      "sha256": "bd165f83c82ea95b77dbd1ed38edd72ab77edc48a036ad5ff0f3badc107e43e7",
+      "infoSha256": "c6338c31a4d72706a110e89a94686254a08718479735ad5df156059a1144500a",
+      "info": "info/virtualjaguar_libretro.info",
+      "title": "Virtual Jaguar",
+      "license": "GPLv3",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "j64",
+        "jag",
+        "rom",
+        "abs",
+        "cof",
+        "bin",
+        "prg",
+        "cue",
+        "cdi",
+        "chd"
+      ],
+      "firmware": [
+        {
+          "path": "[BIOS] Atari Jaguar CD (World).j64",
+          "description": "[BIOS] Atari Jaguar CD (World).j64 (Jaguar CD BIOS, retail - optional override)",
+          "optional": true
+        },
+        {
+          "path": "[BIOS] Atari Jaguar Developer CD (World).j64",
+          "description": "[BIOS] Atari Jaguar Developer CD (World).j64 (Jaguar CD BIOS, developer - optional override)",
+          "optional": true
+        },
+        {
+          "path": "jagboot_m.rom",
+          "description": "jagboot_m.rom (Jaguar cart boot ROM, Model M - optional override)",
+          "optional": true
+        },
+        {
+          "path": "jagboot.rom",
+          "description": "jagboot.rom (Jaguar cart boot ROM, any revision - optional, used when Cart BIOS Type is Custom)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "wasm4",
+      "binary": "Frameworks/wasm4.libretro.framework/wasm4.libretro",
+      "systemIds": [
+        "wasm4"
+      ],
+      "sha256": "0ece8acddee75f10370807fcd110cca21cc45c7f932f6efb39e37da01496a4bd",
+      "infoSha256": "e6e069d1259c2362da7b1e8b52a7dcd0532f420e34f193fa8257a45a6ebfd5fb",
+      "info": "info/wasm4_libretro.info",
+      "title": "WASM-4",
+      "license": "ISC",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "wasm"
+      ],
+      "firmware": [],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "yabause",
+      "binary": "Frameworks/yabause.libretro.framework/yabause.libretro",
+      "systemIds": [
+        "sat"
+      ],
+      "sha256": "9ef128d5d11e75877174d82a24f06efd73cb5bb3feaa9247a8f8154ef984cd9e",
+      "infoSha256": "a65a050c3cedefd6a06d790e3a9b4341ed21a9bb122e7b49516dbd5f4c014e81",
+      "info": "info/yabause_libretro.info",
+      "title": "Yabause",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "bin",
+        "ccd",
+        "chd",
+        "cue",
+        "iso",
+        "mds",
+        "zip",
+        "m3u"
+      ],
+      "firmware": [
+        {
+          "path": "saturn_bios.bin",
+          "description": "saturn_bios.bin (Saturn BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa"
+    },
+    {
+      "id": "ppsspp",
+      "binary": "Frameworks/ppsspp.libretro.framework/ppsspp.libretro",
+      "systemIds": [
+        "psp",
+        "pspminis"
+      ],
+      "title": "PPSSPP",
+      "license": "GPLv2",
+      "sha256": "52cec262640fb3eb1aea9521c3576cba827095f52878c2c673b1f6a352d4927a",
+      "info": "info/ppsspp_libretro.info",
+      "infoSha256": "2e9becab17d0db4222e9655bb9b065167e5bcf599ca16256be72beb8f38e646d",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "elf",
+        "iso",
+        "cso",
+        "prx",
+        "pbp",
+        "chd"
+      ],
+      "firmware": [
+        {
+          "path": "PPSSPP/ppge_atlas.zim",
+          "description": "ppge_atlas.zim (PPSSPP Data ROM)",
+          "optional": false,
+          "providedBy": "pinned-upstream-support-assets"
+        }
+      ],
+      "supplementaryInput": {
+        "coreArchive": "native/retroarch/psp/ppsspp_libretro.dylib.zip",
+        "coreArchiveSha256": "5dec365c3956b78d05085391d80761664064cd0377e8165dec5cc128f863e5dc",
+        "repository": "https://github.com/hrydgard/ppsspp.git",
+        "sourceCommit": "91a34056d036b22ee9ec1a656875fc780eff5efb",
+        "assetsSourceSha256": "1c6955ce6c9aed7b17f4b7fcb0ed8b00078696e9292513e2aa0a41fd4bb49aaf",
+        "assetsIndexSha256": "6d24bb076268ccde5e7c447da4b833f38203abc2f89387d42b731f9be246bffc"
+      },
+      "input": "supplemental-ppsspp",
+      "forcedOptions": {
+        "ppsspp_cpu_core": "Interpreter",
+        "ppsspp_backend": "opengl"
+      }
+    },
+    {
+      "id": "mupen64plus_next",
+      "binary": "Frameworks/mupen64plus.next.libretro.framework/mupen64plus.next.libretro",
+      "systemIds": [
+        "n64"
+      ],
+      "sha256": "9e218101d03556d2c7decd182706174a3fc738ab7fba946bc9bd36e6eee38237",
+      "infoSha256": "8d1fcd13a17310e233be4ff247bf1032f8f786fe685e24cef5ed4ea474ccdfb6",
+      "info": "info/mupen64plus_next_libretro.info",
+      "title": "Mupen64Plus-Next",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "n64",
+        "v64",
+        "z64",
+        "ndd",
+        "bin",
+        "u1"
+      ],
+      "firmware": [
+        {
+          "path": "Mupen64plus/IPL.n64",
+          "description": "Mupen64plus/IPL.n64 (64DD BIOS)",
+          "optional": true
+        }
+      ],
+      "input": "sourceIpa",
+      "forcedOptions": {
+        "mupen64plus-cpucore": "pure_interpreter",
+        "mupen64plus-rdp-plugin": "gliden64",
+        "mupen64plus-rsp-plugin": "hle",
+        "mupen64plus-ThreadedRenderer": "False"
+      },
+      "runtimeProfile": {
+        "sourceRepository": "https://github.com/libretro/mupen64plus-libretro-nx.git",
+        "sourceCommit": "12edd2c74a517ff86dfa8cfc71ad75e4c10486d5",
+        "embeddedVersion": "3.0-Vulkan 12edd2c",
+        "hardwareContext": "RETRO_HW_CONTEXT_OPENGLES3",
+        "videoDriver": "gl",
+        "jitEnabled": false,
+        "iosDynarecCompiled": false,
+        "deviceValidated": false,
+        "sourceFileGitBlobs": {
+          "libretro/libretro.c": "4a9f1297ff16a2a1d34551c7bfa883d2a8baa6e9",
+          "libretro/libretro_core_options.h": "fb39aa98e3c872caaaff3d9b2a654a403d6b3762",
+          "libretro-common/glsm/glsm.c": "b3e8c60e4e3b62b1761afa69e305c8ac9da58cd3",
+          "Makefile": "2443f80e9abe71d92f5422af2553eca4c546c94b"
+        }
+      }
     }
-  ]
+  ],
+  "catalogAudit": {
+    "softwareCores": 85,
+    "supplementaryCores": 1,
+    "deviceValidated": false,
+    "appStoreAllowlistCommit": "3a6a1e9c4fb4e90044945f84138ae7fad687e1a4",
+    "systemMappings": "appstore-candidate-audit.json",
+    "reviewedHardwareCores": 1
+  },
+  "supplementaryInputs": {
+    "ppsspp": {
+      "pins": "native/retroarch/psp/pins.json",
+      "packageTool": "build-utils/retroarch/psp/package.py"
+    }
+  }
 }

@@ -10,6 +10,7 @@ import 'package:neostation/services/home_music_service.dart';
 import 'package:neostation/widgets/shimmering_logo.dart';
 import 'my_systems_section/my_systems_grid.dart';
 import 'my_systems_section/initial_setup_widget.dart';
+import '../../widgets/console_library_picker.dart';
 
 /// Orchestrator for the 'Systems' tab content.
 ///
@@ -84,7 +85,9 @@ class _SystemContentState extends State<SystemContent> {
 
         final showInitialSetup =
             !showSplash &&
-            !configProvider.hasDetectedSystems &&
+            (configProvider.usesLibrarySelection
+                ? configProvider.visibleDetectedSystems.isEmpty
+                : !configProvider.hasDetectedSystems) &&
             configProvider.scanCompleted;
 
         final showContent =
@@ -104,9 +107,11 @@ class _SystemContentState extends State<SystemContent> {
             child: _buildSplash(context, configProvider),
           );
         } else if (showInitialSetup) {
-          phase = const KeyedSubtree(
-            key: ValueKey('setup'),
-            child: InitialSetupWidget(),
+          phase = KeyedSubtree(
+            key: const ValueKey('setup'),
+            child: configProvider.usesLibrarySelection
+                ? ConsoleLibraryEmptyState(provider: configProvider)
+                : const InitialSetupWidget(),
           );
         } else if (showContent) {
           phase = KeyedSubtree(

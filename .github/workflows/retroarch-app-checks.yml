@@ -1,0 +1,67 @@
+name: RetroArch library and migration checks
+
+on:
+  push:
+    branches: [feature/retroarch-embedded]
+    paths:
+      - lib/**
+      - test/**
+      - pubspec.yaml
+      - packages/retroarch_internal_bridge/**
+      - build-utils/retroarch/**
+      - native/retroarch/**
+      - .github/workflows/retroarch-app-checks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retroarch-app-checks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  libraries-and-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Resolve existing application dependencies
+        run: flutter pub get
+      - name: Check source formatting and all twelve translations
+        run: |
+          git diff --check
+          python3 test/retroarch_localization_test.py
+          python3 -m unittest discover -s build-utils/retroarch/tests -v
+          python3 -m unittest discover -s build-utils/retroarch/psp/tests -v
+      - name: Analyze the RetroArch application integration
+        run: |
+          dart analyze \
+            lib/services/retroarch_core_catalog.dart \
+            lib/services/retroarch_core_preferences.dart \
+            lib/services/retroarch_internal_service.dart \
+            lib/services/retroarch_import_service.dart \
+            lib/services/retroarch_migration_service.dart \
+            lib/services/retroarch_data_migration.dart \
+            lib/services/library_visibility_service.dart \
+            lib/widgets/console_library_picker.dart \
+            lib/widgets/retroarch_migration_dialog.dart \
+            lib/widgets/retroarch_library_actions.dart \
+            lib/l10n/retroarch_locale.dart \
+            lib/l10n/library_visibility_locale.dart \
+            packages/retroarch_internal_bridge/lib
+      - name: Verify libraries, choices, files, migration and session ownership
+        run: |
+          flutter test --no-pub \
+            test/retroarch_*_test.dart \
+            test/library_visibility_service_test.dart \
+            test/console_library_picker_test.dart \
+            test/system_repository_test.dart \
+            test/frontend_media_gate_test.dart \
+            test/armsx2_retroarch_routing_isolation_test.dart \
+            test/rpcs3_internal_integration_test.dart

@@ -21,6 +21,11 @@ List<SystemInfo> buildSystemsList({
       : dbProvider.getRecentlyPlayedGames(recentCount);
 
   final recentGames = recentDbGames
+      .where(
+        (game) =>
+            !configProvider.usesLibrarySelection ||
+            configProvider.isLibraryEnabled(game.systemFolderName ?? ''),
+      )
       .map((dbGame) => GameModel.fromDatabaseModel(dbGame))
       .map((game) => SystemInfo.fromGameModel(game, fileProvider))
       .toList();
@@ -28,7 +33,7 @@ List<SystemInfo> buildSystemsList({
   final hiddenFolders = configProvider.hiddenSystemFolders;
   final totalFavorites = dbProvider.totalFavorites;
 
-  final detectedSystems = configProvider.detectedSystems
+  final detectedSystems = configProvider.visibleDetectedSystems
       .where((s) => !hiddenFolders.contains(s.folderName))
       .where(
         (s) =>

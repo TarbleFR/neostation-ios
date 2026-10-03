@@ -92,6 +92,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     if (Platform.isIOS) {
       await Armsx2InternalService.ensureLayout();
       await DusklightInternalService.ensureLayout();
+      await RetroArchInternalService.ensureLayout();
     }
 
     // Re-probe the fast SAF walk once per scan: the permission behind it can be
@@ -180,7 +181,11 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       } else {
         // On Desktop, use File IO based detection
         detectedSystems = await SqliteConfigService.detectSystems(
-          romFolders: _config.romFolders,
+          romFolders: [
+            ..._config.romFolders,
+            if (Platform.isIOS)
+              (await RetroArchInternalService.gamesDirectory()).path,
+          ],
           availableSystems: _availableSystems,
         );
       }
@@ -211,7 +216,9 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       // global ROM folder or changing another system's scan source.
       if (Platform.isIOS) {
         for (final folderName in const ['gc', 'wii']) {
-          if (detectedSystems.any((system) => system.folderName == folderName)) {
+          if (detectedSystems.any(
+            (system) => system.folderName == folderName,
+          )) {
             continue;
           }
           try {
@@ -238,7 +245,13 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         final List<String> fastScanFolders = Platform.isAndroid
             ? ['android']
             : Platform.isIOS
-            ? ['gc', 'wii', 'ps2', 'ports']
+            ? [
+                'gc',
+                'wii',
+                'ps2',
+                'ports',
+                ...RetroArchCoreCatalog.supportedSystems,
+              ]
             : [];
         // DOLPHIN_ISOLATION_END: fast_scan_playlists
 
@@ -548,16 +561,17 @@ extension SqliteConfigScanning on SqliteConfigProvider {
             DolphinInternalV2Service.isDolphinSystem(system.folderName);
         final isEmbeddedIosLibrary =
             Platform.isIOS &&
-            const <String>{'ps2', 'ports'}.contains(
-              system.folderName.toLowerCase(),
-            );
+            const <String>{
+              'ps2',
+              'ports',
+            }.contains(system.folderName.toLowerCase());
         if (romCount > 0 ||
             hasFolderWhenNonRecursive ||
             isAndroidVirtual ||
             isDolphinInternalSystem ||
             isEmbeddedIosLibrary) {
           systemsToKeep.add(system.copyWith(romCount: romCount));
-        // DOLPHIN_ISOLATION_END: keep_empty_native_systems
+          // DOLPHIN_ISOLATION_END: keep_empty_native_systems
 
           // Increment count for 'all' logic if it's a real emulator system with games
           if (romCount > 0 && !virtualSystems.contains(system.folderName)) {
@@ -683,6 +697,29 @@ extension SqliteConfigScanning on SqliteConfigProvider {
   Future<void> refreshDusklightInternalLibrary() =>
       refreshPortsInternalLibrary();
 
+  /// A Files import refreshes only its curated RetroArch console. Existing
+  /// generic ROM roots stay included, so the import cannot prune their games.
+  Future<void> refreshRetroArchInternalLibrary(String folderName) async {
+    if (!Platform.isIOS ||
+        !RetroArchCoreCatalog.supportedSystems.contains(folderName)) {
+      throw ArgumentError.value(
+        folderName,
+        'folderName',
+        'Embedded RetroArch refresh requires a curated iOS system.',
+      );
+    }
+    await RetroArchInternalService.ensureLayout();
+    if (_availableSystems.isEmpty) await _loadAvailableSystems();
+    final system = _availableSystems.firstWhere(
+      (candidate) => candidate.folderName == folderName,
+    );
+    await SystemRepository.addDetectedSystem(system.id!, system.folderName);
+    await _scanSystemRoms(system);
+    await _refreshDetectedSystemsFromDatabase();
+    _sortDetectedSystems();
+    _notify();
+  }
+
   /// Performs an isolated scan for a specific system.
   Future<ScanSummary> _scanSystemRoms(
     SystemModel system, {
@@ -697,10 +734,14 @@ extension SqliteConfigScanning on SqliteConfigProvider {
           Platform.isIOS && system.folderName.toLowerCase() == 'ps2';
       final isPortsInternalSystem =
           Platform.isIOS && system.folderName.toLowerCase() == 'ports';
+      final isRetroArchInternalSystem =
+          Platform.isIOS &&
+          RetroArchCoreCatalog.supportedSystems.contains(system.folderName);
       final isNativeInternalSystem =
           isDolphinInternalSystem ||
           isArmsx2InternalSystem ||
-          isPortsInternalSystem;
+          isPortsInternalSystem ||
+          isRetroArchInternalSystem;
       // Native embedded playlists scan their own roots even when no public ROM
       // folder exists. Every other system retains the original early return.
       if (_config.romFolders.isEmpty &&
@@ -722,8 +763,8 @@ extension SqliteConfigScanning on SqliteConfigProvider {
         ];
         effectiveRootFoldersMap =
             await SqliteDatabaseService.getExistingSubdirectories(
-          nativeScanRoots,
-        );
+              nativeScanRoots,
+            );
       } else if (isArmsx2InternalSystem) {
         nativeScanRoots = <String>[
           (await Armsx2InternalService.gamesDirectory()).path,
@@ -741,6 +782,15 @@ extension SqliteConfigScanning on SqliteConfigProvider {
             'ports': (await KartPadInternalService.gamesDirectory()).path,
           },
         };
+      } else if (isRetroArchInternalSystem) {
+        nativeScanRoots = {
+          ..._config.romFolders,
+          (await RetroArchInternalService.gamesDirectory()).path,
+        }.toList();
+        effectiveRootFoldersMap =
+            await SqliteDatabaseService.getExistingSubdirectories(
+              nativeScanRoots,
+            );
       } else {
         nativeScanRoots = _config.romFolders;
       }
@@ -839,9 +889,10 @@ extension SqliteConfigScanning on SqliteConfigProvider {
               (DolphinInternalV2Service.isDolphinSystem(
                     updatedSystem.folderName,
                   ) ||
-                  const <String>{'ps2', 'ports'}.contains(
-                    updatedSystem.folderName.toLowerCase(),
-                  )));
+                  const <String>{
+                    'ps2',
+                    'ports',
+                  }.contains(updatedSystem.folderName.toLowerCase())));
       // DOLPHIN_ISOLATION_END: refresh_keep_native_systems
 
       if (shouldKeep) {
@@ -1081,7 +1132,60 @@ extension SqliteConfigScanning on SqliteConfigProvider {
     }
   }
 
+  Future<void> _loadLibraryVisibility() async {
+    final preferences = await SharedPreferences.getInstance();
+    _libraryVisibilityService = LibraryVisibilityService(preferences);
+    final detected = await SqliteService.getUserDetectedSystems();
+    final hidden = await SystemRepository.getHiddenSystems();
+    final existingInstallation =
+        _config.setupCompleted ||
+        _config.romFolders.isNotEmpty ||
+        detected.isNotEmpty ||
+        preferences.getBool('setup_completed_prefs') == true;
+    _libraryVisibility = await _libraryVisibilityService!.initialize(
+      existingInstallation: existingInstallation,
+      previouslyVisibleFolders: {
+        ...detected.map((system) => system.folderName),
+        // These empty libraries were automatically visible before this feature.
+        if (existingInstallation) ...LibraryVisibilityService.embeddedFolders,
+      }..removeAll({...hidden, 'all', 'favorites'}),
+      existingLibraryFolders: detected
+          .map((system) => system.folderName)
+          .where((folder) => folder != 'all' && folder != 'favorites')
+          .toSet(),
+    );
+  }
+
+  Future<void> saveLibrarySelection(Set<String> enabledFolders) async {
+    final service = _libraryVisibilityService;
+    if (service == null) return;
+    final selection = LibraryVisibilitySelection(
+      enabledFolders: enabledFolders,
+      setupCompleted: true,
+      existingInstallation: _libraryVisibility?.existingInstallation ?? false,
+      legacyFolders: _libraryVisibility?.legacyFolders ?? const {},
+    );
+    // Save before updating the UI, so a failed write never reports success.
+    await service.save(selection);
+    _libraryVisibility = selection;
+    await _loadDetectedSystems();
+    _notify();
+  }
+
   Future<void> toggleSystemHidden(String folderName) async {
+    if (_libraryVisibility != null &&
+        folderName != 'all' &&
+        folderName != 'favorites') {
+      final selection = _libraryVisibility!.withConsoleEnabled(
+        folderName,
+        !isConsoleLibraryEnabled(folderName),
+      );
+      await _libraryVisibilityService!.save(selection);
+      _libraryVisibility = selection;
+      await _loadDetectedSystems();
+      _notify();
+      return;
+    }
     final isNowHidden = !_hiddenSystems.contains(folderName);
     if (isNowHidden) {
       _hiddenSystems = {..._hiddenSystems, folderName};

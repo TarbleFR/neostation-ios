@@ -83,7 +83,11 @@
     "migrationCopyFailure": "Copy failed. Your external files remain unchanged.",
     "migrationSourceMissing": "The selected external RetroArch folder is unavailable.",
     "migrationProgress": "Copying {done} / {total}…",
-    "technicalDetails": "Technical details"
+    "technicalDetails": "Technical details",
+    "managedFolders": "RetroArch folders",
+    "changeRetroArchMode": "Choose built-in or external RetroArch",
+    "builtInRetroArch": "Built-in RetroArch",
+    "gameImportRequired": "Import this game file into NeoStation, or link a folder that contains the original file. Copying is optional."
   },
   "fr": {
     "menuTitle": "RetroArch",
@@ -169,7 +173,11 @@
     "migrationCopyFailure": "La copie a échoué. Vos fichiers externes restent inchangés.",
     "migrationSourceMissing": "Le dossier RetroArch externe sélectionné est indisponible.",
     "migrationProgress": "Copie {done} / {total}…",
-    "technicalDetails": "Détails techniques"
+    "technicalDetails": "Détails techniques",
+    "managedFolders": "Dossiers RetroArch",
+    "changeRetroArchMode": "Choisir RetroArch intégré ou externe",
+    "builtInRetroArch": "RetroArch intégré",
+    "gameImportRequired": "Importez ce fichier de jeu dans NeoStation ou liez un dossier contenant le fichier d’origine. La copie est facultative."
   },
   "es": {
     "menuTitle": "RetroArch",
@@ -255,7 +263,11 @@
     "migrationCopyFailure": "La copia ha fallado. Tus archivos externos no se han modificado.",
     "migrationSourceMissing": "La carpeta seleccionada de RetroArch externo no está disponible.",
     "migrationProgress": "Copiando {done} / {total}…",
-    "technicalDetails": "Detalles técnicos"
+    "technicalDetails": "Detalles técnicos",
+    "managedFolders": "Carpetas de RetroArch",
+    "changeRetroArchMode": "Elegir RetroArch integrado o externo",
+    "builtInRetroArch": "RetroArch integrado",
+    "gameImportRequired": "Importa este archivo de juego en NeoStation o vincula una carpeta que contenga el archivo original. La copia es opcional."
   },
   "de": {
     "menuTitle": "RetroArch",
@@ -341,7 +353,11 @@
     "migrationCopyFailure": "Kopieren fehlgeschlagen. Deine externen Dateien bleiben unverändert.",
     "migrationSourceMissing": "Der gewählte externe RetroArch-Ordner ist nicht verfügbar.",
     "migrationProgress": "Kopieren: {done} / {total}…",
-    "technicalDetails": "Technische Details"
+    "technicalDetails": "Technische Details",
+    "managedFolders": "RetroArch-Ordner",
+    "changeRetroArchMode": "Integriertes oder externes RetroArch wählen",
+    "builtInRetroArch": "Integriertes RetroArch",
+    "gameImportRequired": "Importiere diese Spieldatei in NeoStation oder verknüpfe einen Ordner mit der Originaldatei. Das Kopieren ist optional."
   },
   "it": {
     "menuTitle": "RetroArch",
@@ -427,7 +443,11 @@
     "migrationCopyFailure": "Copia non riuscita. I file esterni restano invariati.",
     "migrationSourceMissing": "La cartella selezionata di RetroArch esterno non è disponibile.",
     "migrationProgress": "Copia {done} / {total}…",
-    "technicalDetails": "Dettagli tecnici"
+    "technicalDetails": "Dettagli tecnici",
+    "managedFolders": "Cartelle di RetroArch",
+    "changeRetroArchMode": "Scegli RetroArch integrato o esterno",
+    "builtInRetroArch": "RetroArch integrato",
+    "gameImportRequired": "Importa questo file di gioco in NeoStation o collega una cartella che contiene il file originale. La copia è facoltativa."
   },
   "pt": {
     "menuTitle": "RetroArch",
@@ -513,7 +533,11 @@
     "migrationCopyFailure": "A cópia falhou. Os ficheiros externos ficam inalterados.",
     "migrationSourceMissing": "A pasta selecionada do RetroArch externo está indisponível.",
     "migrationProgress": "A copiar {done} / {total}…",
-    "technicalDetails": "Detalhes técnicos"
+    "technicalDetails": "Detalhes técnicos",
+    "managedFolders": "Pastas do RetroArch",
+    "changeRetroArchMode": "Escolher RetroArch integrado ou externo",
+    "builtInRetroArch": "RetroArch integrado",
+    "gameImportRequired": "Importe este arquivo de jogo para o NeoStation ou vincule uma pasta que contenha o arquivo original. A cópia é opcional."
   },
   "ru": {
     "menuTitle": "RetroArch",
@@ -599,7 +623,11 @@
     "migrationCopyFailure": "Копирование не удалось. Ваши внешние файлы остаются без изменений.",
     "migrationSourceMissing": "Выбранная папка внешнего RetroArch недоступна.",
     "migrationProgress": "Копирование: {done} / {total}…",
-    "technicalDetails": "Технические сведения"
+    "technicalDetails": "Технические сведения",
+    "managedFolders": "Папки RetroArch",
+    "changeRetroArchMode": "Выбрать встроенный или внешний RetroArch",
+    "builtInRetroArch": "Встроенный RetroArch",
+    "gameImportRequired": "Импортируйте этот файл игры в NeoStation или подключите папку с исходным файлом. Копирование необязательно."
   },
   "id": {
     "menuTitle": "RetroArch",
@@ -685,7 +713,11 @@
     "migrationCopyFailure": "Penyalinan gagal. File eksternal Anda tetap tidak berubah.",
     "migrationSourceMissing": "Folder RetroArch eksternal yang dipilih tidak tersedia.",
     "migrationProgress": "Menyalin {done} / {total}…",
-    "technicalDetails": "Detail teknis"
+    "technicalDetails": "Detail teknis",
+    "managedFolders": "Folder RetroArch",
+    "changeRetroArchMode": "Pilih RetroArch terintegrasi atau eksternal",
+    "builtInRetroArch": "RetroArch terintegrasi",
+    "gameImportRequired": "Impor file game ini ke NeoStation atau tautkan folder yang berisi file aslinya. Menyalin file bersifat opsional."
   },
   "ja": {
     "menuTitle": "RetroArch",
@@ -771,7 +803,11 @@
     "migrationCopyFailure": "コピーに失敗しました。外部のファイルは変更されていません。",
     "migrationSourceMissing": "選択した外部 RetroArch のフォルダは利用できません。",
     "migrationProgress": "コピー中 {done} / {total}…",
-    "technicalDetails": "技術的な詳細"
+    "technicalDetails": "技術的な詳細",
+    "managedFolders": "RetroArch のフォルダ",
+    "changeRetroArchMode": "内蔵または外部 RetroArch を選択",
+    "builtInRetroArch": "内蔵 RetroArch",
+    "gameImportRequired": "このゲームファイルを NeoStation にインポートするか、元のファイルがあるフォルダを関連付けてください。コピーは任意です。"
   },
   "ko": {
     "menuTitle": "RetroArch",
@@ -857,7 +893,11 @@
     "migrationCopyFailure": "복사에 실패했습니다. 외부 파일은 변경되지 않습니다.",
     "migrationSourceMissing": "선택한 외부 RetroArch 폴더를 사용할 수 없습니다.",
     "migrationProgress": "복사 중 {done} / {total}…",
-    "technicalDetails": "기술 세부 정보"
+    "technicalDetails": "기술 세부 정보",
+    "managedFolders": "RetroArch 폴더",
+    "changeRetroArchMode": "내장 또는 외부 RetroArch 선택",
+    "builtInRetroArch": "내장 RetroArch",
+    "gameImportRequired": "이 게임 파일을 NeoStation으로 가져오거나 원본 파일이 있는 폴더를 연결하세요. 파일 복사는 선택 사항입니다."
   },
   "zh": {
     "menuTitle": "RetroArch",
@@ -943,7 +983,11 @@
     "migrationCopyFailure": "复制失败。您的外部文件保持不变。",
     "migrationSourceMissing": "所选外部 RetroArch 文件夹不可用。",
     "migrationProgress": "正在复制 {done} / {total}…",
-    "technicalDetails": "技术详情"
+    "technicalDetails": "技术详情",
+    "managedFolders": "RetroArch 文件夹",
+    "changeRetroArchMode": "选择内置或外部 RetroArch",
+    "builtInRetroArch": "内置 RetroArch",
+    "gameImportRequired": "请将此游戏文件导入 NeoStation，或关联包含原始文件的文件夹。复制文件并非必需。"
   },
   "zh_Hant": {
     "menuTitle": "RetroArch",
@@ -1029,6 +1073,10 @@
     "migrationCopyFailure": "複製失敗。您的外部檔案保持不變。",
     "migrationSourceMissing": "所選外部 RetroArch 資料夾無法使用。",
     "migrationProgress": "正在複製 {done} / {total}…",
-    "technicalDetails": "技術詳細資訊"
+    "technicalDetails": "技術詳細資訊",
+    "managedFolders": "RetroArch 資料夾",
+    "changeRetroArchMode": "選擇內建或外部 RetroArch",
+    "builtInRetroArch": "內建 RetroArch",
+    "gameImportRequired": "請將此遊戲檔案匯入 NeoStation，或連結包含原始檔案的資料夾。複製檔案並非必要。"
   }
 }

@@ -124,6 +124,7 @@ class GameDetailsCardList extends StatefulWidget {
   final VoidCallback? onBack;
   // Emulator-specific action rendered as the final segment of the tab bar.
   final Widget? importAction;
+  final double? importActionWidth;
 
   const GameDetailsCardList({
     super.key,
@@ -164,6 +165,7 @@ class GameDetailsCardList extends StatefulWidget {
     this.isNavigatingFast = false,
     this.onBack,
     this.importAction,
+    this.importActionWidth,
   });
 
   @override
@@ -633,7 +635,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
               onTabChanged: (tab) => _setTab(tab),
               // DOLPHIN_ISOLATION_BEGIN: import_action_header
               trailingAction: widget.importAction,
-              trailingActionWidth: widget.system.folderName == 'ports' ? 100.r : null,
+              trailingActionWidth:
+                  widget.importActionWidth ??
+                  (widget.system.folderName == 'ports' ? 100.r : null),
               // DOLPHIN_ISOLATION_END: import_action_header
             ),
           ),

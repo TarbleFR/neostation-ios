@@ -1,6 +1,7 @@
 import 'dart:io';
 import '../models/system_model.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../services/library_visibility_service.dart';
 
 /// Repository for handling system data (app_systems - read-only)
 class SystemRepository {
@@ -67,18 +68,15 @@ class SystemRepository {
       return true;
     }).toList();
 
-    // Embedded iOS emulator playlists must remain reachable even at zero
-    // games so their import actions are never trapped behind a missing tile.
-    // Merely exposing these systems does not initialize either native Core.
+    // Selection is independent of ROM detection. Selected empty libraries keep
+    // their import actions, while unselected consoles are never auto-enabled.
     if (Platform.isIOS) {
-      for (final folderName in const <String>['ps2', 'ps3', 'ports']) {
-        if (visible.any((system) => system.folderName == folderName)) continue;
-        for (final system in allSystems) {
-          if (system.folderName == folderName) {
-            visible.add(system);
-            break;
-          }
-        }
+      final selection = await LibraryVisibilityService.readSavedSelection();
+      if (selection != null) {
+        return selection.exposeSelectedLibraries(
+          detected: visible,
+          available: allSystems,
+        );
       }
     }
 

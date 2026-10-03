@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "scope": "Read-only donor/profile audit; no native frontend compilation or iPhone qualification claimed.",
+  "sourceIpaSha256": "5803425e6b38dce7a34b1fa125f91879b1e3a5102111f5ac15de19835a330c42",
+  "deviceQualified": false,
+  "cores": [
+    {
+      "id": "mednafen_saturn",
+      "binarySha256": "910484b603e3e3d8a8660270130a5c00265477b13529f677b48d1c68d26ab149",
+      "infoSha256": "ec7785e6a9efd3000f730c463f6711273c1f7d28e87b73f8ee7e2ab6751fc779",
+      "embeddedVersion": "v1.32.1",
+      "source": {
+        "repository": "libretro/beetle-saturn-libretro",
+        "commit": "65f05fa66f83e65e33be83aa433d883b4fd9509a",
+        "commitIdentityEmbedded": false,
+        "identityBasis": "Latest official source before donor build matches version and exact option descriptions; no Git suffix exists, so exact source-to-binary commit identity is unproven.",
+        "files": [
+          {
+            "path": "libretro.c",
+            "gitBlobSha": "03e9c3735c4d0fff2c6f9a601d5816445032bb19",
+            "sha256": "d364aede3baf36fbf354ccc99d417c494e2b205cec88b595b5575bf1e50213fc",
+            "url": "https://github.com/libretro/beetle-saturn-libretro/blob/65f05fa66f83e65e33be83aa433d883b4fd9509a/libretro.c"
+          },
+          {
+            "path": "libretro_core_options.h",
+            "gitBlobSha": "42ad6093f1620256b6783e8fecb65e1958315a88",
+            "sha256": "55b99dce485af41e1cce0d84c71d3185447ea424acc3869aa116967365886723",
+            "url": "https://github.com/libretro/beetle-saturn-libretro/blob/65f05fa66f83e65e33be83aa433d883b4fd9509a/libretro_core_options.h"
+          },
+          {
+            "path": "Makefile",
+            "gitBlobSha": "d4231ed9febb8e9aa739289f6f3b718ccbf001a5",
+            "sha256": "2c74c2e8248ce39043548a231b853cca5b7959e6aac68b08a56eff34d3cce112",
+            "url": "https://github.com/libretro/beetle-saturn-libretro/blob/65f05fa66f83e65e33be83aa433d883b4fd9509a/Makefile"
+          },
+          {
+            "path": "libretro_settings.c",
+            "gitBlobSha": "8c5234242c670d234776fa59278663f6106c61b4",
+            "sha256": "c4813f810802551c8f63058dcca3004c5a82f354b3b5ff8af6fe6318dfdd7e9b",
+            "url": "https://github.com/libretro/beetle-saturn-libretro/blob/65f05fa66f83e65e33be83aa433d883b4fd9509a/libretro_settings.c"
+          },
+          {
+            "path": "mednafen/ss/scsp_dsp_jit.c",
+            "gitBlobSha": "3663991d5e43a01520b5f61c9f70ba27979f202f",
+            "sha256": "b14d4119eced9c3664a28f5acf922b6ae79db2e19614b0170ad8b706f88c0ddf",
+            "url": "https://github.com/libretro/beetle-saturn-libretro/blob/65f05fa66f83e65e33be83aa433d883b4fd9509a/mednafen/ss/scsp_dsp_jit.c"
+          },
+          {
+            "path": "mednafen/ss/scu_dsp_jit.c",
+            "gitBlobSha": "db12bc53fc2f351d797ac10b513c9643a60b82ca",
+            "sha256": "e5a5155932096bf084b8f729ebce87d6db668ca2d0f6c4bb3667c607d5882b62",
+            "url": "https://github.com/libretro/beetle-saturn-libretro/blob/65f05fa66f83e65e33be83aa433d883b4fd9509a/mednafen/ss/scu_dsp_jit.c"
+          }
+        ]
+      },
+      "requiredOptions": {
+        "beetle_saturn_sh2_jit": "disabled",
+        "beetle_saturn_jit_scu": "disabled",
+        "beetle_saturn_jit_scsp": "disabled"
+      },
+      "sourceEvidence": [
+        {
+          "file": "libretro.c",
+          "lines": [
+            397,
+            451
+          ],
+          "meaning": "Startup queries all three keys; disabled clears SCU/SCSP flags and SH2 enables only for enabled."
+        },
+        {
+          "file": "libretro_core_options.h",
+          "lines": [
+            160,
+            230
+          ],
+          "meaning": "All three option tables declare disabled; DSP defaults enabled, so protect imported .opt values."
+        }
+      ],
+      "binaryEvidence": {
+        "architecture": "arm64",
+        "functionFirstBytes": {
+          "_SCU_DSP_JIT_Init": "c0035fd6",
+          "_SCU_DSP_JIT_Reset": "c0035fd6",
+          "_SCU_DSP_JIT_CompileSlot": "000080d2c0035fd6",
+          "_SCSP_DSP_JIT_Init": "684200901f6903f9c0035fd6",
+          "_SCSP_DSP_JIT_Reset": "684200901f6903f9c0035fd6",
+          "_SCSP_DSP_JIT_Compile": "c0035fd6",
+          "_SH2JIT_Init": "c0035fd6",
+          "_SH2JIT_Available": "00008052c0035fd6"
+        },
+        "meaning": "Actual donor SCU/SCSP/SH2 JIT functions are stubs: RET, return-null/false, or clear entry pointer then RET.",
+        "mmapOrMprotectImportsPresent": false
+      }
+    },
+    {
+      "id": "mednafen_vb",
+      "binarySha256": "94971f959fe9ba390e92cdeb03230cfcd4243b0c2532d382237cc7700a59472e",
+      "infoSha256": "425e0ef983f72b7e938af8cc170d2ddc1cb6b0a19a98aa4fce49bb2957567236",
+      "embeddedVersion": "v1.31.0 83ed426",
+      "source": {
+        "repository": "libretro/beetle-vb-libretro",
+        "commit": "83ed42608601fb7b01d41e4f8fb2007a37b8c84e",
+        "commitIdentityEmbedded": true,
+        "files": [
+          {
+            "path": "libretro.cpp",
+            "gitBlobSha": "3487402330ddf6ad6d40a1c4f3bb218126757cee",
+            "sha256": "1a25d2a644a1d27d355919b143a9f30a1bfae463b78215effe2e458b0eb843b6",
+            "url": "https://github.com/libretro/beetle-vb-libretro/blob/83ed42608601fb7b01d41e4f8fb2007a37b8c84e/libretro.cpp"
+          },
+          {
+            "path": "libretro_core_options.h",
+            "gitBlobSha": "48a6e0ede5fe9af43ca9f045e9899d603051d250",
+            "sha256": "2fd7b62b3f0969f9aeddd804808ab0b17ae3ea13371e5d82ceb20a52a9bd5da1",
+            "url": "https://github.com/libretro/beetle-vb-libretro/blob/83ed42608601fb7b01d41e4f8fb2007a37b8c84e/libretro_core_options.h"
+          },
+          {
+            "path": "mednafen/hw_cpu/v810/v810_cpu.h",
+            "gitBlobSha": "bdcb7fdf08a0674634c2bf8a363a3eb2dfdd4807",
+            "sha256": "02ff4b219a9e587559bfe94c838c6b9084da30072f66259c1fdd3f985a48ed91",
+            "url": "https://github.com/libretro/beetle-vb-libretro/blob/83ed42608601fb7b01d41e4f8fb2007a37b8c84e/mednafen/hw_cpu/v810/v810_cpu.h"
+          },
+          {
+            "path": "mednafen/hw_cpu/v810/v810_cpu.cpp",
+            "gitBlobSha": "68df2d9f77bb6bbcc4cee8d2ef90bcc367e151c3",
+            "sha256": "9cb339453cea1487b681fd11071c417761b580397de512260dfce5762b3a20d5",
+            "url": "https://github.com/libretro/beetle-vb-libretro/blob/83ed42608601fb7b01d41e4f8fb2007a37b8c84e/mednafen/hw_cpu/v810/v810_cpu.cpp"
+          }
+        ]
+      },
+      "requiredOptions": {},
+      "sourceEvidence": [
+        {
+          "file": "libretro.cpp",
+          "lines": [
+            2256,
+            2262
+          ],
+          "meaning": "vb_cpu_emulation accurate/fast selects V810_EMU_MODE_ACCURATE/FAST."
+        },
+        {
+          "file": "mednafen/hw_cpu/v810/v810_cpu.cpp",
+          "lines": [
+            525,
+            588
+          ],
+          "meaning": "Run_Accurate and Run_Fast execute shared v810_oploop.inc interpreter; fast optimizes guest-memory reads, not executable memory."
+        }
+      ],
+      "binaryEvidence": {
+        "mmapOrMprotectImportsPresent": false,
+        "meaning": "Both selectable CPU modes are interpreters; no additional option restriction is needed."
+      }
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:armsx2_internal_bridge/armsx2_internal_bridge.dart';
 import 'package:dusklight_internal_bridge/dusklight_internal_bridge.dart';
 import 'package:kartpad_internal_bridge/kartpad_internal_bridge.dart';
+import 'package:retroarch_internal_bridge/retroarch_internal_bridge.dart';
 import 'package:flutter/widgets.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'audio_policy_service.dart';
@@ -10,6 +11,7 @@ import 'home_music_service.dart';
 import 'game_service.dart';
 import 'music_player_service.dart';
 import 'sfx_service.dart';
+import 'retroarch_internal_service.dart';
 
 /// Defines the operational phases of a game execution session.
 enum GameLaunchPhase {
@@ -70,6 +72,7 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     'ios_armsx2_internal',
     'ios_dolphin_internal',
     'ios_rpcs3_internal',
+    'ios_retroarch_internal',
   };
   String? _activeEmulatorExe;
 
@@ -195,6 +198,11 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
     GameService.clearOnProcessExitCallback();
     WidgetsBinding.instance.removeObserver(this);
     try {
+      // A failed RetroArch first-frame handoff can still own its renderer.
+      // Keep menu audio paused until that exact native stop is acknowledged.
+      if (Platform.isIOS && RetroArchInternalService.hasSession) {
+        await RetroArchInternalService.waitForSessionEnd();
+      }
       // The native session has ended before this route is disposed. Restore
       // audio ownership before resuming any menu voices, including on failure.
       await AudioPolicyService().restoreAfterGameSession();
@@ -258,6 +266,25 @@ class GameLaunchManager extends ChangeNotifier with WidgetsBindingObserver {
   void _startPlatformMonitoring(String? emulatorExe) {
     if (Platform.isAndroid) {
       GameService.setOnGameReturnedCallback((_) => _triggerClose());
+      return;
+    }
+
+    if (Platform.isIOS && emulatorExe == 'ios_retroarch_internal') {
+      _embeddedSessionSubscription = RetroArchInternalBridge.sessionEvents
+          .listen((event) {
+            // Menu/pause events are not exit; the bridge already rejects events
+            // belonging to an earlier transaction after a rapid relaunch.
+            if (event['type'] != 'sessionEnded') return;
+            if (_phase != GameLaunchPhase.playing || _isClosing) return;
+            _log.i(
+              '[GameLaunchManager] RetroArch native session ended: '
+              '${event['reason'] ?? 'unknown'} '
+              '(transaction=${event['transaction']})',
+            );
+            _triggerClose();
+          });
+      // Preserve an end acknowledgement received before monitoring subscribed.
+      if (!RetroArchInternalBridge.hasSession && !_isClosing) _triggerClose();
       return;
     }
 

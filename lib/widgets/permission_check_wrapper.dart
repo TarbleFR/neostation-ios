@@ -6,13 +6,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/pairing_file_service.dart';
-import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/retroarch_migration_service.dart';
 import 'package:neostation/services/stikjit_melonx_service.dart';
 import '../providers/sqlite_config_provider.dart';
 import '../screens/systems_screen/fork_first_run_onboarding.dart';
 import 'pairing_file_onboarding.dart';
 import 'setup_wizard.dart';
 import 'shimmering_logo.dart';
+import 'console_library_picker.dart';
+import 'retroarch_migration_dialog.dart';
+import '../services/library_visibility_service.dart';
+import '../services/retroarch_core_catalog.dart';
+import '../services/retroarch_internal_service.dart';
 
 /// Checks the initial configuration and displays the first-run flow when needed.
 class PermissionCheckWrapper extends StatefulWidget {
@@ -33,8 +38,8 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   bool _isChecking = true;
   bool _showForkWelcomeGate = false;
   bool _showPairingFileGate = false;
-  bool _isStartingRetroArchSync = false;
-  bool _retroArchSyncStarted = false;
+  bool _migrationScheduled = false;
+  bool _librariesChosen = false;
 
   static final _log = LoggerService.instance;
 
@@ -56,6 +61,11 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       // Existing installations must never be interrupted by a newly added
       // onboarding step. The pairing file remains available in Settings > Tools.
       if (prefs.getBool(PermissionCheckWrapper.setupCompletedKey) == true) {
+        if (Platform.isIOS) {
+          await RetroArchMigrationService.instance.initialize(
+            existingInstallation: true,
+          );
+        }
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
         _pushWizardActive(false);
@@ -65,6 +75,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
           _showPairingFileGate = false;
           _isChecking = false;
         });
+        _offerExistingRetroArchMigration();
         return;
       }
 
@@ -81,7 +92,14 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       final hasRomFolder = configProvider.config.romFolder?.isNotEmpty == true;
       final setupCompleted = configProvider.config.setupCompleted;
 
-      if (hasRomFolder || setupCompleted) {
+      if (hasRomFolder ||
+          setupCompleted ||
+          configProvider.isExistingLibraryInstallation) {
+        if (Platform.isIOS) {
+          await RetroArchMigrationService.instance.initialize(
+            existingInstallation: true,
+          );
+        }
         await prefs.setBool(PermissionCheckWrapper.setupCompletedKey, true);
         await prefs.setBool(forkOnboardingCompletedKey, true);
         if (!mounted) return;
@@ -92,50 +110,33 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
           _showPairingFileGate = false;
           _isChecking = false;
         });
+        _offerExistingRetroArchMigration();
         return;
       }
 
-      // Genuine fresh install. Keep the established RetroArch first-run flow,
-      // inserting only the Pairing File gate before it.
+      if (Platform.isIOS &&
+          configProvider.usesLibrarySelection &&
+          !configProvider.needsLibrarySelection) {
+        // Resume a first install interrupted after the selection was saved.
+        await _completeLibrarySelection();
+        if (mounted) setState(() => _isChecking = false);
+        return;
+      }
+
+      // Fresh installs choose all console libraries in one opt-in step after
+      // the welcome gate, then pair only if a chosen console requires JIT.
       final welcomeGateCompleted =
           prefs.getBool(forkOnboardingCompletedKey) ?? false;
 
-      var pairingGateCompleted =
-          prefs.getBool(PermissionCheckWrapper.pairingOnboardingCompletedKey) ??
-          false;
-
-      if (_supportsPairingGate && !pairingGateCompleted) {
-        try {
-          if (await PairingFileService.hasStoredPairingFile()) {
-            pairingGateCompleted = true;
-            await prefs.setBool(
-              PermissionCheckWrapper.pairingOnboardingCompletedKey,
-              true,
-            );
-          }
-        } catch (error) {
-          _log.w('Could not inspect pairing-file onboarding state: $error');
-        }
-      }
-
-      final pairingReady = !_supportsPairingGate || pairingGateCompleted;
       if (!mounted) return;
       _pushWizardActive(true);
       setState(() {
         _needsSetup = true;
         _showForkWelcomeGate = !welcomeGateCompleted;
-        _showPairingFileGate =
-            welcomeGateCompleted && !pairingReady && _supportsPairingGate;
+        // Ask for pairing only after the user has selected a JIT console.
+        _showPairingFileGate = false;
         _isChecking = false;
       });
-
-      // If an interrupted first run already completed the two gates, resume the
-      // exact RetroArch-first setup rather than waiting for another launch.
-      if (welcomeGateCompleted && pairingReady) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _startFirstRunRetroArchFlow();
-        });
-      }
     } catch (e) {
       _log.e('Error checking initial setup: $e');
       if (!mounted) return;
@@ -149,6 +150,30 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     }
   }
 
+  void _offerExistingRetroArchMigration() {
+    if (!Platform.isIOS || _migrationScheduled) return;
+    _migrationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        await RetroArchMigrationDialog.showIfNeeded(context);
+        if (!mounted || !RetroArchMigrationService.instance.usesEmbedded) {
+          return;
+        }
+        await RetroArchInternalService.ensureLayout();
+        if (!mounted) return;
+        final provider = context.read<SqliteConfigProvider>();
+        for (final folder in provider.enabledLibraryFolders) {
+          if (RetroArchCoreCatalog.supportsSystem(folder)) {
+            await provider.refreshRetroArchInternalLibrary(folder);
+          }
+        }
+      } catch (error) {
+        _log.w('Could not offer RetroArch migration: $error');
+      }
+    });
+  }
+
   void _pushWizardActive(bool active) {
     if (!mounted) return;
     Provider.of<SqliteConfigProvider>(
@@ -160,42 +185,54 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
   Future<void> _completeForkWelcomeGate() async {
     if (!mounted) return;
 
-    var showPairing = _supportsPairingGate;
-    if (showPairing) {
-      try {
-        showPairing = !await PairingFileService.hasStoredPairingFile();
-      } catch (_) {
-        showPairing = true;
-      }
-    }
-
-    if (!mounted) return;
     setState(() {
       _showForkWelcomeGate = false;
-      _showPairingFileGate = showPairing;
+      _showPairingFileGate = false;
     });
 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(forkOnboardingCompletedKey, true);
-      if (_supportsPairingGate && !showPairing) {
-        await prefs.setBool(
-          PermissionCheckWrapper.pairingOnboardingCompletedKey,
-          true,
-        );
-      }
     } catch (e) {
       _log.w('Could not persist first-run welcome state: $e');
     }
+  }
 
-    if (!showPairing) {
-      await _startFirstRunRetroArchFlow();
+  Future<void> _completeLibrarySelection() async {
+    if (!mounted) return;
+    _librariesChosen = true;
+    final provider = context.read<SqliteConfigProvider>();
+    final needsJit = LibraryVisibilityService.requiresPairingFor(
+      provider.enabledLibraryFolders,
+    );
+    var showPairing = _supportsPairingGate && needsJit;
+    if (showPairing) {
+      final prefs = await SharedPreferences.getInstance();
+      showPairing =
+          prefs.getBool(PermissionCheckWrapper.pairingOnboardingCompletedKey) !=
+          true;
+      if (showPairing) {
+        try {
+          showPairing = !await PairingFileService.hasStoredPairingFile();
+        } catch (_) {
+          // Keep the established import gate for a chosen JIT console.
+        }
+      }
     }
+    if (!mounted) return;
+    if (showPairing) {
+      setState(() {
+        _needsSetup = true;
+        _showForkWelcomeGate = false;
+        _showPairingFileGate = true;
+      });
+      return;
+    }
+    await _completeSetup();
   }
 
   Future<void> _completePairingFileGate() async {
     if (!mounted) return;
-    setState(() => _showPairingFileGate = false);
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -207,46 +244,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       // A preference write failure must not trap the user in onboarding.
       _log.w('Could not persist pairing-file onboarding state: $e');
     }
-
-    await _startFirstRunRetroArchFlow();
-  }
-
-  /// Reuses NeoStation's established first-install RetroArch sequence:
-  /// select RetroArch as the initial library, request its exported playlists,
-  /// then let the unchanged SetupWizard activate the linked folder and await
-  /// the real scan when NeoStation returns to the foreground.
-  Future<void> _startFirstRunRetroArchFlow() async {
-    if (!Platform.isIOS ||
-        !mounted ||
-        _retroArchSyncStarted ||
-        _isStartingRetroArchSync) {
-      return;
-    }
-
-    _retroArchSyncStarted = true;
-    setState(() {
-      _showForkWelcomeGate = false;
-      _showPairingFileGate = false;
-      _isStartingRetroArchSync = true;
-    });
-
-    try {
-      final opened = await RetroArchLibraryService.requestLibrarySync();
-      if (!opened) {
-        _log.w(
-          'RetroArch first-run library sync could not be opened; '
-          'continuing with the normal folder-link step.',
-        );
-      }
-    } catch (e) {
-      // RetroArch not being installed must not block NeoStation setup. The
-      // normal folder-link screen remains available immediately afterwards.
-      _log.w('RetroArch first-run library sync failed: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isStartingRetroArchSync = false);
-      }
-    }
+    if (_librariesChosen && mounted) await _completeSetup();
   }
 
   Future<void> _completeSetup() async {
@@ -254,6 +252,15 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       context,
       listen: false,
     );
+    if (Platform.isIOS) {
+      await RetroArchMigrationService.instance.initialize(
+        existingInstallation: false,
+      );
+      if (RetroArchMigrationService.instance.usesEmbedded) {
+        await RetroArchInternalService.ensureLayout();
+      }
+      await configProvider.selectRomFolder(scan: false);
+    }
     await configProvider.completeSetup();
     configProvider.setSetupWizardActive(false);
 
@@ -266,33 +273,45 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
       _needsSetup = false;
       _showForkWelcomeGate = false;
       _showPairingFileGate = false;
-      _isStartingRetroArchSync = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isChecking || _isStartingRetroArchSync) {
+    if (_isChecking) {
       return const Scaffold(body: Center(child: ShimmeringLogo()));
     }
 
     if (_needsSetup) {
       if (_showForkWelcomeGate) {
         return Scaffold(
-          body: ForkFirstRunOnboarding(
-            onFinished: _completeForkWelcomeGate,
-          ),
+          body: ForkFirstRunOnboarding(onFinished: _completeForkWelcomeGate),
         );
       }
 
       if (_showPairingFileGate) {
         return Scaffold(
-          body: PairingFileOnboarding(
-            onFinished: _completePairingFileGate,
-          ),
+          body: PairingFileOnboarding(onFinished: _completePairingFileGate),
         );
       }
 
+      if (Platform.isIOS) {
+        final provider = context.watch<SqliteConfigProvider>();
+        return Scaffold(
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: ConsoleLibraryPicker(
+                libraries: provider.selectableLibrarySystems,
+                initiallyEnabled: provider.enabledLibraryFolders,
+                onSave: provider.saveLibrarySelection,
+                onFinished: _completeLibrarySelection,
+                firstLaunch: true,
+              ),
+            ),
+          ),
+        );
+      }
       return SetupWizard(onComplete: _completeSetup);
     }
 

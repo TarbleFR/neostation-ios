@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "id": "ppsspp",
+  "systems": [
+    "psp",
+    "pspminis"
+  ],
+  "frameworkName": "ppsspp.libretro.framework",
+  "executableName": "ppsspp.libretro",
+  "coreArchive": {
+    "repositoryPath": "native/retroarch/psp/ppsspp_libretro.dylib.zip",
+    "originUrl": "https://buildbot.libretro.com/nightly/apple/ios-arm64/latest/ppsspp_libretro.dylib.zip",
+    "downloadedAt": "2026-10-03",
+    "lastModified": "Thu, 01 Oct 2026 02:00:27 GMT",
+    "sha256": "5dec365c3956b78d05085391d80761664064cd0377e8165dec5cc128f863e5dc",
+    "bytes": 6114866,
+    "member": "ppsspp_libretro.dylib",
+    "binarySha256": "52cec262640fb3eb1aea9521c3576cba827095f52878c2c673b1f6a352d4927a",
+    "binaryBytes": 15950008
+  },
+  "upstream": {
+    "repository": "https://github.com/hrydgard/ppsspp.git",
+    "commit": "91a34056d036b22ee9ec1a656875fc780eff5efb",
+    "embeddedGitVersion": "91a3405",
+    "license": "GPL-2.0-or-later",
+    "sourceFilesSha256": {
+      "LICENSE.TXT": "ff265754cbb2e0d3b674f90a79ef5bbaa1f7f1075aec9f5e241524520e5049fa",
+      "README.md": "e7d8bfee0ba33a3b6c99f3032787dba2a97e1dc2c282b947de504bbde941a0d8",
+      "libretro/libretro.cpp": "6dcbe6076bf99236d88606328e2f95e2131bbf436fe65ef2af65a0820be348c5",
+      "libretro/LibretroGLContext.h": "40b05d59e71deca1f9533cb9c141ec51597c60876d62fb91eea4eb70d29c0030",
+      "libretro/libretro_core_options.h": "fe0a23c7b4bc92bca5aed9fa030326afa2b3091d67a5cbbbf762fc15aed359de",
+      "libretro/LibretroGraphicsContext.cpp": "b1559ff17a79d494cd033fcc443cb71b557da595eea2b4ac3019d9935cb64c99"
+    }
+  },
+  "assetsSource": {
+    "url": "https://codeload.github.com/hrydgard/ppsspp/tar.gz/91a34056d036b22ee9ec1a656875fc780eff5efb",
+    "sha256": "1c6955ce6c9aed7b17f4b7fcb0ed8b00078696e9292513e2aa0a41fd4bb49aaf",
+    "bytes": 37466877,
+    "archivePrefix": "ppsspp-91a34056d036b22ee9ec1a656875fc780eff5efb",
+    "assetsPrefix": "assets",
+    "requiredFiles": [
+      "compat.ini",
+      "ppge_atlas.zim",
+      "lang/en_US.ini",
+      "flash0/font/ltn0.pgf"
+    ],
+    "assetsIndexSha256": "6d24bb076268ccde5e7c447da4b833f38203abc2f89387d42b731f9be246bffc"
+  },
+  "info": {
+    "repositoryPath": "native/retroarch/psp/ppsspp_libretro.info",
+    "sourceIpaSha256": "5803425e6b38dce7a34b1fa125f91879b1e3a5102111f5ac15de19835a330c42",
+    "sourceMember": "assets.zip:info/ppsspp_libretro.info",
+    "sha256": "2e9becab17d0db4222e9655bb9b065167e5bcf599ca16256be72beb8f38e646d"
+  },
+  "runtime": {
+    "renderContext": "RETRO_HW_CONTEXT_OPENGLES2",
+    "videoDriver": "gl",
+    "coreOptions": {
+      "ppsspp_cpu_core": "Interpreter",
+      "ppsspp_backend": "opengl"
+    },
+    "jitCapable": false,
+    "vertexDecoderJit": false,
+    "deviceQualified": false,
+    "consoleFirmwareBundled": false,
+    "supportAssetsBundled": true
+  }
+}

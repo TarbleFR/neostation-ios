@@ -152,12 +152,30 @@ void NeoRetroArch_ReleaseRenderResources(void)
     text = text[:start]+body+text[end:]
     overlay.write_text(text)
 
+    runloop = output / 'runloop.c'
+    text = runloop.read_text()
+    text = '#include <stdbool.h>\nextern const char *NeoRetroArch_ForcedOption(const char *key);\nextern bool NeoRetroArch_HardwareRenderingAllowed(void);\n' + text
+    text = replace_once(text, '            var->value = NULL;\n\n            if (!runloop_st->core_options)',
+        '            var->value = NeoRetroArch_ForcedOption(var->key);\n            if (var->value) return true;\n\n            if (!runloop_st->core_options)', 'pre-load forced core profile')
+    text = replace_once(text,
+        '         RARCH_LOG("[Environ] SET_HW_RENDER, context type: %s.\\n", hw_render_context_name(cb->context_type, cb->version_major, cb->version_minor));',
+        '         /* iOS GL2 supports GLES2/GLES3.0, not desktop GL, Vulkan or GLES3.1+. */\n'
+        '         if (!NeoRetroArch_HardwareRenderingAllowed()) return false;\n'
+        '         if (cb->context_type != RETRO_HW_CONTEXT_OPENGLES2 && cb->context_type != RETRO_HW_CONTEXT_OPENGLES3\n'
+        '               && !(cb->context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION && cb->version_major >= 2 && cb->version_major <= 3 && cb->version_minor == 0))\n'
+        '            return false;\n'
+        '         RARCH_LOG("[Environ] SET_HW_RENDER, context type: %s.\\n", hw_render_context_name(cb->context_type, cb->version_major, cb->version_minor));',
+        'supported iOS GPU contexts')
+    runloop.write_text(text)
+
     adapter = output / 'neostation'
     adapter.mkdir()
-    for name in ['NeoRetroArchCore.m','NeoRetroArchNoJIT.c']:
+    for name in ['NeoRetroArchCore.m','NeoRetroArchNoJIT.c','NeoRetroArchStateImport.c','NeoRetroArchStateImport.h']:
         shutil.copy2(ROOT / 'native/retroarch' / name,adapter / name)
     for name in ['NeoRetroArchCoreAPI.h','RetroArchMenuInput.h']:
         shutil.copy2(ROOT / 'packages/retroarch_internal_bridge/ios/Classes' / name,adapter / name)
+    (adapter / 'psp').mkdir()
+    shutil.copy2(ROOT / 'native/retroarch/psp/NeoPPSSPPProfile.h', adapter / 'psp/NeoPPSSPPProfile.h')
     (adapter / 'exports.txt').write_text('_NeoRetroArch_GetAPI\n')
     (adapter / 'prepared-source.json').write_text(json.dumps({
         'frontendCommit':actual,'adapterAbiVersion':1,'driver':'gl',

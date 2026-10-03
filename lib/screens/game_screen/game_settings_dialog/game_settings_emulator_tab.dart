@@ -6,6 +6,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/l10n/embedded_emulator_locale.dart';
+import 'package:neostation/l10n/retroarch_locale.dart';
+import 'package:neostation/services/retroarch_core_catalog.dart';
+import 'package:neostation/services/retroarch_core_preferences.dart';
+import 'package:neostation/services/retroarch_game_core_selection.dart';
+import 'package:neostation/services/retroarch_migration_service.dart';
+import 'package:neostation/services/retroarch_internal_service.dart';
 import 'package:neostation/models/core_emulator_model.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
@@ -16,14 +22,15 @@ import 'package:neostation/utils/emulator_loader.dart';
 import 'package:neostation/widgets/settings_rows.dart';
 // DOLPHIN_ISOLATION_BEGIN: emulator_identity_imports
 import 'package:neostation/services/dolphin_internal_v2_service.dart';
+
 // DOLPHIN_ISOLATION_END: emulator_identity_imports
 
 /// Per-game emulator override tab for [GameSettingsDialog].
 ///
 /// Lists the emulators available for the game's system.
 ///
-/// On iOS, each supported system maps to one external emulator app, so the
-/// generic 'System Default' pseudo-option is intentionally hidden.
+/// Curated iOS RetroArch systems expose a system default plus valid per-game
+/// core overrides. Other embedded engines keep their dedicated identity.
 class GameSettingsEmulatorTab extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
@@ -67,6 +74,14 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   }
   // DOLPHIN_ISOLATION_END: emulator_identity_gate
 
+  bool get _usesEmbeddedRetroArch =>
+      Platform.isIOS &&
+      RetroArchMigrationService.instance.usesEmbedded &&
+      RetroArchCoreCatalog.supportsSystem(_systemFolder);
+
+  List<RetroArchCoreDescriptor> _retroArchCores = [];
+  String? _retroArchCoreOverride;
+  bool _retroArchLoaded = false;
   List<CoreEmulatorModel> _availableEmulators = [];
   int _selectedIndex = 0;
 
@@ -86,6 +101,11 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
       : _activeEmulatorId as String?;
 
   int get _totalItems {
+    if (_usesEmbeddedRetroArch) {
+      return _retroArchLoaded && _retroArchCores.isNotEmpty
+          ? _retroArchCores.length + 1
+          : 0;
+    }
     if (_availableEmulators.isEmpty) return 0;
     // iOS exposes exactly one supported external emulator app per system
     // (RetroArch, MeloNX or ARMSX2). Do not add the desktop-style
@@ -108,6 +128,34 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
   }
 
   Future<void> _loadEmulators() async {
+    if (_usesEmbeddedRetroArch) {
+      final saved = await RetroArchCorePreferences.gameCoreOverride(
+        _systemFolder,
+        widget.game.romname,
+      );
+      final available =
+          await RetroArchInternalService.availableCoreIdentifiers();
+      final legacyIdentifier = saved == null
+          ? await RetroArchGameCoreSelection.resolveLegacyCoreIdentifier(
+              systemFolderName: _systemFolder,
+              systemId: widget.game.systemId ?? widget.system.id,
+              legacyEmulatorId: widget.game.emulatorName,
+              legacyCoreId: widget.game.coreName,
+            )
+          : null;
+      if (mounted) {
+        setState(() {
+          _retroArchCores = RetroArchCoreCatalog.coresForSystem(_systemFolder)
+              .where((core) => available.contains(core.identifier))
+              .toList(growable: false);
+          _retroArchCoreOverride = saved == ''
+              ? null
+              : saved ?? legacyIdentifier;
+          _retroArchLoaded = true;
+        });
+      }
+      return;
+    }
     // DOLPHIN_ISOLATION_BEGIN: embedded_emulator_availability
     if (_iosEmbeddedEngineName != null) return;
     // DOLPHIN_ISOLATION_END: embedded_emulator_availability
@@ -133,6 +181,15 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
 
   void trigger() {
     if (_totalItems == 0) return;
+
+    if (_usesEmbeddedRetroArch) {
+      _setRetroArchCoreOverride(
+        _selectedIndex == 0
+            ? null
+            : _retroArchCores[_selectedIndex - 1].identifier,
+      );
+      return;
+    }
 
     if (Platform.isIOS) {
       final emulator = _availableEmulators[_selectedIndex];
@@ -189,8 +246,100 @@ class GameSettingsEmulatorTabState extends State<GameSettingsEmulatorTab> {
     }
   }
 
+  Future<void> _setRetroArchCoreOverride(String? coreId) async {
+    if (coreId != null &&
+        RetroArchCoreCatalog.findCore(_systemFolder, coreId) == null) {
+      return;
+    }
+    final previous = _retroArchCoreOverride;
+    if (mounted) setState(() => _retroArchCoreOverride = coreId);
+    try {
+      await RetroArchCorePreferences.setGameCoreOverride(
+        _systemFolder,
+        widget.game.romname,
+        coreId,
+      );
+      widget.onGameUpdated?.call();
+    } catch (error) {
+      _log.e('RetroArch game core override persistence failed: $error');
+      if (mounted) setState(() => _retroArchCoreOverride = previous);
+    }
+  }
+
+  Widget _buildRetroArchCoreChoices(BuildContext context) {
+    if (!_retroArchLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_retroArchCores.isEmpty) {
+      return Center(
+        child: Text(RetroArchLocale.text(context, 'embeddedUnavailable')),
+      );
+    }
+    final selectedCore = RetroArchCoreCatalog.findCore(
+      _systemFolder,
+      _retroArchCoreOverride,
+    );
+    final hasInvalidOverride =
+        _retroArchCoreOverride != null &&
+        (selectedCore == null ||
+            !_retroArchCores.any(
+              (core) => core.identifier == selectedCore.identifier,
+            ));
+    return SingleChildScrollView(
+      controller: _scrollController,
+      padding: EdgeInsets.all(12.r),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: const Icon(Symbols.sports_esports_rounded),
+            title: Text(RetroArchLocale.text(context, 'coreChoice')),
+            subtitle: Text(RetroArchLocale.text(context, 'perGameCoreHelp')),
+          ),
+          if (hasInvalidOverride)
+            Padding(
+              padding: EdgeInsets.all(8.r),
+              child: Text(RetroArchLocale.text(context, 'coreUnavailable')),
+            ),
+          EmulatorRow(
+            key: _itemKey(0),
+            isSelected: _selectedIndex == 0,
+            label: RetroArchLocale.text(context, 'defaultCore'),
+            isActive: _retroArchCoreOverride == null,
+            onTap: () {
+              SfxService().playNavSound();
+              setState(() => _selectedIndex = 0);
+              _setRetroArchCoreOverride(null);
+            },
+          ),
+          ..._retroArchCores.asMap().entries.map((entry) {
+            final navIndex = entry.key + 1;
+            final core = entry.value;
+            return EmulatorRow(
+              key: _itemKey(navIndex),
+              isSelected: _selectedIndex == navIndex,
+              label: 'RetroArch — ${core.displayName}',
+              isActive:
+                  RetroArchCoreCatalog.findCore(
+                    _systemFolder,
+                    _retroArchCoreOverride,
+                  )?.identifier ==
+                  core.identifier,
+              onTap: () {
+                SfxService().playNavSound();
+                setState(() => _selectedIndex = navIndex);
+                _setRetroArchCoreOverride(core.identifier);
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_usesEmbeddedRetroArch) return _buildRetroArchCoreChoices(context);
     // Embedded iOS engines share the same identity architecture as RPCS3:
     // one in-process product, with no external-app or RetroArch selector.
     final embeddedEngine = _iosEmbeddedEngineName;

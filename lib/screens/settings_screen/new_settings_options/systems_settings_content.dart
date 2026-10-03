@@ -12,6 +12,8 @@ import '../../../widgets/custom_toggle_switch.dart';
 import '../../../constants/system_folder_names.dart';
 import 'settings_title.dart';
 import 'widgets/settings_card_row.dart';
+import '../../../l10n/library_visibility_locale.dart';
+import '../../../widgets/console_library_picker.dart';
 
 /// A specialized content panel for managing system visibility and interface components.
 ///
@@ -59,6 +61,7 @@ class SystemsSettingsContentState extends State<SystemsSettingsContent> {
 
   /// Calculates the total number of navigable settings (Global Card + Detected Systems).
   int getItemCount(SqliteConfigProvider provider) {
+    if (provider.usesLibrarySelection) return 3;
     // hideRecent + favorites + detectedSystems (excluding favorites to avoid duplication)
     return 2 +
         provider.detectedSystems
@@ -108,18 +111,28 @@ class SystemsSettingsContentState extends State<SystemsSettingsContent> {
             ? () => provider.toggleSystemHidden(SystemFolderNames.favorites)
             : () {},
       ),
-      ...systems
-          .where((s) => s.folderName != SystemFolderNames.favorites)
-          .map(
-            (s) => _SystemSettingRow(
-              icon: Symbols.videogame_asset_rounded,
-              title: s.realName,
-              subtitle: s.folderName,
-              isEnabled: !hiddenFolders.contains(s.folderName),
-              isHideToggle: true,
-              onToggle: () => provider.toggleSystemHidden(s.folderName),
+      if (provider.usesLibrarySelection)
+        _SystemSettingRow(
+          icon: Symbols.library_add_rounded,
+          title: LibraryVisibilityLocale.text(context, 'manage'),
+          subtitle: LibraryVisibilityLocale.text(context, 'description'),
+          isEnabled: true,
+          isAction: true,
+          onToggle: () => showConsoleLibraryPicker(context, provider),
+        ),
+      if (!provider.usesLibrarySelection)
+        ...systems
+            .where((s) => s.folderName != SystemFolderNames.favorites)
+            .map(
+              (s) => _SystemSettingRow(
+                icon: Symbols.videogame_asset_rounded,
+                title: consoleLibraryName(context, s),
+                subtitle: s.folderName,
+                isEnabled: !hiddenFolders.contains(s.folderName),
+                isHideToggle: true,
+                onToggle: () => provider.toggleSystemHidden(s.folderName),
+              ),
             ),
-          ),
     ];
   }
 
@@ -142,7 +155,9 @@ class SystemsSettingsContentState extends State<SystemsSettingsContent> {
           children: [
             SettingsTitle(
               title: AppLocale.systemsSettings.getString(context),
-              subtitle: AppLocale.systemsSettingsSubtitle.getString(context),
+              subtitle: provider.usesLibrarySelection
+                  ? LibraryVisibilityLocale.text(context, 'keepData')
+                  : AppLocale.systemsSettingsSubtitle.getString(context),
             ),
             SizedBox(height: 12.r),
             Expanded(
@@ -169,11 +184,13 @@ class SystemsSettingsContentState extends State<SystemsSettingsContent> {
                     selected: isSelected,
                     disabled: item.isDisabled,
                     onTap: item.isDisabled ? null : onTap,
-                    trailing: CustomToggleSwitch(
-                      value: item.isEnabled,
-                      onChanged: (_) => onTap(),
-                      disabled: item.isDisabled,
-                    ),
+                    trailing: item.isAction
+                        ? const Icon(Symbols.chevron_right_rounded)
+                        : CustomToggleSwitch(
+                            value: item.isEnabled,
+                            onChanged: (_) => onTap(),
+                            disabled: item.isDisabled,
+                          ),
                   );
                 },
               ),
@@ -193,6 +210,7 @@ class _SystemSettingRow {
   final bool isEnabled;
   final bool isHideToggle;
   final bool isDisabled;
+  final bool isAction;
   final VoidCallback onToggle;
 
   const _SystemSettingRow({
@@ -203,5 +221,6 @@ class _SystemSettingRow {
     required this.onToggle,
     this.isHideToggle = false,
     this.isDisabled = false,
+    this.isAction = false,
   });
 }

@@ -7,6 +7,8 @@
 #import <CommonCrypto/CommonDigest.h>
 #include "NeoRetroArchCoreAPI.h"
 #include "RetroArchMenuInput.h"
+#include "NeoRetroArchStateImport.h"
+#include "psp/NeoPPSSPPProfile.h"
 extern void NeoRetroArch_ReleaseRenderResources(void);
 #include "configuration.h"
 #include "retroarch.h"
@@ -61,6 +63,27 @@ static BOOL within(NSString *value, NSString *directory) {
   NSString *p = value.stringByStandardizingPath.stringByResolvingSymlinksInPath;
   NSString *r = directory.stringByStandardizingPath.stringByResolvingSymlinksInPath;
   return [p hasPrefix:[r stringByAppendingString:@"/"]];
+}
+/* Enforced profile values are queried by libretro during init/load_game,
+ * before a core can choose a GPU driver or dynamic CPU backend. Imported user
+ * .opt files remain intact; only required host compatibility values override. */
+const char *NeoRetroArch_ForcedOption(const char *key) {
+  if (!key) return NULL;
+  NSString *core = g_core[@"id"] ?: @"";
+  const char *ppsspp = NeoPPSSPPRequiredOption(core.UTF8String,key);
+  if (ppsspp) return ppsspp;
+  if ([core isEqual:@"pcsx_rearmed"] && strcmp(key,"pcsx_rearmed_drc")==0) return "disabled";
+  id profile=g_core[@"forcedOptions"];
+  id value=[profile isKindOfClass:NSDictionary.class] ? profile[str(key)] : nil;
+  return [value isKindOfClass:NSString.class] ? [value UTF8String] : NULL;
+}
+/* Some cores mark hw_render=false yet opportunistically request a hardware
+ * renderer (DOSBox-Pure Voodoo). Only explicitly reviewed GPU profiles may
+ * obtain an EAGL context; DOSBox then uses its upstream software fallback,
+ * including configurations whose hardware property is marked fixed. */
+bool NeoRetroArch_HardwareRenderingAllowed(void) {
+  NSString *core=g_core[@"id"];
+  return [core isEqual:@"ppsspp"] || [core isEqual:@"mupen64plus_next"];
 }
 static NSArray *files(NSString *directory, NSString *extension, NSString *active) {
   NSMutableArray *items = [NSMutableArray array];
@@ -189,8 +212,10 @@ static NSString *escaped(NSString *path) {
   return [[path stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"] stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
 }
 static int language(NSString *locale) {
-  if ([locale hasPrefix:@"zh-Hant"] || [locale hasPrefix:@"zh_Hant"] || [locale hasPrefix:@"zh_TW"]) locale=@"zh_Hant";
-  else locale=[[locale componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"_-"]] firstObject];
+  NSArray *parts=[[locale.lowercaseString stringByReplacingOccurrencesOfString:@"_" withString:@"-"] componentsSeparatedByString:@"-"];
+  locale=parts.firstObject;
+  if ([locale isEqual:@"zh"] && ([parts containsObject:@"hant"] || [parts containsObject:@"tw"]
+      || [parts containsObject:@"hk"] || [parts containsObject:@"mo"])) locale=@"zh_Hant";
   NSDictionary *map = @{ @"en":@(RETRO_LANGUAGE_ENGLISH), @"fr":@(RETRO_LANGUAGE_FRENCH),
     @"es":@(RETRO_LANGUAGE_SPANISH), @"ru":@(RETRO_LANGUAGE_RUSSIAN), @"zh":@(RETRO_LANGUAGE_CHINESE_SIMPLIFIED),
     @"zh_Hant":@(RETRO_LANGUAGE_CHINESE_TRADITIONAL), @"pt":@(RETRO_LANGUAGE_PORTUGUESE_BRAZIL),
@@ -214,9 +239,9 @@ static int start(const NeoRetroArchLaunch *launch, char *error, size_t size) {
   for (NSDictionary *entry in manifest[@"cores"])
     if ([[bundlePath stringByAppendingPathComponent:entry[@"binary"]] isEqual:corePath]) selected = entry;
   BOOL directory = NO;
-  NSString *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject.path;
-  if (!selected || !within(corePath,[bundlePath stringByAppendingPathComponent:@"Frameworks"]) || !within(gamePath,documents)
-      || ![NSFileManager.defaultManager fileExistsAtPath:gamePath isDirectory:&directory] || directory) {
+  if (!selected || !within(corePath,[bundlePath stringByAppendingPathComponent:@"Frameworks"])
+      || ![NSFileManager.defaultManager fileExistsAtPath:gamePath isDirectory:&directory] || directory
+      || ![NSFileManager.defaultManager isReadableFileAtPath:gamePath]) {
     error_text(error,size,@"uncurated_core_or_invalid_game"); return -1;
   }
   g_core = selected; g_game = gamePath; g_session = launch->session_id;
@@ -230,16 +255,20 @@ static int start(const NeoRetroArchLaunch *launch, char *error, size_t size) {
     @autoreleasepool {
       NSString *base = [g_paths[@"config"] stringByAppendingPathComponent:@"retroarch.cfg"];
       NSString *session = [g_paths[@"config"] stringByAppendingPathComponent:@"neostation-session.cfg"];
-      if (![NSFileManager.defaultManager fileExistsAtPath:base])
-        if (![@"video_smooth = \"false\"\n" writeToFile:base atomically:YES encoding:NSUTF8StringEncoding error:nil]) {
+      if (![NSFileManager.defaultManager fileExistsAtPath:base]) {
+        NSMutableString *defaults=[NSMutableString stringWithString:@"video_smooth = \"false\"\nsort_savefiles_enable = \"false\"\nsort_savestates_enable = \"false\"\nsort_savefiles_by_content_enable = \"false\"\nsort_savestates_by_content_enable = \"false\"\n"];
+        NSString *defaultOverlay = [g_paths[@"overlays"] stringByAppendingPathComponent:@"gamepads/retropad/retropad.cfg"];
+        if ([NSFileManager.defaultManager fileExistsAtPath:defaultOverlay])
+          [defaults appendFormat:@"input_overlay = \"%@\"\ninput_overlay_enable = \"true\"\n",escaped(defaultOverlay)];
+        if (![defaults writeToFile:base atomically:YES encoding:NSUTF8StringEncoding error:nil]) {
           finish(YES,@"config_write_failed",base); return;
         }
+      }
       NSMutableString *cfg = [NSMutableString stringWithString:
         @"video_driver = \"gl\"\nvideo_threaded = \"false\"\nvideo_vsync = \"true\"\n"
          "menu_driver = \"rgui\"\nmenu_pause_libretro = \"true\"\nconfig_save_on_exit = \"false\"\n"
          "input_driver = \"cocoa\"\ninput_joypad_driver = \"mfi\"\naudio_driver = \"coreaudio\"\n"
          "savestate_auto_load = \"false\"\nsavestate_auto_save = \"false\"\n"
-         "sort_savefiles_enable = \"true\"\nsort_savestates_enable = \"true\"\n"
          "log_to_file = \"true\"\nlog_to_file_timestamp = \"true\"\n"
          "menu_show_load_core = \"false\"\nmenu_show_online_updater = \"false\"\n"
          "input_menu_toggle_gamepad_combo = \"0\"\ninput_overlay_hide_in_menu = \"false\"\n"
@@ -250,9 +279,6 @@ static int start(const NeoRetroArchLaunch *launch, char *error, size_t size) {
       [cfg appendFormat:@"core_assets_directory = \"%@\"\nassets_directory = \"%@/assets\"\ncore_info_path = \"%@/info\"\n"
          "joypad_autoconfig_dir = \"%@/autoconfig\"\nuser_language = \"%d\"\n",
          escaped(g_paths[@"root"]),escaped(g_paths[@"root"]),escaped(g_paths[@"root"]),escaped(g_paths[@"root"]),language(locale)];
-      NSString *defaultOverlay = [g_paths[@"overlays"] stringByAppendingPathComponent:@"gamepads/retropad/retropad.cfg"];
-      if ([NSFileManager.defaultManager fileExistsAtPath:defaultOverlay])
-        [cfg appendFormat:@"input_overlay = \"%@\"\ninput_overlay_enable = \"true\"\n",escaped(defaultOverlay)];
       if (![cfg writeToFile:session atomically:YES encoding:NSUTF8StringEncoding error:nil]) {
         finish(YES,@"config_write_failed",session); return;
       }
@@ -275,15 +301,6 @@ static int start(const NeoRetroArchLaunch *launch, char *error, size_t size) {
       int result = rarch_main((int)args.count,argv,NULL);
       if (result != 0 || !(runloop_get_flags() & RUNLOOP_FLAG_CORE_RUNNING)) {
         finish(YES,@"frontend_load_failed",[NSString stringWithFormat:@"rarch_main=%d core=%@ game=%@",result,corePath,gamePath]); return;
-      }
-      // PCSX ReARMed is part of the App Store subset; stay on its interpreter
-      // even if NeoStation has JIT enabled for a different standalone backend.
-      core_option_manager_t *opts = runloop_state_get_ptr()->core_options;
-      size_t drc = 0;
-      if (opts && core_option_manager_get_idx(opts,"pcsx_rearmed_drc",&drc)) {
-        struct core_option *option = &opts->opts[drc];
-        for (size_t i=0;i<option->vals->size;i++)
-          if (strcmp(option->vals->elems[i].data,"disabled")==0) core_option_manager_set_val(opts,drc,i,false);
       }
       NSData *name = [[g_core[@"id"] stringByAppendingString:g_game] dataUsingEncoding:NSUTF8StringEncoding];
       unsigned char digest[CC_SHA256_DIGEST_LENGTH]; CC_SHA256(name.bytes,(CC_LONG)name.length,digest);
@@ -308,9 +325,13 @@ static int pause_session(uint64_t session, int paused, char *error, size_t size)
   if (!NSThread.isMainThread || session != g_session || (g_state != NEO_RA_RUNNING && g_state != NEO_RA_PAUSED)) {
     error_text(error,size,@"session_not_running"); return -1;
   }
-  if (paused) runloop_state_get_ptr()->flags |= RUNLOOP_FLAG_PAUSED;
-  else runloop_state_get_ptr()->flags &= ~RUNLOOP_FLAG_PAUSED;
-  state(paused ? NEO_RA_PAUSED : NEO_RA_RUNNING,@"",@"");
+  if ((g_state == NEO_RA_PAUSED) == !!paused) return 0;
+  // Upstream pause checks silence MIDI, fade audio and update frame timing.
+  // A flag-only pause leaves those side effects undone.
+  command_event(paused ? CMD_EVENT_PAUSE : CMD_EVENT_UNPAUSE, NULL);
+  BOOL effective = !!(runloop_get_flags() & RUNLOOP_FLAG_PAUSED);
+  if (effective != !!paused) { error_text(error,size,@"pause_rejected"); return -1; }
+  state(effective ? NEO_RA_PAUSED : NEO_RA_RUNNING,@"",@"");
   return 0;
 }
 static uint32_t session_state(uint64_t session) { return session == g_session ? g_state : NEO_RA_IDLE; }
@@ -358,12 +379,16 @@ static NSDictionary *perform(NSDictionary *request) {
           || ![data writeToFile:path options:NSDataWritingAtomic error:&err]) return failure(@"state_write_failed",err.description);
       return @{ @"success":@YES,@"slot":value,@"path":path,@"format":@"libretro-raw" };
     }
-    NSData *data = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
-    if (!data) return failure(@"state_read_failed",path);
-    size_t expected = core_serialize_size();
-    if (data.length != expected) return failure(@"state_format_or_size_invalid",@"Expected libretro raw state for this core and content revision");
-    retro_ctx_serialize_info_t info = { .data=NULL,.data_const=data.bytes,.size=data.length };
-    if (!core_unserialize(&info)) return failure(@"unserialize_failed",path);
+    NeoRetroArchStateImportResult imported=NeoRetroArch_ImportStateFile(path.UTF8String,128 * 1024 * 1024);
+    switch (imported) {
+      case NEO_RA_STATE_IMPORT_OK: break;
+      case NEO_RA_STATE_IMPORT_OPEN_FAILED: return failure(@"state_open_failed",path);
+      case NEO_RA_STATE_IMPORT_INVALID_SIZE: return failure(@"state_decode_limit",@"State must decode to 8..134217728 bytes; RZIP chunks may not exceed 4194304 bytes");
+      case NEO_RA_STATE_IMPORT_UNSUPPORTED_CODEC: return failure(@"state_codec_unsupported",@"Unsupported RZIP compression version or codec in this frontend build");
+      case NEO_RA_STATE_IMPORT_READ_FAILED: return failure(@"state_read_or_decode_failed",path);
+      case NEO_RA_STATE_IMPORT_ALLOCATION_FAILED: return failure(@"state_allocation_failed",path);
+      case NEO_RA_STATE_IMPORT_DESERIALIZE_FAILED: return failure(@"state_format_or_core_incompatible",@"Selected core rejected the decoded state; use the original compatible core/version and content");
+    }
     return @{ @"success":@YES,@"slot":value };
   }
   if ([op isEqual:@"readOptions"] || [op isEqual:@"setOption"]) {
@@ -375,15 +400,21 @@ static NSDictionary *perform(NSDictionary *request) {
         if (!core_option_manager_get_visible(manager,i)) continue;
         struct core_option *option = &manager->opts[i];
         NSMutableArray *choices = [NSMutableArray array];
-        for (size_t j=0;j<option->vals->size;j++)
+        const char *forced=NeoRetroArch_ForcedOption(option->key);
+        for (size_t j=0;j<option->vals->size;j++) {
+          if (forced && strcmp(forced,option->vals->elems[j].data)!=0) continue;
           [choices addObject:@{ @"value":str(option->vals->elems[j].data),@"title":str(option->val_labels && j < option->val_labels->size ? option->val_labels->elems[j].data : option->vals->elems[j].data) }];
+        }
         [items addObject:@{ @"key":str(option->key),@"title":str(core_option_manager_get_desc(manager,i,false)),
-          @"value":str(core_option_manager_get_val(manager,i)),@"choices":choices }];
+          @"value":str(forced ?: core_option_manager_get_val(manager,i)),@"choices":choices }];
       }
       return @{ @"success":@YES,@"items":items };
     }
     NSString *key = request[@"key"], *value = request[@"value"];
-    if ([key isEqual:@"pcsx_rearmed_drc"] && ![value isEqual:@"disabled"]) return failure(@"jit_unavailable",key);
+    if ([key isKindOfClass:NSString.class]) {
+      const char *required=NeoRetroArch_ForcedOption(key.UTF8String);
+      if (required && (![value isKindOfClass:NSString.class] || ![value isEqual:str(required)])) return failure(@"option_profile_required",key);
+    }
     size_t index=0;
     if (![key isKindOfClass:NSString.class] || ![value isKindOfClass:NSString.class] || !core_option_manager_get_idx(manager,key.UTF8String,&index))
       return failure(@"invalid_option",key);

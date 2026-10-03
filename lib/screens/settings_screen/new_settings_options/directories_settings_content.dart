@@ -8,6 +8,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:external_folder_access/external_folder_access.dart';
 import 'package:neostation/services/retroarch_library_service.dart';
+import 'package:neostation/services/retroarch_core_catalog.dart';
+import 'package:neostation/services/retroarch_migration_service.dart';
+import 'package:neostation/l10n/retroarch_locale.dart';
+import 'package:neostation/widgets/retroarch_migration_dialog.dart';
+import 'package:neostation/widgets/retroarch_library_actions.dart';
 import 'package:neostation/services/melonx_library_service.dart';
 import 'package:neostation/services/ios_shortcut_jit_launch_service.dart';
 import 'package:neostation/l10n/app_locale.dart';
@@ -239,6 +244,7 @@ class DirectoriesSettingsContentState
 
   Future<void> _loadCurrentPaths() async {
     try {
+      if (Platform.isIOS) await RetroArchMigrationService.instance.load();
       final foldersFuture = ConfigRepository.getUserRomFolders();
       final userDataFuture = ConfigService.getUserDataPath();
       _currentRomFolders = await foldersFuture;
@@ -636,7 +642,73 @@ class DirectoriesSettingsContentState
     ];
   }
 
-  Widget _buildIOSRetroArchSection(ThemeData theme) {
+  Future<void> _chooseRetroArchMode() async {
+    final result = await RetroArchMigrationDialog.show(context);
+    if (!mounted || result == null) return;
+    setState(() {});
+    final provider = context.read<SqliteConfigProvider>();
+    try {
+      if (result == RetroArchExecutionMode.embedded) {
+        for (final folder in RetroArchCoreCatalog.supportedSystems) {
+          if (provider.isLibraryEnabled(folder)) {
+            await provider.refreshRetroArchInternalLibrary(folder);
+          }
+        }
+      } else {
+        await provider.scanSystems();
+      }
+      if (mounted) await _loadCurrentPaths();
+    } catch (error) {
+      _log.w('RetroArch mode saved; library refresh failed: $error');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          RetroArchLocale.text(context, 'importFailed'),
+          type: NotificationType.error,
+        );
+      }
+    }
+  }
+
+  Widget _buildIOSRetroArchSection(ThemeData theme) => AnimatedBuilder(
+    animation: RetroArchMigrationService.instance,
+    builder: (context, child) {
+      final embedded = RetroArchMigrationService.instance.usesEmbedded;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (embedded)
+            _buildIOSEmulatorCard(
+              theme: theme,
+              name: 'RetroArch',
+              icon: Symbols.sports_esports_rounded,
+              statusText: RetroArchLocale.text(context, 'builtInRetroArch'),
+              isLinked: true,
+              bookmarkKey: 'retroarch-embedded-owned',
+              successMessage: '',
+              showLinkButton: false,
+              trailingAction: OutlinedButton.icon(
+                onPressed: () => RetroArchLibraryActions.showFolders(context),
+                icon: const Icon(Icons.folder_open),
+                label: Text(RetroArchLocale.text(context, 'managedFolders')),
+              ),
+            )
+          else
+            _buildExternalIOSRetroArchSection(theme),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.r),
+            child: OutlinedButton.icon(
+              onPressed: _chooseRetroArchMode,
+              icon: const Icon(Icons.swap_horiz),
+              label: Text(RetroArchLocale.text(context, 'changeRetroArchMode')),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  Widget _buildExternalIOSRetroArchSection(ThemeData theme) {
     final isLinked = ConfigService.linkedExternalFolderPath != null;
     final hasSynced = RetroArchLibraryService.hasSyncedLibrary;
 

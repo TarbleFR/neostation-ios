@@ -34,6 +34,10 @@ import '../constants/system_folder_names.dart';
 import '../services/game_session_persistence.dart';
 import '../utils/nav_tabs.dart';
 import '../services/saf_directory_service.dart';
+import '../services/library_visibility_service.dart';
+import '../services/retroarch_core_catalog.dart';
+import '../services/retroarch_internal_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 part 'sqlite_config_provider/mutators.dart';
 part 'sqlite_config_provider/scanning.dart';
@@ -73,6 +77,8 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _appReady = false;
   bool _hasAllFilesAccess = false;
   Set<String> _hiddenSystems = {};
+  LibraryVisibilityService? _libraryVisibilityService;
+  LibraryVisibilitySelection? _libraryVisibility;
 
   // Scanning progress variables
   int _totalSystemsToScan = 0;
@@ -154,10 +160,53 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get initialized => _initialized;
   bool get isFullscreen => _config.isFullscreen;
   bool get hasAllFilesAccess => _hasAllFilesAccess;
-  Set<String> get hiddenSystemFolders => _hiddenSystems;
+  Set<String> get hiddenSystemFolders =>
+      _libraryVisibility?.hiddenFolders(
+        available: _availableSystems,
+        legacyHidden: _hiddenSystems,
+      ) ??
+      _hiddenSystems;
+
+  bool get usesLibrarySelection => _libraryVisibility != null;
+  bool get needsLibrarySelection =>
+      _libraryVisibility != null && !_libraryVisibility!.setupCompleted;
+  bool get isExistingLibraryInstallation =>
+      _libraryVisibility?.existingInstallation ?? false;
+  Set<String> get enabledLibraryFolders =>
+      _libraryVisibility?.enabledFolders ?? const <String>{};
+
+  bool isLibraryEnabled(String folderName) =>
+      _libraryVisibility?.isVisible(folderName) ??
+      !_hiddenSystems.contains(folderName);
+
+  bool isConsoleLibraryEnabled(String folderName) =>
+      _libraryVisibility?.isConsoleEnabled(folderName) ??
+      isLibraryEnabled(folderName);
+
+  /// Only curated RetroArch systems and the established native integrations
+  /// are offered to new users. Upgrade selections remain editable even when
+  /// they belong to an existing external library outside the curated base.
+  List<SystemModel> get selectableLibrarySystems {
+    final supported = {
+      ...RetroArchCoreCatalog.supportedSystems,
+      ...LibraryVisibilityService.embeddedFolders,
+      ...enabledLibraryFolders,
+      ...?_libraryVisibility?.legacyFolders,
+    };
+    final choices = _availableSystems
+        .where(
+          (system) =>
+              supported.contains(system.folderName) &&
+              system.folderName != 'all' &&
+              system.folderName != 'favorites',
+        )
+        .toList();
+    return LibraryVisibilitySelection.groupConsoleChoices(choices)
+      ..sort((a, b) => a.realName.compareTo(b.realName));
+  }
 
   List<SystemModel> get visibleDetectedSystems => _detectedSystems
-      .where((s) => !_hiddenSystems.contains(s.folderName))
+      .where((s) => !hiddenSystemFolders.contains(s.folderName))
       .toList();
 
   // Getters for scanning progress
@@ -391,6 +440,10 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
       // Load config first so persisted sort settings are available before
       // detected systems are loaded and ordered from the database.
       await _loadConfig();
+
+      // Migrate before loading/injecting native empty playlists. Otherwise a
+      // first install would be indistinguishable from an established library.
+      if (Platform.isIOS) await _loadLibraryVisibility();
 
       // The remaining data can be loaded in parallel.
       await Future.wait([
