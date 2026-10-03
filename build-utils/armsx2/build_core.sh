@@ -15,6 +15,13 @@ python3 "$ROOT/build-utils/armsx2/prepare_source.py" "$SOURCE"
 # across the upstream C/C++/Objective-C/Objective-C++ objects linked into Core.
 PREFIX_MAP_FLAGS="-ffile-prefix-map=$ROOT=/neostation -fdebug-prefix-map=$ROOT=/neostation -fmacro-prefix-map=$ROOT=/neostation -ffile-prefix-map=$SOURCE=/armsx2 -fdebug-prefix-map=$SOURCE=/armsx2 -fmacro-prefix-map=$SOURCE=/armsx2 -ffile-prefix-map=$BUILD=/build -fdebug-prefix-map=$BUILD=/build -fmacro-prefix-map=$BUILD=/build"
 
+
+# librashader is compiled by cargo outside CMake's compiler flag propagation.
+# Apply the same path policy to Rust and the C/C++ objects built by its crates.
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$ROOT=/neostation --remap-path-prefix=$SOURCE=/armsx2 --remap-path-prefix=$BUILD=/build --remap-path-prefix=$HOME/.cargo=/cargo --remap-path-prefix=$HOME/.rustup=/rust-toolchain"
+export CFLAGS="${CFLAGS:-} $PREFIX_MAP_FLAGS -ffile-prefix-map=$HOME/.cargo=/cargo -fdebug-prefix-map=$HOME/.cargo=/cargo -fmacro-prefix-map=$HOME/.cargo=/cargo"
+export CXXFLAGS="${CXXFLAGS:-} $PREFIX_MAP_FLAGS -ffile-prefix-map=$HOME/.cargo=/cargo -fdebug-prefix-map=$HOME/.cargo=/cargo -fmacro-prefix-map=$HOME/.cargo=/cargo"
+
 cmake -S "$SOURCE/platforms/ios/app/src/main/cpp" -B "$BUILD" -G Xcode \
   -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
   -DCMAKE_C_FLAGS="$PREFIX_MAP_FLAGS" \
