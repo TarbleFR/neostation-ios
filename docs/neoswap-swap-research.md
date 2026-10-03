@@ -5,6 +5,23 @@ Les références `experimental`, `main`, `backup`, les cœurs et les helpers JIT
 ne sont pas modifiés par ce chantier. Cette candidate est une étape de recherche,
 pas une validation de stabilité sur iPhone.
 
+## Périmètre exclusivement RPCS3
+
+Les seuls clients acceptés par l'allocateur, les sessions et le relais sont ceux
+portant l'identifiant RPCS3. Les identifiants historiques des autres cœurs et du
+probe restent réservés dans l'ABI v1, sans allocation, enregistrement ni demande
+de donneur. Une configuration qui tenterait de les activer est refusée.
+Dolphin, ARMSX2, DuskLight, KartPad et les autres ports ne sont pas intégrés.
+
+Le relais ne démarre plus à l'ouverture de NeoStation : seul l'appel explicite
+de préparation RPCS3 le lance. Après une session, la maintenance inactive ne
+relance aucun helper. Elle libère le support RPCS3 devenu inutilisé ; les alias
+RPCS3 encore vivants conservent leur propriété jusqu'à leur fin effective.
+La télémétrie de pression du jeu et les warnings persistants sont centrés sur
+les sessions RPCS3. Les vérifications synthétiques de fichiers restent dans
+les builds de test ; elles ne sont ni proposées ni exécutées dans l'application
+distribuée. La structure ABI et le Core RPCS3 épinglé restent identiques.
+
 ## Résultat de l'audit du fichier fourni
 
 Archive : `guest-page-relay-main(1).zip`, SHA-256

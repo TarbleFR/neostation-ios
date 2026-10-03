@@ -61,7 +61,7 @@ int main() {
     char directory[] = "/tmp/neoswap-demand-test-XXXXXX";
     assert(mkdtemp(directory));
     const auto* api = NeoSwap_GetAPI(1);
-    NeoSwapConfig config{sizeof(config), NEOSWAP_ABI, 8 * MiB, 0, MiB, 0x3f, 0};
+    NeoSwapConfig config{sizeof(config), NEOSWAP_ABI, 8 * MiB, 0, MiB, 1u << NEOSWAP_RPCS3, 0};
     assert(NeoSwap_Configure(directory, &config) == NEOSWAP_OK);
     assert(!claim().bytes && !host().donor_pending_demand_count);
     const auto request = [&](uint32_t owner, uint64_t bytes) {
@@ -75,8 +75,11 @@ int main() {
         assert(api->release(pointer) == NEOSWAP_OK);
         assert(!host().reserved_virtual_bytes);
     };
-    request(NEOSWAP_PROBE, MiB);
-    request(NEOSWAP_DOLPHIN, MiB);
+    for (uint32_t owner = 1; owner < NEOSWAP_OWNER_COUNT; ++owner) {
+        void* forbidden = reinterpret_cast<void*>(1);
+        assert(api->allocate(owner, NEOSWAP_CPU_DATA, MiB, 65536, &forbidden) == NEOSWAP_DISABLED && !forbidden);
+        assert(!claim().bytes && !host().reserved_virtual_bytes);
+    }
     void* invalid = nullptr;
     assert(api->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA, 257 * MiB, 65536, &invalid) == NEOSWAP_QUOTA);
     assert(api->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA, MiB, 3, &invalid) == NEOSWAP_INVALID);

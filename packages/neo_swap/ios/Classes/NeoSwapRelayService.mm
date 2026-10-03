@@ -3,6 +3,7 @@
 #import "Relay/NeoSwapPageRelay.h"
 #include "Relay/Backend.h"
 #include "NeoSwapExperiment.h"
+#include "NeoSwapHost.h"
 #import <Foundation/Foundation.h>
 #include <mach/mach.h>
 #include <algorithm>
@@ -11,7 +12,7 @@ namespace {
 constexpr uint64_t MiB = 1024 * 1024;
 constexpr uint64_t kCapacity = 8 * 1024 * MiB;
 constexpr uint64_t kSegment = 512 * MiB;
-constexpr uint32_t kRPCS3 = 0, kProbe = 5;
+constexpr uint32_t kRPCS3 = 0;
 constexpr NSTimeInterval kNormalRetryDelaySeconds = 30.0;
 constexpr NSTimeInterval kFastFootprintRetryDelaySeconds = 0.15;
 constexpr NSUInteger kMaxFastFootprintRetries = 1;
@@ -39,7 +40,7 @@ NSDictionary* capabilityCheck() {
     void* second = nullptr;
     constexpr uint64_t bytes = 16 * MiB;
     int result = api && footprint(before) ? NEOSWAP_RELAY_OK : NEOSWAP_RELAY_DISABLED;
-    if (result == 0) result = api->create(kProbe, bytes, &token);
+    if (result == 0) result = api->create(kRPCS3, bytes, &token);
     if (result == 0) result = api->map(token, nullptr, NEOSWAP_RELAY_READ_WRITE, &first);
     if (result == 0) result = api->map(token, nullptr, NEOSWAP_RELAY_READ, &second);
     bool coherent = result == 0;
@@ -88,6 +89,7 @@ NSDictionary* capabilityCheck() {
     NSDictionary* _details;
     BOOL _running;
     BOOL _ready;
+    BOOL _sessionObserved;
     BOOL _memoryPressureRaised;
     uint64_t _generation;
     NSTimeInterval _retryAfter;
@@ -137,6 +139,7 @@ NSDictionary* capabilityCheck() {
         [_lock unlock]; return;
     }
     _running = YES;
+    _sessionObserved = NO;
     _fastFootprintRetryPending = NO;
     _pending = dispatch_group_create();
     dispatch_group_enter(_pending);
@@ -155,7 +158,7 @@ NSDictionary* capabilityCheck() {
         int setup = neostation::relay::shutdown();
         if (setup == 0) {
             neostation::relay::set_pressure(self->_memoryPressureRaised);
-            setup = neostation::relay::configure(1u << kProbe, kCapacity);
+            setup = neostation::relay::configure(1u << kRPCS3, kCapacity);
         }
         if (setup != 0) {
             [self finishGeneration:generation details:@{@"state":@"backend_refused", @"result":@(setup)} ready:NO];
@@ -286,7 +289,15 @@ NSDictionary* capabilityCheck() {
     if (!NeoSwapExperimentProfile().relay()) return;
     dispatch_async(_queue, ^{
         (void)neostation::relay::collect();
-        if (self->_memoryPressureRaised) {
+        // Preserve preparation until RPCS3 can map Core data. After a game,
+        // idle maintenance only retires RPCS3 pages, never starts a helper.
+        const BOOL active = NeoSwap_OwnerSessionActive(kRPCS3);
+        [self->_lock lock];
+        if (active) self->_sessionObserved = YES;
+        const BOOL observed = self->_sessionObserved;
+        [self->_lock unlock];
+        if (!observed) return;
+        if (self->_memoryPressureRaised || !active) {
             NeoSwapRelayStats stats{};
             stats.struct_size = sizeof(stats); stats.abi_version = NEOSWAP_RELAY_ABI;
             NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)->snapshot(&stats);
@@ -295,7 +306,7 @@ NSDictionary* capabilityCheck() {
             if (idle) self->_ready = NO;
             [self->_lock unlock];
             if (idle) (void)neostation::relay::shutdown();
-            neostation::relay::set_pressure(true);
+            neostation::relay::set_pressure(self->_memoryPressureRaised);
         } else [self start];
     });
 }

@@ -170,7 +170,9 @@ class DonorContractTests(unittest.TestCase):
                      'NeoSwap_LiveBytes(', 'NeoSwap_HostSnapshot(', 'NeoSwap_RegisterClient('):
             self.assertIn(call, bridge)
         self.assertNotIn('NeoSwapRelay_Start(', bridge)
-        self.assertIn('NeoSwapRelay_Start();', plugin)
+        self.assertNotIn('NeoSwapRelay_Start();', plugin)
+        service = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm').read_text()
+        self.assertIn('[self start];', service.split('- (int)waitReady:(uint32_t)timeout {', 1)[1])
         self.assertIn("'_NeoSwapRelay_Start' not in undefined", validator)
         self.assertIn("'_NeoSwapRelay_Start'", validator)
         self.assertIn("'_NeoSwap_GetRelayAPI'", validator)

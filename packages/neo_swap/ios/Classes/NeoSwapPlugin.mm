@@ -135,9 +135,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     // Runtime policy, not an optional user feature. Old Off/budget preferences
     // cannot disable the integrated service after an update or relaunch.
     self.capacityMiB = NeoSwapExperimentProfile().donors() ? 8192 : 0;
-#if defined(NEOSWAP_RELAY)
-    if (NeoSwapExperimentProfile().relay()) NeoSwapRelay_Start();
-#endif
+    // Relay preparation begins only at RPCS3's explicit WaitReady call.
     dispatch_async(self.queue, ^{
         NSError* error = nil;
         BOOL created = self.directory.length && [[NSFileManager defaultManager]
@@ -168,7 +166,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
         object:nil queue:nil usingBlock:^(__unused NSNotification* notification) {
         NeoSwapPlugin* owner = weakSelf;
-        if (!owner) return;
+        if (!owner || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
         dispatch_async(owner.queue, ^{
             ++owner.iosWarningCount;
             [owner appendRecord:[owner snapshot:@"ios_memory_warning"]];
@@ -181,7 +179,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
         const unsigned long level = dispatch_source_get_data(strongSelf.cpuBufferPressureSource);
-        strongSelf->_memorySamples.pressure_event(level);
+        if (NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3))
+            strongSelf->_memorySamples.pressure_event(level);
         strongSelf.cpuBufferPressureRaised = (level &
             (DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL)) != 0;
 #if defined(NEOSWAP_DONATION)
@@ -216,9 +215,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                 strongSelf.lastOperationDrops = drops;
             }
 #endif
+            const bool rpcs3Active = NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3);
+            // Keep the final RPCS3 sample, then stop sampling unrelated cores.
+            if (!rpcs3Active && !strongSelf->_memorySamples.active()) return;
             const auto event = strongSelf->_memorySamples.poll(
-                static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000),
-                NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3));
+                static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000), rpcs3Active);
             using neostation::diagnostics::MemoryEvent;
             if (event == MemoryEvent::none) return;
             NSString* name = event == MemoryEvent::session_start ? @"rpcs3_memory_session_start" :
@@ -669,9 +670,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     config.capacity_bytes = (uint64_t)capacity*kMiB;
     config.minimum_free_bytes = 2048*kMiB;
     config.minimum_allocation_bytes = kMiB;
-    // V1 production adapter: RPCS3 CPU-side RSX data; the probe is kept separate.
-    // Other owners are implemented in the broker, but not claimed as core integrations.
-    config.enabled_owner_mask = (1u << NEOSWAP_RPCS3) | (1u << NEOSWAP_PROBE);
+    // RPCS3 is the only supported owner; legacy ABI slots stay disabled.
+    config.enabled_owner_mask = 1u << NEOSWAP_RPCS3;
     int code = NeoSwap_Configure(self.directory.fileSystemRepresentation, &config);
     if (code == NEOSWAP_OK) { self.capacityMiB = capacity; self.configResult = NEOSWAP_OK; }
     return code;
@@ -802,7 +802,13 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #endif
     NeoSwapCPUBufferStats cpuBuffers{};
     NeoSwap_CPUBufferSnapshot(&cpuBuffers);
-    return @{@"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
+#if defined(NEOSWAP_TESTING)
+    const BOOL diagnosticProbesAvailable = YES;
+#else
+    const BOOL diagnosticProbesAvailable = NO;
+#endif
+    return @{@"scope":@"rpcs3_only", @"diagnosticProbesAvailable":@(diagnosticProbesAvailable),
+        @"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
         @"experiment":@{@"mode":[NSString stringWithUTF8String:NeoSwapExperimentProfile().name()],
             @"valid":@(NeoSwapExperimentProfile().valid), @"configured":@(NeoSwapExperimentProfile().configured),
             @"sourceCommit":[NSBundle.mainBundle objectForInfoDictionaryKey:@"NeoSwapResearchSource"] ?: NSNull.null,
@@ -980,11 +986,15 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     dispatch_async(self.queue, ^{
         @autoreleasepool {
             int code = NEOSWAP_OK;
+#if !defined(NEOSWAP_TESTING)
+            // Distributed apps never create synthetic allocations from settings.
+            if (![call.method isEqualToString:@"snapshot"]) code = NEOSWAP_DISABLED;
+#else
             if ([call.method isEqualToString:@"probe"]) {
                 // Bounded functional check. It is NOT a fake game allocation or a RAM-limit benchmark.
                 void* address = nullptr;
                 const auto* api = NeoSwap_GetAPI(NEOSWAP_ABI);
-                code = api->allocate(NEOSWAP_PROBE, NEOSWAP_CPU_DATA, 8*kMiB, 65536, &address);
+                code = api->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA, 8*kMiB, 65536, &address);
                 if (code == NEOSWAP_OK) {
                     auto* p = (unsigned char*)address;
                     for (uint64_t i=0; i<8*kMiB; ++i) p[i] = (unsigned char)((i*131+(i>>12)*17)^0x9d);
@@ -1016,6 +1026,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                       @"kind":@"file-backed data capacity; not physical RAM or a donation test"};
                 }
             }
+#endif
             if (![call.method isEqualToString:@"snapshot"]) {
                 NSMutableDictionary* event = [[self snapshot:call.method] mutableCopy];
                 event[@"result"] = @(code); [self appendRecord:event];

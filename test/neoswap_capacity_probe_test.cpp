@@ -15,7 +15,7 @@ int main(int argc,char** argv){
   assert(!NeoSwapCapacityHeadroom(256*MiB,false));
   assert(NeoSwapCapacityHeadroom(256*MiB+1,false));
   assert(NeoSwapCapacityHeadroom(0,true));
-  NeoSwapConfig config{sizeof(config),1,8192*MiB,0,MiB,1u<<NEOSWAP_PROBE,0};
+  NeoSwapConfig config{sizeof(config),1,8192*MiB,0,MiB,1u<<NEOSWAP_RPCS3,0};
   assert(NeoSwap_Configure(folder,&config)==0);
   NeoSwapHostStats host{};assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);
   config.capacity_bytes=8192*MiB+1;assert(NeoSwap_Configure(folder,&config)==NEOSWAP_INVALID);config.capacity_bytes=8192*MiB;
@@ -34,7 +34,7 @@ int main(int argc,char** argv){
   };
   assert(NeoSwapCapacityProbe(NeoSwap_GetAPI(1),64*MiB,sample,[]{return true;})==0);
   assert((phases==std::vector<std::string>{"before","written","synced","verified","released"}));
-  NeoSwapStats stats{};stats.struct_size=sizeof(stats);assert(NeoSwap_Snapshot(&stats)==0 && !stats.live_blocks && stats.owners[NEOSWAP_PROBE].allocation_count==1);
+  NeoSwapStats stats{};stats.struct_size=sizeof(stats);assert(NeoSwap_Snapshot(&stats)==0 && !stats.live_blocks && stats.owners[NEOSWAP_RPCS3].allocation_count==1);
   assert(NeoSwapCapacityProbe(NeoSwap_GetAPI(1),64*MiB,sample,[]{return NeoSwapCapacityHeadroom(0,false);})==NEOSWAP_BUSY);
   int headroomCalls=0;
   assert(NeoSwapCapacityProbe(NeoSwap_GetAPI(1),64*MiB,sample,[&]{return ++headroomCalls<3;})==NEOSWAP_BUSY);

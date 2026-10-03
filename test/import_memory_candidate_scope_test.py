@@ -14,6 +14,9 @@ manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
 assert manifest['target_build'] == 401
 assert manifest['swap_research']['branch'] == 'swap'
+assert manifest['swap_research']['scope'] == 'RPCS3 only'
+assert manifest['swap_research']['supported_owner_mask'] == 1
+assert manifest['swap_research']['production_synthetic_probes'] is False
 assert manifest['swap_research']['profiles'] == ['baseline', 'relay', 'integrated']
 assert manifest['swap_research']['physical_iPhone_validated'] is False
 assert manifest['real_device_8gib_validated'] is False
@@ -54,6 +57,8 @@ assert managed['required_evidence'] == [
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # RPCS3-only integrity harness shares its sole supported allocation owner.
+    'packages/neo_swap/ios/Classes/NeoSwapCapacityProbe.h',
     'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
     'build-utils/configure_neoswap_research.py',
     '.github/workflows/neoswap-research-check.yml',

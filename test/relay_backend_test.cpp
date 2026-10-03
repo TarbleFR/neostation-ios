@@ -223,8 +223,18 @@ static void guards_and_pressure() {
     f.backend.set_pressure(true);
     assert(f.backend.unmap(token, mapped) == 0 && f.backend.release(token) == 0);
     f.backend.set_pressure(false);
-    assert(f.backend.configure(1U << 5) == 0 && !f.backend.enabled(0) && f.backend.enabled(5));
-    assert(f.backend.create(5, page, &token) == 0 && f.backend.release(token) == 0);
+    const auto beforeScope = f.stats();
+    const auto mappingsBeforeScope = f.os.mappings.size();
+    for (uint32_t owner = 1; owner < 6; ++owner) {
+        assert(f.backend.configure(1U | (1U << owner)) == NEOSWAP_RELAY_INVALID);
+        assert(!f.backend.enabled(owner) && f.backend.enabled(0));
+        token = 99;
+        assert(f.backend.create(owner, page, &token) == NEOSWAP_RELAY_DISABLED && !token);
+        assert(f.stats().enabled_owner_mask == 1U);
+        assert(f.stats().retained_capacity_bytes == beforeScope.retained_capacity_bytes);
+        assert(f.stats().object_count == beforeScope.object_count);
+        assert(f.os.mappings.size() == mappingsBeforeScope);
+    }
     assert(f.backend.configure(1) == 0 && f.backend.enabled(0));
     NeoSwapRelayStats too_small{};
     assert(f.backend.snapshot(&too_small) == NEOSWAP_RELAY_INVALID);
