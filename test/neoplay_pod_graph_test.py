@@ -32,7 +32,9 @@ end
 post_install do |installer|
   require 'json'
   graph = installer.pod_targets.to_h do |target|
-    [target.pod_name, {linkage: target.build_type.linkage.to_s, packaging: target.build_type.packaging.to_s}]
+    [target.pod_name, {linkage: target.build_as_static? ? 'static' : 'dynamic',
+                       packaging: target.build_as_framework? ? 'framework' : 'library',
+                       shouldBuild: target.should_build?}]
   end
   File.write(File.join(__dir__, 'graph.json'), JSON.generate(graph))
 end
@@ -49,7 +51,11 @@ class NeoPlayPodGraph(unittest.TestCase):
         if not static:
             text = text.replace('  s.static_framework = true\n', '')
         (bridge / PODSPEC.name).write_text(text)
-        (bridge / 'Classes').symlink_to(PODSPEC.parent / 'Classes', target_is_directory=True)
+        # CocoaPods' source glob does not traverse this directory as a symlink.
+        # Physical, byte-identical copies are required to test a built wrapper.
+        shutil.copytree(PODSPEC.parent / 'Classes', bridge / 'Classes')
+        for source in (PODSPEC.parent / 'Classes').glob('*.swift'):
+            self.assertEqual(source.read_bytes(), (bridge / 'Classes' / source.name).read_bytes())
         shutil.copyfile(ROOT / 'LICENSE.md', ios / 'LICENSE.md')
         for name in ('Flutter', 'UnrelatedDynamicFixture'):
             folder = ios / 'fixtures' / name
@@ -82,10 +88,10 @@ class NeoPlayPodGraph(unittest.TestCase):
             corrected, accepted = self.exercise(root, True)
             self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             graph = json.loads((corrected / 'graph.json').read_text())
-            self.assertEqual(graph['neoplay_bridge'], {'linkage': 'static', 'packaging': 'framework'})
+            self.assertEqual(graph['neoplay_bridge'], {'linkage': 'static', 'packaging': 'framework', 'shouldBuild': True})
             self.assertEqual(graph['google-cast-sdk']['linkage'], 'static')
-            self.assertEqual(graph['Flutter'], {'linkage': 'dynamic', 'packaging': 'framework'})
-            self.assertEqual(graph['UnrelatedDynamicFixture'], {'linkage': 'dynamic', 'packaging': 'framework'})
+            self.assertEqual(graph['Flutter'], {'linkage': 'dynamic', 'packaging': 'framework', 'shouldBuild': True})
+            self.assertEqual(graph['UnrelatedDynamicFixture'], {'linkage': 'dynamic', 'packaging': 'framework', 'shouldBuild': True})
             self.assertEqual((old / 'Podfile').read_text(), (corrected / 'Podfile').read_text())
             report = {'passed': True, 'sourceCommit': os.environ['GITHUB_SHA'],
                       'podspecSHA256': hashlib.sha256(PODSPEC.read_bytes()).hexdigest(),
