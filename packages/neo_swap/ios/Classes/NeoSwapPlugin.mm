@@ -250,6 +250,13 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #if defined(NEOSWAP_DONATION)
 - (void)startDonors {
     if (!NeoSwapExperimentProfile().donors() || self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+    if (NeoSwapExperimentProfile().configured) {
+        NeoSwapCPUBufferStats cpu{}; NeoSwapHostStats host{};
+        if (NeoSwap_CPUBufferSnapshot(&cpu) != NEOSWAP_OK || NeoSwap_HostSnapshot(&host) != NEOSWAP_OK) return;
+        // Warm only a consumer that can use loans. Other games create no
+        // donor process until a real allocation miss has queued a demand.
+        if (!cpu.enabled && !host.donor_pending_demand_bytes && !host.donor_inflight_demand_bytes) return;
+    }
     if (self.donorEpoch >= UINT64_MAX / 16) {
         self.donorGrowthRefusal = @{@"stage":@"donor_epoch_exhausted"};
         return;
@@ -350,10 +357,14 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     return total;
 }
 - (uint64_t)adaptiveDonationTarget {
-    if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return 0;
+    if (!NeoSwapExperimentProfile().donors() || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return 0;
     neostation::donation::PoolSnapshot pool{};
     neostation::donation::pool_snapshot(pool);
     if (pool.last_stage == neostation::donation::Stage::snapshot_busy) return 0;
+    if (NeoSwapExperimentProfile().configured && !pool.live_bytes) {
+        NeoSwapCPUBufferStats cpu{};
+        if (NeoSwap_CPUBufferSnapshot(&cpu) != NEOSWAP_OK || !cpu.enabled) return 0;
+    }
     // Existing file allocations cannot become donor loans by filling an idle
     // pool. Only real donor use and the separate demand queue justify growth.
     return neostation::donation::adaptive_donation_target(pool.live_bytes,
@@ -399,6 +410,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised || !cacheSample ||
         cacheHeadroom.usable_bytes < 128 * kMiB);
     (void)neostation::donation::pool_collect_lost();
+    if (NeoSwapExperimentProfile().configured && !self.donorDemand.bytes) {
+        NeoSwapDonationDemand demand{};
+        if (NeoSwap_ClaimDonationDemand(&demand) != NEOSWAP_OK) return;
+        self.donorDemand = demand;
+    }
 
     // Two helpers are enough to establish the warm floor quickly. Additional
     // donor processes are started only when the active pair cannot satisfy a
@@ -799,7 +815,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             @"faults":eventsValid ? @(memoryEvents.faults) : NSNull.null,
             @"pageins":eventsValid ? @(memoryEvents.pageins) : NSNull.null,
             @"cowFaults":eventsValid ? @(memoryEvents.cow_faults) : NSNull.null,
-            @"zeroFills":eventsValid ? @(memoryEvents.zero_fills) : NSNull.null,
+            @"zeroFills":NSNull.null, @"zeroFillsAvailable":@NO,
             @"scope":@"process_lifetime_kernel_counters_not_NeoSwap_restores"},
         @"systemMemory":@{@"valid":@(systemValid), @"kernelResult":@(systemResult), @"pageBytes":@(vm_page_size),
             @"freeBytes":systemValid ? @(uint64_t(systemMemory.free_count)*vm_page_size) : NSNull.null,

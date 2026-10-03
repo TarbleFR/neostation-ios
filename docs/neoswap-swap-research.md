@@ -63,11 +63,13 @@ pendant le processus et ne créent aucune nouvelle option utilisateur.
 | --- | --- | --- | --- |
 | `baseline` | Désactivé ; support ordinaire | Aucun lancement | Désactivé |
 | `relay` | Activé si vérifié | Aucun lancement | Désactivé |
-| `integrated` | Activé si vérifié | Un donneur initial, graine 16 Mio, croissance mesurée | Automatique sur les titres déjà admissibles |
+| `integrated` | Activé si vérifié | Un donneur initial pour un consommateur admissible, sinon demande réelle ; graine 16 Mio | Automatique sur les titres déjà admissibles |
 
 Dans le profil explicite `integrated`, la cible du pool CPU est constituée des
 prêts actifs plus 32 Mio de marge, arrondie par 16 Mio, avec le plafond existant
-de 5 Gio. À vide, cela représente une cible de 32 Mio plutôt que 512 Mio. Une
+de 5 Gio. Sans consommateur admissible ni demande réelle, aucun donneur n'est
+lancé et aucun délai de préchauffage n'est imposé au jeu. Pour un consommateur
+admissible à vide, cela représente une cible de 32 Mio plutôt que 512 Mio. Une
 véritable demande de buffer prime sur la petite graine de démarrage. Les
 réservations des requêtes en vol et les refus de pression globale sont conservés.
 La capacité de relais de 8 Gio reste une capacité, pas un objectif de résidence.
@@ -107,7 +109,8 @@ python3 tools/compare_neoswap_sessions.py \
 processus, pages libres/actives/inactives/wired/compressées du système, capacité
 retenue du relais, prêts effectivement utilisés, pool préparé et allocations
 fichier. Il ajoute profil/SHA, warnings UIKit, état thermique et compteurs
-`TASK_EVENTS_INFO` : faults, pageins, COW, zero fills. Ceux-ci sont des compteurs
+`TASK_EVENTS_INFO` : faults, pageins, COW. Le compteur `zeroFills` reste inconnu
+car cette API ne le fournit pas. Ceux-ci sont des compteurs
 noyau du processus, pas des restaurations NeoSwap.
 
 `NeoSwap-operations.jsonl` enregistre session, objet, domaine, index de bloc,

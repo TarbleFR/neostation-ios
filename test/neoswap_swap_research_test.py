@@ -52,32 +52,54 @@ int main(){assert(!rejects(0,0));assert(rejects(1,0));assert(rejects(0,1));asser
     subprocess.run([str(startup)],check=True)
     plugin=(ROOT/'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
     target=plugin.split('- (uint64_t)adaptiveDonationTarget {',1)[1].split('\n}',1)[0]
+    admission=plugin.split('- (void)startDonors {',1)[1].split('    if (self.donorEpoch',1)[0]
+    admission=admission[admission.index('    if (NeoSwapExperimentProfile().configured)'):]
+    warm=re.search(r'const BOOL warmEligible = (.*?);',bridge,re.S).group(1).replace('titleId.UTF8String ?: ""','title')
+    includes=work/'include';includes.mkdir();(includes/'neo_swap').symlink_to(ROOT/'packages/neo_swap/ios/Classes')
     policy=work/'policy.cpp';policy_exe=work/'policy'
     policy.write_text('''#include <cassert>
 #include "NeoSwapExperiment.h"
+#include "NeoSwapHost.h"
+#include "NeoSwapUsagePolicy.h"
 #include "Pool.h"
 constexpr uint64_t kMiB=1024*1024,kDonationWarmFloorBytes=512*kMiB,
     kDonationReserveBytes=128*kMiB,kDonationGrowthQuantumBytes=128*kMiB,kDonationHardLimitBytes=5*1024*kMiB;
-constexpr unsigned NEOSWAP_RPCS3=0;
 static neostation::experiment::Profile selected;
 static neostation::donation::PoolSnapshot observed{};
 static bool active=true;
+static bool cpu_enabled=true;
+static NeoSwapHostStats host{};
+static unsigned starts=0;
 const auto& NeoSwapExperimentProfile(){return selected;}
-bool NeoSwap_OwnerSessionActive(unsigned){return active;}
+extern "C" int NeoSwap_OwnerSessionActive(uint32_t){return active;}
+extern "C" int NeoSwap_CPUBufferSnapshot(NeoSwapCPUBufferStats* out){out->enabled=cpu_enabled;return NEOSWAP_OK;}
+extern "C" int NeoSwap_HostSnapshot(NeoSwapHostStats* out){*out=host;return NEOSWAP_OK;}
 namespace neostation::donation {void pool_snapshot(PoolSnapshot& out) noexcept{out=observed;}}
 uint64_t actualTarget(){'''+target+'''}
+void actualStartAdmission(){'''+admission+''';++starts;}
+bool actualWarm(std::string_view title){return '''+warm+''';}
 int main(){
     selected=neostation::experiment::parse("integrated");
+    cpu_enabled=false;actualStartAdmission();assert(starts==0);
+    host.donor_pending_demand_bytes=65536;actualStartAdmission();assert(starts==1);host={};
+    cpu_enabled=true;actualStartAdmission();assert(starts==2);
+    assert(!actualWarm("BLES00113"));assert(actualWarm("BCES00510"));
     assert(actualTarget()==32*kMiB);observed.live_bytes=64*kMiB;assert(actualTarget()==96*kMiB);
+    cpu_enabled=false;assert(actualTarget()==96*kMiB);observed.live_bytes=0;assert(actualTarget()==0);cpu_enabled=true;
     observed.live_bytes=kDonationHardLimitBytes;assert(actualTarget()==kDonationHardLimitBytes);
     active=false;assert(actualTarget()==0);active=true;observed.live_bytes=0;
     selected=neostation::experiment::parse(nullptr);assert(actualTarget()==512*kMiB);
+    assert(actualWarm("BLES00113"));
+    selected=neostation::experiment::parse("baseline");assert(!actualWarm("BCES00510"));assert(actualTarget()==0);
+    selected=neostation::experiment::parse("relay");assert(!actualWarm("BCES00510"));assert(actualTarget()==0);
     observed.last_stage=neostation::donation::Stage::snapshot_busy;assert(actualTarget()==0);
 }
 ''')
     subprocess.run([compiler,'-std=c++20','-Wall','-Wextra','-Werror','-I',str(ROOT/'packages/neo_swap/ios/Classes'),
+        '-I',str(includes),'-I',str(ROOT/'packages/rpcs3_internal_bridge/ios/Classes'),
         '-I',str(ROOT/'native/neoswap-donation'),str(policy),'-o',str(policy_exe)],check=True)
     subprocess.run([str(policy_exe)],check=True)
     report['productionStartupPredicateExecuted']=True
     report['productionAdaptiveDonationTargetExecuted']=True
+    report['productionDonorAdmissionAndBootWaitExecuted']=True
     print(json.dumps(report))

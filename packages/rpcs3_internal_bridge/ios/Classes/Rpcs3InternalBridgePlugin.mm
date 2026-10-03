@@ -1616,18 +1616,20 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       // making the full 512 MiB background warm target part of boot latency.
       // A timeout is degradable: RPCS3 boots and later allocations adopt donor
       // pages as the adaptive pool continues growing.
-      const int warmResult = NeoSwapExperimentProfile().donors() ? NeoSwap_WaitForDonationReady(
+      const BOOL warmEligible = NeoSwapExperimentProfile().donors() &&
+          (!NeoSwapExperimentProfile().configured || NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
+      const int warmResult = warmEligible ? NeoSwap_WaitForDonationReady(
           NeoSwapExperimentProfile().configured ? 16ULL*1024*1024 : kNeoSwapBootMinimumBytes,
           kNeoSwapBootWaitMs) : NEOSWAP_DISABLED;
       NeoSwapHostStats warmHost = {};
       const int warmSnapshot = NeoSwap_HostSnapshot(&warmHost);
       RPCS3Diagnostic(@"neoswap_warm_pool", [NSString stringWithFormat:
-          @"result=%d snapshot=%d minimum=%llu timeout_ms=%u prepared=%llu target=%llu donor_count=%u",
+          @"result=%d snapshot=%d minimum=%llu timeout_ms=%u prepared=%llu target=%llu donor_count=%u warm_eligible=%d",
           warmResult, warmSnapshot,
           (unsigned long long)(NeoSwapExperimentProfile().configured ? 16ULL*1024*1024 : kNeoSwapBootMinimumBytes), kNeoSwapBootWaitMs,
           (unsigned long long)warmHost.donor_prepared_bytes,
           (unsigned long long)warmHost.donor_target_bytes,
-          (unsigned)warmHost.donor_count]);
+          (unsigned)warmHost.donor_count, warmEligible]);
       if (!self.llvmSelfTestPassed) {
         typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
         auto selfTest = reinterpret_cast<SelfTest>(

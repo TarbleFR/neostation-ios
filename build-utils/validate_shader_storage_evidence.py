@@ -30,6 +30,7 @@ def validate(report,sha,root=ROOT):
             'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm','packages/neo_swap/ios/Classes/StorageABI.h'}
     paths.add('packages/neo_swap/ios/Classes/SourceABI.h')
     paths.add('packages/neo_swap/ios/Classes/NeoSwapSourceWork.h')
+    paths.add('packages/neo_swap/ios/Classes/NeoSwapExperiment.h')
     assert set(report['inputSHA256'])==paths,'Incomplete/extraneous storage input identity'
     for path,want in report['inputSHA256'].items():assert hashlib.sha256((root/path).read_bytes()).hexdigest()==want,path
 if __name__=='__main__':

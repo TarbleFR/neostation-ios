@@ -5,6 +5,9 @@ FOUNDATION_EXPORT NSObject* const FlutterMethodNotImplemented;
 @protocol FlutterBinaryMessenger <NSObject>
 @end
 @class FlutterMethodChannel;
+@interface FlutterError : NSObject
++ (instancetype)errorWithCode:(NSString*)code message:(NSString* _Nullable)message details:(id _Nullable)details;
+@end
 @interface FlutterMethodCall : NSObject
 @property(nonatomic,copy) NSString* method;
 @property(nonatomic,strong) id _Nullable arguments;
