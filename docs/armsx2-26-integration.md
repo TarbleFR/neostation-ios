@@ -17,6 +17,11 @@ Le framework reconstruit contient le cœur PCSX2/ARMSX2 et librashader Metal, pa
 l’exécutable ou les delegates de l’application ARMSX2. Le seul patch canonique a
 été rebasé sur le tag 2.6. Les ressources conservent leurs chemins relatifs.
 Le framework et Rust ciblent iOS 18, conformément au minimum de NeoStation.
+La cible embarquée lie directement la dépendance Zstandard et reçoit ses
+en-têtes depuis la cible CMake, même lorsque les sources du fournisseur changent
+de dossier. Seul `ARMSX2Bridge.mm` est compilé en ARC, conformément au tag 2.6.
+Le test de construction génère les véritables arguments du compilateur pour
+contrôler cette propagation et préserver le mode mémoire des autres fichiers.
 Le pont des sauvegardes rapides utilise les nouvelles signatures 2.6 à deux
 arguments de retour. Les slots du menu gardent leur comportement existant, sans
 création d'une sauvegarde d'annulation supplémentaire lors d'un chargement.
@@ -62,7 +67,8 @@ Le workflow `ARMSX2 native core` valide les sources, les paramètres BIOS et le
 cycle de fermeture/relancement, les fichiers de presets et leurs identifiants,
 la persistance par jeu et les échecs d’écriture, les traductions, le menu UIKit
 réel et la compilation du plugin hôte contre Flutter. Le binaire est refusé si
-le moteur Metal est absent ou si les presets ne sont pas empaquetés. Son
+le moteur Metal est absent ou si les 28 fichiers de shaders ne correspondent
+pas octet pour octet aux sources épinglées. Son
 `identity.json` lie le SHA hôte, le SHA des sources et le hash du framework.
 Le validateur de l’IPA vérifie aussi les presets après packaging.
 

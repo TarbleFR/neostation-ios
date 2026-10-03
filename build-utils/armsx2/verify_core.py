@@ -13,7 +13,7 @@ def re_search_symbol(symbols, symbol):
     return any(line.split()[-1:] == [symbol] and ' U ' not in line for line in symbols.splitlines())
 
 root = Path(__file__).resolve().parents[2]
-build, output = map(Path, sys.argv[1:3])
+build, output, source = map(Path, sys.argv[1:4])
 candidates = [p for p in build.rglob('ARMSX2Core.framework')
               if (p / 'ARMSX2Core').is_file() and 'Release-iphoneos' in str(p)]
 if len(candidates) != 1:
@@ -48,9 +48,17 @@ symbols = run('nm', str(binary))
 for symbol in ('_libra_mtl_filter_chain_create', '_libra_mtl_filter_chain_frame'):
     if not re_search_symbol(symbols, symbol):
         raise SystemExit('Missing compiled Metal shader runtime: ' + symbol)
-presets = sorted(resources.glob('shaders/presets/**/*.slangp'))
-if len(presets) < 10:
+presets = sorted(resources.glob('shaders/**/*.slangp'))
+if len(list(resources.glob('shaders/presets/**/*.slangp'))) < 10:
     raise SystemExit('Bundled iOS shader presets were not packaged')
+shader_source = source / 'platforms/ios/app/src/main/assets/shaders'
+shader_files = sorted(p for p in shader_source.rglob('*') if p.is_file())
+if not shader_files:
+    raise SystemExit('Pinned upstream shader assets are missing')
+for original in shader_files:
+    packaged = resources / 'shaders' / original.relative_to(shader_source)
+    if not packaged.is_file() or hashlib.sha256(packaged.read_bytes()).digest() != hashlib.sha256(original.read_bytes()).digest():
+        raise SystemExit('Bundled shader asset differs from pinned source: ' + str(original.relative_to(shader_source)))
 subprocess.run(['codesign', '--force', '--sign', '-', str(framework)], check=True)
 subprocess.run(['codesign', '--verify', '--strict', str(framework)], check=True)
 output.mkdir(parents=True, exist_ok=True)
@@ -71,6 +79,6 @@ if identity.get('abi_version') != header_abi:
 identity.update(host_commit=os.environ.get('GITHUB_SHA', ''),
                 sha256=hashlib.sha256((destination/'ARMSX2Core').read_bytes()).hexdigest(),
                 architectures=['arm64'], signature='ad-hoc; sideloading must re-sign',
-                shader_chains=True, bundled_shader_presets=len(presets), performance_overlays=True, device_runtime_tested=False)
+                shader_chains=True, bundled_shader_presets=len(presets), bundled_shader_files=len(shader_files), performance_overlays=True, device_runtime_tested=False)
 (output / 'identity.json').write_text(json.dumps(identity, indent=2)+'\n')
 print(json.dumps(identity, indent=2))

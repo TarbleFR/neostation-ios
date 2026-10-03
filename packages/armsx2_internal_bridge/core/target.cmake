@@ -10,6 +10,8 @@ target_compile_definitions(PCSX2_FLAGS INTERFACE ARMSX2_HAS_LIBRASHADER=1)
 add_library(ARMSX2Core SHARED
   ios_main.mm IOS/GamepadHaptics.mm IOS/HostImpls.mm IOS/PlaySoundAsync.mm
   ARMSX2Bridge.mm "${NEO_ARMSX2_ADAPTER_DIR}/core/ARMSX2Core.mm")
+# The 2.6 bridge uses ARC; the runtime and owned adapter still release by hand.
+set_property(SOURCE ARMSX2Bridge.mm APPEND PROPERTY COMPILE_OPTIONS "-fobjc-arc")
 # IOSRuntime.h only forward-declares ARMSX2GameView. The embedded render-window
 # adapter converts it to UIView, which requires the actual superclass declaration.
 # Keep this source-specific: no cast and no change to other engines or upstream UI.
@@ -34,7 +36,7 @@ target_compile_definitions(ARMSX2Core PRIVATE PCSX2_NO_PCAP=1 ARMSX2_HAS_LIBRASH
   NEO_ARMSX2_SOURCE_REVISION="${NEO_ARMSX2_SOURCE_REVISION}")
 target_compile_options(ARMSX2Core PRIVATE -fno-objc-arc)
 target_include_directories(ARMSX2Core PRIVATE "${NEO_ARMSX2_ADAPTER_DIR}/ios/Classes")
-target_link_libraries(ARMSX2Core PRIVATE PCSX2 SDL3::SDL3 librashader
+target_link_libraries(ARMSX2Core PRIVATE PCSX2 SDL3::SDL3 librashader Zstd::Zstd
   "-framework UIKit" "-framework AVFoundation" "-framework Metal"
   "-framework MetalKit" "-framework QuartzCore" "-framework CoreText"
   "-framework CoreGraphics" "-framework ImageIO" "-framework GameController"
@@ -75,7 +77,6 @@ target_link_options(ARMSX2Core PRIVATE
 		${ARMSX2_ROOT}/3rdparty/soundtouch/soundtouch
 		${ARMSX2_ROOT}/3rdparty/lz4/lz4/lib
 		${ARMSX2_ROOT}/3rdparty/lzma/include
-		${ARMSX2_ROOT}/3rdparty/zstd/zstd/lib
 		${ARMSX2_ROOT}/3rdparty/demangler/include
 		${ARMSX2_ROOT}/3rdparty/ccc/src
 		${CMAKE_BINARY_DIR}/3rdparty/SDL3/include-revision

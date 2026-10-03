@@ -9,6 +9,7 @@ mkdir -p "$BUILD" "$ROOT/dist/armsx2"
 python3 "$ROOT/test/armsx2_vm_shutdown_test.py" --upstream "$SOURCE"
 python3 "$ROOT/test/armsx2_bios_hacks_test.py" --upstream "$SOURCE"
 python3 "$ROOT/test/armsx2_save_state_test.py" --upstream "$SOURCE"
+python3 "$ROOT/test/armsx2_core_build_test.py"
 python3 "$ROOT/build-utils/armsx2/prepare_source.py" "$SOURCE"
 
 # Make the native artifact independent from GitHub runner/workspace paths.
@@ -39,4 +40,4 @@ cmake --build "$BUILD" --config Release --target ARMSX2Core -- \
   -sdk iphoneos -jobs 4 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   COMPILER_INDEX_STORE_ENABLE=NO \
   2>&1 | tee "$BUILD/compile.log"
-python3 "$ROOT/build-utils/armsx2/verify_core.py" "$BUILD" "$ROOT/dist/armsx2"
+python3 "$ROOT/build-utils/armsx2/verify_core.py" "$BUILD" "$ROOT/dist/armsx2" "$SOURCE"
