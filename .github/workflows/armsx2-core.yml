@@ -98,6 +98,7 @@ jobs:
           mkdir -p build/armsx2-diagnostics
           cp build/armsx2-core/*.log build/armsx2-diagnostics/ 2>/dev/null || true
           cp build/armsx2-core/CMakeCache.txt build/armsx2-diagnostics/ 2>/dev/null || true
+          cp build/armsx2-core/binary-path-leaks.txt build/armsx2-diagnostics/ 2>/dev/null || true
           printf 'host=%s\narmsx2=%s\n' "$GITHUB_SHA" '${{ steps.source.outputs.revision }}' > build/armsx2-diagnostics/identity.txt
       - uses: actions/upload-artifact@v4
         if: always()

@@ -312,6 +312,30 @@ index 75a8491dd..3aa1e4cd3 100644
  		"Secrets layer has already been set");
  	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_SECRETS, sif);
  }
+diff --git a/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt b/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt
+index 174a3b2a9..ac6e892a0 100644
+--- a/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt
++++ b/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt
+@@ -104,10 +104,17 @@ set(_lrs_lib "${_lrs_out_dir}/${_lrs_rust_target}/release/liblibrashader_capi.a"
+ # because rustc otherwise links at iOS 10.0 while cc builds librashader's C++ deps against
+ # the current SDK, and the link dies on ___chkstk_darwin. Two values that can drift apart
+ # reintroduce that silently.
++# Xcode's script phase does not preserve the host shell's compiler flags.
++# Capture the owned adapter's path maps at configure time and pass them to cargo.
++set(_lrs_cargo_env "IPHONEOS_DEPLOYMENT_TARGET=${ARMSX2_IOS_DEPLOYMENT_TARGET}")
++if(NEO_ARMSX2_ADAPTER_DIR)
++	foreach(flag RUSTFLAGS CFLAGS CXXFLAGS)
++		list(APPEND _lrs_cargo_env "${flag}=$ENV{${flag}}")
++	endforeach()
++endif()
+ add_custom_command(
+ 	OUTPUT "${_lrs_lib}"
+-	COMMAND ${CMAKE_COMMAND} -E env
+-		"IPHONEOS_DEPLOYMENT_TARGET=${ARMSX2_IOS_DEPLOYMENT_TARGET}"
++	COMMAND ${CMAKE_COMMAND} -E env ${_lrs_cargo_env}
+ 		${CARGO_EXECUTABLE} build --release
+ 			--manifest-path "${librashader_src_SOURCE_DIR}/librashader-capi/Cargo.toml"
+ 			--target ${_lrs_rust_target}
 diff --git a/platforms/ios/app/src/main/cpp/CMakeLists.txt b/platforms/ios/app/src/main/cpp/CMakeLists.txt
 index e0eabe9d8..fa0097ceb 100644
 --- a/platforms/ios/app/src/main/cpp/CMakeLists.txt

@@ -22,6 +22,11 @@ en-têtes depuis la cible CMake, même lorsque les sources du fournisseur change
 de dossier. Seul `ARMSX2Bridge.mm` est compilé en ARC, conformément au tag 2.6.
 Le test de construction génère les véritables arguments du compilateur pour
 contrôler cette propagation et préserver le mode mémoire des autres fichiers.
+Les remplacements de chemins Rust/C/C++ sont capturés à la configuration CMake
+et transmis explicitement à Cargo. Le test exécute la commande de production
+après suppression des variables du shell : il refuse la commande amont et
+valide la version adaptée. Le contrôle du binaire conserve un diagnostic détaillé
+si un chemin de machine de build subsiste.
 Le pont des sauvegardes rapides utilise les nouvelles signatures 2.6 à deux
 arguments de retour. Les slots du menu gardent leur comportement existant, sans
 création d'une sauvegarde d'annulation supplémentaire lors d'un chargement.

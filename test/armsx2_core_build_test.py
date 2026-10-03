@@ -6,11 +6,17 @@ compiling an emulator or claiming iOS/device validation.
 """
 from pathlib import Path
 import json
+import argparse
+import os
 import shlex
 import subprocess
+import sys
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--upstream',type=Path,required=True)
+args=parser.parse_args()
 with tempfile.TemporaryDirectory(prefix='armsx2-cmake-') as directory:
     fixture=Path(directory)
     upstream=fixture/'upstream'
@@ -63,3 +69,46 @@ set_source_files_properties(ios_main.mm IOS/GamepadHaptics.mm IOS/HostImpls.mm
         assert '-fobjc-arc' not in flags(name),name
     assert '-fexceptions' in flags('ARMSX2Core.mm')
 print('PASS: production CMake propagates relocated Zstandard headers; ARC applies only to the 2.6 bridge')
+
+# Generate the actual patched cargo command, then run it with host flags removed
+# from the build environment, as happens across Xcode's script-phase boundary.
+module=(args.upstream/'platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt').read_text()
+start=module.index('set(_lrs_out_dir ')
+end=module.index('set(ARMSX2_HAVE_LIBRASHADER ON PARENT_SCOPE)',start)
+with tempfile.TemporaryDirectory(prefix='armsx2-cargo-env-') as directory:
+    fixture=Path(directory);build=fixture/'build';source=fixture/'source'
+    source.mkdir();(source/'include').mkdir()
+    cargo=fixture/'cargo'
+    cargo.write_text('#!'+sys.executable+'\n'+r'''
+import json,os,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+target=Path(arguments[arguments.index('--target-dir')+1])
+output=target/'aarch64-apple-ios/release/liblibrashader_capi.a'
+output.parent.mkdir(parents=True,exist_ok=True);output.write_bytes(b'fixture')
+(target/'environment.json').write_text(json.dumps({k:os.environ.get(k) for k in ('RUSTFLAGS','CFLAGS','CXXFLAGS','IPHONEOS_DEPLOYMENT_TARGET')}))
+''')
+    cargo.chmod(0o755)
+    cmake=f'''
+cmake_minimum_required(VERSION 3.20)
+project(ARMSX2CargoEnvironment LANGUAGES NONE)
+set(NEO_ARMSX2_ADAPTER_DIR "{ROOT}/packages/armsx2_internal_bridge")
+set(ARMSX2_IOS_DEPLOYMENT_TARGET 18.0)
+set(_lrs_rust_target aarch64-apple-ios)
+set(librashader_src_SOURCE_DIR "{source}")
+set(CARGO_EXECUTABLE "{cargo}")
+'''+module[start:end]
+    (fixture/'CMakeLists.txt').write_text(cmake)
+    configured=os.environ.copy()
+    expected={'RUSTFLAGS':'--remap-path-prefix=/Users/runner/example=/source',
+              'CFLAGS':'-ffile-prefix-map=/Users/runner/example=/source -fmacro-prefix-map=/Users/runner/example=/source',
+              'CXXFLAGS':'-ffile-prefix-map=/Users/runner/example=/source -fdebug-prefix-map=/Users/runner/example=/source'}
+    configured.update(expected)
+    subprocess.run(['cmake','-S',str(fixture),'-B',str(build),'-G','Unix Makefiles'],env=configured,check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    clean=os.environ.copy()
+    for key in expected:clean.pop(key,None)
+    subprocess.run(['cmake','--build',str(build),'--target','librashader_cargo'],env=clean,check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    seen=json.loads((build/'cargo/environment.json').read_text())
+    assert all(seen[key]==value for key,value in expected.items()),seen
+    assert seen['IPHONEOS_DEPLOYMENT_TARGET']=='18.0'
+print('PASS: production cargo command preserves Rust and C/C++ path maps after the host environment is cleared')

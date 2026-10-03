@@ -23,6 +23,12 @@ binary = framework / 'ARMSX2Core'
 binary_bytes = binary.read_bytes()
 for forbidden in (b'/Users/runner/', b'/Users/builder/'):
     if forbidden in binary_bytes:
+        # Keep the rejected artifact out of dist, but preserve actionable origin
+        # evidence instead of reporting only the shared /Users/runner prefix.
+        leaked = sorted({s.decode('utf-8',errors='replace') for s in binary_bytes.split(b'\0') if forbidden in s})
+        report = build / 'binary-path-leaks.txt'
+        report.write_text('\n'.join(s[-4096:] for s in leaked[:50])+'\n')
+        print(report.read_text())
         raise SystemExit(f'Absolute CI path leaked into ARMSX2 Core: {forbidden!r}')
 def run(*args):
     return subprocess.check_output(args, text=True)
