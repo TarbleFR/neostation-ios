@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = '7a271185860fabc70b2823e5ea79d02cacdaec35a4fa990c421e88b79d169f3b'
+PATCH_SHA256 = 'b9b5e31730f94e34f32b84f0c2cfacff3bc3d02f03f3d716b192596315009f70'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -32,6 +32,10 @@ CORE_INPUTS = (
     'native/neoswap-storage/ShaderKey.h',
     'test/rpcs3_shader_storage_test.py',
     'test/native/rpcs3_shader_storage_client_test.cpp',
+    'native/neoswap-storage/SourceABI.h',
+    'native/neoswap-storage/SourceClient.h',
+    'test/rpcs3_source_archive_test.py',
+    'test/native/rpcs3_source_archive_client_test.cpp',
     'build-utils/build_rpcs3_embedded_core.sh',
     'build-utils/materialize_rpcs3_core.py',
     'build-utils/apply_rpcs3_llvm_patch.py',
@@ -135,10 +139,15 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'Unexpected diagnostics ABI')
     require('NEOSWAP_RELAY_ABI = 1' in (root / 'packages/neo_swap/ios/Classes/NeoSwapRelay.h').read_text(),
             'Unexpected page-relay ABI')
-    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h'):
+    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h', 'SourceABI.h', 'SourceClient.h'):
         payload = (root/'native/neoswap-storage'/name).read_bytes()
         require(hashlib.sha256(payload).hexdigest() == manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name], 'Storage Core contract differs: '+name)
     recipe = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
+    require(manifest['neoswap_source_archive']['abi'] == 1 and
+            manifest['neoswap_source_archive']['host_owned'] is True and
+            manifest['neoswap_source_archive']['device_tested'] is False,
+            'Cold GLSL source archive must be host-owned, independently versioned and honestly unvalidated on device')
+    require('test/rpcs3_source_archive_test.py' in recipe, 'Missing production cold-source regression')
     require('RPCS3_IOS_ABI="${RPCS3_IOS_ABI:-30}"' in recipe, 'Unexpected main Core ABI')
     require('test/rpcs3_xitrix_v0101_native_test.py' in recipe, 'Missing production native regressions')
     require('test/rpcs3_neoswap_relay_test.py' in recipe, 'Missing actual shared-memory relay regressions')
@@ -148,6 +157,8 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
     require('_rpcs3_ios_set_neoswap_relay_api' in core_workflow, 'Relay setter export must be verified')
     require("'neoswap_relay_abi':1" in core_workflow, 'Missing relay identity ABI')
     require("'neoswap_client_stats_abi':1" in core_workflow, 'Missing diagnostics identity ABI')
+    require("'neoswap_source_archive_abi':1" in core_workflow and
+            '_rpcs3_ios_set_source_archive_api' in core_workflow, 'Missing cold-source ABI/export identity')
     require("'core_input_sha256':core_input_hashes()" in core_workflow, 'Missing recipe/input identity')
     ipa_workflow = (root / '.github/workflows/neoswap-ipa.yml').read_text()
     block = ipa_workflow.split('# RPCS3_CORE_INPUTS_BEGIN\n', 1)[1].split('# RPCS3_CORE_INPUTS_END', 1)[0]
@@ -160,6 +171,8 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'IPA must reject a Core without shared-memory relay ABI 1')
     require('validate_core_input_identity(identity)' in ipa_workflow,
             'IPA must verify the complete Core input identity')
+    require("assert identity['neoswap_source_archive_abi'] == 1" in ipa_workflow,
+            'IPA must reject a Core without cold-source archive ABI 1')
     if source_root is not None:
         head = subprocess.check_output(['git', '-C', str(source_root), 'rev-parse', 'HEAD'], text=True).strip()
         require(head == UPSTREAM, 'Materialized source base changed')
@@ -194,6 +207,7 @@ def validate_exact_pin(commit: str, root: Path = ROOT) -> None:
 def validate_core_input_identity(identity: dict, root: Path = ROOT) -> None:
     for name, expected in (
         ('abi_version', 30), ('neoswap_client_abi', 1), ('neoswap_client_stats_abi', 1), ('neoswap_relay_abi', 1),
+        ('neoswap_storage_abi', 1), ('neoswap_source_archive_abi', 1),
         ('source_commit', UPSTREAM), ('source_patch_sha256', PATCH_SHA256),
     ):
         value = identity.get(name)

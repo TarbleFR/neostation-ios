@@ -800,7 +800,11 @@ jobs:
             native/neoswap-storage/Client.h \
             native/neoswap-storage/ShaderKey.h \
             test/rpcs3_shader_storage_test.py \
-            test/native/rpcs3_shader_storage_client_test.cpp
+            test/native/rpcs3_shader_storage_client_test.cpp \
+            native/neoswap-storage/SourceABI.h \
+            native/neoswap-storage/SourceClient.h \
+            test/rpcs3_source_archive_test.py \
+            test/native/rpcs3_source_archive_client_test.cpp
           # RPCS3_CORE_INPUTS_END
           # The independent host broker/donation is rebuilt by this IPA job.
           # Only the Core source, client ABI, recipe and native tests are pinned.
@@ -825,6 +829,7 @@ jobs:
           assert identity['neoswap_client_stats_abi'] == 1, identity
           assert identity['neoswap_relay_abi'] == 1, identity
           assert identity['neoswap_storage_abi'] == 1, identity
+          assert identity['neoswap_source_archive_abi'] == 1, identity
           validate_core_input_identity(identity)
           passive = validate_passive_dlopen(data)
           assert passive['forbiddenReachability'] is False, passive
@@ -1144,6 +1149,10 @@ jobs:
           managed=json.loads((folder/'managed-swap.json').read_text())
           validate_managed(managed,sha)
           (Path('build/fast-diagnostics')/'managed-swap-evidence.json').write_text(json.dumps(managed,indent=2))
+          from validate_source_archive_evidence import validate as validate_source
+          source=json.loads((folder/'source-archive.json').read_text())
+          validate_source(source,sha,require_apple=True)
+          (Path('build/fast-diagnostics')/'source-archive-evidence.json').write_text(json.dumps(source,indent=2))
           print('Exact storage consumer/host/sdk/simulator/GPU evidence verified:',run['id'])
           PYSTORAGE
 

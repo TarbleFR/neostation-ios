@@ -2,6 +2,7 @@
 #import "NeoSwapStorageService.h"
 #import <UIKit/UIKit.h>
 #include "Storage/ShaderCache.h"
+#include "Storage/SourceArchive.h"
 #include "Storage/ShaderPolicy.h"
 #include "Storage/SessionSlot.h"
 #include <atomic>
@@ -20,9 +21,12 @@ struct State {
     dispatch_queue_t queue;
     dispatch_source_t timer=nullptr,pressureSource=nullptr;
     SessionSlot<ShaderCache> active;
+    SessionSlot<neostation::source_archive::Archive> sourceArchive;
     std::vector<std::shared_ptr<ShaderCache>> retired;
+    std::vector<std::shared_ptr<neostation::source_archive::Archive>> retiredSources;
     std::atomic<uint64_t> requestedGeneration{1};
     std::atomic<int> binderResult{NS_STORAGE_DISABLED};
+    std::atomic<int> sourceBinderResult{NS_SOURCE_DISABLED};
     std::mutex snapshotMutex;
     NSDictionary* cached=@{};
     NSDictionary* lastSessionCache=@{};
@@ -34,21 +38,46 @@ struct State {
     Pressure memoryPressure=Pressure::normal;
     uint64_t tick=0,started=0,stopped=0,setupFailures=0,retirementRefusals=0,warningEvents=0;
 };
+const char utilityQueueKey=0;
 State& state() {
     static State* s=[] {
         auto* p=new State;
         p->retired.reserve(4);
+        p->retiredSources.reserve(4);
         p->queue=dispatch_queue_create("neostation.storage.shader.utility",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,QOS_CLASS_UTILITY,0));
+        dispatch_queue_set_specific(p->queue,&utilityQueueKey,(void*)&utilityQueueKey,nullptr);
         return p;
     }();
     return *s;
 }
 void applyPressure(State& s) {
-    auto cache=s.active.control_load();if(!cache)return;
-    cache->pause(s.background);
     const Pressure level=s.background ? Pressure::critical :
         s.thermal>=NSProcessInfoThermalStateSerious && s.memoryPressure==Pressure::normal ? Pressure::warning:s.memoryPressure;
-    cache->pressure(level);
+    if(auto cache=s.active.control_load()){cache->pause(s.background);cache->pressure(level);}
+    if(auto source=s.sourceArchive.control_load()){source->pause(s.background);source->pressure(level);}
+}
+NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,State& s){
+    const auto x=archive.snapshot();const auto& m=x.managed;const auto& d=m.store;
+    return @{
+        @"abi":@1,@"active":@(archive.accepting()&&s.sourceBinderResult.load()==NS_SOURCE_OK),
+        @"binderResult":@(s.sourceBinderResult.load()),@"session":@(x.session),
+        @"scope":@"owned GLSL source after successful GPU module creation; no guest/JIT/GPU paging",
+        @"sources":@(x.sources),@"pending":@(x.pending),@"admissions":@(x.admissions),@"refusals":@(x.refusals),
+        @"stagingRamBytes":@(x.staging_bytes),@"stagingRamPeakBytes":@(x.staging_peak),@"stagingBudgetBytes":@(4*MiB),
+        @"managedMappingBudgetBytes":@(8*MiB),@"budgetIsProcessFootprint":@NO,
+        @"logicalBytes":@(m.logical_bytes),@"managedMappedBytes":@(m.resident_mapped_bytes),
+        @"backendWorkspaceBoundBytes":@(m.backend_workspace_bound_bytes),
+        @"archivedSourceBytesCumulative":@(x.archived_bytes),@"archiveFailures":@(x.archive_failures),
+        @"sourceReads":@(x.reads),@"returnedArchivedSourceBytesCumulative":@(x.restored_bytes),
+        @"coreReleasedSourceCapacityBytesCumulative":@(x.core_released_capacity),
+        @"readFailures":@(x.read_failures),@"lastErrno":@(x.last_errno),
+        @"checkpointedBytesCumulative":@(m.checkpointed_bytes),@"releasedOwnedMappedBytesCumulative":@(m.released_owned_bytes),
+        @"diskReadBytes":@(d.bytes_read),@"diskWriteBytes":@(d.bytes_written),@"allocatedFileBytes":@(d.allocated_file_bytes),
+        @"restoredDiskLogicalBytesCumulative":@(d.restored_logical_bytes),
+        @"ioErrors":@(d.io_errors),@"corruptions":@(d.corruptions),@"quotaRefusals":@(d.quota_refusals),
+        @"onAdmissionRefusal":@"retain original Core string",@"onWriteFailure":@"retain complete host RAM snapshot",
+        @"physicalIPhoneValidated":@NO,@"gameplayGainValidated":@NO
+    };
 }
 NSDictionary* statsDictionary(const ShaderStats& x) {
     const auto& d=x.store;
@@ -107,6 +136,8 @@ void snapshotOnQueue(State& s) {
         result[@"cache"]=statsDictionary(cache->snapshot());
         if(!cache->accepting()&&!s.background)result[@"reason"]=@"cache_disabled_after_invalidation_contention";
     }
+    if(auto source=s.sourceArchive.control_load())result[@"sourceArchive"]=sourceDictionary(*source,s);
+    else result[@"sourceArchive"]=@{@"active":@NO,@"binderResult":@(s.sourceBinderResult.load())};
     auto metrics=sample_process();
     result[@"processResidentBytes"]=metrics.resident_valid?@(metrics.resident_bytes):NSNull.null;
     result[@"processFootprintBytes"]=metrics.footprint_valid?@(metrics.footprint_bytes):NSNull.null;
@@ -123,8 +154,14 @@ void reap(State& s) {
     for(auto it=s.retired.begin();it!=s.retired.end();) {
         if(it->use_count()==1)it=s.retired.erase(it);else ++it;
     }
+    for(auto it=s.retiredSources.begin();it!=s.retiredSources.end();){
+        if(it->use_count()==1)it=s.retiredSources.erase(it);else ++it;
+    }
 }
 void retireOnQueue(State& s) {
+    if(auto old=s.sourceArchive.exchange(nullptr)){
+        old->pause(true);old->pressure(Pressure::critical);s.retiredSources.push_back(std::move(old));
+    }
     if(auto old=s.active.exchange(nullptr)){
         s.lastSessionCache=statsDictionary(old->snapshot());
         old->pause(true);old->pressure(Pressure::critical);s.retired.push_back(std::move(old));++s.stopped;
@@ -157,6 +194,48 @@ void prefetch(uint64_t epoch,const uint8_t* key){if(!key)return;try{if(auto cach
 void invalidate(uint64_t epoch,const uint8_t* key){if(!key)return;try{if(auto cache=current(epoch))cache->invalidate(keyFrom(key));}catch(...) {}}
 void event(uint64_t epoch,uint32_t kind,uint64_t bytes){try{if(auto cache=current(epoch))cache->event(kind,bytes);}catch(...) {}}
 const NeoSwapStorageAPI api{sizeof(api),NEOSWAP_STORAGE_ABI,session,acquire,publish,release,prefetch,invalidate,event};
+std::shared_ptr<neostation::source_archive::Archive> currentSource(uint64_t epoch){
+    auto& s=state();if(!epoch||s.sourceBinderResult.load()!=NS_SOURCE_OK||s.requestedGeneration.load()!=epoch)return {};
+    auto source=s.sourceArchive.try_load();return source&&source->generation()==epoch?source:nullptr;
+}
+uint64_t sourceSession(){auto& s=state();const auto epoch=s.requestedGeneration.load();auto source=currentSource(epoch);return source&&source->accepting()?epoch:0;}
+int sourceAdmit(uint64_t epoch,uint32_t domain,const char* text,uint64_t bytes,uint64_t* object){
+    if(!object)return NS_SOURCE_INVALID;*object=0;
+    if(!text||bytes>NEOSWAP_SOURCE_MAX_BYTES)return NS_SOURCE_INVALID;
+    try{
+        auto source=currentSource(epoch);if(!source)return NS_SOURCE_DISABLED;
+        const auto result=source->admit(domain,text,static_cast<size_t>(bytes));*object=result.object;
+        if(result.code==NS_SOURCE_OK)dispatch_async(state().queue,^{try{source->maintain();}catch(...) {}});
+        return result.code;
+    }catch(...){return NS_SOURCE_BUSY;}
+}
+int sourceRead(uint64_t epoch,uint64_t object,char* output,uint64_t bytes,int* os_error){
+    if(os_error)*os_error=0;
+    if(!output||!os_error||bytes>NEOSWAP_SOURCE_MAX_BYTES)return NS_SOURCE_INVALID;
+    __block int result=NS_SOURCE_DISABLED;
+    // Only debug/export asks for archived source. All storage and destruction
+    // runs on this queue; the returned string belongs to Core, never a lease.
+    const auto operation=^{
+        try{
+            auto& s=state();auto source=s.sourceArchive.control_load();
+            if(s.requestedGeneration.load()==epoch && source && source->generation()==epoch)
+                result=source->read(object,output,static_cast<size_t>(bytes),*os_error);
+        }catch(...){result=NS_SOURCE_BUSY;}
+    };
+    if(dispatch_get_specific(&utilityQueueKey))operation();else dispatch_sync(state().queue,operation);
+    return result;
+}
+void sourceDiscard(uint64_t epoch,uint64_t object){
+    dispatch_async(state().queue,^{
+        auto& s=state();auto source=s.sourceArchive.control_load();
+        if(!source || source->generation()!=epoch){
+            source.reset();for(auto& old:s.retiredSources)if(old->generation()==epoch){source=old;break;}
+        }
+        try{if(source){source->discard(object);source->maintain();}}catch(...) {}
+    });
+}
+void sourceReleased(uint64_t epoch,uint64_t bytes){if(auto source=currentSource(epoch))source->released(bytes);}
+const NeoSwapSourceAPI sourceAPI{sizeof(sourceAPI),NEOSWAP_SOURCE_ABI,sourceSession,sourceAdmit,sourceRead,sourceDiscard,sourceReleased};
 }
 
 void NeoSwapStorage_Initialize(void) {
@@ -166,8 +245,9 @@ void NeoSwapStorage_Initialize(void) {
         if(!s.timer){s.reason=@"timer_unavailable";snapshotOnQueue(s);return;}
         dispatch_source_set_timer(s.timer,dispatch_time(DISPATCH_TIME_NOW,250*NSEC_PER_MSEC),250*NSEC_PER_MSEC,25*NSEC_PER_MSEC);
         dispatch_source_set_event_handler(s.timer,^{@autoreleasepool {
-            try{auto& stateRef=state();auto cache=stateRef.active.control_load();if(!cache&&stateRef.retired.empty())return;
-                if(cache)cache->maintain();reap(stateRef);if(++stateRef.tick%4==0)snapshotOnQueue(stateRef);}
+            try{auto& stateRef=state();auto cache=stateRef.active.control_load();auto source=stateRef.sourceArchive.control_load();
+                if(!cache&&!source&&stateRef.retired.empty()&&stateRef.retiredSources.empty())return;
+                if(cache)cache->maintain();if(source)source->maintain();reap(stateRef);if(++stateRef.tick%4==0)snapshotOnQueue(stateRef);}
             catch(const std::exception& error){auto& stateRef=state();stateRef.lastFailure=[NSString stringWithUTF8String:error.what()]?:@"maintenance_error";}
         }});dispatch_resume(s.timer);
         s.pressureSource=dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE,0,
@@ -193,7 +273,9 @@ void NeoSwapStorage_Initialize(void) {
     });
 }
 const NeoSwapStorageAPI* NeoSwapStorage_GetAPI(uint32_t version){NeoSwapStorage_Initialize();return version==NEOSWAP_STORAGE_ABI?&api:nullptr;}
+const NeoSwapSourceAPI* NeoSwapStorage_GetSourceAPI(uint32_t version){NeoSwapStorage_Initialize();return version==NEOSWAP_SOURCE_ABI?&sourceAPI:nullptr;}
 void NeoSwapStorage_SetBinderResult(int result){state().binderResult.store(result);}
+void NeoSwapStorage_SetSourceBinderResult(int result){state().sourceBinderResult.store(result);}
 BOOL NeoSwapStorage_GetPreference(void){return [NSUserDefaults.standardUserDefaults boolForKey:preferenceKey];}
 void NeoSwapStorage_SetPreference(BOOL enabled){[NSUserDefaults.standardUserDefaults setBool:enabled forKey:preferenceKey];}
 void NeoSwapStorage_BeginSession(NSString* title) {
@@ -204,7 +286,7 @@ void NeoSwapStorage_BeginSession(NSString* title) {
         retireOnQueue(x);x.title=selected;x.lastFailure=@"";
         if(!enabled){x.reason=@"disabled";snapshotOnQueue(x);return;}
         if(!shader_storage_title(selected.UTF8String?:"")){x.reason=@"unsupported_title";snapshotOnQueue(x);return;}
-        if(x.retired.size()>=2){++x.retirementRefusals;x.reason=@"retired_sessions_busy";snapshotOnQueue(x);return;}
+        if(x.retired.size()>=2||x.retiredSources.size()>=2){++x.retirementRefusals;x.reason=@"retired_sessions_busy";snapshotOnQueue(x);return;}
         if(x.background||!x.pressureSource){x.reason=@"background_or_pressure_monitor_unavailable";snapshotOnQueue(x);return;}
         try {
             auto manager=NSFileManager.defaultManager;
@@ -217,8 +299,10 @@ void NeoSwapStorage_BeginSession(NSString* title) {
             Config config;config.ram_bytes=8*MiB;config.warm_bytes=MiB;config.disk_bytes=128*MiB;
             config.max_entries=4096;config.compression_budget_us=500;
             auto cache=std::make_shared<ShaderCache>(directory.fileSystemRepresentation,generation,config);
+            auto source=std::make_shared<neostation::source_archive::Archive>(directory.fileSystemRepresentation,generation);
             if(x.requestedGeneration.load()!=generation)return;
-            (void)x.active.exchange(std::move(cache));++x.started;x.reason=@"ready";applyPressure(x);snapshotOnQueue(x);
+            (void)x.active.exchange(std::move(cache));(void)x.sourceArchive.exchange(std::move(source));
+            ++x.started;x.reason=@"ready";applyPressure(x);snapshotOnQueue(x);
         }catch(const std::exception& error){++x.setupFailures;x.reason=@"setup_failed";x.lastFailure=[NSString stringWithUTF8String:error.what()]?:@"unknown";snapshotOnQueue(x);}
     }});
 }

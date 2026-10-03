@@ -34,9 +34,10 @@ assert manifest['relay_capacity_is_resident_ram'] is False
 assert manifest['relay_target_capacity_bytes'] == 8 * 1024 ** 3
 assert manifest['relay_target_object_count'] == 16
 assert manifest['abi']['neoswap_managed'] == 1
+assert manifest['abi']['neoswap_source_archive'] == 1
 managed = manifest['managed_swap']
-assert managed['stage'] == 'owned CPU framework, explicit caller lifecycle'
-assert managed['integrated_rpcs3_consumers'] == []
+assert managed['stage'] == 'owned CPU framework with compiled GLSL source consumer'
+assert managed['integrated_rpcs3_consumers'] == ['compiled GLSL source snapshots']
 assert managed['physical_iPhone_validated'] is False
 assert managed['gameplay_validated'] is False
 assert managed['automatic_guest_paging_activated'] is False
@@ -50,6 +51,11 @@ assert managed['required_evidence'] == [
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    'native/neoswap-storage/SourceABI.h',
+    'native/neoswap-storage/SourceClient.h',
+    'native/neoswap-storage/SourceArchive.h',
+    'native/neoswap-storage/SourceArchive.cpp',
+    'packages/neo_swap/ios/Classes/SourceABI.h',
     # Build398: bounded owned CPU swap module; Core and shader ABI retained.
     'native/neoswap-storage/ManagedSwap.h',
     'native/neoswap-storage/ManagedSwap.cpp',
@@ -192,6 +198,12 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'native/neoswap-storage/run_source_validation.py',
+    'native/neoswap-storage/tests/source_archive_test.cpp',
+    'build-utils/validate_source_archive_evidence.py',
+    'test/neoswap_source_archive_host_test.py',
+    'test/rpcs3_source_archive_test.py',
+    'test/native/rpcs3_source_archive_client_test.cpp',
     # Actual mutable block/file cycle, C boundary and Swift interop proofs.
     'native/neoswap-storage/run_managed_validation.py',
     'native/neoswap-storage/tests/managed_swap_test.cpp',

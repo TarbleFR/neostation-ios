@@ -9068,12 +9068,16 @@ index a604696..819de43 100644
  			ensure(single_target_pass != VK_NULL_HANDLE);
  
 diff --git a/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp b/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp
-index 20a4250..fefe72b 100644
+index 20a4250..6c78b5f 100644
 --- a/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp
 +++ b/rpcs3/Emu/RSX/VK/VKProgramPipeline.cpp
-@@ -101,10 +101,46 @@ namespace vk
+@@ -100,11 +100,55 @@ namespace vk
+ 		void shader::create(::glsl::program_domain domain, const std::string& source)
  		{
  			type     = domain;
++#ifdef RPCS3_IOS
++            m_source_archive.reset();
++#endif
  			m_source = source;
 +#ifdef RPCS3_IOS
 +            m_storage_ticket = neostation::storage_client::shader_ticket(source, static_cast<uint32_t>(domain));
@@ -9112,13 +9116,18 @@ index 20a4250..fefe72b 100644
 +            }
 +            if (result == neostation::storage_client::CompileResult::module_failure)
 +                fmt::throw_exception("Failed to create %s shader module: %d", to_string(type), static_cast<int>(native_result));
++            // The module has consumed its bytecode. Keep the compiler/dump
++            // path unchanged, then transfer this otherwise retained CPU text
++            // to the host. Refusal keeps the original string intact; disk I/O
++            // and verified eviction happen later on the host utility queue.
++            (void)m_source_archive.offload(m_source, static_cast<uint32_t>(type));
 +            return m_handle;
 +#else
 +
  			ensure(m_handle == VK_NULL_HANDLE);
  
  			if (!spirv::compile_glsl_to_spv(m_compiled, m_source, type, ::glsl::glsl_rules_vulkan))
-@@ -123,6 +159,7 @@ namespace vk
+@@ -123,10 +167,14 @@ namespace vk
  			vkCreateShaderModule(*g_render_device, &vs_info, nullptr, &m_handle);
  
  			return m_handle;
@@ -9126,17 +9135,47 @@ index 20a4250..fefe72b 100644
  		}
  
  		void shader::destroy()
-@@ -144,6 +181,17 @@ namespace vk
+ 		{
++#ifdef RPCS3_IOS
++            m_source_archive.reset();
++#endif
+ 			m_source.clear();
+ 			m_compiled.clear();
+ 
+@@ -137,13 +185,39 @@ namespace vk
+ 			}
+ 		}
+ 
++#ifdef RPCS3_IOS
++		std::string shader::get_source() const
++#else
+ 		const std::string& shader::get_source() const
+-		{
++#endif
++		{
++#ifdef RPCS3_IOS
++            if (m_source_archive.archived())
++            {
++                std::string restored;
++                int os_error = 0;
++                const int status = m_source_archive.restore(restored, os_error);
++                if (status != NS_SOURCE_OK)
++                    fmt::throw_exception("NeoSwap GLSL debug restore failed: status=%d errno=%d", status, os_error);
++                return restored;
++            }
++#endif
+ 			return m_source;
+ 		}
  
  		const std::vector<u32> shader::get_compiled() const
  		{
 +#ifdef RPCS3_IOS
 +            // Debug/export accessor remains complete after the redundant CPU
 +            // vector was admitted to storage. It never exposes partial data.
-+            if (m_compiled.empty() && !m_source.empty() && m_handle)
++            if (m_compiled.empty() && (!m_source.empty() || m_source_archive.archived()) && m_handle)
 +            {
 +                std::vector<u32> regenerated;
-+                auto source = m_source;
++                auto source = get_source();
 +                ensure(spirv::compile_glsl_to_spv(regenerated, source, type, ::glsl::glsl_rules_vulkan));
 +                return regenerated;
 +            }
@@ -9145,29 +9184,43 @@ index 20a4250..fefe72b 100644
  		}
  
 diff --git a/rpcs3/Emu/RSX/VK/VKProgramPipeline.h b/rpcs3/Emu/RSX/VK/VKProgramPipeline.h
-index 79b8371..44c9103 100644
+index 79b8371..f6ad7f1 100644
 --- a/rpcs3/Emu/RSX/VK/VKProgramPipeline.h
 +++ b/rpcs3/Emu/RSX/VK/VKProgramPipeline.h
-@@ -9,6 +9,9 @@
+@@ -9,6 +9,10 @@
  #include <string>
  #include <vector>
  #include <variant>
 +#ifdef RPCS3_IOS
 +#include "ios/NeoSwapStorage/ShaderKey.h"
++#include "ios/NeoSwapStorage/SourceClient.h"
 +#endif
  
  namespace vk
  {
-@@ -117,6 +120,9 @@ namespace vk
+@@ -117,6 +121,10 @@ namespace vk
  			VkShaderModule m_handle = VK_NULL_HANDLE;
  			std::string m_source;
  			std::vector<u32> m_compiled;
 +#ifdef RPCS3_IOS
 +			neostation::storage_client::Ticket m_storage_ticket{};
++			neostation::source_client::ColdSource m_source_archive;
 +#endif
  
  		public:
  			shader() = default;
+@@ -128,7 +136,11 @@ namespace vk
+ 
+ 			void destroy();
+ 
++#ifdef RPCS3_IOS
++			std::string get_source() const;
++#else
+ 			const std::string& get_source() const;
++#endif
+ 			const std::vector<u32> get_compiled() const;
+ 
+ 			VkShaderModule get_handle() const;
 diff --git a/rpcs3/Emu/RSX/VK/VKQueryPool.cpp b/rpcs3/Emu/RSX/VK/VKQueryPool.cpp
 index bcd00a9..f47ed3c 100644
 --- a/rpcs3/Emu/RSX/VK/VKQueryPool.cpp
@@ -12215,6 +12268,105 @@ index 0000000..86f7444
 +    return t;
 +}
 +}
+diff --git a/rpcs3/ios/NeoSwapStorage/SourceABI.h b/rpcs3/ios/NeoSwapStorage/SourceABI.h
+new file mode 100644
+index 0000000..b50f81e
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapStorage/SourceABI.h
+@@ -0,0 +1,30 @@
++// SPDX-License-Identifier: MIT
++#ifndef NEOSTATION_SOURCE_ARCHIVE_ABI_H
++#define NEOSTATION_SOURCE_ARCHIVE_ABI_H
++#include <stdint.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++/* Optional host-owned archive for immutable, compiled GLSL source. Admission
++ * snapshots at most 1 MiB, never waits for I/O and keeps ownership on refusal.
++ * The host checkpoints on its utility queue before releasing its snapshot.
++ * read copies into caller-owned output: it is a synchronous debug/export
++ * operation, NOT a rendering-thread cache lookup or a guest-memory pager. */
++enum { NEOSWAP_SOURCE_ABI = 1, NEOSWAP_SOURCE_MAX_BYTES = 1024*1024 };
++enum NeoSwapSourceResult { NS_SOURCE_OK=0, NS_SOURCE_BUSY=1,
++    NS_SOURCE_DISABLED=2, NS_SOURCE_INVALID=3, NS_SOURCE_IO=4,
++    NS_SOURCE_QUOTA=5, NS_SOURCE_MISSING=6, NS_SOURCE_PRESSURE=7 };
++typedef struct NeoSwapSourceAPI {
++    uint32_t struct_size, abi_version;
++    uint64_t (*session)(void);
++    int (*admit)(uint64_t session, uint32_t domain, const char* source,
++                 uint64_t bytes, uint64_t* object);
++    int (*read)(uint64_t session, uint64_t object, char* output,
++                uint64_t exact_bytes, int* os_error);
++    void (*discard)(uint64_t session, uint64_t object);
++    void (*released)(uint64_t session, uint64_t source_capacity);
++} NeoSwapSourceAPI;
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/rpcs3/ios/NeoSwapStorage/SourceClient.h b/rpcs3/ios/NeoSwapStorage/SourceClient.h
+new file mode 100644
+index 0000000..c652c93
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapStorage/SourceClient.h
+@@ -0,0 +1,57 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include "SourceABI.h"
++#include <atomic>
++#include <memory>
++#include <string>
++#include <utility>
++namespace neostation::source_client {
++inline constinit std::atomic<const NeoSwapSourceAPI*> installed{nullptr};
++inline int install(const NeoSwapSourceAPI* api) noexcept {
++    if(!api || api->struct_size!=sizeof(*api) || api->abi_version!=NEOSWAP_SOURCE_ABI ||
++       !api->session || !api->admit || !api->read || !api->discard || !api->released)
++        return NS_SOURCE_INVALID;
++    const NeoSwapSourceAPI* expected=nullptr;
++    return installed.compare_exchange_strong(expected,api)||expected==api ? NS_SOURCE_OK:NS_SOURCE_INVALID;
++}
++struct Reference final {
++    const NeoSwapSourceAPI* api=nullptr;
++    uint64_t session=0,object=0,bytes=0;
++    ~Reference(){if(api && object)api->discard(session,object);}
++};
++// Shared ownership preserves shader moves/copies without double retirement.
++// A restored string owns its bytes; no reference escapes a temporary lease.
++class ColdSource final {
++public:
++    void reset() noexcept { reference_.reset(); }
++    bool archived() const noexcept { return bool(reference_); }
++    bool offload(std::string& source,uint32_t domain) noexcept {
++        if(reference_ || source.empty())return false;
++        const auto* api=installed.load();if(!api)return false;
++        const auto session=api->session();if(!session)return false;
++        try {
++            auto ref=std::make_shared<Reference>(); // Before host ownership transfer.
++            ref->api=api;ref->session=session;ref->bytes=source.size();
++            uint64_t object=0;
++            if(api->admit(session,domain,source.data(),source.size(),&object)!=NS_SOURCE_OK || !object)
++                return false;
++            ref->object=object;reference_=std::move(ref);
++            const auto capacity=source.capacity();std::string().swap(source);
++            api->released(session,capacity);
++            return true;
++        }catch(...){return false;}
++    }
++    int restore(std::string& output,int& os_error) const noexcept {
++        os_error=0;output.clear();if(!reference_)return NS_SOURCE_MISSING;
++        const auto& ref=*reference_;
++        try {
++            output.resize(static_cast<size_t>(ref.bytes));
++            const auto result=ref.api->read(ref.session,ref.object,output.data(),ref.bytes,&os_error);
++            if(result!=NS_SOURCE_OK)output.clear();
++            return result;
++        }catch(...){output.clear();return NS_SOURCE_BUSY;}
++    }
++private:
++    std::shared_ptr<Reference> reference_;
++};
++}
 diff --git a/rpcs3/ios/NeoSwapStorage/StorageABI.h b/rpcs3/ios/NeoSwapStorage/StorageABI.h
 new file mode 100644
 index 0000000..535b53e
@@ -12403,18 +12555,19 @@ index 0000000..0c2639e
 +}
 +} // namespace vk
 diff --git a/rpcs3/ios/RPCS3IOS.cpp b/rpcs3/ios/RPCS3IOS.cpp
-index 74a6dc7..2c85c1e 100644
+index 74a6dc7..f63811a 100644
 --- a/rpcs3/ios/RPCS3IOS.cpp
 +++ b/rpcs3/ios/RPCS3IOS.cpp
-@@ -1,4 +1,7 @@
+@@ -1,4 +1,8 @@
  #include "RPCS3IOS.h"
 +#include "NeoSwapClient.h"
 +#include "NeoSwapRelayClient.h"
 +#include "NeoSwapStorage/Client.h"
++#include "NeoSwapStorage/SourceClient.h"
  #include "RPCS3IOSBigPicture.h"
  #include "RPCS3IOSBootProgress.h"
  #include "RPCS3IOSCapabilities.h"
-@@ -20,10 +23,15 @@
+@@ -20,10 +24,15 @@
  #include "GameLibrary.h"
  #include "GameUpdateManifest.h"
  #include "IOSGSFrame.h"
@@ -12430,7 +12583,7 @@ index 74a6dc7..2c85c1e 100644
  #include "Emu/IdManager.h"
  #include "Emu/Audio/IOS/IOSAudioBackend.h"
  #include "Emu/Audio/Null/null_enumerator.h"
-@@ -110,6 +118,8 @@ std::string g_application_support_path;
+@@ -110,6 +119,8 @@ std::string g_application_support_path;
  std::string g_cache_path;
  std::string g_preferred_language = "en";
  bool g_emu_started = false;
@@ -12439,7 +12592,7 @@ index 74a6dc7..2c85c1e 100644
  std::atomic_bool g_accept_display_surfaces = false;
  std::atomic_bool g_accept_pad_state = false;
  rpcs3::ios::display_surface_registry g_display_surface;
-@@ -312,7 +322,8 @@ boot_progress_snapshot capture_boot_progress()
+@@ -312,7 +323,8 @@ boot_progress_snapshot capture_boot_progress()
  	};
  
  	boot_progress_snapshot snapshot = read();
@@ -12449,7 +12602,7 @@ index 74a6dc7..2c85c1e 100644
  	{
  		boot_progress_snapshot next = read();
  		if (next == snapshot)
-@@ -321,6 +332,7 @@ boot_progress_snapshot capture_boot_progress()
+@@ -321,6 +333,7 @@ boot_progress_snapshot capture_boot_progress()
  		}
  		snapshot = std::move(next);
  	}
@@ -12457,7 +12610,7 @@ index 74a6dc7..2c85c1e 100644
  }
  
  rpcs3_ios_emulation_state current_emulation_state() noexcept
-@@ -378,6 +390,11 @@ void emit_log(int32_t level, std::string_view message)
+@@ -378,6 +391,11 @@ void emit_log(int32_t level, std::string_view message)
  	g_config.log_callback(g_config.user_context, level, terminated.c_str());
  }
  
@@ -12469,7 +12622,7 @@ index 74a6dc7..2c85c1e 100644
  void emit_jit_arena_statistics(std::string_view phase)
  {
  	constexpr usz mib = 1024 * 1024;
-@@ -385,7 +402,7 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -385,7 +403,7 @@ void emit_jit_arena_statistics(std::string_view phase)
  	emit_log(4, fmt::format(
  		"iOS JIT arena %s: code live=%u MiB, free=%u MiB (%llu bytes), largest_free=%u MiB (%llu bytes), "
  		"runtime=%u MiB, peak=%u MiB; data live=%u MiB, free=%u MiB (%llu bytes), "
@@ -12478,7 +12631,7 @@ index 74a6dc7..2c85c1e 100644
  		phase,
  		stats.live_code_bytes / mib,
  		stats.free_code_bytes / mib,
-@@ -401,7 +418,8 @@ void emit_jit_arena_statistics(std::string_view phase)
+@@ -401,7 +419,8 @@ void emit_jit_arena_statistics(std::string_view phase)
  		static_cast<u64>(stats.largest_free_data_bytes),
  		stats.runtime_data_bytes / mib,
  		stats.peak_data_bytes / mib,
@@ -12488,7 +12641,7 @@ index 74a6dc7..2c85c1e 100644
  }
  
  class callback_log_listener final : public logs::listener
-@@ -448,16 +466,32 @@ private:
+@@ -448,16 +467,32 @@ private:
  	std::string m_name;
  };
  
@@ -12525,7 +12678,7 @@ index 74a6dc7..2c85c1e 100644
  }
  
  bool apply_database_settings_for_api(std::string_view title_id)
-@@ -1267,15 +1301,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
+@@ -1267,15 +1302,15 @@ extern "C" uint32_t rpcs3_ios_abi_version(void) noexcept
  
  extern "C" const char* rpcs3_ios_build_info(void) noexcept
  {
@@ -12544,7 +12697,7 @@ index 74a6dc7..2c85c1e 100644
  		return RPCS3_IOS_INVALID_STATE;
  	}
  
-@@ -1289,40 +1323,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1289,40 +1324,103 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		return result;
  	}
  
@@ -12590,20 +12743,15 @@ index 74a6dc7..2c85c1e 100644
 -		return RPCS3_IOS_JIT_UNAVAILABLE;
 +		return fail_initialize(RPCS3_IOS_JIT_UNAVAILABLE, "debugger_readiness",
 +			rpcs3::ios::jit::last_error());
- 	}
--	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
--		!rpcs3::ios::jit::seal_arena())
++	}
 +
 +	emit_log(2, fmt::format("requested_code_capacity policy=%u", config->expanded_jit_arena));
 +	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena))
- 	{
--		set_error(rpcs3::ios::jit::last_error());
--		g_lifecycle.finish_initialize(false);
--		return RPCS3_IOS_JIT_MAPPING_FAILED;
++	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "arena_prepare",
 +			rpcs3::ios::jit::last_error());
- 	}
- 
++	}
++
 +	// No process-global runtime has been changed before this point. An early
 +	// reservation failure can be retried by the user after helper completion.
 +	// Once executable runtime construction starts, retain the single-instance
@@ -12623,13 +12771,18 @@ index 74a6dc7..2c85c1e 100644
 +	{
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "ppu_trampolines",
 +			trampoline_error + "; " + rpcs3::ios::jit::last_error());
-+	}
+ 	}
+-	if (!rpcs3::ios::jit::prepare_arena(config->expanded_jit_arena != 0) ||
+-		!rpcs3::ios::jit::seal_arena())
 +	trampoline_error.clear();
 +	if (!ppu_function_manager::initialize_ghc_trampolines(trampoline_error))
-+	{
+ 	{
+-		set_error(rpcs3::ios::jit::last_error());
+-		g_lifecycle.finish_initialize(false);
+-		return RPCS3_IOS_JIT_MAPPING_FAILED;
 +		return fail_initialize(RPCS3_IOS_JIT_MAPPING_FAILED, "ppu_hle_trampolines",
 +			trampoline_error + "; " + rpcs3::ios::jit::last_error());
-+	}
+ 	}
 +	emit_log(2, "ppu_trampoline_init_end");
 +
 +	trampoline_error.clear();
@@ -12647,7 +12800,7 @@ index 74a6dc7..2c85c1e 100644
 +			rpcs3::ios::jit::last_error());
 +	}
 +	emit_log(2, "jit_initialize_success");
-+
+ 
  	try
  	{
 -		g_application_support_path = config->application_support_path;
@@ -12671,7 +12824,7 @@ index 74a6dc7..2c85c1e 100644
  		// A developer can request one bounded SPU profile through the injected
  		// cache root. Consume the request so subsequent launches stay unchanged.
  		const std::string profile_request = fs::get_cache_dir() + "jit-profile.once";
-@@ -1385,8 +1482,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1385,8 +1483,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		Emu.SetCallbacks(make_callbacks());
  		Emu.SetSupportedRenderers({video_renderer::vulkan});
  		Emu.SetDefaultRenderer(video_renderer::vulkan);
@@ -12680,7 +12833,7 @@ index 74a6dc7..2c85c1e 100644
  		Emu.SetDefaultGraphicsAdapter("iOS Metal GPU");
  		Emu.SetHasGui(false);
  		Emu.SetHeadless(false);
-@@ -1397,6 +1492,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
+@@ -1397,6 +1493,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_initialize(const rpcs3_ios_config* config)
  		g_accept_display_surfaces = true;
  		g_accept_pad_state = true;
  		emit_log(4, "RPCS3 Emu.Init completed with the iOS Vulkan/MoltenVK and RemoteIO frontend");
@@ -12688,7 +12841,7 @@ index 74a6dc7..2c85c1e 100644
  		emit_jit_arena_statistics("after core initialization");
  		return RPCS3_IOS_OK;
  	}
-@@ -1519,6 +1615,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
+@@ -1519,6 +1616,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_run_llvm_self_test(uint64_t input, uint64_
  
  		using test_function = uint64_t (*)(uint64_t);
  		const auto function_address = compiler.get("rpcs3_ios_test_function");
@@ -12696,7 +12849,7 @@ index 74a6dc7..2c85c1e 100644
  		if (!function_address)
  		{
  			set_error("LLVM did not publish the self-test function");
-@@ -3161,7 +3258,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
+@@ -3161,7 +3259,7 @@ extern "C" rpcs3_ios_status rpcs3_ios_enumerate_game_settings(
  		}
  		bool custom_config = false;
  		const bool loaded = load_settings_for_api(title_id, custom_config);
@@ -12705,7 +12858,7 @@ index 74a6dc7..2c85c1e 100644
  		if (!loaded)
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3233,12 +3330,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
+@@ -3233,12 +3331,15 @@ extern "C" rpcs3_ios_status rpcs3_ios_set_game_setting(
  		{
  			return result;
  		}
@@ -12724,7 +12877,7 @@ index 74a6dc7..2c85c1e 100644
  		return RPCS3_IOS_OK;
  	}
  	catch (const std::exception& error)
-@@ -3310,7 +3410,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
+@@ -3310,7 +3411,8 @@ extern "C" rpcs3_ios_status rpcs3_ios_remove_game_settings(const char* title_id)
  
  	try
  	{
@@ -12734,7 +12887,7 @@ index 74a6dc7..2c85c1e 100644
  		{
  			set_error(fmt::format("Unable to remove the custom configuration for %s", title_id));
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
-@@ -3388,10 +3489,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
+@@ -3388,10 +3490,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_save_game_settings_preset(
  		{
  			return RPCS3_IOS_SETTINGS_SAVE_FAILED;
  		}
@@ -12745,7 +12898,7 @@ index 74a6dc7..2c85c1e 100644
  		normalize_current_game_resolution(game.resolution);
  		const auto result = finish_game_settings_preset_result(
  			rpcs3::ios::save_current_game_settings_preset(title_id, name));
-@@ -4444,6 +4541,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4444,6 +4542,12 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  	const char* savestate_id) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -12758,7 +12911,7 @@ index 74a6dc7..2c85c1e 100644
  	if (!title_id || !title_id[0])
  	{
  		set_error("An installed title ID is required");
-@@ -4486,7 +4589,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4486,7 +4590,37 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  			return RPCS3_IOS_GAME_NOT_FOUND;
  		}
  
@@ -12797,7 +12950,7 @@ index 74a6dc7..2c85c1e 100644
  		if (!requested_savestate_id.empty())
  		{
  			const auto savestates = enumerate_title_savestates(game->title_id, game->path);
-@@ -4503,21 +4636,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
+@@ -4503,21 +4637,6 @@ extern "C" rpcs3_ios_status rpcs3_ios_boot_game(
  				return RPCS3_IOS_BOOT_FAILED;
  			}
  			boot_path = selected->path;
@@ -12819,7 +12972,7 @@ index 74a6dc7..2c85c1e 100644
  		}
  
  		if (requested_savestate_id.empty())
-@@ -4730,9 +4848,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
+@@ -4730,9 +4849,179 @@ extern "C" rpcs3_ios_status rpcs3_ios_resume_emulation(void) noexcept
  	return RPCS3_IOS_INTERNAL_ERROR;
  }
  
@@ -12999,7 +13152,7 @@ index 74a6dc7..2c85c1e 100644
  	if (g_lifecycle.state() != RPCS3_IOS_STATE_READY)
  	{
  		set_error("RPCS3Core must be ready before stopping emulation");
-@@ -4784,6 +5072,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
+@@ -4784,6 +5073,12 @@ extern "C" rpcs3_ios_state rpcs3_ios_get_state(void) noexcept
  extern "C" rpcs3_ios_status rpcs3_ios_shutdown(void) noexcept
  {
  	std::lock_guard lock(g_api_mutex);
@@ -13012,7 +13165,7 @@ index 74a6dc7..2c85c1e 100644
  	bool should_run = false;
  	if (const auto result = g_lifecycle.begin_shutdown(should_run); result != RPCS3_IOS_OK)
  	{
-@@ -4852,3 +5146,26 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
+@@ -4852,3 +5147,32 @@ extern "C" const char* rpcs3_ios_last_error(void) noexcept
  	emit_log(1, text);
  	std::abort();
  }
@@ -13039,11 +13192,17 @@ index 74a6dc7..2c85c1e 100644
 +{
 +    return neostation::storage_client::install(api);
 +}
++
++// Independent host archive ABI. No main ABI layout or JIT/guest/GPU change.
++extern "C" RPCS3_IOS_EXPORT int32_t rpcs3_ios_set_source_archive_api(const NeoSwapSourceAPI* api) noexcept
++{
++    return neostation::source_client::install(api);
++}
 diff --git a/rpcs3/ios/RPCS3IOS.exports b/rpcs3/ios/RPCS3IOS.exports
-index d7529ab..56b3ba3 100644
+index d7529ab..8a90790 100644
 --- a/rpcs3/ios/RPCS3IOS.exports
 +++ b/rpcs3/ios/RPCS3IOS.exports
-@@ -72,3 +72,12 @@ _rpcs3_ios_stop_emulation
+@@ -72,3 +72,13 @@ _rpcs3_ios_stop_emulation
  _rpcs3_ios_get_state
  _rpcs3_ios_shutdown
  _rpcs3_ios_last_error
@@ -13056,6 +13215,7 @@ index d7529ab..56b3ba3 100644
 +
 +_rpcs3_ios_set_neoswap_relay_api
 +_rpcs3_ios_set_storage_cache_api
++_rpcs3_ios_set_source_archive_api
 diff --git a/rpcs3/ios/RPCS3IOS.h b/rpcs3/ios/RPCS3IOS.h
 index 20526d0..367413d 100644
 --- a/rpcs3/ios/RPCS3IOS.h

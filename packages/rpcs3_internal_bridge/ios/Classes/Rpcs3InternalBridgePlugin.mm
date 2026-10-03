@@ -484,6 +484,13 @@ static void RPCS3Progress(void* context,
   auto bindStorage = reinterpret_cast<StorageBinder>(dlsym(handle, "rpcs3_ios_set_storage_cache_api"));
   const int storageResult = bindStorage ? bindStorage(NeoSwapStorage_GetAPI(NEOSWAP_STORAGE_ABI)) : NS_STORAGE_DISABLED;
   NeoSwapStorage_SetBinderResult(storageResult);
+  using SourceBinder = int32_t (*)(const NeoSwapSourceAPI*);
+  auto bindSource = reinterpret_cast<SourceBinder>(dlsym(handle, "rpcs3_ios_set_source_archive_api"));
+  const int sourceResult = bindSource ? bindSource(NeoSwapStorage_GetSourceAPI(NEOSWAP_SOURCE_ABI)) : NS_SOURCE_DISABLED;
+  NeoSwapStorage_SetSourceBinderResult(sourceResult);
+  RPCS3Diagnostic(@"neoswap_glsl_archive", [NSString stringWithFormat:
+      @"abi=1 bind=%d scope=owned_GLSL_after_module_create admission=no_disk_wait restore=debug_utility_copy",
+      sourceResult]);
   RPCS3Diagnostic(@"neoswap_shader_storage", [NSString stringWithFormat:
       @"abi=1 bind=%d requested=%d scope=regenerable_SPIRV cache_miss=recompile_no_disk_wait",
       storageResult, NeoSwapStorage_GetPreference()]);

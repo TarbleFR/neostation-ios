@@ -39,6 +39,10 @@ on:
       - 'native/neoswap-storage/ShaderKey.h'
       - 'test/rpcs3_shader_storage_test.py'
       - 'test/native/rpcs3_shader_storage_client_test.cpp'
+      - 'native/neoswap-storage/SourceABI.h'
+      - 'native/neoswap-storage/SourceClient.h'
+      - 'test/rpcs3_source_archive_test.py'
+      - 'test/native/rpcs3_source_archive_client_test.cpp'
   workflow_dispatch:
 permissions:
   contents: read
@@ -95,6 +99,7 @@ jobs:
           git -C "$STORAGE_SRC" checkout -q --detach FETCH_HEAD
           python3 build-utils/materialize_rpcs3_core.py "$STORAGE_SRC"
           CXX="$(xcrun --sdk macosx --find clang++)" HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" python3 test/rpcs3_shader_storage_test.py "$STORAGE_SRC"
+          CXX="$(xcrun --sdk macosx --find clang++)" HOST_MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path)" python3 test/rpcs3_source_archive_test.py "$STORAGE_SRC"
           for formula in ccache ninja cmake llvm@22; do
             brew list --versions "$formula" >/dev/null 2>&1 || brew install "$formula"
           done
@@ -116,7 +121,7 @@ jobs:
           file "$CORE" | tee build/rpcs3-core-diagnostics/file.txt
           lipo -archs "$CORE" | tee build/rpcs3-core-diagnostics/archs.txt
           nm -gU "$CORE" > build/rpcs3-core-diagnostics/exports.txt
-          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_ios_save_state_slot _rpcs3_ios_run_llvm_self_test _rpcs3_ios_shutdown _rpcs3_ios_set_neoswap_api _rpcs3_ios_get_neoswap_client_stats _rpcs3_ios_set_neoswap_relay_api _rpcs3_ios_set_storage_cache_api; do
+          for symbol in _rpcs3_ios_initialize _rpcs3_ios_boot_game _neostation_rpcs3_ios_save_state _neostation_rpcs3_ios_save_state_slot _rpcs3_ios_run_llvm_self_test _rpcs3_ios_shutdown _rpcs3_ios_set_neoswap_api _rpcs3_ios_get_neoswap_client_stats _rpcs3_ios_set_neoswap_relay_api _rpcs3_ios_set_storage_cache_api _rpcs3_ios_set_source_archive_api; do
             grep -q " $symbol$" build/rpcs3-core-diagnostics/exports.txt
           done
           ! grep -q ' _neostation_rpcs3_adopt_jit_layout$' build/rpcs3-core-diagnostics/exports.txt
@@ -144,6 +149,7 @@ jobs:
             'neoswap_client_stats_abi':1,
             'neoswap_relay_abi':1,
             'neoswap_storage_abi':1,
+            'neoswap_source_archive_abi':1,
             'core_input_sha256':core_input_hashes(),
             'neoswap_coverage':'RSX CPU data and coherent host-visible Vulkan SYSTEM buffers (1-256MiB); strict import checks and GPU retirement; shared-memory guest backing with coherent aliases via separate host relay ABI 1; no JIT/executable mappings/images',
             'device_runtime_tested':False,

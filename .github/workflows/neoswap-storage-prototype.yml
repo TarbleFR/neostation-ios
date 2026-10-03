@@ -38,6 +38,7 @@ jobs:
         run: |
           python3 test/neoswap_shader_storage_host_test.py
           python3 test/neoswap_managed_swap_host_test.py
+          python3 test/neoswap_source_archive_host_test.py
       - name: Actual shader consumer, Apple host SDK and real Vulkan lifetime
         run: python3 native/neoswap-storage/run_shader_validation.py --output "$RUNNER_TEMP/storage-proof"
       - name: Owned mutable CPU RAM-storage-RAM cycle and Swift interface
@@ -49,6 +50,8 @@ jobs:
           else
             python3 native/neoswap-storage/run_managed_validation.py --output "$RUNNER_TEMP/storage-proof"
           fi
+      - name: Actual Core source client with real owned RAM-storage-RAM bytes
+        run: python3 native/neoswap-storage/run_source_validation.py --output "$RUNNER_TEMP/storage-proof"
       - name: Preserve exact-source evidence, including failures
         if: always()
         uses: actions/upload-artifact@v4

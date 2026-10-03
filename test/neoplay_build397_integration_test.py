@@ -16,6 +16,19 @@ APPROVED_RPCS3_MENU_FILES = frozenset({
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 })
 APPROVED_MANAGED_SWAP_FILES = frozenset({
+    'native/neoswap-storage/SourceABI.h',
+    'native/neoswap-storage/SourceClient.h',
+    'native/neoswap-storage/SourceArchive.h',
+    'native/neoswap-storage/SourceArchive.cpp',
+    'native/neoswap-storage/run_source_validation.py',
+    'native/neoswap-storage/tests/source_archive_test.cpp',
+    'native/neoswap-storage/tests/service_runtime.mm',
+    'native/neoswap-storage/run_shader_validation.py',
+    'packages/neo_swap/ios/Classes/SourceABI.h',
+    'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',
+    'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',
+    'build-utils/rpcs3/canonical-source.json',
+    'build-utils/rpcs3/embedded-core.patch',
     'native/neoswap-storage/ManagedSwap.h',
     'native/neoswap-storage/ManagedSwap.cpp',
     'native/neoswap-storage/ManagedSwapABI.h',
@@ -46,14 +59,22 @@ class Build398Integration(unittest.TestCase):
     def test_approved_menu_routing_preserves_core_abi_and_passes_input_behavior(self):
         for path in (
             'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3CoreABI.h',
-            'build-utils/rpcs3/embedded-core.patch',
         ):
             self.assertEqual((ROOT / path).read_bytes(), original(path), path)
         plugin_path = 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm'
         plugin = (ROOT / plugin_path).read_bytes()
         callback = b'      controller.inputController.menuRequested = controller.menuHandler;\n'
         self.assertEqual(plugin.count(callback), 1)
-        self.assertEqual(plugin.replace(callback, b''), original(plugin_path), 'Menu callback wiring must be the only bridge plugin change')
+        source_binding=(
+            b'  using SourceBinder = int32_t (*)(const NeoSwapSourceAPI*);\n'
+            b'  auto bindSource = reinterpret_cast<SourceBinder>(dlsym(handle, "rpcs3_ios_set_source_archive_api"));\n'
+            b'  const int sourceResult = bindSource ? bindSource(NeoSwapStorage_GetSourceAPI(NEOSWAP_SOURCE_ABI)) : NS_SOURCE_DISABLED;\n'
+            b'  NeoSwapStorage_SetSourceBinderResult(sourceResult);\n'
+            b'  RPCS3Diagnostic(@"neoswap_glsl_archive", [NSString stringWithFormat:\n'
+            b'      @"abi=1 bind=%d scope=owned_GLSL_after_module_create admission=no_disk_wait restore=debug_utility_copy",\n'
+            b'      sourceResult]);\n')
+        self.assertEqual(plugin.count(source_binding),1)
+        self.assertEqual(plugin.replace(callback, b'').replace(source_binding,b''), original(plugin_path), 'Only reviewed menu and optional source ABI binding may change the bridge')
         subprocess.run([sys.executable, str(ROOT / 'test/rpcs3_input_bridge_test.py')], cwd=ROOT, check=True, timeout=30)
     def test_both_tools_are_present_at_distinct_gamepad_indices(self):
         text = (ROOT/'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart').read_text()

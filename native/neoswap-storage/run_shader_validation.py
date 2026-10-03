@@ -57,6 +57,7 @@ def main():
     common=[compiler,'-std=c++20','-pthread','-Wall','-Wextra','-Werror','-I',str(HERE)]
     libs=['-lcompression','-lz'] if apple else ['-llz4','-lz']
     sources=[str(HERE/p) for p in ('Store.cpp','ShaderCache.cpp')]
+    host_sources=sources+[str(HERE/'ManagedSwap.cpp'),str(HERE/'SourceArchive.cpp')]
     result={'schema':1,'sourceCommit':os.environ.get('GITHUB_SHA'),'platform':system,'passed':False,
             'productionClientExecuted':False,'productionHostServiceIOSLinked':False,
             'realVulkanModule':False,'physicalIPhoneValidated':False,'realRPCS3GameplayValidated':False,
@@ -75,13 +76,13 @@ def main():
             ios=['xcrun','--sdk','iphoneos','clang++','-std=c++20','-O2','-Wall','-Wextra','-Werror','-fobjc-arc','-fblocks',
                  '-x','objective-c++','-arch','arm64','-isysroot',sdk,'-miphoneos-version-min=18.0','-I',str(HERE)]
             library=out/'NeoSwapShaderHostProbe.dylib'
-            execute(ios+sources+[str(HERE/'Metrics.cpp'),str(service),'-dynamiclib','-framework','Foundation','-framework','UIKit',
+            execute(ios+host_sources+[str(HERE/'Metrics.cpp'),str(service),'-dynamiclib','-framework','Foundation','-framework','UIKit',
                     '-lcompression','-lz','-install_name','@rpath/NeoSwapShaderHostProbe.dylib','-o',str(library)],out,'shader-ios-service-link')
             text=execute(['xcrun','nm','-gU',str(library)],out,'shader-ios-service-symbols')
-            for symbol in ('_NeoSwapStorage_GetAPI','_NeoSwapStorage_BeginSession','_NeoSwapStorage_EndSession','_NeoSwapStorage_Diagnostics'):
+            for symbol in ('_NeoSwapStorage_GetAPI','_NeoSwapStorage_BeginSession','_NeoSwapStorage_EndSession','_NeoSwapStorage_Diagnostics','_NeoSwapStorage_GetSourceAPI','_NeoSwapStorage_SetSourceBinderResult'):
                 assert symbol in text,symbol
             result['productionHostServiceIOSLinked']=True
-            result['simulator']=simulator_service(work,out,sources)
+            result['simulator']=simulator_service(work,out,host_sources)
             result['realIOSSimulatorServiceExecuted']=True
             archive=work/'MoltenVK.tar'
             execute(['curl','-fL','--retry','3','https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar','-o',str(archive)],out,'shader-moltenvk-download')
@@ -99,6 +100,7 @@ def main():
             result['gpu']=gpu_result;result['realVulkanModule']=True;result['moltenVKArchiveSHA256']=MOLTENVK_SHA
     tracked=list(HERE.glob('*.h'))+list(HERE.glob('*.cpp'))+list(HERE.glob('*.py'))+list((HERE/'tests').glob('*.cpp'))+list((HERE/'tests').glob('*.mm'))
     tracked += [ROOT/'build-utils/configure_neoswap_storage.py',ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',ROOT/'packages/neo_swap/ios/Classes/StorageABI.h']
+    tracked += [ROOT/'packages/neo_swap/ios/Classes/SourceABI.h']
     result['inputSHA256']={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(set(tracked))}
     result['passed']=True
     (out/'shader-integration.json').write_text(json.dumps(result,indent=2)+'\n')

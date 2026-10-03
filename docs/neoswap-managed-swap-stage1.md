@@ -98,6 +98,39 @@ testés sans attente. Ce correctif du harness nécessite sa propre validation CI
 
 ## Intégration RPCS3 suivante
 
+### Étape 2 : consommateur GLSL intégré dans la candidate Build 398
+
+Le chantier continue avec `SourceArchive` et l'ABI optionnelle indépendante
+`SourceABI` v1. Après création réussie du module Vulkan, `ColdSource` confie
+une copie bornée du texte GLSL à NeoSwap puis libère la capacité de la chaîne
+RPCS3. Un refus conserve la chaîne d'origine. Aucune E/S disque n'a lieu dans
+cette admission ; la queue utilitaire sauvegarde, synchronise et vérifie des
+chunks de 64 Kio avant de libérer sa copie RAM. Un échec conserve la copie
+complète en RAM, avec des admissions suivantes bornées par le quota.
+
+Le getter de diagnostic/export restitue une chaîne propriétaire, pas un
+pointeur emprunté. Les dumps avant compilation et le compilateur restent
+inchangés. Ce getter peut attendre la queue utilitaire ; le chemin normal de
+compilation ne relit pas le disque. Les ressources GPU, le JIT et les pages
+invitées ne sont pas évincés par ce nouveau consommateur.
+
+L'intégration reste liée à l'option existante, désactivée par défaut et limitée
+aux six identifiants God of War III déjà reconnus. Les diagnostics
+`sourceArchive` séparent capacité de chaîne libérée, staging RAM, mappings
+gérés, octets réellement écrits/lus et erreurs. Le staging est borné à 4 Mio,
+l'enveloppe de mappings à 8 Mio, le stockage et la taille logique à 128 Mio.
+Ces plafonds ne sont ni des mesures de footprint ni de la RAM physique ajoutée.
+
+`run_source_validation.py` a exécuté localement, sous ASAN/UBSAN, 64 Mio de
+données non compressibles à travers le véritable client Core et le gestionnaire
+de stockage. Tous les octets ont été restaurés et comparés. L'admission sans
+E/S, les quotas, la pression, les erreurs write/fsync/read, corruption et
+troncature, les sessions périmées et la retraite partagée sont couverts. La CI
+doit encore compiler le vrai consommateur Vulkan dans le nouveau Core et
+exécuter le service UIKit en simulateur avant packaging IPA.
+
+### Audit initial conservé
+
 L'audit des sources exactes `22f1152783cef1f7e04af7b1c895173e28fd5b03`, après
 matérialisation du patch canonique, identifie les sources GLSL conservées dans
 `vk::glsl::shader::m_source` comme premier consommateur CPU possédé possible.
@@ -112,7 +145,7 @@ vidéo peuvent être partagées avec le décodeur. Leur éviction demande un con
 d'accès établi. Aucun gros cache froid de plusieurs centaines de Mio n'est
 encore démontré. Le consommateur GLSL n'est pas modifié par cette étape.
 
-La prochaine étape est l'intégration et la mesure d'un consommateur réel, puis
-une politique automatique bornée de sauvegarde/éviction sur ses blocs froids.
+Cet audit précédait l'intégration de l'étape 2 ci-dessus. La mesure du volume
+réel et du comportement en jeu reste à effectuer sur l'IPA candidate.
 La preuve générique de ce cycle ne démontre pas un gain en jeu, une correction
 du gel RSX ou huit Gio de RAM physique disponible pour RPCS3.

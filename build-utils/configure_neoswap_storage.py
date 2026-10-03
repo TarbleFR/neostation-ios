@@ -5,8 +5,9 @@ import hashlib
 import shutil
 ROOT=Path(__file__).resolve().parents[1]
 SOURCES=('Store.cpp','Store.h','ShaderCache.cpp','ShaderCache.h','ShaderPolicy.h','SessionSlot.h','StorageABI.h','Metrics.cpp',
-         'ManagedSwap.cpp','ManagedSwap.h','ManagedSwapABI.cpp','ManagedSwapABI.h')
-PUBLIC_ABIS=('StorageABI.h','ManagedSwapABI.h')
+         'ManagedSwap.cpp','ManagedSwap.h','ManagedSwapABI.cpp','ManagedSwapABI.h',
+         'SourceArchive.cpp','SourceArchive.h','SourceABI.h','SourceClient.h')
+PUBLIC_ABIS=('StorageABI.h','ManagedSwapABI.h','SourceABI.h')
 def materialize(root: Path=ROOT) -> None:
     source=root/'native/neoswap-storage';target=root/'packages/neo_swap/ios/Classes/Storage'
     for name in PUBLIC_ABIS:

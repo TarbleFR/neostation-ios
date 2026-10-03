@@ -61,12 +61,15 @@ assert workflow.index('python3 build-utils/configure_neoswap_storage.py')<workfl
 paths={str(p.relative_to(ROOT)) for p in (ROOT/'native/neoswap-storage').glob('*') if p.suffix in ('.h','.cpp','.py')}
 paths|={str(p.relative_to(ROOT)) for p in (ROOT/'native/neoswap-storage/tests').glob('*') if p.suffix in ('.cpp','.mm')}
 paths|={'build-utils/configure_neoswap_storage.py','packages/neo_swap/ios/Classes/NeoSwapStorageService.h','packages/neo_swap/ios/Classes/NeoSwapStorageService.mm','packages/neo_swap/ios/Classes/StorageABI.h'}
+paths.add('packages/neo_swap/ios/Classes/SourceABI.h')
 # Fixtures test refusal logic, never masquerade as a hardware result.
 fixture={'passed':True,'sourceCommit':'d'*40,'productionClientExecuted':True,'productionHostServiceIOSLinked':True,
          'realIOSSimulatorServiceExecuted':True,'realVulkanModule':True,'physicalIPhoneValidated':False,
          'realRPCS3GameplayValidated':False,'kernelSwapPorted':False,
          'gpu':{'passed':True,'sourceBuilds':1,'sourceBuildsBeforeRestore':1,'realComputeDispatchCompleted':True,'cpuBytesReleasedBeforePipeline':True,'diskReadBytes':1,'diskWriteBytes':1},
-         'simulator':{'passed':True,'epochIsolation':True,'leaseSurvivedSessionEnd':True,'privateFileRoundTrip':True},
+         'simulator':{'passed':True,'epochIsolation':True,'leaseSurvivedSessionEnd':True,'privateFileRoundTrip':True,
+                      'sourceArchiveRoundTrip':True,'sourceEpochIsolation':True,'sourcePressureRefusal':True,
+                      'sourceDiagnostics':{'archivedSourceBytesCumulative':1,'stagingRamBytes':0,'diskReadBytes':1,'diskWriteBytes':1}},
          'inputSHA256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths}}
 validate(fixture,'d'*40)
 for key in ('passed','productionClientExecuted','productionHostServiceIOSLinked','realIOSSimulatorServiceExecuted','realVulkanModule'):
