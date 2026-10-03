@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+# Build upstream's actual griffin iOS graph as a hosted dylib.
+require 'xcodeproj'
+source = File.expand_path(ARGV.fetch(0))
+path = File.join(source, 'pkg/apple/RetroArch_iOS11.xcodeproj')
+project = Xcodeproj::Project.open(path)
+target = project.targets.find { |t| t.name == 'RetroArchiOS11' }
+raise 'Pinned iOS frontend target missing' unless target
+project.targets.reject { |t| t == target }.each(&:remove_from_project)
+target.name = 'RetroArchCore'
+target.product_type = 'com.apple.product-type.library.dynamic'
+target.product_reference.path = 'libRetroArchCore.dylib'
+target.product_reference.explicit_file_type = 'compiled.mach-o.dylib'
+# The dylib has no application resources, core-download scripts, UIApplication,
+# code signing hooks or app packaging. Cores/resources are independently pinned.
+target.build_phases.to_a.each do |phase|
+  phase.remove_from_project if phase.is_a?(Xcodeproj::Project::Object::PBXResourcesBuildPhase) ||
+    phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase) ||
+    phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+end
+adapter = project.main_group.new_group('NeoStation', '../../neostation')
+['NeoRetroArchCore.m', 'NeoRetroArchNoJIT.c'].each do |name|
+  target.source_build_phase.add_file_reference(adapter.new_file(name))
+end
+['CoreHaptics','MetricKit'].each do |name|
+  ref = project.frameworks_group.new_file("System/Library/Frameworks/#{name}.framework")
+  ref.source_tree = 'SDKROOT'
+  target.frameworks_build_phase.add_file_reference(ref)
+end
+# Do not leak tvOS SDK references into the iOS link step.
+project.files.each do |ref|
+  if ref.path&.include?('AppleTVOS') && ref.path&.end_with?('.framework')
+    ref.path = "System/Library/Frameworks/#{File.basename(ref.path)}"
+    ref.source_tree = 'SDKROOT'
+  end
+end
+(project.build_configurations + target.build_configurations).each do |configuration|
+  settings = configuration.build_settings
+  settings.keys.grep(/OTHER_CFLAGS/).each do |key|
+    flags = Array(settings[key])
+    flags.reject! { |f| %w[-DHAVE_ONLINE_UPDATER -DHAVE_UPDATE_ASSETS -DHAVE_UPDATE_CORES -DHAVE_NETWORKGAMEPAD].include?(f) }
+    settings[key] = flags + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DNEOSTATION_EMBEDDED_RETROARCH=1']
+  end
+  settings['OTHER_CFLAGS'] = Array(settings['OTHER_CFLAGS']) + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DNEOSTATION_EMBEDDED_RETROARCH=1']
+  settings['HEADER_SEARCH_PATHS'] = ['$(inherited)', '$(SRCROOT)/../..', '$(SRCROOT)/../../libretro-common/include',
+    '$(SRCROOT)/../../deps/stb','$(SRCROOT)/../../deps/rcheevos/include','$(SRCROOT)/../../deps',
+    '$(SRCROOT)', '$(SRCROOT)/../../neostation']
+  settings['CLANG_ENABLE_OBJC_ARC'] = 'YES'
+  settings['CLANG_CXX_LIBRARY'] = 'libc++'
+  settings['GCC_C_LANGUAGE_STANDARD'] = 'gnu11'
+  settings['ARCHS'] = 'arm64'
+  settings['VALID_ARCHS'] = 'arm64'
+  settings['ONLY_ACTIVE_ARCH'] = 'NO'
+  settings['IPHONEOS_DEPLOYMENT_TARGET'] = '18.0'
+  settings['SUPPORTED_PLATFORMS'] = 'iphoneos'
+  settings['SDKROOT'] = 'iphoneos'
+  settings['MACH_O_TYPE'] = 'mh_dylib'
+  settings['PRODUCT_NAME'] = 'RetroArchCore'
+  settings['EXECUTABLE_PREFIX'] = 'lib'
+  settings['EXECUTABLE_EXTENSION'] = 'dylib'
+  settings['DYLIB_INSTALL_NAME_BASE'] = '@rpath'
+  settings['LD_DYLIB_INSTALL_NAME'] = '@rpath/libRetroArchCore.dylib'
+  settings['EXPORTED_SYMBOLS_FILE'] = '$(SRCROOT)/../../neostation/exports.txt'
+  settings['GCC_SYMBOLS_PRIVATE_EXTERN'] = 'YES'
+  settings['DEAD_CODE_STRIPPING'] = 'YES'
+  settings['CODE_SIGNING_ALLOWED'] = 'NO'
+  settings['CODE_SIGNING_REQUIRED'] = 'NO'
+  settings['SKIP_INSTALL'] = 'YES'
+  %w[INFOPLIST_FILE GENERATE_INFOPLIST_FILE WRAPPER_EXTENSION ASSETCATALOG_COMPILER_APPICON_NAME
+    ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME CODE_SIGN_RESOURCE_RULES_PATH DEVELOPMENT_TEAM
+    PROVISIONING_PROFILE LD_NO_PIE].each { |key| settings.delete(key) }
+end
+project.save
+puts "Configured #{path}: RetroArchCore arm64 iOS 18 dylib"

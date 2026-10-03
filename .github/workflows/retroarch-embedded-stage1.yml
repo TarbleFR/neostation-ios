@@ -1,0 +1,76 @@
+name: RetroArch embedded stage 1
+
+on:
+  push:
+    branches: [feature/retroarch-embedded]
+    paths:
+      - native/retroarch/**
+      - build-utils/retroarch/**
+      - packages/retroarch_internal_bridge/**
+      - .github/workflows/retroarch-embedded-stage1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retroarch-embedded-stage1-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-and-curation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate curation and source tooling
+        run: python3 -m unittest discover -s build-utils/retroarch/tests -v
+
+  apple-native:
+    runs-on: macos-15
+    needs: source-and-curation
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record Apple toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Compile bridge and verify simulated lifecycle
+        run: bash packages/retroarch_internal_bridge/ci/run_apple_checks.sh
+      - name: Install Xcode project editor
+        run: gem install --user-install xcodeproj --version 1.27.0 --no-document
+      - name: Fetch exact matching RetroArch frontend source
+        run: |
+          commit="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["frontend"]["commit"])')"
+          git init "$RUNNER_TEMP/retroarch-upstream"
+          git -C "$RUNNER_TEMP/retroarch-upstream" remote add origin https://github.com/libretro/RetroArch.git
+          git -C "$RUNNER_TEMP/retroarch-upstream" fetch --depth 1 origin "$commit"
+          git -C "$RUNNER_TEMP/retroarch-upstream" checkout --detach FETCH_HEAD
+      - name: Download the requested pinned IPA
+        run: |
+          url="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["sourceIpa"]["url"])')"
+          curl --fail --location --retry 3 --connect-timeout 30 "$url" --output "$RUNNER_TEMP/2026-10-03_RetroArch.ipa"
+      - name: Build actual hosted frontend and curated signed core package
+        run: |
+          bash build-utils/retroarch/build_core.sh \
+            --upstream "$RUNNER_TEMP/retroarch-upstream" \
+            --ipa "$RUNNER_TEMP/2026-10-03_RetroArch.ipa" \
+            --work "$RUNNER_TEMP/retroarch-build" \
+            --output "$RUNNER_TEMP/retroarch-embedded-stage1"
+      - name: Upload stage 1 native package and exact corresponding source
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-Embedded-Stage1-${{ github.sha }}
+          path: ${{ runner.temp }}/retroarch-embedded-stage1
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve Apple diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-Stage1-Apple-Diagnostics-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/retroarch-build/frontend-build.log
+            packages/retroarch_internal_bridge/ci/results/**
+          if-no-files-found: warn
+          retention-days: 14

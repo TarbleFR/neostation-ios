@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "sourceIpa": {
+    "url": "https://buildbot.libretro.com/nightly/apple/ios-arm64/2026-10-03_RetroArch.ipa",
+    "sha256": "5803425e6b38dce7a34b1fa125f91879b1e3a5102111f5ac15de19835a330c42",
+    "bytes": 611752729,
+    "bundleVersion": "1.20261003.0202"
+  },
+  "frontend": {
+    "repository": "https://github.com/libretro/RetroArch.git",
+    "commit": "3a6a1e9c4fb4e90044945f84138ae7fad687e1a4",
+    "abiVersion": 1,
+    "runtimeIdentity": "neostation-retroarch-curated-v1",
+    "renderDriver": "gl",
+    "shaderFormats": [
+      "glslp"
+    ]
+  },
+  "cores": [
+    {
+      "id": "fceumm",
+      "binary": "Frameworks/fceumm.libretro.framework/fceumm.libretro",
+      "systemIds": [
+        "nes"
+      ],
+      "sha256": "2438988bb2d719aaf02e4fa7fe260daf3557bd965d532a815b94dc5d443e0cd3",
+      "infoSha256": "eda6fbfdc1fda5ea80c2caed205345b0cbbfa9427acf3626e0cffd6ee5a96721",
+      "info": "info/fceumm_libretro.info",
+      "title": "Nintendo - NES / Famicom (FCEUmm)",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "fds",
+        "nes",
+        "unif",
+        "unf"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "nestopia",
+      "binary": "Frameworks/nestopia.libretro.framework/nestopia.libretro",
+      "systemIds": [
+        "nes"
+      ],
+      "sha256": "a35f2cf94a76e0583b049337d14354c4b9336ddeeda2fecc75304e9a1411e279",
+      "infoSha256": "bce8d791385b01639ef282d370e218f814519c964d6f4c747bd9d2e6e0b1e35b",
+      "info": "info/nestopia_libretro.info",
+      "title": "Nintendo - NES / Famicom (Nestopia)",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "nes",
+        "fds",
+        "unf",
+        "unif",
+        "nsf"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "snes9x",
+      "binary": "Frameworks/snes9x.libretro.framework/snes9x.libretro",
+      "systemIds": [
+        "snes"
+      ],
+      "sha256": "08f38b5db9911e67206daffe1414017ea493136404a5b994ed522892061085ff",
+      "infoSha256": "fa62b78d58bc4c30f4e0a4a581f0cb3252447b7f198b55bd6ebe2e4b9bde5cc2",
+      "info": "info/snes9x_libretro.info",
+      "title": "Nintendo - SNES / SFC (Snes9x)",
+      "license": "Non-commercial",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "smc",
+        "sfc",
+        "swc",
+        "fig",
+        "bs",
+        "st"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "gambatte",
+      "binary": "Frameworks/gambatte.libretro.framework/gambatte.libretro",
+      "systemIds": [
+        "gb",
+        "gbc"
+      ],
+      "sha256": "6248e4362948b29a32f15b1364e9342c5c03416e41b2d5996db55387cd9326b8",
+      "infoSha256": "084975942c06a658972890c12a8251fe8d0f6c7ffd2b268850458628bbbe68f4",
+      "info": "info/gambatte_libretro.info",
+      "title": "Nintendo - Game Boy / Color (Gambatte)",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "gb",
+        "gbc",
+        "dmg"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "sameboy",
+      "binary": "Frameworks/sameboy.libretro.framework/sameboy.libretro",
+      "systemIds": [
+        "gb",
+        "gbc"
+      ],
+      "sha256": "2f1ddcea9d6aa79fe33814555bf2ca12cfda471daaf2a23a426faf2afc4089e0",
+      "infoSha256": "41aa5359b594f26a08254f944b3244c801338c85ddfc14797f5e67ae68ad2ca6",
+      "info": "info/sameboy_libretro.info",
+      "title": "Nintendo - Game Boy / Color (SameBoy)",
+      "license": "MIT",
+      "savestate": false,
+      "cheats": false,
+      "supportedExtensions": [
+        "gb",
+        "gbc"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "mgba",
+      "binary": "Frameworks/mgba.libretro.framework/mgba.libretro",
+      "systemIds": [
+        "gba"
+      ],
+      "sha256": "2ad6359e46ab61ed8c1fe54817c2199475c7fddaab707df7ef69c47371bb971b",
+      "infoSha256": "64444beb8268d3a57d53a45564c55049f39ff621315401fef86e82f3849042d6",
+      "info": "info/mgba_libretro.info",
+      "title": "Nintendo - Game Boy Advance (mGBA)",
+      "license": "MPLv2.0",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "gb",
+        "gbc",
+        "gba"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "genesis_plus_gx",
+      "binary": "Frameworks/genesis.plus.gx.libretro.framework/genesis.plus.gx.libretro",
+      "systemIds": [
+        "md",
+        "genesis",
+        "sms",
+        "gg",
+        "mcd"
+      ],
+      "sha256": "bf273d3b99d78f5f9401f995dea1e304ee6847855e30d2ba68e12b0886428658",
+      "infoSha256": "9793bff8d9e298a7ee0c94c0511dab242200ca60fbe87e3720eb9231a3e0166a",
+      "info": "info/genesis_plus_gx_libretro.info",
+      "title": "Sega - MS/GG/MD/CD (Genesis Plus GX)",
+      "license": "Non-commercial",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "mdx",
+        "md",
+        "smd",
+        "gen",
+        "bin",
+        "cue",
+        "iso",
+        "sms",
+        "bms",
+        "gg",
+        "sg",
+        "68k",
+        "sgd",
+        "chd",
+        "m3u"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "picodrive",
+      "binary": "Frameworks/picodrive.libretro.framework/picodrive.libretro",
+      "systemIds": [
+        "md",
+        "genesis",
+        "sms",
+        "mcd"
+      ],
+      "sha256": "727b62280603b676321699fe6a005c68088adaaf2c1d7a6296a0aa4a84616190",
+      "infoSha256": "35cef57b4b61d95a86e1ceee3a7c325d9d16bbdc136b4b3a556e808864de06c5",
+      "info": "info/picodrive_libretro.info",
+      "title": "Sega - MS/GG/MD/CD/32X (PicoDrive)",
+      "license": "MAME",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "bin",
+        "gen",
+        "smd",
+        "md",
+        "32x",
+        "cue",
+        "iso",
+        "chd",
+        "sms",
+        "gg",
+        "sg",
+        "sc",
+        "m3u",
+        "68k",
+        "sgd",
+        "pco"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "mednafen_pce_fast",
+      "binary": "Frameworks/mednafen.pce.fast.libretro.framework/mednafen.pce.fast.libretro",
+      "systemIds": [
+        "pce"
+      ],
+      "sha256": "4384606257b6ce413f54ead76524e6fe3280c383e0103764bf1e343a53d62f46",
+      "infoSha256": "b75e4f64518d4161bef48068f6d4be24c4ea0f478431b749b490251430d8ec35",
+      "info": "info/mednafen_pce_fast_libretro.info",
+      "title": "NEC - PC Engine / CD (Beetle PCE FAST)",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": false,
+      "supportedExtensions": [
+        "pce",
+        "cue",
+        "ccd",
+        "chd",
+        "toc",
+        "m3u"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "pcsx_rearmed",
+      "binary": "Frameworks/pcsx.rearmed.libretro.framework/pcsx.rearmed.libretro",
+      "systemIds": [
+        "ps1"
+      ],
+      "sha256": "67861db07413cce87a570a029994e483812cc1f3896287d489eee73bbcd44a25",
+      "infoSha256": "83e98e7b7068b99330db52741a369f217ebadcdbd1eb182a5a435c76ab6ae704",
+      "info": "info/pcsx_rearmed_libretro.info",
+      "title": "Sony - PlayStation (PCSX ReARMed)",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "bin",
+        "cue",
+        "img",
+        "mdf",
+        "pbp",
+        "toc",
+        "cbn",
+        "m3u",
+        "ccd",
+        "chd",
+        "iso",
+        "exe"
+      ],
+      "firmware": []
+    },
+    {
+      "id": "mednafen_psx",
+      "binary": "Frameworks/mednafen.psx.libretro.framework/mednafen.psx.libretro",
+      "systemIds": [
+        "ps1"
+      ],
+      "sha256": "d4723a64f0bc4822abdae113abd152801f18526c1c4374964a1993844cd88771",
+      "infoSha256": "c10863c3a6cba7f013712633fc49d52b77bc5648d374024f3d4d09c120528f2b",
+      "info": "info/mednafen_psx_libretro.info",
+      "title": "Sony - PlayStation (Beetle PSX)",
+      "license": "GPLv2",
+      "savestate": true,
+      "cheats": true,
+      "supportedExtensions": [
+        "cue",
+        "toc",
+        "m3u",
+        "ccd",
+        "exe",
+        "pbp",
+        "chd",
+        "bin"
+      ],
+      "firmware": []
+    }
+  ]
+}
