@@ -14,6 +14,7 @@ extern void NeoRetroArch_ReleaseRenderResources(void);
 #include "core.h"
 #include "core_option_manager.h"
 #include "content.h"
+#include "frontend/frontend.h"
 #include "command.h"
 #include "cheat_manager.h"
 #include "gfx/video_driver.h"
@@ -470,7 +471,7 @@ static NSDictionary *perform(NSDictionary *request) {
       }
     }
     cheat_manager_apply_cheats(false);
-    if (!cheat_manager_save(g_cheat_file.UTF8String,g_paths[@"cheats"].UTF8String,true)) return failure(@"cheat_save_failed",g_cheat_file);
+    if (!cheat_manager_save(g_cheat_file.UTF8String,[g_paths[@"cheats"] UTF8String],true)) return failure(@"cheat_save_failed",g_cheat_file);
     return @{ @"success":@YES,@"codeValidation":@"core-defined" };
   }
   return failure(@"unsupported_command",op);
