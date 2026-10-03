@@ -1,7 +1,7 @@
 name: NeoSwap real memory donation checks
 on:
   push:
-    branches: [experimental]
+    branches: [experimental, swap]
   workflow_dispatch:
 permissions:
   contents: read

@@ -23,6 +23,7 @@ REQUIRED_INPUTS=frozenset({
     'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',
     'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',
     'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h',
+    'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
     'packages/neo_swap/ios/neo_swap.podspec',
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
     'build-utils/rpcs3/canonical-source.json','build-utils/rpcs3/embedded-core.patch',

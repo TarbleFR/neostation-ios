@@ -11,7 +11,7 @@ public:
     static constexpr std::uint64_t active_interval_ms = 1000;
     static constexpr std::uint64_t idle_interval_ms = 2000;
     static constexpr std::uint64_t maximum_row_bytes = 64 * 1024;
-    static constexpr std::uint64_t maximum_file_bytes = 2 * 1024 * 1024;
+    static constexpr std::uint64_t maximum_file_bytes = 16 * 1024 * 1024;
 
     void pressure_event(std::uint64_t level) noexcept {
         ++pressure_events_;

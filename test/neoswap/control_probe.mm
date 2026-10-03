@@ -95,7 +95,7 @@ static void MemoryProbe(NSDictionary* initial) {
                         dispatch_async(dispatch_get_main_queue(),^{
                             Request(@"snapshot",nil,^(NSDictionary* bounded) {
                                 Check([bounded[@"diagnosticErrno"] intValue]==EOVERFLOW,@"oversized row refused with its real technical error");
-                                Check([bounded[@"memoryProfile"][@"maximumRetainedLogBytes"] unsignedLongLongValue]==4*1024*1024,@"two-file retained log bound");
+                                Check([bounded[@"memoryProfile"][@"maximumRetainedLogBytes"] unsignedLongLongValue]==32*1024*1024,@"two-file retained log bound");
                                 memoryLogsPassed=YES;
                                 Finish(YES,@"automatic8GiB contract; integrity and ownership; real process samples with zero loans; session end; bounded log rotation");
                             });

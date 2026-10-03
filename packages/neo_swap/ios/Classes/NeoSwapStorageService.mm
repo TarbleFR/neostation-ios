@@ -6,6 +6,7 @@
 #include "Storage/ShaderPolicy.h"
 #include "Storage/SessionSlot.h"
 #include "NeoSwapSourceWork.h"
+#include "NeoSwapExperiment.h"
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -40,6 +41,9 @@ struct State {
 #endif
     std::mutex snapshotMutex;
     NSDictionary* cached=@{};
+    NSMutableArray* operationEvents=[NSMutableArray new];
+    uint64_t operationDrops=0;
+    std::map<uint64_t,uint64_t> archiveOperationDrops;
     NSDictionary* lastSessionCache=@{};
     NSString* title=@"";
     NSString* reason=@"disabled";
@@ -66,7 +70,8 @@ void refreshVideoNeed(State& s,ProcessMetrics metrics){
 #ifdef NEOSWAP_STORAGE_TESTING
     if(s.testMemory){metrics.process_available_bytes=s.testAvailable;metrics.process_available_valid=s.testAvailableValid;}
 #endif
-    s.videoMemoryNeed.update(metrics.process_available_bytes,metrics.process_available_valid,s.memoryPressure!=Pressure::normal);
+    s.videoMemoryNeed.update(metrics.process_available_bytes,metrics.process_available_valid,
+        s.memoryPressure!=Pressure::normal,NSProcessInfo.processInfo.physicalMemory);
     s.videoAdmissionNeeded.store(s.videoMemoryNeed.needed()&&!s.background&&s.memoryPressure==Pressure::normal);
     s.videoNeedSampleUs.store(monotonicUs());
 }
@@ -77,7 +82,31 @@ void applyPressure(State& s) {
     if(auto source=s.sourceArchive.control_load()){source->pause(s.background);source->pressure(level);}
     refreshVideoNeed(s,sample_process());
 }
+void collectOperations(neostation::source_archive::Archive& archive,State& s){
+    using namespace neostation::source_archive;
+    // Capture on the utility queue, publish to the independent diagnostics
+    // worker. No filesystem operation is added to a demand restore's FIFO.
+    for(unsigned pass=0;pass<8;++pass){
+        const auto batch=archive.drain_operations();
+        std::lock_guard guard(s.snapshotMutex);
+        auto& previous=s.archiveOperationDrops[archive.generation()];
+        if(batch.dropped>=previous)s.operationDrops+=batch.dropped-previous;
+        previous=batch.dropped;
+        for(size_t i=0;i<batch.count;++i){
+            const auto& e=batch.events[i];
+            if(s.operationEvents.count==512){[s.operationEvents removeObjectAtIndex:0];++s.operationDrops;}
+            [s.operationEvents addObject:@{
+                @"sequence":@(e.sequence),@"monotonicUs":@(e.monotonic_us),@"session":@(e.session),
+                @"object":@(e.object),@"domain":@(e.domain),@"chunk":@(e.chunk),
+                @"operation":[NSString stringWithUTF8String:operation_name(e.operation)],
+                @"logicalBytes":@(e.bytes),@"durationUs":@(e.duration_us),
+                @"result":@(e.result),@"osError":@(e.os_error)}];
+        }
+        if(!batch.pending)break;
+    }
+}
 NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,State& s){
+    collectOperations(archive,s);
     const auto x=archive.snapshot();const auto& m=x.managed;const auto& d=m.store;
     return @{
         @"abi":@1,@"active":@(archive.accepting()&&s.sourceBinderResult.load()==NS_SOURCE_OK),
@@ -99,8 +128,9 @@ NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,Stat
         @"transientCheckpointRetries":@(x.transient_retries),
         @"videoAdmissionNeedsMemory":@(s.videoAdmissionNeeded.load()),
         @"videoAdmissionRefusalsWithoutMemoryNeed":@(s.videoPolicyRefusals.load()),
-        @"videoMemoryEnterAvailableBytes":@(neostation::source_work::VideoMemoryNeed::enter_bytes),
-        @"videoMemoryLeaveAvailableBytes":@(neostation::source_work::VideoMemoryNeed::leave_bytes),
+        @"videoMemoryEnterAvailableBytes":@(s.videoMemoryNeed.enter_threshold()),
+        @"videoMemoryLeaveAvailableBytes":@(s.videoMemoryNeed.leave_threshold()),
+        @"videoStrategyReason":[NSString stringWithUTF8String:s.videoMemoryNeed.reason()],
         @"maintenanceCoalescedRequests":@(s.sourceWork.coalesced()),
         @"maintenanceQuanta":@(s.sourceWork.quanta()),@"pendingDiscards":@(s.sourceWork.pending_discards()),
         @"demandReadRequests":@(s.sourceReadTiming.requests.load()),@"demandRamSnapshotReads":@(s.sourceReadTiming.ram_reads.load()),
@@ -110,6 +140,11 @@ NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,Stat
         @"checkpointedBytesCumulative":@(m.checkpointed_bytes),@"releasedOwnedMappedBytesCumulative":@(m.released_owned_bytes),
         @"diskReadBytes":@(d.bytes_read),@"diskWriteBytes":@(d.bytes_written),@"allocatedFileBytes":@(d.allocated_file_bytes),
         @"restoredDiskLogicalBytesCumulative":@(d.restored_logical_bytes),
+        @"compressionAttempts":@(d.compression_attempts),@"compressionAccepted":@(d.compression_accepted),
+        @"compressionInputBytes":@(d.compression_input_bytes),@"compressionOutputBytes":@(d.compression_output_bytes),
+        @"compressionUs":@(d.compression_us),@"decompressionUs":@(d.decompression_us),
+        @"readP50Us":@(d.read_p50_us),@"readP95Us":@(d.read_p95_us),@"readP99Us":@(d.read_p99_us),
+        @"writeP95Us":@(d.write_p95_us),@"queueP95Us":@(d.queue_p95_us),
         @"ioErrors":@(d.io_errors),@"corruptions":@(d.corruptions),@"quotaRefusals":@(d.quota_refusals),
         @"onAdmissionRefusal":@"retain original Core text/pixels",@"onWriteFailure":@"retain complete host RAM snapshot",
         @"physicalIPhoneValidated":@NO,@"gameplayGainValidated":@NO
@@ -223,6 +258,8 @@ void enqueueSourceWork(State& s){
 }
 void retireOnQueue(State& s) {
     if(auto old=s.sourceArchive.exchange(nullptr)){
+        collectOperations(*old,s);
+        s.archiveOperationDrops.erase(old->generation());
         old->pause(true);old->pressure(Pressure::critical);s.retiredSources.push_back(std::move(old));
     }
     if(auto old=s.active.exchange(nullptr)){
@@ -351,7 +388,10 @@ const NeoSwapStorageAPI* NeoSwapStorage_GetAPI(uint32_t version){NeoSwapStorage_
 const NeoSwapSourceAPI* NeoSwapStorage_GetSourceAPI(uint32_t version){NeoSwapStorage_Initialize();return version==NEOSWAP_SOURCE_ABI?&sourceAPI:nullptr;}
 void NeoSwapStorage_SetBinderResult(int result){state().binderResult.store(result);}
 void NeoSwapStorage_SetSourceBinderResult(int result){state().sourceBinderResult.store(result);}
-BOOL NeoSwapStorage_GetPreference(void){return [NSUserDefaults.standardUserDefaults boolForKey:preferenceKey];}
+BOOL NeoSwapStorage_GetPreference(void){
+    const auto& profile=NeoSwapExperimentProfile();
+    return profile.storage() && (profile.configured || [NSUserDefaults.standardUserDefaults boolForKey:preferenceKey]);
+}
 void NeoSwapStorage_SetPreference(BOOL enabled){[NSUserDefaults.standardUserDefaults setBool:enabled forKey:preferenceKey];}
 void NeoSwapStorage_BeginSession(NSString* title) {
     NeoSwapStorage_Initialize();auto& s=state();const uint64_t generation=s.requestedGeneration.fetch_add(1)+1;
@@ -392,6 +432,14 @@ NSDictionary* NeoSwapStorage_Diagnostics(void) {
     {std::lock_guard guard(s.snapshotMutex);result=[s.cached mutableCopy];}
     result[@"requestedEnabled"]=@(NeoSwapStorage_GetPreference());result[@"appliesOnNextLaunch"]=@YES;
     return result;
+}
+NSDictionary* NeoSwapStorage_DrainOperations(void){
+    auto& s=state();std::lock_guard guard(s.snapshotMutex);
+    const NSUInteger count=MIN(s.operationEvents.count,128u);
+    NSArray* events=[s.operationEvents subarrayWithRange:NSMakeRange(0,count)];
+    [s.operationEvents removeObjectsInRange:NSMakeRange(0,count)];
+    return @{@"events":events,@"droppedEventsCumulative":@(s.operationDrops),
+        @"pendingEvents":@(s.operationEvents.count),@"completeHistory":@(s.operationDrops==0)};
 }
 #ifdef NEOSWAP_STORAGE_TESTING
 void NeoSwapStorage_TestSetMemory(uint64_t available,bool valid,uint32_t pressure){

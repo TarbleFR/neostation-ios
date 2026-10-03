@@ -515,6 +515,9 @@ assert host.index('rpcs3_ios_set_neoswap_api') < host.index('self->_api.initiali
 assert 'NeoSwap_RegisterClient(NEOSWAP_RPCS3)' in host
 assert 'NeoSwapRelay_WaitReady(10000)' in host
 assert 'relayReady != NEOSWAP_RELAY_OK' in host and 'RPCS3_NEOSWAP_NOT_READY' in host
+assert 'if (swapResult != NEOSWAP_OK || relayResult != NEOSWAP_RELAY_OK)' in host
+assert 'neoswap_relay_fallback' in host
+assert 'swapResult != NEOSWAP_OK || relayReady !=' not in host
 assert host.index('NeoSwapRelay_WaitReady(10000)') < host.index('NeoSwap_RegisterClient(NEOSWAP_RPCS3)')
 assert 'dlsym(handle, "rpcs3_ios_get_neoswap_client_stats")' in host
 broker = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwap.cpp').read_text()

@@ -329,7 +329,7 @@ def validate_optional_mach_imports(undefined_symbols: str) -> None:
 
 def source_hashes() -> dict[str, str]:
     sources = list(RELAY.glob('*')) + [DONATION / 'Broker.cpp', DONATION / 'Broker.h',
-        PUBLIC / 'NeoSwapRelay.h', PUBLIC / 'NeoSwapRelayService.h', PUBLIC / 'NeoSwapRelayService.mm',
+        PUBLIC / 'NeoSwapRelay.h', PUBLIC / 'NeoSwapRelayService.h', PUBLIC / 'NeoSwapRelayService.mm', PUBLIC / 'NeoSwapExperiment.h',
         Path(__file__).resolve(),
         ROOT / 'build-utils/configure_neoswap_relay.py', ROOT / 'test/neoswap_donor_simulator_test.py',
         ROOT / 'build-utils/embed_rpcs3_host_entitlements.py']
@@ -350,7 +350,7 @@ def build(work: Path, sdk: str, report: dict, *, device: bool = False) -> Path:
         shutil.copyfile(DONATION / name, canonical / 'native/neoswap-donation' / name)
     host = canonical / 'packages/neo_swap/ios/Classes'
     host.mkdir(parents=True)
-    for name in ('NeoSwapRelay.h', 'NeoSwapRelayService.h', 'NeoSwapRelayService.mm'):
+    for name in ('NeoSwapRelay.h', 'NeoSwapRelayService.h', 'NeoSwapRelayService.mm', 'NeoSwapExperiment.h'):
         shutil.copyfile(PUBLIC / name, host / name)
     (host / 'Donation').mkdir()
     shutil.copyfile(DONATION / 'Broker.h', host / 'Donation/Broker.h')

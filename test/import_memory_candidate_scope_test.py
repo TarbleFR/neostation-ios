@@ -13,6 +13,9 @@ MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
 assert manifest['target_build'] == 401
+assert manifest['swap_research']['branch'] == 'swap'
+assert manifest['swap_research']['profiles'] == ['baseline', 'relay', 'integrated']
+assert manifest['swap_research']['physical_iPhone_validated'] is False
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -51,6 +54,9 @@ assert managed['required_evidence'] == [
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    'packages/neo_swap/ios/Classes/NeoSwapExperiment.h',
+    'build-utils/configure_neoswap_research.py',
+    '.github/workflows/neoswap-research-check.yml',
     # Build401: explicit main-menu entry moved from Tools.
     'lib/widgets/header.dart',
     'lib/widgets/airplay_menu_button.dart',
@@ -210,6 +216,12 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'docs/neoswap-swap-research.md',
+    'tools/compare_neoswap_sessions.py',
+    'test/neoswap_swap_research_test.cpp',
+    'test/neoswap_swap_research_test.py',
+    'test/neoswap_comparison_test.py',
+    'test/neoswap_research_service_test.py',
     'test/rpcs3_build283_boot_stability_test.py',
     'test/rpcs3_internal_integration_test.dart',
     'docs/neoswap-build401-airplay-entry.md',

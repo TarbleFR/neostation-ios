@@ -1,0 +1,64 @@
+name: NeoSwap swap-branch research checks
+on:
+  push:
+    branches: [swap]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neoswap-research-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  research:
+    if: github.ref == 'refs/heads/swap'
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Actual profile, archive, error, journal and comparison behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/neoswap-research
+          git diff --check
+          python3 test/neoswap_swap_research_test.py | tee build/neoswap-research/native.json
+          python3 test/neoswap_comparison_test.py | tee build/neoswap-research/comparison.txt
+          python3 native/neoswap-storage/run_source_validation.py --output "$RUNNER_TEMP/research-source"
+      - name: Compile the full production plugin with all memory services for iPhone
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'build-utils')
+          import configure_neoswap_donor,configure_neoswap_relay,configure_neoswap_storage
+          configure_neoswap_donor.materialize()
+          configure_neoswap_relay.materialize()
+          configure_neoswap_storage.materialize()
+          PY
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun clang++ -x objective-c++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only \
+            -arch arm64 -isysroot "$SDK" -miphoneos-version-min=18.0 \
+            -DNEOSWAP_DONATION=1 -DNEOSWAP_RELAY=1 -DNEOSWAP_SHADER_STORAGE=1 \
+            -Itest/neoswap -Ipackages/neo_swap/ios/Classes \
+            packages/neo_swap/ios/Classes/NeoSwapPlugin.mm \
+            packages/neo_swap/ios/Classes/NeoSwapRelayService.mm \
+            packages/neo_swap/ios/Classes/NeoSwapStorageService.mm
+      - name: Execute baseline, relay and integrated profiles on iOS 18 Simulator
+        run: python3 test/neoswap_research_service_test.py
+      - name: Preserve exact-source results including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoSwap-swap-research-${{ github.sha }}
+          path: |
+            build/neoswap-research/
+            ${{ runner.temp }}/research-source/
+          if-no-files-found: error
+          retention-days: 14

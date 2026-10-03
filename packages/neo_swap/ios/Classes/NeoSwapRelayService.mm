@@ -2,6 +2,7 @@
 #import "NeoSwapRelay.h"
 #import "Relay/NeoSwapPageRelay.h"
 #include "Relay/Backend.h"
+#include "NeoSwapExperiment.h"
 #import <Foundation/Foundation.h>
 #include <mach/mach.h>
 #include <algorithm>
@@ -130,6 +131,7 @@ NSDictionary* capabilityCheck() {
     return self;
 }
 - (void)start {
+    if (!NeoSwapExperimentProfile().relay()) return;
     [_lock lock];
     if (_ready || _running || _memoryPressureRaised || NSDate.date.timeIntervalSince1970 < _retryAfter) {
         [_lock unlock]; return;
@@ -248,6 +250,7 @@ NSDictionary* capabilityCheck() {
     dispatch_group_leave(completed);
 }
 - (int)waitReady:(uint32_t)timeout {
+    if (!NeoSwapExperimentProfile().relay()) return NEOSWAP_RELAY_DISABLED;
     [self start];
     const uint32_t boundedTimeout = std::min(timeout, 10000u);
     const NSTimeInterval deadline = NSDate.date.timeIntervalSince1970 +
@@ -280,6 +283,7 @@ NSDictionary* capabilityCheck() {
     }
 }
 - (void)maintain {
+    if (!NeoSwapExperimentProfile().relay()) return;
     dispatch_async(_queue, ^{
         (void)neostation::relay::collect();
         if (self->_memoryPressureRaised) {
@@ -299,6 +303,7 @@ NSDictionary* capabilityCheck() {
     [_lock lock];
     NSMutableDictionary* result = [_details mutableCopy];
     result[@"ready"] = @(_ready);
+    result[@"experimentMode"] = [NSString stringWithUTF8String:NeoSwapExperimentProfile().name()];
     result[@"preparationRunning"] = @(_running);
     result[@"fastFootprintRetryCount"] = @(_fastFootprintRetryCount);
     result[@"fastFootprintRetryPending"] = @(_fastFootprintRetryPending);

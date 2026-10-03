@@ -16,6 +16,9 @@ void NeoSwapStorage_EndSession(void);
 void NeoSwapStorage_SetPreference(BOOL enabled);
 BOOL NeoSwapStorage_GetPreference(void);
 NSDictionary* NeoSwapStorage_Diagnostics(void);
+// Diagnostics worker only. Consumes at most 128 events, with explicit gap
+// counters. No filesystem I/O, wait for the utility FIFO or Core getter call.
+NSDictionary* NeoSwapStorage_DrainOperations(void);
 #ifdef __cplusplus
 }
 #endif

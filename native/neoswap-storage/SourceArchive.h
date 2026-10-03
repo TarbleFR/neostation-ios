@@ -3,6 +3,7 @@
 #include "ManagedSwap.h"
 #include "SourceABI.h"
 #include <atomic>
+#include <array>
 #include <map>
 #include <mutex>
 namespace neostation::source_archive {
@@ -15,6 +16,21 @@ struct Config {
     Config();
 };
 struct Admission { int code=NS_SOURCE_BUSY;uint64_t object=0; };
+enum class Operation { admitted, quota_refused, discarded, checkpoint, archived, retry,
+    archive_failed, ram_read, restored, restore_failed, pressure };
+const char* operation_name(Operation) noexcept;
+struct OperationEvent {
+    uint64_t sequence=0,monotonic_us=0,session=0,object=0,bytes=0,duration_us=0;
+    uint32_t domain=0,chunk=0;
+    int result=0,os_error=0;
+    Operation operation=Operation::admitted;
+};
+struct OperationBatch {
+    static constexpr size_t capacity=64;
+    std::array<OperationEvent,capacity> events{};
+    size_t count=0;
+    uint64_t dropped=0,pending=0;
+};
 struct Stats {
     uint64_t session=0,sources=0,pending=0,staging_bytes=0,staging_peak=0;
     uint64_t admissions=0,refusals=0,archived_bytes=0,archive_failures=0;
@@ -46,6 +62,9 @@ public:
     bool accepting() const noexcept {return !paused_.load() && pressure_.load()==storage::Pressure::normal;}
     uint64_t generation() const noexcept {return session_;}
     Stats snapshot();
+    // The journal has a fixed RAM bound. Core callbacks append while holding
+    // the existing admission lock; only a utility worker drains/writes it.
+    OperationBatch drain_operations();
 #ifdef NEOSWAP_STORAGE_TESTING
     void inject(storage::Store::Fault fault){manager_.inject(fault);}
     void defer_after_chunks(uint32_t count){defer_after_chunks_=count;}
@@ -68,6 +87,11 @@ private:
     std::map<uint64_t,std::shared_ptr<Record>> records_;
     uint64_t next_id_=1,staging_=0,pending_=0;
     Stats stats_;
+    std::array<OperationEvent,512> operations_{};
+    size_t operation_head_=0,operation_count_=0;
+    uint64_t operation_sequence_=0,operation_dropped_=0;
+    void record_locked(Operation,uint64_t object,uint32_t domain,uint64_t bytes,
+        uint64_t duration=0,int result=0,int error=0,uint32_t chunk=0) noexcept;
     std::atomic<bool> paused_{false};
     std::atomic<storage::Pressure> pressure_{storage::Pressure::normal};
     std::atomic<uint64_t> released_{0};

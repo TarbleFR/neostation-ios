@@ -1,7 +1,7 @@
 name: NeoSwap native and host checks
 on:
   push:
-    branches: [experimental]
+    branches: [experimental, swap]
   workflow_dispatch:
 permissions:
   contents: read
