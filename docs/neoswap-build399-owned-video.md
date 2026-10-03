@@ -86,6 +86,18 @@ roundtrips/lifecycle failures in iOS18 Simulator, and syntax-checks the complete
 `cellVdec.cpp` with the actual iOS Core compiler flags before the full build.
 Those Apple results and a new private IPA are still pending at this checkpoint.
 
+The first Apple Core preflight at `899dafb81a62f30d4150a604125730ac629be965`
+stopped while configuring its **host test dependency**, before compiling the
+iOS Core: FFmpeg reported missing host C11 support. Target SDK flags had been
+supplied, but its separate host compiler did not receive the selected macOS
+SDK. The repaired helper passes the SDK to both compiler roles, removes an
+inherited iOS SDK, and preserves `ffbuild/config.log` plus the native proof log
+on failure. Two command-contract simulations fail before that repair and pass
+after it; they do not replace the real Apple FFmpeg execution. The independent
+Linux/macOS storage jobs at that first SHA passed, including the actual iOS
+simulator source-domain-3 service roundtrip. Future candidates must rerun their
+own exact-source gates, not reuse these results as new-revision proof.
+
 ## Observability and honest presentation
 
 Core diagnostics separately report owned live mappings, actual unmaps,

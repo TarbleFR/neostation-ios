@@ -50,6 +50,8 @@ static void runTest(){@autoreleasepool {
                 [d[@"stagingRamBytes"] unsignedLongLongValue]==0;}),"pixel verified checkpoint");
         std::string restoredPixels;int pixelError=0;
         require(pixelOwner.restore(restoredPixels,pixelError)==NS_SOURCE_OK && restoredPixels==originalPixels,"pixel real private-file roundtrip");
+        // Diagnostics are a utility-queue snapshot, refreshed once per second.
+        require(until([&]{return [NeoSwapStorage_Diagnostics()[@"sourceArchive"][@"videoPixelReturnedArchiveBytesCumulative"] unsignedLongLongValue]>=originalPixels.size();}),"pixel read diagnostics");
         result[@"pixelDiagnostics"]=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
         words[0]=0x07230203;words[1]=0x00010500;words[3]=64;words[4]=0;
         for(unsigned i=1;i<=16;++i){uint8_t key[32]{};key[0]=i;uint32_t random=i;
