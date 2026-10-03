@@ -23,6 +23,7 @@ static NSString* NeoShaderResolve(NSString* token, NSString* bundled, NSString* 
 
 static NSArray<NSDictionary*>* NeoShaderScan(NSString* root, NSString* marker) {
   if (!root.length) return @[];
+  root = root.stringByStandardizingPath.stringByResolvingSymlinksInPath;
   NSMutableArray* presets = [NSMutableArray array];
   NSDirectoryEnumerator* files = [NSFileManager.defaultManager enumeratorAtURL:
       [NSURL fileURLWithPath:root isDirectory:YES]
@@ -35,7 +36,11 @@ static NSArray<NSDictionary*>* NeoShaderScan(NSString* root, NSString* marker) {
     [file getResourceValue:&symbolic forKey:NSURLIsSymbolicLinkKey error:nil];
     if (symbolic.boolValue || files.level > 12) { [files skipDescendants]; continue; }
     if (![file.pathExtension.lowercaseString isEqual:@"slangp"]) continue;
-    NSString* relative = [file.path substringFromIndex:root.length + 1];
+    // NSURL enumeration can expand /var to /private/var. Derive relative
+    // identities only after both sides have the same filesystem spelling.
+    NSString* path=file.path.stringByStandardizingPath.stringByResolvingSymlinksInPath;
+    if (![path hasPrefix:[root stringByAppendingString:@"/"]]) continue;
+    NSString* relative = [path substringFromIndex:root.length + 1];
     NSString* token = [NSString stringWithFormat:@"%@:%@", marker, relative];
     if (!NeoShaderResolve(token, [marker isEqual:@"bundle"] ? root : nil,
                                 [marker isEqual:@"data"] ? root : nil)) continue;

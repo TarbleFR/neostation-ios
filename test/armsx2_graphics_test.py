@@ -46,7 +46,11 @@ int main() { @autoreleasepool {
  NSString* bundled=[temp stringByAppendingPathComponent:@"container-a/shaders"];
  NSString* user=[temp stringByAppendingPathComponent:@"data/shaders"];
  write(bundled,@"presets/crt.slangp"); write(user,@"pack/lcd.slangp");
- assert(NeoShaderScan(bundled,@"bundle").count==1);
+ assert(NeoShaderResolve(@"bundle:presets/crt.slangp",bundled,user));
+ NSArray* bundledScan=NeoShaderScan(bundled,@"bundle");
+ if(bundledScan.count!=1) NSLog(@"Preset scan failed: root=%@ canonical=%@ entries=%@",bundled,bundled.stringByResolvingSymlinksInPath,bundledScan);
+ assert(bundledScan.count==1);
+ assert([bundledScan[0][@"id"] isEqual:@"bundle:presets/crt.slangp"]);
  assert(NeoShaderScan(user,@"data").count==1);
  assert(NeoShaderResolve(@"bundle:presets/crt.slangp",bundled,user));
  assert(NeoShaderResolve(@"data:pack/lcd.slangp",bundled,user));
@@ -64,8 +68,8 @@ int main() { @autoreleasepool {
  NSArray* scan=NeoShaderScan(user,@"data");
  assert([scan[0][@"id"] isEqual:@"data:pack/lcd.slangp"]);
  assert([ARMSX2CanonicalLocale(@"zh-TW") isEqual:@"zh_Hant"]);
- assert([ARMSX2LocalizedText(@"Performance Overlays",nil,@"fr") isEqual:@"Overlays de performances"]);
- assert([ARMSX2LocalizedText(@"Detailed",nil,@"zh-Hant") isEqual:@"詳細"]);
+ assert([ARMSX2LocalizedText(@"Performance Overlays",@"",@"fr") isEqual:@"Overlays de performances"]);
+ assert([ARMSX2LocalizedText(@"Detailed",@"",@"zh-Hant") isEqual:@"詳細"]);
  [NSFileManager.defaultManager removeItemAtPath:temp error:nil];
  puts("PASS: production scans; stable identities after container move; invalid paths; symlink escape; locale selection");
 } }

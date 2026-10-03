@@ -13,10 +13,18 @@ runner=runner.replace('str(CLASSES / \'DolphinSessionMenu.mm\')','str(CLASSES / 
 runner=runner.replace("'CLANG_ENABLE_OBJC_ARC': 'YES'","'CLANG_ENABLE_OBJC_ARC': 'YES', 'CLANG_CXX_LANGUAGE_STANDARD': 'c++20'")
 runner=runner.replace("{'sdk': 'UIKit.framework'}","{'sdk': 'libz.tbd'}, {'sdk': 'UniformTypeIdentifiers.framework'}, {'sdk': 'UIKit.framework'}")
 ns=dict(vars(harness));ns['CLASSES']=ROOT/'packages/armsx2_internal_bridge/ios/Classes'
+# ARMSX2 needs a plain UIKit host; don't pull in the motion fixture's controller.
+ns['APP']=harness.APP.replace('#import "TouchController/TCManagerInterface.h"','')
+a=ns['APP'].index('@implementation TCManagerInterface');b=ns['APP'].index('@end',a)+len('@end')
+ns['APP']=ns['APP'][:a]+ns['APP'][b:]
+runner=runner.replace('dolphin-account-tests-','armsx2-graphics-tests-').replace('build/rpcs3-ci/','build/armsx2-validation/')
 ns['TESTS']=r'''
 #import <XCTest/XCTest.h>
 #import <UIKit/UIKit.h>
 #import "Armsx2SessionMenu.h"
+@interface Armsx2SessionMenu (GraphicsTesting)
+- (void)resumePressed;
+@end
 @interface ARMSX2GraphicsTests : XCTestCase
 @end
 @implementation ARMSX2GraphicsTests
@@ -25,7 +33,7 @@ ns['TESTS']=r'''
 }
 - (Armsx2SessionMenu*)menu:(__strong UINavigationController**)navigation {
  Armsx2SessionMenu* menu=[Armsx2SessionMenu new];menu.localeIdentifier=@"fr";
- menu.readSnapshot=^(void (^done)(NSDictionary*)){done([self snapshot]);};
+ menu.readSnapshot=^(void (^done)(NSDictionary<NSString*, id>* _Nullable)){done([self snapshot]);};
  *navigation=[[UINavigationController alloc] initWithRootViewController:menu];
  [*navigation loadViewIfNeeded];[menu loadViewIfNeeded];[menu viewWillAppear:NO];
  // Exercise production root navigation; no private enum constants are assumed.
@@ -59,7 +67,7 @@ ns['TESTS']=r'''
  [shaders tableView:shaders.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
  XCTAssertNotNil(pending);XCTAssertTrue(nav.view.userInteractionEnabled);
  XCTAssertFalse([shaders tableView:shaders.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]].userInteractionEnabled);
- [shaders performSelector:NSSelectorFromString(@"resumePressed")];XCTAssertEqual(resumed,1U);
+ [shaders resumePressed];XCTAssertEqual(resumed,1U);
  pending(NO,@"HTTP 503");
  NSString* footer=[shaders tableView:shaders.tableView titleForFooterInSection:0];
  XCTAssertTrue([footer containsString:@"HTTP 503"]);
