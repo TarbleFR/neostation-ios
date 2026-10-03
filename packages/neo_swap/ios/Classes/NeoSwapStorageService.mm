@@ -97,10 +97,14 @@ void collectOperations(neostation::source_archive::Archive& archive,State& s){
             if(s.operationEvents.count==512){[s.operationEvents removeObjectAtIndex:0];++s.operationDrops;}
             [s.operationEvents addObject:@{
                 @"sequence":@(e.sequence),@"monotonicUs":@(e.monotonic_us),@"session":@(e.session),
-                @"object":@(e.object),@"domain":@(e.domain),@"chunk":@(e.chunk),
+                @"object":@(e.object),@"domain":@(e.domain),@"chunk":e.chunk==UINT32_MAX?NSNull.null:@(e.chunk),
                 @"operation":[NSString stringWithUTF8String:operation_name(e.operation)],
+                @"domainKind":e.operation==Operation::pressure?@"none":
+                    e.domain==3?@"owned_software_vdec_pixels":@"compiled_glsl_cpu_snapshot",
                 @"logicalBytes":@(e.bytes),@"durationUs":@(e.duration_us),
-                @"result":@(e.result),@"osError":@(e.os_error)}];
+                @"result":@(e.result),@"resultName":[NSString stringWithUTF8String:result_name(e.operation,e.result)],
+                @"osError":@(e.os_error),@"osErrorText":e.os_error?
+                    ([NSString stringWithUTF8String:std::strerror(e.os_error)] ?: @"unknown_errno"):NSNull.null}];
         }
         if(!batch.pending)break;
     }

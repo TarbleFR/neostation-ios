@@ -43,11 +43,26 @@ const char* operation_name(Operation operation) noexcept {
     case Operation::retry:return "checkpoint_deferred_snapshot_retained";
     case Operation::archive_failed:return "archive_failed_snapshot_retained";
     case Operation::ram_read:return "restored_from_ram_snapshot";
+    case Operation::restored_chunk:return "managed_chunk_restored";
     case Operation::restored:return "restored_from_managed_chunks";
     case Operation::restore_failed:return "restore_failed";
     case Operation::pressure:return "pressure_changed";
     }
     return "unknown";
+}
+const char* result_name(Operation operation,int result) noexcept {
+    if(operation==Operation::pressure){
+        return result==static_cast<int>(storage::Pressure::normal)?"normal":
+            result==static_cast<int>(storage::Pressure::warning)?"warning":
+            result==static_cast<int>(storage::Pressure::critical)?"critical":"unknown_pressure";
+    }
+    switch(result){
+    case NS_SOURCE_OK:return "ok";case NS_SOURCE_BUSY:return "busy";
+    case NS_SOURCE_DISABLED:return "disabled";case NS_SOURCE_INVALID:return "invalid";
+    case NS_SOURCE_IO:return "io_error";case NS_SOURCE_QUOTA:return "quota_refused";
+    case NS_SOURCE_MISSING:return "missing";case NS_SOURCE_PRESSURE:return "pressure_refused";
+    default:return "unknown_source_result";
+    }
 }
 void Archive::record_locked(Operation operation,uint64_t object,uint32_t domain,uint64_t bytes,
     uint64_t duration,int result,int error,uint32_t chunk) noexcept {
@@ -244,21 +259,26 @@ int Archive::read(uint64_t object,char* output,size_t bytes,int& os_error){
             record_locked(Operation::ram_read,object,record->domain,bytes,now_us()-started);return NS_SOURCE_OK;}
     }
     managed_swap::Result result{};
+    uint32_t failed_chunk=UINT32_MAX;
     for(uint32_t index=0;static_cast<uint64_t>(index)*config_.managed.chunk_bytes<bytes;++index){
+        const auto chunk_started=now_us();
         auto read=manager_.read_chunk(record->object,index);result={read.code,read.os_error};
-        if(result.code!=managed_swap::Code::ok)break;
+        if(result.code!=managed_swap::Code::ok){failed_chunk=index;break;}
         const auto offset=static_cast<size_t>(index)*config_.managed.chunk_bytes;
         if(read.lease.size()!=std::min<size_t>(config_.managed.chunk_bytes,bytes-offset)){
-            result={managed_swap::Code::corrupt,0};break;
+            result={managed_swap::Code::corrupt,0};failed_chunk=index;break;
         }
         std::memcpy(output+offset,read.lease.data(),read.lease.size());
+        {std::lock_guard lock(mutex_);
+            record_locked(Operation::restored_chunk,object,record->domain,read.lease.size(),
+                now_us()-chunk_started,NS_SOURCE_OK,0,index);}
     }
     std::lock_guard lock(mutex_);
     if(result.code==managed_swap::Code::ok){stats_.restored_bytes+=bytes;
         if(record->domain==3)stats_.pixel_restored_bytes+=bytes;}
     else{++stats_.read_failures;stats_.last_errno=result.os_error;os_error=result.os_error;}
     record_locked(result.code==managed_swap::Code::ok?Operation::restored:Operation::restore_failed,
-        object,record->domain,bytes,now_us()-started,translate(result.code),result.os_error);
+        object,record->domain,bytes,now_us()-started,translate(result.code),result.os_error,failed_chunk);
     return translate(result.code);
 }
 void Archive::pressure(storage::Pressure value){

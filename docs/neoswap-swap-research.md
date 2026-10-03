@@ -116,7 +116,12 @@ noyau du processus, pas des restaurations NeoSwap.
 `NeoSwap-operations.jsonl` enregistre session, objet, domaine, index de bloc,
 séquence, temps monotone, octets logiques, durée, résultat et errno : admission,
 checkpoint vérifié/éviction, libération de snapshot, lecture RAM, restauration,
-retrait, pression et échec avec copie RAM conservée. Les métriques agrégées
+retrait, pression et échec avec copie RAM conservée. Chaque bloc restauré a son
+index ; une erreur de lecture identifie le bloc fautif. Les événements portant
+sur l'objet entier ont `chunk: null`, sans être attribués artificiellement au
+bloc zéro. Domaine, résultat et errno ont aussi une description textuelle.
+Le comparateur rattache les opérations à l'epoch d'archive observé et signale
+les événements exclus d'une autre session. Les métriques agrégées
 donnent séparément volumes lus/écrits, compression/décompression, attente de la
 file de restauration et temps du travail. Les décisions VDEC ont une raison
 technique explicite. La journalisation n'effectue pas d'I/O dans l'admission
@@ -128,6 +133,11 @@ n'est donc jamais présentée comme exhaustive. Chaque famille de logs conserve
 deux fichiers de 16 Mio, soit au maximum 64 Mio pour les deux familles NeoSwap.
 Une rotation peut supprimer le début d'une longue session : le comparateur le
 signale. Les erreurs d'écriture restent visibles.
+
+`coreBootCallSeconds` utilise les milestones réels `game_boot_begin` et
+`game_boot_return`, avec un statut de succès. Cette durée mesure l'appel du
+Core ; elle ne comprend pas tout le lancement de l'application, la préparation
+du relais avant session ou le délai jusqu'à la première image jouable.
 
 Les FPS proviennent du producteur Core existant à 1 Hz, sans deuxième appel au
 getter. ABI30 ne fournit pas de timings par frame. `frameTimeP95Ms` et

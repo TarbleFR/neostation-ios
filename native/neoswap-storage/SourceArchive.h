@@ -17,8 +17,9 @@ struct Config {
 };
 struct Admission { int code=NS_SOURCE_BUSY;uint64_t object=0; };
 enum class Operation { admitted, quota_refused, discarded, checkpoint, archived, retry,
-    archive_failed, ram_read, restored, restore_failed, pressure };
+    archive_failed, ram_read, restored_chunk, restored, restore_failed, pressure };
 const char* operation_name(Operation) noexcept;
+const char* result_name(Operation,int result) noexcept;
 struct OperationEvent {
     uint64_t sequence=0,monotonic_us=0,session=0,object=0,bytes=0,duration_us=0;
     uint32_t domain=0,chunk=0;
@@ -91,7 +92,7 @@ private:
     size_t operation_head_=0,operation_count_=0;
     uint64_t operation_sequence_=0,operation_dropped_=0;
     void record_locked(Operation,uint64_t object,uint32_t domain,uint64_t bytes,
-        uint64_t duration=0,int result=0,int error=0,uint32_t chunk=0) noexcept;
+        uint64_t duration=0,int result=0,int error=0,uint32_t chunk=UINT32_MAX) noexcept;
     std::atomic<bool> paused_{false};
     std::atomic<storage::Pressure> pressure_{storage::Pressure::normal};
     std::atomic<uint64_t> released_{0};

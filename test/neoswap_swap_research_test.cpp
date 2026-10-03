@@ -34,19 +34,21 @@ int main(int argc,char** argv){
     const auto admission=archive.admit(2,input.data(),input.size());assert(admission.code==NS_SOURCE_OK);
     auto batch=archive.drain_operations();assert(batch.count==1&&batch.events[0].operation==source_archive::Operation::admitted);
     assert(batch.events[0].session==71&&batch.events[0].object==admission.object&&batch.events[0].bytes==input.size());
+    assert(batch.events[0].chunk==UINT32_MAX);
     assert(archive.try_read_staging(admission.object,output.data(),output.size())==NS_SOURCE_OK&&output==input);
     archive.maintain();int error=0;
     assert(archive.snapshot().staging_bytes==0);
     assert(archive.read(admission.object,output.data(),output.size(),error)==NS_SOURCE_OK&&output==input);
-    batch=archive.drain_operations();unsigned checkpoints=0;bool unmapped=false,restored=false,ram=false;
+    batch=archive.drain_operations();unsigned checkpoints=0,restored_chunks=0;bool unmapped=false,restored=false,ram=false;
     uint64_t sequence=1;
     for(size_t i=0;i<batch.count;++i){const auto& e=batch.events[i];
         assert(e.sequence>sequence&&e.object==admission.object&&e.monotonic_us>0);sequence=e.sequence;
         checkpoints+=e.operation==source_archive::Operation::checkpoint;
+        if(e.operation==source_archive::Operation::restored_chunk){assert(e.chunk==restored_chunks&&e.bytes==65536);++restored_chunks;}
         unmapped|=e.operation==source_archive::Operation::archived;
         restored|=e.operation==source_archive::Operation::restored;ram|=e.operation==source_archive::Operation::ram_read;
     }
-    assert(checkpoints==2&&unmapped&&restored&&ram);
+    assert(checkpoints==2&&restored_chunks==2&&unmapped&&restored&&ram);
     archive.discard(admission.object);archive.maintain();assert(archive.snapshot().sources==0);
 
     source_archive::Archive failed(argv[1],72,config);
@@ -58,6 +60,18 @@ int main(int argc,char** argv){
         assert(batch.events[i].os_error==ENOSPC&&batch.events[i].result==NS_SOURCE_IO);preserved=true;
     }
     assert(preserved&&failed.snapshot().staging_bytes==input.size());
+    source_archive::Archive unreadable(argv[1],73,config);
+    const auto corrupt=unreadable.admit(1,input.data(),input.size());assert(corrupt.code==NS_SOURCE_OK);
+    unreadable.maintain();unreadable.inject(storage::Store::Fault::read_error);
+    assert(unreadable.read(corrupt.object,output.data(),output.size(),error)==NS_SOURCE_IO);
+    const auto failures=unreadable.drain_operations();bool failed_chunk=false;
+    for(size_t i=0;i<failures.count;++i)if(failures.events[i].operation==source_archive::Operation::restore_failed){
+        assert(failures.events[i].chunk==0&&failures.events[i].os_error==EIO);failed_chunk=true;
+    }
+    assert(failed_chunk);
+    assert(!std::strcmp(source_archive::result_name(source_archive::Operation::restore_failed,NS_SOURCE_IO),"io_error"));
+    assert(!std::strcmp(source_archive::result_name(source_archive::Operation::pressure,
+        static_cast<int>(storage::Pressure::warning)),"warning"));
     for(unsigned i=0;i<600;++i)assert(failed.try_read_staging(retained.object,output.data(),output.size())==NS_SOURCE_OK);
     batch=failed.drain_operations();assert(batch.count==64&&batch.dropped==88&&batch.pending==448);
     sequence=batch.events[0].sequence;

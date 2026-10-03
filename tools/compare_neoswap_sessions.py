@@ -66,6 +66,8 @@ def session(memory,rpcs3,operations,title,sequence=None):
         (row.get('memoryProfile',{}).get('sampledSessionActive') is True or
          row.get('event')=='rpcs3_memory_session_end')]
     active=[row for row in rows if row.get('memoryProfile',{}).get('sampledSessionActive') is True]
+    if sum(row.get('event')=='rpcs3_memory_session_start' for row in rows)>1:
+        raise ValueError('Multiple launches reused the same PID/session number; supply one launch export')
     profile=active[0].get('experiment',{})
     if any(row.get('experiment')!=profile for row in active):
         raise ValueError('Mixed research profiles/source commits in one session')
@@ -99,6 +101,8 @@ def session(memory,rpcs3,operations,title,sequence=None):
                 raise ValueError('Baseline has live NeoSwap allocations')
             if row.get('shaderStorage',{}).get('active'):raise ValueError('Baseline storage is active')
     source=[row.get('shaderStorage',{}).get('sourceArchive',{}) for row in rows]
+    archive_epochs={item['session'] for item in source if number(item.get('session')) and item['session']>0}
+    if len(archive_epochs)>1:issues.append('source_archive_epoch_changed_during_memory_session')
     cache=[row.get('shaderStorage',{}).get('cache',{}) for row in rows]
     def delta(items,key):return counter_delta([item[key] for item in items if number(item.get(key))])
     faults=[row.get('processMemoryEvents',{}) for row in rows if row.get('processMemoryEvents',{}).get('valid')]
@@ -107,16 +111,24 @@ def session(memory,rpcs3,operations,title,sequence=None):
     gaps=max([batch.get('droppedEventsCumulative',0) for batch in batches],default=0)
     if gaps:issues.append('operation_journal_reports_dropped_events')
     if profile.get('storage') and not batches:issues.append('operation_journal_not_supplied_or_no_operations')
-    counts=Counter(event.get('operation','unknown') for batch in batches for event in batch.get('events',[]))
+    events=[event for batch in batches for event in batch.get('events',[])]
+    unbound=sum(event.get('session') not in archive_epochs for event in events)
+    if unbound:issues.append('operation_events_outside_selected_archive_epoch')
+    counts=Counter(event.get('operation','unknown') for event in events if event.get('session') in archive_epochs)
     footprint=values(active,'processFootprintBytes');resident=values(active,'processResidentBytes')
     available=values(active,'processAvailableBytes')
     if not footprint or not resident or not available:issues.append('memory_measurements_missing')
-    boots={}
+    boots={};boot_status=None
     for row in rpcs3:
-        if row.get('pid')==pid and row.get('stage') in ('game_boot_begin','game_boot_end') and begin-2<=row.get('timestamp',0)<=end:
-            boots[row['stage']]=row['timestamp']
-    boot_seconds=boots.get('game_boot_end',0)-boots.get('game_boot_begin',0) if len(boots)==2 else None
-    if boot_seconds is None:issues.append('boot_milestones_missing')
+        if row.get('pid')!=pid or not begin-2<=row.get('timestamp',0)<=end:continue
+        message=row.get('message','')
+        if row.get('stage')=='game_boot_begin' and message==title:
+            boots['begin']=row['timestamp']
+        elif row.get('stage')=='game_boot_return' and message.startswith(title+' '):
+            status=re.search(r'\bstatus=(-?\d+)\b',message)
+            if status:boot_status=int(status[1]);boots['return']=row['timestamp']
+    boot_seconds=boots['return']-boots['begin'] if len(boots)==2 and boot_status==0 and boots['return']>=boots['begin'] else None
+    if boot_seconds is None:issues.append('successful_boot_call_milestones_missing')
     return {
         'mode':profile.get('mode'),'sourceCommit':profile.get('sourceCommit'),'pid':pid,'session':selected,
         'physicalMemoryBytes':active[0].get('physicalMemoryBytes'),'osVersion':active[0].get('osVersion'),
@@ -135,9 +147,10 @@ def session(memory,rpcs3,operations,title,sequence=None):
         'sourceRestorationWorkUs':delta(source,'demandReadUsCumulative'),
         'sampledFpsMean':statistics.mean(fps) if fps else None,'sampledFpsP05':percentile(fps,0.05),
         'sampledFpsMinimum':min(fps) if fps else None,'fpsSamples':len(fps),'zeroFpsSamples':fps.count(0),
-        'worstThermalState':max(thermal) if thermal else None,'coreBootSeconds':boot_seconds,
+        'worstThermalState':max(thermal) if thermal else None,'coreBootCallSeconds':boot_seconds,'coreBootStatus':boot_status,
         'frameTimeP95Ms':None,'stutterCount':None,'jetsamCause':None,
-        'operationCounts':dict(counts),'operationDropsCumulative':gaps,'issues':issues,
+        'sourceArchiveEpochs':sorted(archive_epochs),'operationCounts':dict(counts),
+        'operationEventsExcluded':unbound,'operationDropsCumulative':gaps,'issues':issues,
     }
 
 
@@ -150,10 +163,11 @@ def compare(baseline,candidate):
     return {'schema':1,'baseline':baseline,'candidate':candidate,
         'candidateMinusBaseline':{key:candidate[key]-baseline[key] for key in (
             'processFootprintPeakBytes','processResidentPeakBytes','processAvailableMinimumBytes',
-            'sampledFpsMean','coreBootSeconds') if number(baseline[key]) and number(candidate[key])},
+            'sampledFpsMean','coreBootCallSeconds') if number(baseline[key]) and number(candidate[key])},
         'deviceValidationPassed':False,'automaticPromotionAllowed':False,
         'limitations':['FPS sampled at 1 Hz; per-frame frametime and stutters unavailable from Core ABI30',
             'Kernel pageins/faults are not NeoSwap restorations','Missing session end does not identify jetsam/OOM',
+            'coreBootCallSeconds measures the Core boot invocation; full app launch and first playable frame are separate',
             'Same game settings, device identity, save point and thermal conditions require test protocol confirmation']}
 
 
