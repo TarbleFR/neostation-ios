@@ -32,7 +32,7 @@ static void runTest(){@autoreleasepool {
         for(auto& byte:text){textRandom^=textRandom<<13;textRandom^=textRandom>>17;textRandom^=textRandom<<5;byte=static_cast<char>(textRandom);}
         const auto originalText=text;neostation::source_client::ColdSource sourceOwner;
         require(until([&]{return sourceOwner.offload(text,1);}),"source admission");require(text.empty(),"Core source allocation retained");
-        require(until([&]{auto d=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
+        require(until([&]{NSDictionary* d=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
             return [d[@"archivedSourceBytesCumulative"] unsignedLongLongValue]==originalText.size() &&
                 [d[@"stagingRamBytes"] unsignedLongLongValue]==0;}),"source verified eviction");
         std::string restoredText;int sourceError=0;

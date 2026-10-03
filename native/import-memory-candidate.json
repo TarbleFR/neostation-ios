@@ -480,7 +480,7 @@
     "native/neoswap-storage/tests/managed_swap_abi_test.cpp": "5c1012d5626a2e9b9a46e32a5491e358274106a874dedbf01f71ca3f3772e799",
     "native/neoswap-storage/tests/managed_swap_swift_test.swift": "010a3793557f5e048173dd32e0e7895535f2695ef651ebb6916456e50b764db2",
     "native/neoswap-storage/tests/managed_swap_test.cpp": "5b8944d8d21dfbfa5be590e80e3ab134ffeb7346311d47f74a92c8cbed94d254",
-    "native/neoswap-storage/tests/service_runtime.mm": "411e408abeb22a9dfd1d90e86092736886b4400c4844109bbe758d5f5798f720",
+    "native/neoswap-storage/tests/service_runtime.mm": "15abed5615e8ad1fcd84a28974f4559328e67a59b2aa65005f490beba6cfda7b",
     "native/neoswap-storage/tests/shader_cache_test.cpp": "5470044e6ebe90b011e2c8e8382d127415c893e545b631a6fcfc9a0d61f961ba",
     "native/neoswap-storage/tests/source_archive_test.cpp": "5d03238a89447d1434173835580f96dd0e1971f2165426a509a4f351d508f717",
     "native/neoswap-storage/tests/store_test.cpp": "d4ce262da84beb7b1a905f6412ae7ebe7601d7b14333e1614a58631faf6ac468",
