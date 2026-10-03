@@ -581,8 +581,17 @@ static void NeoRAEvent(void* context, uint64_t session, uint32_t event,
     });
     return;
   }
-  if (_host.presentingViewController) [_host dismissViewControllerAnimated:NO completion:released];
-  else released();
+  // Dismissing from the game host while it presents the menu dismisses only
+  // that menu. Its presenter owns the whole game/menu presentation chain.
+  // Recheck UIKit's relationships in completion before acknowledging release.
+  UIViewController* presenter = _host.presentingViewController;
+  UIViewController* dismissing = presenter ?: (_host.presentedViewController ? _host : nil);
+  if (dismissing) {
+    __weak RetroArchInternalBridgePlugin* weakSelf = self;
+    [dismissing dismissViewControllerAnimated:NO completion:^{
+      [weakSelf dismissAcknowledgedHost:released generation:generation];
+    }];
+  } else released();
 }
 
 - (void)finish:(BOOL)success reason:(NSString*)reason detail:(NSString*)detail {

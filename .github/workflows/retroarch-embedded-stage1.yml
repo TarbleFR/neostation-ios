@@ -74,8 +74,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Install Xcode project editor
+        if: ${{ !cancelled() }}
         run: gem install --user-install xcodeproj --version 1.27.0 --no-document
       - name: Verify generated Runner metadata with the actual project editor
+        if: ${{ !cancelled() }}
         run: bash build-utils/retroarch/ci/run_host_configuration_checks.sh "$RUNNER_TEMP/retroarch-host-configuration-checks"
       - name: Preserve generated host configuration evidence
         if: always()
@@ -86,6 +88,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Fetch exact matching RetroArch frontend source
+        if: ${{ !cancelled() }}
         run: |
           commit="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["frontend"]["commit"])')"
           git init "$RUNNER_TEMP/retroarch-upstream"
@@ -93,10 +96,14 @@ jobs:
           git -C "$RUNNER_TEMP/retroarch-upstream" fetch --depth 1 origin "$commit"
           git -C "$RUNNER_TEMP/retroarch-upstream" checkout --detach FETCH_HEAD
       - name: Download the requested pinned IPA
+        if: ${{ !cancelled() }}
         run: |
           url="$(python3 -c 'import json; print(json.load(open("build-utils/retroarch/source.json"))["sourceIpa"]["url"])')"
           curl --fail --location --retry 3 --connect-timeout 30 "$url" --output "$RUNNER_TEMP/2026-10-03_RetroArch.ipa"
       - name: Build actual hosted frontend and curated signed core package
+        # Keep compilation diagnostics available when the independent UIKit
+        # gate fails. The job remains failed and package upload stays success().
+        if: ${{ !cancelled() }}
         run: |
           python3 test/retroarch_curation_test.py \
             --ipa "$RUNNER_TEMP/2026-10-03_RetroArch.ipa" \

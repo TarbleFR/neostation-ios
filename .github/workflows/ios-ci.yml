@@ -462,6 +462,29 @@ jobs:
           flutter test --no-pub test/retroarch_*_test.dart \
             test/library_visibility_service_test.dart test/console_library_picker_test.dart
 
+      - name: Validate RetroArch Apple host lifecycle and generated-host configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 packages/retroarch_internal_bridge/ci/test_apple_evidence.py
+          bundle exec bash packages/retroarch_internal_bridge/ci/run_apple_checks.sh \
+            "$RUNNER_TEMP/retroarch-host-checks"
+          python3 packages/retroarch_internal_bridge/ci/verify_apple_evidence.py \
+            "$RUNNER_TEMP/retroarch-host-checks" "$GITHUB_SHA" --require-completion
+          bundle exec bash build-utils/retroarch/ci/run_host_configuration_checks.sh \
+            "$RUNNER_TEMP/retroarch-host-configuration-checks"
+
+      - name: Retain mandatory RetroArch host validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-Host-Validation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/retroarch-host-checks
+            ${{ runner.temp }}/retroarch-host-configuration-checks
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Build the pinned hosted RetroArch frontend and curated cores
         shell: bash
         run: |

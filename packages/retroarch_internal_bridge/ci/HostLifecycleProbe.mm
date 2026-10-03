@@ -105,7 +105,11 @@ static NSUInteger EndedForTransaction(NSInteger transaction) {
   NSDictionary* report = @{@"success": @(success), @"detail": detail, @"stage": @(self.stage), @"cycles": @(self.cycles),
     @"testRuntimeOnly": @YES, @"realRetroArchGameplayValidated": @NO, @"sourceSHA": @PROBE_SOURCE_SHA,
     @"starts": @(self.starts ? self.starts() : 0), @"stops": @(self.stops ? self.stops() : 0),
-    @"endedEvents": @(EndedEvents()), @"firstFrameTimeoutRetainedOwnership": @(self.stage >= 3),
+    @"endedEvents": @(EndedEvents()), @"stopResult": self.stopResponse ?: @{},
+    @"sessionDiagnostics": [self call:@"diagnostics" arguments:nil] ?: @{},
+    @"rootPresentedController": self.registrar.viewController.presentedViewController
+        ? NSStringFromClass(self.registrar.viewController.presentedViewController.class) : @"",
+    @"firstFrameTimeoutRetainedOwnership": @(self.stage >= 3),
     @"lateCallbackIgnored": @(self.stage >= 6), @"stopAcknowledgementRequired": @(self.stage >= 7)};
   NSData* data = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
   [data writeToFile:[documents stringByAppendingPathComponent:@"retroarch-host-probe.json"] atomically:YES];
