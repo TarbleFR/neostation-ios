@@ -47,18 +47,20 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 @property(nonatomic, assign) BOOL applying;
 @end
 
-@interface Armsx2SessionMenu ()
+@interface Armsx2SessionMenu () <UISearchResultsUpdating>
 @property(nonatomic, assign) ARMSX2MenuPage page;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* snapshot;
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
 @property(nonatomic, assign) BOOL stateFailed;
 @property(nonatomic, assign) BOOL shaderDownloadBusy;
+@property(nonatomic, copy) NSArray<NSDictionary*>* visibleShaderPresets;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* graphicsHacks;
 @property(nonatomic, assign) BOOL graphicsHacksLoading;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* patches;
 @property(nonatomic, assign) BOOL patchesLoading;
 - (void)reloadSnapshot;
+- (void)updateShaderFilter;
 - (void)reloadGraphicsHacks;
 - (void)reloadPatches;
 @end
@@ -196,6 +198,18 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
       initWithTitle:ARMSX2MenuText(@"Resume Game", @"Reprendre le jeu")
       style:UIBarButtonItemStyleDone target:self action:@selector(resumePressed)];
+  if (self.page==ARMSX2MenuShaders) {
+    UISearchController* search=[[UISearchController alloc] initWithSearchResultsController:nil];
+    search.obscuresBackgroundDuringPresentation=NO;
+    search.hidesNavigationBarDuringPresentation=NO;
+    search.automaticallyShowsCancelButton=NO;
+    search.searchResultsUpdater=self;
+    search.searchBar.placeholder=ARMSX2MenuText(@"Search shaders",@"Rechercher un shader");
+    self.navigationItem.searchController=search;
+    self.navigationItem.hidesSearchBarWhenScrolling=NO;
+    self.definesPresentationContext=YES;
+    [self updateShaderFilter];
+  }
   if(self.page==ARMSX2MenuCheats) {
     UIBarButtonItem* file=[[UIBarButtonItem alloc] initWithTitle:NeoCheatText(@"importFile",self.localeIdentifier)
         style:UIBarButtonItemStylePlain target:self action:@selector(importCheatFilePressed)];
@@ -220,10 +234,26 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       if (!menu) return;
       menu.loading = NO;
       menu.snapshot = [snapshot isKindOfClass:NSDictionary.class] ? snapshot : @{};
+      [menu updateShaderFilter];
       menu.navigationItem.rightBarButtonItem.enabled = YES;
       [menu.tableView reloadData];
     });
   });
+}
+
+- (void)updateShaderFilter {
+  if (self.page!=ARMSX2MenuShaders) return;
+  NSArray* presets=self.snapshot[@"graphicsAssets"][@"presets"];
+  if (![presets isKindOfClass:NSArray.class]) presets=@[];
+  NSString* query=[self.navigationItem.searchController.searchBar.text ?: @""
+      stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  self.visibleShaderPresets=query.length ?
+      [presets filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"name CONTAINS[cd] %@",query]] : presets;
+}
+
+- (void)updateSearchResultsForSearchController:(UISearchController*)search {
+  [self updateShaderFilter];
+  [self.tableView reloadData];
 }
 
 - (void)reloadGraphicsHacks {
@@ -288,7 +318,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     case ARMSX2MenuRoot: return self.rootKeys.count;
     case ARMSX2MenuGraphics: return self.snapshot.count ? 5 : 0;
     case ARMSX2MenuShaders: return [self.snapshot[@"graphicsAssets"][@"supported"] boolValue]
-        ? 2 + [self.snapshot[@"graphicsAssets"][@"presets"] count] : 0;
+        ? 2 + self.visibleShaderPresets.count : 0;
     case ARMSX2MenuGraphicsHacks:
       return [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class]
           ? [self.graphicsHacks[@"items"] count] : 0;
@@ -425,7 +455,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       if (self.shaderDownloadBusy) cell.textLabel.text=ARMSX2MenuText(@"Loading…",@"Chargement…");
       cell.userInteractionEnabled=!installed && !self.shaderDownloadBusy;
     } else {
-      NSDictionary* preset=assets[@"presets"][row-2];
+      NSDictionary* preset=self.visibleShaderPresets[row-2];
       cell.textLabel.text=preset[@"name"];
       cell.accessoryType=[selected isEqual:preset[@"id"]] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     }
@@ -658,7 +688,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
         });
       });
     } else {
-      NSString* token=row==0 ? @"" : self.snapshot[@"graphicsAssets"][@"presets"][row-2][@"id"];
+      NSString* token=row==0 ? @"" : self.visibleShaderPresets[row-2][@"id"];
       [self perform:@"shader" value:token successText:ARMSX2MenuText(@"Shader selection saved for this game.",@"Shader enregistré pour ce jeu.")];
     }
   } else if (self.page == ARMSX2MenuGraphicsHacks) {

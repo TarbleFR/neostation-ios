@@ -9,6 +9,7 @@ on:
       - 'packages/armsx2_jit_helper/**'
       - 'build-utils/armsx2/**'
       - 'test/armsx2_bios_hacks_test.py'
+      - 'test/armsx2_save_state_test.py'
       - 'test/armsx2_patch_catalog_test.py'
       - 'test/armsx2_graphics*'
   workflow_dispatch:

@@ -523,11 +523,12 @@ int state_operation(bool load,uint32_t slot,uint32_t timeout,char* error,size_t 
   if(slot<1 || slot>10) return error_out("ARMSX2 save-state slot must be between 1 and 10.",error,capacity);
   __block BOOL success=NO;
   dispatch_semaphore_t done=dispatch_semaphore_create(0);
-  ARMSX2SaveStateCompletion completion=^(BOOL ok){
+  void (^completion)(BOOL, NSString* _Nullable)=^(BOOL ok, NSString* _Nullable){
     success=ok;
     dispatch_semaphore_signal(done);
   };
-  if(load) [ARMSX2Bridge loadStateFromSlot:(NSInteger)slot completion:completion];
+  // The embedded menu keeps its existing slot behavior; it has no undo UI.
+  if(load) [ARMSX2Bridge loadStateFromSlot:(NSInteger)slot expectedModified:nil keepingUndo:NO completion:completion];
   else [ARMSX2Bridge saveStateToSlot:(NSInteger)slot completion:completion];
   const int64_t nanos=(int64_t)std::max<uint32_t>(timeout,1000u)*NSEC_PER_MSEC;
   if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,nanos))!=0)

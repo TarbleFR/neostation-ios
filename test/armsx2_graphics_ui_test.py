@@ -24,6 +24,7 @@ ns['TESTS']=r'''
 #import "Armsx2SessionMenu.h"
 @interface Armsx2SessionMenu (GraphicsTesting)
 - (void)resumePressed;
+- (void)updateSearchResultsForSearchController:(UISearchController*)search;
 @end
 @interface ARMSX2GraphicsTests : XCTestCase
 @end
@@ -56,6 +57,20 @@ ns['TESTS']=r'''
  XCTAssertEqualObjects(value,@"");
  [shaders tableView:shaders.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
  XCTAssertEqualObjects(command,@"downloadShaders");
+}
+- (void)testSearchFiltersByNameWithoutChangingTheStableSelection {
+ UINavigationController* nav=nil;Armsx2SessionMenu* graphics=[self menu:&nav];
+ __block id selected=nil;graphics.performCommand=^(NSString* c,id value,void (^done)(BOOL,NSString*)){selected=value;done(YES,@"");};
+ [graphics tableView:graphics.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]];
+ Armsx2SessionMenu* shaders=(id)nav.topViewController;[shaders loadViewIfNeeded];
+ UISearchController* search=shaders.navigationItem.searchController;
+ XCTAssertNotNil(search);XCTAssertEqualObjects(search.searchBar.placeholder,@"Rechercher un shader");
+ search.searchBar.text=@"unknown";[shaders updateSearchResultsForSearchController:search];
+ XCTAssertEqual([shaders tableView:shaders.tableView numberOfRowsInSection:0],2);
+ search.searchBar.text=@"crt";[shaders updateSearchResultsForSearchController:search];
+ XCTAssertEqual([shaders tableView:shaders.tableView numberOfRowsInSection:0],3);
+ [shaders tableView:shaders.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]];
+ XCTAssertEqualObjects(selected,@"bundle:presets/crt.slangp");
 }
 - (void)testDownloadDoesNotBlockResumeAndFailuresRemainVisible {
  UINavigationController* nav=nil;Armsx2SessionMenu* graphics=[self menu:&nav];

@@ -22,12 +22,12 @@ for locale in locales:
     assert keys==translation_keys,locale
     for key,value in entries.items():
         assert re.findall(r'%[\d.$]*[@dufs]',key)==re.findall(r'%[\d.$]*[@dufs]',value),(locale,key)
-assert len(translation_keys)==12
+assert len(translation_keys)==13
 source=json.loads((ROOT/'build-utils/armsx2/source.json').read_text())
 assert source['release']=='iOSv2.6.0' and source['revision']=='9d989ca933a85bb2f1d111fd3b9e5742ac7d2fbe'
 assert source['abi_version']==6
 assert '#define NEO_ARMSX2_ABI_VERSION 6u' in (CLASSES/'ARMSX2CoreABI.h').read_text()
-print('PASS: exact official 2.6 pin; ABI 6; 12 graphics keys in all 12 locales')
+print('PASS: exact official 2.6 pin; ABI 6; 13 graphics keys in all 12 locales')
 if platform.system()!='Darwin':
     print('Foundation behavior checks require macOS and are mandatory in native CI.')
     raise SystemExit(0)

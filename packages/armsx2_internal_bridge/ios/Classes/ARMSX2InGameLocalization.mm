@@ -704,6 +704,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
   dispatch_once(&once, ^{
     values = @{
       @"en": @{
+        @"Search shaders": @"Search shaders",
         @"Shaders": @"Shaders",
         @"Bundled presets and downloads": @"Bundled presets and downloads",
         @"Performance Overlays": @"Performance Overlays",
@@ -718,6 +719,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.",
       },
       @"fr": @{
+        @"Search shaders": @"Rechercher un shader",
         @"Shaders": @"Shaders",
         @"Bundled presets and downloads": @"Presets intégrés et téléchargements",
         @"Performance Overlays": @"Overlays de performances",
@@ -732,6 +734,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Choisissez un shader intégré ou téléchargez le pack RetroArch (environ 54 Mo). Le choix est enregistré par jeu. Reprenez pour voir l’effet ; rouvrez ce menu pour les erreurs de rendu.",
       },
       @"de": @{
+        @"Search shaders": @"Shader suchen",
         @"Shaders": @"Shader",
         @"Bundled presets and downloads": @"Integrierte Presets und Downloads",
         @"Performance Overlays": @"Leistungsanzeigen",
@@ -746,6 +749,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Wählen Sie einen integrierten Shader oder laden Sie das RetroArch-Paket herunter (etwa 54 MB). Die Auswahl wird pro Spiel gespeichert. Setzen Sie das Spiel fort, um den Effekt zu sehen; öffnen Sie dieses Menü erneut, um Renderfehler zu prüfen.",
       },
       @"es": @{
+        @"Search shaders": @"Buscar shaders",
         @"Shaders": @"Shaders",
         @"Bundled presets and downloads": @"Preajustes integrados y descargas",
         @"Performance Overlays": @"Indicadores de rendimiento",
@@ -760,6 +764,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Elige un shader integrado o descarga el paquete de RetroArch (unos 54 MB). La selección se guarda por juego. Reanuda para ver el efecto; vuelve a abrir este menú para consultar errores de renderizado.",
       },
       @"it": @{
+        @"Search shaders": @"Cerca shader",
         @"Shaders": @"Shader",
         @"Bundled presets and downloads": @"Preset integrati e download",
         @"Performance Overlays": @"Indicatori delle prestazioni",
@@ -774,6 +779,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Scegli uno shader integrato o scarica il pacchetto RetroArch (circa 54 MB). La selezione viene salvata per gioco. Riprendi per vedere l’effetto; riapri questo menu per gli errori di rendering.",
       },
       @"pt": @{
+        @"Search shaders": @"Pesquisar shaders",
         @"Shaders": @"Shaders",
         @"Bundled presets and downloads": @"Predefinições integradas e downloads",
         @"Performance Overlays": @"Indicadores de desempenho",
@@ -788,6 +794,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Escolha um shader integrado ou baixe o pacote do RetroArch (cerca de 54 MB). A seleção é salva por jogo. Retome para ver o efeito; reabra este menu para consultar erros de renderização.",
       },
       @"ru": @{
+        @"Search shaders": @"Поиск шейдеров",
         @"Shaders": @"Шейдеры",
         @"Bundled presets and downloads": @"Встроенные пресеты и загрузки",
         @"Performance Overlays": @"Показатели производительности",
@@ -802,6 +809,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Выберите встроенный шейдер или скачайте набор RetroArch (около 54 МБ). Выбор сохраняется для каждой игры. Продолжите игру, чтобы увидеть эффект; снова откройте это меню для просмотра ошибок рендеринга.",
       },
       @"id": @{
+        @"Search shaders": @"Cari shader",
         @"Shaders": @"Shader",
         @"Bundled presets and downloads": @"Preset bawaan dan unduhan",
         @"Performance Overlays": @"Indikator performa",
@@ -816,6 +824,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"Pilih shader bawaan atau unduh paket RetroArch (sekitar 54 MB). Pilihan disimpan per game. Lanjutkan untuk melihat efeknya; buka kembali menu ini untuk memeriksa kesalahan render.",
       },
       @"ja": @{
+        @"Search shaders": @"シェーダーを検索",
         @"Shaders": @"シェーダー",
         @"Bundled presets and downloads": @"内蔵プリセットとダウンロード",
         @"Performance Overlays": @"パフォーマンス表示",
@@ -830,6 +839,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"内蔵シェーダーを選ぶか、RetroArchパック（約54 MB）をダウンロードしてください。設定はゲームごとに保存されます。再開すると効果を確認できます。描画エラーはこのメニューを開き直して確認してください。",
       },
       @"ko": @{
+        @"Search shaders": @"셰이더 검색",
         @"Shaders": @"셰이더",
         @"Bundled presets and downloads": @"내장 프리셋 및 다운로드",
         @"Performance Overlays": @"성능 오버레이",
@@ -844,6 +854,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"내장 셰이더를 선택하거나 RetroArch 팩(약 54 MB)을 다운로드하세요. 선택은 게임별로 저장됩니다. 재개하면 효과를 볼 수 있으며, 렌더링 오류는 이 메뉴를 다시 열어 확인하세요.",
       },
       @"zh": @{
+        @"Search shaders": @"搜索着色器",
         @"Shaders": @"着色器",
         @"Bundled presets and downloads": @"内置预设和下载",
         @"Performance Overlays": @"性能叠加显示",
@@ -858,6 +869,7 @@ static NSDictionary* ARMSX2GraphicsTranslations() {
         @"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.": @"选择内置着色器或下载 RetroArch 包（约 54 MB）。选择按游戏保存。恢复游戏即可查看效果；重新打开此菜单可查看渲染错误。",
       },
       @"zh_Hant": @{
+        @"Search shaders": @"搜尋著色器",
         @"Shaders": @"著色器",
         @"Bundled presets and downloads": @"內建預設與下載",
         @"Performance Overlays": @"效能疊加顯示",

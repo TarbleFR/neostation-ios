@@ -17,6 +17,9 @@ Le framework reconstruit contient le cœur PCSX2/ARMSX2 et librashader Metal, pa
 l’exécutable ou les delegates de l’application ARMSX2. Le seul patch canonique a
 été rebasé sur le tag 2.6. Les ressources conservent leurs chemins relatifs.
 Le framework et Rust ciblent iOS 18, conformément au minimum de NeoStation.
+Le pont des sauvegardes rapides utilise les nouvelles signatures 2.6 à deux
+arguments de retour. Les slots du menu gardent leur comportement existant, sans
+création d'une sauvegarde d'annulation supplémentaire lors d'un chargement.
 
 ## Menu et persistance
 
@@ -24,9 +27,13 @@ Le framework et Rust ciblent iOS 18, conformément au minimum de NeoStation.
 de la résolution, du format d’écran et des hacks GS existants. Les traductions
 couvrent les douze langues de NeoStation.
 
-Les shaders intégrés se sélectionnent directement. Le bouton de téléchargement
+Les shaders intégrés se sélectionnent directement. Une recherche filtre les noms
+et chemins des presets sans modifier leur identifiant persistant. Le bouton de téléchargement
 utilise le même pack RetroArch que l’application ARMSX2 :
 `https://buildbot.libretro.com/assets/frontend/shaders_slang.zip` (environ 54 Mo).
+Le pack actuellement vérifié contient 2 658 presets et 5 208 fichiers (54 274 055
+octets compressés, 71 394 473 octets extraits). Il respecte les limites de
+l’extracteur natif : 32 768 entrées, 8 Mio par fichier, 512 Mio au total.
 Le téléchargement écrit un fichier temporaire, puis l’extracteur natif ARMSX2
 prépare un dossier provisoire. L’installation ne devient visible qu’après une
 extraction réussie contenant des presets. Elle conserve stages, includes et
