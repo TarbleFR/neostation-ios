@@ -83,11 +83,12 @@ static void MemoryProbe(NSDictionary* initial) {
                     dispatch_async(plugin.queue,^{
                         @autoreleasepool {
                             NSString* payload=[@"" stringByPaddingToLength:60000 withString:@"x" startingAtIndex:0];
-                            for(NSUInteger i=0;i<45;++i) [plugin appendRecord:@{@"event":@"rotation_fixture",@"payload":payload}];
                             const auto limit=neostation::diagnostics::MemorySamples::maximum_file_bytes;
+                            for(NSUInteger i=0;i<limit/payload.length+3;++i)
+                                [plugin appendRecord:@{@"event":@"rotation_fixture",@"payload":payload}];
                             for(NSString* path in @[ended[@"diagnosticPath"],[ended[@"diagnosticPath"] stringByAppendingString:@".previous"]]) {
                                 const auto size=[[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil] fileSize];
-                                Check(size>0 && size<=limit,@"each rotated production log is bounded to 2 MiB");
+                                Check(size>0 && size<=limit,@"both production logs exist and respect the configured rotation bound");
                             }
                             NSString* oversized=[@"" stringByPaddingToLength:65536 withString:@"x" startingAtIndex:0];
                             [plugin appendRecord:@{@"payload":oversized}];
