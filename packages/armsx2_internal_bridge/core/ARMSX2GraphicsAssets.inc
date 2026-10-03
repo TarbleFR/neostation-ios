@@ -81,7 +81,7 @@ int set_shader_preset(const char* raw,char* error,size_t capacity) {
       si.DeleteValue("EmuCore/GS","ShaderChainPreset");
     }
     success=si.Save();
-    if (success) { VMManager::ReloadGameSettings(); [ARMSX2Bridge applyGraphicsSettingsNow]; [ARMSX2Bridge retryShaderChain]; }
+    if (success) { VMManager::ReloadGameSettings(); [ARMSX2Bridge retryShaderChain]; }
   },true);
   return success ? 1 : error_out("Could not persist this game's shader selection.",error,capacity);
 }
@@ -100,7 +100,7 @@ int set_performance_overlay(uint32_t preset,char* error,size_t capacity) {
     for (size_t i=0;i<std::size(keys);++i) si.SetBoolValue("EmuCore/GS",keys[i],preset>=(i<4 ? 1u : (i<8 ? 2u : 3u)));
     si.SetBoolValue("EmuCore/GS","OsdShowInputRec",false);
     success=si.Save();
-    if (success) { VMManager::ReloadGameSettings(); [ARMSX2Bridge applyGraphicsSettingsNow]; }
+    if (success) { VMManager::ReloadGameSettings(); }
   },true);
   return success ? 1 : error_out("Could not persist this game's performance overlay.",error,capacity);
 }

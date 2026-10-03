@@ -74,3 +74,8 @@ with tempfile.TemporaryDirectory(prefix='armsx2-graphics-') as directory:
     src=Path(directory)/'test.mm';binary=Path(directory)/'test';src.write_text(program)
     subprocess.run(['xcrun','clang++','-std=c++20','-fblocks','-fobjc-arc','-I',str(CORE),'-I',str(CLASSES),str(src),str(CLASSES/'ARMSX2InGameLocalization.mm'),'-framework','Foundation','-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True,timeout=20)
+
+with tempfile.TemporaryDirectory(prefix='armsx2-graphics-settings-') as directory:
+    binary=Path(directory)/'test'
+    subprocess.run(['xcrun','clang++','-std=c++20','-fblocks','-fobjc-arc','-I',str(CORE),str(ROOT/'test/armsx2_graphics_settings_test.mm'),'-framework','Foundation','-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True,timeout=20)

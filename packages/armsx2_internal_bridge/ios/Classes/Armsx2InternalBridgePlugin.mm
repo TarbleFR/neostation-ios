@@ -394,6 +394,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) BOOL operationBusy;
 @property(nonatomic, assign) BOOL stopInProgress;
 @property(nonatomic, strong) NSURLSessionDownloadTask* shaderDownload;
+@property(nonatomic, assign) uint64_t shaderDownloadGeneration;
 @property(nonatomic, strong) UINavigationController* sessionMenu;
 @property(nonatomic, assign) BOOL menuOpening;
 @property(nonatomic, copy) NSString* activeDataDirectory;
@@ -541,6 +542,7 @@ static UIViewController* ARMSX2RootViewController(void) {
       return;
     }
     self.stopInProgress = YES;
+    ++self.shaderDownloadGeneration;
     [self.shaderDownload cancel];
     self.shaderDownload = nil;
     self.operationBusy = YES;
@@ -803,6 +805,7 @@ static UIViewController* ARMSX2RootViewController(void) {
     // Same official RetroArch pack endpoint used by ARMSX2 iOS 2.6.
     NSURL* url=[NSURL URLWithString:@"https://buildbot.libretro.com/assets/frontend/shaders_slang.zip"];
     NSURLRequest* request=[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:240];
+    const uint64_t generation=++self.shaderDownloadGeneration;
     self.shaderDownload=[NSURLSession.sharedSession downloadTaskWithRequest:request
         completionHandler:^(NSURL* temporary, NSURLResponse* response, NSError* failure) {
       // NSURLSession removes its temporary file after this callback returns.
@@ -817,9 +820,9 @@ static UIViewController* ARMSX2RootViewController(void) {
           bytes.unsignedLongLongValue<=128ULL*1024*1024 &&
           [NSFileManager.defaultManager moveItemAtPath:temporary.path toPath:staged error:&diskError];
       dispatch_async(self->_runtimeQueue, ^{
-        self.shaderDownload=nil;
+        if (self.shaderDownloadGeneration==generation) self.shaderDownload=nil;
         char error[2048]={};
-        BOOL active=self.api && self.gameController==controller && !self.stopInProgress;
+        BOOL active=self.shaderDownloadGeneration==generation && self.api && self.gameController==controller && !self.stopInProgress;
         BOOL ok=downloaded && active && self.api->install_shader_pack(staged.UTF8String,error,sizeof(error));
         [NSFileManager.defaultManager removeItemAtPath:staged error:nil];
         NSString* message=ok ? [controller en:@"Shader pack installed." fr:@"Pack de shaders installé."] :

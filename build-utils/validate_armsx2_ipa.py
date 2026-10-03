@@ -83,6 +83,10 @@ def main() -> None:
             f"Unexpected ARMSX2 Core bundle ID: {framework_info.get('CFBundleIdentifier')}",
         )
 
+        # This update must survive final packaging, not only Core compilation.
+        shader_presets = [name for name in names if name.startswith(core_root + "shaders/presets/") and name.endswith(".slangp")]
+        demand(len(shader_presets) >= 10, "Bundled ARMSX2 2.6 shader presets missing from packaged Core")
+
         helper_prefix = app + "PlugIns/ARMSX2JITHelper.appex/"
         helper_info_name = helper_prefix + "Info.plist"
         demand(helper_info_name in names, "Embedded ARMSX2 JIT helper is missing")

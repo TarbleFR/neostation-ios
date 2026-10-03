@@ -5,7 +5,6 @@
 
 static NSString* NeoShaderResolve(NSString* token, NSString* bundled, NSString* user) {
   if (![token isKindOfClass:NSString.class]) return nil;
-  if ([token rangeOfString:@"\0"].location != NSNotFound) return nil;
   NSRange separator = [token rangeOfString:@":"];
   if (separator.location == NSNotFound) return nil;
   NSString* marker = [token substringToIndex:separator.location];
