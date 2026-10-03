@@ -50,7 +50,7 @@ jobs:
       # Preserve the validated KartPad session recovery while testing the new pinned RPCS3 Core.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
-      ARMSX2_CORE_HOST_SHA: 82351b75114df5fb33387f2157745bccaf1c872d
+      ARMSX2_CORE_HOST_SHA: bfe466d01d1ba947f77317bac6a29b70bcbebe6d
       RPCS3_CORE_HOST_SHA: 7fbdc9fd26c094499179bf6f42727b8b2e59c281
       RPCS3_CORE_RUN_ID: '36418910869'
       DUSKLIGHT_CORE_HOST_SHA: 4de572747e794d69756fda5db761a7650e98e9f6
@@ -426,6 +426,7 @@ jobs:
           flutter test test/audio_policy_service_test.dart
           python3 test/carousel_chrome_layout_test.py
           python3 test/armsx2_patch_catalog_test.py
+          python3 test/armsx2_graphics_test.py
           python3 test/rpcs3_pod_header_visibility_test.py
           python3 test/rpcs3_reporter_send_order_test.py
           python3 test/rpcs3_host_entitlements_test.py
