@@ -51,8 +51,11 @@ assert 'NeoSwapStorage_SetBinderResult(storageResult)' in bridge
 for title in ('BCES00510','BCES00799','BCUS98111','BCJS37001','BCAS25003','BCKS15003'):assert title in policy
 assert 'BLES00113' not in policy
 labels=json.loads((ROOT/'native/neoswap/localizations.json').read_text())
-keys={'storageToggle','storageDescription','storageApplied','storageActive','storageInactive','storageMetrics'}
+keys={'storageToggle','storageDescription','storageApplied','storageActive','storageInactive','storageMetrics','storageVideoMetrics'}
 for locale,values in labels.items():assert keys<=values.keys(),locale
+assert set(labels)=={'en','es','ru','zh','zh_Hant','pt','fr','de','it','id','ja','ko'}
+for locale,values in labels.items():
+    assert set(re.findall(r'\{(\w+)\}',values['storageVideoMetrics']))=={'cold','returned'},locale
 assert 'CFBooleanGetTypeID()' in (ROOT/'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
 workflow=(ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
 assert "assert identity['neoswap_storage_abi'] == 1" in workflow
@@ -69,6 +72,9 @@ fixture={'passed':True,'sourceCommit':'d'*40,'productionClientExecuted':True,'pr
          'gpu':{'passed':True,'sourceBuilds':1,'sourceBuildsBeforeRestore':1,'realComputeDispatchCompleted':True,'cpuBytesReleasedBeforePipeline':True,'diskReadBytes':1,'diskWriteBytes':1},
          'simulator':{'passed':True,'epochIsolation':True,'leaseSurvivedSessionEnd':True,'privateFileRoundTrip':True,
                       'sourceArchiveRoundTrip':True,'sourceEpochIsolation':True,'sourcePressureRefusal':True,
+                      'videoPixelRoundTrip':True,'videoPixelEpochIsolation':True,'videoPixelPressureRefusal':True,
+                      'pixelDiagnostics':{'videoPixelLiveArchivedBytes':1280*720*3//2,
+                          'videoPixelReturnedArchiveBytesCumulative':1280*720*3//2,'stagingRamBytes':0},
                       'sourceDiagnostics':{'archivedSourceBytesCumulative':1,'stagingRamBytes':0,'diskReadBytes':1,'diskWriteBytes':1}},
          'inputSHA256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in paths}}
 validate(fixture,'d'*40)

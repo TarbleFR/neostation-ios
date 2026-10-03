@@ -14,6 +14,11 @@ def validate(report,sha,root=ROOT):
     sim=report['simulator'];assert sim['passed'] and sim['epochIsolation'] and sim['leaseSurvivedSessionEnd'] and sim['privateFileRoundTrip']
     for field in ('sourceArchiveRoundTrip','sourceEpochIsolation','sourcePressureRefusal'):
         assert sim[field] is True,field
+    for field in ('videoPixelRoundTrip','videoPixelEpochIsolation','videoPixelPressureRefusal'):
+        assert sim[field] is True,field
+    pixels=sim['pixelDiagnostics']
+    assert pixels['videoPixelLiveArchivedBytes']>=1280*720*3//2
+    assert pixels['videoPixelReturnedArchiveBytesCumulative']>=1280*720*3//2 and pixels['stagingRamBytes']==0
     source=sim['sourceDiagnostics']
     assert source['archivedSourceBytesCumulative']>0 and source['stagingRamBytes']==0
     assert source['diskReadBytes']>0 and source['diskWriteBytes']>0

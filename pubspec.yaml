@@ -18,7 +18,7 @@ workspace:
   - packages/kartpad_internal_bridge
   - packages/neoplay_bridge
 
-version: 0.0.2+398
+version: 0.0.2+399
 environment:
   sdk: '>=3.9.2'
 

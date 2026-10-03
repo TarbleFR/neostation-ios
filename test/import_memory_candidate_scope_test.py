@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 398
+assert manifest['target_build'] == 399
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -36,8 +36,8 @@ assert manifest['relay_target_object_count'] == 16
 assert manifest['abi']['neoswap_managed'] == 1
 assert manifest['abi']['neoswap_source_archive'] == 1
 managed = manifest['managed_swap']
-assert managed['stage'] == 'owned CPU framework with compiled GLSL source consumer'
-assert managed['integrated_rpcs3_consumers'] == ['compiled GLSL source snapshots']
+assert managed['stage'] == 'owned CPU framework with compiled GLSL and exclusive video pixel consumers'
+assert managed['integrated_rpcs3_consumers'] == ['compiled GLSL source snapshots','cold exclusive software VDEC pixels']
 assert managed['physical_iPhone_validated'] is False
 assert managed['gameplay_validated'] is False
 assert managed['automatic_guest_paging_activated'] is False
@@ -56,6 +56,8 @@ PRODUCTION_FILES = {
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
     'native/neoswap-storage/SourceClient.cpp',
+    'native/neoswap-storage/FrameClient.h',
+    'native/neoswap-storage/VideoBuffer.h',
     'native/neoswap-storage/SourceArchive.h',
     'native/neoswap-storage/SourceArchive.cpp',
     'packages/neo_swap/ios/Classes/SourceABI.h',
@@ -201,6 +203,11 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'build-utils/run_vdec_archive_validation.sh',
+    'test/rpcs3_video_frame_archive_test.py',
+    'test/native/rpcs3_video_frame_archive_test.cpp',
+    'native/neoswap-storage/tests/frame_archive_test.cpp',
+    'docs/neoswap-build399-owned-video.md',
     'test/neoplay_pod_graph_test.py',
     'test/neoswap_memory_samples_test.cpp',
     'test/neoplay_deployment_project_test.py',

@@ -5,11 +5,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Optional host-owned archive for immutable, compiled GLSL source. Admission
+/* Optional host-owned archive for immutable CPU snapshots: compiled GLSL
+ * (domains 0..2), or exclusively owned software pixels (domain 3 opt-in).
+ * An old GLSL-only host refuses domain 3; retain original pixels on refusal.
+ * Layout/ABI 1 is unchanged. Admission
  * snapshots at most 1 MiB, never waits for I/O and keeps ownership on refusal.
  * The host checkpoints on its utility queue before releasing its snapshot.
- * read copies into caller-owned output: it is a synchronous debug/export
- * operation, NOT a rendering-thread cache lookup or a guest-memory pager. */
+ * read copies into caller-owned output: synchronous debug/export or VDEC CPU
+ * consumption outside queue/conversion locks. NOT an RSX/render-thread lookup,
+ * a guest-memory pager or a way to archive FFmpeg reference/GPU frames. */
 enum { NEOSWAP_SOURCE_ABI = 1, NEOSWAP_SOURCE_MAX_BYTES = 1024*1024 };
 enum NeoSwapSourceResult { NS_SOURCE_OK=0, NS_SOURCE_BUSY=1,
     NS_SOURCE_DISABLED=2, NS_SOURCE_INVALID=3, NS_SOURCE_IO=4,

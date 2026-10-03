@@ -61,7 +61,7 @@ NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,Stat
     return @{
         @"abi":@1,@"active":@(archive.accepting()&&s.sourceBinderResult.load()==NS_SOURCE_OK),
         @"binderResult":@(s.sourceBinderResult.load()),@"session":@(x.session),
-        @"scope":@"owned GLSL source after successful GPU module creation; no guest/JIT/GPU paging",
+        @"scope":@"owned GLSL after module creation and cold exclusive software video pixels; no guest/JIT/GPU paging",
         @"sources":@(x.sources),@"pending":@(x.pending),@"admissions":@(x.admissions),@"refusals":@(x.refusals),
         @"stagingRamBytes":@(x.staging_bytes),@"stagingRamPeakBytes":@(x.staging_peak),@"stagingBudgetBytes":@(4*MiB),
         @"managedMappingBudgetBytes":@(8*MiB),@"budgetIsProcessFootprint":@NO,
@@ -71,11 +71,16 @@ NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,Stat
         @"sourceReads":@(x.reads),@"returnedArchivedSourceBytesCumulative":@(x.restored_bytes),
         @"coreReleasedSourceCapacityBytesCumulative":@(x.core_released_capacity),
         @"readFailures":@(x.read_failures),@"lastErrno":@(x.last_errno),
+        @"videoPixelChunks":@(x.pixel_admissions),
+        @"videoPixelArchivedBytesCumulative":@(x.pixel_archived_bytes),
+        @"videoPixelLiveArchivedBytes":@(x.pixel_live_archived_bytes),
+        @"videoPixelReturnedArchiveBytesCumulative":@(x.pixel_restored_bytes),
+        @"transientCheckpointRetries":@(x.transient_retries),
         @"checkpointedBytesCumulative":@(m.checkpointed_bytes),@"releasedOwnedMappedBytesCumulative":@(m.released_owned_bytes),
         @"diskReadBytes":@(d.bytes_read),@"diskWriteBytes":@(d.bytes_written),@"allocatedFileBytes":@(d.allocated_file_bytes),
         @"restoredDiskLogicalBytesCumulative":@(d.restored_logical_bytes),
         @"ioErrors":@(d.io_errors),@"corruptions":@(d.corruptions),@"quotaRefusals":@(d.quota_refusals),
-        @"onAdmissionRefusal":@"retain original Core string",@"onWriteFailure":@"retain complete host RAM snapshot",
+        @"onAdmissionRefusal":@"retain original Core text/pixels",@"onWriteFailure":@"retain complete host RAM snapshot",
         @"physicalIPhoneValidated":@NO,@"gameplayGainValidated":@NO
     };
 }
@@ -213,8 +218,8 @@ int sourceRead(uint64_t epoch,uint64_t object,char* output,uint64_t bytes,int* o
     if(os_error)*os_error=0;
     if(!output||!os_error||bytes>NEOSWAP_SOURCE_MAX_BYTES)return NS_SOURCE_INVALID;
     __block int result=NS_SOURCE_DISABLED;
-    // Only debug/export asks for archived source. All storage and destruction
-    // runs on this queue; the returned string belongs to Core, never a lease.
+    // Debug/export or VDEC's CPU consumer asks for owned archived bytes.
+    // Storage runs on this queue; the result belongs to Core, never a lease.
     const auto operation=^{
         try{
             auto& s=state();auto source=s.sourceArchive.control_load();
@@ -299,7 +304,9 @@ void NeoSwapStorage_BeginSession(NSString* title) {
             Config config;config.ram_bytes=8*MiB;config.warm_bytes=MiB;config.disk_bytes=128*MiB;
             config.max_entries=4096;config.compression_budget_us=500;
             auto cache=std::make_shared<ShaderCache>(directory.fileSystemRepresentation,generation,config);
-            auto source=std::make_shared<neostation::source_archive::Archive>(directory.fileSystemRepresentation,generation);
+            neostation::source_archive::Config sourceConfig;
+            sourceConfig.domain_mask=15; // optional cold VDEC pixels use the same owned-chunk engine
+            auto source=std::make_shared<neostation::source_archive::Archive>(directory.fileSystemRepresentation,generation,sourceConfig);
             if(x.requestedGeneration.load()!=generation)return;
             (void)x.active.exchange(std::move(cache));(void)x.sourceArchive.exchange(std::move(source));
             ++x.started;x.reason=@"ready";applyPressure(x);snapshotOnQueue(x);

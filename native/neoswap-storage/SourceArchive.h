@@ -10,6 +10,8 @@ struct Config {
     managed_swap::Config managed;
     uint64_t staging_bytes=4ULL<<20;
     uint32_t max_sources=4096,max_pending=64,minimum_bytes=4096;
+    // The GLSL-only default is retained. VDEC opts into domain 3 explicitly.
+    uint32_t domain_mask=7;
     Config();
 };
 struct Admission { int code=NS_SOURCE_BUSY;uint64_t object=0; };
@@ -17,6 +19,9 @@ struct Stats {
     uint64_t session=0,sources=0,pending=0,staging_bytes=0,staging_peak=0;
     uint64_t admissions=0,refusals=0,archived_bytes=0,archive_failures=0;
     uint64_t reads=0,restored_bytes=0,read_failures=0,core_released_capacity=0;
+    uint64_t pixel_admissions=0,pixel_archived_bytes=0,pixel_restored_bytes=0;
+    uint64_t pixel_live_archived_bytes=0;
+    uint64_t transient_retries=0;
     int last_errno=0;
     managed_swap::Stats managed;
 };
@@ -38,13 +43,18 @@ public:
     Stats snapshot();
 #ifdef NEOSWAP_STORAGE_TESTING
     void inject(storage::Store::Fault fault){manager_.inject(fault);}
+    void defer_after_chunks(uint32_t count){defer_after_chunks_=count;}
 #endif
 private:
     struct Record {
         uint64_t id=0;size_t bytes=0;
         std::shared_ptr<storage::Bytes> staging;
         managed_swap::Object object{};
+        uint32_t next_chunk=0,chunks=0;
+        uint64_t chunk_generation=0;
+        bool chunk_written=false;
         bool working=false,retired=false,failed=false;
+        uint32_t domain=0;
     };
     const Config config_;
     const uint64_t session_;
@@ -56,5 +66,8 @@ private:
     std::atomic<bool> paused_{false};
     std::atomic<storage::Pressure> pressure_{storage::Pressure::normal};
     std::atomic<uint64_t> released_{0};
+#ifdef NEOSWAP_STORAGE_TESTING
+    uint32_t defer_after_chunks_=0;
+#endif
 };
 }

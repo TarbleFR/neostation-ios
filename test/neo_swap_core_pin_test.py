@@ -17,7 +17,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = '22f1152783cef1f7e04af7b1c895173e28fd5b03'
-PATCH_SHA256 = '555139f6eef778523384a4580e4d714af6f141c6d223336436c42333c015b94c'
+PATCH_SHA256 = '704cb1ef184c017510158607ee9230233b07ad564252a099976e6528df1b7c44'
 BACKPORTS = (
     '8bd938e9de9ff6455f312cdf8bd64bd37a064c4e',
     '1d13d1e6bbabfbb7a873f2c608c52525ff470e25',
@@ -35,6 +35,11 @@ CORE_INPUTS = (
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
     'native/neoswap-storage/SourceClient.cpp',
+    'native/neoswap-storage/FrameClient.h',
+    'native/neoswap-storage/VideoBuffer.h',
+    'test/rpcs3_video_frame_archive_test.py',
+    'test/native/rpcs3_video_frame_archive_test.cpp',
+    'build-utils/run_vdec_archive_validation.sh',
     'test/rpcs3_source_archive_test.py',
     'test/native/rpcs3_source_archive_client_test.cpp',
     'build-utils/build_rpcs3_embedded_core.sh',
@@ -140,7 +145,7 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             'Unexpected diagnostics ABI')
     require('NEOSWAP_RELAY_ABI = 1' in (root / 'packages/neo_swap/ios/Classes/NeoSwapRelay.h').read_text(),
             'Unexpected page-relay ABI')
-    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h', 'SourceABI.h', 'SourceClient.h', 'SourceClient.cpp'):
+    for name in ('StorageABI.h', 'Client.h', 'ShaderKey.h', 'SourceABI.h', 'SourceClient.h', 'SourceClient.cpp', 'FrameClient.h', 'VideoBuffer.h'):
         payload = (root/'native/neoswap-storage'/name).read_bytes()
         require(hashlib.sha256(payload).hexdigest() == manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name], 'Storage Core contract differs: '+name)
     recipe = (root / 'build-utils/build_rpcs3_embedded_core.sh').read_text()
@@ -149,6 +154,10 @@ def validate_source_contract(root: Path = ROOT, source_root: Path | None = None)
             manifest['neoswap_source_archive']['device_tested'] is False,
             'Cold GLSL source archive must be host-owned, independently versioned and honestly unvalidated on device')
     require('test/rpcs3_source_archive_test.py' in recipe, 'Missing production cold-source regression')
+    require(manifest['neoswap_video_frames']['domain']==3 and manifest['neoswap_video_frames']['device_tested'] is False,
+            'Owned video domain must remain independently scoped and honestly unvalidated on device')
+    require('test/rpcs3_video_frame_archive_test.py' in (root/'.github/workflows/rpcs3-core.yml').read_text(),
+            'Missing real decoded-frame and mapping-release regression')
     require('RPCS3_IOS_ABI="${RPCS3_IOS_ABI:-30}"' in recipe, 'Unexpected main Core ABI')
     require('test/rpcs3_xitrix_v0101_native_test.py' in recipe, 'Missing production native regressions')
     require('test/rpcs3_neoswap_relay_test.py' in recipe, 'Missing actual shared-memory relay regressions')

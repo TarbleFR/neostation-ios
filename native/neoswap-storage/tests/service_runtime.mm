@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 #import "NeoSwapStorageService.h"
 #include "SourceClient.h"
+#include "FrameClient.h"
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -39,6 +40,17 @@ static void runTest(){@autoreleasepool {
         require(sourceOwner.restore(restoredText,sourceError)==NS_SOURCE_OK && restoredText==originalText,"source private file roundtrip");
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"sourceArchive"][@"sourceReads"] unsignedLongLongValue]>0;}),"source read diagnostics");
         result[@"sourceDiagnostics"]=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
+        std::string pixels(1280*720*3/2,'\0');uint32_t pixelRandom=779;
+        for(auto& byte:pixels){pixelRandom^=pixelRandom<<13;pixelRandom^=pixelRandom>>17;pixelRandom^=pixelRandom<<5;byte=static_cast<char>(pixelRandom);}
+        const auto originalPixels=pixels;neostation::source_client::ColdFrame pixelOwner;
+        require(until([&]{return pixelOwner.offload(pixels.data(),pixels.size());}),"pixel domain admission");
+        require(pixels==originalPixels,"pixel client changed caller allocation before transfer");std::string().swap(pixels);
+        require(until([&]{NSDictionary* d=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
+            return [d[@"videoPixelLiveArchivedBytes"] unsignedLongLongValue]==originalPixels.size() &&
+                [d[@"stagingRamBytes"] unsignedLongLongValue]==0;}),"pixel verified checkpoint");
+        std::string restoredPixels;int pixelError=0;
+        require(pixelOwner.restore(restoredPixels,pixelError)==NS_SOURCE_OK && restoredPixels==originalPixels,"pixel real private-file roundtrip");
+        result[@"pixelDiagnostics"]=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
         words[0]=0x07230203;words[1]=0x00010500;words[3]=64;words[4]=0;
         for(unsigned i=1;i<=16;++i){uint8_t key[32]{};key[0]=i;uint32_t random=i;
             for(size_t n=5;n<words.size();++n){random^=random<<13;random^=random>>17;random^=random<<5;words[n]=random;}words[5]=i;
@@ -49,6 +61,7 @@ static void runTest(){@autoreleasepool {
         NeoSwapStorage_EndSession();require(api->session()==0,"immediate epoch invalidation");
         require(sourceApi->session()==0,"immediate source invalidation");
         require(sourceOwner.restore(restoredText,sourceError)==NS_SOURCE_DISABLED && restoredText.empty(),"stale source read accepted");sourceOwner.reset();
+        require(pixelOwner.restore(restoredPixels,pixelError)==NS_SOURCE_DISABLED && restoredPixels.empty(),"stale pixel read accepted");pixelOwner.reset();
         NeoSwapStorageView stale{};require(api->acquire(epoch,key,&stale)==NS_STORAGE_DISABLED,"stale request accepted");
         std::this_thread::sleep_for(300ms);require(view.words[5]==1,"lease lost after shutdown");api->release(&view);
         NeoSwapStorage_BeginSession(@"BCES00510");require(until([&]{return api->session()!=0&&api->session()!=epoch;}),"restart");
@@ -64,12 +77,15 @@ static void runTest(){@autoreleasepool {
         require(api->publish(next,key,words.data(),words.size()*4)!=NS_STORAGE_OK,"optional publication under pressure");
         text=originalText;neostation::source_client::ColdSource pressureRefusal;
         require(!pressureRefusal.offload(text,0) && text==originalText,"source pressure refusal loses original");
+        pixels=originalPixels;neostation::source_client::ColdFrame pixelPressureRefusal;
+        require(!pixelPressureRefusal.offload(pixels.data(),pixels.size())&&pixels==originalPixels,"pixel pressure refusal loses original");
         NeoSwapStorage_EndSession();NeoSwapStorage_SetPreference(NO);
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"session_ended"];}),"end diagnostics");
         result[@"passed"]=@YES;result[@"realIOSSimulatorServiceExecuted"]=@YES;
         result[@"privateFileRoundTrip"]=@YES;result[@"epochIsolation"]=@YES;result[@"leaseSurvivedSessionEnd"]=@YES;
         result[@"lifecycleNotificationsInjected"]=@YES;result[@"pressureNotificationInjected"]=@YES;
         result[@"sourceArchiveRoundTrip"]=@YES;result[@"sourceEpochIsolation"]=@YES;result[@"sourcePressureRefusal"]=@YES;
+        result[@"videoPixelRoundTrip"]=@YES;result[@"videoPixelEpochIsolation"]=@YES;result[@"videoPixelPressureRefusal"]=@YES;
         result[@"diagnostics"]=NeoSwapStorage_Diagnostics();
     }catch(const std::exception& e){result[@"error"]=[NSString stringWithUTF8String:e.what()];}
     NSString* path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"shader-service-runtime.json"];

@@ -24,10 +24,13 @@ APPROVED_MANAGED_SWAP_FILES = frozenset({
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
     'native/neoswap-storage/SourceClient.cpp',
+    'native/neoswap-storage/FrameClient.h',
+    'native/neoswap-storage/VideoBuffer.h',
     'native/neoswap-storage/SourceArchive.h',
     'native/neoswap-storage/SourceArchive.cpp',
     'native/neoswap-storage/run_source_validation.py',
     'native/neoswap-storage/tests/source_archive_test.cpp',
+    'native/neoswap-storage/tests/frame_archive_test.cpp',
     'native/neoswap-storage/tests/service_runtime.mm',
     'native/neoswap-storage/run_shader_validation.py',
     'packages/neo_swap/ios/Classes/SourceABI.h',
@@ -94,17 +97,17 @@ class Build398Integration(unittest.TestCase):
         for name in ('neo_swap', 'neoplay_bridge'):
             self.assertIn('  - packages/' + name, pubspec)
             self.assertIn('  ' + name + ':\n    path: packages/' + name, pubspec)
-        self.assertIn('version: 0.0.2+398', pubspec)
+        self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build398', text)
+        self.assertIn('neostation-neoswap-neoplay-build399', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
-        self.assertIn('run_id = 37065639799', text)
+        self.assertIn('run_id = 37110155453', text)
         self.assertIn("run['conclusion'] == 'success'", text)
-        self.assertIn('d3d5681cc8b10af1cd503ea72a4886c82faaa3ef', text)
+        self.assertIn('8285a15b889133daab5a178b9f1615044c248b81', text)
         self.assertIn("'neoplay-check.yml',", text)
         self.assertIn('head_sha={sha}', text)
-        self.assertLess(text.index('Require completed Build 396'), text.index('Wait for exact-SHA validation workflows'))
+        self.assertLess(text.index('Require completed Build 398'), text.index('Wait for exact-SHA validation workflows'))
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))
@@ -131,7 +134,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('build/neoplay-native/pod-graph.json', workflow)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 398)
+        self.assertEqual(data['target_build'], 399)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)
         self.assertFalse(data['neoplay_integration']['physical_device_validation'])

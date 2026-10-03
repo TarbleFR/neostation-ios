@@ -1977,10 +1977,32 @@ index a88ac6e..5a8d88e 100644
  	~audio_ringbuffer();
  
 diff --git a/rpcs3/Emu/Cell/Modules/cellVdec.cpp b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-index 1847c8c..0c0a006 100644
+index 1847c8c..548f8ad 100644
 --- a/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 +++ b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-@@ -197,6 +197,14 @@ struct vdec_context final
+@@ -46,6 +46,10 @@ extern "C"
+ #include "Utilities/lockless.h"
+ #include <variant>
+ #include "util/asm.hpp"
++#ifdef RPCS3_IOS
++#include "ios/NeoSwapStorage/FrameClient.h"
++#include "ios/NeoSwapStorage/VideoBuffer.h"
++#endif
+ 
+ std::mutex g_mutex_avcodec_open2;
+ 
+@@ -165,6 +169,10 @@ struct vdec_frame
+ 	u64 cmd_id{};
+ 
+ 	std::unique_ptr<AVFrame, frame_dtor> avf;
++#ifdef RPCS3_IOS
++	neostation::source_client::ColdFrame cold_pixels;
++	u64 queued_at_us = 0;
++#endif
+ 	u64 dts{};
+ 	u64 pts{};
+ 	u64 userdata{};
+@@ -197,6 +205,14 @@ struct vdec_context final
  	const AVCodecDescriptor* codec_desc{};
  	AVCodecContext* ctx{};
  	SwsContext* sws{};
@@ -1995,16 +2017,106 @@ index 1847c8c..0c0a006 100644
  
  	shared_mutex mutex; // Used for 'out' queue (TODO)
  
-@@ -581,7 +589,7 @@ struct vdec_context final
+@@ -214,6 +230,65 @@ struct vdec_context final
+ 
+ 	std::deque<vdec_frame> out_queue;
+ 	const u32 out_max = 60;
++#ifdef RPCS3_IOS
++	u64 next_pixel_archive_us = 0;
++	u32 picture_consumers = 0;
++	u64 pixel_frames_archived = 0, pixel_payload_archived = 0;
++	std::atomic<u64> pixel_frames_restored{0}, pixel_restore_max_us{0};
++	bool pixel_mapping_allocator = false;
++
++	// NEOSTATION_VDEC_COLD_PIXELS_V1: VDEC producer only, under its queue lock.
++	// At most one old image per 100 ms; the newest eight and ALL FFmpeg reference
++	// or hardware frames stay in RAM. FIFO labels/guest output/GPU stay untouched.
++	void archive_cold_pixels_locked()
++	{
++		using namespace neostation::source_client;
++		if (!pixel_mapping_allocator) return; // Never count returning pixels to FFmpeg's pool as RAM release.
++		const auto* api = installed.load();
++		if (!api || !api->session()) return;
++		const u64 now = get_system_time();
++		if (out_queue.size() < frame_min_queue || now < next_pixel_archive_us)
++			return;
++		next_pixel_archive_us = now + 100'000;
++		u32 position = 0;
++		for (auto& picture : out_queue)
++		{
++			const u32 index = position++;
++			if (picture.cold_pixels.archived() || !picture.avf || picture->hw_frames_ctx ||
++				picture->nb_extended_buf || picture->extended_data != picture->data ||
++				(picture->format != AV_PIX_FMT_YUV420P && picture->format != AV_PIX_FMT_YUVJ420P))
++				continue;
++			const int bytes = av_image_get_buffer_size(static_cast<AVPixelFormat>(picture->format),
++				picture->width, picture->height, 1);
++			const u64 age = now >= picture.queued_at_us ? now - picture.queued_at_us : 0;
++			if (bytes <= 0 || !frame_can_cool(static_cast<u32>(out_queue.size()), index, age,
++				static_cast<u64>(bytes), av_frame_is_writable(picture.avf.get()) == 1))
++				continue;
++			const auto copy = [](char* output, size_t size, void* context) -> int
++			{
++				const auto* frame = static_cast<const AVFrame*>(context);
++				return av_image_copy_to_buffer(reinterpret_cast<u8*>(output), static_cast<int>(size),
++					frame->data, frame->linesize, static_cast<AVPixelFormat>(frame->format),
++					frame->width, frame->height, 1);
++			};
++			if (!picture.cold_pixels.offload_copy(static_cast<usz>(bytes), copy, picture.avf.get()))
++				return; // EVERY refusal/allocation error keeps the original AVBuffers intact.
++			// Bound pixel admissions to 8 MiB/s, within the existing 16 MiB/s
++			// utility writer. This is deterministic pacing, not automatic tuning.
++			next_pixel_archive_us = now + std::max<u64>(100'000,
++				static_cast<u64>(bytes) * 1'000'000 / (8ULL << 20));
++			for (auto& buffer : picture->buf) av_buffer_unref(&buffer);
++			for (auto& plane : picture->data) plane = nullptr;
++			++pixel_frames_archived;
++			pixel_payload_archived += static_cast<u64>(bytes);
++			if (pixel_frames_archived == 1 || !(pixel_frames_archived % 16))
++				cellVdec.notice("NEOSWAP_VDEC cold_frames=%llu pixel_payload_bytes=%llu queue=%u mapped_live=%llu unmapped_bytes=%llu unmap_failures=%llu scope=exclusive_software_pixels",
++					pixel_frames_archived, pixel_payload_archived, static_cast<u32>(out_queue.size()),
++					video_mapped_bytes.load(), video_unmapped_bytes.load(), video_unmap_failures.load());
++			return;
++		}
++	}
++#endif
+ 
+ 	atomic_t<s32> au_count{0};
+ 
+@@ -272,6 +347,16 @@ struct vdec_context final
+ 			fmt::throw_exception("avcodec_alloc_context3() failed (type=0x%x)", type);
+ 		}
+ 
++#ifdef RPCS3_IOS
++		// Only the already-enabled title/session opts into reclaimable pixels.
++		const auto* pixel_api = neostation::source_client::installed.load();
++		if (pixel_api && pixel_api->session() && (codec->capabilities & AV_CODEC_CAP_DR1))
++		{
++			ctx->get_buffer2 = neostation::source_client::allocate_video_mapping;
++			pixel_mapping_allocator = true;
++		}
++#endif
++
+ 		AVDictionary* opts = nullptr;
+ 
+ 		std::lock_guard lock(g_mutex_avcodec_open2);
+@@ -581,7 +666,14 @@ struct vdec_context final
  							{
  								std::lock_guard lock{mutex};
  
 -								if (out_queue.size() <= out_max)
-+								if (out_queue.size() < out_max)
++#ifdef RPCS3_IOS
++								archive_cold_pixels_locked();
++#endif
++								if (out_queue.size() < out_max
++#ifdef RPCS3_IOS
++									&& neostation::source_client::frame_queue_has_room(out_queue.size(), picture_consumers, out_max)
++#endif
++								)
  								{
  									break;
  								}
-@@ -591,7 +599,12 @@ struct vdec_context final
+@@ -591,7 +683,12 @@ struct vdec_context final
  
  							if (elapsed++ >= 500) // 5 seconds
  							{
@@ -2018,24 +2130,121 @@ index 1847c8c..0c0a006 100644
  								elapsed = 0;
  							}
  						}
-@@ -1742,7 +1755,7 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -603,6 +700,9 @@ struct vdec_context final
+ 
+ 						{
+ 							std::lock_guard lock{mutex};
++#ifdef RPCS3_IOS
++							decoded_frames.front().queued_at_us = get_system_time();
++#endif
+ 							out_queue.push_back(std::move(decoded_frames.front()));
+ 							decoded_frames.pop_front();
+ 						}
+@@ -1728,6 +1828,31 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 
+ 	vdec_frame frame;
+ 	bool notify = false;
++#ifdef RPCS3_IOS
++	// A disk restore may fail. Reserve the removed frame's queue slot until
++	// successful consumption so the producer cannot fill it before a retry.
++	struct picture_consumption
++	{
++		vdec_context* context;
++		bool active = false;
++		~picture_consumption()
++		{
++			if (!active) return;
++			bool wake = false;
++			{
++				std::lock_guard lock{context->mutex};
++				wake = context->out_queue.size() + context->picture_consumers >= context->out_max;
++				ensure(context->picture_consumers);
++				--context->picture_consumers;
++			}
++			if (wake)
++			{
++				auto producer = idm::get_unlocked<named_thread<ppu_thread>>(context->ppu_tid);
++				if (producer) thread_ctrl::notify(*producer);
++			}
++		}
++	} consumption{vdec.get()};
++#endif
+ 	u64 sequence_id{};
+ 
+ 	{
+@@ -1740,10 +1865,16 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 
+ 		frame = std::move(vdec->out_queue.front());
  		sequence_id = vdec->seq_id;
++#ifdef RPCS3_IOS
++		++vdec->picture_consumers;
++		consumption.active = true;
++#endif
  
  		vdec->out_queue.pop_front();
 -		if (vdec->out_queue.size() + 1 == vdec->out_max)
++#ifndef RPCS3_IOS
 +		if (vdec->out_queue.size() + 1 >= vdec->out_max)
  			notify = true;
++#endif
  	}
  
-@@ -1759,17 +1772,21 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 	if (notify)
+@@ -1759,17 +1890,67 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  	if (outBuff)
  	{
++#ifdef RPCS3_IOS
++		// Restore before taking conversion_mutex: disk waits run on NeoSwap's
++		// utility queue, never on RSX, audio, or while holding the VDEC queue lock.
++		std::string restored_pixels;
++		if (frame.cold_pixels.archived())
++		{
++			int os_error = 0;
++			const u64 restore_started = get_system_time();
++			const int result = frame.cold_pixels.restore(restored_pixels, os_error);
++			if (result != NS_SOURCE_OK)
++			{
++				cellVdec.error("NEOSWAP_VDEC restore failed: handle=0x%x seq=%llu code=%d errno=%d", handle, frame.seq_id, result, os_error);
++				// Keep the failed frame retryable. Do not forge/drop a decoded image
++				// or write stale/partial bytes to the guest output buffer.
++				std::lock_guard lock{vdec->mutex};
++				if (vdec->seq_id == frame.seq_id && vdec->seq_state != sequence_state::closed)
++				{
++					vdec->out_queue.push_front(std::move(frame));
++					ensure(vdec->picture_consumers);
++					--vdec->picture_consumers;
++					consumption.active = false;
++				}
++				return CELL_VDEC_ERROR_PIC;
++			}
++			const u64 elapsed = get_system_time() - restore_started;
++			auto peak = vdec->pixel_restore_max_us.load();
++			while (peak < elapsed && !vdec->pixel_restore_max_us.compare_exchange_weak(peak, elapsed)) {}
++			const u64 restored_count = vdec->pixel_frames_restored.fetch_add(1) + 1;
++			if (restored_count == 1 || !(restored_count % 16) || elapsed >= 50'000)
++				cellVdec.notice("NEOSWAP_VDEC restored_frames=%llu bytes=%llu read_us=%llu max_read_us=%llu mapped_live=%llu scope=cpu_archive_read_not_nand_benchmark",
++					restored_count, static_cast<u64>(restored_pixels.size()), elapsed,
++					vdec->pixel_restore_max_us.load(), neostation::source_client::video_mapped_bytes.load());
++		}
++#endif
 +#ifdef RPCS3_IOS
 +		std::lock_guard conversion_lock{vdec->conversion_mutex};
 +#endif
  		const int w = frame->width;
  		const int h = frame->height;
++		const u8* pixel_data[4] = {frame->data[0], frame->data[1], frame->data[2], nullptr};
++		int pixel_stride[4] = {frame->linesize[0], frame->linesize[1], frame->linesize[2], 0};
++#ifdef RPCS3_IOS
++		if (frame.cold_pixels.archived())
++		{
++			u8* packed_planes[4]{};
++			const int bytes = av_image_fill_arrays(packed_planes, pixel_stride,
++				reinterpret_cast<const u8*>(restored_pixels.data()), static_cast<AVPixelFormat>(frame->format), w, h, 1);
++			ensure(bytes > 0 && static_cast<usz>(bytes) == restored_pixels.size());
++			for (usz i = 0; i < 3; ++i) pixel_data[i] = packed_planes[i];
++		}
++#endif
  
  		AVPixelFormat out_f = AV_PIX_FMT_YUV420P;
  
@@ -2052,7 +2261,7 @@ index 1847c8c..0c0a006 100644
  		case CELL_VDEC_PICFMT_UYVY422_ILV: out_f = AV_PIX_FMT_UYVY422; break;
  		case CELL_VDEC_PICFMT_YUV420_PLANAR: out_f = AV_PIX_FMT_YUV420P; break;
  		default:
-@@ -1780,9 +1797,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1780,9 +1961,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		// TODO: color matrix
  
@@ -2080,7 +2289,7 @@ index 1847c8c..0c0a006 100644
  		}
  
  		AVPixelFormat in_f = AV_PIX_FMT_YUV420P;
-@@ -1801,9 +1834,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1801,10 +1998,26 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		cellVdec.trace("cellVdecGetPictureExt: handle=0x%x, seq_id=%d, cmd_id=%d, w=%d, h=%d, frameFormat=%d, formatType=%d, in_f=%d, out_f=%d, alpha_plane=%d, alpha=%d, colorMatrixType=%d", handle, frame.seq_id, frame.cmd_id, w, h, frame->format, format->formatType, +in_f, +out_f, !!alpha_plane, format->alpha, format->colorMatrixType);
  
@@ -2091,7 +2300,7 @@ index 1847c8c..0c0a006 100644
 +		{
 +			const int size = av_image_get_buffer_size(out_f, w, h, 1);
 +			if (size < 0 || av_image_copy_to_buffer(outBuff.get_ptr(), size,
-+				frame->data, frame->linesize, out_f, w, h, 1) < 0)
++				pixel_data, pixel_stride, out_f, w, h, 1) < 0)
 +				fmt::throw_exception("cellVdecGetPictureExt: planar copy failed");
 +			return CELL_OK;
 +		}
@@ -2100,14 +2309,16 @@ index 1847c8c..0c0a006 100644
  		vdec->sws = sws_getCachedContext(vdec->sws, w, h, in_f, w, h, out_f, SWS_POINT, nullptr, nullptr, nullptr);
  
 -		const u8* in_data[4] = { frame->data[0], frame->data[1], frame->data[2], alpha_plane.get() };
+-		const int in_line[4] = { frame->linesize[0], frame->linesize[1], frame->linesize[2], w * 1 };
 +		if (!vdec->sws)
 +			fmt::throw_exception("cellVdecGetPictureExt: failed to allocate converter");
 +
-+		const u8* in_data[4] = { frame->data[0], frame->data[1], frame->data[2], alpha_plane };
- 		const int in_line[4] = { frame->linesize[0], frame->linesize[1], frame->linesize[2], w * 1 };
++		const u8* in_data[4] = { pixel_data[0], pixel_data[1], pixel_data[2], alpha_plane };
++		const int in_line[4] = { pixel_stride[0], pixel_stride[1], pixel_stride[2], w * 1 };
  		u8* out_data[4] = { outBuff.get_ptr() };
  		int out_line[4] = { w * 4 }; // RGBA32 or ARGB32
-@@ -1824,7 +1873,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+ 
+@@ -1824,7 +2037,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  			}
  		}
  
@@ -12253,6 +12464,60 @@ index 0000000..a0d7975
 +    return CompileResult::ok;
 +}
 +}
+diff --git a/rpcs3/ios/NeoSwapStorage/FrameClient.h b/rpcs3/ios/NeoSwapStorage/FrameClient.h
+new file mode 100644
+index 0000000..e90c368
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapStorage/FrameClient.h
+@@ -0,0 +1,48 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include "SourceClient.h"
++#include <array>
++#include <cstddef>
++#include <cstdint>
++
++namespace neostation::source_client {
++// Immutable packed SOFTWARE pixels only, after the decoder has relinquished
++// its references. Neither guest buffers nor GPU images belong to this client.
++inline constexpr uint32_t frame_domain = 3;
++inline constexpr uint64_t frame_max_bytes = 4ULL << 20;
++inline constexpr uint32_t frame_max_chunks = 4;
++inline constexpr uint64_t frame_cold_age_us = 250'000;
++inline constexpr uint32_t frame_warm_count = 8, frame_min_queue = 24;
++inline bool frame_queue_has_room(uint64_t queued, uint64_t consuming, uint64_t maximum) noexcept {
++    return queued < maximum && consuming < maximum - queued;
++}
++inline bool frame_can_cool(uint32_t queue, uint32_t position, uint64_t age_us,
++                           uint64_t bytes, bool exclusively_owned) noexcept {
++    return exclusively_owned && queue >= frame_min_queue && position < queue &&
++        queue - position > frame_warm_count && age_us >= frame_cold_age_us &&
++        bytes >= 4096 && bytes <= frame_max_bytes;
++}
++struct FrameReference final {
++    std::array<Reference, frame_max_chunks> chunks;
++    uint64_t bytes = 0;
++    uint32_t count = 0;
++};
++class ColdFrame final {
++public:
++    bool archived() const noexcept { return bool(reference_); }
++    void reset() noexcept { reference_.reset(); }
++    // Transactional admission: every chunk shares ONE session; partial
++    // acceptance is retired and the caller must keep its original AVFrame.
++    // This only copies bounded bytes, never performs storage I/O.
++    bool offload(const char* packed_pixels, size_t bytes) noexcept;
++    // Allocation/copy lives in the dedicated exception-enabled source unit,
++    // keeping decoder consumers valid with their real -fno-exceptions flags.
++    using PixelCopy = int (*)(char*, size_t, void*);
++    bool offload_copy(size_t bytes, PixelCopy copy, void* context) noexcept;
++    // VDEC's CPU consumer only, outside the queue/conversion mutexes. Failed
++    // restore clears output; no caller may consume partially restored pixels.
++    int restore(std::string& output, int& os_error) const noexcept;
++private:
++    std::shared_ptr<FrameReference> reference_;
++};
++}
 diff --git a/rpcs3/ios/NeoSwapStorage/ShaderKey.h b/rpcs3/ios/NeoSwapStorage/ShaderKey.h
 new file mode 100644
 index 0000000..86f7444
@@ -12283,10 +12548,10 @@ index 0000000..86f7444
 +}
 diff --git a/rpcs3/ios/NeoSwapStorage/SourceABI.h b/rpcs3/ios/NeoSwapStorage/SourceABI.h
 new file mode 100644
-index 0000000..b50f81e
+index 0000000..aad4038
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapStorage/SourceABI.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,34 @@
 +// SPDX-License-Identifier: MIT
 +#ifndef NEOSTATION_SOURCE_ARCHIVE_ABI_H
 +#define NEOSTATION_SOURCE_ARCHIVE_ABI_H
@@ -12294,11 +12559,15 @@ index 0000000..b50f81e
 +#ifdef __cplusplus
 +extern "C" {
 +#endif
-+/* Optional host-owned archive for immutable, compiled GLSL source. Admission
++/* Optional host-owned archive for immutable CPU snapshots: compiled GLSL
++ * (domains 0..2), or exclusively owned software pixels (domain 3 opt-in).
++ * An old GLSL-only host refuses domain 3; retain original pixels on refusal.
++ * Layout/ABI 1 is unchanged. Admission
 + * snapshots at most 1 MiB, never waits for I/O and keeps ownership on refusal.
 + * The host checkpoints on its utility queue before releasing its snapshot.
-+ * read copies into caller-owned output: it is a synchronous debug/export
-+ * operation, NOT a rendering-thread cache lookup or a guest-memory pager. */
++ * read copies into caller-owned output: synchronous debug/export or VDEC CPU
++ * consumption outside queue/conversion locks. NOT an RSX/render-thread lookup,
++ * a guest-memory pager or a way to archive FFmpeg reference/GPU frames. */
 +enum { NEOSWAP_SOURCE_ABI = 1, NEOSWAP_SOURCE_MAX_BYTES = 1024*1024 };
 +enum NeoSwapSourceResult { NS_SOURCE_OK=0, NS_SOURCE_BUSY=1,
 +    NS_SOURCE_DISABLED=2, NS_SOURCE_INVALID=3, NS_SOURCE_IO=4,
@@ -12319,12 +12588,14 @@ index 0000000..b50f81e
 +#endif
 diff --git a/rpcs3/ios/NeoSwapStorage/SourceClient.cpp b/rpcs3/ios/NeoSwapStorage/SourceClient.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..624c465bcabb264d3ec3517242c8cead941a8640
+index 0000000..e834820
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapStorage/SourceClient.cpp
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,81 @@
 +// SPDX-License-Identifier: MIT
 +#include "SourceClient.h"
++#include "FrameClient.h"
++#include <algorithm>
 +#if !defined(__cpp_exceptions)
 +#error "NeoSwap SourceClient.cpp requires exceptions in this dedicated unit"
 +#endif
@@ -12353,6 +12624,52 @@ index 0000000000000000000000000000000000000000..624c465bcabb264d3ec3517242c8cead
 +        const auto result=ref.api->read(ref.session,ref.object,output.data(),ref.bytes,&os_error);
 +        if(result!=NS_SOURCE_OK)output.clear();
 +        return result;
++    }catch(...){output.clear();return NS_SOURCE_BUSY;}
++}
++bool ColdFrame::offload(const char* pixels, size_t bytes) noexcept {
++    if(reference_ || !pixels || bytes < 4096 || bytes > frame_max_bytes)return false;
++    const auto* api=installed.load();if(!api)return false;
++    const auto epoch=api->session();if(!epoch)return false;
++    try {
++        auto candidate=std::make_shared<FrameReference>();
++        candidate->bytes=bytes;
++        candidate->count=static_cast<uint32_t>((bytes+NEOSWAP_SOURCE_MAX_BYTES-1)/NEOSWAP_SOURCE_MAX_BYTES);
++        const auto chunk=(bytes+candidate->count-1)/candidate->count;
++        size_t offset=0;
++        for(uint32_t index=0;index<candidate->count;++index){
++            auto& ref=candidate->chunks[index];
++            ref.api=api;ref.session=epoch;ref.bytes=std::min(chunk,bytes-offset);
++            if(api->admit(epoch,frame_domain,pixels+offset,ref.bytes,&ref.object)!=NS_SOURCE_OK || !ref.object)
++                return false; // candidate retires ALL accepted chunks exactly once
++            offset+=static_cast<size_t>(ref.bytes);
++        }
++        // A concurrent stop/relaunch must never strand the original frame in
++        // a retired epoch. Old hosts reject domain 3 and keep the RAM fallback.
++        if(api->session()!=epoch)return false;
++        reference_=std::move(candidate);return true;
++    }catch(...){return false;}
++}
++bool ColdFrame::offload_copy(size_t bytes,PixelCopy copy,void* context) noexcept {
++    const auto* api=installed.load();
++    if(reference_ || !copy || bytes<4096 || bytes>frame_max_bytes || !api || !api->session())return false;
++    try {
++        std::string packed(bytes,'\0');
++        if(copy(packed.data(),bytes,context)!=static_cast<int>(bytes))return false;
++        return offload(packed.data(),packed.size());
++    }catch(...){return false;}
++}
++int ColdFrame::restore(std::string& output,int& os_error) const noexcept {
++    os_error=0;output.clear();if(!reference_)return NS_SOURCE_MISSING;
++    const auto& frame=*reference_;
++    try {
++        output.resize(static_cast<size_t>(frame.bytes));size_t offset=0;
++        for(uint32_t index=0;index<frame.count;++index){
++            const auto& ref=frame.chunks[index];
++            const int code=ref.api->read(ref.session,ref.object,output.data()+offset,ref.bytes,&os_error);
++            if(code!=NS_SOURCE_OK){output.clear();return code;}
++            offset+=static_cast<size_t>(ref.bytes);
++        }
++        return NS_SOURCE_OK;
 +    }catch(...){output.clear();return NS_SOURCE_BUSY;}
 +}
 +}
@@ -12439,6 +12756,85 @@ index 0000000..535b53e
 +}
 +#endif
 +#endif
+diff --git a/rpcs3/ios/NeoSwapStorage/VideoBuffer.h b/rpcs3/ios/NeoSwapStorage/VideoBuffer.h
+new file mode 100644
+index 0000000..eb24188
+--- /dev/null
++++ b/rpcs3/ios/NeoSwapStorage/VideoBuffer.h
+@@ -0,0 +1,73 @@
++// SPDX-License-Identifier: MIT
++#pragma once
++#include "FrameClient.h"
++extern "C" {
++#include <libavcodec/avcodec.h>
++#include <libavutil/imgutils.h>
++}
++#include <algorithm>
++#include <cerrno>
++#include <climits>
++#include <sys/mman.h>
++#include <unistd.h>
++
++namespace neostation::source_client {
++// The default FFmpeg pool retains freed pixels. Opt-in software VDEC frames
++// instead own anonymous mappings, released by FFmpeg's LAST reference. This
++// changes no codec, threading, timestamps, guest output or hardware frames.
++inline constinit std::atomic<uint64_t> video_mapped_bytes{0},video_mapped_peak{0},video_unmapped_bytes{0};
++inline constinit std::atomic<uint64_t> video_unmap_failures{0};
++inline void retire_video_mapping(void* opaque,uint8_t* pixels) noexcept {
++    const auto bytes=reinterpret_cast<uintptr_t>(opaque);
++    if(::munmap(pixels,bytes)==0){video_mapped_bytes.fetch_sub(bytes);video_unmapped_bytes.fetch_add(bytes);}
++    else video_unmap_failures.fetch_add(1);
++}
++inline bool video_mapping_format(const AVCodecContext* ctx,const AVFrame* frame) noexcept {
++    if(!ctx->codec || !(ctx->codec->capabilities&AV_CODEC_CAP_DR1) || ctx->hw_frames_ctx || frame->hw_frames_ctx ||
++       (frame->format!=AV_PIX_FMT_YUV420P && frame->format!=AV_PIX_FMT_YUVJ420P))return false;
++    const int bytes=av_image_get_buffer_size(static_cast<AVPixelFormat>(frame->format),frame->width,frame->height,1);
++    return bytes>=4096 && static_cast<uint64_t>(bytes)<=frame_max_bytes;
++}
++inline int allocate_video_mapping(AVCodecContext* ctx,AVFrame* frame,int flags) noexcept {
++    if(!video_mapping_format(ctx,frame))return avcodec_default_get_buffer2(ctx,frame,flags);
++    for(auto* p:frame->data)if(p)return AVERROR(EINVAL);
++    int width=frame->width,height=frame->height,alignment[AV_NUM_DATA_POINTERS]{};
++    avcodec_align_dimensions2(ctx,&width,&height,alignment);
++    if(width<=0 || height<=0)return AVERROR(EINVAL);
++    int strides[4]{};bool aligned=false;
++    for(unsigned attempt=0;attempt<32;++attempt){
++        const int result=av_image_fill_linesizes(strides,static_cast<AVPixelFormat>(frame->format),width);
++        if(result<0)return result;
++        aligned=true;for(unsigned p=0;p<4;++p)
++            if(strides[p] && (alignment[p]<=0 || strides[p]%alignment[p]))aligned=false;
++        if(aligned)break;
++        const auto increment=static_cast<unsigned>(width)&(~static_cast<unsigned>(width)+1);
++        if(!increment || increment>static_cast<unsigned>(INT_MAX-width))return AVERROR(EINVAL);
++        width+=static_cast<int>(increment);
++    }
++    if(!aligned)return AVERROR(EINVAL);
++    ptrdiff_t pitch[4]={strides[0],strides[1],strides[2],strides[3]};size_t sizes[4]{};
++    const int result=av_image_fill_plane_sizes(sizes,static_cast<AVPixelFormat>(frame->format),height,pitch);
++    if(result<0)return result;
++    const long page_size=::sysconf(_SC_PAGESIZE);if(page_size<=0)return AVERROR(EINVAL);
++    const auto page=static_cast<size_t>(page_size);size_t offsets[4]{},span=0;
++    for(unsigned p=0;p<4;++p)if(sizes[p]){
++        // Page-aligned planes cover all codec SIMD alignment requirements.
++        // Include overread/padding without assuming that visible bytes are allocation bytes.
++        if(alignment[p]>page_size || sizes[p]>(8ULL<<20)-page-64)return AVERROR(EINVAL);
++        offsets[p]=span;const auto charge=(sizes[p]+64+page-1)/page*page;
++        if(charge>(8ULL<<20)-span)return AVERROR(EINVAL);
++        span+=charge;
++    }
++    if(!span)return AVERROR(EINVAL);
++    auto* mapping=static_cast<uint8_t*>(::mmap(nullptr,span,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0));
++    if(mapping==MAP_FAILED)return AVERROR(errno);
++    auto* buffer=av_buffer_create(mapping,span,retire_video_mapping,reinterpret_cast<void*>(span),0);
++    if(!buffer){(void)::munmap(mapping,span);return AVERROR(ENOMEM);}
++    const auto live=video_mapped_bytes.fetch_add(span)+span;auto peak=video_mapped_peak.load();
++    while(peak<live && !video_mapped_peak.compare_exchange_weak(peak,live)){}
++    frame->buf[0]=buffer;
++    for(unsigned p=0;p<4;++p){frame->linesize[p]=strides[p];frame->data[p]=sizes[p]?mapping+offsets[p]:nullptr;}
++    frame->extended_data=frame->data;return 0;
++}
++}
 diff --git a/rpcs3/ios/NeoSwapVulkanBuffer.h b/rpcs3/ios/NeoSwapVulkanBuffer.h
 new file mode 100644
 index 0000000..0c2639e

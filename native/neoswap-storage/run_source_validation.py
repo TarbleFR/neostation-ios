@@ -42,8 +42,13 @@ def main():
                 [str(store),str(HERE/'tests/source_archive_test.cpp')]+libraries+['-o',str(exe)],out,'source-archive-build')
         result=execute([str(exe),str(cache)],out,'source-archive-run')
         report['core']=json.loads(next(line for line in reversed(result.splitlines()) if line.startswith('{')))
+        frames=work/'frame-test'
+        execute(common+[str(HERE/name) for name in ('Metrics.cpp','ManagedSwap.cpp','SourceArchive.cpp','SourceClient.cpp')]+
+                [str(store),str(HERE/'tests/frame_archive_test.cpp')]+libraries+['-o',str(frames)],out,'frame-archive-build')
+        result=execute([str(frames),str(cache)],out,'frame-archive-run')
+        report['frames']=json.loads(next(line for line in reversed(result.splitlines()) if line.startswith('{')))
     report['inputSHA256']={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in sorted(REQUIRED_INPUTS)}
     report['passed']=True;validate(report,report['sourceCommit'],require_apple=apple)
     (out/'source-archive.json').write_text(json.dumps(report,indent=2)+'\n')
-    print('PASS 64MiB actual owned CPU RAM-storage-RAM cycle, strict errors and bounded admission; no device/gameplay inference')
+    print('PASS 64MiB owned GLSL and 63MiB synthetic pixel cycles, exact bytes and resumed throttled progress; no device/gameplay inference')
 if __name__=='__main__':main()

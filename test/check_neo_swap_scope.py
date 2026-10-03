@@ -402,13 +402,14 @@ SOURCE_FILES = {
 }
 SOURCE_ADDED = {'rpcs3/ios/NeoSwapStorage/SourceABI.h', 'rpcs3/ios/NeoSwapStorage/SourceClient.h',
                 'rpcs3/ios/NeoSwapStorage/SourceClient.cpp'}
-current = json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+VIDEO_BASE='2e18a46d3f7733ed7ae8f237615e2c7a4fd2501d'
+current = json.loads(original('build-utils/rpcs3/canonical-source.json',VIDEO_BASE))
 assert set(current)==set(storage_manifest)|{'neoswap_source_archive'}
 for key in set(storage_manifest)-{'files_sha256','patch_sha256'}:
     assert current[key]==storage_manifest[key], 'Historical policy changed by source archive: '+key
 assert set(current['files_sha256'])==set(storage_manifest['files_sha256'])|SOURCE_ADDED
 assert {p for p,h in current['files_sha256'].items() if storage_manifest['files_sha256'].get(p)!=h}==SOURCE_FILES
-source_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+source_patch=original('build-utils/rpcs3/embedded-core.patch',VIDEO_BASE)
 assert hashlib.sha256(source_patch).hexdigest()==current['patch_sha256']
 source_sections=sections(source_patch)
 assert set(source_sections)==set(storage_sections)|SOURCE_ADDED
@@ -449,11 +450,47 @@ assert runtime.endswith(setter)
 assert runtime[:-len(setter)].rstrip()==postimage_lines(storage_sections[cpp]).rstrip(), 'Archive changed Core lifecycle/JIT'
 assert postimage_lines(source_sections[exports]).rstrip()==postimage_lines(storage_sections[exports]).rstrip()+b'\n_rpcs3_ios_set_source_archive_api'
 for name in ('SourceABI.h','SourceClient.h','SourceClient.cpp'):
-    assert hashlib.sha256((ROOT/'native/neoswap-storage'/name).read_bytes()).hexdigest()==current['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
+    assert hashlib.sha256(original('native/neoswap-storage/'+name,VIDEO_BASE)).hexdigest()==current['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
 assert current['neoswap_source_archive']['abi']==1
 assert current['neoswap_source_archive']['host_owned'] is True
 assert current['neoswap_source_archive']['device_tested'] is False
 AUDITED_CORE_FILES |= SOURCE_FILES
+# A separate, behavior-tested video delta. Preserve the complete Build398
+# shader/source audit above and EVERY unrelated patch section byte-for-byte.
+VIDEO_FILES={'rpcs3/Emu/Cell/Modules/cellVdec.cpp',
+             'rpcs3/ios/NeoSwapStorage/SourceABI.h','rpcs3/ios/NeoSwapStorage/SourceClient.cpp',
+             'rpcs3/ios/NeoSwapStorage/FrameClient.h','rpcs3/ios/NeoSwapStorage/VideoBuffer.h'}
+VIDEO_ADDED={'rpcs3/ios/NeoSwapStorage/FrameClient.h','rpcs3/ios/NeoSwapStorage/VideoBuffer.h'}
+video_manifest=json.loads((ROOT/'build-utils/rpcs3/canonical-source.json').read_text())
+video_patch=(ROOT/'build-utils/rpcs3/embedded-core.patch').read_bytes()
+video_sections=sections(video_patch)
+assert set(video_manifest)==set(current)|{'neoswap_video_frames'}
+for key in set(current)-{'files_sha256','patch_sha256'}:
+    assert video_manifest[key]==current[key], 'Video changed unrelated canonical policy: '+key
+assert set(video_manifest['files_sha256'])==set(current['files_sha256'])|VIDEO_ADDED
+assert {p for p,h in video_manifest['files_sha256'].items() if current['files_sha256'].get(p)!=h}==VIDEO_FILES
+assert video_manifest['files_sha256']['rpcs3/Emu/Cell/Modules/cellVdec.cpp']=='e3dfee027589a95e6ed58ea5d2f05f6fe0c83c1c5b23a9023cf425a81d3700b0', \
+    'The separately reviewed VDEC producer/consumer integration changed'
+assert hashlib.sha256(video_patch).hexdigest()==video_manifest['patch_sha256']
+assert set(video_sections)==set(source_sections)|VIDEO_ADDED
+for path in set(source_sections)-VIDEO_FILES:
+    assert video_sections[path]==source_sections[path], 'Video changed unrelated Core patch section: '+path
+for name in ('SourceABI.h','SourceClient.h','SourceClient.cpp','FrameClient.h','VideoBuffer.h'):
+    assert hashlib.sha256((ROOT/'native/neoswap-storage'/name).read_bytes()).hexdigest()==video_manifest['files_sha256']['rpcs3/ios/NeoSwapStorage/'+name]
+# Source ABI extends the admitted domain only; declarations/layout are identical.
+def declarations(payload):
+    payload=re.sub(rb'/\*.*?\*/',b'',payload,flags=re.S)
+    return b'\n'.join(line.split(b'//',1)[0].strip() for line in payload.splitlines() if line.split(b'//',1)[0].strip())
+assert declarations((ROOT/'native/neoswap-storage/SourceABI.h').read_bytes())==declarations(original('native/neoswap-storage/SourceABI.h',VIDEO_BASE))
+client=(ROOT/'native/neoswap-storage/SourceClient.cpp').read_bytes()
+old_client=original('native/neoswap-storage/SourceClient.cpp',VIDEO_BASE)
+shader_prefix=client[:client.index(b'bool ColdFrame::offload(')].replace(b'#include "FrameClient.h"\n',b'').replace(b'#include <algorithm>\n',b'')
+assert shader_prefix+b'}\n'==old_client, 'Video changed the existing GLSL client implementation'
+video=video_manifest['neoswap_video_frames']
+assert video['source_abi']==1 and video['domain']==3 and video['admission_io'] is False
+assert video['guest_gpu_jit_untouched'] is True and video['device_tested'] is False and video['gameplay_validated'] is False
+AUDITED_CORE_FILES |= VIDEO_FILES
+current=video_manifest
 assert candidate['manifest']['rpcs3_postimages_sha256'] == {
     path: current['files_sha256'][path] for path in sorted(AUDITED_CORE_FILES)
 }, 'Candidate/Core postimage identity drift'

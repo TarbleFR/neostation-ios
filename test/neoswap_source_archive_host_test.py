@@ -28,6 +28,11 @@ fixture={'schema':1,'sourceCommit':'a'*40,'platform':'Darwin','passed':True,'phy
 fixture['core'].update(logicalTouchedBytes=64*1024**2,restoredBytes=64*1024**2,coreReleasedCapacityBytes=64*1024**2,
     stagingPeakBytes=1024**2,stagingLimitBytes=4*1024**2,managedMappedPeakBytes=65536,managedMappedLimitBytes=8*1024**2,
     diskReadBytes=1,diskWriteBytes=1)
+fixture['frames']={field:True for field in ('passed','softwarePixelBytesSimulated','byteIdentityVerified',
+    'transactionalAdmissionVerified','partialRestoreNeverConsumed','oldHostFallbackVerified',
+    'warmAndReferencedPixelsRetained','throttledProgressResumed')}
+fixture['frames'].update(realDecoderExecuted=False,physicalIPhoneValidated=False,gameplayValidated=False,
+    logicalPixelBytes=48*1280*720*3//2,returnedPixelBytes=48*1280*720*3//2,stagingPeakBytes=2*1024**2)
 validate(fixture,'a'*40,require_apple=True)
 for field in ('passed','coreClientExecuted','ramStorageRamCycleVerified','byteIdentityVerified','admissionNoDiskIO',
               'pressureAndQuotaVerified','persistenceFailureRetainsSnapshot','failedRestoreClearsOutput','staleEpochRejected','sharedRetirementVerified'):
@@ -41,4 +46,13 @@ for field,invalid in (('sourceCommit','b'*40),('inputSHA256',{}),('physicalIPhon
     try:validate(bad,'a'*40,require_apple=True)
     except AssertionError:pass
     else:raise AssertionError('Accepted wrong provenance: '+field)
+for field in ('passed','byteIdentityVerified','transactionalAdmissionVerified','partialRestoreNeverConsumed',
+              'oldHostFallbackVerified','throttledProgressResumed'):
+    for invalid in (False,1,'true'):
+        bad=copy.deepcopy(fixture);bad['frames'][field]=invalid
+        try:validate(bad,'a'*40,require_apple=True)
+        except AssertionError:pass
+        else:raise AssertionError('Accepted incomplete pixel evidence: '+field)
+assert 'sourceConfig.domain_mask=15' in service
+assert 'videoPixelLiveArchivedBytes' in service and 'budgetIsProcessFootprint":@NO' in service
 print('PASS exact source ABI/host contract, simulator proof required and fail-closed owned archive evidence')

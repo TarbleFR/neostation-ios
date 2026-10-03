@@ -95,7 +95,11 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
   Future<void> _setShaderStorage(bool enabled) async {
     if (_busy) return;
     ++_revision;
-    setState(() { _busy = true; _messageKey = null; _code = null; });
+    setState(() {
+      _busy = true;
+      _messageKey = null;
+      _code = null;
+    });
     try {
       final stats = await NeoSwap.setShaderStorage(enabled);
       if (!mounted) return;
@@ -142,10 +146,17 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
     final donationReady = _stats?['memoryDonationSupported'] == true;
     final growthState = _stats?['donationGrowthState'];
     final storage = _stats?['shaderStorage'] is Map
-        ? _stats!['shaderStorage'] as Map : const {};
+        ? _stats!['shaderStorage'] as Map
+        : const {};
     final cache = storage['cache'] is Map ? storage['cache'] as Map : const {};
-    final storageRam = cache['rawRamBytes'] is num && cache['compressedCacheRamBytes'] is num
-        ? (cache['rawRamBytes'] as num) + (cache['compressedCacheRamBytes'] as num) : null;
+    final sourceArchive = storage['sourceArchive'] is Map
+        ? storage['sourceArchive'] as Map
+        : const {};
+    final storageRam =
+        cache['rawRamBytes'] is num && cache['compressedCacheRamBytes'] is num
+        ? (cache['rawRamBytes'] as num) +
+              (cache['compressedCacheRamBytes'] as num)
+        : null;
     return PopScope(
       canPop: !_busy,
       child: Dialog(
@@ -175,14 +186,38 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                     value: storage['requestedEnabled'] == true,
                     onChanged: _busy ? null : _setShaderStorage,
                   ),
-                  Text(t(storage['active'] == true ? 'storageActive' : 'storageInactive')),
+                  Text(
+                    t(
+                      storage['active'] == true
+                          ? 'storageActive'
+                          : 'storageInactive',
+                    ),
+                  ),
                   if (cache.isNotEmpty)
-                    Text(t('storageMetrics', {
-                      'ram': _bytes(storageRam),
-                      'disk': _bytes(cache['storedPayloadBytes']),
-                      'cold': _bytes(cache['diskOnlyLogicalBytes']),
-                      'latency': cache['readP95Us'] is num ? ((cache['readP95Us'] as num) / 1000).toStringAsFixed(2) : '—',
-                    }), key: const ValueKey('neoSwapShaderStorageMetrics')),
+                    Text(
+                      t('storageMetrics', {
+                        'ram': _bytes(storageRam),
+                        'disk': _bytes(cache['storedPayloadBytes']),
+                        'cold': _bytes(cache['diskOnlyLogicalBytes']),
+                        'latency': cache['readP95Us'] is num
+                            ? ((cache['readP95Us'] as num) / 1000)
+                                  .toStringAsFixed(2)
+                            : '—',
+                      }),
+                      key: const ValueKey('neoSwapShaderStorageMetrics'),
+                    ),
+                  if (sourceArchive.isNotEmpty)
+                    Text(
+                      t('storageVideoMetrics', {
+                        'cold': _bytes(
+                          sourceArchive['videoPixelLiveArchivedBytes'],
+                        ),
+                        'returned': _bytes(
+                          sourceArchive['videoPixelReturnedArchiveBytesCumulative'],
+                        ),
+                      }),
+                      key: const ValueKey('neoSwapVideoStorageMetrics'),
+                    ),
                 ],
                 const SizedBox(height: 16),
                 Text(

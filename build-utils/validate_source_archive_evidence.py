@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject incomplete or wrong-source owned GLSL archive evidence."""
+"""Reject incomplete or wrong-source owned GLSL/pixel archive evidence."""
 import hashlib
 import json
 from pathlib import Path
@@ -11,8 +11,10 @@ REQUIRED_INPUTS=frozenset({
     'native/neoswap-storage/SourceArchive.cpp','native/neoswap-storage/SourceArchive.h',
     'native/neoswap-storage/SourceABI.h','native/neoswap-storage/SourceClient.h',
     'native/neoswap-storage/SourceClient.cpp',
+    'native/neoswap-storage/FrameClient.h',
     'native/neoswap-storage/Metrics.cpp',
     'native/neoswap-storage/tests/source_archive_test.cpp',
+    'native/neoswap-storage/tests/frame_archive_test.cpp',
     'native/neoswap-storage/run_source_validation.py',
     'build-utils/validate_source_archive_evidence.py',
     'build-utils/configure_neoswap_storage.py',
@@ -41,6 +43,16 @@ def validate(report,commit,require_apple=False):
     assert 0<core['managedMappedPeakBytes']<=core['managedMappedLimitBytes']==8*1024**2
     assert core['diskReadBytes']>0 and core['diskWriteBytes']>0
     assert report['c11HeaderVerified'] is True
+    frames=report['frames']
+    for field in ('passed','softwarePixelBytesSimulated','byteIdentityVerified','transactionalAdmissionVerified',
+                  'partialRestoreNeverConsumed','oldHostFallbackVerified','warmAndReferencedPixelsRetained',
+                  'throttledProgressResumed'):
+        assert frames[field] is True,field
+    for field in ('realDecoderExecuted','physicalIPhoneValidated','gameplayValidated'):
+        assert frames[field] is False,field
+    assert frames['logicalPixelBytes']>=48*1280*720*3//2
+    assert frames['returnedPixelBytes']==frames['logicalPixelBytes']
+    assert 0<frames['stagingPeakBytes']<=4*1024**2
     if require_apple:assert report['platform']=='Darwin'
     expected={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in sorted(REQUIRED_INPUTS)}
     assert report['inputSHA256']==expected,'Wrong exact-source archive inputs'

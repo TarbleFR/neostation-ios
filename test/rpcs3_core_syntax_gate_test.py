@@ -20,7 +20,7 @@ class SyntaxGateTests(unittest.TestCase):
             exception_flags = {}
             for name in sorted(gate.UNITS):
                 exception_flags[name] = (['-fno-exceptions', '-fexceptions'] if name == 'SourceClient.cpp'
-                    else ['-fno-exceptions'] if name in ('fsr_pass.cpp', 'VKProgramPipeline.cpp')
+                    else ['-fno-exceptions'] if name in ('fsr_pass.cpp', 'VKProgramPipeline.cpp', 'cellVdec.cpp')
                     else ['-fexceptions'])
                 entries.append({'file': name, 'directory': temp, 'arguments': [
                     'clang++', '--target=arm64-apple-ios16.3', '-std=c++23',
@@ -52,7 +52,7 @@ class SyntaxGateTests(unittest.TestCase):
             self.assertEqual(len(calls), len(gate.UNITS) + 1)
 
     def test_cold_source_consumer_and_no_exception_upscaler_are_required_early(self):
-        self.assertTrue({'VKProgramPipeline.cpp', 'fsr_pass.cpp', 'SourceClient.cpp'} <= gate.UNITS)
+        self.assertTrue({'VKProgramPipeline.cpp', 'fsr_pass.cpp', 'SourceClient.cpp', 'cellVdec.cpp'} <= gate.UNITS)
 
     def test_missing_translation_units_are_an_error(self):
         with tempfile.TemporaryDirectory() as temp:
