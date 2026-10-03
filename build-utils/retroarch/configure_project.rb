@@ -22,6 +22,14 @@ adapter = project.main_group.new_group('NeoStation', '../../neostation')
 ['NeoRetroArchCore.m', 'NeoRetroArchNoJIT.c'].each do |name|
   target.source_build_phase.add_file_reference(adapter.new_file(name))
 end
+# The pinned iOS11 project predates the WebDAV source addition: Cocoa lifecycle
+# methods still reference this class even though hosted startup is disabled.
+# Compile the tracked matching implementation, not a fetched dependency.
+webdav = project.main_group.new_group('Pinned WebDAV', 'WebServer/GCDWebDAVServer')
+target.source_build_phase.add_file_reference(webdav.new_file('GCDWebDAVServer.m'))
+xml = project.frameworks_group.new_file('usr/lib/libxml2.tbd')
+xml.source_tree = 'SDKROOT'
+target.frameworks_build_phase.add_file_reference(xml)
 ['CoreHaptics','MetricKit'].each do |name|
   ref = project.frameworks_group.new_file("System/Library/Frameworks/#{name}.framework")
   ref.source_tree = 'SDKROOT'
@@ -42,9 +50,14 @@ end
     settings[key] = flags + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DNEOSTATION_EMBEDDED_RETROARCH=1']
   end
   settings['OTHER_CFLAGS'] = Array(settings['OTHER_CFLAGS']) + ['-DHAVE_APPLE_STORE','-DHAVE_FRAMEWORKS','-DHAVE_OPENGLES3','-DNEOSTATION_EMBEDDED_RETROARCH=1']
-  settings['HEADER_SEARCH_PATHS'] = ['$(inherited)', '$(SRCROOT)/../..', '$(SRCROOT)/../../libretro-common/include',
+  # Keep existing upstream headers and include its repository-pinned WebDAV
+  # directory, which is missing from the original iOS11 project's header map.
+  settings['HEADER_SEARCH_PATHS'] = Array(settings['HEADER_SEARCH_PATHS']) + ['$(inherited)', '$(SRCROOT)/../..', '$(SRCROOT)/../../libretro-common/include',
     '$(SRCROOT)/../../deps/stb','$(SRCROOT)/../../deps/rcheevos/include','$(SRCROOT)/../../deps',
-    '$(SRCROOT)', '$(SRCROOT)/../../neostation']
+    '$(SRCROOT)', '$(SRCROOT)/../../neostation', '$(SRCROOT)/WebServer/GCDWebDAVServer',
+    '$(SRCROOT)/WebServer/GCDWebUploader', '$(SRCROOT)/WebServer/GCDWebServer/Core',
+    '$(SRCROOT)/WebServer/GCDWebServer/Requests', '$(SRCROOT)/WebServer/GCDWebServer/Responses',
+    '$(SDKROOT)/usr/include/libxml2']
   settings['CLANG_ENABLE_OBJC_ARC'] = 'YES'
   settings['CLANG_CXX_LIBRARY'] = 'libc++'
   settings['GCC_C_LANGUAGE_STANDARD'] = 'gnu11'
