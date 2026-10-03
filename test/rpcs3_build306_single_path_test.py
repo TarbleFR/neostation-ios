@@ -55,8 +55,27 @@ dlopen = bridge.index('handle = dlopen(')
 initialize = bridge.index('self->_api.initialize(&options)')
 launch = bridge.index('if ([call.method isEqualToString:@"launchGame"])')
 self_test = bridge.index('rpcs3_ios_run_llvm_self_test', launch)
-boot = bridge.index('self->_api.boot_game', launch)
+boot_call = ('[self bootTitleForCore:titleId.UTF8String '
+             'savestate:savestateId.length ? savestateId.UTF8String : NULL]')
+boot = bridge.index(boot_call, launch)
 assert handoff < dlopen < initialize < launch < self_test < boot
+
+# Boot remains the final operation of the SAME launch path, through the host
+# snapshot-epoch wrapper. Verify its delegation as well as the caller's order;
+# a raw API token elsewhere in the file cannot establish a valid JIT handoff.
+wrapper = bridge.split(
+    '- (rpcs3_ios_status)bootTitleForCore:(const char*)title savestate:(const char*)identifier {',
+    1)[1].split('\n}', 1)[0]
+raw_boot = 'const rpcs3_ios_status status = _api.boot_game(title, identifier);'
+assert bridge.count('_api.boot_game(') == 1
+assert wrapper.count(raw_boot) == 1
+assert 'return status;' in wrapper
+assert wrapper.index('[self invalidatePerformanceSnapshotForBoot]') < wrapper.index(raw_boot)
+assert 'if (status != 0) _performanceSnapshot.end();' in wrapper
+invalidate = bridge.split('- (void)invalidatePerformanceSnapshotForBoot {', 1)[1].split('\n}', 1)[0]
+assert 'if (++_performanceEpoch == 0) ++_performanceEpoch;' in invalidate
+assert '_performanceSnapshot.begin(_performanceEpoch);' in invalidate
+assert '_performanceDisplayEpoch.store(_performanceEpoch, std::memory_order_release);' in invalidate
 
 stop_start = bridge.index('- (void)stopAndDismiss:')
 stop_body = bridge[stop_start:]

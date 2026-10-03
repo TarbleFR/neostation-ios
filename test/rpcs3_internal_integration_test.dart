@@ -2,6 +2,47 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+const _launchCoreBootCall =
+    '[self bootTitleForCore:titleId.UTF8String '
+    'savestate:savestateId.length ? savestateId.UTF8String : NULL]';
+
+void _expectCoreBootEpochWrapper(String plugin) {
+  const signature =
+      '- (rpcs3_ios_status)bootTitleForCore:(const char*)title '
+      'savestate:(const char*)identifier {';
+  const rawBoot =
+      'const rpcs3_ios_status status = _api.boot_game(title, identifier);';
+  expect(signature.allMatches(plugin).length, 1);
+  final wrapper = plugin.split(signature)[1].split('\n}')[0];
+  expect('_api.boot_game('.allMatches(plugin).length, 1);
+  expect(rawBoot.allMatches(wrapper).length, 1);
+  expect(wrapper, contains('return status;'));
+  expect(wrapper, contains('[self invalidatePerformanceSnapshotForBoot]'));
+  expect(
+    wrapper.indexOf('[self invalidatePerformanceSnapshotForBoot]'),
+    lessThan(wrapper.indexOf(rawBoot)),
+  );
+  expect(wrapper, contains('if (status != 0) _performanceSnapshot.end();'));
+
+  const invalidateSignature = '- (void)invalidatePerformanceSnapshotForBoot {';
+  expect(invalidateSignature.allMatches(plugin).length, 1);
+  final invalidate = plugin.split(invalidateSignature)[1].split('\n}')[0];
+  expect(
+    invalidate,
+    contains('if (++_performanceEpoch == 0) ++_performanceEpoch;'),
+  );
+  expect(
+    invalidate,
+    contains('_performanceSnapshot.begin(_performanceEpoch);'),
+  );
+  expect(
+    invalidate,
+    contains(
+      '_performanceDisplayEpoch.store(_performanceEpoch, std::memory_order_release);',
+    ),
+  );
+}
+
 void main() {
   group('RPCS3 internal engine contracts', () {
     test('RPCS3 JIT path is isolated from Dolphin and standalone RPCS3', () {
@@ -113,7 +154,7 @@ void main() {
           'if ([call.method isEqualToString:@"launchGame"])',
         );
         final selfTest = bridge.indexOf('rpcs3_ios_run_llvm_self_test', launch);
-        final boot = bridge.indexOf('self->_api.boot_game', launch);
+        final boot = bridge.indexOf(_launchCoreBootCall, launch);
         expect(handoff, greaterThanOrEqualTo(0));
         expect(dlopen, greaterThan(handoff));
         expect(initializeCall, greaterThan(dlopen));
@@ -287,7 +328,8 @@ void main() {
       ).readAsStringSync();
 
       expect(plugin, contains('rpcs3_ios_boot_game'));
-      expect(plugin, contains('self->_api.boot_game'));
+      expect(plugin, contains(_launchCoreBootCall));
+      _expectCoreBootEpochWrapper(plugin);
       expect(plugin, contains('@"launchGame"'));
       // The standard arena also supports gameplay; expansion is optional.
       expect(plugin, isNot(contains('!self.initializedWithExpandedJit')));

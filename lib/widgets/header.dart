@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +17,7 @@ import 'package:neostation/services/permission_service.dart';
 import 'package:neostation/services/rpcs3_internal_service.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/widgets/header_sort_dropdown.dart';
+import 'package:neostation/widgets/airplay_menu_button.dart';
 import 'package:neostation/widgets/bumper_glyph.dart';
 import 'package:neostation/widgets/notification_bell.dart';
 import 'package:neostation/screens/app_screen.dart';
@@ -329,6 +331,10 @@ class HeaderState extends State<Header> {
                       ),
                     ),
                     _buildShoulderButton('RB', false),
+                    if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                      SizedBox(width: 4.r),
+                      const AirPlayMenuButton(),
+                    ],
                   ],
                 ),
               ),

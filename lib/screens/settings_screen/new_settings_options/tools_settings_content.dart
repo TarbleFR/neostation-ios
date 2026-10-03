@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:neostation/l10n/neoplay_locale.dart';
-import 'package:neostation/widgets/neoplay_dialog.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -53,7 +50,7 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
     _refreshJitFallbackState();
   }
 
-  int getItemCount() => defaultTargetPlatform == TargetPlatform.iOS ? 4 : 3;
+  int getItemCount() => 3;
 
   void _openNeoSwap() {
     showDialog<void>(context: context, builder: (_) => const NeoSwapDialog());
@@ -62,10 +59,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
   void scrollToIndex(int index) {}
 
   void selectItem(int index) {
-    if (index == 3 && defaultTargetPlatform == TargetPlatform.iOS) {
-      showNeoPlayDialog(context);
-      return;
-    }
     if (index == 2) {
       _openNeoSwap();
       return;
@@ -338,15 +331,6 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
                 onTap: _openNeoSwap,
                 trailing: const Icon(Icons.chevron_right),
               ),
-              if (defaultTargetPlatform == TargetPlatform.iOS)
-                SettingsCardRow(
-                  icon: Symbols.cast_rounded,
-                  title: 'NeoPlay',
-                  subtitle: NeoPlayLocale.get(context, 'subtitle'),
-                  selected: widget.isContentFocused && widget.selectedContentIndex == 3,
-                  onTap: () => showNeoPlayDialog(context),
-                  trailing: const Icon(Icons.chevron_right),
-                ),
             ],
           ),
         ),

@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap + NeoPlay private • Build 400
-run-name: NeoStation NeoSwap + NeoPlay private • Build 400 • ${{ github.sha }}
+name: NeoStation NeoSwap + NeoPlay private • Build 401
+run-name: NeoStation NeoSwap + NeoPlay private • Build 401 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '400'
+        default: '401'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-neoplay-build400
+  group: neostation-neoswap-neoplay-build401
   cancel-in-progress: true
 
 jobs:
@@ -58,11 +58,11 @@ jobs:
               run = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}']))
               assert run['head_sha'] == expected_sha and run['path'] == '.github/workflows/neoswap-ipa.yml'
               if run['status'] == 'completed':
-                  assert run['conclusion'] == 'success', 'Build399 did not succeed; inspect it before packaging Build400'
+                  assert run['conclusion'] == 'success', 'Build399 did not succeed; inspect it before packaging Build401'
                   break
               if time.monotonic() >= deadline:
                   raise SystemExit('Timed out waiting for Build399; no build was cancelled')
-              print('Build399 is still running; Build400 packaging remains gated', flush=True)
+              print('Build399 is still running; Build401 packaging remains gated', flush=True)
               time.sleep(30)
           artifacts = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100']))['artifacts']
           expected = 'NeoStation-NeoSwap-NeoPlay-Build-399-' + expected_sha
@@ -112,13 +112,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (400)
+    name: Neostation iOS 0.0.2 private IPA (401)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '400' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '401' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-400-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-401-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'

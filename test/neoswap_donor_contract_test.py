@@ -193,8 +193,27 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0)', bridge)
         launch = bridge.split('if ([call.method isEqualToString:@"launchGame"])', 1)[1].split(
             'if ([call.method isEqualToString:@"isSessionActive"])', 1)[0]
+        boot_call = ('[self bootTitleForCore:titleId.UTF8String '
+                     'savestate:savestateId.length ? savestateId.UTF8String : NULL]')
         self.assertLess(launch.index('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1)'),
-                        launch.index('self->_api.boot_game(titleId.UTF8String'))
+                        launch.index(boot_call))
+        # The telemetry wrapper keeps the SAME Core boot call and status.
+        # Donation still becomes active before the launch call above; merely
+        # finding a raw API call in an earlier helper would not prove ordering.
+        wrapper = bridge.split(
+            '- (rpcs3_ios_status)bootTitleForCore:(const char*)title savestate:(const char*)identifier {',
+            1)[1].split('\n}', 1)[0]
+        raw_boot = 'const rpcs3_ios_status status = _api.boot_game(title, identifier);'
+        self.assertEqual(bridge.count('_api.boot_game('), 1)
+        self.assertEqual(wrapper.count(raw_boot), 1)
+        self.assertIn('return status;', wrapper)
+        self.assertLess(wrapper.index('[self invalidatePerformanceSnapshotForBoot]'),
+                        wrapper.index(raw_boot))
+        self.assertIn('if (status != 0) _performanceSnapshot.end();', wrapper)
+        invalidate = bridge.split('- (void)invalidatePerformanceSnapshotForBoot {', 1)[1].split('\n}', 1)[0]
+        self.assertIn('if (++_performanceEpoch == 0) ++_performanceEpoch;', invalidate)
+        self.assertIn('_performanceSnapshot.begin(_performanceEpoch);', invalidate)
+        self.assertIn('_performanceDisplayEpoch.store(_performanceEpoch, std::memory_order_release);', invalidate)
         self.assertIn('NeoSwap_SetOwnerSessionActive', host)
         self.assertIn('NeoSwap_OwnerSessionActive', host)
         self.assertIn('NeoSwap_WaitForDonationReady', host)

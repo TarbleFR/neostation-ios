@@ -108,13 +108,22 @@ class Build398Integration(unittest.TestCase):
         self.assertIn(b'if (level > 2 && !profiler && !videoArchive) return;', plugin)
         subprocess.run([sys.executable, str(ROOT / 'test/rpcs3_input_bridge_test.py')], cwd=ROOT, check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'test/rpcs3_performance_snapshot_test.py')], cwd=ROOT, check=True, timeout=30)
-    def test_both_tools_are_present_at_distinct_gamepad_indices(self):
+    def test_screen_sharing_moves_to_the_main_menu_and_preserves_other_tools(self):
         text = (ROOT/'lib/screens/settings_screen/new_settings_options/tools_settings_content.dart').read_text()
-        self.assertIn('TargetPlatform.iOS ? 4 : 3', text)
+        self.assertIn('int getItemCount() => 3;', text)
         self.assertRegex(text, r'if \(index == 2\)\s*\{\s*_openNeoSwap\(\);')
-        self.assertRegex(text, r'if \(index == 3 && defaultTargetPlatform == TargetPlatform.iOS\)\s*\{\s*showNeoPlayDialog\(context\);')
         self.assertEqual(text.count('onTap: _openNeoSwap'), 1)
-        self.assertEqual(text.count('onTap: () => showNeoPlayDialog(context)'), 1)
+        self.assertNotIn('showNeoPlayDialog', text)
+        self.assertNotIn('NeoPlayLocale', text)
+        self.assertNotIn('index == 3', text)
+        header = (ROOT/'lib/widgets/header.dart').read_text()
+        self.assertIn("import 'package:neostation/widgets/airplay_menu_button.dart';", header)
+        self.assertRegex(header, r'if \(defaultTargetPlatform == TargetPlatform.iOS\) \.\.\.\[\s*SizedBox\(width: 4.r\),\s*const AirPlayMenuButton\(\),')
+        self.assertEqual(header.count('const AirPlayMenuButton()'), 1)
+        action = (ROOT/'lib/widgets/airplay_menu_button.dart').read_text()
+        self.assertIn('Icons.airplay_rounded', action)
+        self.assertEqual(action.count('onPressed: () => showNeoPlayDialog(context)'), 1)
+        self.assertNotIn('NeoPlayBridge.', action)
     def test_packages_and_version(self):
         pubspec = (ROOT/'pubspec.yaml').read_text()
         for name in ('neo_swap', 'neoplay_bridge'):
@@ -123,7 +132,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('version: 0.0.2+399', pubspec)
     def test_full_ipa_requires_previous_build_and_both_exact_evidence_suites(self):
         text = (ROOT/'.github/workflows/neoswap-ipa.yml').read_text()
-        self.assertIn('neostation-neoswap-neoplay-build400', text)
+        self.assertIn('neostation-neoswap-neoplay-build401', text)
         self.assertNotIn('group: neostation-neoswap-private\n', text)
         self.assertIn('run_id = 37124491800', text)
         self.assertIn("run['conclusion'] == 'success'", text)
@@ -176,7 +185,7 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('failure = nil', request)
     def test_candidate_identity_remains_honest(self):
         data = json.loads((ROOT/'native/import-memory-candidate.json').read_text())
-        self.assertEqual(data['target_build'], 400)
+        self.assertEqual(data['target_build'], 401)
         self.assertEqual(data['neoplay_integration']['preserved_neoswap_base'], BASE)
         self.assertEqual(data['neoplay_integration']['source'], FEATURE)
         self.assertFalse(data['neoplay_integration']['physical_device_validation'])

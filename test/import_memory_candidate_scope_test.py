@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 400
+assert manifest['target_build'] == 401
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -51,6 +51,9 @@ assert managed['required_evidence'] == [
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Build401: explicit main-menu entry moved from Tools.
+    'lib/widgets/header.dart',
+    'lib/widgets/airplay_menu_button.dart',
     # Build400: reviewed host scheduling, single FPS sampler and discovery guidance.
     'lib/l10n/neoplay_discovery_locale.dart',
     'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h',
@@ -207,6 +210,8 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'test/rpcs3_internal_integration_test.dart',
+    'docs/neoswap-build401-airplay-entry.md',
     'docs/neoswap-build400-runtime-repair.md',
     'native/neoswap-storage/tests/source_work_test.cpp',
     'test/neoswap_source_work_test.py',

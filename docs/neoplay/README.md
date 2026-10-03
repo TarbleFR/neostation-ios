@@ -7,12 +7,12 @@ No changes to `experimental`, NeoSwap, JIT, emulator cores, saves or libraries a
 ## Windows
 
 A complementary **free NeoPlay Receiver** is required. The first candidate runs with Node.js 22+ and Edge/Chrome, using their built-in H.264/AAC media pipeline, not unsigned third-party FFmpeg DLLs.
-In `tools/neoplay-receiver`: `npm ci`, then `npm start`. Open the localhost address, click Ready, then select the PC in NeoStation / Tools / NeoPlay. Enter the six-digit code.
+In `tools/neoplay-receiver`: `npm ci`, then `npm start`. Open the localhost address, click Ready, then tap the **AirPlay icon in NeoStation’s main menu**, select the PC in the NeoPlay panel and enter the six-digit code.
 The receiver announces `_neoplay._tcp` over Bonjour/mDNS. No account, external signalling service, internet relay or router port forwarding is used. A narrowly scoped Windows **private-network** firewall permission for the receiver may be needed; do not disable security protections globally.
 
 ## Chromecast
 
-Open **Settings → Tools → NeoPlay**, tap **Find screens**, allow iOS local-network access, and select the Chromecast before launching a game. Starting a game does not automatically search for a TV. The iPhone and Chromecast must be on the same local Wi-Fi network; guest/client isolation may prevent discovery. If access was denied, enable NeoStation's **Local Network** permission in iOS Settings, return to NeoPlay, and search again. A conventional Chromecast uses the Google default media receiver and does not need the Windows receiver application.
+Tap the **AirPlay icon in the main menu** to open NeoPlay, then **Find screens**, allow iOS local-network access, and select the Chromecast before launching a game. The previous NeoPlay activation entry in **Settings → Tools** has been removed; the AirPlay action opens the same panel with Apple TV guidance, Chromecast and Windows receiver selection. Opening the panel or starting a game does not automatically search for a TV or start capture. The iPhone and Chromecast must be on the same local Wi-Fi network; guest/client isolation may prevent discovery. If access was denied, enable NeoStation's **Local Network** permission in iOS Settings, return to NeoPlay, and search again. A conventional Chromecast uses the Google default media receiver and does not need the Windows receiver application.
 
 The discovery panel now retains a **Search again** action after the initial request and retries an explicitly requested search after a Settings/foreground round trip. Native diagnostics in `NeoPlay.jsonl` record Cast discovery requests, SDK-active state and total/eligible device counts; Bonjour errors and Cast-session errors retain their actual domain and code. These records distinguish a search request, a discovered video receiver and successful playback; an empty device list alone is not labelled permission denial. Real iPhone-to-Chromecast discovery/playback remains unvalidated.
 
@@ -45,7 +45,7 @@ Primary API references: Apple ReplayKit `RPScreenRecorder.startCapture`, AVFound
 
 The current image source is the **application screen**, not an emulator's isolated framebuffer. Consequently, letterboxing already rendered on the phone is preserved inside the shared picture. Removing that extra border without cropping the game requires an explicit game-viewport/render integration; it is not yet implemented. Do not advertise perfect game-only screen filling from these tests.
 
-The Tools dialog can connect before launching a game. The native pass-through overlay disconnects a running stream. Opening a first receiver-selection UI from every already-running embedded emulator is a separate integration task and has not been validated.
+The NeoPlay panel opened from the main menu’s AirPlay icon can connect before launching a game. Apple TV screen selection remains managed by iOS Control Center. The native pass-through overlay disconnects a running stream. Opening a first receiver-selection UI from every already-running embedded emulator is a separate integration task and has not been validated.
 
 Windows viewport changes are reported back to iOS and debounced before restarting only the encoder when its output dimensions must change. This is not an emulator restart. There is no HEVC mode or network-adaptive bitrate controller in this candidate.
 
