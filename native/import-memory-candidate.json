@@ -80,7 +80,8 @@
     "Build398 stage2: actual RPCS3 compiled GLSL sources transfer to a bounded 4MiB host snapshot, verified 64KiB checkpoints release owned RAM and restore exact owning text on debug/export demand; independent source ABI1 and new related Core build required, main ABI30 and JIT/guest/GPU policies retained. Admission does no disk I/O; refused admission retains original Core text and failed persistence retains host RAM. Existing opt-in God of War III policy retained; no physical-memory or gameplay gain claim.",
     "Build399: extend the unchanged source ABI1 with opt-in domain3 for old exclusively owned software VDEC pixels; replace eligible FFmpeg pool allocations with explicit anonymous mappings so last-reference release really unmaps RAM; retain codec/guest/GPU/JIT/RSX labels and timeouts. Preserve complete accepted snapshots on errors, resume verified chunk progress, reserve in-flight restore queue slots and clear partial reads. Real local H264/owned-versus-pooled pixel identity and actual munmap tests pass; mandatory pinned FFmpeg8.1.1 Apple execution and full iOS consumer gates remain required. No iPhone gameplay gain or cutscene-fix claim.",
     "Build400: host-only repair from Build399 God of War III logs: coalesced bounded source archive maintenance, prioritized restoration with direct immutable RAM reads, fresh measured low-headroom video admission with recovery hysteresis, separate queue/read timings and existing bounded Core video notices; single Core FPS producer with stale/error/boot epoch fences; retryable explicit NeoPlay discovery and 12-locale guidance. Preserve exact Core7bcc/run37120654954, all Core inputs, ABI, JIT, settings and guest/GPU paths. Actual native Store/scheduler and content proofs plus required exact-SHA Apple Simulator/SDK/NeoPlay gates precede private IPA400. No physical-iPhone gameplay or Chromecast connection validation claim.",
-    "Build401: repair active donation/launch/JIT contracts to follow the common host boot wrapper with exact unchanged raw Core delegation and preserved ordering; Build400 failed an obsolete donor callsite assertion and did not package an IPA. Move activation to a main-menu AirPlay icon, remove NeoPlay activation from Tools, retain the existing destination panel and no automatic discovery/capture. Keep Build399 as the last successful packaging prerequisite and every exact-SHA Apple/native gate. Core57 identities, runtime400 repairs, ABI and device-validation limits unchanged."
+    "Build401: repair active donation/launch/JIT contracts to follow the common host boot wrapper with exact unchanged raw Core delegation and preserved ordering; Build400 failed an obsolete donor callsite assertion and did not package an IPA. Move activation to a main-menu AirPlay icon, remove NeoPlay activation from Tools, retain the existing destination panel and no automatic discovery/capture. Keep Build399 as the last successful packaging prerequisite and every exact-SHA Apple/native gate. Core57 identities, runtime400 repairs, ABI and device-validation limits unchanged.",
+    "Build401 packaging retry: preserve every production byte and Core input; replace the obsolete Build283 log-filter assertion with executed production filter/budget behavior proving VDEC and ordinary logs share the locked128-lines/second limit. Keep all historical startup guarantees, exact-SHA evidence gates and last successful Build399 prerequisite; no packaged IPA existed from the stopped attempt."
   ],
   "files_sha256": {
     ".github/workflows/cheats-media-check.yml": "6bc7b3b56e5c729ee8454cf29f4c4b89977ecdd278debd315c8d38518950dcef",
@@ -481,7 +482,7 @@
     "docs/neoswap-build398-memory-logs.md": "f0cc4f42aeaed352bf644373088b74a7830da976027251c6af09d5caecc6d091",
     "docs/neoswap-build399-owned-video.md": "6d8259629354d1030a0df71246e9ee228b3395f2a0962bcffccd17dec00e22ea",
     "docs/neoswap-build400-runtime-repair.md": "e4617a33645782fa1fb24ab55bee6a19dc59043dd3faa70315d9a3ab9e226375",
-    "docs/neoswap-build401-airplay-entry.md": "ee75cc76b2f3f5f423370360645a0250bae6a2df73abd358fbcb8aebeb915191",
+    "docs/neoswap-build401-airplay-entry.md": "1e896d2199bd6dfdbbf9e2fb0f6f757c541432f426019cb8446297281cdce9d0",
     "docs/neoswap-device-analysis-20260930.md": "eabc558b24871e0ac0ba9b584222db4ce6c3c4f06b025ed50a682bccfe955cb4",
     "docs/neoswap-framework-direction.md": "52459643ce0a2ae061b9febc8363bbfac04e33096514d2bcd7f279368bc5dc7a",
     "docs/neoswap-guest-relay-build372.md": "3792130b2940cb0234834d580c8591a266fd37e7fcc5335019e0b8527704d48f",
@@ -534,7 +535,7 @@
     "test/dolphin_texture_zip_test.py": "918c2df1371dad2b2b6cb084516231adf6205c6ca7d84705cd9115f62ac648a1",
     "test/dusklight_bridge_contract_test.py": "8c5d2b55bc1bf652260209f0fa8bd8ed2d0de7625ab613a017ffc296f72bae94",
     "test/dusklight_terminal_shutdown_test.py": "00dd9f61c7a882ee1e0c25d7066bce81aa2535c2ed35a0bc1a08027a027d7399",
-    "test/import_memory_candidate_scope_test.py": "0cb03349ece39965e6eee3d3e4ee5233bdfb5da843b3808ba52911f26b4b7f55",
+    "test/import_memory_candidate_scope_test.py": "58eab60cad20b06a1f6f7f2dd5954aec5e921b2be352ea9d5cd0f1a65b13a3ae",
     "test/jit_backend_preference_service_test.dart": "d9335110f2a86ea1521e3a104ae882bed331001bcfc33a3856c295b49e0a1831",
     "test/kartpad_display_title_test.dart": "1525c2e6913f7e62b40b78c50868599febb2b51e03b29834ee2e45474e3bde04",
     "test/kartpad_personal_pack_test.py": "88530eb99bfea9d03e57b97f63bcfc57233d75b54f2d7813d80a5f58abeafc7f",
@@ -588,6 +589,7 @@
     "test/neoswap_usage_policy_test.cpp": "bb3cee89932014b6bb89cfc33615256f1cb78486ee78362040d6b6cd0f046e2b",
     "test/neoswap_vulkan_evidence_test.py": "b93d3006845f07ce2b53d53b918187f1bafadb4c7f77ab0124f890f0415a7fd8",
     "test/relay_backend_test.cpp": "1fab60e26bfdac0567d49f5bb3659ac42d5924e71296e98dd5d6d099de71e50e",
+    "test/rpcs3_build283_boot_stability_test.py": "add501cb863d56a06036089d4e1bcd421469ef3be01232490bdda722701e3bbd",
     "test/rpcs3_build306_single_path_test.py": "a9ccf814021f928b0318ad42050e7949e62bb002c9c2b7922a5fc5df3c3bc7cd",
     "test/rpcs3_core_syntax_gate_test.py": "1d56e9eeab1757ff1ba126627eb73d6293854af2c869a61505381a7228eae4e2",
     "test/rpcs3_input_bridge_test.py": "f74aa819467e98b75fe4d8831036de8d3c3301cc1ce1d16a291137d2997b7194",
@@ -732,6 +734,7 @@
     "test/neoswap_usage_policy_test.cpp": "100644",
     "test/neoswap_vulkan_evidence_test.py": "100644",
     "test/relay_backend_test.cpp": "100644",
+    "test/rpcs3_build283_boot_stability_test.py": "100644",
     "test/rpcs3_build306_single_path_test.py": "100644",
     "test/rpcs3_core_syntax_gate_test.py": "100644",
     "test/rpcs3_input_bridge_test.py": "100644",

@@ -210,6 +210,7 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'test/rpcs3_build283_boot_stability_test.py',
     'test/rpcs3_internal_integration_test.dart',
     'docs/neoswap-build401-airplay-entry.md',
     'docs/neoswap-build400-runtime-repair.md',

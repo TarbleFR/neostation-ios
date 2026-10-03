@@ -8,6 +8,16 @@ callsite ordering and its sole unchanged Core delegation, including failure
 and epoch invalidation. No donation, JIT, startup or test guarantees are removed.
 The prerequisite remains the last successfully packaged Build399.
 
+The first Build401 packaging attempt passed Apple syntax and all ten evidence
+workflows, then stopped on a historical log-filter contract. Its retry preserves
+the complete production postimage. The updated Build283 test executes the actual
+filter body with a controlled clock and verifies that video notices share the
+existing locked 128-lines/second budget, while high-level noise stays filtered.
+Portable packaging regressions and all 33 active Flutter files were checked:
+199 Flutter cases passed; one macOS case was skipped locally and two unchanged
+Dolphin audio cases require the unavailable Linux SoLoud library. These local
+limits do not replace or relax the required Apple packaging tests.
+
 AirPlay is accessible from an icon on the application main menu. It opens the
 existing NeoPlay panel for AirPlay, Chromecast and Windows destinations.
 The former NeoPlay activation entry in Settings > Tools is removed. Opening
