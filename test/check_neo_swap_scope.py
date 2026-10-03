@@ -469,7 +469,7 @@ for key in set(current)-{'files_sha256','patch_sha256'}:
     assert video_manifest[key]==current[key], 'Video changed unrelated canonical policy: '+key
 assert set(video_manifest['files_sha256'])==set(current['files_sha256'])|VIDEO_ADDED
 assert {p for p,h in video_manifest['files_sha256'].items() if current['files_sha256'].get(p)!=h}==VIDEO_FILES
-assert video_manifest['files_sha256']['rpcs3/Emu/Cell/Modules/cellVdec.cpp']=='e3dfee027589a95e6ed58ea5d2f05f6fe0c83c1c5b23a9023cf425a81d3700b0', \
+assert video_manifest['files_sha256']['rpcs3/Emu/Cell/Modules/cellVdec.cpp']=='5b67c0d62a3919dd60f244b9462513f527b00b10a67d050d42dde733dd9be62c', \
     'The separately reviewed VDEC producer/consumer integration changed'
 assert hashlib.sha256(video_patch).hexdigest()==video_manifest['patch_sha256']
 assert set(video_sections)==set(source_sections)|VIDEO_ADDED

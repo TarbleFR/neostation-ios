@@ -98,6 +98,23 @@ Linux/macOS storage jobs at that first SHA passed, including the actual iOS
 simulator source-domain-3 service roundtrip. Future candidates must rerun their
 own exact-source gates, not reuse these results as new-revision proof.
 
+At `c56b52743daf5c59783a82a0e6687a84773a72e3`, the pinned FFmpeg 8.1.1
+Apple video proof passed, including four decoder workers: 52 old 720p pictures
+archived, 74,973,184 mapped bytes actually unmapped, and identical decoded pixel
+contents versus the pooled path. The independent simulator service archived
+and returned 1,382,400 pixel bytes from its private file, with zero staging RAM
+at the sampled checkpoint; all ten exact-revision regression workflows passed.
+
+The full iOS syntax gate then correctly **blocked** the Core: the new calls to
+`get_system_time()` in `cellVdec.cpp` lacked their declaring header. The old
+fixture's fake clock definition had hidden this integration error. The canonical
+VDEC postimage now explicitly includes the existing `Emu/Cell/timers.hpp`,
+without changing its clock implementation or any decoder policy. A new native
+compile probe uses the real header's declaration and no fake clock definition;
+omitting that production include now fails locally, and a permanent negative
+probe confirms the failure is caught. The full 17-unit iOS gate remains mandatory.
+The failed Core has no usable artifact and will not be pinned into an IPA.
+
 ## Observability and honest presentation
 
 Core diagnostics separately report owned live mappings, actual unmaps,

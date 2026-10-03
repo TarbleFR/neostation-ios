@@ -1977,21 +1977,22 @@ index a88ac6e..5a8d88e 100644
  	~audio_ringbuffer();
  
 diff --git a/rpcs3/Emu/Cell/Modules/cellVdec.cpp b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-index 1847c8c..548f8ad 100644
+index 1847c8c..ace2ad0 100644
 --- a/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 +++ b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-@@ -46,6 +46,10 @@ extern "C"
+@@ -46,6 +46,11 @@ extern "C"
  #include "Utilities/lockless.h"
  #include <variant>
  #include "util/asm.hpp"
 +#ifdef RPCS3_IOS
++#include "Emu/Cell/timers.hpp"
 +#include "ios/NeoSwapStorage/FrameClient.h"
 +#include "ios/NeoSwapStorage/VideoBuffer.h"
 +#endif
  
  std::mutex g_mutex_avcodec_open2;
  
-@@ -165,6 +169,10 @@ struct vdec_frame
+@@ -165,6 +170,10 @@ struct vdec_frame
  	u64 cmd_id{};
  
  	std::unique_ptr<AVFrame, frame_dtor> avf;
@@ -2002,7 +2003,7 @@ index 1847c8c..548f8ad 100644
  	u64 dts{};
  	u64 pts{};
  	u64 userdata{};
-@@ -197,6 +205,14 @@ struct vdec_context final
+@@ -197,6 +206,14 @@ struct vdec_context final
  	const AVCodecDescriptor* codec_desc{};
  	AVCodecContext* ctx{};
  	SwsContext* sws{};
@@ -2017,7 +2018,7 @@ index 1847c8c..548f8ad 100644
  
  	shared_mutex mutex; // Used for 'out' queue (TODO)
  
-@@ -214,6 +230,65 @@ struct vdec_context final
+@@ -214,6 +231,65 @@ struct vdec_context final
  
  	std::deque<vdec_frame> out_queue;
  	const u32 out_max = 60;
@@ -2083,7 +2084,7 @@ index 1847c8c..548f8ad 100644
  
  	atomic_t<s32> au_count{0};
  
-@@ -272,6 +347,16 @@ struct vdec_context final
+@@ -272,6 +348,16 @@ struct vdec_context final
  			fmt::throw_exception("avcodec_alloc_context3() failed (type=0x%x)", type);
  		}
  
@@ -2100,7 +2101,7 @@ index 1847c8c..548f8ad 100644
  		AVDictionary* opts = nullptr;
  
  		std::lock_guard lock(g_mutex_avcodec_open2);
-@@ -581,7 +666,14 @@ struct vdec_context final
+@@ -581,7 +667,14 @@ struct vdec_context final
  							{
  								std::lock_guard lock{mutex};
  
@@ -2116,7 +2117,7 @@ index 1847c8c..548f8ad 100644
  								{
  									break;
  								}
-@@ -591,7 +683,12 @@ struct vdec_context final
+@@ -591,7 +684,12 @@ struct vdec_context final
  
  							if (elapsed++ >= 500) // 5 seconds
  							{
@@ -2130,7 +2131,7 @@ index 1847c8c..548f8ad 100644
  								elapsed = 0;
  							}
  						}
-@@ -603,6 +700,9 @@ struct vdec_context final
+@@ -603,6 +701,9 @@ struct vdec_context final
  
  						{
  							std::lock_guard lock{mutex};
@@ -2140,7 +2141,7 @@ index 1847c8c..548f8ad 100644
  							out_queue.push_back(std::move(decoded_frames.front()));
  							decoded_frames.pop_front();
  						}
-@@ -1728,6 +1828,31 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1728,6 +1829,31 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  	vdec_frame frame;
  	bool notify = false;
@@ -2172,7 +2173,7 @@ index 1847c8c..548f8ad 100644
  	u64 sequence_id{};
  
  	{
-@@ -1740,10 +1865,16 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1740,10 +1866,16 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		frame = std::move(vdec->out_queue.front());
  		sequence_id = vdec->seq_id;
@@ -2190,7 +2191,7 @@ index 1847c8c..548f8ad 100644
  	}
  
  	if (notify)
-@@ -1759,17 +1890,67 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1759,17 +1891,67 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  	if (outBuff)
  	{
@@ -2261,7 +2262,7 @@ index 1847c8c..548f8ad 100644
  		case CELL_VDEC_PICFMT_UYVY422_ILV: out_f = AV_PIX_FMT_UYVY422; break;
  		case CELL_VDEC_PICFMT_YUV420_PLANAR: out_f = AV_PIX_FMT_YUV420P; break;
  		default:
-@@ -1780,9 +1961,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1780,9 +1962,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		// TODO: color matrix
  
@@ -2289,7 +2290,7 @@ index 1847c8c..548f8ad 100644
  		}
  
  		AVPixelFormat in_f = AV_PIX_FMT_YUV420P;
-@@ -1801,10 +1998,26 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1801,10 +1999,26 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		cellVdec.trace("cellVdecGetPictureExt: handle=0x%x, seq_id=%d, cmd_id=%d, w=%d, h=%d, frameFormat=%d, formatType=%d, in_f=%d, out_f=%d, alpha_plane=%d, alpha=%d, colorMatrixType=%d", handle, frame.seq_id, frame.cmd_id, w, h, frame->format, format->formatType, +in_f, +out_f, !!alpha_plane, format->alpha, format->colorMatrixType);
  
@@ -2318,7 +2319,7 @@ index 1847c8c..548f8ad 100644
  		u8* out_data[4] = { outBuff.get_ptr() };
  		int out_line[4] = { w * 4 }; // RGBA32 or ARGB32
  
-@@ -1824,7 +2037,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1824,7 +2038,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  			}
  		}
  

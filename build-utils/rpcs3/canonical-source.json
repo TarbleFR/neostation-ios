@@ -27,7 +27,7 @@
     "rpcs3/Emu/CPU/CPUTranslator.h": "6a75ba938064bb21f1a6c87f9b737192588c8dd64360c58ce8df37bbb2bc51ce",
     "rpcs3/Emu/Cell/Modules/cellAudio.cpp": "01fd0c82b91126e76939afa867c5ab23ed40d6b6459269d327712c798bfd5248",
     "rpcs3/Emu/Cell/Modules/cellAudio.h": "fda457be7b703ae2daf462cc202bee9c18980b85564102419f01770d870960cd",
-    "rpcs3/Emu/Cell/Modules/cellVdec.cpp": "e3dfee027589a95e6ed58ea5d2f05f6fe0c83c1c5b23a9023cf425a81d3700b0",
+    "rpcs3/Emu/Cell/Modules/cellVdec.cpp": "5b67c0d62a3919dd60f244b9462513f527b00b10a67d050d42dde733dd9be62c",
     "rpcs3/Emu/Cell/PPUAnalyser.cpp": "d1e305c525914ab4c7b15b898c60614c33a8738d2126fc0e25eea18279391d31",
     "rpcs3/Emu/Cell/PPUFunction.cpp": "726178947463764929e175800d4b2d513d33c7b5103b1fd8183bbc22566b72bf",
     "rpcs3/Emu/Cell/PPUFunction.h": "277e970a05dc808c8851aef12fd985d8b35ecf62559cf3ab3751e04cd6264a15",
@@ -146,7 +146,7 @@
     "rpcs3/util/vm.hpp": "ac58df153ca5e9b1e9f69511879035493338265ee2de96656072ab777a07ecbc",
     "rpcs3/util/vm_native.cpp": "2c8c9547fc4ae1b6c7d2b39d19475c64b6922d4ac21b193cbded859fc2796a8c"
   },
-  "patch_sha256": "704cb1ef184c017510158607ee9230233b07ad564252a099976e6528df1b7c44",
+  "patch_sha256": "eb55474092391b4ca106c62f805b98b2ff96392bc4bb14256ed09e4433da04fc",
   "policy": "Build353 experimental; selective XITRIX Preview 0.10 engine backports (ARM64 SPU/PPU, VM reservations, RSX/Metal, audio recovery, savestate and graphics correctness); Build352 God of War III bounded-memory policy and Build350 lifecycle baseline retained; NeoSwap v1 opt-in host-owned file-backed RSX CPU data allocator, existing JIT/VM/GPU policies unchanged; selective XITRIX v0.10.1 SPU BID continuation, disabled-texture eviction, MoltenVK conditional-rendering fixes; SPU object cache v5 retires old CFG objects; optional NeoSwap client diagnostics ABI 1, main Core ABI 30 unchanged; NeoSwap coherent host-visible Vulkan SYSTEM buffer imports (1-256MiB), strict external-memory/type/alignment checks, deferred GPU resource disposal and allocator fallback; optional NeoSwap guest page relay ABI 1 for guest data shared aliases, host-owned preparation after authenticated creator exit and ordinary file fallback before first published mapping; Build395: measured God of War III opt-in for RSX CPU aligned buffers 64KiB-1MiB via verified donor loans only, fixed metadata budgets, fast pressure gate and original heap fallback; no JIT/VM/GPU/private allocations redirected",
   "schema_version": 2,
   "upstream_commit": "22f1152783cef1f7e04af7b1c895173e28fd5b03",

@@ -20,7 +20,13 @@ using u8=uint8_t;using u32=uint32_t;using u64=uint64_t;using usz=size_t;
 using namespace neostation::source_client;
 #define CHECK(v) do {if(!(v)){std::cerr<<"FAIL "<<__LINE__<<": " #v "\n";std::abort();}}while(0)
 u64 clock_us=1'000'000,freed_bytes=0,freed_buffers=0;
+#ifdef NEOSWAP_CLOCK_DECLARATION_PROBE
+#ifdef NEOSWAP_CLOCK_HEADER_INCLUDED
+#include "vdec-clock-declaration.inc"
+#endif
+#else
 u64 get_system_time(){return clock_us;}
+#endif
 struct logger {template<class... T>void notice(const char*,T...) {}} cellVdec;
 struct frame_dtor{void operator()(AVFrame* p)const{av_frame_free(&p);}};
 struct vdec_frame {

@@ -31,6 +31,20 @@ for name in ('FrameClient.h','VideoBuffer.h','SourceClient.cpp'):
     assert (source/'rpcs3/ios/NeoSwapStorage'/name).read_bytes()==(root/'native/neoswap-storage'/name).read_bytes(),name
 with tempfile.TemporaryDirectory(prefix='vdec-ffmpeg-proof-') as temp:
     out=Path(temp);(out/'vdec-method.inc').write_text(method+'\n');exe=out/'test';video=out/'fixture.h264'
+    # A fake clock definition formerly hid a missing production header. Compile
+    # the exact producer with the REAL RPCS3 declaration and no fake definition.
+    clock_header='Emu/Cell/timers.hpp'
+    declaration=re.search(r'(?m)^u64 get_system_time\(\);$',(source/'rpcs3'/clock_header).read_text())
+    assert declaration is not None,'RPCS3 clock declaration changed'
+    (out/'vdec-clock-declaration.inc').write_text(declaration[0]+'\n')
+    clock_probe=[*compiler,'-std=c++20','-Wall','-Wextra','-Werror','-fno-exceptions',
+                 '-I',str(out),'-I',str(source/'rpcs3'),*cflags,'-fsyntax-only',
+                 '-DNEOSWAP_CLOCK_DECLARATION_PROBE',str(root/'test/native/rpcs3_video_frame_archive_test.cpp')]
+    header_included=('#include "'+clock_header+'"') in text[:start]
+    subprocess.run(clock_probe+(['-DNEOSWAP_CLOCK_HEADER_INCLUDED'] if header_included else []),check=True,env=env)
+    negative=subprocess.run(clock_probe,env=env,capture_output=True,text=True)
+    assert negative.returncode!=0 and 'get_system_time' in negative.stderr,'Missing clock header must fail compilation'
+    assert header_included,'Declare the clock in the complete production VDEC unit, not only in its test fixture'
     subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=1280x720:rate=30',
                     '-frames:v','60','-c:v','libx264','-threads','1','-bf','2','-g','30','-pix_fmt','yuv420p','-f','h264',str(video)],check=True,env=env,timeout=60)
     subprocess.run([*compiler,'-std=c++20','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',
