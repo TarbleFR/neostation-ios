@@ -49,6 +49,23 @@ ns['TESTS']=r'''
  [shaders tableView:shaders.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
  XCTAssertEqualObjects(command,@"downloadShaders");
 }
+- (void)testDownloadDoesNotBlockResumeAndFailuresRemainVisible {
+ UINavigationController* nav=nil;Armsx2SessionMenu* graphics=[self menu:&nav];
+ __block NSUInteger resumed=0;graphics.resumeGame=^{++resumed;};
+ __block void (^pending)(BOOL,NSString*)=nil;
+ graphics.performCommand=^(NSString* command,id value,void (^done)(BOOL,NSString*)){pending=[done copy];};
+ [graphics tableView:graphics.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:0]];
+ Armsx2SessionMenu* shaders=(id)nav.topViewController;[shaders loadViewIfNeeded];
+ [shaders tableView:shaders.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];
+ XCTAssertNotNil(pending);XCTAssertTrue(nav.view.userInteractionEnabled);
+ XCTAssertFalse([shaders tableView:shaders.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]].userInteractionEnabled);
+ [shaders performSelector:NSSelectorFromString(@"resumePressed")];XCTAssertEqual(resumed,1U);
+ pending(NO,@"HTTP 503");
+ NSString* footer=[shaders tableView:shaders.tableView titleForFooterInSection:0];
+ XCTAssertTrue([footer containsString:@"HTTP 503"]);
+ XCTAssertTrue([footer containsString:@"ARMSX2"]);
+ XCTAssertTrue([shaders tableView:shaders.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]].userInteractionEnabled);
+}
 - (void)testOverlayChoicesReachNativeCommandAndPreserveResolution {
  UINavigationController* nav=nil;Armsx2SessionMenu* graphics=[self menu:&nav];
  __block NSString* command=nil;__block id value=nil;

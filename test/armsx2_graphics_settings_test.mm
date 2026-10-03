@@ -22,6 +22,7 @@ public:
  bool Load(){id loaded=[NSDictionary dictionaryWithContentsOfFile:[NSString stringWithUTF8String:file.c_str()]];if(!loaded)return false;[values addEntriesFromDictionary:loaded];return true;}
  bool Save(){return saveAllowed && [values writeToFile:[NSString stringWithUTF8String:file.c_str()] atomically:YES];}
  std::string GetStringValue(const char* s,const char* n,const char* d){return std::string([(values[k(s,n)] ?: [NSString stringWithUTF8String:d]) description].UTF8String);}
+ bool GetBoolValue(const char* s,const char* n,bool d){id v=values[k(s,n)];return v?[v boolValue]:d;}
  void SetStringValue(const char* s,const char* n,const char* v){values[k(s,n)]=[NSString stringWithUTF8String:v];}
  void SetBoolValue(const char* s,const char* n,bool v){values[k(s,n)]=@(v);}
  void SetIntValue(const char* s,const char* n,unsigned v){values[k(s,n)]=@(v);}

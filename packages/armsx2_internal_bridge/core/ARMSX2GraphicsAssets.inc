@@ -27,8 +27,13 @@ void repair_shader_paths() {
     const std::string token=si.GetStringValue("EmuCore/GS","ShaderChainPresetRef","");
     if (token.empty()) continue;
     NSString* resolved=shader_resolve([NSString stringWithUTF8String:token.c_str()]);
-    if (resolved) si.SetStringValue("EmuCore/GS","ShaderChainPreset",resolved.UTF8String);
+    const std::string cached=si.GetStringValue("EmuCore/GS","ShaderChainPreset","");
+    if (resolved) {
+      if (cached==resolved.UTF8String) continue;
+      si.SetStringValue("EmuCore/GS","ShaderChainPreset",resolved.UTF8String);
+    }
     else {
+      if (cached.empty() && !si.GetBoolValue("EmuCore/GS","ShaderChainEnabled",false)) continue;
       si.SetBoolValue("EmuCore/GS","ShaderChainEnabled",false);
       si.DeleteValue("EmuCore/GS","ShaderChainPreset");
     }

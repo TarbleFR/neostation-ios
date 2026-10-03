@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 90
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
+      RUSTUP_TOOLCHAIN: '1.94.0'
     steps:
       - uses: actions/checkout@v4
         with:

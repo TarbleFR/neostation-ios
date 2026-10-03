@@ -52,6 +52,8 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 @property(nonatomic, copy) NSDictionary<NSString*, id>* snapshot;
 @property(nonatomic, assign) BOOL loading;
 @property(nonatomic, copy) NSString* stateMessage;
+@property(nonatomic, assign) BOOL stateFailed;
+@property(nonatomic, assign) BOOL shaderDownloadBusy;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* graphicsHacks;
 @property(nonatomic, assign) BOOL graphicsHacksLoading;
 @property(nonatomic, copy) NSDictionary<NSString*, id>* patches;
@@ -308,7 +310,13 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     NSString* help=ARMSX2MenuText(@"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.",
         @"Choisissez un shader intégré ou téléchargez le pack RetroArch (environ 54 Mo). Le choix est enregistré par jeu. Reprenez pour voir l’effet ; rouvrez ce menu pour les erreurs de rendu.");
     NSString* failure=self.snapshot[@"graphicsAssets"][@"shaderError"];
-    return failure.length ? [help stringByAppendingFormat:@"\n%@",failure] : help;
+    if (self.stateMessage.length) {
+      NSString* prefix=self.stateFailed ? ARMSX2MenuText(@"ARMSX2 setting failed",@"Réglage ARMSX2 impossible") : @"";
+      help=[help stringByAppendingFormat:@"\n%@%@%@",prefix,prefix.length ? @"\n" : @"",self.stateMessage];
+    }
+    if (failure.length) help=[help stringByAppendingFormat:@"\n%@\n%@",
+        ARMSX2MenuText(@"ARMSX2 setting failed",@"Réglage ARMSX2 impossible"),failure];
+    return help;
   }
   if (self.page == ARMSX2MenuGraphicsHacks)
     return ARMSX2MenuText(@"Automatic removes this game's override and returns control to ARMSX2/GameDB.",
@@ -414,7 +422,8 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       BOOL installed=[assets[@"packInstalled"] boolValue];
       cell.textLabel.text=installed ? ARMSX2MenuText(@"Shader pack installed.",@"Pack de shaders installé.") :
           ARMSX2MenuText(@"Download RetroArch shader pack",@"Télécharger le pack de shaders RetroArch");
-      cell.userInteractionEnabled=!installed;
+      if (self.shaderDownloadBusy) cell.textLabel.text=ARMSX2MenuText(@"Loading…",@"Chargement…");
+      cell.userInteractionEnabled=!installed && !self.shaderDownloadBusy;
     } else {
       NSDictionary* preset=assets[@"presets"][row-2];
       cell.textLabel.text=preset[@"name"];
@@ -540,6 +549,7 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
       menu.loading = NO;
       menu.navigationController.view.userInteractionEnabled = YES;
       menu.stateMessage = success ? successText : message;
+      menu.stateFailed = !success;
       [menu reloadSnapshot];
     });
   });
@@ -633,7 +643,20 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     }
   } else if (self.page == ARMSX2MenuShaders) {
     if (row==1) {
-      [self perform:@"downloadShaders" value:@0 successText:ARMSX2MenuText(@"Shader pack installed.",@"Pack de shaders installé.")];
+      if (self.shaderDownloadBusy || !self.performCommand) return;
+      self.shaderDownloadBusy=YES;
+      [self.tableView reloadData];
+      __weak Armsx2SessionMenu* weakSelf=self;
+      self.performCommand(@"downloadShaders",@0,^(BOOL success,NSString* message) {
+        ARMSX2MenuOnMain(^{
+          Armsx2SessionMenu* menu=weakSelf;
+          if (!menu) return;
+          menu.shaderDownloadBusy=NO;
+          menu.stateFailed=!success;
+          menu.stateMessage=success ? ARMSX2LocalizedText(@"Shader pack installed.",@"Pack de shaders installé.",menu.localeIdentifier) : message;
+          [menu reloadSnapshot];
+        });
+      });
     } else {
       NSString* token=row==0 ? @"" : self.snapshot[@"graphicsAssets"][@"presets"][row-2][@"id"];
       [self perform:@"shader" value:token successText:ARMSX2MenuText(@"Shader selection saved for this game.",@"Shader enregistré pour ce jeu.")];
