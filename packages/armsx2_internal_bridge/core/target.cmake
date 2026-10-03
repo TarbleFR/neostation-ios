@@ -41,8 +41,12 @@ target_link_libraries(ARMSX2Core PRIVATE PCSX2 SDL3::SDL3 librashader Zstd::Zstd
   "-framework MetalKit" "-framework QuartzCore" "-framework CoreText"
   "-framework CoreGraphics" "-framework ImageIO" "-framework GameController"
   "-framework CoreHaptics" "-framework OpenGLES")
+# Rust's prebuilt std objects carry debug metadata. ld records their absolute
+# archive/member origins in N_OSO independently of compiler source-path maps.
+get_filename_component(NEO_ARMSX2_WORKSPACE_DIR "${NEO_ARMSX2_ADAPTER_DIR}/../.." ABSOLUTE)
 target_link_options(ARMSX2Core PRIVATE
-  "LINKER:-exported_symbols_list,${NEO_ARMSX2_ADAPTER_DIR}/core/exports.txt")
+  "LINKER:-exported_symbols_list,${NEO_ARMSX2_ADAPTER_DIR}/core/exports.txt"
+  "LINKER:-oso_prefix,${NEO_ARMSX2_WORKSPACE_DIR}/")
 	target_include_directories(ARMSX2Core PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_SOURCE_DIR}

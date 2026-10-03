@@ -27,6 +27,11 @@ et transmis explicitement à Cargo. Le test exécute la commande de production
 après suppression des variables du shell : il refuse la commande amont et
 valide la version adaptée. Le contrôle du binaire conserve un diagnostic détaillé
 si un chemin de machine de build subsiste.
+Les objets précompilés de la bibliothèque standard Rust ont aussi des entrées
+de débogage `N_OSO` créées au lien. La cible applique `-oso_prefix` au dossier du
+dépôt pour rendre ces origines relatives. Un test macOS construit une archive
+minimale, reproduit le chemin absolu et vérifie sa suppression avec l'option
+exacte générée par la cible Core ; les fonctions exportées restent vérifiées.
 Le pont des sauvegardes rapides utilise les nouvelles signatures 2.6 à deux
 arguments de retour. Les slots du menu gardent leur comportement existant, sans
 création d'une sauvegarde d'annulation supplémentaire lors d'un chargement.
