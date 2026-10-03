@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#ifdef __cplusplus
 #include <cstring>
 
 // Immutable, process-wide research profile. Switching backing during a game
@@ -38,3 +39,4 @@ inline const neostation::experiment::Profile& NeoSwapExperimentProfile() {
     return profile;
 }
 #endif
+#endif // __cplusplus: the public pod header must also parse in Objective-C modules

@@ -12,6 +12,12 @@ ROOT=Path(__file__).resolve().parents[1]
 HERE=ROOT/'native/neoswap-storage'
 compiler=shutil.which('clang++') or shutil.which('c++')
 assert compiler, 'C++ compiler required'
+# Flutter's generated Objective-C registrar imports the public pod module.
+# Keep its research header valid outside Objective-C++ as well.
+for defines in ([],['-D__OBJC__=1']):
+    subprocess.run([compiler,'-x','c','-std=c11','-Wall','-Wextra','-Werror','-fsyntax-only',
+        '-I',str(ROOT/'packages/neo_swap/ios/Classes')]+defines+['-'],
+        input='#include "NeoSwapExperiment.h"\n',text=True,check=True)
 spec=importlib.util.spec_from_file_location('research_config',ROOT/'build-utils/configure_neoswap_research.py')
 config=importlib.util.module_from_spec(spec);spec.loader.exec_module(config)
 import plistlib
@@ -102,4 +108,5 @@ int main(){
     report['productionStartupPredicateExecuted']=True
     report['productionAdaptiveDonationTargetExecuted']=True
     report['productionDonorAdmissionAndBootWaitExecuted']=True
+    report['publicProfileHeaderCAndObjCCompatible']=True
     print(json.dumps(report))

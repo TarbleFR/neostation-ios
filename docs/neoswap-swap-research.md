@@ -73,7 +73,8 @@ admissible à vide, cela représente une cible de 32 Mio plutôt que 512 Mio. Un
 véritable demande de buffer prime sur la petite graine de démarrage. Les
 réservations des requêtes en vol et les refus de pression globale sont conservés.
 La capacité de relais de 8 Gio reste une capacité, pas un objectif de résidence.
-Un paquet sans profil explicite conserve les préférences/politique antérieures.
+Un paquet sans profil explicite conserve les préférences de stockage et
+l'ancienne politique du pool CPU.
 
 Après génération du projet iOS et avant signature, sur `swap` uniquement :
 
