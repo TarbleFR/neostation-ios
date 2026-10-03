@@ -115,6 +115,15 @@ omitting that production include now fails locally, and a permanent negative
 probe confirms the failure is caught. The full 17-unit iOS gate remains mandatory.
 The failed Core has no usable artifact and will not be pinned into an IPA.
 
+The final consumption guard reserves a retry slot **only** for an archived
+picture with an output buffer. Warm pictures, default-off decoders and skipped
+pictures keep the original immediate producer notification. All four guard
+combinations are compile-time checked against the actual client helper, the
+producer capacity/restore failure tests remain required, and the source test
+rejects unconditionally delaying warm/default-off consumption. The earlier
+clock-only candidate `f6dbdce904e13e72971d3baf9f4a930a45813891` is superseded
+and must not provide the final IPA's Core or validation evidence.
+
 ## Observability and honest presentation
 
 Core diagnostics separately report owned live mappings, actual unmaps,

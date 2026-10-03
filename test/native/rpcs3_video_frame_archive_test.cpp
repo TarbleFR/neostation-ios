@@ -18,6 +18,10 @@ extern "C" {
 #include <vector>
 using u8=uint8_t;using u32=uint32_t;using u64=uint64_t;using usz=size_t;
 using namespace neostation::source_client;
+static_assert(!frame_requires_restore_slot(false, false));
+static_assert(!frame_requires_restore_slot(false, true));
+static_assert(!frame_requires_restore_slot(true, false));
+static_assert(frame_requires_restore_slot(true, true));
 #define CHECK(v) do {if(!(v)){std::cerr<<"FAIL "<<__LINE__<<": " #v "\n";std::abort();}}while(0)
 u64 clock_us=1'000'000,freed_bytes=0,freed_buffers=0;
 #ifdef NEOSWAP_CLOCK_DECLARATION_PROBE

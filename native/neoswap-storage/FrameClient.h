@@ -13,6 +13,10 @@ inline constexpr uint64_t frame_max_bytes = 4ULL << 20;
 inline constexpr uint32_t frame_max_chunks = 4;
 inline constexpr uint64_t frame_cold_age_us = 250'000;
 inline constexpr uint32_t frame_warm_count = 8, frame_min_queue = 24;
+inline constexpr bool frame_requires_restore_slot(bool archived, bool has_output) noexcept {
+    // Normal/warm/default-off consumption keeps the original producer wakeup.
+    return archived && has_output;
+}
 inline bool frame_queue_has_room(uint64_t queued, uint64_t consuming, uint64_t maximum) noexcept {
     return queued < maximum && consuming < maximum - queued;
 }

@@ -27,6 +27,9 @@ get_picture=text[text.index('error_code cellVdecGetPictureExt('):text.index('err
 assert get_picture.index('frame.cold_pixels.restore')<get_picture.index('conversion_lock')
 assert 'vdec->out_queue.push_front(std::move(frame));' in get_picture
 assert 'pixel_data, pixel_stride, out_f, w, h, 1' in get_picture
+assert 'frame_requires_restore_slot(frame.cold_pixels.archived(), static_cast<bool>(outBuff))' in get_picture, \
+    'Warm/default-off frames must keep the original immediate producer notification'
+assert '&& !consumption.active' in get_picture,'Only an archived restore may delay notification'
 for name in ('FrameClient.h','VideoBuffer.h','SourceClient.cpp'):
     assert (source/'rpcs3/ios/NeoSwapStorage'/name).read_bytes()==(root/'native/neoswap-storage'/name).read_bytes(),name
 with tempfile.TemporaryDirectory(prefix='vdec-ffmpeg-proof-') as temp:

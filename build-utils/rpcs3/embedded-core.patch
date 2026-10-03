@@ -1977,7 +1977,7 @@ index a88ac6e..5a8d88e 100644
  	~audio_ringbuffer();
  
 diff --git a/rpcs3/Emu/Cell/Modules/cellVdec.cpp b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
-index 1847c8c..ace2ad0 100644
+index 1847c8c..9786108 100644
 --- a/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 +++ b/rpcs3/Emu/Cell/Modules/cellVdec.cpp
 @@ -46,6 +46,11 @@ extern "C"
@@ -2173,25 +2173,29 @@ index 1847c8c..ace2ad0 100644
  	u64 sequence_id{};
  
  	{
-@@ -1740,10 +1866,16 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1740,9 +1866,20 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		frame = std::move(vdec->out_queue.front());
  		sequence_id = vdec->seq_id;
 +#ifdef RPCS3_IOS
-+		++vdec->picture_consumers;
-+		consumption.active = true;
++		if (neostation::source_client::frame_requires_restore_slot(frame.cold_pixels.archived(), static_cast<bool>(outBuff)))
++		{
++			++vdec->picture_consumers;
++			consumption.active = true;
++		}
 +#endif
  
  		vdec->out_queue.pop_front();
 -		if (vdec->out_queue.size() + 1 == vdec->out_max)
-+#ifndef RPCS3_IOS
-+		if (vdec->out_queue.size() + 1 >= vdec->out_max)
- 			notify = true;
++		if (vdec->out_queue.size() + 1 >= vdec->out_max
++#ifdef RPCS3_IOS
++			&& !consumption.active
 +#endif
++		)
+ 			notify = true;
  	}
  
- 	if (notify)
-@@ -1759,17 +1891,67 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1759,17 +1896,67 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  	if (outBuff)
  	{
@@ -2262,7 +2266,7 @@ index 1847c8c..ace2ad0 100644
  		case CELL_VDEC_PICFMT_UYVY422_ILV: out_f = AV_PIX_FMT_UYVY422; break;
  		case CELL_VDEC_PICFMT_YUV420_PLANAR: out_f = AV_PIX_FMT_YUV420P; break;
  		default:
-@@ -1780,9 +1962,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1780,9 +1967,25 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		// TODO: color matrix
  
@@ -2290,7 +2294,7 @@ index 1847c8c..ace2ad0 100644
  		}
  
  		AVPixelFormat in_f = AV_PIX_FMT_YUV420P;
-@@ -1801,10 +1999,26 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1801,10 +2004,26 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  
  		cellVdec.trace("cellVdecGetPictureExt: handle=0x%x, seq_id=%d, cmd_id=%d, w=%d, h=%d, frameFormat=%d, formatType=%d, in_f=%d, out_f=%d, alpha_plane=%d, alpha=%d, colorMatrixType=%d", handle, frame.seq_id, frame.cmd_id, w, h, frame->format, format->formatType, +in_f, +out_f, !!alpha_plane, format->alpha, format->colorMatrixType);
  
@@ -2319,7 +2323,7 @@ index 1847c8c..ace2ad0 100644
  		u8* out_data[4] = { outBuff.get_ptr() };
  		int out_line[4] = { w * 4 }; // RGBA32 or ARGB32
  
-@@ -1824,7 +2038,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
+@@ -1824,7 +2043,8 @@ error_code cellVdecGetPictureExt(ppu_thread& ppu, u32 handle, vm::cptr<CellVdecP
  			}
  		}
  
@@ -12467,10 +12471,10 @@ index 0000000..a0d7975
 +}
 diff --git a/rpcs3/ios/NeoSwapStorage/FrameClient.h b/rpcs3/ios/NeoSwapStorage/FrameClient.h
 new file mode 100644
-index 0000000..e90c368
+index 0000000..0bec1ac
 --- /dev/null
 +++ b/rpcs3/ios/NeoSwapStorage/FrameClient.h
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,52 @@
 +// SPDX-License-Identifier: MIT
 +#pragma once
 +#include "SourceClient.h"
@@ -12486,6 +12490,10 @@ index 0000000..e90c368
 +inline constexpr uint32_t frame_max_chunks = 4;
 +inline constexpr uint64_t frame_cold_age_us = 250'000;
 +inline constexpr uint32_t frame_warm_count = 8, frame_min_queue = 24;
++inline constexpr bool frame_requires_restore_slot(bool archived, bool has_output) noexcept {
++    // Normal/warm/default-off consumption keeps the original producer wakeup.
++    return archived && has_output;
++}
 +inline bool frame_queue_has_room(uint64_t queued, uint64_t consuming, uint64_t maximum) noexcept {
 +    return queued < maximum && consuming < maximum - queued;
 +}
