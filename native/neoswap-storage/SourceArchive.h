@@ -32,10 +32,15 @@ class Archive final {
 public:
     Archive(const std::string& directory,uint64_t session,Config config={});
     Admission admit(uint32_t domain,const char* source,size_t bytes);
+    // Core demand may use a complete immutable RAM snapshot immediately.
+    // Busy means utility I/O is needed (or the bounded try-lock lost); no I/O.
+    int try_read_staging(uint64_t object,char* output,size_t exact_bytes);
     int read(uint64_t object,char* output,size_t exact_bytes,int& os_error);
     void discard(uint64_t object) noexcept;
     void released(uint64_t capacity) noexcept { released_.fetch_add(capacity); }
-    void maintain();
+    // A host quantum bounds completed chunks/retirements. True asks for a
+    // continuation at the END of the utility queue, never a producer retry.
+    bool maintain(uint32_t chunk_limit=UINT32_MAX,uint32_t retirement_limit=UINT32_MAX);
     void pressure(storage::Pressure value);
     void pause(bool value) noexcept { paused_.store(value); }
     bool accepting() const noexcept {return !paused_.load() && pressure_.load()==storage::Pressure::normal;}

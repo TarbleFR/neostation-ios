@@ -21,10 +21,19 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
             GCKCastContext.setSharedInstanceWith(options)
             context.discoveryManager.add(self); context.sessionManager.add(self); initialized = true
         }
-        context.discoveryManager.startDiscovery(); changed?()
+        // A new user request must also recover a scan previously suspended by
+        // a Settings/network round trip, without ending an owned Cast session.
+        context.discoveryManager.stopDiscovery()
+        context.discoveryManager.startDiscovery()
+        recordDiscovery("cast.discovery.requested"); changed?()
     }
     func stopDiscovery() { if initialized { context.discoveryManager.stopDiscovery() } }
-    func didUpdateDeviceList() { changed?() }
+    func didUpdateDeviceList() { recordDiscovery("cast.discovery.updated"); changed?() }
+    private func recordDiscovery(_ event: String) {
+        NPLog.record(event, ["active": context.discoveryManager.discoveryActive,
+                             "deviceCount": context.discoveryManager.deviceCount,
+                             "eligibleCount": devices.count])
+    }
     private var devices: [GCKDevice] {
         guard initialized else { return [] }
         return (0..<context.discoveryManager.deviceCount).map { context.discoveryManager.device(at: $0) }.filter { $0.isOnLocalNetwork && $0.hasCapabilities(.videoOut) }
@@ -59,10 +68,10 @@ final class NPGoogleCast: NSObject, GCKDiscoveryManagerListener, GCKSessionManag
     }
     func request(_ request: GCKRequest, didFailWithError error: GCKError) { if ownsSession { NPLog.error("cast.request", error); onError?(.cast) } }
     func sessionManager(_ sessionManager: GCKSessionManager, didFailToStart session: GCKCastSession, withError error: Error) {
-        guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; cancelling = false; onError?(.cast)
+        guard selected == session.device.uniqueID else { return }; NPLog.error("cast.session.start.failed", error); selected = nil; ownsSession = false; cancelling = false; onError?(.cast)
     }
     func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKCastSession, withError error: Error?) {
-        guard selected == session.device.uniqueID else { return }; selected = nil; ownsSession = false; cancelling = false; onError?(.network)
+        guard selected == session.device.uniqueID else { return }; NPLog.error("cast.session.ended", error); selected = nil; ownsSession = false; cancelling = false; onError?(.network)
     }
     func stop() {
         onReady = nil; onPlayback = nil; onError = nil

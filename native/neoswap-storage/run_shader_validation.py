@@ -15,6 +15,7 @@ def simulator_service(work, out, sources):
     app=work/'ShaderServiceTest.app';app.mkdir();exe=app/'ShaderServiceTest'
     service=ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm'
     command=['xcrun','--sdk','iphonesimulator','clang++','-std=c++20','-O1','-Wall','-Wextra','-Werror',
+             '-DNEOSWAP_STORAGE_TESTING',
              '-fobjc-arc','-fblocks','-x','objective-c++','-target','arm64-apple-ios18.0-simulator','-isysroot',sdk,
              '-I',str(HERE),'-I',str(service.parent)]
     execute(command+sources+[str(HERE/'SourceClient.cpp'),str(HERE/'Metrics.cpp'),str(service),str(HERE/'tests/service_runtime.mm'),
@@ -101,6 +102,7 @@ def main():
     tracked=list(HERE.glob('*.h'))+list(HERE.glob('*.cpp'))+list(HERE.glob('*.py'))+list((HERE/'tests').glob('*.cpp'))+list((HERE/'tests').glob('*.mm'))
     tracked += [ROOT/'build-utils/configure_neoswap_storage.py',ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',ROOT/'packages/neo_swap/ios/Classes/StorageABI.h']
     tracked += [ROOT/'packages/neo_swap/ios/Classes/SourceABI.h']
+    tracked += [ROOT/'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h']
     result['inputSHA256']={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(set(tracked))}
     result['passed']=True
     (out/'shader-integration.json').write_text(json.dumps(result,indent=2)+'\n')

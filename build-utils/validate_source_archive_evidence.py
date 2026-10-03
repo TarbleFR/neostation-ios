@@ -15,16 +15,20 @@ REQUIRED_INPUTS=frozenset({
     'native/neoswap-storage/Metrics.cpp',
     'native/neoswap-storage/tests/source_archive_test.cpp',
     'native/neoswap-storage/tests/frame_archive_test.cpp',
+    'native/neoswap-storage/tests/source_work_test.cpp',
     'native/neoswap-storage/run_source_validation.py',
     'build-utils/validate_source_archive_evidence.py',
     'build-utils/configure_neoswap_storage.py',
     'packages/neo_swap/ios/Classes/SourceABI.h',
     'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',
     'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',
+    'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h',
     'packages/neo_swap/ios/neo_swap.podspec',
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
     'build-utils/rpcs3/canonical-source.json','build-utils/rpcs3/embedded-core.patch',
     'test/rpcs3_source_archive_test.py','test/native/rpcs3_source_archive_client_test.cpp',
+    'test/neoswap_source_work_test.py',
+    'test/neoswap_source_archive_host_test.py',
 })
 def validate(report,commit,require_apple=False):
     assert report['schema']==1 and report['sourceCommit']==commit
@@ -53,6 +57,13 @@ def validate(report,commit,require_apple=False):
     assert frames['logicalPixelBytes']>=48*1280*720*3//2
     assert frames['returnedPixelBytes']==frames['logicalPixelBytes']
     assert 0<frames['stagingPeakBytes']<=4*1024**2
+    work=report['sourceWork']
+    for field in ('passed','actualPrivateFileCheckpointAndRestore','wholeRecordFifoBacklogReproduced',
+                  'demandPrecedesContinuation','maintenanceCoalesced','ramDemandNoDiskIO',
+                  'partialQuantumRetainsFullSnapshot','pressureResumeExact','invalidMemoryFailsClosed'):
+        assert work[field] is True,field
+    for field in ('physicalIPhoneValidated','realRPCS3GameplayValidated'):
+        assert work[field] is False,field
     if require_apple:assert report['platform']=='Darwin'
     expected={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in sorted(REQUIRED_INPUTS)}
     assert report['inputSHA256']==expected,'Wrong exact-source archive inputs'

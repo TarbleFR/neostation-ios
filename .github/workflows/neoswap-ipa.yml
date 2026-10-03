@@ -1,5 +1,5 @@
-name: NeoStation NeoSwap + NeoPlay private • Build 399
-run-name: NeoStation NeoSwap + NeoPlay private • Build 399 • ${{ github.sha }}
+name: NeoStation NeoSwap + NeoPlay private • Build 400
+run-name: NeoStation NeoSwap + NeoPlay private • Build 400 • ${{ github.sha }}
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       build_number:
         description: 'Candidate build number (used only for manual runs)'
         required: true
-        default: '399'
+        default: '400'
         type: string
       kartpad_core_run_id:
         description: 'Validated KartPadCore artifact workflow run ID; leave empty for a non-KartPad manual build'
@@ -29,7 +29,7 @@ permissions:
 
 # Keep candidate IPA runs separate from native validation.
 concurrency:
-  group: neostation-neoswap-neoplay-build399
+  group: neostation-neoswap-neoplay-build400
   cancel-in-progress: true
 
 jobs:
@@ -44,30 +44,30 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Require completed Build 398 without cancelling its run
+      - name: Require completed Build 399 without cancelling its run
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PREVIOUS'
           import json, subprocess, time
           repo = 'TarbleFR/neostation-ios'
-          run_id = 37110155453
-          expected_sha = '8285a15b889133daab5a178b9f1615044c248b81'
+          run_id = 37124491800
+          expected_sha = '3be1b3a528345f25870fde25913bc7f4713d2255'
           deadline = time.monotonic() + 3600
           while True:
               run = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}']))
               assert run['head_sha'] == expected_sha and run['path'] == '.github/workflows/neoswap-ipa.yml'
               if run['status'] == 'completed':
-                  assert run['conclusion'] == 'success', 'Build398 did not succeed; inspect it before packaging Build399'
+                  assert run['conclusion'] == 'success', 'Build399 did not succeed; inspect it before packaging Build400'
                   break
               if time.monotonic() >= deadline:
-                  raise SystemExit('Timed out waiting for Build398; no build was cancelled')
-              print('Build398 is still running; Build399 packaging remains gated', flush=True)
+                  raise SystemExit('Timed out waiting for Build399; no build was cancelled')
+              print('Build399 is still running; Build400 packaging remains gated', flush=True)
               time.sleep(30)
           artifacts = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100']))['artifacts']
-          expected = 'NeoStation-NeoSwap-NeoPlay-Build-398-' + expected_sha
-          assert any(a['name'] == expected and not a['expired'] for a in artifacts), 'Build398 IPA artifact is absent'
-          print('Build398 completed successfully; its IPA artifact is preserved', flush=True)
+          expected = 'NeoStation-NeoSwap-NeoPlay-Build-399-' + expected_sha
+          assert any(a['name'] == expected and not a['expired'] for a in artifacts), 'Build399 IPA artifact is absent'
+          print('Build399 completed successfully; its IPA artifact is preserved', flush=True)
           PREVIOUS
 
       - name: Wait for exact-SHA validation workflows
@@ -112,13 +112,13 @@ jobs:
     # Core-only development commits validate their native engine separately,
     # not a mislabeled full NeoStation IPA.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[neoswap-ipa]') }}
-    name: Neostation iOS 0.0.2 private IPA (399)
+    name: Neostation iOS 0.0.2 private IPA (400)
     runs-on: macos-15
     timeout-minutes: 210
     env:
-      BUILD_NUMBER: ${{ inputs.build_number || '399' }}
+      BUILD_NUMBER: ${{ inputs.build_number || '400' }}
       IPA_NAME: NeoStation
-      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-399-${{ github.sha }}
+      ARTIFACT_NAME: NeoStation-NeoSwap-NeoPlay-Build-400-${{ github.sha }}
       KARTPAD_CORE_RUN_ID: ${{ inputs.kartpad_core_run_id || '36322395443' }}
       KARTPAD_CORE_HOST_SHA: ${{ inputs.kartpad_core_host_sha || '3934ac9d333247d5374b9fb7d71f8ef49bbcd79e' }}
       KARTPAD_CANDIDATE: '1'
@@ -632,6 +632,7 @@ jobs:
           python3 test/rpcs3_build283_boot_stability_test.py
           python3 test/rpcs3_build285_core_handoff_test.py
           python3 test/rpcs3_diagnostics_native_test.py
+          python3 test/rpcs3_performance_snapshot_test.py
           python3 test/rpcs3_jit_handshake_test.py
           python3 test/rpcs3_atomic_startup_test.py
           python3 test/rpcs3_early_escrow_integration_test.py

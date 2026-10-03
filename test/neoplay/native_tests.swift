@@ -2,6 +2,40 @@ import XCTest
 @testable import NPCheck
 
 final class NeoPlayNativeTests: XCTestCase {
+    func testDiscoveryRestartDetachesPreviousBrowserAndRejectsLateErrors() {
+        let first = NPRecordingBrowser(), second = NPRecordingBrowser()
+        var pending = [first, second]
+        let discovery = NPDiscovery(makeBrowser: { pending.removeFirst() })
+        var failures = 0
+        discovery.failed = { failures += 1 }
+        discovery.start()
+        XCTAssertEqual(first.searches, 1)
+        discovery.start()
+        XCTAssertEqual(first.stops, 1)
+        XCTAssertNil(first.delegate)
+        XCTAssertEqual(second.searches, 1)
+        let browserError: [String: NSNumber] = [NetService.errorDomain: 10, NetService.errorCode: -72008]
+        discovery.netServiceBrowser(first, didNotSearch: browserError)
+        XCTAssertEqual(failures, 0)
+        discovery.netServiceBrowser(second, didNotSearch: browserError)
+        XCTAssertEqual(failures, 1)
+        discovery.stop()
+        discovery.netServiceBrowser(second, didNotSearch: browserError)
+        XCTAssertEqual(failures, 1)
+    }
+    func testStoppedDiscoveryRejectsLateServiceResolution() {
+        let browser = NPRecordingBrowser()
+        let discovery = NPDiscovery(makeBrowser: { browser })
+        var changes = 0
+        discovery.changed = { changes += 1 }
+        discovery.start()
+        let service = NetService(domain: "local.", type: "_neoplay._tcp.", name: "fixture", port: 0)
+        discovery.stop()
+        let stoppedChanges = changes
+        discovery.netServiceDidResolveAddress(service)
+        XCTAssertEqual(changes, stoppedChanges)
+        XCTAssertTrue(discovery.receivers.isEmpty)
+    }
     func testGeometryKeepsAspectAndBounds() {
         XCTAssertEqual(NPPolicy.encodeSize(source: NPSize(width:640,height:480), display:NPSize(width:1920,height:1080)), NPSize(width:640,height:480))
         let wide = NPPolicy.encodeSize(source: NPSize(width:3840,height:2160), display:NPSize(width:3440,height:1440))
@@ -42,4 +76,14 @@ final class NeoPlayNativeTests: XCTestCase {
         XCTAssertThrowsError(try store.append(Data([1]),duration:1.5))
         XCTAssertTrue(String(data:store.response("index.m3u8").2,encoding:.utf8)!.contains("#EXT-X-TARGETDURATION:1"))
     }
+}
+
+private final class NPRecordingBrowser: NetServiceBrowser {
+    var searches = 0
+    var stops = 0
+    override func searchForServices(ofType type: String, inDomain domainString: String) {
+        XCTAssertEqual(type, "_neoplay._tcp."); XCTAssertEqual(domainString, "local.")
+        searches += 1
+    }
+    override func stop() { stops += 1 }
 }

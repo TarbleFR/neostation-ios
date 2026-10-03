@@ -75,31 +75,45 @@ void Archive::discard(uint64_t object) noexcept {
     std::lock_guard lock(mutex_);
     auto it=records_.find(object);if(it!=records_.end())it->second->retired=true;
 }
-void Archive::maintain(){
+bool Archive::maintain(uint32_t chunk_limit,uint32_t retirement_limit){
+    if(!chunk_limit || !retirement_limit)return false;
     std::shared_ptr<Record> record;
+    std::vector<std::shared_ptr<Record>> retired;
     {
         std::lock_guard lock(mutex_);
+        // Allocation must precede every erase/counter/working mutation. The
+        // following shared_ptr copies cannot allocate or strand a record.
+        retired.reserve(std::min<size_t>(records_.size(),retirement_limit));
         for(auto it=records_.begin();it!=records_.end();){
             auto& r=*it->second;
-            if(r.retired && !r.working){
-                if(r.object.id)(void)manager_.destroy(r.object);
+            if(r.retired && !r.working && retired.size()<retirement_limit){
+                retired.push_back(it->second);
                 if(r.staging){staging_-=r.staging->mapped_size();--pending_;}
                 it=records_.erase(it);continue;
             }
-            if(!record && r.staging && !r.failed && !r.working && accepting()){
+            if(!record && !r.retired && r.staging && !r.failed && !r.working && accepting()){
                 record=it->second;r.working=true;
             }
             ++it;
         }
     }
-    if(!record)return;
+    // Manager retirement can contend with its worker. It never runs under
+    // the admission/snapshot mutex, nor on Core destructor callbacks.
+    for(const auto& old:retired)if(old->object.id)(void)manager_.destroy(old->object);
+    retired.clear();
+    if(!record){
+        std::lock_guard lock(mutex_);
+        for(const auto& [id,r]:records_){(void)id;if(r->retired&&!r->working)return true;}
+        return false;
+    }
     managed_swap::Result result{};
+    uint32_t completed=0;
     try {
         if(!record->object.id){
             auto created=manager_.create(record->bytes);result={created.code,created.os_error};
             record->object=created.object;record->chunks=created.chunks;
         }
-        for(;result.code==managed_swap::Code::ok && record->next_chunk<record->chunks;){
+        for(;result.code==managed_swap::Code::ok && record->next_chunk<record->chunks && completed<chunk_limit;){
             const auto index=record->next_chunk;
             if(!record->chunk_written){
                 auto info=manager_.describe(record->object,index);
@@ -113,7 +127,7 @@ void Archive::maintain(){
             result=retry([&]{return manager_.checkpoint_chunk(record->object,index,record->chunk_generation);});
             if(result.code==managed_swap::Code::ok)result=retry([&]{return manager_.evict_chunk(record->object,index);});
             if(result.code==managed_swap::Code::ok){
-                ++record->next_chunk;record->chunk_written=false;
+                ++record->next_chunk;++completed;record->chunk_written=false;
 #ifdef NEOSWAP_STORAGE_TESTING
                 if(defer_after_chunks_==record->next_chunk){
                     defer_after_chunks_=0;result={managed_swap::Code::busy,0};break;
@@ -127,12 +141,15 @@ void Archive::maintain(){
         (void)manager_.destroy(record->object);record->object={};
     }
     std::lock_guard lock(mutex_);record->working=false;
-    if(result.code==managed_swap::Code::ok){
+    if(result.code==managed_swap::Code::ok && record->next_chunk==record->chunks){
         // All chunks have a synchronized, verified disk version. Only now
         // release the original accepted CPU snapshot, not merely its pointer.
         const auto charge=record->staging->mapped_size();record->staging.reset();
         staging_-=charge;--pending_;stats_.archived_bytes+=record->bytes;
         if(record->domain==3)stats_.pixel_archived_bytes+=record->bytes;
+    }else if(result.code==managed_swap::Code::ok){
+        // The quantum yielded before the record completed. Keep the COMPLETE
+        // snapshot and verified progress; a demand can read it without disk.
     }else if(transient){
         // Rate limiting, contention or a pressure transition is not corruption.
         // Preserve both the COMPLETE snapshot and verified chunk progress.
@@ -144,6 +161,20 @@ void Archive::maintain(){
         record->failed=true;++stats_.archive_failures;stats_.last_errno=result.os_error;
         // Keep the complete original snapshot readable on EVERY refusal/error.
     }
+    if(transient)return false; // retry only on the next timer/admission tick
+    for(const auto& [id,r]:records_){(void)id;
+        if((r->retired&&!r->working) || (!r->retired&&r->staging&&!r->failed&&!r->working&&accepting()))return true;
+    }
+    return false;
+}
+int Archive::try_read_staging(uint64_t object,char* output,size_t bytes){
+    std::unique_lock lock(mutex_,std::try_to_lock);if(!lock.owns_lock())return NS_SOURCE_BUSY;
+    const auto it=records_.find(object);
+    if(it==records_.end()||it->second->retired)return NS_SOURCE_MISSING;
+    const auto& record=*it->second;if(!output||bytes!=record.bytes)return NS_SOURCE_INVALID;
+    if(!record.staging)return NS_SOURCE_BUSY;
+    std::memcpy(output,record.staging->data(),bytes);++stats_.reads;
+    return NS_SOURCE_OK;
 }
 int Archive::read(uint64_t object,char* output,size_t bytes,int& os_error){
     os_error=0;std::shared_ptr<Record> record;

@@ -31,7 +31,7 @@ final class NPController {
     }
     var snapshot: [String: Any] { ["state": state, "error": failure as Any? ?? NSNull(), "selected": selected as Any? ?? NSNull(), "receivers": discovery.receivers + cast.receivers, "appleTV": airplay.snapshot, "physicalValidation": ["windows": false, "chromecast": false, "appleTV": false, "controllerBattery": false]] }
     private func publish() { changed?(snapshot) }
-    func discover() { discovery.start(); cast.startDiscovery(); publish() }
+    func discover() { failure = nil; discovery.start(); cast.startDiscovery(); publish() }
     func stopDiscovery() { discovery.stop(); cast.stopDiscovery() }
     func connect(id: String, pin: String, stopLabel: String) throws {
         guard !NPAirPlayMonitor.facts().externalMirroring, !isStopping, let token = fence.begin() else { throw NPError.busy }

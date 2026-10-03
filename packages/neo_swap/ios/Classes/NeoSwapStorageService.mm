@@ -5,7 +5,9 @@
 #include "Storage/SourceArchive.h"
 #include "Storage/ShaderPolicy.h"
 #include "Storage/SessionSlot.h"
+#include "NeoSwapSourceWork.h"
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -27,6 +29,15 @@ struct State {
     std::atomic<uint64_t> requestedGeneration{1};
     std::atomic<int> binderResult{NS_STORAGE_DISABLED};
     std::atomic<int> sourceBinderResult{NS_SOURCE_DISABLED};
+    neostation::source_work::Queue sourceWork;
+    neostation::source_work::ReadTiming sourceReadTiming;
+    neostation::source_work::VideoMemoryNeed videoMemoryNeed;
+    std::atomic<bool> videoAdmissionNeeded{false};
+    std::atomic<uint64_t> videoNeedSampleUs{0},videoPolicyRefusals{0};
+#ifdef NEOSWAP_STORAGE_TESTING
+    bool testMemory=false,testAvailableValid=false;
+    uint64_t testAvailable=0;
+#endif
     std::mutex snapshotMutex;
     NSDictionary* cached=@{};
     NSDictionary* lastSessionCache=@{};
@@ -50,11 +61,21 @@ State& state() {
     }();
     return *s;
 }
+uint64_t monotonicUs(){return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();}
+void refreshVideoNeed(State& s,ProcessMetrics metrics){
+#ifdef NEOSWAP_STORAGE_TESTING
+    if(s.testMemory){metrics.process_available_bytes=s.testAvailable;metrics.process_available_valid=s.testAvailableValid;}
+#endif
+    s.videoMemoryNeed.update(metrics.process_available_bytes,metrics.process_available_valid,s.memoryPressure!=Pressure::normal);
+    s.videoAdmissionNeeded.store(s.videoMemoryNeed.needed()&&!s.background&&s.memoryPressure==Pressure::normal);
+    s.videoNeedSampleUs.store(monotonicUs());
+}
 void applyPressure(State& s) {
     const Pressure level=s.background ? Pressure::critical :
         s.thermal>=NSProcessInfoThermalStateSerious && s.memoryPressure==Pressure::normal ? Pressure::warning:s.memoryPressure;
     if(auto cache=s.active.control_load()){cache->pause(s.background);cache->pressure(level);}
     if(auto source=s.sourceArchive.control_load()){source->pause(s.background);source->pressure(level);}
+    refreshVideoNeed(s,sample_process());
 }
 NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,State& s){
     const auto x=archive.snapshot();const auto& m=x.managed;const auto& d=m.store;
@@ -76,6 +97,16 @@ NSDictionary* sourceDictionary(neostation::source_archive::Archive& archive,Stat
         @"videoPixelLiveArchivedBytes":@(x.pixel_live_archived_bytes),
         @"videoPixelReturnedArchiveBytesCumulative":@(x.pixel_restored_bytes),
         @"transientCheckpointRetries":@(x.transient_retries),
+        @"videoAdmissionNeedsMemory":@(s.videoAdmissionNeeded.load()),
+        @"videoAdmissionRefusalsWithoutMemoryNeed":@(s.videoPolicyRefusals.load()),
+        @"videoMemoryEnterAvailableBytes":@(neostation::source_work::VideoMemoryNeed::enter_bytes),
+        @"videoMemoryLeaveAvailableBytes":@(neostation::source_work::VideoMemoryNeed::leave_bytes),
+        @"maintenanceCoalescedRequests":@(s.sourceWork.coalesced()),
+        @"maintenanceQuanta":@(s.sourceWork.quanta()),@"pendingDiscards":@(s.sourceWork.pending_discards()),
+        @"demandReadRequests":@(s.sourceReadTiming.requests.load()),@"demandRamSnapshotReads":@(s.sourceReadTiming.ram_reads.load()),
+        @"demandUtilityQueueWaitUsCumulative":@(s.sourceReadTiming.queue_us.load()),
+        @"demandUtilityQueueWaitMaxUs":@(s.sourceReadTiming.queue_max_us.load()),
+        @"demandReadUsCumulative":@(s.sourceReadTiming.read_us.load()),@"demandReadMaxUs":@(s.sourceReadTiming.read_max_us.load()),
         @"checkpointedBytesCumulative":@(m.checkpointed_bytes),@"releasedOwnedMappedBytesCumulative":@(m.released_owned_bytes),
         @"diskReadBytes":@(d.bytes_read),@"diskWriteBytes":@(d.bytes_written),@"allocatedFileBytes":@(d.allocated_file_bytes),
         @"restoredDiskLogicalBytesCumulative":@(d.restored_logical_bytes),
@@ -119,6 +150,7 @@ NSDictionary* statsDictionary(const ShaderStats& x) {
     };
 }
 void snapshotOnQueue(State& s) {
+    auto metrics=sample_process();refreshVideoNeed(s,metrics);
     auto cache=s.active.control_load();
     NSMutableDictionary* result=[NSMutableDictionary dictionaryWithDictionary:@{
         @"abi":@1,@"marker":[NSString stringWithUTF8String:marker],
@@ -143,7 +175,6 @@ void snapshotOnQueue(State& s) {
     }
     if(auto source=s.sourceArchive.control_load())result[@"sourceArchive"]=sourceDictionary(*source,s);
     else result[@"sourceArchive"]=@{@"active":@NO,@"binderResult":@(s.sourceBinderResult.load())};
-    auto metrics=sample_process();
     result[@"processResidentBytes"]=metrics.resident_valid?@(metrics.resident_bytes):NSNull.null;
     result[@"processFootprintBytes"]=metrics.footprint_valid?@(metrics.footprint_bytes):NSNull.null;
     result[@"processCompressedAccountedBytes"]=metrics.compressed_valid?@(metrics.compressed_accounted_bytes):NSNull.null;
@@ -162,6 +193,33 @@ void reap(State& s) {
     for(auto it=s.retiredSources.begin();it!=s.retiredSources.end();){
         if(it->use_count()==1)it=s.retiredSources.erase(it);else ++it;
     }
+}
+void enqueueSourceWork(State& s);
+void requestSourceWork(State& s){if(s.sourceWork.request())enqueueSourceWork(s);}
+void enqueueSourceWork(State& s){
+    dispatch_async(s.queue,^{@autoreleasepool {
+        auto& x=state();
+        if(x.sourceWork.demand_pending()){x.sourceWork.defer();return;}
+        const auto batch=x.sourceWork.begin();bool more=false;
+        try{
+            for(size_t i=0;i<batch.count;++i){
+                const auto& command=batch.discards[i];auto source=x.sourceArchive.control_load();
+                if(!source || source->generation()!=command.epoch){
+                    source.reset();for(const auto& old:x.retiredSources)if(old->generation()==command.epoch){source=old;break;}
+                }
+                if(source)source->discard(command.object);
+            }
+            // One verified 64KiB chunk, never a whole pixel record. Requests
+            // arriving during it run before its continuation at the FIFO tail.
+            if(!x.sourceWork.demand_pending()){
+                if(auto source=x.sourceArchive.control_load())more=source->maintain(1,4);
+                for(const auto& old:x.retiredSources)more=old->maintain(1,4)||more;
+                if(auto cache=x.active.control_load())cache->maintain();
+                if(!x.sourceWork.demand_pending())reap(x);
+            }else more=true;
+        }catch(const std::exception& error){x.lastFailure=[NSString stringWithUTF8String:error.what()]?:@"maintenance_error";}
+        if(x.sourceWork.finish(more))enqueueSourceWork(x);
+    }});
 }
 void retireOnQueue(State& s) {
     if(auto old=s.sourceArchive.exchange(nullptr)){
@@ -208,36 +266,48 @@ int sourceAdmit(uint64_t epoch,uint32_t domain,const char* text,uint64_t bytes,u
     if(!object)return NS_SOURCE_INVALID;*object=0;
     if(!text||bytes>NEOSWAP_SOURCE_MAX_BYTES)return NS_SOURCE_INVALID;
     try{
+        auto& s=state();
         auto source=currentSource(epoch);if(!source)return NS_SOURCE_DISABLED;
+        if(domain==3 && (!s.videoAdmissionNeeded.load() || monotonicUs()-s.videoNeedSampleUs.load()>3*1000000)){
+            s.videoPolicyRefusals.fetch_add(1);return NS_SOURCE_PRESSURE;
+        }
         const auto result=source->admit(domain,text,static_cast<size_t>(bytes));*object=result.object;
-        if(result.code==NS_SOURCE_OK)dispatch_async(state().queue,^{try{source->maintain();}catch(...) {}});
+        if(result.code==NS_SOURCE_OK)requestSourceWork(s);
         return result.code;
     }catch(...){return NS_SOURCE_BUSY;}
 }
 int sourceRead(uint64_t epoch,uint64_t object,char* output,uint64_t bytes,int* os_error){
     if(os_error)*os_error=0;
     if(!output||!os_error||bytes>NEOSWAP_SOURCE_MAX_BYTES)return NS_SOURCE_INVALID;
-    __block int result=NS_SOURCE_DISABLED;
+    auto& s=state();const auto requested=monotonicUs();
+    // Incomplete checkpoints retain the accepted FULL snapshot. A bounded
+    // try-lock RAM copy avoids waiting for unrelated utility disk work.
+    try{if(auto source=currentSource(epoch)){
+        const int ram=source->try_read_staging(object,output,static_cast<size_t>(bytes));
+        if(ram!=NS_SOURCE_BUSY){s.sourceReadTiming.record(0,monotonicUs()-requested,ram==NS_SOURCE_OK);return ram;}
+    }}catch(...){return NS_SOURCE_BUSY;}
+    __block int result=NS_SOURCE_DISABLED;__block uint64_t queued=0,read=0;
+    s.sourceWork.demand_begin();
+    const auto submitted=monotonicUs();
     // Debug/export or VDEC's CPU consumer asks for owned archived bytes.
     // Storage runs on this queue; the result belongs to Core, never a lease.
     const auto operation=^{
+        const auto started=monotonicUs();queued=started-submitted;
         try{
             auto& s=state();auto source=s.sourceArchive.control_load();
             if(s.requestedGeneration.load()==epoch && source && source->generation()==epoch)
                 result=source->read(object,output,static_cast<size_t>(bytes),*os_error);
         }catch(...){result=NS_SOURCE_BUSY;}
+        read=monotonicUs()-started;
     };
     if(dispatch_get_specific(&utilityQueueKey))operation();else dispatch_sync(state().queue,operation);
+    s.sourceReadTiming.record(queued,read,false);
+    if(s.sourceWork.demand_end()&&s.sourceWork.resume())enqueueSourceWork(s);
     return result;
 }
 void sourceDiscard(uint64_t epoch,uint64_t object){
-    dispatch_async(state().queue,^{
-        auto& s=state();auto source=s.sourceArchive.control_load();
-        if(!source || source->generation()!=epoch){
-            source.reset();for(auto& old:s.retiredSources)if(old->generation()==epoch){source=old;break;}
-        }
-        try{if(source){source->discard(object);source->maintain();}}catch(...) {}
-    });
+    if(!epoch||!object)return;
+    try{auto& s=state();if(s.sourceWork.discard(epoch,object))enqueueSourceWork(s);}catch(...) {}
 }
 void sourceReleased(uint64_t epoch,uint64_t bytes){if(auto source=currentSource(epoch))source->released(bytes);}
 const NeoSwapSourceAPI sourceAPI{sizeof(sourceAPI),NEOSWAP_SOURCE_ABI,sourceSession,sourceAdmit,sourceRead,sourceDiscard,sourceReleased};
@@ -252,7 +322,7 @@ void NeoSwapStorage_Initialize(void) {
         dispatch_source_set_event_handler(s.timer,^{@autoreleasepool {
             try{auto& stateRef=state();auto cache=stateRef.active.control_load();auto source=stateRef.sourceArchive.control_load();
                 if(!cache&&!source&&stateRef.retired.empty()&&stateRef.retiredSources.empty())return;
-                if(cache)cache->maintain();if(source)source->maintain();reap(stateRef);if(++stateRef.tick%4==0)snapshotOnQueue(stateRef);}
+                requestSourceWork(stateRef);if(++stateRef.tick%4==0)snapshotOnQueue(stateRef);}
             catch(const std::exception& error){auto& stateRef=state();stateRef.lastFailure=[NSString stringWithUTF8String:error.what()]?:@"maintenance_error";}
         }});dispatch_resume(s.timer);
         s.pressureSource=dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE,0,
@@ -323,3 +393,10 @@ NSDictionary* NeoSwapStorage_Diagnostics(void) {
     result[@"requestedEnabled"]=@(NeoSwapStorage_GetPreference());result[@"appliesOnNextLaunch"]=@YES;
     return result;
 }
+#ifdef NEOSWAP_STORAGE_TESTING
+void NeoSwapStorage_TestSetMemory(uint64_t available,bool valid,uint32_t pressure){
+    dispatch_sync(state().queue,^{auto& s=state();s.testMemory=true;s.testAvailable=available;s.testAvailableValid=valid;
+        s.memoryPressure=static_cast<Pressure>(pressure);applyPressure(s);snapshotOnQueue(s);});
+}
+void NeoSwapStorage_TestClearMemory(void){dispatch_sync(state().queue,^{auto& s=state();s.testMemory=false;s.memoryPressure=Pressure::normal;applyPressure(s);snapshotOnQueue(s);});}
+#endif

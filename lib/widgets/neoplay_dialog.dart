@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:neostation/l10n/neoplay_companion_locale.dart';
+import 'package:neostation/l10n/neoplay_discovery_locale.dart';
 import 'package:neostation/widgets/neoplay_apple_tv_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +14,7 @@ class NeoPlayDialog extends StatefulWidget {
   @override
   State<NeoPlayDialog> createState() => _NeoPlayDialogState();
 }
-class _NeoPlayDialogState extends State<NeoPlayDialog> {
+class _NeoPlayDialogState extends State<NeoPlayDialog> with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? subscription;
   Map<String, dynamic> snapshot = const {'state': 'idle', 'receivers': []};
   bool error = false;
@@ -21,10 +22,21 @@ class _NeoPlayDialogState extends State<NeoPlayDialog> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     subscription = NeoPlayBridge.events.listen((value) { if (mounted) setState(() { snapshot = value; error = value['error'] != null; }); }, onError: (_) { if (mounted) setState(() => error = true); });
   }
   @override
-  void dispose() { unawaited(subscription?.cancel()); unawaited(NeoPlayBridge.stopDiscovery().catchError((Object _) {})); super.dispose(); }
+  void dispose() { WidgetsBinding.instance.removeObserver(this); unawaited(subscription?.cancel()); unawaited(NeoPlayBridge.stopDiscovery().catchError((Object _) {})); super.dispose(); }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Rebuild the explicit search after a Settings/Wi-Fi round trip. Opening
+    // this dialog alone must never scan or prompt for local network access.
+    if (state == AppLifecycleState.resumed && searching) unawaited(search());
+  }
+  Future<void> search() async {
+    setState(() { searching = true; error = false; });
+    await action(NeoPlayBridge.discover);
+  }
   Future<void> action(Future<void> Function() callback) async {
     try { await callback(); } catch (_) { if (mounted) setState(() => error = true); }
   }
@@ -60,7 +72,8 @@ class _NeoPlayDialogState extends State<NeoPlayDialog> {
         Text(NeoPlayCompanionLocale.get(context,'batteryHelp')),
         const SizedBox(height: 10), Text(text(state)),
         if (error) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(text('error'), style: TextStyle(color: Theme.of(context).colorScheme.error))),
-        if (!searching) TextButton.icon(onPressed: () { setState(() => searching = true); action(NeoPlayBridge.discover); }, icon: const Icon(Icons.cast), label: Text(text('discover'))),
+        Text(NeoPlayDiscoveryLocale.get(context, 'networkHelp')),
+        TextButton.icon(onPressed: search, icon: const Icon(Icons.cast), label: Text(searching ? NeoPlayDiscoveryLocale.get(context, 'refresh') : text('discover'))),
         receivers.isEmpty ? Center(child: Text(text('empty'))) : ListView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: receivers.length, itemBuilder: (context,index) {
           final receiver = receivers[index];
           return ListTile(leading: Icon(receiver['kind'] == 'windows' ? Icons.desktop_windows : Icons.cast), title: Text(receiver['name'] as String? ?? 'NeoPlay'), selected: snapshot['selected'] == receiver['id'], enabled: !busy, onTap: () => connect(receiver));

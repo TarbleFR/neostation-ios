@@ -14,7 +14,9 @@ def validate(report,sha,root=ROOT):
     sim=report['simulator'];assert sim['passed'] and sim['epochIsolation'] and sim['leaseSurvivedSessionEnd'] and sim['privateFileRoundTrip']
     for field in ('sourceArchiveRoundTrip','sourceEpochIsolation','sourcePressureRefusal'):
         assert sim[field] is True,field
-    for field in ('videoPixelRoundTrip','videoPixelEpochIsolation','videoPixelPressureRefusal'):
+    for field in ('videoPixelRoundTrip','videoPixelEpochIsolation','videoPixelPressureRefusal',
+                  'videoMemoryNeedGate','videoMemoryRecoveryStopsArchival','warningRecoveryReactivatesPixels',
+                  'memoryInputsAreInjected','immediateDemandDuringAdmissionBurst'):
         assert sim[field] is True,field
     pixels=sim['pixelDiagnostics']
     assert pixels['videoPixelLiveArchivedBytes']>=1280*720*3//2
@@ -27,6 +29,7 @@ def validate(report,sha,root=ROOT):
     paths|={'build-utils/configure_neoswap_storage.py','packages/neo_swap/ios/Classes/NeoSwapStorageService.h',
             'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm','packages/neo_swap/ios/Classes/StorageABI.h'}
     paths.add('packages/neo_swap/ios/Classes/SourceABI.h')
+    paths.add('packages/neo_swap/ios/Classes/NeoSwapSourceWork.h')
     assert set(report['inputSHA256'])==paths,'Incomplete/extraneous storage input identity'
     for path,want in report['inputSHA256'].items():assert hashlib.sha256((root/path).read_bytes()).hexdigest()==want,path
 if __name__=='__main__':

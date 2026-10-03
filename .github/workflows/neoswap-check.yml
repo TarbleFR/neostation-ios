@@ -40,6 +40,7 @@ jobs:
           mkdir -p build/neoswap
           git diff --check
           python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/neoswap/embedded-menu-input-tests.txt
+          python3 test/rpcs3_performance_snapshot_test.py 2>&1 | tee build/neoswap/performance-snapshot-tests.txt
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
             -Ipackages/neo_swap/ios/Classes test/neoswap_memory_samples_test.cpp \
             -o "$RUNNER_TEMP/neoswap-memory-samples"

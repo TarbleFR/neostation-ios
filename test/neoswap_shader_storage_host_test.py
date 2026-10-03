@@ -65,6 +65,7 @@ paths={str(p.relative_to(ROOT)) for p in (ROOT/'native/neoswap-storage').glob('*
 paths|={str(p.relative_to(ROOT)) for p in (ROOT/'native/neoswap-storage/tests').glob('*') if p.suffix in ('.cpp','.mm')}
 paths|={'build-utils/configure_neoswap_storage.py','packages/neo_swap/ios/Classes/NeoSwapStorageService.h','packages/neo_swap/ios/Classes/NeoSwapStorageService.mm','packages/neo_swap/ios/Classes/StorageABI.h'}
 paths.add('packages/neo_swap/ios/Classes/SourceABI.h')
+paths.add('packages/neo_swap/ios/Classes/NeoSwapSourceWork.h')
 # Fixtures test refusal logic, never masquerade as a hardware result.
 fixture={'passed':True,'sourceCommit':'d'*40,'productionClientExecuted':True,'productionHostServiceIOSLinked':True,
          'realIOSSimulatorServiceExecuted':True,'realVulkanModule':True,'physicalIPhoneValidated':False,
@@ -73,6 +74,9 @@ fixture={'passed':True,'sourceCommit':'d'*40,'productionClientExecuted':True,'pr
          'simulator':{'passed':True,'epochIsolation':True,'leaseSurvivedSessionEnd':True,'privateFileRoundTrip':True,
                       'sourceArchiveRoundTrip':True,'sourceEpochIsolation':True,'sourcePressureRefusal':True,
                       'videoPixelRoundTrip':True,'videoPixelEpochIsolation':True,'videoPixelPressureRefusal':True,
+                      'videoMemoryNeedGate':True,'videoMemoryRecoveryStopsArchival':True,
+                      'warningRecoveryReactivatesPixels':True,'memoryInputsAreInjected':True,
+                      'immediateDemandDuringAdmissionBurst':True,
                       'pixelDiagnostics':{'videoPixelLiveArchivedBytes':1280*720*3//2,
                           'videoPixelReturnedArchiveBytesCumulative':1280*720*3//2,'stagingRamBytes':0},
                       'sourceDiagnostics':{'archivedSourceBytesCumulative':1,'stagingRamBytes':0,'diskReadBytes':1,'diskWriteBytes':1}},
@@ -88,4 +92,31 @@ for key in ('sourceCommit','inputSHA256'):
     try:validate(bad,'d'*40)
     except AssertionError:pass
     else:raise AssertionError('Accepted wrong provenance '+key)
+for key in ('videoMemoryNeedGate','videoMemoryRecoveryStopsArchival','warningRecoveryReactivatesPixels',
+            'memoryInputsAreInjected','immediateDemandDuringAdmissionBurst'):
+    for value in (False,1,'true',None):
+        bad=copy.deepcopy(fixture);bad['simulator'][key]=value
+        try:validate(bad,'d'*40)
+        except AssertionError:pass
+        else:raise AssertionError('Accepted missing/invalid simulator behavior '+key)
+    bad=copy.deepcopy(fixture);del bad['simulator'][key]
+    try:validate(bad,'d'*40)
+    except (AssertionError,KeyError):pass
+    else:raise AssertionError('Accepted absent simulator behavior '+key)
+bad=copy.deepcopy(fixture);del bad['inputSHA256']['packages/neo_swap/ios/Classes/NeoSwapSourceWork.h']
+try:validate(bad,'d'*40)
+except AssertionError:pass
+else:raise AssertionError('Accepted unbound host scheduling policy')
+# Simulator-only memory injection must never enter the production iOS link.
+import ast
+runner=ast.parse((ROOT/'native/neoswap-storage/run_shader_validation.py').read_text())
+flags_by_name={}
+for node in ast.walk(runner):
+    if isinstance(node,ast.Assign) and isinstance(node.value,ast.List):
+        for target in node.targets:
+            if isinstance(target,ast.Name) and target.id in ('command','ios'):
+                flags_by_name[target.id]={item.value for item in node.value.elts
+                    if isinstance(item,ast.Constant) and isinstance(item.value,str)}
+assert '-DNEOSWAP_STORAGE_TESTING' in flags_by_name['command']
+assert '-DNEOSWAP_STORAGE_TESTING' not in flags_by_name['ios']
 print('PASS optional host binding, title/epoch/lifecycle boundaries, generated source identity, locales and strict evidence refusal')

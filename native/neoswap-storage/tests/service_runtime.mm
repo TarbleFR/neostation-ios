@@ -4,6 +4,7 @@
 #import "NeoSwapStorageService.h"
 #include "SourceClient.h"
 #include "FrameClient.h"
+#include "NeoSwapSourceWork.h"
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -20,6 +21,7 @@ static void runTest(){@autoreleasepool {
         require(NeoSwapStorage_GetSourceAPI(2)==nullptr,"wrong source ABI accepted");
         NeoSwapStorage_SetSourceBinderResult(NS_SOURCE_OK);
         require(neostation::source_client::install(sourceApi)==NS_SOURCE_OK,"source client binding");
+        NeoSwapStorage_TestSetMemory(2ULL<<30,true,0);
         NeoSwapStorage_SetPreference(NO);NeoSwapStorage_BeginSession(@"BCES00510");
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"disabled"];}),"default-off session");require(api->session()==0,"disabled epoch");
         require(sourceApi->session()==0,"disabled source epoch");
@@ -43,7 +45,21 @@ static void runTest(){@autoreleasepool {
         std::string pixels(1280*720*3/2,'\0');uint32_t pixelRandom=779;
         for(auto& byte:pixels){pixelRandom^=pixelRandom<<13;pixelRandom^=pixelRandom>>17;pixelRandom^=pixelRandom<<5;byte=static_cast<char>(pixelRandom);}
         const auto originalPixels=pixels;neostation::source_client::ColdFrame pixelOwner;
+        require(!pixelOwner.offload(pixels.data(),pixels.size())&&pixels==originalPixels,
+            "comfortable RAM must retain original pixels without archival");
+        require(sourceApi->session()==epoch,"video need gate disabled GLSL/source session");
+        NeoSwapStorage_TestSetMemory(512ULL<<20,true,0);
+        require([NeoSwapStorage_Diagnostics()[@"sourceArchive"][@"videoAdmissionNeedsMemory"] boolValue],
+            "low available RAM did not enable optional pixels");
         require(until([&]{return pixelOwner.offload(pixels.data(),pixels.size());}),"pixel domain admission");
+        neostation::source_client::ColdFrame burstOwner;
+        require(until([&]{return burstOwner.offload(pixels.data(),pixels.size());}),"coalesced pixel burst admission");
+        std::string immediatePixels;int immediateError=0;
+        require(burstOwner.restore(immediatePixels,immediateError)==NS_SOURCE_OK&&immediatePixels==originalPixels,
+            "immediate demand during pixel admission burst corrupted pixels");
+        require(pixelOwner.restore(immediatePixels,immediateError)==NS_SOURCE_OK&&immediatePixels==originalPixels,
+            "immediate demand during queued maintenance lost pixels");
+        burstOwner.reset();
         require(pixels==originalPixels,"pixel client changed caller allocation before transfer");std::string().swap(pixels);
         require(until([&]{NSDictionary* d=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
             return [d[@"videoPixelLiveArchivedBytes"] unsignedLongLongValue]==originalPixels.size() &&
@@ -53,6 +69,25 @@ static void runTest(){@autoreleasepool {
         // Diagnostics are a utility-queue snapshot, refreshed once per second.
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"sourceArchive"][@"videoPixelReturnedArchiveBytesCumulative"] unsignedLongLongValue]>=originalPixels.size();}),"pixel read diagnostics");
         result[@"pixelDiagnostics"]=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
+        NeoSwapStorage_TestSetMemory(2ULL<<30,true,0);
+        pixels=originalPixels;neostation::source_client::ColdFrame healthyRefusal;
+        require(!healthyRefusal.offload(pixels.data(),pixels.size())&&pixels==originalPixels,
+            "video did not stop archival after available RAM recovered");
+        require(pixelOwner.restore(restoredPixels,pixelError)==NS_SOURCE_OK&&restoredPixels==originalPixels,
+            "memory recovery prevented a previously accepted demand restore");
+        // Actual pressure still refuses optional publication. NORMAL recovery
+        // with a measured low margin reactivates pixels; unknown memory cannot.
+        NeoSwapStorage_TestSetMemory(512ULL<<20,true,1);
+        require(!healthyRefusal.offload(pixels.data(),pixels.size())&&pixels==originalPixels,
+            "optional pixels admitted during pressure");
+        NeoSwapStorage_TestSetMemory(512ULL<<20,true,0);
+        require([NeoSwapStorage_Diagnostics()[@"sourceArchive"][@"videoAdmissionNeedsMemory"] boolValue],
+            "warning recovery lost measured memory need");
+        require(healthyRefusal.offload(pixels.data(),pixels.size()),"warning recovery did not reactivate pixels");
+        healthyRefusal.reset();NeoSwapStorage_TestSetMemory(0,false,0);
+        require(!healthyRefusal.offload(pixels.data(),pixels.size())&&pixels==originalPixels,
+            "unknown available RAM admitted optional pixels");
+        NeoSwapStorage_TestSetMemory(2ULL<<30,true,0);
         words[0]=0x07230203;words[1]=0x00010500;words[3]=64;words[4]=0;
         for(unsigned i=1;i<=16;++i){uint8_t key[32]{};key[0]=i;uint32_t random=i;
             for(size_t n=5;n<words.size();++n){random^=random<<13;random^=random>>17;random^=random<<5;words[n]=random;}words[5]=i;
@@ -82,12 +117,16 @@ static void runTest(){@autoreleasepool {
         pixels=originalPixels;neostation::source_client::ColdFrame pixelPressureRefusal;
         require(!pixelPressureRefusal.offload(pixels.data(),pixels.size())&&pixels==originalPixels,"pixel pressure refusal loses original");
         NeoSwapStorage_EndSession();NeoSwapStorage_SetPreference(NO);
+        NeoSwapStorage_TestClearMemory();
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"session_ended"];}),"end diagnostics");
         result[@"passed"]=@YES;result[@"realIOSSimulatorServiceExecuted"]=@YES;
         result[@"privateFileRoundTrip"]=@YES;result[@"epochIsolation"]=@YES;result[@"leaseSurvivedSessionEnd"]=@YES;
         result[@"lifecycleNotificationsInjected"]=@YES;result[@"pressureNotificationInjected"]=@YES;
         result[@"sourceArchiveRoundTrip"]=@YES;result[@"sourceEpochIsolation"]=@YES;result[@"sourcePressureRefusal"]=@YES;
         result[@"videoPixelRoundTrip"]=@YES;result[@"videoPixelEpochIsolation"]=@YES;result[@"videoPixelPressureRefusal"]=@YES;
+        result[@"videoMemoryNeedGate"]=@YES;result[@"videoMemoryRecoveryStopsArchival"]=@YES;
+        result[@"warningRecoveryReactivatesPixels"]=@YES;result[@"memoryInputsAreInjected"]=@YES;
+        result[@"immediateDemandDuringAdmissionBurst"]=@YES;
         result[@"diagnostics"]=NeoSwapStorage_Diagnostics();
     }catch(const std::exception& e){result[@"error"]=[NSString stringWithUTF8String:e.what()];}
     NSString* path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"shader-service-runtime.json"];

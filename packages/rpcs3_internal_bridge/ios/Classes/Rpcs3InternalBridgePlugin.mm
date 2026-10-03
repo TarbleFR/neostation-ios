@@ -11,6 +11,8 @@
 #import "Rpcs3EarlyAddressSpaceEscrow.h"
 #import "RPCS3GameInputController.h"
 #import "RPCS3PerformanceOverlay.h"
+#include "RPCS3PerformanceSnapshot.h"
+#include <atomic>
 #include "NeoSwapUsagePolicy.h"
 #import "RPCS3InGameLocalization.h"
 #import "Rpcs3SessionMenu.h"
@@ -233,6 +235,10 @@ static UIViewController* RPCS3RootViewController(void) {
   dispatch_queue_t _runtimeQueue;
   dispatch_source_t _performanceTimer;
   dispatch_source_t _diagnosticPerformanceTimer;
+  RPCS3PerformanceSnapshot _performanceSnapshot;
+  uint64_t _performanceEpoch;
+  uint64_t _performanceProducerGeneration;
+  std::atomic<uint64_t> _performanceDisplayEpoch;
   uint64_t _diagnosticPerformanceSamples;
   double _diagnosticFpsTotal;
   double _diagnosticMinimumFps;
@@ -290,7 +296,10 @@ static void RPCS3Log(void* context, int32_t level, const char* message) {
   const BOOL profiler =
       strstr(message, "COREPROF ") != nullptr ||
       strstr(message, "COREPROF_RESILIENCE ") != nullptr;
-  if (level > 2 && !profiler) return;
+  // Core already emits bounded video archive/unmap/restore notices. Keep them
+  // under the ordinary log budget so device logs can measure real RAM release.
+  const BOOL videoArchive = strstr(message, "NEOSWAP_VDEC ") != nullptr;
+  if (level > 2 && !profiler && !videoArchive) return;
 
   static os_unfair_lock budgetLock = OS_UNFAIR_LOCK_INIT;
   static CFTimeInterval budgetWindow = 0;
@@ -613,6 +622,14 @@ static void RPCS3Progress(void* context,
 }
 
 - (void)setPerformanceSamplingEnabled:(BOOL)enabled {
+  if (!NSThread.isMainThread) {
+    __weak Rpcs3InternalBridgePlugin* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf setPerformanceSamplingEnabled:enabled]; });
+    return;
+  }
+  // This nonatomic UIKit owner belongs to main. Carry only a weak reference
+  // across the runtime queue; dereference and fence it back on main.
+  __weak RPCS3GameViewController* weakSampledOwner = self.gameController;
   dispatch_async(_runtimeQueue, ^{
     if (!enabled) {
       if (self->_performanceTimer) {
@@ -621,7 +638,7 @@ static void RPCS3Progress(void* context,
       }
       return;
     }
-    if (self->_performanceTimer || !self->_api.get_performance_metrics) return;
+    if (self->_performanceTimer) return;
     dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self->_runtimeQueue);
     self->_performanceTimer = timer;
     dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0),
@@ -631,9 +648,10 @@ static void RPCS3Progress(void* context,
     dispatch_source_set_event_handler(timer, ^{
       Rpcs3InternalBridgePlugin* strongSelf = weakSelf;
       if (!strongSelf) return;
-      rpcs3_ios_performance_metrics metrics = {};
-      metrics.size = sizeof(metrics);
-      if (strongSelf->_api.get_performance_metrics(&metrics) != 0) return;
+      // ABI 30 advances a shared frame/time baseline on EVERY getter call.
+      // The diagnostic timer is the sole producer; overlay toggles only read.
+      const double timestamp = CACurrentMediaTime() * 1000.0;
+      const auto sample = strongSelf->_performanceSnapshot.read(strongSelf->_performanceEpoch, timestamp);
       NeoSwapClientStats client = {};
       client.struct_size = sizeof(client);
       client.abi_version = NEOSWAP_CLIENT_STATS_ABI;
@@ -645,10 +663,14 @@ static void RPCS3Progress(void* context,
       NSDictionary* relay = NeoSwapRelay_Diagnostics();
       const BOOL relayMeasured = [relay[@"liveBackingBytes"] isKindOfClass:NSNumber.class];
       const uint64_t relayLiveBytes = relayMeasured ? [relay[@"liveBackingBytes"] unsignedLongLongValue] : 0;
-      const double timestamp = CACurrentMediaTime() * 1000.0;
       dispatch_async(dispatch_get_main_queue(), ^{
-        RPCS3GameViewController* owner = strongSelf.gameController;
-        if (!owner || !owner.showingPerformance) return;
+        RPCS3GameViewController* sampledOwner = weakSampledOwner;
+        if (!sampledOwner || strongSelf.gameController != sampledOwner || !sampledOwner.showingPerformance) return;
+        if (sample.epoch != strongSelf->_performanceDisplayEpoch.load(std::memory_order_acquire)) return;
+        RPCS3GameViewController* owner = sampledOwner;
+        const auto displaySample = RPCS3PerformanceSnapshot::afterDelay(
+            sample, CACurrentMediaTime() * 1000.0 - timestamp);
+        const auto metrics = displaySample.metrics;
         [owner.performanceOverlay appendMetricsWithFPS:metrics.frames_per_second
                                                    cpu:metrics.cpu_usage_percent
                                                    gpu:metrics.gpu_usage_percent
@@ -671,6 +693,7 @@ static void RPCS3Progress(void* context,
 // NEOSTATION_RPCS3_PERFORMANCE_TELEMETRY_V1: one buffered sample per second, outside emulation hot paths.
 - (void)startDiagnosticPerformanceSampling {
   if (_diagnosticPerformanceTimer || !_api.get_performance_metrics || !self.activeTitleId.length) return;
+  const uint64_t producerGeneration = ++_performanceProducerGeneration;
   _diagnosticPerformanceSamples = 0;
   _diagnosticFpsTotal = 0.0;
   _diagnosticMinimumFps = 0.0;
@@ -685,10 +708,17 @@ static void RPCS3Progress(void* context,
   __weak Rpcs3InternalBridgePlugin* weakSelf = self;
   dispatch_source_set_event_handler(timer, ^{
     Rpcs3InternalBridgePlugin* strongSelf = weakSelf;
-    if (!strongSelf || !strongSelf.activeTitleId.length) return;
+    if (!strongSelf || !strongSelf.activeTitleId.length ||
+        strongSelf->_performanceProducerGeneration != producerGeneration) return;
+    const uint64_t epoch = strongSelf->_performanceEpoch;
+    if (!strongSelf->_performanceSnapshot.accepts(epoch)) return;
     rpcs3_ios_performance_metrics metrics = {};
     metrics.size = sizeof(metrics);
-    if (strongSelf->_api.get_performance_metrics(&metrics) != 0) return;
+    const rpcs3_ios_status metricStatus = strongSelf->_api.get_performance_metrics(&metrics);
+    const double sampleTimestamp = CACurrentMediaTime() * 1000.0;
+    if (!strongSelf->_performanceSnapshot.publish(epoch, metrics, metricStatus, sampleTimestamp)) return;
+    const auto sample = strongSelf->_performanceSnapshot.read(epoch, sampleTimestamp);
+    metrics = sample.metrics;
 
     const NSInteger thermal = NSProcessInfo.processInfo.thermalState;
     const uint64_t availableMemory = os_proc_available_memory();
@@ -705,7 +735,8 @@ static void RPCS3Progress(void* context,
     if (metrics.valid_fields & rpcs3_ios_performance_memory) {
       strongSelf->_diagnosticPeakMemory = MAX(strongSelf->_diagnosticPeakMemory, metrics.memory_used_bytes);
     }
-    if (metrics.valid_fields & rpcs3_ios_performance_fps) {
+    const BOOL fpsValid = NeoSwapFPSValid(metrics.frames_per_second, metrics.valid_fields);
+    if (fpsValid) {
       if (strongSelf->_diagnosticPerformanceSamples == 0 || metrics.frames_per_second < strongSelf->_diagnosticMinimumFps) {
         strongSelf->_diagnosticMinimumFps = metrics.frames_per_second;
       }
@@ -713,13 +744,16 @@ static void RPCS3Progress(void* context,
       strongSelf->_diagnosticPerformanceSamples++;
     }
 
+    NSString* fpsDiagnostic = fpsValid
+        ? [NSString stringWithFormat:@"%.2f", metrics.frames_per_second] : @"unavailable";
     RPCS3Diagnostic(@"performance_sample", [NSString stringWithFormat:
-        @"title=%@ valid=0x%x fps=%.2f cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld swap_rpc_total_live=%llu swap_rpc_shared_live=%llu swap_file_ready=%d swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_count=%u donor_lost=%u donor_first_pid=%d donor_generation=%llu donor_target=%llu donor_prepared=%llu donor_shared_live=%llu donor_retained=%llu donor_retained_live=%llu donor_resident=%llu donor_accounted_compressed=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_nonvolatile_compressed=%llu donor_stage=%d donor_kernel=%d relay_ready=%d relay_live=%llu relay_peak=%llu relay_objects=%llu relay_aliases=%llu relay_mapped=%llu process_resident=%llu",
-        strongSelf.activeTitleId, metrics.valid_fields, metrics.frames_per_second,
+        @"title=%@ valid=0x%x fps=%@ cpu=%.1f rsx=%.1f memory=%llu/%llu available=%llu thermal=%ld sample_epoch=%llu sample_status=%d sample_age_ms=%.1f swap_rpc_total_live=%llu swap_rpc_shared_live=%llu swap_file_ready=%d swap_host=%d swap_stats=%d swap_small=%llu swap_attempts=%llu swap_failures=%llu swap_successes=%llu swap_last=%d donor_state=%d donor_count=%u donor_lost=%u donor_first_pid=%d donor_generation=%llu donor_target=%llu donor_prepared=%llu donor_shared_live=%llu donor_retained=%llu donor_retained_live=%llu donor_resident=%llu donor_accounted_compressed=%llu donor_footprint=%llu donor_nonvolatile=%llu donor_nonvolatile_compressed=%llu donor_stage=%d donor_kernel=%d relay_ready=%d relay_live=%llu relay_peak=%llu relay_objects=%llu relay_aliases=%llu relay_mapped=%llu process_resident=%llu",
+        strongSelf.activeTitleId, metrics.valid_fields, fpsDiagnostic,
         metrics.cpu_usage_percent, metrics.gpu_usage_percent,
         (unsigned long long)metrics.memory_used_bytes,
         (unsigned long long)metrics.memory_total_bytes,
         (unsigned long long)availableMemory, (long)thermal,
+        (unsigned long long)epoch, sample.status, sample.ageMs,
         (unsigned long long)NeoSwap_LiveBytes(NEOSWAP_RPCS3),
         (unsigned long long)host.owner_donated_live_bytes[NEOSWAP_RPCS3],
         !!(host.file_ready_owner_mask & (1u << NEOSWAP_RPCS3)), hostValid, clientValid,
@@ -752,10 +786,13 @@ static void RPCS3Progress(void* context,
 }
 
 - (void)stopDiagnosticPerformanceSampling {
+  ++_performanceProducerGeneration;
   if (_diagnosticPerformanceTimer) {
     dispatch_source_cancel(_diagnosticPerformanceTimer);
     _diagnosticPerformanceTimer = nil;
   }
+  [self invalidatePerformanceSnapshotForBoot];
+  _performanceSnapshot.end();
   if (_diagnosticPerformanceSamples > 0) {
     const double average = _diagnosticFpsTotal / (double)_diagnosticPerformanceSamples;
     RPCS3Diagnostic(@"performance_summary", [NSString stringWithFormat:
@@ -766,6 +803,22 @@ static void RPCS3Progress(void* context,
         (long)_diagnosticWorstThermalState]);
   }
   _diagnosticPerformanceSamples = 0;
+}
+
+// All host boot/restart paths use this entry without changing settings or
+// Core behavior. Internal language/settings/savestate restarts keep the single
+// sampler alive, but an old session's FPS cannot survive a new Core baseline.
+- (void)invalidatePerformanceSnapshotForBoot {
+  if (++_performanceEpoch == 0) ++_performanceEpoch;
+  _performanceSnapshot.begin(_performanceEpoch);
+  _performanceDisplayEpoch.store(_performanceEpoch, std::memory_order_release);
+}
+
+- (rpcs3_ios_status)bootTitleForCore:(const char*)title savestate:(const char*)identifier {
+  [self invalidatePerformanceSnapshotForBoot];
+  const rpcs3_ios_status status = _api.boot_game(title, identifier);
+  if (status != 0) _performanceSnapshot.end();
+  return status;
 }
 
 static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info* info) {
@@ -838,7 +891,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         if (!strongSelf.activeTitleId.length || !strongSelf->_api.stop_emulation || !strongSelf->_api.set_game_setting) return;
         rpcs3_ios_status status = strongSelf->_api.stop_emulation();
         if (status == 0) status = strongSelf->_api.set_game_setting(strongSelf.activeTitleId.UTF8String, "system.language", value.UTF8String);
-        if (status == 0) status = strongSelf->_api.boot_game(strongSelf.activeTitleId.UTF8String, NULL);
+        if (status == 0) status = [strongSelf bootTitleForCore:strongSelf.activeTitleId.UTF8String savestate:NULL];
         if (status != 0) [strongSelf showMessage:@"RPCS3" message:[strongSelf lastError]];
         else RPCS3Diagnostic(@"game_language", [NSString stringWithFormat:@"%@ = %@", strongSelf.activeTitleId, value]);
       });
@@ -863,7 +916,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
           titleId.UTF8String, "gpu.resolution_scale", value.UTF8String);
     }
     if (status == 0) {
-      status = self->_api.boot_game(titleId.UTF8String, NULL);
+      status = [self bootTitleForCore:titleId.UTF8String savestate:NULL];
     }
     if (status != 0) {
       [self showMessage:@"RPCS3" message:[self lastError]];
@@ -906,7 +959,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     rpcs3_ios_status status = self->_api.stop_emulation();
     if (status == 0) status = self->_api.set_game_setting(
         titleId.UTF8String, "gpu.stretch_to_display", stretched ? "true" : "false");
-    if (status == 0) status = self->_api.boot_game(titleId.UTF8String, NULL);
+    if (status == 0) status = [self bootTitleForCore:titleId.UTF8String savestate:NULL];
     if (status != 0) [self showMessage:@"RPCS3" message:[self lastError]];
     else RPCS3Diagnostic(@"game_stretch", [NSString stringWithFormat:@"%@ = %d", titleId, stretched]);
   });
@@ -1058,13 +1111,13 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     NSString* titleId = [self.activeTitleId copy];
     if (!titleId.length) return;
     rpcs3_ios_status status = self->_api.stop_emulation();
-    if (status == 0) status = self->_api.boot_game(titleId.UTF8String, identifier.UTF8String);
+    if (status == 0) status = [self bootTitleForCore:titleId.UTF8String savestate:identifier.UTF8String];
     if (status != 0) {
       NSString* originalError = [self lastError];
       // A rejected/corrupt state must not strand the user on a black surface.
       // Restore the normal title after preserving the original diagnostic.
       if (self->_api.stop_emulation) self->_api.stop_emulation();
-      rpcs3_ios_status recovery = self->_api.boot_game(titleId.UTF8String, NULL);
+      rpcs3_ios_status recovery = [self bootTitleForCore:titleId.UTF8String savestate:NULL];
       NSString* message = [self localizedSavestateError:originalError];
       if (recovery == 0) message = [NSString stringWithFormat:@"%@\n%@", message, [self localized:@"stateFreshRestart"]];
       [self showMessage:[self localized:@"state"] message:message];
@@ -1175,7 +1228,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
     if (status == 0)
       status = self->_api.set_game_setting(titleId.UTF8String, setting.UTF8String, settingValue.UTF8String);
     if (status == 0)
-      status = self->_api.boot_game(titleId.UTF8String, NULL);
+      status = [self bootTitleForCore:titleId.UTF8String savestate:NULL];
     NSString* message = status == 0 ? @"" : [self lastError];
     self.operationBusy = NO;
     if (status == 0)
@@ -1272,12 +1325,12 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       return;
     }
     rpcs3_ios_status status = self->_api.stop_emulation();
-    if (status == 0) status = self->_api.boot_game(titleId.UTF8String, identifier.UTF8String);
+    if (status == 0) status = [self bootTitleForCore:titleId.UTF8String savestate:identifier.UTF8String];
     NSString* message = @"";
     if (status != 0) {
       NSString* original = [self lastError];
       if (self->_api.stop_emulation) self->_api.stop_emulation();
-      rpcs3_ios_status recovery = self->_api.boot_game(titleId.UTF8String, NULL);
+      rpcs3_ios_status recovery = [self bootTitleForCore:titleId.UTF8String savestate:NULL];
       message = [self localizedSavestateError:original];
       if (recovery == 0)
         message = [NSString stringWithFormat:@"%@\n%@", message, [self localized:@"stateFreshRestart"]];
@@ -1614,7 +1667,7 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       rpcs3_ios_status surfaceStatus = self->_api.set_display_surface(&surface);
       RPCS3Milestone(@"game_boot_begin", titleId);
       rpcs3_ios_status bootStatus = surfaceStatus == 0
-          ? self->_api.boot_game(titleId.UTF8String, savestateId.length ? savestateId.UTF8String : NULL)
+          ? [self bootTitleForCore:titleId.UTF8String savestate:savestateId.length ? savestateId.UTF8String : NULL]
           : surfaceStatus;
       RPCS3Milestone(@"game_boot_return", [NSString stringWithFormat:@"%@ status=%d", titleId, bootStatus]);
       NSMutableDictionary* payload = [[self statusPayload:bootStatus] mutableCopy];

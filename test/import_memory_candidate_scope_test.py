@@ -12,7 +12,7 @@ BASE = '3ccde925351b3e59985ba466e013e87a857d6ad0'
 MANIFEST_PATH = 'native/import-memory-candidate.json'
 manifest = json.loads((ROOT / MANIFEST_PATH).read_text())
 assert manifest['baseline'] == BASE
-assert manifest['target_build'] == 399
+assert manifest['target_build'] == 400
 assert manifest['real_device_8gib_validated'] is False
 assert manifest['real_device_donation_validated'] is False
 assert manifest['real_device_dolphin_motion_validated'] is False
@@ -51,6 +51,10 @@ assert managed['required_evidence'] == [
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    # Build400: reviewed host scheduling, single FPS sampler and discovery guidance.
+    'lib/l10n/neoplay_discovery_locale.dart',
+    'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h',
+    'packages/rpcs3_internal_bridge/ios/Classes/RPCS3PerformanceSnapshot.h',
     'packages/neo_swap/ios/Classes/NeoSwapMemorySamples.h',
     'build-utils/neoplay_deployment.rb',
     'native/neoswap-storage/SourceABI.h',
@@ -203,6 +207,11 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'docs/neoswap-build400-runtime-repair.md',
+    'native/neoswap-storage/tests/source_work_test.cpp',
+    'test/neoswap_source_work_test.py',
+    'test/rpcs3_performance_snapshot_test.cpp',
+    'test/rpcs3_performance_snapshot_test.py',
     'build-utils/run_vdec_archive_validation.sh',
     'test/rpcs3_video_frame_archive_test.py',
     'test/native/rpcs3_video_frame_archive_test.cpp',

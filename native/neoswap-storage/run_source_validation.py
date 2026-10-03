@@ -47,6 +47,10 @@ def main():
                 [str(store),str(HERE/'tests/frame_archive_test.cpp')]+libraries+['-o',str(frames)],out,'frame-archive-build')
         result=execute([str(frames),str(cache)],out,'frame-archive-run')
         report['frames']=json.loads(next(line for line in reversed(result.splitlines()) if line.startswith('{')))
+        # Parse the actual sanitized real-file/scheduler executable output.
+        # Hashing its sources alone is not evidence that the work was executed.
+        result=execute([sys.executable,str(ROOT/'test/neoswap_source_work_test.py')],out,'source-work-run')
+        report['sourceWork']=json.loads(next(line for line in reversed(result.splitlines()) if line.startswith('{')))
     report['inputSHA256']={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in sorted(REQUIRED_INPUTS)}
     report['passed']=True;validate(report,report['sourceCommit'],require_apple=apple)
     (out/'source-archive.json').write_text(json.dumps(report,indent=2)+'\n')
