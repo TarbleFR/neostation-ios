@@ -36,7 +36,15 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
       - name: Compile bridge and verify simulated lifecycle
-        run: bash packages/retroarch_internal_bridge/ci/run_apple_checks.sh
+        run: bash packages/retroarch_internal_bridge/ci/run_apple_checks.sh "$RUNNER_TEMP/retroarch-host-checks"
+      - name: Preserve native host lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-Host-Checks-${{ github.sha }}
+          path: ${{ runner.temp }}/retroarch-host-checks
+          if-no-files-found: warn
+          retention-days: 14
       - name: Install Xcode project editor
         run: gem install --user-install xcodeproj --version 1.27.0 --no-document
       - name: Fetch exact matching RetroArch frontend source
@@ -71,6 +79,6 @@ jobs:
           name: RetroArch-Stage1-Apple-Diagnostics-${{ github.sha }}
           path: |
             ${{ runner.temp }}/retroarch-build/frontend-build.log
-            packages/retroarch_internal_bridge/ci/results/**
+            ${{ runner.temp }}/retroarch-host-checks/**
           if-no-files-found: warn
           retention-days: 14

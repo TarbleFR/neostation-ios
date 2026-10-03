@@ -457,8 +457,14 @@ static void NeoRAEvent(void* context, uint64_t session, uint32_t event,
     }
     completion([plugin command:request]);
   };
-  menu.resumeGame = ^{ if (weakSelf && weakSelf->_generation == generation) [weakSelf resumeMenu]; };
-  menu.quitGame = ^{ if (weakSelf && weakSelf->_generation == generation) [weakSelf requestStop:nil]; };
+  menu.resumeGame = ^{
+    RetroArchInternalBridgePlugin* plugin = weakSelf;
+    if (plugin && plugin->_generation == generation) [plugin resumeMenu];
+  };
+  menu.quitGame = ^{
+    RetroArchInternalBridgePlugin* plugin = weakSelf;
+    if (plugin && plugin->_generation == generation) [plugin requestStop:nil];
+  };
   _menu = [[UINavigationController alloc] initWithRootViewController:menu];
   _menu.modalPresentationStyle = UIModalPresentationFormSheet;
   _menu.modalInPresentation = YES;
