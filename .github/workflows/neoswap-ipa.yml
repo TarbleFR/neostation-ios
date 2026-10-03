@@ -1162,8 +1162,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 test/neoswap_shader_storage_host_test.py
+          python3 test/neoplay_config_test.py
+          python3 test/neoplay_deployment_project_test.py
           python3 build-utils/configure_neoswap_storage.py
           python3 build-utils/patch_ios_video_player_audio_session.py
+          # Flutter's config-only build also invokes CocoaPods. Align its host
+          # first, then reapply after legacy host generators below.
+          python3 build-utils/configure_neoplay_ios.py --deployment-only
           flutter build ios --release --no-codesign --config-only --no-pub \
             --build-number="$BUILD_NUMBER" \
             --dart-define-from-file=.dart-defines.json

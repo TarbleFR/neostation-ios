@@ -35,7 +35,9 @@ try:
     report=json.loads(result.read_text());shutil.copy2(result,OUT/'simulator-control.json')
     log=container/'Documents/Diagnostics/NeoSwap-v1.jsonl'
     if log.exists(): shutil.copy2(log,OUT/'simulator-neoswap.jsonl')
+    shutil.copy2(container/'Documents/memory-samples.jsonl',OUT/'simulator-memory-samples.jsonl')
     assert report['success'] and report['checks']>=30,report
+    assert report['memoryLogsPassed'] is True and report['realRPCS3GameplayValidated'] is False,report
     (OUT/'source.txt').write_text(os.environ.get('GITHUB_SHA',run('git','rev-parse','HEAD',cwd=ROOT))+'\n')
     print('PASS',json.dumps(report))
 finally:

@@ -40,6 +40,10 @@ jobs:
           mkdir -p build/neoswap
           git diff --check
           python3 test/rpcs3_input_bridge_test.py 2>&1 | tee build/neoswap/embedded-menu-input-tests.txt
+          xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+            -Ipackages/neo_swap/ios/Classes test/neoswap_memory_samples_test.cpp \
+            -o "$RUNNER_TEMP/neoswap-memory-samples"
+          "$RUNNER_TEMP/neoswap-memory-samples" | tee build/neoswap/memory-samples-tests.txt
           python3 test/rpcs3_neoswap_localizations_test.py | tee build/neoswap/overlay-locales-tests.txt
           xcrun clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined \
             native/neoswap-donation/Pool.cpp test/neoswap_pool_fragmentation_test.cpp \

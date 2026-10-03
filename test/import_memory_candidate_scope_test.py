@@ -51,6 +51,8 @@ assert managed['required_evidence'] == [
 # Additions require a review of the requested production scope. Never derive
 # this whitelist from git status or from the hash manifest itself.
 PRODUCTION_FILES = {
+    'packages/neo_swap/ios/Classes/NeoSwapMemorySamples.h',
+    'build-utils/neoplay_deployment.rb',
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
     'native/neoswap-storage/SourceClient.cpp',
@@ -199,6 +201,10 @@ PRODUCTION_FILES = {
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 }
 SUPPORT_FILES = {
+    'test/neoswap_memory_samples_test.cpp',
+    'test/neoplay_deployment_project_test.py',
+    'test/check_neo_swap_simulator.py',
+    'docs/neoswap-build398-memory-logs.md',
     'native/neoswap-storage/run_source_validation.py',
     'native/neoswap-storage/tests/source_archive_test.cpp',
     'build-utils/validate_source_archive_evidence.py',

@@ -56,6 +56,7 @@ jobs:
           xcodebuild -version
           gem install xcodeproj --no-document --user-install
           export GEM_HOME="$(ruby -e 'puts Gem.user_dir')"
+          python3 test/neoplay_deployment_project_test.py
           ruby build-utils/neoplay_native_project.rb
           pod install --project-directory=build/neoplay-native
       - name: Compile Cast SDK and independently test both production encoders

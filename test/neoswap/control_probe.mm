@@ -3,6 +3,13 @@
 #import <UIKit/UIKit.h>
 #import "NeoSwapPlugin.h"
 #import "NeoSwap.h"
+#include "NeoSwapHost.h"
+#include "NeoSwapMemorySamples.h"
+#include <cerrno>
+@interface NeoSwapPlugin (MemoryLogProbe)
+@property(nonatomic, strong) dispatch_queue_t queue;
+- (void)appendRecord:(NSDictionary*)record;
+@end
 NSObject* const FlutterMethodNotImplemented=nil;
 @implementation FlutterMethodCall
 @end
@@ -21,10 +28,12 @@ NSObject* const FlutterMethodNotImplemented=nil;
 static NeoSwapPlugin* plugin;
 static void* live;
 static int checks=0;
+static BOOL memoryLogsPassed=NO;
 static void Finish(BOOL success,NSString* detail) {
     NSString* docs=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
     NSDictionary* report=@{@"success":@(success),@"checks":@(checks),@"detail":detail,
         @"kind":@"iOS simulator plugin control plane; not RPCS3 emulation",
+        @"memoryLogsPassed":@(memoryLogsPassed), @"realRPCS3GameplayValidated":@NO,
         @"os":NSProcessInfo.processInfo.operatingSystemVersionString};
     NSData* data=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
     [data writeToFile:[docs stringByAppendingPathComponent:@"result.json"] atomically:YES];
@@ -42,6 +51,60 @@ static void Request(NSString* method,id arguments,void(^next)(NSDictionary*)) {
 static NSDictionary* Owner(NSDictionary* result,NSString* name) {
     for(NSDictionary* owner in result[@"owners"]) if([owner[@"owner"] isEqual:name]) return owner;
     Finish(NO,@"missing owner");return @{};
+}
+static void MemoryProbe(NSDictionary* initial) {
+    Check([initial[@"liveBytes"] unsignedLongLongValue]==0,@"memory sampling starts with no allocator loan");
+    Check(NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3,1)==0,@"signal observed session without running an emulator");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,3*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        Request(@"snapshot",nil,^(NSDictionary* sample) {
+            NSDictionary* profile=sample[@"memoryProfile"];
+            Check([profile[@"sampledSessionActive"] boolValue],@"active sampling despite zero loans");
+            Check([profile[@"intervalMs"] intValue]==1000,@"one-second active cadence");
+            Check([profile[@"measurementValid"] boolValue] && [profile[@"validSamples"] intValue]>=3,@"real TASK_VM_INFO measurements");
+            Check([profile[@"footprintPeakBytes"] unsignedLongLongValue]>0,@"measured sampled footprint peak");
+            NSString* log=[NSString stringWithContentsOfFile:sample[@"diagnosticPath"] encoding:NSUTF8StringEncoding error:nil];
+            NSUInteger periodic=0;BOOL start=NO;
+            for(NSString* line in [log componentsSeparatedByString:@"\n"]) {
+                NSDictionary* row=[NSJSONSerialization JSONObjectWithData:[line dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+                if([row[@"event"] isEqual:@"rpcs3_memory_session_start"])start=YES;
+                if([row[@"event"] isEqual:@"sample"] && [row[@"memoryProfile"][@"sampledSessionActive"] boolValue]) {
+                    ++periodic;
+                    Check([row[@"liveBytes"] unsignedLongLongValue]==0,@"zero-loan periodic log retained");
+                }
+            }
+            Check(start && periodic>=2,@"start and repeated zero-loan samples written by production timer");
+            Check(NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3,0)==0,@"signal session end");
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC/2),dispatch_get_main_queue(),^{
+                Request(@"snapshot",nil,^(NSDictionary* ended) {
+                    NSString* finalLog=[NSString stringWithContentsOfFile:ended[@"diagnosticPath"] encoding:NSUTF8StringEncoding error:nil];
+                    Check([finalLog containsString:@"rpcs3_memory_session_end"],@"session end logged without a live allocation");
+                    NSString* docs=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+                    [finalLog writeToFile:[docs stringByAppendingPathComponent:@"memory-samples.jsonl"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                    dispatch_async(plugin.queue,^{
+                        @autoreleasepool {
+                            NSString* payload=[@"" stringByPaddingToLength:60000 withString:@"x" startingAtIndex:0];
+                            for(NSUInteger i=0;i<45;++i) [plugin appendRecord:@{@"event":@"rotation_fixture",@"payload":payload}];
+                            const auto limit=neostation::diagnostics::MemorySamples::maximum_file_bytes;
+                            for(NSString* path in @[ended[@"diagnosticPath"],[ended[@"diagnosticPath"] stringByAppendingString:@".previous"]]) {
+                                const auto size=[[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil] fileSize];
+                                Check(size>0 && size<=limit,@"each rotated production log is bounded to 2 MiB");
+                            }
+                            NSString* oversized=[@"" stringByPaddingToLength:65536 withString:@"x" startingAtIndex:0];
+                            [plugin appendRecord:@{@"payload":oversized}];
+                        }
+                        dispatch_async(dispatch_get_main_queue(),^{
+                            Request(@"snapshot",nil,^(NSDictionary* bounded) {
+                                Check([bounded[@"diagnosticErrno"] intValue]==EOVERFLOW,@"oversized row refused with its real technical error");
+                                Check([bounded[@"memoryProfile"][@"maximumRetainedLogBytes"] unsignedLongLongValue]==4*1024*1024,@"two-file retained log bound");
+                                memoryLogsPassed=YES;
+                                Finish(YES,@"automatic8GiB contract; integrity and ownership; real process samples with zero loans; session end; bounded log rotation");
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
 }
 static void RunProbe(void) {
     // An old opt-out from the previous candidate cannot disable the new policy.
@@ -92,7 +155,7 @@ static void RunProbe(void) {
                                 Check([Owner(final,@"probe")[@"allocationCount"] unsignedLongLongValue]==2,@"diagnostic ownership isolated");
                                 NSString* log=[NSString stringWithContentsOfFile:final[@"diagnosticPath"] encoding:NSUTF8StringEncoding error:nil];
                                 Check([log containsString:@"process_start"] && [log containsString:@"capacity_probe"],@"diagnostic events written");
-                                Finish(YES,@"automatic8GiB; legacy Off ignored; no activation command; live-game refusal;64MiB integrity; ownership; stale evidence rejection; cleanup");
+                                MemoryProbe(final);
                             });
                         }];
                     });

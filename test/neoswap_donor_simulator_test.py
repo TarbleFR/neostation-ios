@@ -727,7 +727,7 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
     abi = work / 'CanonicalABI'
     abi.mkdir()
     for name in ('NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h', 'NeoSwapPlugin.mm',
-                 'NeoSwapPlugin.h', 'NeoSwapCapacityProbe.h'):
+                 'NeoSwapPlugin.h', 'NeoSwapCapacityProbe.h', 'NeoSwapMemorySamples.h'):
         shutil.copyfile(HOST / name, abi / name)
     (abi / 'Donation').symlink_to(DONATION, target_is_directory=True)
     architecture = platform.machine()
@@ -828,7 +828,7 @@ def build(work: Path, sdk: str, report: dict) -> tuple[Path, dict[str, str]]:
                     'NeoSwapDonorRequestHandler.mm', 'NeoSwapDonorRequestHandler.h', 'DonorLedger.h', 'Info.plist',
                     'NeoSwapDonor.entitlements')]
     source_files += [HOST / name for name in ('NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h',
-                    'NeoSwapPlugin.mm', 'NeoSwapPlugin.h', 'NeoSwapCapacityProbe.h')]
+                    'NeoSwapPlugin.mm', 'NeoSwapPlugin.h', 'NeoSwapCapacityProbe.h', 'NeoSwapMemorySamples.h')]
     source_files += [ROOT / 'test/neoswap/Flutter/Flutter.h']
     source_files += [Path(__file__).resolve(), ROOT / 'build-utils/configure_neoswap_donor.py']
     hashes = {str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files}

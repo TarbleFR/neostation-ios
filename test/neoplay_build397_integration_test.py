@@ -16,6 +16,10 @@ APPROVED_RPCS3_MENU_FILES = frozenset({
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 })
 APPROVED_MANAGED_SWAP_FILES = frozenset({
+    # Host-only measurements requested after the Build398 packaging failure;
+    # allocator, Core flags and all unrelated runtime remain locked below.
+    'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm',
+    'packages/neo_swap/ios/Classes/NeoSwapMemorySamples.h',
     'native/neoswap/localizations.json',
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
@@ -104,6 +108,9 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('needs: wait-evidence', text)
         self.assertIn("xcode-version: '26.3'", text)
         self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py'), text.index('pod install --project-directory=ios'))
+        self.assertLess(text.index('python3 build-utils/configure_neoplay_ios.py --deployment-only'), text.index('flutter build ios'))
+        host = text.split('      - name: Configure release host', 1)[1]
+        self.assertLess(host.index('python3 build-utils/configure_armsx2_ios.py'), host.index('python3 build-utils/configure_neoplay_ios.py\n'))
         self.assertLess(text.index('python3 build-utils/validate_neoplay_ipa.py'), text.index('      - name: Upload direct private IPA'))
         self.assertIn('python3 build-utils/validate_neoswap_ipa.py', text)
         self.assertNotIn('gh release create', text)

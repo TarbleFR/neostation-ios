@@ -2,6 +2,7 @@
 #import "NeoSwap.h"
 #include "NeoSwapHost.h"
 #include "NeoSwapCapacityProbe.h"
+#include "NeoSwapMemorySamples.h"
 #if defined(NEOSWAP_SHADER_STORAGE)
 #import "NeoSwapStorageService.h"
 #endif
@@ -43,7 +44,9 @@ static_assert(kDonationPrimaryChunkBytes == neostation::donation::max_chunk_byte
 static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_bytes);
 #endif
 
-@interface NeoSwapPlugin ()
+@interface NeoSwapPlugin () {
+    neostation::diagnostics::MemorySamples _memorySamples;
+}
 @property(nonatomic, strong) dispatch_queue_t queue;
 @property(nonatomic, strong) dispatch_source_t timer;
 @property(nonatomic, strong) dispatch_source_t cpuBufferPressureSource;
@@ -53,12 +56,12 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
 @property(nonatomic, assign) NSInteger capacityMiB;
 @property(nonatomic, assign) int configResult;
 @property(nonatomic, assign) uint64_t lastAllocationCount;
-@property(nonatomic, assign) NSUInteger maintenanceTick;
 #if defined(NEOSWAP_RELAY)
 @property(nonatomic, assign) uint64_t lastRelayLiveBytes;
 @property(nonatomic, copy) NSString* lastRelayState;
 #endif
 @property(nonatomic, assign) int diagnosticErrno;
+@property(nonatomic, strong) NSDictionary* diagnosticError;
 @property(nonatomic, strong) NSDictionary* lastCapacityProbe;
 #if defined(NEOSWAP_DONATION)
 @property(nonatomic, strong) NSMutableArray* donorSessions;
@@ -151,24 +154,26 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         [self appendRecord:[self snapshot:@"process_start"]];
     });
     self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self.queue);
-    // Donation maintenance needs to react before the first heavy RPCS3 buffer
-    // request, while diagnostics keep their original ~2 s cadence.
+    // Reuse the existing maintenance queue/timer, never a per-frame poller.
+    // Active RPCS3 samples are ~1 s, idle allocator samples remain ~2 s.
     dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC/4),
         NSEC_PER_SEC/4, NSEC_PER_SEC/20);
     __weak NeoSwapPlugin* weakSelf = self;
-#if defined(NEOSWAP_DONATION)
     self.cpuBufferPressureSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
         DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
         self.queue);
     dispatch_source_set_event_handler(self.cpuBufferPressureSource, ^{
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
-        strongSelf.cpuBufferPressureRaised = (dispatch_source_get_data(strongSelf.cpuBufferPressureSource) &
+        const unsigned long level = dispatch_source_get_data(strongSelf.cpuBufferPressureSource);
+        strongSelf->_memorySamples.pressure_event(level);
+        strongSelf.cpuBufferPressureRaised = (level &
             (DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL)) != 0;
+#if defined(NEOSWAP_DONATION)
         if (strongSelf.cpuBufferPressureRaised) NeoSwap_SetCPUBufferPressure(1);
+#endif
     });
     dispatch_resume(self.cpuBufferPressureSource);
-#endif
     dispatch_source_set_event_handler(self.timer, ^{
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
@@ -185,10 +190,18 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #if defined(NEOSWAP_RELAY)
             NeoSwapRelay_Maintain();
 #endif
-            if ((++strongSelf.maintenanceTick % 8) != 0) return;
-            NSDictionary* row = [strongSelf snapshot:@"sample"];
+            const auto event = strongSelf->_memorySamples.poll(
+                static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000),
+                NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3));
+            using neostation::diagnostics::MemoryEvent;
+            if (event == MemoryEvent::none) return;
+            NSString* name = event == MemoryEvent::session_start ? @"rpcs3_memory_session_start" :
+                event == MemoryEvent::session_end ? @"rpcs3_memory_session_end" :
+                event == MemoryEvent::pressure ? @"memory_pressure" : @"sample";
+            NSDictionary* row = [strongSelf snapshot:name];
             uint64_t count = [row[@"allocationCount"] unsignedLongLongValue];
-            BOOL record = [row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount;
+            BOOL record = strongSelf->_memorySamples.active() || event != MemoryEvent::sample ||
+                [row[@"liveBytes"] unsignedLongLongValue] || count != strongSelf.lastAllocationCount;
 #if defined(NEOSWAP_RELAY)
             const uint64_t relayLive = [row[@"guestRelay"][@"liveBackingBytes"] unsignedLongLongValue];
             NSString* relayState = row[@"guestRelay"][@"state"] ?: @"unknown";
@@ -198,8 +211,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             strongSelf.lastRelayState = relayState;
             record = record || relayLive || relayChanged;
 #endif
-            // Automatic availability does not imply an active game. Avoid
-            // periodic disk writes while the integrated allocator is idle.
+            // Record the whole RPCS3 session even when no allocator loan is
+            // live. Idle availability alone still creates no periodic writes.
             if (record)
                 [strongSelf appendRecord:row];
             strongSelf.lastAllocationCount = count;
@@ -624,6 +637,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     task_vm_info_data_t memory{};
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
     kern_return_t kr = task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&memory, &count);
+    _memorySamples.observe(kr == KERN_SUCCESS, memory.phys_footprint, memory.resident_size);
     NSMutableArray* owners = [NSMutableArray new];
     NSArray* names = @[@"rpcs3",@"dolphin",@"armsx2",@"dusklight",@"kartpad",@"probe"];
     for (uint32_t i=0; i<NEOSWAP_OWNER_COUNT; ++i) {
@@ -793,6 +807,21 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"lastResult":@(stats.last_result), @"lastErrno":@(stats.last_errno),
         @"processFootprintBytes":kr == KERN_SUCCESS ? @(memory.phys_footprint) : NSNull.null,
         @"processResidentBytes":kr == KERN_SUCCESS ? @(memory.resident_size) : NSNull.null,
+        @"processCompressedLedgerBytes":kr == KERN_SUCCESS ? @(memory.compressed) : NSNull.null,
+        @"memoryProfile":@{
+            @"schema":@1, @"sampledSessionActive":@(_memorySamples.active()),
+            @"sessionSequence":@(_memorySamples.session()), @"sessionElapsedMs":@(_memorySamples.elapsed_ms()),
+            @"intervalMs":@(_memorySamples.active() ? _memorySamples.active_interval_ms : _memorySamples.idle_interval_ms),
+            @"validSamples":@(_memorySamples.valid_samples()), @"measurementValid":@(kr == KERN_SUCCESS),
+            @"taskInfoKernelResult":@(kr),
+            @"footprintPeakBytes":_memorySamples.valid_samples() ? @(_memorySamples.footprint_peak()) : NSNull.null,
+            @"residentPeakBytes":_memorySamples.valid_samples() ? @(_memorySamples.resident_peak()) : NSNull.null,
+            @"footprintDeltaBytes":_memorySamples.delta_valid() ? @(_memorySamples.footprint_delta()) : NSNull.null,
+            @"pressureMask":@(_memorySamples.pressure_level()),
+            @"pressureEvents":@(_memorySamples.pressure_events()), @"pressureChanges":@(_memorySamples.pressure_changes()),
+            @"sampledPeakOnly":@YES, @"automaticTraining":@NO,
+            @"maximumRowBytes":@(_memorySamples.maximum_row_bytes),
+            @"maximumRetainedLogBytes":@(2 * _memorySamples.maximum_file_bytes)},
         @"processAvailableBytes":@(os_proc_available_memory()),
         @"memoryHeadroomPolicy":TARGET_OS_SIMULATOR ? @"macOS-hosted simulator; iOS process limit unavailable" : @"iOS process headroom above256MiB required for capacity test",
         @"physicalMemoryBytes":@(NSProcessInfo.processInfo.physicalMemory),
@@ -804,17 +833,24 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"shaderStorage":NeoSwapStorage_Diagnostics(),
 #endif
         @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"",
-        @"diagnosticErrno":@(self.diagnosticErrno)};
+        @"diagnosticErrno":@(self.diagnosticErrno), @"diagnosticError":self.diagnosticError ?: NSNull.null};
 }
 - (void)appendRecord:(NSDictionary*)record {
     NSData* data = [NSJSONSerialization dataWithJSONObject:record options:NSJSONWritingSortedKeys error:nil];
     if (!data || !self.diagnosticPath.length) return;
+    using neostation::diagnostics::MemorySamples;
+    if (data.length >= MemorySamples::maximum_row_bytes) { self.diagnosticErrno = EOVERFLOW; return; }
     NSFileManager* fm = NSFileManager.defaultManager;
     unsigned long long size = [[fm attributesOfItemAtPath:self.diagnosticPath error:nil] fileSize];
-    if (size > 2*1024*1024) {
+    if (size > MemorySamples::maximum_file_bytes - (data.length + 1)) {
         NSString* previous = [self.diagnosticPath stringByAppendingString:@".previous"];
-        [fm removeItemAtPath:previous error:nil];
-        [fm moveItemAtPath:self.diagnosticPath toPath:previous error:nil];
+        NSError* error = nil;
+        if ([fm fileExistsAtPath:previous] && ![fm removeItemAtPath:previous error:&error]) {
+            [self preserveDiagnosticError:error]; return;
+        }
+        if (![fm moveItemAtPath:self.diagnosticPath toPath:previous error:&error]) {
+            [self preserveDiagnosticError:error]; return;
+        }
     }
     int fd = open(self.diagnosticPath.fileSystemRepresentation, O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC|O_NOFOLLOW, 0600);
     if (fd < 0) { self.diagnosticErrno = errno; return; }
@@ -824,10 +860,19 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     while (remaining) {
         ssize_t n = write(fd, bytes, remaining);
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) { self.diagnosticErrno = errno; break; }
+        if (n <= 0) { self.diagnosticErrno = n < 0 ? errno : EIO; break; }
         bytes += n; remaining -= (size_t)n;
     }
     close(fd);
+}
+- (void)preserveDiagnosticError:(NSError*)error {
+    NSError* underlying = error.userInfo[NSUnderlyingErrorKey];
+    NSError* posix = [error.domain isEqual:NSPOSIXErrorDomain] ? error :
+        [underlying.domain isEqual:NSPOSIXErrorDomain] ? underlying : nil;
+    self.diagnosticErrno = posix ? (int)posix.code : EIO;
+    self.diagnosticError = error ? @{@"domain":error.domain, @"code":@(error.code),
+        @"detail":error.localizedDescription, @"underlyingDomain":underlying.domain ?: @"",
+        @"underlyingCode":underlying ? @(underlying.code) : NSNull.null} : nil;
 }
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
 #if defined(NEOSWAP_SHADER_STORAGE)
