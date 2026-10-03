@@ -84,9 +84,10 @@ file(WRITE "{fixture}/link-options.txt" "${{owned_link_options}}")
         subprocess.run(['xcrun','ar','rcs',str(archive),str(obj)],check=True)
         for suffix,extra in [('original',[]),('mapped',['-Wl,'+oso[0].removeprefix('LINKER:')])]:
             binary=fixture/(suffix+'.dylib')
-            subprocess.run(['xcrun','clang','-dynamiclib','-Wl,-all_load',str(archive),*extra,'-o',str(binary)],check=True)
+            subprocess.run(['xcrun','clang','-dynamiclib','-Wl,-install_name,@rpath/NeoDebugMapFixture.dylib','-Wl,-all_load',str(archive),*extra,'-o',str(binary)],check=True)
             contains=str(fixture).encode() in binary.read_bytes()
-            assert contains==(suffix=='original'),suffix
+            leaked=[item.decode('utf-8',errors='replace')[-1024:] for item in binary.read_bytes().split(b'\0') if str(fixture).encode() in item]
+            assert contains==(suffix=='original'),(suffix,leaked[:10])
 print('PASS: native linker removes absolute archive debug-map origins' if platform.system()=='Darwin' else 'PASS: production linker option generated; native behavior requires macOS')
 print('PASS: production CMake propagates relocated Zstandard headers; ARC applies only to the 2.6 bridge')
 
