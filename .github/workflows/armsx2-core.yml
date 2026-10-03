@@ -2,7 +2,7 @@ name: ARMSX2 native core
 run-name: ARMSX2 native core • ${{ github.sha }}
 on:
   push:
-    branches: [experimental]
+    branches: [experimental, armsx2-26]
     paths:
       - '.github/workflows/armsx2-core.yml'
       - 'packages/armsx2_internal_bridge/**'
@@ -10,6 +10,7 @@ on:
       - 'build-utils/armsx2/**'
       - 'test/armsx2_bios_hacks_test.py'
       - 'test/armsx2_patch_catalog_test.py'
+      - 'test/armsx2_graphics*'
   workflow_dispatch:
 permissions:
   contents: read
@@ -67,6 +68,19 @@ jobs:
           git diff --check
       - name: Verify patch selection and activation with Foundation
         run: python3 test/armsx2_patch_catalog_test.py
+      - name: Validate graphics library, translations and native menu
+        run: |
+          python3 test/armsx2_graphics_test.py
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ -isysroot "$SDK" -target arm64-apple-ios18.0 packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm
+      - name: Install required Rust Metal shader target
+        run: |
+          command -v rustup >/dev/null || brew install rustup
+          rustup toolchain install 1.94.0 --profile minimal
+          rustup default 1.94.0
+          rustup target add aarch64-apple-ios
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustc --version
       - name: Compile native core and verify binary ABI
         run: bash build-utils/armsx2/build_core.sh .native-sources/ARMSX2
       - uses: actions/upload-artifact@v4
@@ -89,3 +103,35 @@ jobs:
           path: build/armsx2-diagnostics/
           if-no-files-found: error
           retention-days: 7
+
+  graphics-ui:
+    name: Verify ARMSX2 Graphics menu and host ABI
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - name: Execute real UIKit graphics navigation
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          python3 test/armsx2_graphics_ui_test.py > /tmp/armsx2-graphics-ui.log 2>&1 || { tail -n 100 /tmp/armsx2-graphics-ui.log; exit 1; }
+          tail -n 30 /tmp/armsx2-graphics-ui.log
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - run: flutter precache --ios
+      - run: flutter pub get --enforce-lockfile
+      - name: Compile actual embedded host against Flutter and ABI 6
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          FLUTTER_FRAMEWORK=$(find "$FLUTTER_ROOT/bin/cache/artifacts/engine/ios" -path '*/Flutter.framework' -type d | head -1)
+          test -n "$FLUTTER_FRAMEWORK"
+          xcrun clang++ -std=c++20 -fobjc-arc -fblocks -fsyntax-only -x objective-c++ -isysroot "$SDK" -target arm64-apple-ios18.0 -F "$(dirname "$FLUTTER_FRAMEWORK")" -I packages/armsx2_jit_helper/ios/Classes packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm
+      - name: Verify existing isolated roots, routing and localization
+        run: flutter test test/armsx2_in_game_localization_test.dart test/armsx2_isolated_root_test.dart test/armsx2_bios_selection_test.dart test/armsx2_retroarch_routing_isolation_test.dart test/stikjit_armsx2_isolation_test.dart

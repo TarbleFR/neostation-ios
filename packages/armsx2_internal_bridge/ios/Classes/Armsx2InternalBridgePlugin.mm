@@ -1,3 +1,4 @@
+#include <vector>
 #import "Armsx2InternalBridgePlugin.h"
 #import "Armsx2JitBridgePlugin.h"
 #import "ARMSX2CoreABI.h"
@@ -392,6 +393,7 @@ static UIViewController* ARMSX2RootViewController(void) {
 @property(nonatomic, assign) const NeoARMSX2API* api;
 @property(nonatomic, assign) BOOL operationBusy;
 @property(nonatomic, assign) BOOL stopInProgress;
+@property(nonatomic, strong) NSURLSessionDownloadTask* shaderDownload;
 @property(nonatomic, strong) UINavigationController* sessionMenu;
 @property(nonatomic, assign) BOOL menuOpening;
 @property(nonatomic, copy) NSString* activeDataDirectory;
@@ -482,7 +484,9 @@ static UIViewController* ARMSX2RootViewController(void) {
       !api->get_retroachievements_state_json ||
       !api->set_retroachievements_option ||
       !api->login_retroachievements || !api->logout_retroachievements ||
-      !api->get_graphics_hacks_json || !api->set_graphics_hack) {
+      !api->get_graphics_hacks_json || !api->set_graphics_hack ||
+      !api->get_graphics_assets_json || !api->set_shader_preset ||
+      !api->set_performance_overlay || !api->install_shader_pack) {
     if (error) *error = @"Embedded ARMSX2 Core ABI is incompatible.";
     return NO;
   }
@@ -537,6 +541,8 @@ static UIViewController* ARMSX2RootViewController(void) {
       return;
     }
     self.stopInProgress = YES;
+    [self.shaderDownload cancel];
+    self.shaderDownload = nil;
     self.operationBusy = YES;
     const BOOL hadPresentedSession = self.gameController != nil;
     BOOL ok = YES;
@@ -763,6 +769,13 @@ static UIViewController* ARMSX2RootViewController(void) {
     uint32_t mask = 0;
     for (uint32_t slot = 1; slot <= 5; slot++)
       if (self.api->has_save_state(slot)) mask |= (1u << (slot - 1));
+    std::vector<char> assetJSON(2 * 1024 * 1024);
+    NSDictionary* assets = nil;
+    if (self.api->get_graphics_assets_json(assetJSON.data(),assetJSON.size())) {
+      NSData* data = [[NSString stringWithUTF8String:assetJSON.data()] dataUsingEncoding:NSUTF8StringEncoding];
+      id decoded = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+      if ([decoded isKindOfClass:NSDictionary.class]) assets = decoded;
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
       if (self.gameController != controller || self.stopInProgress) {
         if (completion) completion(nil);
@@ -774,8 +787,48 @@ static UIViewController* ARMSX2RootViewController(void) {
         @"cheats": @(cheats),
         @"saveStateMask": @(mask),
         @"touch": @(controller.touchControlsVisible),
+        @"graphicsAssets": assets ?: @{},
       });
     });
+  });
+}
+
+- (void)downloadShaderPackForController:(Armsx2GameViewController*)controller
+                              completion:(void (^)(BOOL, NSString*))completion {
+  dispatch_async(_runtimeQueue, ^{
+    if (!self.api || self.gameController != controller || self.stopInProgress || self.shaderDownload) {
+      dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO,@"ARMSX2 shader download is unavailable."); });
+      return;
+    }
+    // Same official RetroArch pack endpoint used by ARMSX2 iOS 2.6.
+    NSURL* url=[NSURL URLWithString:@"https://buildbot.libretro.com/assets/frontend/shaders_slang.zip"];
+    NSURLRequest* request=[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:240];
+    self.shaderDownload=[NSURLSession.sharedSession downloadTaskWithRequest:request
+        completionHandler:^(NSURL* temporary, NSURLResponse* response, NSError* failure) {
+      // NSURLSession removes its temporary file after this callback returns.
+      // Move it before handing extraction to the background runtime queue.
+      NSString* staged=[NSTemporaryDirectory() stringByAppendingPathComponent:
+          [NSString stringWithFormat:@"armsx2-shaders-%@.zip",NSUUID.UUID.UUIDString]];
+      NSHTTPURLResponse* http=[response isKindOfClass:NSHTTPURLResponse.class] ? (id)response : nil;
+      NSNumber* bytes=nil;
+      [temporary getResourceValue:&bytes forKey:NSURLFileSizeKey error:nil];
+      NSError* diskError=nil;
+      BOOL downloaded=!failure && http.statusCode==200 && temporary && bytes.unsignedLongLongValue>0 &&
+          bytes.unsignedLongLongValue<=128ULL*1024*1024 &&
+          [NSFileManager.defaultManager moveItemAtPath:temporary.path toPath:staged error:&diskError];
+      dispatch_async(self->_runtimeQueue, ^{
+        self.shaderDownload=nil;
+        char error[2048]={};
+        BOOL active=self.api && self.gameController==controller && !self.stopInProgress;
+        BOOL ok=downloaded && active && self.api->install_shader_pack(staged.UTF8String,error,sizeof(error));
+        [NSFileManager.defaultManager removeItemAtPath:staged error:nil];
+        NSString* message=ok ? [controller en:@"Shader pack installed." fr:@"Pack de shaders installé."] :
+            (error[0] ? [NSString stringWithUTF8String:error] :
+             (failure.localizedDescription ?: diskError.localizedDescription ?: @"ARMSX2 shader download failed or session ended."));
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(ok,message); });
+      });
+    }];
+    [self.shaderDownload resume];
   });
 }
 
@@ -798,6 +851,10 @@ static UIViewController* ARMSX2RootViewController(void) {
     return;
   }
 
+  if ([command isEqualToString:@"downloadShaders"]) {
+    [self downloadShaderPackForController:controller completion:completion];
+    return;
+  }
   dispatch_async(_runtimeQueue, ^{
     if (!self.api || self.gameController != controller || self.stopInProgress) {
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -817,6 +874,12 @@ static UIViewController* ARMSX2RootViewController(void) {
     } else if ([command isEqualToString:@"aspect"]) {
       ok = self.api->set_aspect_ratio([value unsignedIntValue], error, sizeof(error)) != 0;
       success = [controller en:@"Screen format updated." fr:@"Format d’écran mis à jour."];
+    } else if ([command isEqualToString:@"shader"]) {
+      ok = [value isKindOfClass:NSString.class] && self.api->set_shader_preset([value UTF8String], error, sizeof(error));
+      success = [controller en:@"Shader selection saved for this game." fr:@"Shader enregistré pour ce jeu."];
+    } else if ([command isEqualToString:@"overlay"]) {
+      ok = self.api->set_performance_overlay([value unsignedIntValue], error, sizeof(error)) != 0;
+      success = [controller en:@"Performance overlay updated for this game." fr:@"Overlay de performances mis à jour pour ce jeu."];
     } else if ([command isEqualToString:@"cheats"]) {
       ok = self.api->set_cheats_enabled([value boolValue] ? 1 : 0, error, sizeof(error)) != 0;
       success = [value boolValue]

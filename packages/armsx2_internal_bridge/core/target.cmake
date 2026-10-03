@@ -2,6 +2,11 @@
 if(NOT NEO_ARMSX2_ADAPTER_DIR OR NOT NEO_ARMSX2_SOURCE_REVISION)
   message(FATAL_ERROR "NeoStation adapter and pinned source revision are required")
 endif()
+if(NOT ARMSX2_HAVE_LIBRASHADER OR NOT TARGET librashader)
+  message(FATAL_ERROR "ARMSX2 2.6 requires librashader: install Rust and aarch64-apple-ios")
+endif()
+target_link_libraries(PCSX2_FLAGS INTERFACE librashader)
+target_compile_definitions(PCSX2_FLAGS INTERFACE ARMSX2_HAS_LIBRASHADER=1)
 add_library(ARMSX2Core SHARED
   ios_main.mm IOS/GamepadHaptics.mm IOS/HostImpls.mm IOS/PlaySoundAsync.mm
   ARMSX2Bridge.mm "${NEO_ARMSX2_ADAPTER_DIR}/core/ARMSX2Core.mm")
@@ -18,18 +23,18 @@ set_target_properties(ARMSX2Core PROPERTIES
   FRAMEWORK TRUE FRAMEWORK_VERSION A OUTPUT_NAME ARMSX2Core
   MACOSX_FRAMEWORK_IDENTIFIER com.neogamelab.neostation.ARMSX2Core
   XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.neogamelab.neostation.ARMSX2Core
-  XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET 17.4
+  XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET 18.0
   XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
   XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED NO
   XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC NO
   XCODE_ATTRIBUTE_CLANG_ENABLE_MODULES YES
   XCODE_ATTRIBUTE_MTL_HEADER_SEARCH_PATHS "${ARMSX2_ROOT}/pcsx2/GS/Renderers/Metal ${ARMSX2_ROOT}/3rdparty/include"
   BUILD_WITH_INSTALL_NAME_DIR TRUE INSTALL_NAME_DIR "@rpath")
-target_compile_definitions(ARMSX2Core PRIVATE PCSX2_NO_PCAP=1
+target_compile_definitions(ARMSX2Core PRIVATE PCSX2_NO_PCAP=1 ARMSX2_HAS_LIBRASHADER=1
   NEO_ARMSX2_SOURCE_REVISION="${NEO_ARMSX2_SOURCE_REVISION}")
 target_compile_options(ARMSX2Core PRIVATE -fno-objc-arc)
 target_include_directories(ARMSX2Core PRIVATE "${NEO_ARMSX2_ADAPTER_DIR}/ios/Classes")
-target_link_libraries(ARMSX2Core PRIVATE PCSX2 SDL3::SDL3
+target_link_libraries(ARMSX2Core PRIVATE PCSX2 SDL3::SDL3 librashader
   "-framework UIKit" "-framework AVFoundation" "-framework Metal"
   "-framework MetalKit" "-framework QuartzCore" "-framework CoreText"
   "-framework CoreGraphics" "-framework ImageIO" "-framework GameController"
@@ -96,4 +101,13 @@ foreach(resource
     "${CMAKE_SOURCE_DIR}/../assets/resources/patches.zip")
   target_sources(ARMSX2Core PRIVATE "${resource}")
   set_source_files_properties("${resource}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+endforeach()
+
+# iOS 2.6 presets include stages, textures and relative includes. Keep their tree.
+file(GLOB_RECURSE IOS_SHADER_RESOURCES "${CMAKE_SOURCE_DIR}/../assets/shaders/*")
+foreach(resource IN LISTS IOS_SHADER_RESOURCES)
+  get_filename_component(directory "${resource}" DIRECTORY)
+  file(RELATIVE_PATH relative "${CMAKE_SOURCE_DIR}/../assets/shaders" "${directory}")
+  target_sources(ARMSX2Core PRIVATE "${resource}")
+  set_source_files_properties("${resource}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/shaders/${relative}")
 endforeach()

@@ -8,6 +8,7 @@ typedef NS_ENUM(NSInteger, ARMSX2MenuPage) {
   ARMSX2MenuRoot,
   ARMSX2MenuGraphics,
   ARMSX2MenuGraphicsHacks,
+  ARMSX2MenuShaders,
   ARMSX2MenuCheats,
   ARMSX2MenuPatches,
   ARMSX2MenuControls,
@@ -283,7 +284,9 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
   switch (self.page) {
     case ARMSX2MenuRoot: return self.rootKeys.count;
-    case ARMSX2MenuGraphics: return self.snapshot.count ? 3 : 0;
+    case ARMSX2MenuGraphics: return self.snapshot.count ? 5 : 0;
+    case ARMSX2MenuShaders: return [self.snapshot[@"graphicsAssets"][@"supported"] boolValue]
+        ? 2 + [self.snapshot[@"graphicsAssets"][@"presets"] count] : 0;
     case ARMSX2MenuGraphicsHacks:
       return [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class]
           ? [self.graphicsHacks[@"items"] count] : 0;
@@ -301,6 +304,12 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
   if (self.page == ARMSX2MenuGraphics)
     return ARMSX2MenuText(@"Per-game graphics settings are applied live. Advanced hacks keep ARMSX2/GameDB automatic behavior unless explicitly overridden.",
                           @"Les réglages graphiques par jeu sont appliqués en direct. Les hacks avancés conservent le comportement automatique ARMSX2/GameDB sauf remplacement explicite.");
+  if (self.page == ARMSX2MenuShaders) {
+    NSString* help=ARMSX2MenuText(@"Choose a bundled shader or download the RetroArch pack (about 54 MB). Selection is saved per game. Resume to see the effect; reopen this menu for renderer errors.",
+        @"Choisissez un shader intégré ou téléchargez le pack RetroArch (environ 54 Mo). Le choix est enregistré par jeu. Reprenez pour voir l’effet ; rouvrez ce menu pour les erreurs de rendu.");
+    NSString* failure=self.snapshot[@"graphicsAssets"][@"shaderError"];
+    return failure.length ? [help stringByAppendingFormat:@"\n%@",failure] : help;
+  }
   if (self.page == ARMSX2MenuGraphicsHacks)
     return ARMSX2MenuText(@"Automatic removes this game's override and returns control to ARMSX2/GameDB.",
                           @"Automatique supprime le réglage propre à ce jeu et rend le contrôle à ARMSX2/GameDB.");
@@ -382,9 +391,34 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
     } else if (row == 1) {
       cell.textLabel.text = ARMSX2MenuText(@"Screen Format", @"Format d’écran");
       cell.detailTextLabel.text = [self aspectTitle:[self.snapshot[@"aspect"] integerValue]];
+    } else if (row == 2) {
+      cell.textLabel.text = ARMSX2MenuText(@"Shaders", @"Shaders");
+      cell.detailTextLabel.text = [self.snapshot[@"graphicsAssets"][@"supported"] boolValue]
+          ? ARMSX2MenuText(@"Bundled presets and downloads", @"Presets intégrés et téléchargements")
+          : ARMSX2MenuText(@"Unavailable", @"Indisponible");
+      cell.userInteractionEnabled = [self.snapshot[@"graphicsAssets"][@"supported"] boolValue];
+    } else if (row == 3) {
+      cell.textLabel.text = ARMSX2MenuText(@"Performance Overlays", @"Overlays de performances");
+      cell.detailTextLabel.text = ARMSX2MenuText(@"FPS, frametime and diagnostics", @"FPS, frametime et diagnostics");
     } else {
       cell.textLabel.text = ARMSX2MenuText(@"Graphics Hacks", @"Hacks graphiques");
       cell.detailTextLabel.text = ARMSX2MenuText(@"Per-game advanced GS options", @"Options GS avancées par jeu");
+    }
+  } else if (self.page == ARMSX2MenuShaders) {
+    NSDictionary* assets=self.snapshot[@"graphicsAssets"];
+    NSString* selected=assets[@"selected"] ?: @"";
+    if (row==0) {
+      cell.textLabel.text=ARMSX2MenuText(@"Off",@"Désactivé");
+      cell.accessoryType=selected.length ? UITableViewCellAccessoryNone : UITableViewCellAccessoryCheckmark;
+    } else if (row==1) {
+      BOOL installed=[assets[@"packInstalled"] boolValue];
+      cell.textLabel.text=installed ? ARMSX2MenuText(@"Shader pack installed.",@"Pack de shaders installé.") :
+          ARMSX2MenuText(@"Download RetroArch shader pack",@"Télécharger le pack de shaders RetroArch");
+      cell.userInteractionEnabled=!installed;
+    } else {
+      NSDictionary* preset=assets[@"presets"][row-2];
+      cell.textLabel.text=preset[@"name"];
+      cell.accessoryType=[selected isEqual:preset[@"id"]] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     }
   } else if (self.page == ARMSX2MenuGraphicsHacks) {
     NSArray* items = [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class] ? self.graphicsHacks[@"items"] : @[];
@@ -582,11 +616,27 @@ static UINavigationBarAppearance* ARMSX2MenuNavigationAppearance(void) {
                  titles:@[ARMSX2MenuText(@"Auto", @"Auto"), @"4:3", @"16:9", @"10:7",
                           ARMSX2MenuText(@"Stretch", @"Étendre")]
           selectedIndex:selected];
+    } else if (row == 2) {
+      [self.navigationController pushViewController:[self child:ARMSX2MenuShaders
+          title:ARMSX2MenuText(@"Shaders",@"Shaders")] animated:YES];
+    } else if (row == 3) {
+      [self pushChoice:ARMSX2MenuText(@"Performance Overlays",@"Overlays de performances")
+          command:@"overlay" values:@[@0,@1,@2,@3]
+          titles:@[ARMSX2MenuText(@"Off",@"Désactivé"),ARMSX2MenuText(@"Simple",@"Simple"),
+                   ARMSX2MenuText(@"Detailed",@"Détaillé"),ARMSX2MenuText(@"Full",@"Complet")]
+          selectedIndex:[self.snapshot[@"graphicsAssets"][@"overlay"] integerValue]];
     } else {
       Armsx2SessionMenu* hacks=[self child:ARMSX2MenuGraphicsHacks
           title:ARMSX2MenuText(@"Graphics Hacks", @"Hacks graphiques")];
       [self.navigationController pushViewController:hacks animated:YES];
       [hacks reloadGraphicsHacks];
+    }
+  } else if (self.page == ARMSX2MenuShaders) {
+    if (row==1) {
+      [self perform:@"downloadShaders" value:@0 successText:ARMSX2MenuText(@"Shader pack installed.",@"Pack de shaders installé.")];
+    } else {
+      NSString* token=row==0 ? @"" : self.snapshot[@"graphicsAssets"][@"presets"][row-2][@"id"];
+      [self perform:@"shader" value:token successText:ARMSX2MenuText(@"Shader selection saved for this game.",@"Shader enregistré pour ce jeu.")];
     }
   } else if (self.page == ARMSX2MenuGraphicsHacks) {
     NSArray* items = [self.graphicsHacks[@"items"] isKindOfClass:NSArray.class] ? self.graphicsHacks[@"items"] : @[];

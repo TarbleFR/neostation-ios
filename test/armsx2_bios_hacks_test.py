@@ -26,7 +26,7 @@ def main():
     headers=ROOT/'packages/armsx2_internal_bridge/ios/Classes'
     abi=(headers/'ARMSX2CoreABI.h').read_text()
     manifest=json.loads((ROOT/'build-utils/armsx2/source.json').read_text())
-    assert manifest['abi_version']==int(re.search(r'NEO_ARMSX2_ABI_VERSION (\d+)u',abi)[1])==5
+    assert manifest['abi_version']==int(re.search(r'NEO_ARMSX2_ABI_VERSION (\d+)u',abi)[1])==6
     assert 'get_available_patches_json' in abi and 'set_patch_state' in abi
     assert 'int get_available_patches_json(' in core and 'int set_patch_state(' in core
     start=core.index('      VMBootParameters parameters;')

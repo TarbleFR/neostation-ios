@@ -1,2 +1,3 @@
 # Generated diff is data; preserve upstream whitespace in the canonical postimage.
 build-utils/rpcs3/embedded-core.patch -whitespace
+build-utils/armsx2/neostation-core.patch -whitespace

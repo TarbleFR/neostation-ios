@@ -8,6 +8,10 @@ import shutil
 import subprocess
 import sys
 
+import re
+def re_search_symbol(symbols, symbol):
+    return any(line.split()[-1:] == [symbol] and ' U ' not in line for line in symbols.splitlines())
+
 root = Path(__file__).resolve().parents[2]
 build, output = map(Path, sys.argv[1:3])
 candidates = [p for p in build.rglob('ARMSX2Core.framework')
@@ -39,6 +43,14 @@ resources = framework
 for required in ('default.metallib', 'GameIndex.yaml', 'game_controller_db.txt'):
     if not (resources / required).is_file():
         raise SystemExit(f'Missing framework resource: {required}')
+# A successful link with the optional shader stub is not an acceptable 2.6 artifact.
+symbols = run('nm', str(binary))
+for symbol in ('_libra_mtl_filter_chain_create', '_libra_mtl_filter_chain_frame'):
+    if not re_search_symbol(symbols, symbol):
+        raise SystemExit('Missing compiled Metal shader runtime: ' + symbol)
+presets = sorted(resources.glob('shaders/presets/**/*.slangp'))
+if len(presets) < 10:
+    raise SystemExit('Bundled iOS shader presets were not packaged')
 subprocess.run(['codesign', '--force', '--sign', '-', str(framework)], check=True)
 subprocess.run(['codesign', '--verify', '--strict', str(framework)], check=True)
 output.mkdir(parents=True, exist_ok=True)
@@ -59,6 +71,6 @@ if identity.get('abi_version') != header_abi:
 identity.update(host_commit=os.environ.get('GITHUB_SHA', ''),
                 sha256=hashlib.sha256((destination/'ARMSX2Core').read_bytes()).hexdigest(),
                 architectures=['arm64'], signature='ad-hoc; sideloading must re-sign',
-                shader_chains=False, device_runtime_tested=False)
+                shader_chains=True, bundled_shader_presets=len(presets), performance_overlays=True, device_runtime_tested=False)
 (output / 'identity.json').write_text(json.dumps(identity, indent=2)+'\n')
 print(json.dumps(identity, indent=2))
