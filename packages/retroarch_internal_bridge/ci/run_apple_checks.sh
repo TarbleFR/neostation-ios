@@ -68,15 +68,35 @@ codesign --force --sign - "$APP_DIR/Frameworks/libRetroArchCore.dylib"
 codesign --force --sign - "$APP_DIR"
 xcrun simctl list runtimes --json > "$EVIDENCE_DIR/runtimes.json"
 xcrun simctl list devicetypes --json > "$EVIDENCE_DIR/device-types.json"
+xcrun simctl list devices available --json > "$EVIDENCE_DIR/available-devices.json"
 read -r RUNTIME_ID TYPE_ID < <(python3 - "$EVIDENCE_DIR" <<'PY'
 import json, pathlib, sys
 p=pathlib.Path(sys.argv[1])
-runtimes=[r for r in json.load(open(p/'runtimes.json'))['runtimes'] if r.get('isAvailable') and 'iOS' in r['name'] and tuple(map(int,r['version'].split('.'))) >= (18,0)]
-if not runtimes: raise SystemExit('No iOS 18+ simulator runtime installed')
-runtime=max(runtimes,key=lambda r:tuple(map(int,r['version'].split('.'))))
-devices=json.load(open(p/'device-types.json'))['devicetypes']
-type_id=next(d['identifier'] for d in reversed(devices) if d['name'].startswith('iPhone'))
-print(runtime['identifier'],type_id)
+runtimes={r['identifier']:r for r in json.load(open(p/'runtimes.json'))['runtimes']
+          if r.get('isAvailable') and 'iOS' in r['name'] and tuple(map(int,r['version'].split('.'))) >= (18,0)}
+types=json.load(open(p/'device-types.json'))['devicetypes']
+by_name={d['name']:d['identifier'] for d in types}
+pairs=[]
+for runtime_id, devices in json.load(open(p/'available-devices.json'))['devices'].items():
+    if runtime_id not in runtimes:
+        continue
+    version=tuple(map(int,runtimes[runtime_id]['version'].split('.')))
+    for device in devices:
+        if not device.get('isAvailable') or not device['name'].startswith('iPhone'):
+            continue
+        type_id=device.get('deviceTypeIdentifier') or by_name.get(device['name'])
+        if type_id:
+            # Copy a pair CoreSimulator already considers compatible. Choosing
+            # the newest device type independently can pair an iPhone 17 with
+            # iOS 18.5 and fail before any host test executes.
+            priority=(version[:2] == (18,5), version[0] == 18,
+                      device['name'].startswith('iPhone 16'), version, device['name'])
+            pairs.append((priority,runtime_id,type_id,device['name']))
+if not pairs:
+    raise SystemExit('No compatible available iPhone/iOS 18+ simulator pair installed')
+_,runtime_id,type_id,name=max(pairs)
+(p/'selected-device.json').write_text(json.dumps({'runtime':runtime_id,'deviceType':type_id,'name':name},indent=2)+'\n')
+print(runtime_id,type_id)
 PY
 )
 DEVICE_ID="$(xcrun simctl create RetroArchHostProbe "$TYPE_ID" "$RUNTIME_ID")"
