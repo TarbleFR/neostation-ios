@@ -7,6 +7,15 @@ import 'package:neostation/l10n/neoswap_locale.dart';
 import 'package:neostation/screens/settings_screen/neoswap_dialog.dart';
 
 void main() {
+  test('all twelve descriptions distinguish cache and owned-source budgets', () {
+    expect(NeoSwapLocale.values.length, 12);
+    for (final locale in NeoSwapLocale.values.entries) {
+      final text = locale.value['storageDescription']!;
+      for (final token in ['8', '12', '128', 'GLSL']) {
+        expect(text, contains(token), reason: locale.key);
+      }
+    }
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   const channel = MethodChannel('neostation/neo_swap');

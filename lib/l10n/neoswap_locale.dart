@@ -94,11 +94,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "Waiting for an eligible RPCS3 buffer request before preparing more real pages.",
       "storageToggle": "Experimental shader disk cache",
-      "storageDescription": "God of War III only, on the next launch. Up to 8 MiB RAM and 128 MiB disk. Does not move all game memory.",
+      "storageDescription":
+          "God of War III only, on the next launch. Managed budgets: 8 MiB cache + 12 MiB GLSL cycle; 128 MiB disk each. Does not move all game memory.",
       "storageApplied": "Saved for the next game launch.",
       "storageActive": "Shader disk cache active",
       "storageInactive": "Shader disk cache inactive for this session",
-      "storageMetrics": "Cache: {ram} RAM · {disk} stored · {cold} disk-only · read p95 {latency} ms",
+      "storageMetrics":
+          "Cache: {ram} RAM · {disk} stored · {cold} disk-only · read p95 {latency} ms",
     },
     "fr": {
       "title": "NeoSwap — Diagnostics",
@@ -168,11 +170,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "En attente d’une demande de tampon RPCS3 éligible avant de préparer davantage de pages réelles.",
       "storageToggle": "Cache disque expérimental des shaders",
-      "storageDescription": "God of War III uniquement, au prochain lancement. Jusqu’à 8 Mio de RAM et 128 Mio sur disque. Ne déplace pas toute la mémoire du jeu.",
+      "storageDescription":
+          "God of War III uniquement, au prochain lancement. Budgets gérés : 8 Mio de cache + 12 Mio pour le cycle GLSL ; 128 Mio sur disque chacun. Ne déplace pas toute la mémoire du jeu.",
       "storageApplied": "Enregistré pour le prochain lancement du jeu.",
       "storageActive": "Cache disque des shaders actif",
       "storageInactive": "Cache disque des shaders inactif pour cette session",
-      "storageMetrics": "Cache : {ram} RAM · {disk} stockés · {cold} sur disque uniquement · lecture p95 {latency} ms",
+      "storageMetrics":
+          "Cache : {ram} RAM · {disk} stockés · {cold} sur disque uniquement · lecture p95 {latency} ms",
     },
     "de": {
       "title": "NeoSwap — Diagnose",
@@ -242,11 +246,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "Warten auf eine geeignete RPCS3-Pufferanforderung, bevor weitere echte Speicherseiten vorbereitet werden.",
       "storageToggle": "Experimenteller Shader-Datenträgercache",
-      "storageDescription": "Nur God of War III, ab dem nächsten Start. Bis zu 8 MiB RAM und 128 MiB auf dem Datenträger. Lagert nicht den gesamten Spielspeicher aus.",
+      "storageDescription":
+          "Nur God of War III, ab dem nächsten Start. Verwaltete Budgets: 8 MiB Cache + 12 MiB GLSL-Zyklus; je 128 MiB auf dem Datenträger. Lagert nicht den gesamten Spielspeicher aus.",
       "storageApplied": "Für den nächsten Spielstart gespeichert.",
       "storageActive": "Shader-Datenträgercache aktiv",
       "storageInactive": "Shader-Datenträgercache in dieser Sitzung inaktiv",
-      "storageMetrics": "Cache: {ram} RAM · {disk} gespeichert · {cold} nur auf Datenträger · Lesen p95 {latency} ms",
+      "storageMetrics":
+          "Cache: {ram} RAM · {disk} gespeichert · {cold} nur auf Datenträger · Lesen p95 {latency} ms",
     },
     "es": {
       "title": "NeoSwap — Diagnósticos",
@@ -315,11 +321,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "Esperando una solicitud de búfer de RPCS3 apta antes de preparar más páginas de memoria reales.",
       "storageToggle": "Caché experimental de shaders en disco",
-      "storageDescription": "Solo God of War III, en el próximo inicio. Hasta 8 MiB de RAM y 128 MiB en disco. No traslada toda la memoria del juego.",
+      "storageDescription":
+          "Solo God of War III, en el próximo inicio. Presupuestos gestionados: 8 MiB de caché + 12 MiB para el ciclo GLSL; 128 MiB de disco cada uno. No traslada toda la memoria del juego.",
       "storageApplied": "Guardado para el próximo inicio del juego.",
       "storageActive": "Caché de shaders en disco activa",
       "storageInactive": "Caché de shaders en disco inactiva en esta sesión",
-      "storageMetrics": "Caché: {ram} RAM · {disk} guardados · {cold} solo en disco · lectura p95 {latency} ms",
+      "storageMetrics":
+          "Caché: {ram} RAM · {disk} guardados · {cold} solo en disco · lectura p95 {latency} ms",
     },
     "it": {
       "title": "NeoSwap — Diagnostica",
@@ -388,11 +396,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "In attesa di una richiesta di buffer RPCS3 idonea prima di preparare altre pagine di memoria reali.",
       "storageToggle": "Cache shader sperimentale su disco",
-      "storageDescription": "Solo God of War III, dal prossimo avvio. Fino a 8 MiB di RAM e 128 MiB su disco. Non trasferisce tutta la memoria del gioco.",
+      "storageDescription":
+          "Solo God of War III, dal prossimo avvio. Budget gestiti: 8 MiB di cache + 12 MiB per il ciclo GLSL; 128 MiB su disco ciascuno. Non trasferisce tutta la memoria del gioco.",
       "storageApplied": "Salvato per il prossimo avvio del gioco.",
       "storageActive": "Cache shader su disco attiva",
       "storageInactive": "Cache shader su disco inattiva in questa sessione",
-      "storageMetrics": "Cache: {ram} RAM · {disk} salvati · {cold} solo su disco · lettura p95 {latency} ms",
+      "storageMetrics":
+          "Cache: {ram} RAM · {disk} salvati · {cold} solo su disco · lettura p95 {latency} ms",
     },
     "pt": {
       "title": "NeoSwap — Diagnósticos",
@@ -463,11 +473,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "Aguardando uma solicitação de buffer RPCS3 elegível antes de preparar mais páginas de memória reais.",
       "storageToggle": "Cache experimental de shaders em disco",
-      "storageDescription": "Apenas God of War III, no próximo início. Até 8 MiB de RAM e 128 MiB em disco. Não transfere toda a memória do jogo.",
+      "storageDescription":
+          "Apenas God of War III, no próximo início. Limites geridos: 8 MiB de cache + 12 MiB para o ciclo GLSL; 128 MiB de disco para cada um. Não transfere toda a memória do jogo.",
       "storageApplied": "Guardado para o próximo início do jogo.",
       "storageActive": "Cache de shaders em disco ativa",
       "storageInactive": "Cache de shaders em disco inativa nesta sessão",
-      "storageMetrics": "Cache: {ram} RAM · {disk} guardados · {cold} apenas em disco · leitura p95 {latency} ms",
+      "storageMetrics":
+          "Cache: {ram} RAM · {disk} guardados · {cold} apenas em disco · leitura p95 {latency} ms",
     },
     "ru": {
       "title": "NeoSwap — Диагностика",
@@ -534,11 +546,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "Ожидание подходящего запроса буфера RPCS3 перед подготовкой дополнительных реальных страниц памяти.",
       "storageToggle": "Экспериментальный дисковый кэш шейдеров",
-      "storageDescription": "Только God of War III, со следующего запуска. До 8 МиБ ОЗУ и 128 МиБ на диске. Не переносит всю память игры.",
+      "storageDescription":
+          "Только God of War III, со следующего запуска. Управляемые лимиты: 8 МиБ кэша + 12 МиБ для цикла GLSL; по 128 МиБ на диске. Не переносит всю память игры.",
       "storageApplied": "Сохранено для следующего запуска игры.",
       "storageActive": "Дисковый кэш шейдеров активен",
       "storageInactive": "Дисковый кэш шейдеров неактивен в этом сеансе",
-      "storageMetrics": "Кэш: {ram} ОЗУ · {disk} сохранено · {cold} только на диске · чтение p95 {latency} мс",
+      "storageMetrics":
+          "Кэш: {ram} ОЗУ · {disk} сохранено · {cold} только на диске · чтение p95 {latency} мс",
     },
     "id": {
       "title": "NeoSwap — Diagnostik",
@@ -607,11 +621,13 @@ class NeoSwapLocale {
       "donorWaiting":
           "Menunggu permintaan buffer RPCS3 yang memenuhi syarat sebelum menyiapkan lebih banyak halaman memori nyata.",
       "storageToggle": "Cache shader disk eksperimental",
-      "storageDescription": "Hanya God of War III, mulai peluncuran berikutnya. Maksimal 8 MiB RAM dan 128 MiB disk. Tidak memindahkan seluruh memori game.",
+      "storageDescription":
+          "Hanya God of War III, mulai peluncuran berikutnya. Batas yang dikelola: cache 8 MiB + siklus GLSL 12 MiB; masing-masing 128 MiB disk. Tidak memindahkan seluruh memori game.",
       "storageApplied": "Disimpan untuk peluncuran game berikutnya.",
       "storageActive": "Cache shader disk aktif",
       "storageInactive": "Cache shader disk tidak aktif pada sesi ini",
-      "storageMetrics": "Cache: {ram} RAM · {disk} tersimpan · {cold} hanya di disk · baca p95 {latency} ms",
+      "storageMetrics":
+          "Cache: {ram} RAM · {disk} tersimpan · {cold} hanya di disk · baca p95 {latency} ms",
     },
     "ja": {
       "title": "NeoSwap — 診断",
@@ -665,11 +681,13 @@ class NeoSwapLocale {
       "donorGrowing": "次の検証済みメモリブロックを準備しています…",
       "donorWaiting": "実際のメモリページを追加で準備する前に、対象となるRPCS3バッファ要求を待っています。",
       "storageToggle": "実験的なシェーダーディスクキャッシュ",
-      "storageDescription": "God of War III のみ、次回起動から適用。RAM は最大 8 MiB、ディスクは最大 128 MiB。ゲームの全メモリを移す機能ではありません。",
+      "storageDescription":
+          "God of War III のみ、次回起動から適用。管理対象の上限：キャッシュ 8 MiB + GLSL サイクル 12 MiB、ディスクは各 128 MiB。ゲームの全メモリを移す機能ではありません。",
       "storageApplied": "次回のゲーム起動用に保存しました。",
       "storageActive": "シェーダーディスクキャッシュは有効です",
       "storageInactive": "このセッションではシェーダーディスクキャッシュは無効です",
-      "storageMetrics": "キャッシュ：{ram} RAM · {disk} 保存済み · {cold} ディスクのみ · 読込 p95 {latency} ms",
+      "storageMetrics":
+          "キャッシュ：{ram} RAM · {disk} 保存済み · {cold} ディスクのみ · 読込 p95 {latency} ms",
     },
     "ko": {
       "title": "NeoSwap — 진단",
@@ -725,11 +743,13 @@ class NeoSwapLocale {
       "donorGrowing": "다음 검증된 메모리 블록을 준비하는 중…",
       "donorWaiting": "실제 메모리 페이지를 추가로 준비하기 전에 조건에 맞는 RPCS3 버퍼 요청을 기다리는 중입니다.",
       "storageToggle": "실험적 셰이더 디스크 캐시",
-      "storageDescription": "God of War III에만 적용되며 다음 실행부터 사용됩니다. RAM 최대 8 MiB, 디스크 최대 128 MiB. 게임 메모리 전체를 옮기지 않습니다.",
+      "storageDescription":
+          "God of War III에만 적용되며 다음 실행부터 사용됩니다. 관리 한도: 캐시 8 MiB + GLSL 순환 12 MiB, 디스크는 각각 128 MiB. 게임 메모리 전체를 옮기지 않습니다.",
       "storageApplied": "다음 게임 실행에 적용하도록 저장했습니다.",
       "storageActive": "셰이더 디스크 캐시 활성",
       "storageInactive": "현재 세션의 셰이더 디스크 캐시 비활성",
-      "storageMetrics": "캐시: {ram} RAM · {disk} 저장 · {cold} 디스크 전용 · 읽기 p95 {latency} ms",
+      "storageMetrics":
+          "캐시: {ram} RAM · {disk} 저장 · {cold} 디스크 전용 · 읽기 p95 {latency} ms",
     },
     "zh": {
       "title": "NeoSwap — 诊断",
@@ -778,11 +798,13 @@ class NeoSwapLocale {
       "donorGrowing": "正在准备下一个已验证的内存块…",
       "donorWaiting": "正在等待符合条件的 RPCS3 缓冲区请求，然后再准备更多实际内存页。",
       "storageToggle": "实验性着色器磁盘缓存",
-      "storageDescription": "仅适用于 God of War III，下次启动时生效。最多使用 8 MiB 内存和 128 MiB 磁盘，不会转移全部游戏内存。",
+      "storageDescription":
+          "仅适用于 God of War III，下次启动时生效。管理额度：缓存 8 MiB + GLSL 循环 12 MiB，两者各有 128 MiB 磁盘额度。不会转移全部游戏内存。",
       "storageApplied": "已保存，将在下次启动游戏时生效。",
       "storageActive": "着色器磁盘缓存已启用",
       "storageInactive": "本次会话未启用着色器磁盘缓存",
-      "storageMetrics": "缓存：{ram} 内存 · {disk} 已存储 · {cold} 仅磁盘 · 读取 p95 {latency} 毫秒",
+      "storageMetrics":
+          "缓存：{ram} 内存 · {disk} 已存储 · {cold} 仅磁盘 · 读取 p95 {latency} 毫秒",
     },
     "zh_Hant": {
       "title": "NeoSwap — 診斷",
@@ -831,11 +853,13 @@ class NeoSwapLocale {
       "donorGrowing": "正在準備下一個已驗證的記憶體區塊…",
       "donorWaiting": "正在等待符合條件的 RPCS3 緩衝區請求，之後才準備更多實際記憶體頁面。",
       "storageToggle": "實驗性著色器磁碟快取",
-      "storageDescription": "僅適用於 God of War III，下次啟動時生效。最多使用 8 MiB 記憶體和 128 MiB 磁碟，不會轉移全部遊戲記憶體。",
+      "storageDescription":
+          "僅適用於 God of War III，下次啟動時生效。管理額度：快取 8 MiB + GLSL 循環 12 MiB，兩者各有 128 MiB 磁碟額度。不會轉移全部遊戲記憶體。",
       "storageApplied": "已儲存，將於下次啟動遊戲時生效。",
       "storageActive": "著色器磁碟快取已啟用",
       "storageInactive": "本次工作階段未啟用著色器磁碟快取",
-      "storageMetrics": "快取：{ram} 記憶體 · {disk} 已儲存 · {cold} 僅磁碟 · 讀取 p95 {latency} 毫秒",
+      "storageMetrics":
+          "快取：{ram} 記憶體 · {disk} 已儲存 · {cold} 僅磁碟 · 讀取 p95 {latency} 毫秒",
     },
   };
 }

@@ -16,6 +16,7 @@ APPROVED_RPCS3_MENU_FILES = frozenset({
     'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm',
 })
 APPROVED_MANAGED_SWAP_FILES = frozenset({
+    'native/neoswap/localizations.json',
     'native/neoswap-storage/SourceABI.h',
     'native/neoswap-storage/SourceClient.h',
     'native/neoswap-storage/SourceArchive.h',
