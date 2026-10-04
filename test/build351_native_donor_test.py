@@ -41,10 +41,12 @@ def main() -> None:
     donor = WORKFLOW.index("Download validated Build 350 native donor")
     rpcs3 = WORKFLOW.index("Download pinned passive RPCS3 Core", donor)
     dolphin = WORKFLOW.index("Verify retained stable Dolphin Core", rpcs3)
-    armsx2 = WORKFLOW.index("Verify retained stable ARMSX2 Core identity", dolphin)
+    armsx2_cleanup = WORKFLOW.index("Require completed exact ARMSX2 2.6 Core and remove its donor bootstrap", dolphin)
+    armsx2_download = WORKFLOW.index("Download pinned ARMSX2 2.6 Core", armsx2_cleanup)
+    armsx2 = WORKFLOW.index("Verify pinned ARMSX2 Core identity", armsx2_download)
     dusklight = WORKFLOW.index("Verify retained stable Dusklight Core identity", armsx2)
-    require(donor < rpcs3 < dolphin < armsx2 < dusklight,
-            "retained stable Cores must be verified after the RPCS3 replacement")
+    require(donor < rpcs3 < dolphin < armsx2_cleanup < armsx2_download < armsx2 < dusklight,
+            "pinned Cores must replace their donor bootstrap before identity verification")
     print("Build 351 retained native donor contract: OK")
 
 

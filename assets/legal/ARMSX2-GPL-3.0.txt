@@ -1,5 +1,5 @@
 Upstream source: https://github.com/ARMSX2/ARMSX2
-Pinned revision/tag: 8b5fad23dc290660aa394e75b0fd23e31099eaec
+Pinned revision/tag: 9d989ca933a85bb2f1d111fd3b9e5742ac7d2fbe
 Original path: COPYING.GPLv3
 
                     GNU GENERAL PUBLIC LICENSE

@@ -125,7 +125,8 @@ jobs:
       # Preserve the validated KartPad session recovery while testing the new pinned RPCS3 Core.
       DOLPHIN_SHA: 7cac54161659421ed95c2cd1c0b0746539a4cd38
       DOLPHIN_CORE_HOST_SHA: ae7d46f90dff64ce698b8c18e0c12510dbae96fe
-      ARMSX2_CORE_HOST_SHA: bfe466d01d1ba947f77317bac6a29b70bcbebe6d
+      ARMSX2_CORE_HOST_SHA: f4bdeb5e25f7622118a5c8ba23d8fc538e07ba07
+      ARMSX2_CORE_RUN_ID: '37164423042'
       RPCS3_CORE_HOST_SHA: 7bcc52854d6f5bd9c4bb67acdff676f74eee8318
       RPCS3_CORE_RUN_ID: '37120654954'
       DUSKLIGHT_CORE_HOST_SHA: 94ed2d91e1547e1879fab214b6ef082b642dff84
@@ -948,7 +949,31 @@ jobs:
             grep -q " $symbol$" build/dolphin-native-exports.txt
           done
 
-      - name: Verify retained stable ARMSX2 Core identity
+      - name: Require completed exact ARMSX2 2.6 Core and remove its donor bootstrap
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, shutil, subprocess
+          endpoint='repos/TarbleFR/neostation-ios/actions/runs/'+os.environ['ARMSX2_CORE_RUN_ID']
+          result=json.loads(subprocess.check_output(['gh','api',endpoint]))
+          assert result['head_sha'] == os.environ['ARMSX2_CORE_HOST_SHA'], result
+          assert result['path'] == '.github/workflows/armsx2-core.yml', result
+          assert result['status'] == 'completed' and result['conclusion'] == 'success', result
+          shutil.rmtree('dist/armsx2')
+          PY
+
+      - name: Download pinned ARMSX2 2.6 Core
+        uses: actions/download-artifact@v4
+        with:
+          name: ARMSX2Core-${{ env.ARMSX2_CORE_HOST_SHA }}
+          run-id: ${{ env.ARMSX2_CORE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist/armsx2
+
+      - name: Verify pinned ARMSX2 Core identity
         shell: bash
         run: |
           set -euo pipefail
@@ -967,11 +992,30 @@ jobs:
           assert identity['revision'] == source['revision'], identity
           assert identity['host_commit'] == os.environ['ARMSX2_CORE_HOST_SHA'], identity
           assert identity['architectures'] == ['arm64'], identity
-          assert identity['abi_version'] == source['abi_version'], identity
+          assert identity['abi_version'] == source['abi_version'] == 6, identity
+          assert identity['release'] == source['release'] == 'iOSv2.6.0', identity
+          assert identity['shader_chains'] and identity['performance_overlays'], identity
+          assert identity['bundled_shader_presets'] == 12 and identity['bundled_shader_files'] == 28, identity
+          resources=Path('dist/armsx2/ARMSX2Core.framework/shaders')
+          shader_hashes=identity['bundled_shader_sha256']
+          assert len(shader_hashes) == identity['bundled_shader_files'], identity
+          assert len(list(resources.glob('**/*.slangp'))) == identity['bundled_shader_presets'], identity
+          for relative,expected in shader_hashes.items():
+              asset=resources/relative
+              assert asset.is_file() and hashlib.sha256(asset.read_bytes()).hexdigest() == expected, relative
           binary=Path('dist/armsx2/ARMSX2Core.framework/ARMSX2Core')
           assert hashlib.sha256(binary.read_bytes()).hexdigest() == identity['sha256'], identity
+          binary.chmod(0o755)
+          fast_path=Path('build/fast-native/identity.json')
+          fast=json.loads(fast_path.read_text())
+          fast.update(armsx2CoreSha256=identity['sha256'],
+                      armsx2CoreHostCommit=identity['host_commit'],
+                      armsx2SourceRevision=identity['revision'],
+                      armsx2CoreRunId=int(os.environ['ARMSX2_CORE_RUN_ID']))
+          fast_path.write_text(json.dumps(fast,indent=2)+'\n')
           print(identity)
           PY
+          python3 test/armsx2_packaging_test.py --core-directory dist/armsx2
 
       - name: Require completed exact Dusklight 2.0.3 Core
         env:

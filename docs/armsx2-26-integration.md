@@ -80,7 +80,35 @@ réel et la compilation du plugin hôte contre Flutter. Le binaire est refusé s
 le moteur Metal est absent ou si les 28 fichiers de shaders ne correspondent
 pas octet pour octet aux sources épinglées. Son
 `identity.json` lie le SHA hôte, le SHA des sources et le hash du framework.
-Le validateur de l’IPA vérifie aussi les presets après packaging.
+Les workflows de packaging retirent le bootstrap ARMSX2 de l'ancienne IPA et
+chargent l'artefact du run natif exact. Ils vérifient son SHA hôte, ses sources,
+l'ABI 6, son hash, les shaders/overlays et le hash de chacun des 28 fichiers de
+shaders après téléchargement de l'archive. L'upload conserve toutes ces ressources.
+Le manifeste final enregistre cette nouvelle identité, plutôt que celle du donneur.
+Le validateur de l’IPA vérifie aussi les presets après packaging. La notice GPL
+ARMSX2 suit le tag 2.6, et les crédits incluent le runtime librashader épinglé ainsi
+que l’attribution des presets intégrés.
+
+Le run [37164423042](https://github.com/TarbleFR/neostation-ios/actions/runs/37164423042)
+a réussi ses deux tâches le 4 octobre 2026 : framework iOS arm64, moteur Metal,
+ABI/export/signature, ressources, tests Foundation, 4 tests UIKit et 29 tests Dart.
+Les 100 cycles de lancement/arrêt sont des tests de contrat dans une fixture,
+pas des démarrages de jeux sur iPhone.
+
+- Producteur Core : `f4bdeb5e25f7622118a5c8ba23d8fc538e07ba07`.
+- SHA-256 du binaire : `aca6afe92068a1803208675c84d2a13bb57f72bec6e383f93236929205c2588c`.
+- SHA-256 de l'archive téléchargée :
+  `61b3fed041b7d76065a895d6e3c29d52716ec356f330e09655c94c99987a3567`.
+- 12 presets et 28 ressources iOS vérifiés à nouveau après téléchargement,
+  octet pour octet contre le tag officiel.
+
+`test/armsx2_packaging_test.py --archive <archive Core>` exécute les véritables
+gardes Python des deux workflows sur cette archive. Les cas négatifs couvrent
+ABI 5, mauvais SHA hôte, mauvais hash binaire et ressource manquante. Le test
+vérifie aussi le remplacement du registre du donneur et la conservation des
+identités RPCS3/Dolphin. Ces contrôles ont réussi sur l'archive ci-dessus.
+Le commit de packaging peut être plus récent que le producteur : ses sources
+Core/ABI/patch doivent rester identiques, ce que les workflows imposent.
 
 Les vérifications locales Linux confirment les contrats de cycle de vie sur les
 sources 2.6 et les douze traductions. Les tests Foundation/UIKit et la compilation

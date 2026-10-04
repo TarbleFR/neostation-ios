@@ -54,3 +54,19 @@ named beside each code. Source: https://www.gc-forever.com/forums/viewtopic.php?
 The catalogue is not bundled in NeoStation. Imported entries retain the author
 and source URL; attribution is not an endorsement or a claim to relicense the
 creator's work. The source does not specify a disc revision.
+
+
+## ARMSX2 2.6 shader runtime and presets
+
+ARMSX2 iOS `iOSv2.6.0` uses **librashader 0.12.0** for its native Metal shader
+chains. librashader is by **Ronny Chan / SnowflakePowered and contributors**.
+The embedded C API is pinned to commit
+`87e8a97b50516d997defeaa168173dcd185d4022`; its upstream package declares
+`MPL-2.0 OR GPL-3.0-only`. Source and the upstream license notices are available at:
+https://github.com/SnowflakePowered/librashader/tree/87e8a97b50516d997defeaa168173dcd185d4022
+
+The bundled preset sources, their original copyright/license headers and
+`ARMSX2Core.framework/shaders/ATTRIBUTION.md` are preserved from the official
+ARMSX2 tag. The attribution file identifies each bundled shader's author and
+license. Optional downloaded RetroArch presets keep their upstream source files
+and notices as supplied by the pack; each file remains under its own license.
