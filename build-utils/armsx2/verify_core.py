@@ -85,6 +85,8 @@ if identity.get('abi_version') != header_abi:
 identity.update(host_commit=os.environ.get('GITHUB_SHA', ''),
                 sha256=hashlib.sha256((destination/'ARMSX2Core').read_bytes()).hexdigest(),
                 architectures=['arm64'], signature='ad-hoc; sideloading must re-sign',
-                shader_chains=True, bundled_shader_presets=len(presets), bundled_shader_files=len(shader_files), performance_overlays=True, device_runtime_tested=False)
+                shader_chains=True, bundled_shader_presets=len(presets), bundled_shader_files=len(shader_files),
+                bundled_shader_sha256={str(p.relative_to(shader_source)):hashlib.sha256(p.read_bytes()).hexdigest() for p in shader_files},
+                performance_overlays=True, device_runtime_tested=False)
 (output / 'identity.json').write_text(json.dumps(identity, indent=2)+'\n')
 print(json.dumps(identity, indent=2))

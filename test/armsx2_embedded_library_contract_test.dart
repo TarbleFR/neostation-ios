@@ -79,7 +79,7 @@ void main() {
       'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
     ).readAsStringSync();
 
-    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 5u'));
+    expect(abi, contains('NEO_ARMSX2_ABI_VERSION 6u'));
     expect(abi, contains('NEO_ARMSX2_BOOT_BIOS'));
     expect(abi, contains('set_upscale_multiplier'));
     expect(abi, contains('set_aspect_ratio'));
