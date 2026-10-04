@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// NeoStation host adapter for ARMSX2 8b5fad23dc. No application/scene delegate,
+// NeoStation host adapter for ARMSX2 iOS 2.6.0 (9d989ca933). No application/scene delegate,
 // URL, shortcut, VPN, interpreter fallback or detached VM worker is used.
 #define SDL_MAIN_HANDLED
 #include "ARMSX2CoreABI.h"
@@ -94,6 +94,7 @@ void folder(std::string& slot, const std::string& root, const char* name) {
   if (!FileSystem::DirectoryExists(slot.c_str()) && !FileSystem::CreateDirectoryPath(slot.c_str(), false))
     throw std::runtime_error("Cannot create ARMSX2 data directory: " + slot);
 }
+void repair_shader_paths();
 void initialize_settings() {
   auto& r=runtime();
   EmuFolders::DataRoot = r.data;
@@ -116,6 +117,7 @@ void initialize_settings() {
   std::string bios_state; folder(bios_state,r.data,"bios-state");
   EmuFolders::Bios = r.bios_directory; // Read-only external scope belongs to host.
 
+  repair_shader_paths();
   s_settings_interface = new INISettingsInterface(Path::Combine(EmuFolders::Settings,"PCSX2.ini"));
   s_settings_interface->Load();
   s_secrets_settings_interface = new INISettingsInterface(Path::Combine(EmuFolders::Settings,"secrets.ini"));
@@ -521,11 +523,12 @@ int state_operation(bool load,uint32_t slot,uint32_t timeout,char* error,size_t 
   if(slot<1 || slot>10) return error_out("ARMSX2 save-state slot must be between 1 and 10.",error,capacity);
   __block BOOL success=NO;
   dispatch_semaphore_t done=dispatch_semaphore_create(0);
-  ARMSX2SaveStateCompletion completion=^(BOOL ok){
+  void (^completion)(BOOL, NSString* _Nullable)=^(BOOL ok, NSString* _Nullable){
     success=ok;
     dispatch_semaphore_signal(done);
   };
-  if(load) [ARMSX2Bridge loadStateFromSlot:(NSInteger)slot completion:completion];
+  // The embedded menu keeps its existing slot behavior; it has no undo UI.
+  if(load) [ARMSX2Bridge loadStateFromSlot:(NSInteger)slot expectedModified:nil keepingUndo:NO completion:completion];
   else [ARMSX2Bridge saveStateToSlot:(NSInteger)slot completion:completion];
   const int64_t nanos=(int64_t)std::max<uint32_t>(timeout,1000u)*NSEC_PER_MSEC;
   if(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,nanos))!=0)
@@ -680,6 +683,8 @@ int set_graphics_hack(const char* name,int value,char* error,size_t capacity) {
   return success ? 1 : error_out("ARMSX2 could not persist this game's graphics hack.",error,capacity);
 }
 
+#include "ARMSX2GraphicsAssets.inc"
+
 const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_SOURCE_REVISION,
   create_view,release_view,prepare,request_jit_detach,validate_jit,boot,request_stop,shutdown,paused,button,sticks,
   get_upscale_multiplier,get_aspect_ratio,get_cheats_enabled,set_upscale_multiplier,set_aspect_ratio,
@@ -687,7 +692,8 @@ const NeoARMSX2API api={sizeof(NeoARMSX2API),NEO_ARMSX2_ABI_VERSION,NEO_ARMSX2_S
   has_save_state,save_state,load_state,
   get_retroachievements_state_json,set_retroachievements_option,
   login_retroachievements,logout_retroachievements,
-  get_graphics_hacks_json,set_graphics_hack};
+  get_graphics_hacks_json,set_graphics_hack,
+  get_graphics_assets_json,set_shader_preset,set_performance_overlay,install_shader_pack};
 }
 extern "C" bool ARMSX2_IsIdleVMPrewarmResolved() { return false; } // No autonomous prewarm in NeoStation.
 extern "C" const NeoARMSX2API* NeoARMSX2_GetAPI(uint32_t version) {

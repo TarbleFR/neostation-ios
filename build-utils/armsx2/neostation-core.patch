@@ -1,36 +1,35 @@
+diff --git a/common/Darwin/DarwinMisc.cpp b/common/Darwin/DarwinMisc.cpp
+index d73b158af..4a3a3ddd4 100644
 --- a/common/Darwin/DarwinMisc.cpp
 +++ b/common/Darwin/DarwinMisc.cpp
-@@ -881,22 +881,32 @@
+@@ -881,22 +881,32 @@ DarwinMisc::JitMode DarwinMisc::GetJitMode()
  }
  
  #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
 -__attribute__((noinline, optnone))
 -static void JIT26PrepareRegion(void* addr, size_t len)
--{
++// Only the NeoStation helper may acknowledge this transaction. The return
++// register is checked; resuming the breakpoint alone is not success.
++__attribute__((naked, noinline))
++static void* JIT26PrepareRegion(void* addr, size_t len)
+ {
 -	asm volatile("mov x0, %0\n"
 -	             "mov x1, %1\n"
 -	             "mov x16, #1\n"
 -	             "brk #0xf00d\n"
 -	             :: "r"(addr), "r"(len) : "x0", "x1", "x16", "memory");
--}
++    asm volatile("mov x16, #1\n brk #0xf00d\n ret");
+ }
 -
 -__attribute__((noinline, optnone))
 -static void JIT26Detach(void)
--{
--	asm volatile("mov x16, #0\n"
--	             "brk #0xf00d\n"
--	             ::: "x16", "memory");
-+// Only the NeoStation helper may acknowledge this transaction. The return
-+// register is checked; resuming the breakpoint alone is not success.
-+__attribute__((naked, noinline))
-+static void* JIT26PrepareRegion(void* addr, size_t len)
-+{
-+    asm volatile("mov x16, #1\n brk #0xf00d\n ret");
-+}
 +static thread_local sigjmp_buf* s_neostation_prepare_trap = nullptr;
 +static struct sigaction s_neostation_previous_trap = {};
 +static void NeoStationPrepareTrap(int number, siginfo_t* info, void* context)
-+{
+ {
+-	asm volatile("mov x16, #0\n"
+-	             "brk #0xf00d\n"
+-	             ::: "x16", "memory");
 +    if (s_neostation_prepare_trap)
 +        siglongjmp(*s_neostation_prepare_trap, 1);
 +    // A signal on a different thread must never jump into this worker's stack.
@@ -49,7 +48,7 @@
  }
  #endif
  
-@@ -1031,132 +1041,34 @@
+@@ -1031,132 +1041,34 @@ void* DarwinMisc::MmapCodeDualMap(size_t size)
  		rx_ptr, size, JitModeName(mode));
  	std::fflush(stderr);
  
@@ -210,7 +209,7 @@
  
  	vm_address_t rw_region = 0;
  	vm_address_t target = reinterpret_cast<vm_address_t>(rx_ptr);
-@@ -1169,8 +1081,6 @@
+@@ -1169,8 +1081,6 @@ void* DarwinMisc::MmapCodeDualMap(size_t size)
  		std::fprintf(stderr, "@@JIT_ALLOC@@ dualmap_remap_fail kr=%d\n", kr);
  		std::fflush(stderr);
  		munmap(rx_ptr, size);
@@ -219,7 +218,7 @@
  		return nullptr;
  	}
  
-@@ -1181,8 +1091,6 @@
+@@ -1181,8 +1091,6 @@ void* DarwinMisc::MmapCodeDualMap(size_t size)
  		std::fflush(stderr);
  		vm_deallocate(mach_task_self(), rw_region, static_cast<vm_size_t>(size));
  		munmap(rx_ptr, size);
@@ -228,7 +227,7 @@
  		return nullptr;
  	}
  
-@@ -1195,8 +1103,6 @@
+@@ -1195,8 +1103,6 @@ void* DarwinMisc::MmapCodeDualMap(size_t size)
  	std::fprintf(stderr, "@@JIT_ALLOC@@ dualmap_ok rx=%p rw=%p offset=%td size=0x%zx mode=%s\n",
  		rx_ptr, rw_ptr, g_code_rw_offset, size, JitModeName(mode));
  	std::fflush(stderr);
@@ -237,9 +236,146 @@
  	return rx_ptr;
  #endif
  }
+diff --git a/pcsx2/CDVD/CDVD.cpp b/pcsx2/CDVD/CDVD.cpp
+index a866e92d3..2fe8b82f8 100644
+--- a/pcsx2/CDVD/CDVD.cpp
++++ b/pcsx2/CDVD/CDVD.cpp
+@@ -170,7 +170,7 @@ static void cdvdCreateNewNVM()
+ 
+ static std::string cdvdGetNVRAMPath()
+ {
+-	return Path::ReplaceExtension(BiosPath, "nvm");
++	return Path::Combine(Path::Combine(EmuFolders::DataRoot, "bios-state"), Path::ReplaceExtension(Path::GetFileName(BiosPath), "nvm"));
+ }
+ 
+ void cdvdLoadNVRAM()
+@@ -199,7 +199,7 @@ void cdvdLoadNVRAM()
+ 	}
+ 
+ 	// Also load the mechacon version while we're here.
+-	const std::string mecfile = Path::ReplaceExtension(BiosPath, "mec");
++	const std::string mecfile = Path::Combine(Path::Combine(EmuFolders::DataRoot, "bios-state"), Path::ReplaceExtension(Path::GetFileName(BiosPath), "mec"));
+ 	fp = FileSystem::OpenManagedCFileTryIgnoreCase(mecfile.c_str(), "rb", &error);
+ 	if (!fp || std::fread(&s_mecha_version, sizeof(s_mecha_version), 1, fp.get()) != 1)
+ 	{
+diff --git a/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm b/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
+index 6fd2f0a9f..0e576b1a8 100644
+--- a/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
++++ b/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
+@@ -11,14 +11,11 @@
+ 
+ static id<MTLLibrary> loadMainLibrary(id<MTLDevice> dev, NSString* name)
+ {
+-	NSString* path = [[NSBundle mainBundle] pathForResource:name ofType:@"metallib"];
+-	if (!path)
+-	{
+-		std::string ssname = std::string([name UTF8String]) + ".metallib";
+-		std::string sspath = Path::Combine(EmuFolders::Resources, ssname);
+-		path = [[NSString alloc] initWithBytes:sspath.data() length:sspath.length() encoding:NSUTF8StringEncoding];
+-	}
+-	return path ? [dev newLibraryWithFile:path error:nullptr] : nullptr;
++    // Never fall back to the host's default.metallib (Dolphin/other cores).
++    const std::string path = Path::Combine(EmuFolders::Resources,
++        std::string(name.UTF8String) + ".metallib");
++    NSString* resource = [NSString stringWithUTF8String:path.c_str()];
++    return resource ? [dev newLibraryWithFile:resource error:nullptr] : nullptr;
+ }
+ 
+ static MRCOwned<id<MTLLibrary>> loadMainLibrary(id<MTLDevice> dev)
+@@ -34,7 +31,7 @@ static MRCOwned<id<MTLLibrary>> loadMainLibrary(id<MTLDevice> dev)
+ 			return MRCTransfer(lib);
+ 	if (id<MTLLibrary> lib = loadMainLibrary(dev, @"default"))
+ 		return MRCTransfer(lib);
+-	return MRCTransfer([dev newDefaultLibrary]);
++	return MRCTransfer(static_cast<id<MTLLibrary>>(nil));
+ }
+ 
+ static GSMTLDevice::MetalVersion detectLibraryVersion(id<MTLLibrary> lib)
+diff --git a/pcsx2/Host.cpp b/pcsx2/Host.cpp
+index 75a8491dd..3aa1e4cd3 100644
+--- a/pcsx2/Host.cpp
++++ b/pcsx2/Host.cpp
+@@ -422,14 +422,14 @@ SettingsInterface* Host::Internal::GetInputSettingsLayer()
+ 
+ void Host::Internal::SetBaseSettingsLayer(SettingsInterface* sif)
+ {
+-	pxAssertRel(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE) == nullptr,
++	pxAssertRel(sif == nullptr || s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE) == nullptr,
+ 		"Base layer has already been set");
+ 	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_BASE, sif);
+ }
+ 
+ void Host::Internal::SetSecretsSettingsLayer(SettingsInterface* sif)
+ {
+-	pxAssertRel(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
++	pxAssertRel(sif == nullptr || s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
+ 		"Secrets layer has already been set");
+ 	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_SECRETS, sif);
+ }
+diff --git a/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt b/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt
+index 174a3b2a9..ac6e892a0 100644
+--- a/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt
++++ b/platforms/ios/app/src/main/cpp/3rdparty/librashader/CMakeLists.txt
+@@ -104,10 +104,17 @@ set(_lrs_lib "${_lrs_out_dir}/${_lrs_rust_target}/release/liblibrashader_capi.a"
+ # because rustc otherwise links at iOS 10.0 while cc builds librashader's C++ deps against
+ # the current SDK, and the link dies on ___chkstk_darwin. Two values that can drift apart
+ # reintroduce that silently.
++# Xcode's script phase does not preserve the host shell's compiler flags.
++# Capture the owned adapter's path maps at configure time and pass them to cargo.
++set(_lrs_cargo_env "IPHONEOS_DEPLOYMENT_TARGET=${ARMSX2_IOS_DEPLOYMENT_TARGET}")
++if(NEO_ARMSX2_ADAPTER_DIR)
++	foreach(flag RUSTFLAGS CFLAGS CXXFLAGS)
++		list(APPEND _lrs_cargo_env "${flag}=$ENV{${flag}}")
++	endforeach()
++endif()
+ add_custom_command(
+ 	OUTPUT "${_lrs_lib}"
+-	COMMAND ${CMAKE_COMMAND} -E env
+-		"IPHONEOS_DEPLOYMENT_TARGET=${ARMSX2_IOS_DEPLOYMENT_TARGET}"
++	COMMAND ${CMAKE_COMMAND} -E env ${_lrs_cargo_env}
+ 		${CARGO_EXECUTABLE} build --release
+ 			--manifest-path "${librashader_src_SOURCE_DIR}/librashader-capi/Cargo.toml"
+ 			--target ${_lrs_rust_target}
+diff --git a/platforms/ios/app/src/main/cpp/CMakeLists.txt b/platforms/ios/app/src/main/cpp/CMakeLists.txt
+index e0eabe9d8..fa0097ceb 100644
+--- a/platforms/ios/app/src/main/cpp/CMakeLists.txt
++++ b/platforms/ios/app/src/main/cpp/CMakeLists.txt
+@@ -59,7 +59,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+ endif()
+ 
+ # Project Name
+-project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX)
++if(NEO_ARMSX2_ADAPTER_DIR)
++    set(CMAKE_C_VISIBILITY_PRESET hidden)
++    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
++    set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
++    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
++endif()
++project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX OBJC OBJCXX)
+ 
+ add_compile_definitions(ARMSX2_VERSION_STR="${ARMSX2_VERSION}")
+ 
+@@ -124,9 +130,14 @@ add_subdirectory(${ARMSX2_ROOT}/common ${CMAKE_BINARY_DIR}/common)
+ 
+ # make pcsx2
+ add_subdirectory(${ARMSX2_ROOT}/pcsx2 ${CMAKE_BINARY_DIR}/pcsx2)
++add_subdirectory(3rdparty/librashader)
++if(NEO_ARMSX2_ADAPTER_DIR)
++    # Build the core only, with no standalone UI/application delegates.
++    include("${NEO_ARMSX2_ADAPTER_DIR}/core/target.cmake")
++    return()
++endif()
+ # Fetched and cargo-built, never vendored. Must follow pcsx2 so PCSX2_FLAGS exists by the
+ # time the link block below runs.
+-add_subdirectory(3rdparty/librashader)
+ 
+ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+ 	enable_language(Swift)
+diff --git a/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm b/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
+index d9b0aacc6..de82446a0 100644
 --- a/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
 +++ b/platforms/ios/app/src/main/cpp/IOS/HostImpls.mm
-@@ -43,6 +43,7 @@
+@@ -45,6 +45,7 @@
  #import <UIKit/UIKit.h>
  
  #include "IOSRuntime.h"
@@ -247,7 +383,7 @@
  
  #pragma mark - namespace Host
  namespace Host
-@@ -117,57 +118,24 @@
+@@ -117,59 +118,24 @@ namespace Host
      void RequestResetSettings(bool) {} 
      const char* GetTranslatedStringImpl(const char* key) { return key; }
      u32 GetDisplayRefreshRate() { return 60; }
@@ -272,6 +408,8 @@
 -                // Use dedicated game render view if available (sized for portrait).
 -                if (g_gameRenderView) {
 -                    wi.window_handle = (__bridge void*)g_gameRenderView;
+-                } else if (s_sdlRootVC) {
+-                    wi.window_handle = (__bridge void*)s_sdlRootVC.view;
 -                } else {
 -                    wi.window_handle = (__bridge void*)[window rootViewController].view;
 -                }
@@ -320,7 +458,7 @@
          return wi;
      }
      void ReleaseRenderWindow() {}
-@@ -215,6 +182,7 @@
+@@ -217,6 +183,7 @@ namespace Host
              std::lock_guard<std::mutex> lock(s_cpuTaskMutex);
              s_cpuTasks.push_back(task);
          }
@@ -328,102 +466,3 @@
  
          if (!block)
              return;
---- a/pcsx2/CDVD/CDVD.cpp
-+++ b/pcsx2/CDVD/CDVD.cpp
-@@ -170,7 +170,7 @@
- 
- static std::string cdvdGetNVRAMPath()
- {
--	return Path::ReplaceExtension(BiosPath, "nvm");
-+	return Path::Combine(Path::Combine(EmuFolders::DataRoot, "bios-state"), Path::ReplaceExtension(Path::GetFileName(BiosPath), "nvm"));
- }
- 
- void cdvdLoadNVRAM()
-@@ -199,7 +199,7 @@
- 	}
- 
- 	// Also load the mechacon version while we're here.
--	const std::string mecfile = Path::ReplaceExtension(BiosPath, "mec");
-+	const std::string mecfile = Path::Combine(Path::Combine(EmuFolders::DataRoot, "bios-state"), Path::ReplaceExtension(Path::GetFileName(BiosPath), "mec"));
- 	fp = FileSystem::OpenManagedCFileTryIgnoreCase(mecfile.c_str(), "rb", &error);
- 	if (!fp || std::fread(&s_mecha_version, sizeof(s_mecha_version), 1, fp.get()) != 1)
- 	{
---- a/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
-+++ b/pcsx2/GS/Renderers/Metal/GSMTLDeviceInfo.mm
-@@ -11,14 +11,11 @@
- 
- static id<MTLLibrary> loadMainLibrary(id<MTLDevice> dev, NSString* name)
- {
--	NSString* path = [[NSBundle mainBundle] pathForResource:name ofType:@"metallib"];
--	if (!path)
--	{
--		std::string ssname = std::string([name UTF8String]) + ".metallib";
--		std::string sspath = Path::Combine(EmuFolders::Resources, ssname);
--		path = [[NSString alloc] initWithBytes:sspath.data() length:sspath.length() encoding:NSUTF8StringEncoding];
--	}
--	return path ? [dev newLibraryWithFile:path error:nullptr] : nullptr;
-+    // Never fall back to the host's default.metallib (Dolphin/other cores).
-+    const std::string path = Path::Combine(EmuFolders::Resources,
-+        std::string(name.UTF8String) + ".metallib");
-+    NSString* resource = [NSString stringWithUTF8String:path.c_str()];
-+    return resource ? [dev newLibraryWithFile:resource error:nullptr] : nullptr;
- }
- 
- static MRCOwned<id<MTLLibrary>> loadMainLibrary(id<MTLDevice> dev)
-@@ -34,7 +31,7 @@
- 			return MRCTransfer(lib);
- 	if (id<MTLLibrary> lib = loadMainLibrary(dev, @"default"))
- 		return MRCTransfer(lib);
--	return MRCTransfer([dev newDefaultLibrary]);
-+	return MRCTransfer(static_cast<id<MTLLibrary>>(nil));
- }
- 
- static GSMTLDevice::MetalVersion detectLibraryVersion(id<MTLLibrary> lib)
---- a/pcsx2/Host.cpp
-+++ b/pcsx2/Host.cpp
-@@ -422,14 +422,14 @@
- 
- void Host::Internal::SetBaseSettingsLayer(SettingsInterface* sif)
- {
--	pxAssertRel(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE) == nullptr,
-+	pxAssertRel(sif == nullptr || s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE) == nullptr,
- 		"Base layer has already been set");
- 	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_BASE, sif);
- }
- 
- void Host::Internal::SetSecretsSettingsLayer(SettingsInterface* sif)
- {
--	pxAssertRel(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
-+	pxAssertRel(sif == nullptr || s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
- 		"Secrets layer has already been set");
- 	s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_SECRETS, sif);
- }
---- a/platforms/ios/app/src/main/cpp/CMakeLists.txt
-+++ b/platforms/ios/app/src/main/cpp/CMakeLists.txt
-@@ -57,7 +57,13 @@
- endif()
- 
- # Project Name
--project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX)
-+if(NEO_ARMSX2_ADAPTER_DIR)
-+    set(CMAKE_C_VISIBILITY_PRESET hidden)
-+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-+    set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
-+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-+endif()
-+project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX OBJC OBJCXX)
- 
- add_compile_definitions(ARMSX2_VERSION_STR="${ARMSX2_VERSION}")
- 
-@@ -122,6 +128,11 @@
- 
- # make pcsx2
- add_subdirectory(${ARMSX2_ROOT}/pcsx2 ${CMAKE_BINARY_DIR}/pcsx2)
-+if(NEO_ARMSX2_ADAPTER_DIR)
-+    # Build the core only, with no standalone UI/application delegates.
-+    include("${NEO_ARMSX2_ADAPTER_DIR}/core/target.cmake")
-+    return()
-+endif()
- # Fetched and cargo-built, never vendored. Must follow pcsx2 so PCSX2_FLAGS exists by the
- # time the link block below runs.
- add_subdirectory(3rdparty/librashader)

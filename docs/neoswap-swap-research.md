@@ -1,8 +1,11 @@
 # NeoSwap : reprise isolée sur `swap`
 
 Point de départ : hôte Build401 `905461854998c65e1b884cabfedd7b46060c701b`.
-Les références `experimental`, `main`, `backup`, les cœurs et les helpers JIT
-ne sont pas modifiés par ce chantier. Cette candidate est une étape de recherche,
+La recherche a été menée sur `swap`, séparée des autres branches. Le 4 octobre
+2026, le mainteneur a autorisé sa fusion dans `experimental` avec `armsx2-26`.
+`main`, `backup`, les cœurs RPCS3 et les helpers JIT restent inchangés par cette
+fusion. NeoSwap conserve son périmètre exclusivement RPCS3 ; ARMSX2 2.6 est
+une intégration indépendante, sans client ni allocation NeoSwap. Cette candidate est une étape de recherche,
 pas une validation de stabilité sur iPhone.
 
 ## Périmètre exclusivement RPCS3

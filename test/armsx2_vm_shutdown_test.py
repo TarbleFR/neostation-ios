@@ -20,7 +20,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = '8b5fad23dc290660aa394e75b0fd23e31099eaec'
+REVISION = '9d989ca933a85bb2f1d111fd3b9e5742ac7d2fbe'
 STATE_ENUM = '''enum class VMState
 {
     Shutdown,

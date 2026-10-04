@@ -424,6 +424,51 @@ SUPPORT_FILES |= {
     'tools/neoplay-receiver/test/receiver.test.mjs',
 }
 
+# Maintainer-authorized integration of swap and armsx2-26 into experimental.
+# Keep the complete reviewed ARMSX2 postimage pinned, separately from RPCS3.
+ARMSX2_INTEGRATION_SHA = '424a360348ae1178feed330da1af8c45909ed675'
+ARMSX2_INTEGRATION_FILES = {
+    'build-utils/armsx2/source.json',
+    '.gitattributes',
+    '.github/workflows/armsx2-core.yml',
+    '.github/workflows/ios-ci.yml',
+    '.github/workflows/neoswap-ipa.yml',
+    'assets/legal/ARMSX2-GPL-3.0.txt',
+    'assets/legal/THIRD_PARTY_NOTICES.md',
+    'build-utils/armsx2/build_core.sh',
+    'build-utils/armsx2/neostation-core.patch',
+    'build-utils/armsx2/upstream-files.json',
+    'build-utils/armsx2/verify_core.py',
+    'build-utils/validate_armsx2_ipa.py',
+    'docs/LEGAL_AND_CREDITS.md',
+    'docs/armsx2-26-integration.md',
+    'packages/armsx2_internal_bridge/core/ARMSX2Core.mm',
+    'packages/armsx2_internal_bridge/core/ARMSX2GraphicsAssets.inc',
+    'packages/armsx2_internal_bridge/core/ARMSX2ShaderLibrary.h',
+    'packages/armsx2_internal_bridge/core/target.cmake',
+    'packages/armsx2_internal_bridge/ios/Classes/ARMSX2CoreABI.h',
+    'packages/armsx2_internal_bridge/ios/Classes/ARMSX2InGameLocalization.mm',
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2InternalBridgePlugin.mm',
+    'packages/armsx2_internal_bridge/ios/Classes/Armsx2SessionMenu.mm',
+    'test/armsx2_bios_hacks_test.py',
+    'test/armsx2_core_build_test.py',
+    'test/armsx2_embedded_library_contract_test.dart',
+    'test/armsx2_graphics_settings_test.mm',
+    'test/armsx2_graphics_test.py',
+    'test/armsx2_graphics_ui_test.py',
+    'test/armsx2_packaging_test.py',
+    'test/armsx2_save_state_test.py',
+    'test/armsx2_vm_shutdown_test.py',
+    'test/build351_native_donor_test.py',
+}
+PRODUCTION_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
+                     if not path.startswith(('test/', 'docs/'))}
+SUPPORT_FILES |= {path for path in ARMSX2_INTEGRATION_FILES
+                  if path.startswith(('test/', 'docs/'))}
+for path in ARMSX2_INTEGRATION_FILES:
+    reviewed = subprocess.check_output(['git', 'show', ARMSX2_INTEGRATION_SHA + ':' + path], cwd=ROOT)
+    assert (ROOT / path).read_bytes() == reviewed, 'Reviewed ARMSX2 integration changed: ' + path
+
 approved = set(manifest['files_sha256'])
 assert approved == PRODUCTION_FILES, 'Production whitelist/manifest mismatch: ' + str(approved ^ PRODUCTION_FILES)
 assert set(manifest['git_modes']) == approved
@@ -496,7 +541,6 @@ for path in (
     'native/armsx2_internal_helper/Info.plist',
     'packages/neo_swap/ios/Classes/NeoSwap.h',
     'lib/services/kartpad_internal_service.dart',
-    'build-utils/armsx2/source.json',
     'build-utils/kartpad/source.json',
     'build-utils/stikjit/source.json',
 ):
@@ -523,10 +567,14 @@ for key in set(old_dusklight) - {'commit', 'submodules'}:
 for workflow_path in ('.github/workflows/neoswap-ipa.yml', '.github/workflows/ios-ci.yml'):
     workflow = (ROOT / workflow_path).read_text()
     old_workflow = before(workflow_path).decode('utf-8')
-    for key in ('DOLPHIN_SHA', 'DOLPHIN_CORE_HOST_SHA', 'ARMSX2_CORE_HOST_SHA',
+    for key in ('DOLPHIN_SHA', 'DOLPHIN_CORE_HOST_SHA',
                 'KARTPAD_CORE_HOST_SHA', 'KARTPAD_CORE_RUN_ID'):
         pattern = r'(?m)^      ' + key + r': (.+)$'
         assert re.findall(pattern, workflow) == re.findall(pattern, old_workflow), (workflow_path, key)
+    assert re.findall(r'(?m)^      ARMSX2_CORE_HOST_SHA: (.+)$', workflow) == ['f4bdeb5e25f7622118a5c8ba23d8fc538e07ba07']
+    assert re.findall(r'(?m)^      ARMSX2_CORE_RUN_ID: (.+)$', workflow) == ["'37164423042'"]
+    assert 'Download pinned ARMSX2 2.6 Core' in workflow
+    assert "identity['abi_version'] == source['abi_version'] == 6" in workflow
     pattern = r'(?m)^      DUSKLIGHT_CORE_HOST_SHA: (.+)$'
     if workflow_path == '.github/workflows/neoswap-ipa.yml':
         # Related owned-GLSL consumer requires this exact newly built Core;
@@ -562,4 +610,4 @@ for locale, values in catalog.items():
     for key, value in values.items():
         assert set(re.findall(r'\{\w+\}', value)) == set(re.findall(r'\{\w+\}', catalog['en'][key])), (locale, key)
 print('PASS requested candidate scope: explicit hashed production paths, tracked/untracked deltas, '
-      'unchanged original JIT helpers/other cores/save routing and complete texture locales; device evidence separate')
+      'unchanged original JIT helpers/unrelated cores/save routing; exact reviewed ARMSX2 2.6 integration and complete texture locales; device evidence separate')

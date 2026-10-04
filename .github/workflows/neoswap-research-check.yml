@@ -1,7 +1,7 @@
 name: NeoSwap swap-branch research checks
 on:
   push:
-    branches: [swap]
+    branches: [experimental, swap]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,7 +10,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: github.ref == 'refs/heads/swap'
     runs-on: macos-15
     timeout-minutes: 35
     steps:

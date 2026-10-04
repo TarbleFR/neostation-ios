@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define NEO_ARMSX2_ABI_VERSION 5u
+#define NEO_ARMSX2_ABI_VERSION 6u
 #define NEO_ARMSX2_BOOT_DISC 1u
 #define NEO_ARMSX2_BOOT_ELF 2u
 // No ROM: use the installed BIOS and the same owned VM lifecycle.
@@ -84,6 +84,11 @@ typedef struct NeoARMSX2API {
   // 0/1 select off/on. Effective state comes from the upstream GS/GameDB path.
   int (*get_graphics_hacks_json)(char* output, size_t capacity);
   int (*set_graphics_hack)(const char* key, int value, char* error, size_t capacity);
+  // iOS 2.6 graphics. File I/O is off main; shader compilation stays on GS.
+  int (*get_graphics_assets_json)(char* output, size_t capacity);
+  int (*set_shader_preset)(const char* stable_token, char* error, size_t capacity);
+  int (*set_performance_overlay)(uint32_t preset, char* error, size_t capacity);
+  int (*install_shader_pack)(const char* archive_path, char* error, size_t capacity);
 } NeoARMSX2API;
 
 typedef const NeoARMSX2API* (*NeoARMSX2GetAPI)(uint32_t version);
