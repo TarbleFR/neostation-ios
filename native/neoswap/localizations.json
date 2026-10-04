@@ -2,7 +2,7 @@
   "en": {
     "title": "NeoSwap — Diagnostics",
     "capacity": "Automatic allocation budget",
-    "scope": "RPCS3 CPU-side RSX buffers of 1 MiB or more. Available to all games, not all allocations. JIT, guest RAM and GPU resources are unchanged. Other cores are not connected yet.",
+    "scope": "NeoSwap applies only to RPCS3: guest memory relay, eligible CPU buffers and owned cold data. Other cores never use NeoSwap.",
     "warning": "Active automatically at each launch. Storage is reserved as needed, keeping 2 GiB free. Storage access can cause stutters.",
     "probe": "Run 8 MiB integrity test",
     "pass": "Integrity test passed. This is not a memory-limit benchmark.",
@@ -55,7 +55,7 @@
   "fr": {
     "title": "NeoSwap — Diagnostics",
     "capacity": "Budget d’allocation automatique",
-    "scope": "Tampons RSX côté CPU de RPCS3 de 1 Mio ou plus. Disponible pour tous les jeux, pas pour toutes les allocations. JIT, RAM émulée et ressources GPU inchangés. Autres cœurs non raccordés pour le moment.",
+    "scope": "NeoSwap concerne uniquement RPCS3 : relais de mémoire invitée, buffers CPU admissibles et données froides possédées. Aucun autre cœur ne peut utiliser NeoSwap.",
     "warning": "Actif automatiquement à chaque lancement. Le stockage est réservé selon les besoins, avec 2 Gio laissés libres. Les accès au stockage peuvent provoquer des saccades.",
     "probe": "Tester l’intégrité sur 8 Mio",
     "pass": "Test d’intégrité réussi. Ce n’est pas un test de limite mémoire.",
@@ -108,7 +108,7 @@
   "de": {
     "title": "NeoSwap — Diagnose",
     "capacity": "Automatisches Zuweisungsbudget",
-    "scope": "CPU-seitige RSX-Puffer von RPCS3 ab 1 MiB. Für alle Spiele, nicht für alle Zuweisungen. JIT, emulierter RAM und GPU-Ressourcen bleiben unverändert. Andere Kerne sind noch nicht angebunden.",
+    "scope": "NeoSwap gilt ausschließlich für RPCS3: Gast-Speicher-Relay, geeignete CPU-Puffer und eigene kalte Daten. Andere Kerne können NeoSwap nicht verwenden.",
     "warning": "Bei jedem Start automatisch aktiv. Speicherplatz wird nach Bedarf reserviert, wobei 2 GiB frei bleiben. Speicherzugriffe können Ruckler verursachen.",
     "probe": "8-MiB-Integritätstest starten",
     "pass": "Integritätstest bestanden. Dies ist kein Test des Speicherlimits.",
@@ -161,7 +161,7 @@
   "es": {
     "title": "NeoSwap — Diagnósticos",
     "capacity": "Presupuesto de asignación automático",
-    "scope": "Búferes RSX de RPCS3 en la CPU de al menos 1 MiB. Disponible para todos los juegos, no para todas las asignaciones. JIT, RAM emulada y recursos GPU no cambian. Otros núcleos aún no están conectados.",
+    "scope": "NeoSwap se aplica únicamente a RPCS3: relé de memoria invitada, búferes CPU aptos y datos fríos de su propiedad. Ningún otro núcleo puede usar NeoSwap.",
     "warning": "Activo automáticamente en cada inicio. El almacenamiento se reserva según sea necesario, dejando 2 GiB libres. El acceso al almacenamiento puede causar tirones.",
     "probe": "Ejecutar prueba de integridad de 8 MiB",
     "pass": "Prueba de integridad superada. No es una prueba del límite de memoria.",
@@ -214,7 +214,7 @@
   "it": {
     "title": "NeoSwap — Diagnostica",
     "capacity": "Budget di allocazione automatico",
-    "scope": "Buffer RSX lato CPU di RPCS3 da almeno 1 MiB. Disponibile per tutti i giochi, non per tutte le allocazioni. JIT, RAM emulata e risorse GPU restano invariati. Gli altri core non sono ancora collegati.",
+    "scope": "NeoSwap riguarda esclusivamente RPCS3: relay della memoria ospite, buffer CPU idonei e dati freddi di sua proprietà. Nessun altro core può usare NeoSwap.",
     "warning": "Attivo automaticamente a ogni avvio. Lo spazio viene riservato secondo necessità, lasciando 2 GiB liberi. Gli accessi all’archiviazione possono causare scatti.",
     "probe": "Esegui test di integrità da 8 MiB",
     "pass": "Test di integrità superato. Non è un test del limite di memoria.",
@@ -267,7 +267,7 @@
   "pt": {
     "title": "NeoSwap — Diagnósticos",
     "capacity": "Orçamento de alocação automático",
-    "scope": "Buffers RSX de RPCS3 no lado da CPU a partir de 1 MiB. Disponível para todos os jogos, não para todas as alocações. JIT, RAM emulada e recursos da GPU permanecem iguais. Outros núcleos ainda não estão conectados.",
+    "scope": "NeoSwap se aplica apenas ao RPCS3: retransmissão da memória convidada, buffers de CPU elegíveis e dados frios de sua propriedade. Nenhum outro núcleo pode usar NeoSwap.",
     "warning": "Ativo automaticamente em cada inicialização. O armazenamento é reservado conforme necessário, mantendo 2 GiB livres. O acesso ao armazenamento pode causar travamentos momentâneos.",
     "probe": "Executar teste de integridade de 8 MiB",
     "pass": "Teste de integridade aprovado. Este não é um teste do limite de memória.",
@@ -320,7 +320,7 @@
   "ru": {
     "title": "NeoSwap — Диагностика",
     "capacity": "Автоматический бюджет выделения памяти",
-    "scope": "Буферы RSX RPCS3 на стороне CPU от 1 МиБ. Доступно для всех игр, но не для всех выделений памяти. JIT, эмулируемая ОЗУ и ресурсы GPU не изменены. Другие ядра пока не подключены.",
+    "scope": "NeoSwap применяется только к RPCS3: передача гостевой памяти, подходящие буферы CPU и принадлежащие ему холодные данные. Другие ядра не могут использовать NeoSwap.",
     "warning": "Автоматически активируется при каждом запуске. Место резервируется по мере необходимости; 2 ГиБ остаются свободными. Обращения к хранилищу могут вызывать рывки.",
     "probe": "Проверить целостность на 8 МиБ",
     "pass": "Проверка целостности пройдена. Это не проверка предела памяти.",
@@ -373,7 +373,7 @@
   "id": {
     "title": "NeoSwap — Diagnostik",
     "capacity": "Anggaran alokasi otomatis",
-    "scope": "Buffer RSX sisi CPU RPCS3 berukuran minimal 1 MiB. Tersedia untuk semua game, bukan semua alokasi. JIT, RAM emulasi, dan sumber daya GPU tidak berubah. Core lain belum terhubung.",
+    "scope": "NeoSwap hanya berlaku untuk RPCS3: relay memori tamu, buffer CPU yang memenuhi syarat, dan data dingin miliknya. Core lain tidak dapat menggunakan NeoSwap.",
     "warning": "Aktif otomatis setiap aplikasi dimulai. Penyimpanan dicadangkan sesuai kebutuhan dengan menyisakan 2 GiB ruang kosong. Akses penyimpanan dapat menyebabkan tersendat.",
     "probe": "Jalankan uji integritas 8 MiB",
     "pass": "Uji integritas berhasil. Ini bukan pengujian batas memori.",
@@ -426,7 +426,7 @@
   "ja": {
     "title": "NeoSwap — 診断",
     "capacity": "自動割り当て予算",
-    "scope": "RPCS3のCPU側RSXバッファ（1 MiB以上）が対象です。全ゲームで利用できますが、すべてのメモリ割り当てが対象ではありません。JIT、エミュレートされたRAM、GPUリソースは変更しません。他のコアは未接続です。",
+    "scope": "NeoSwapはRPCS3専用です。対象はゲストメモリのリレー、条件を満たすCPUバッファ、RPCS3が所有するコールドデータです。他のコアはNeoSwapを使用できません。",
     "warning": "起動するたびに自動で有効になります。必要に応じてストレージを確保し、2 GiBの空き容量を残します。ストレージへのアクセスでカクつく場合があります。",
     "probe": "8 MiBの整合性テストを実行",
     "pass": "整合性テストに合格しました。メモリ上限のテストではありません。",
@@ -479,7 +479,7 @@
   "ko": {
     "title": "NeoSwap — 진단",
     "capacity": "자동 할당 예산",
-    "scope": "1 MiB 이상의 RPCS3 CPU 측 RSX 버퍼에 적용됩니다. 모든 게임에서 사용할 수 있지만 모든 메모리 할당에 적용되지는 않습니다. JIT, 에뮬레이션 RAM 및 GPU 리소스는 변경되지 않습니다. 다른 코어는 아직 연결되지 않았습니다.",
+    "scope": "NeoSwap은 RPCS3에만 적용됩니다. 게스트 메모리 릴레이, 조건에 맞는 CPU 버퍼 및 RPCS3가 소유한 콜드 데이터가 대상입니다. 다른 코어는 NeoSwap을 사용할 수 없습니다.",
     "warning": "실행할 때마다 자동으로 활성화됩니다. 필요에 따라 저장 공간을 확보하고 2 GiB를 남겨 둡니다. 저장 공간 접근으로 끊김이 발생할 수 있습니다.",
     "probe": "8 MiB 무결성 테스트 실행",
     "pass": "무결성 테스트를 통과했습니다. 메모리 한도 테스트는 아닙니다.",
@@ -532,7 +532,7 @@
   "zh": {
     "title": "NeoSwap — 诊断",
     "capacity": "自动分配预算",
-    "scope": "适用于 RPCS3 中至少 1 MiB 的 CPU 端 RSX 缓冲区。所有游戏均可使用，但并非所有内存分配都适用。JIT、模拟 RAM 和 GPU 资源保持不变。其他核心尚未接入。",
+    "scope": "NeoSwap 仅用于 RPCS3：客户机内存中继、符合条件的 CPU 缓冲区及其拥有的冷数据。其他核心无法使用 NeoSwap。",
     "warning": "每次启动时自动启用。按需预留存储空间，并保留 2 GiB 空闲空间。存储访问可能导致卡顿。",
     "probe": "运行 8 MiB 完整性测试",
     "pass": "完整性测试通过。这不是内存上限测试。",
@@ -585,7 +585,7 @@
   "zh_Hant": {
     "title": "NeoSwap — 診斷",
     "capacity": "自動配置預算",
-    "scope": "適用於 RPCS3 中至少 1 MiB 的 CPU 端 RSX 緩衝區。所有遊戲皆可使用，但並非所有記憶體配置都適用。JIT、模擬 RAM 和 GPU 資源保持不變。其他核心尚未接入。",
+    "scope": "NeoSwap 僅用於 RPCS3：客體記憶體中繼、符合條件的 CPU 緩衝區及其擁有的冷資料。其他核心無法使用 NeoSwap。",
     "warning": "每次啟動時自動啟用。依需求保留儲存空間，並留下 2 GiB 可用空間。儲存存取可能導致卡頓。",
     "probe": "執行 8 MiB 完整性測試",
     "pass": "完整性測試通過。這不是記憶體上限測試。",

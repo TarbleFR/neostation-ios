@@ -27,7 +27,8 @@ compiled=subprocess.run(command+['-D'+flag for flag in flags]+['-'],input=probe,
 assert compiled.returncode==0, 'Production CocoaPods defines break public ABI:\n'+compiled.stderr
 assert 'NEOSWAP_SHADER_STORAGE=1' in flags, 'Shader feature must remain compiled in'
 plugin=(ROOT/'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
-assert plugin.count('#if defined(NEOSWAP_SHADER_STORAGE)')==3
+assert plugin.count('#if defined(NEOSWAP_SHADER_STORAGE)')==4
+assert re.search(r'#if defined\(NEOSWAP_SHADER_STORAGE\)\s+NSDictionary\* operations = NeoSwapStorage_DrainOperations\(\);',plugin), 'Operation handoff must remain feature guarded'
 assert '#if defined(NEOSWAP_STORAGE)' not in plugin
 # Keep a negative compiler regression: the old flag really must fail, rather
 # than merely checking a renamed string or suppressing a warning.
@@ -66,6 +67,7 @@ paths|={str(p.relative_to(ROOT)) for p in (ROOT/'native/neoswap-storage/tests').
 paths|={'build-utils/configure_neoswap_storage.py','packages/neo_swap/ios/Classes/NeoSwapStorageService.h','packages/neo_swap/ios/Classes/NeoSwapStorageService.mm','packages/neo_swap/ios/Classes/StorageABI.h'}
 paths.add('packages/neo_swap/ios/Classes/SourceABI.h')
 paths.add('packages/neo_swap/ios/Classes/NeoSwapSourceWork.h')
+paths.add('packages/neo_swap/ios/Classes/NeoSwapExperiment.h')
 # Fixtures test refusal logic, never masquerade as a hardware result.
 fixture={'passed':True,'sourceCommit':'d'*40,'productionClientExecuted':True,'productionHostServiceIOSLinked':True,
          'realIOSSimulatorServiceExecuted':True,'realVulkanModule':True,'physicalIPhoneValidated':False,

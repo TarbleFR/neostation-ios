@@ -13,7 +13,7 @@ namespace neostation::relay {
 constexpr std::uint64_t maximum_capacity = 8ULL * 1024 * 1024 * 1024;
 constexpr std::uint64_t maximum_segment_bytes = 512ULL * 1024 * 1024;
 constexpr std::uint32_t initial_owner_mask = 1U; // NeoSwap RPCS3 owner 0 only.
-constexpr std::uint32_t supported_owner_mask = initial_owner_mask | (1U << 5); // Explicit self-test owner.
+constexpr std::uint32_t supported_owner_mask = initial_owner_mask; // RPCS3 only, including preparation checks.
 
 // Operations return zero on success, otherwise their original OS error.
 // map and unmap MUST be atomic on failure. fixed unmap must OVERWRITE with a

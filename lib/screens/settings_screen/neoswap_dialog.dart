@@ -347,43 +347,45 @@ class _NeoSwapDialogState extends State<NeoSwapDialog> {
                 if (messageKey != null) Text(t(messageKey)),
                 if (resultCode != 0)
                   SelectableText('NeoSwap result: $resultCode'),
-                OutlinedButton(
-                  onPressed: _busy || _stats == null ? null : () => _run(),
-                  child: Text(t('probe')),
-                ),
-                Text(t('capacityProbe')),
-                DropdownButton<int>(
-                  key: const ValueKey('neoSwapProbeSize'),
-                  isExpanded: true,
-                  value: _probeMiB,
-                  items: NeoSwap.probeSizesMiB
-                      .map(
-                        (n) => DropdownMenuItem(
-                          value: n,
-                          enabled: n <= capacity,
-                          child: Text('$n MiB'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _busy || _stats == null
-                      ? null
-                      : (n) {
-                          if (n != null) setState(() => _probeMiB = n);
-                        },
-                ),
-                OutlinedButton(
-                  onPressed: _busy || _stats == null || _probeMiB > capacity
-                      ? null
-                      : () => _run(capacityTest: true),
-                  child: Text(t('capacityRun')),
-                ),
-                if (_capacityReport != null)
-                  SelectableText(
-                    t('capacityResult', {
-                      'size': _bytes(_capacityReport!['requestedBytes']),
-                      'delta': _capacityDelta(),
-                    }),
+                if (_stats?['diagnosticProbesAvailable'] == true) ...[
+                  OutlinedButton(
+                    onPressed: _busy || _stats == null ? null : () => _run(),
+                    child: Text(t('probe')),
                   ),
+                  Text(t('capacityProbe')),
+                  DropdownButton<int>(
+                    key: const ValueKey('neoSwapProbeSize'),
+                    isExpanded: true,
+                    value: _probeMiB,
+                    items: NeoSwap.probeSizesMiB
+                        .map(
+                          (n) => DropdownMenuItem(
+                            value: n,
+                            enabled: n <= capacity,
+                            child: Text('$n MiB'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _busy || _stats == null
+                        ? null
+                        : (n) {
+                            if (n != null) setState(() => _probeMiB = n);
+                          },
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy || _stats == null || _probeMiB > capacity
+                        ? null
+                        : () => _run(capacityTest: true),
+                    child: Text(t('capacityRun')),
+                  ),
+                  if (_capacityReport != null)
+                    SelectableText(
+                      t('capacityResult', {
+                        'size': _bytes(_capacityReport!['requestedBytes']),
+                        'delta': _capacityDelta(),
+                      }),
+                    ),
+                ],
                 if (_stats != null) ...[
                   SelectableText(
                     t('diagnostics', {

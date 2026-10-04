@@ -8,7 +8,7 @@ Pod::Spec.new do |s|
   s.author = { 'NeoStation iOS' => 'TarbleFR' }
   s.source = { :path => '.' }
   s.source_files = 'Classes/**/*'
-  s.public_header_files = 'Classes/NeoSwap.h', 'Classes/NeoSwapPlugin.h', 'Classes/NeoSwapHost.h', 'Classes/NeoSwapClientStats.h', 'Classes/NeoSwapRelay.h', 'Classes/NeoSwapRelayService.h', 'Classes/NeoSwapStorageService.h', 'Classes/StorageABI.h', 'Classes/ManagedSwapABI.h', 'Classes/SourceABI.h'
+  s.public_header_files = 'Classes/NeoSwap.h', 'Classes/NeoSwapPlugin.h', 'Classes/NeoSwapHost.h', 'Classes/NeoSwapClientStats.h', 'Classes/NeoSwapRelay.h', 'Classes/NeoSwapRelayService.h', 'Classes/NeoSwapStorageService.h', 'Classes/StorageABI.h', 'Classes/ManagedSwapABI.h', 'Classes/SourceABI.h', 'Classes/NeoSwapExperiment.h'
   s.private_header_files = 'Classes/NeoSwapCapacityProbe.h', 'Classes/Donation/*.h', 'Classes/Relay/*.h', 'Classes/Storage/*.h'
   s.exclude_files = 'Classes/Donation/NeoSwapDonorRequestHandler.h'
   s.dependency 'Flutter'

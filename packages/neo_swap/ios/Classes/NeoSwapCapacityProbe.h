@@ -26,7 +26,7 @@ int NeoSwapCapacityProbe(const NeoSwapAPI* api,uint64_t size,Sample sample,Headr
   for(uint64_t offset=0;offset<size && result==NEOSWAP_OK;offset+=blockSize) {
     if(!headroom()){result=NEOSWAP_BUSY;break;}
     uint64_t length=std::min<uint64_t>(blockSize,size-offset);void* address=nullptr;
-    result=api->allocate(NEOSWAP_PROBE,NEOSWAP_CPU_DATA,length,chunkSize,&address);if(result!=NEOSWAP_OK)break;
+    result=api->allocate(NEOSWAP_RPCS3,NEOSWAP_CPU_DATA,length,chunkSize,&address);if(result!=NEOSWAP_OK)break;
     blocks[count]=address;lengths[count++]=length;
     for(uint64_t at=0;at<length;at+=chunkSize) {
       if(at%(8*MiB)==0 && !headroom()){result=NEOSWAP_BUSY;break;}

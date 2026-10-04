@@ -323,6 +323,10 @@ int record_allocation(Broker& b, Block& slot, void* address, uint64_t size,
 int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, void** out) {
     if (!out) return NEOSWAP_INVALID;
     *out = nullptr;
+    // Legacy ABI slots are reserved, never eligible clients. Refuse before
+    // broker locks, file creation, donor demand or allocation accounting.
+    if (owner >= NEOSWAP_OWNER_COUNT) return NEOSWAP_INVALID;
+    if (owner != NEOSWAP_RPCS3) return NEOSWAP_DISABLED;
     auto& b = broker();
     const bool small_cpu = owner == NEOSWAP_RPCS3 && kind == NEOSWAP_CPU_CACHE &&
         bytes >= small_cpu_minimum && bytes < MiB;
@@ -400,7 +404,7 @@ int allocate(uint32_t owner, uint32_t kind, uint64_t bytes, uint64_t alignment, 
     const auto started = std::chrono::steady_clock::now();
 #if defined(NEOSWAP_DONATION)
     // Borrow only a verified helper-owned object, entirely locally. Never wait
-    // for extension launch/XPC on an emulator thread. Probe remains file-only.
+    // for extension launch/XPC on an RPCS3 thread.
     if (donor_enabled) {
         void* donated = nullptr;
         uint64_t token = 0;
@@ -534,7 +538,7 @@ int sync(void* p) {
     return NEOSWAP_NOT_OWNED;
 }
 int enabled(uint32_t owner) {
-    if (owner >= NEOSWAP_OWNER_COUNT) return 0;
+    if (owner != NEOSWAP_RPCS3) return 0;
     auto& b = broker();
     if (b.enabled_mask.load(std::memory_order_acquire) & (1u << owner)) return 1;
 #if defined(NEOSWAP_DONATION)
@@ -553,7 +557,7 @@ extern "C" const NeoSwapAPI* NeoSwap_GetAPI(uint32_t version) {
 extern "C" int NeoSwap_Configure(const char* path, const NeoSwapConfig* c) {
     if (!c || c->struct_size != sizeof(*c) || c->abi_version != NEOSWAP_ABI || c->reserved ||
         c->capacity_bytes > 8 * 1024 * MiB || !c->minimum_allocation_bytes ||
-        c->minimum_allocation_bytes > max_block_bytes || (c->enabled_owner_mask >> NEOSWAP_OWNER_COUNT))
+        c->minimum_allocation_bytes > max_block_bytes || (c->enabled_owner_mask & ~(1u << NEOSWAP_RPCS3)))
         return NEOSWAP_INVALID;
     auto& b = broker(); std::lock_guard guard(b.mutex);
     if (b.stats.live_blocks) return NEOSWAP_BUSY;
@@ -607,12 +611,13 @@ extern "C" int NeoSwap_Snapshot(NeoSwapStats* out) {
     return NEOSWAP_OK;
 }
 extern "C" void NeoSwap_RegisterClient(uint32_t owner) {
-    if (owner >= NEOSWAP_OWNER_COUNT) return;
+    if (owner != NEOSWAP_RPCS3) return;
     auto& b = broker(); std::lock_guard guard(b.mutex);
     b.stats.registered_owner_mask |= 1u << owner;
 }
 extern "C" int NeoSwap_SetOwnerSessionActive(uint32_t owner, int active) {
     if (owner >= NEOSWAP_OWNER_COUNT) return NEOSWAP_INVALID;
+    if (owner != NEOSWAP_RPCS3) return NEOSWAP_DISABLED;
     auto& b = broker();
     const uint32_t bit = 1u << owner;
     if (active) {
@@ -632,7 +637,7 @@ extern "C" int NeoSwap_SetOwnerSessionActive(uint32_t owner, int active) {
     return NEOSWAP_OK;
 }
 extern "C" int NeoSwap_OwnerSessionActive(uint32_t owner) {
-    if (owner >= NEOSWAP_OWNER_COUNT) return 0;
+    if (owner != NEOSWAP_RPCS3) return 0;
     return (broker().active_session_mask.load(std::memory_order_acquire) & (1u << owner)) ? 1 : 0;
 }
 extern "C" int NeoSwap_WaitForDonationReady(uint64_t minimum_bytes, uint32_t timeout_ms) {

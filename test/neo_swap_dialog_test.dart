@@ -11,6 +11,7 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   Map<String, dynamic> sample({int capacity = 8192, int result = 0}) => {
+    'diagnosticProbesAvailable': true,
     'capacityMiB': capacity,
     'capacityBytes': capacity * 1024 * 1024,
     'configResult': 0,
@@ -442,6 +443,21 @@ void main() {
     pending.complete(sample());
     await tester.pump();
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('distributed RPCS3 diagnostics never offer synthetic allocations', (tester) async {
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      final stats = sample();
+      stats['diagnosticProbesAvailable'] = false;
+      return stats;
+    });
+    await open(tester);
+    expect(find.text(NeoSwapLocale.values['en']!['probe']!), findsNothing);
+    expect(find.text(NeoSwapLocale.values['en']!['capacityRun']!), findsNothing);
+    expect(find.byKey(const ValueKey('neoSwapProbeSize')), findsNothing);
+    expect(calls, ['snapshot']);
+    expect(find.text(NeoSwapLocale.values['en']!['scope']!), findsOneWidget);
   });
   testWidgets('probe is explicit and distinct from game allocation counters', (
     tester,

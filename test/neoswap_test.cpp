@@ -23,7 +23,7 @@ int main() {
     assert(::mkdtemp(dir));
     const auto* api = NeoSwap_GetAPI(NEOSWAP_ABI);
     assert(api && !NeoSwap_GetAPI(123));
-    NeoSwapConfig config{sizeof(config), NEOSWAP_ABI, 8*MiB, 0, 4096, 0x3f, 0};
+    NeoSwapConfig config{sizeof(config), NEOSWAP_ABI, 8*MiB, 0, 4096, 1u << NEOSWAP_RPCS3, 0};
     void* p = reinterpret_cast<void*>(1);
     assert(api->allocate(0, NEOSWAP_CPU_DATA, MiB, 16, &p) == NEOSWAP_DISABLED && !p);
     NeoSwapHostStats host{};
@@ -42,11 +42,43 @@ int main() {
     // A failed directory replacement preserves the working quota/owner policy.
     auto rejected_config = config;
     rejected_config.capacity_bytes = 4*MiB;
-    rejected_config.enabled_owner_mask = 1u << NEOSWAP_DOLPHIN;
     assert(NeoSwap_Configure("/dev/null", &rejected_config) == NEOSWAP_STORAGE);
     assert(snapshot().capacity_bytes == config.capacity_bytes);
-    assert(api->enabled(0) && api->enabled(NEOSWAP_PROBE));
+    assert(api->enabled(0) && !api->enabled(NEOSWAP_PROBE));
     assert(NeoSwap_Configure("relative", &rejected_config) == NEOSWAP_INVALID);
+    // The pinned v1 ABI keeps six slots, but only RPCS3 can own memory.
+    const auto beforeScope = snapshot();
+    const auto beforeCapacity = beforeScope.capacity_bytes;
+    for (uint32_t owner = 1; owner < NEOSWAP_OWNER_COUNT; ++owner) {
+        auto forbidden = config;
+        forbidden.enabled_owner_mask |= 1u << owner;
+        assert(NeoSwap_Configure(dir, &forbidden) == NEOSWAP_INVALID);
+        NeoSwap_RegisterClient(owner);
+        assert(!api->enabled(owner));
+        assert(NeoSwap_SetOwnerSessionActive(owner, 1) == NEOSWAP_DISABLED);
+        assert(NeoSwap_SetOwnerSessionActive(owner, 0) == NEOSWAP_DISABLED);
+        assert(!NeoSwap_OwnerSessionActive(owner));
+        p = reinterpret_cast<void*>(1);
+        assert(api->allocate(owner, NEOSWAP_CPU_DATA, MiB, 65536, &p) == NEOSWAP_DISABLED && !p);
+        assert(!NeoSwap_LiveBytes(owner));
+    }
+    const auto afterScope = snapshot();
+    assert(afterScope.capacity_bytes == beforeCapacity && afterScope.enabled_owner_mask == 1u);
+    assert(afterScope.allocation_count == beforeScope.allocation_count);
+    assert(afterScope.rejection_count == beforeScope.rejection_count);
+    assert(!afterScope.registered_owner_mask && !afterScope.live_blocks && !afterScope.allocated_disk_bytes);
+    for (uint32_t owner = 1; owner < NEOSWAP_OWNER_COUNT; ++owner) {
+        const auto& stats = afterScope.owners[owner];
+        assert(!stats.live_bytes && !stats.peak_bytes && !stats.allocation_count && !stats.rejection_count);
+    }
+    NeoSwap_RegisterClient(NEOSWAP_RPCS3);
+    assert(NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1) == NEOSWAP_OK);
+    assert(NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3));
+    assert(NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0) == NEOSWAP_OK);
+    assert(!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3));
+    // Repeat the legitimate RPCS3 lifecycle; no legacy client becomes active.
+    assert(NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1) == NEOSWAP_OK);
+    assert(NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 0) == NEOSWAP_OK);
     const size_t page = static_cast<size_t>(::sysconf(_SC_PAGESIZE));
     const auto rounded = [page](size_t bytes) { return (bytes+page-1)&~(page-1); };
     // A foreign mapping is never a candidate for MAP_FIXED or cleanup.
@@ -104,7 +136,7 @@ int main() {
     assert(!snapshot().live_blocks && !snapshot().live_bytes && !snapshot().allocated_disk_bytes);
     NeoSwap_TestFailNext(8);
     assert(NeoSwap_Configure(dir, &rejected_config) == NEOSWAP_MAPPING);
-    assert(snapshot().capacity_bytes == config.capacity_bytes && api->enabled(NEOSWAP_PROBE));
+    assert(snapshot().capacity_bytes == config.capacity_bytes && api->enabled(NEOSWAP_RPCS3));
     assert(!NeoSwap_HostSnapshot(&host) && host.reserved_virtual_bytes == MiB);
     assert(NeoSwap_Configure(dir, &config) == 0);
     assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);
@@ -155,14 +187,13 @@ int main() {
     std::atomic<int> failures{0};
     std::barrier first_allocations(NEOSWAP_OWNER_COUNT+1);
     std::vector<std::thread> workers;
-    for (uint32_t owner=0; owner<NEOSWAP_OWNER_COUNT; ++owner) {
-        NeoSwap_RegisterClient(owner);
-        workers.emplace_back([&, owner] {
+    for (uint32_t worker=0; worker<NEOSWAP_OWNER_COUNT; ++worker) {
+        workers.emplace_back([&, worker] {
             for (int i=0; i<60; ++i) {
                 void* ptr = nullptr;
-                const bool allocated = api->allocate(owner, NEOSWAP_CPU_DATA, 65536, 65536, &ptr) == 0;
+                const bool allocated = api->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA, 65536, 65536, &ptr) == 0;
                 if (!allocated) ++failures;
-                else std::memset(ptr, static_cast<int>(owner+1), 65536);
+                else std::memset(ptr, static_cast<int>(worker+1), 65536);
                 if (!i) {
                     first_allocations.arrive_and_wait();
                     first_allocations.arrive_and_wait();
@@ -171,7 +202,7 @@ int main() {
                 NeoSwapHostStats display{};
                 if (NeoSwap_HostSnapshot(&display) || display.reserved_virtual_bytes < 65536 ||
                     display.reserved_virtual_bytes >= config.capacity_bytes) ++failures;
-                for (size_t n=0; n<65536; ++n) if (static_cast<unsigned char*>(ptr)[n] != owner+1) ++failures;
+                for (size_t n=0; n<65536; ++n) if (static_cast<unsigned char*>(ptr)[n] != worker+1) ++failures;
                 if (api->release(ptr)) ++failures;
             }
         });
@@ -182,7 +213,7 @@ int main() {
     assert(snapshot().live_blocks == NEOSWAP_OWNER_COUNT);
     first_allocations.arrive_and_wait();
     for (auto& worker : workers) worker.join();
-    assert(!failures && !snapshot().live_bytes && snapshot().registered_owner_mask == 0x3f);
+    assert(!failures && !snapshot().live_bytes && snapshot().registered_owner_mask == (1u << NEOSWAP_RPCS3));
     assert(!NeoSwap_HostSnapshot(&host) && !host.reserved_virtual_bytes);
     // Exhaust all descriptor slots and prove quota rolls back exactly.
     std::array<void*, 256> pointers{};
@@ -196,6 +227,6 @@ int main() {
     assert(api->allocate(0, 1, MiB, 16, &p) == NEOSWAP_DISABLED);
     assert(::rmdir(dir) == 0); // no backing names survive any success/error path
     auto result = snapshot();
-    std::printf("NeoSwap PASS: %llu allocations, %llu rejections, all owners, 8 fault stages, exact regions, zero live blocks\n",
+    std::printf("NeoSwap PASS: %llu allocations, %llu rejections, RPCS3-only ownership, six concurrent workers, 8 fault stages, exact regions, zero live blocks\n",
         static_cast<unsigned long long>(result.allocation_count), static_cast<unsigned long long>(result.rejection_count));
 }

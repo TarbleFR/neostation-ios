@@ -3,6 +3,8 @@
 #include "NeoSwapHost.h"
 #include "NeoSwapCapacityProbe.h"
 #include "NeoSwapMemorySamples.h"
+#include "NeoSwapExperiment.h"
+#import <UIKit/UIKit.h>
 #if defined(NEOSWAP_SHADER_STORAGE)
 #import "NeoSwapStorageService.h"
 #endif
@@ -53,6 +55,9 @@ static_assert(kDonationInitialChunkBytes == neostation::donation::max_chunk_byte
 @property(nonatomic, assign) BOOL cpuBufferPressureRaised;
 @property(nonatomic, copy) NSString* directory;
 @property(nonatomic, copy) NSString* diagnosticPath;
+@property(nonatomic, copy) NSString* operationPath;
+@property(nonatomic, assign) uint64_t lastOperationDrops;
+@property(nonatomic, assign) uint64_t iosWarningCount;
 @property(nonatomic, assign) NSInteger capacityMiB;
 @property(nonatomic, assign) int configResult;
 @property(nonatomic, assign) uint64_t lastAllocationCount;
@@ -126,12 +131,11 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     NSArray<NSString*>* docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString* diagnosticDir = [docs.firstObject stringByAppendingPathComponent:@"Diagnostics"];
     self.diagnosticPath = [diagnosticDir stringByAppendingPathComponent:kDiagnostic];
+    self.operationPath = [diagnosticDir stringByAppendingPathComponent:@"NeoSwap-operations.jsonl"];
     // Runtime policy, not an optional user feature. Old Off/budget preferences
     // cannot disable the integrated service after an update or relaunch.
-    self.capacityMiB = 8192;
-#if defined(NEOSWAP_RELAY)
-    NeoSwapRelay_Start();
-#endif
+    self.capacityMiB = NeoSwapExperimentProfile().donors() ? 8192 : 0;
+    // Relay preparation begins only at RPCS3's explicit WaitReady call.
     dispatch_async(self.queue, ^{
         NSError* error = nil;
         BOOL created = self.directory.length && [[NSFileManager defaultManager]
@@ -159,6 +163,15 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC/4),
         NSEC_PER_SEC/4, NSEC_PER_SEC/20);
     __weak NeoSwapPlugin* weakSelf = self;
+    [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
+        object:nil queue:nil usingBlock:^(__unused NSNotification* notification) {
+        NeoSwapPlugin* owner = weakSelf;
+        if (!owner || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+        dispatch_async(owner.queue, ^{
+            ++owner.iosWarningCount;
+            [owner appendRecord:[owner snapshot:@"ios_memory_warning"]];
+        });
+    }];
     self.cpuBufferPressureSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
         DISPATCH_MEMORYPRESSURE_NORMAL | DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
         self.queue);
@@ -166,7 +179,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         NeoSwapPlugin* strongSelf = weakSelf;
         if (!strongSelf) return;
         const unsigned long level = dispatch_source_get_data(strongSelf.cpuBufferPressureSource);
-        strongSelf->_memorySamples.pressure_event(level);
+        if (NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3))
+            strongSelf->_memorySamples.pressure_event(level);
         strongSelf.cpuBufferPressureRaised = (level &
             (DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL)) != 0;
 #if defined(NEOSWAP_DONATION)
@@ -180,7 +194,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @autoreleasepool {
 #if defined(NEOSWAP_DONATION)
             (void)neostation::donation::retry_cleanup();
-            if (NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) {
+            if (NeoSwapExperimentProfile().donors() && NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) {
                 if (!strongSelf.donorSessions) [strongSelf startDonors];
                 [strongSelf advanceDonors];
             } else {
@@ -188,11 +202,24 @@ static NSDictionary* NeoSwapEffectivePermissions() {
             }
 #endif
 #if defined(NEOSWAP_RELAY)
-            NeoSwapRelay_Maintain();
+            if (NeoSwapExperimentProfile().relay()) NeoSwapRelay_Maintain();
 #endif
+#if defined(NEOSWAP_SHADER_STORAGE)
+            NSDictionary* operations = NeoSwapStorage_DrainOperations();
+            const uint64_t drops = [operations[@"droppedEventsCumulative"] unsignedLongLongValue];
+            if ([operations[@"events"] count] || drops != strongSelf.lastOperationDrops) {
+                [strongSelf appendRecord:@{@"schema":@1, @"event":@"source_operations",
+                    @"timestamp":@(NSDate.date.timeIntervalSince1970), @"pid":@(getpid()),
+                    @"mode":[NSString stringWithUTF8String:NeoSwapExperimentProfile().name()],
+                    @"batch":operations} toPath:strongSelf.operationPath];
+                strongSelf.lastOperationDrops = drops;
+            }
+#endif
+            const bool rpcs3Active = NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3);
+            // Keep the final RPCS3 sample, then stop sampling unrelated cores.
+            if (!rpcs3Active && !strongSelf->_memorySamples.active()) return;
             const auto event = strongSelf->_memorySamples.poll(
-                static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000),
-                NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3));
+                static_cast<uint64_t>(NSProcessInfo.processInfo.systemUptime * 1000), rpcs3Active);
             using neostation::diagnostics::MemoryEvent;
             if (event == MemoryEvent::none) return;
             NSString* name = event == MemoryEvent::session_start ? @"rpcs3_memory_session_start" :
@@ -223,7 +250,14 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 }
 #if defined(NEOSWAP_DONATION)
 - (void)startDonors {
-    if (self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+    if (!NeoSwapExperimentProfile().donors() || self.donorSessions || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return;
+    if (NeoSwapExperimentProfile().configured) {
+        NeoSwapCPUBufferStats cpu{}; NeoSwapHostStats host{};
+        if (NeoSwap_CPUBufferSnapshot(&cpu) != NEOSWAP_OK || NeoSwap_HostSnapshot(&host) != NEOSWAP_OK) return;
+        // Warm only a consumer that can use loans. Other games create no
+        // donor process until a real allocation miss has queued a demand.
+        if (!cpu.enabled && !host.donor_pending_demand_bytes && !host.donor_inflight_demand_bytes) return;
+    }
     if (self.donorEpoch >= UINT64_MAX / 16) {
         self.donorGrowthRefusal = @{@"stage":@"donor_epoch_exhausted"};
         return;
@@ -296,7 +330,9 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         if (!strongSelf) return;
         dispatch_async(strongSelf.queue, ^{ [strongSelf donorChanged:source index:index error:failure]; });
     }];
-    const uint64_t first = MIN(budget, kDonationInitialChunkBytes);
+    const uint64_t initialMaximum = NeoSwapExperimentProfile().configured
+        ? (self.donorDemand.bytes ?: 16*kMiB) : kDonationInitialChunkBytes;
+    const uint64_t first = MIN(budget, initialMaximum);
     if (![session setInitialChunkMaximumBytes:first]) {
         self.donorErrors[[NSString stringWithFormat:@"%lu", (unsigned long)index]] =
             @{@"stage":@"initial_chunk_budget", @"bytes":@(first)};
@@ -322,14 +358,20 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     return total;
 }
 - (uint64_t)adaptiveDonationTarget {
-    if (!NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return 0;
+    if (!NeoSwapExperimentProfile().donors() || !NeoSwap_OwnerSessionActive(NEOSWAP_RPCS3)) return 0;
     neostation::donation::PoolSnapshot pool{};
     neostation::donation::pool_snapshot(pool);
     if (pool.last_stage == neostation::donation::Stage::snapshot_busy) return 0;
+    if (NeoSwapExperimentProfile().configured && !pool.live_bytes) {
+        NeoSwapCPUBufferStats cpu{};
+        if (NeoSwap_CPUBufferSnapshot(&cpu) != NEOSWAP_OK || !cpu.enabled) return 0;
+    }
     // Existing file allocations cannot become donor loans by filling an idle
     // pool. Only real donor use and the separate demand queue justify growth.
     return neostation::donation::adaptive_donation_target(pool.live_bytes,
-        kDonationWarmFloorBytes, kDonationReserveBytes, kDonationGrowthQuantumBytes,
+        NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationWarmFloorBytes,
+        NeoSwapExperimentProfile().configured ? 32*kMiB : kDonationReserveBytes,
+        NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationGrowthQuantumBytes,
         kDonationHardLimitBytes);
 }
 - (void)retireDonorsIfIdle {
@@ -369,11 +411,17 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised || !cacheSample ||
         cacheHeadroom.usable_bytes < 128 * kMiB);
     (void)neostation::donation::pool_collect_lost();
+    if (NeoSwapExperimentProfile().configured && !self.donorDemand.bytes) {
+        NeoSwapDonationDemand demand{};
+        if (NeoSwap_ClaimDonationDemand(&demand) != NEOSWAP_OK) return;
+        self.donorDemand = demand;
+    }
 
     // Two helpers are enough to establish the warm floor quickly. Additional
     // donor processes are started only when the active pair cannot satisfy a
     // real RPCS3 demand or the adaptive target.
-    while (self.donorLaunchIndex < kDonationWarmDonorCount &&
+    const NSUInteger warmDonors = NeoSwapExperimentProfile().configured ? 1 : kDonationWarmDonorCount;
+    while (self.donorLaunchIndex < warmDonors &&
            self.donorPendingIndexes.count < kDonationConcurrentGrowths) {
         const uint64_t budget = [self nextDonationBudget];
         if (!budget) return;
@@ -622,9 +670,8 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     config.capacity_bytes = (uint64_t)capacity*kMiB;
     config.minimum_free_bytes = 2048*kMiB;
     config.minimum_allocation_bytes = kMiB;
-    // V1 production adapter: RPCS3 CPU-side RSX data; the probe is kept separate.
-    // Other owners are implemented in the broker, but not claimed as core integrations.
-    config.enabled_owner_mask = (1u << NEOSWAP_RPCS3) | (1u << NEOSWAP_PROBE);
+    // RPCS3 is the only supported owner; legacy ABI slots stay disabled.
+    config.enabled_owner_mask = 1u << NEOSWAP_RPCS3;
     int code = NeoSwap_Configure(self.directory.fileSystemRepresentation, &config);
     if (code == NEOSWAP_OK) { self.capacityMiB = capacity; self.configResult = NEOSWAP_OK; }
     return code;
@@ -637,7 +684,20 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     task_vm_info_data_t memory{};
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
     kern_return_t kr = task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&memory, &count);
-    _memorySamples.observe(kr == KERN_SUCCESS, memory.phys_footprint, memory.resident_size);
+    const BOOL memoryValid = kr == KERN_SUCCESS && count >= TASK_VM_INFO_REV1_COUNT;
+    _memorySamples.observe(memoryValid, memory.phys_footprint, memory.resident_size);
+    task_events_info_data_t memoryEvents{};
+    mach_msg_type_number_t eventCount = TASK_EVENTS_INFO_COUNT;
+    const kern_return_t eventResult = task_info(mach_task_self(), TASK_EVENTS_INFO,
+        (task_info_t)&memoryEvents, &eventCount);
+    const BOOL eventsValid = eventResult == KERN_SUCCESS && eventCount >= TASK_EVENTS_INFO_COUNT;
+    vm_statistics64_data_t systemMemory{};
+    mach_msg_type_number_t systemCount = HOST_VM_INFO64_COUNT;
+    const mach_port_t hostPort = mach_host_self();
+    const kern_return_t systemResult = host_statistics64(hostPort, HOST_VM_INFO64,
+        (host_info64_t)&systemMemory, &systemCount);
+    if (hostPort != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), hostPort);
+    const BOOL systemValid = systemResult == KERN_SUCCESS && systemCount >= HOST_VM_INFO64_COUNT;
     NSMutableArray* owners = [NSMutableArray new];
     NSArray* names = @[@"rpcs3",@"dolphin",@"armsx2",@"dusklight",@"kartpad",@"probe"];
     for (uint32_t i=0; i<NEOSWAP_OWNER_COUNT; ++i) {
@@ -742,7 +802,34 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #endif
     NeoSwapCPUBufferStats cpuBuffers{};
     NeoSwap_CPUBufferSnapshot(&cpuBuffers);
-    return @{@"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
+#if defined(NEOSWAP_TESTING)
+    const BOOL diagnosticProbesAvailable = YES;
+#else
+    const BOOL diagnosticProbesAvailable = NO;
+#endif
+    return @{@"scope":@"rpcs3_only", @"diagnosticProbesAvailable":@(diagnosticProbesAvailable),
+        @"schema":@1, @"event":event, @"timestamp":@([NSDate date].timeIntervalSince1970),
+        @"experiment":@{@"mode":[NSString stringWithUTF8String:NeoSwapExperimentProfile().name()],
+            @"valid":@(NeoSwapExperimentProfile().valid), @"configured":@(NeoSwapExperimentProfile().configured),
+            @"sourceCommit":[NSBundle.mainBundle objectForInfoDictionaryKey:@"NeoSwapResearchSource"] ?: NSNull.null,
+            @"relay":@(NeoSwapExperimentProfile().relay()), @"donors":@(NeoSwapExperimentProfile().donors()),
+            @"storage":@(NeoSwapExperimentProfile().storage()), @"changesRequireProcessRestart":@YES},
+        @"iosMemoryWarningCount":@(self.iosWarningCount),
+        @"thermalState":@(NSProcessInfo.processInfo.thermalState),
+        @"terminationCause":NSNull.null, @"jetsamConfirmed":@NO,
+        @"processMemoryEvents":@{@"valid":@(eventsValid), @"kernelResult":@(eventResult),
+            @"faults":eventsValid ? @(memoryEvents.faults) : NSNull.null,
+            @"pageins":eventsValid ? @(memoryEvents.pageins) : NSNull.null,
+            @"cowFaults":eventsValid ? @(memoryEvents.cow_faults) : NSNull.null,
+            @"zeroFills":NSNull.null, @"zeroFillsAvailable":@NO,
+            @"scope":@"process_lifetime_kernel_counters_not_NeoSwap_restores"},
+        @"systemMemory":@{@"valid":@(systemValid), @"kernelResult":@(systemResult), @"pageBytes":@(vm_page_size),
+            @"freeBytes":systemValid ? @(uint64_t(systemMemory.free_count)*vm_page_size) : NSNull.null,
+            @"activeBytes":systemValid ? @(uint64_t(systemMemory.active_count)*vm_page_size) : NSNull.null,
+            @"inactiveBytes":systemValid ? @(uint64_t(systemMemory.inactive_count)*vm_page_size) : NSNull.null,
+            @"wiredBytes":systemValid ? @(uint64_t(systemMemory.wire_count)*vm_page_size) : NSNull.null,
+            @"compressorBytes":systemValid ? @(uint64_t(systemMemory.compressor_page_count)*vm_page_size) : NSNull.null,
+            @"freeIsNotProcessHeadroom":@YES},
         @"cpuBufferExperiment":@{
             @"enabled":@(cpuBuffers.enabled), @"pressureRaised":@(cpuBuffers.pressure_raised),
             @"minimumBytes":@65536, @"maximumExclusiveBytes":@1048576,
@@ -770,12 +857,12 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"donatedClientBytes":@(host.owner_donated_live_bytes[NEOSWAP_RPCS3]),
         @"donationTargetBytes":@(adaptiveTarget), @"donationGoalBytes":@(target),
         @"donationHardLimitBytes":@(kDonationHardLimitBytes),
-        @"donationWarmFloorBytes":@(kDonationWarmFloorBytes),
-        @"donationReserveBytes":@(kDonationReserveBytes),
+        @"donationWarmFloorBytes":@(NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationWarmFloorBytes),
+        @"donationReserveBytes":@(NeoSwapExperimentProfile().configured ? 32*kMiB : kDonationReserveBytes),
         @"donationTargetBasis":@"active_donor_loans_plus_bounded_reserve",
         @"donationUnusedPreparedBytes":@(host.donor_prepared_bytes -
             MIN(host.donor_prepared_bytes, host.donated_live_bytes)),
-        @"donationGrowthQuantumBytes":@(kDonationGrowthQuantumBytes),
+        @"donationGrowthQuantumBytes":@(NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationGrowthQuantumBytes),
         @"donationPrimaryChunkBytes":@(kDonationPrimaryChunkBytes),
         @"donationFallbackChunkBytes":@(kDonationFallbackChunkBytes),
         @"donationConcurrentGrowths":@(kDonationConcurrentGrowths),
@@ -805,14 +892,14 @@ static NSDictionary* NeoSwapEffectivePermissions() {
         @"rejectionCount":@(stats.rejection_count), @"ioErrors":@(stats.io_errors),
         @"maxAllocationTimeUs":@(stats.max_allocation_time_us), @"allocationTimeUs":@(stats.allocation_time_us),
         @"lastResult":@(stats.last_result), @"lastErrno":@(stats.last_errno),
-        @"processFootprintBytes":kr == KERN_SUCCESS ? @(memory.phys_footprint) : NSNull.null,
-        @"processResidentBytes":kr == KERN_SUCCESS ? @(memory.resident_size) : NSNull.null,
-        @"processCompressedLedgerBytes":kr == KERN_SUCCESS ? @(memory.compressed) : NSNull.null,
+        @"processFootprintBytes":memoryValid ? @(memory.phys_footprint) : NSNull.null,
+        @"processResidentBytes":memoryValid ? @(memory.resident_size) : NSNull.null,
+        @"processCompressedLedgerBytes":memoryValid ? @(memory.compressed) : NSNull.null,
         @"memoryProfile":@{
             @"schema":@1, @"sampledSessionActive":@(_memorySamples.active()),
             @"sessionSequence":@(_memorySamples.session()), @"sessionElapsedMs":@(_memorySamples.elapsed_ms()),
             @"intervalMs":@(_memorySamples.active() ? _memorySamples.active_interval_ms : _memorySamples.idle_interval_ms),
-            @"validSamples":@(_memorySamples.valid_samples()), @"measurementValid":@(kr == KERN_SUCCESS),
+            @"validSamples":@(_memorySamples.valid_samples()), @"measurementValid":@(memoryValid),
             @"taskInfoKernelResult":@(kr),
             @"footprintPeakBytes":_memorySamples.valid_samples() ? @(_memorySamples.footprint_peak()) : NSNull.null,
             @"residentPeakBytes":_memorySamples.valid_samples() ? @(_memorySamples.resident_peak()) : NSNull.null,
@@ -832,27 +919,30 @@ static NSDictionary* NeoSwapEffectivePermissions() {
 #if defined(NEOSWAP_SHADER_STORAGE)
         @"shaderStorage":NeoSwapStorage_Diagnostics(),
 #endif
-        @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"",
+        @"owners":owners, @"diagnosticPath":self.diagnosticPath ?: @"", @"operationPath":self.operationPath ?: @"",
         @"diagnosticErrno":@(self.diagnosticErrno), @"diagnosticError":self.diagnosticError ?: NSNull.null};
 }
 - (void)appendRecord:(NSDictionary*)record {
+    [self appendRecord:record toPath:self.diagnosticPath];
+}
+- (void)appendRecord:(NSDictionary*)record toPath:(NSString*)path {
     NSData* data = [NSJSONSerialization dataWithJSONObject:record options:NSJSONWritingSortedKeys error:nil];
-    if (!data || !self.diagnosticPath.length) return;
+    if (!data || !path.length) return;
     using neostation::diagnostics::MemorySamples;
     if (data.length >= MemorySamples::maximum_row_bytes) { self.diagnosticErrno = EOVERFLOW; return; }
     NSFileManager* fm = NSFileManager.defaultManager;
-    unsigned long long size = [[fm attributesOfItemAtPath:self.diagnosticPath error:nil] fileSize];
+    unsigned long long size = [[fm attributesOfItemAtPath:path error:nil] fileSize];
     if (size > MemorySamples::maximum_file_bytes - (data.length + 1)) {
-        NSString* previous = [self.diagnosticPath stringByAppendingString:@".previous"];
+        NSString* previous = [path stringByAppendingString:@".previous"];
         NSError* error = nil;
         if ([fm fileExistsAtPath:previous] && ![fm removeItemAtPath:previous error:&error]) {
             [self preserveDiagnosticError:error]; return;
         }
-        if (![fm moveItemAtPath:self.diagnosticPath toPath:previous error:&error]) {
+        if (![fm moveItemAtPath:path toPath:previous error:&error]) {
             [self preserveDiagnosticError:error]; return;
         }
     }
-    int fd = open(self.diagnosticPath.fileSystemRepresentation, O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC|O_NOFOLLOW, 0600);
+    int fd = open(path.fileSystemRepresentation, O_WRONLY|O_CREAT|O_APPEND|O_CLOEXEC|O_NOFOLLOW, 0600);
     if (fd < 0) { self.diagnosticErrno = errno; return; }
     NSMutableData* line = [data mutableCopy]; const char newline = '\n'; [line appendBytes:&newline length:1];
     const char* bytes = (const char*)line.bytes;
@@ -896,11 +986,15 @@ static NSDictionary* NeoSwapEffectivePermissions() {
     dispatch_async(self.queue, ^{
         @autoreleasepool {
             int code = NEOSWAP_OK;
+#if !defined(NEOSWAP_TESTING)
+            // Distributed apps never create synthetic allocations from settings.
+            if (![call.method isEqualToString:@"snapshot"]) code = NEOSWAP_DISABLED;
+#else
             if ([call.method isEqualToString:@"probe"]) {
                 // Bounded functional check. It is NOT a fake game allocation or a RAM-limit benchmark.
                 void* address = nullptr;
                 const auto* api = NeoSwap_GetAPI(NEOSWAP_ABI);
-                code = api->allocate(NEOSWAP_PROBE, NEOSWAP_CPU_DATA, 8*kMiB, 65536, &address);
+                code = api->allocate(NEOSWAP_RPCS3, NEOSWAP_CPU_DATA, 8*kMiB, 65536, &address);
                 if (code == NEOSWAP_OK) {
                     auto* p = (unsigned char*)address;
                     for (uint64_t i=0; i<8*kMiB; ++i) p[i] = (unsigned char)((i*131+(i>>12)*17)^0x9d);
@@ -932,6 +1026,7 @@ static NSDictionary* NeoSwapEffectivePermissions() {
                       @"kind":@"file-backed data capacity; not physical RAM or a donation test"};
                 }
             }
+#endif
             if (![call.method isEqualToString:@"snapshot"]) {
                 NSMutableDictionary* event = [[self snapshot:call.method] mutableCopy];
                 event[@"result"] = @(code); [self appendRecord:event];

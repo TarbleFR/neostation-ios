@@ -5,6 +5,7 @@
 #include "SourceClient.h"
 #include "FrameClient.h"
 #include "NeoSwapSourceWork.h"
+#include "NeoSwapExperiment.h"
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -21,10 +22,20 @@ static void runTest(){@autoreleasepool {
         require(NeoSwapStorage_GetSourceAPI(2)==nullptr,"wrong source ABI accepted");
         NeoSwapStorage_SetSourceBinderResult(NS_SOURCE_OK);
         require(neostation::source_client::install(sourceApi)==NS_SOURCE_OK,"source client binding");
+        result[@"researchMode"]=[NSString stringWithUTF8String:NeoSwapExperimentProfile().name()];
+        if(!NeoSwapExperimentProfile().storage()){
+            NeoSwapStorage_SetPreference(YES);NeoSwapStorage_BeginSession(@"BCES00510");
+            require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"disabled"];}),"research storage isolation");
+            require(api->session()==0&&sourceApi->session()==0&&!NeoSwapStorage_GetPreference(),"disabled research profile exposed storage");
+            result[@"researchStorageIsolationVerified"]=@YES;
+            result[@"passed"]=@YES;
+        }else{
         NeoSwapStorage_TestSetMemory(2ULL<<30,true,0);
+        if(!NeoSwapExperimentProfile().configured){
         NeoSwapStorage_SetPreference(NO);NeoSwapStorage_BeginSession(@"BCES00510");
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"disabled"];}),"default-off session");require(api->session()==0,"disabled epoch");
         require(sourceApi->session()==0,"disabled source epoch");
+        }
         NeoSwapStorage_SetPreference(YES);NeoSwapStorage_BeginSession(@"BLES00113");
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"reason"] isEqual:@"unsupported_title"];}),"title restriction");require(api->session()==0,"unsupported epoch");
         require(sourceApi->session()==0,"unsupported source epoch");
@@ -42,6 +53,8 @@ static void runTest(){@autoreleasepool {
         require(sourceOwner.restore(restoredText,sourceError)==NS_SOURCE_OK && restoredText==originalText,"source private file roundtrip");
         require(until([&]{return [NeoSwapStorage_Diagnostics()[@"sourceArchive"][@"sourceReads"] unsignedLongLongValue]>0;}),"source read diagnostics");
         result[@"sourceDiagnostics"]=NeoSwapStorage_Diagnostics()[@"sourceArchive"];
+        require([NeoSwapStorage_DrainOperations()[@"events"] count]>0,"persistent operation handoff missing");
+        result[@"operationJournalHandoffVerified"]=@YES;
         std::string pixels(1280*720*3/2,'\0');uint32_t pixelRandom=779;
         for(auto& byte:pixels){pixelRandom^=pixelRandom<<13;pixelRandom^=pixelRandom>>17;pixelRandom^=pixelRandom<<5;byte=static_cast<char>(pixelRandom);}
         const auto originalPixels=pixels;neostation::source_client::ColdFrame pixelOwner;
@@ -128,6 +141,7 @@ static void runTest(){@autoreleasepool {
         result[@"warningRecoveryReactivatesPixels"]=@YES;result[@"memoryInputsAreInjected"]=@YES;
         result[@"immediateDemandDuringAdmissionBurst"]=@YES;
         result[@"diagnostics"]=NeoSwapStorage_Diagnostics();
+        }
     }catch(const std::exception& e){result[@"error"]=[NSString stringWithUTF8String:e.what()];}
     NSString* path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"shader-service-runtime.json"];
     NSData* data=[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil];

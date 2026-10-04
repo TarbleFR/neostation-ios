@@ -3,6 +3,7 @@
 #import "Rpcs3JitBridgePlugin.h"
 #import "Rpcs3CoreABI.h"
 #import <neo_swap/NeoSwap.h>
+#import <neo_swap/NeoSwapExperiment.h>
 #import <neo_swap/NeoSwapRelay.h>
 #import <neo_swap/NeoSwapRelayService.h>
 #import <neo_swap/NeoSwapStorageService.h>
@@ -472,14 +473,21 @@ static void RPCS3Progress(void* context,
   // Therefore do not let Core initialization race ahead of relay preparation:
   // a 2.5 s timeout produced Build378 sessions that permanently fell back to
   // files even though the 8 GiB relay became ready seconds later.
-  const int relayReady = NeoSwapRelay_WaitReady(10000);
+  const int relayReady = NeoSwapExperimentProfile().relay()
+      ? NeoSwapRelay_WaitReady(10000) : NEOSWAP_RELAY_DISABLED;
   auto bindRelay = reinterpret_cast<rpcs3_ios_neoswap_relay_binder>(
       dlsym(handle, "rpcs3_ios_set_neoswap_relay_api"));
   const int relayResult = bindRelay ? bindRelay(NeoSwap_GetRelayAPI(NEOSWAP_RELAY_ABI)) : NEOSWAP_RELAY_INVALID;
   RPCS3Diagnostic(@"neoswap_relay_client", [NSString stringWithFormat:
       @"abi=1 prepare_result=%d bind_result=%d scope=GUEST_DATA shared_aliases=1 executable=0",
       relayReady, relayResult]);
-  if (swapResult != NEOSWAP_OK || relayReady != NEOSWAP_RELAY_OK || relayResult != NEOSWAP_RELAY_OK) {
+  // Preparation failure before the first guest map uses Core's ordinary
+  // backing. The Core chooses once per object and preserves every alias;
+  // a binder/ABI failure remains fatal and is never disguised as a fallback.
+  if (relayReady != NEOSWAP_RELAY_OK) RPCS3Diagnostic(@"neoswap_relay_fallback",
+      [NSString stringWithFormat:@"prepare_result=%d mode=%s backing=ordinary_before_first_map",
+       relayReady, NeoSwapExperimentProfile().name()]);
+  if (swapResult != NEOSWAP_OK || relayResult != NEOSWAP_RELAY_OK) {
     if (error) *error = [NSString stringWithFormat:
         @"RPCS3_NEOSWAP_NOT_READY: allocator=%d relay_prepare=%d relay_bind=%d; retry after NeoSwap preparation completes.",
         swapResult, relayReady, relayResult];
@@ -1553,11 +1561,12 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
         @"stage": @"game_boot", @"message": @"NeoSwap could not open the RPCS3 adaptive memory session."});
       return;
     }
-    NeoSwap_SetCPUBufferExperiment(NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
+    NeoSwap_SetCPUBufferExperiment(NeoSwapExperimentProfile().donors() &&
+        NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
     NeoSwapStorage_BeginSession(titleId);
     RPCS3Diagnostic(@"neoswap_cpu_buffers", [NSString stringWithFormat:
         @"title=%@ enabled=%d minimum_bytes=65536 maximum_exclusive=1048576 disk_fallback=0",
-        titleId, NeoSwapCPUBufferTitle(titleId.UTF8String ?: "")]);
+        titleId, NeoSwapExperimentProfile().donors() && NeoSwapCPUBufferTitle(titleId.UTF8String ?: "")]);
     RPCS3Diagnostic(@"neoswap_session", [NSString stringWithFormat:@"active=1 result=%d", sessionResult]);
     __block RPCS3GameViewController* controller = nil;
     // Flutter delivers this handler on the main queue; dispatch_sync to the
@@ -1607,17 +1616,20 @@ static void RPCS3CollectSavestate(void* context, const rpcs3_ios_savestate_info*
       // making the full 512 MiB background warm target part of boot latency.
       // A timeout is degradable: RPCS3 boots and later allocations adopt donor
       // pages as the adaptive pool continues growing.
-      const int warmResult = NeoSwap_WaitForDonationReady(
-          kNeoSwapBootMinimumBytes, kNeoSwapBootWaitMs);
+      const BOOL warmEligible = NeoSwapExperimentProfile().donors() &&
+          (!NeoSwapExperimentProfile().configured || NeoSwapCPUBufferTitle(titleId.UTF8String ?: ""));
+      const int warmResult = warmEligible ? NeoSwap_WaitForDonationReady(
+          NeoSwapExperimentProfile().configured ? 16ULL*1024*1024 : kNeoSwapBootMinimumBytes,
+          kNeoSwapBootWaitMs) : NEOSWAP_DISABLED;
       NeoSwapHostStats warmHost = {};
       const int warmSnapshot = NeoSwap_HostSnapshot(&warmHost);
       RPCS3Diagnostic(@"neoswap_warm_pool", [NSString stringWithFormat:
-          @"result=%d snapshot=%d minimum=%llu timeout_ms=%u prepared=%llu target=%llu donor_count=%u",
+          @"result=%d snapshot=%d minimum=%llu timeout_ms=%u prepared=%llu target=%llu donor_count=%u warm_eligible=%d",
           warmResult, warmSnapshot,
-          (unsigned long long)kNeoSwapBootMinimumBytes, kNeoSwapBootWaitMs,
+          (unsigned long long)(NeoSwapExperimentProfile().configured ? 16ULL*1024*1024 : kNeoSwapBootMinimumBytes), kNeoSwapBootWaitMs,
           (unsigned long long)warmHost.donor_prepared_bytes,
           (unsigned long long)warmHost.donor_target_bytes,
-          (unsigned)warmHost.donor_count]);
+          (unsigned)warmHost.donor_count, warmEligible]);
       if (!self.llvmSelfTestPassed) {
         typedef rpcs3_ios_status (*SelfTest)(uint64_t, uint64_t*);
         auto selfTest = reinterpret_cast<SelfTest>(

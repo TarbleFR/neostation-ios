@@ -10,7 +10,7 @@ sys.path.insert(0,str(HERE))
 from run_validation import execute
 MOLTENVK_SHA='f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e'
 
-def simulator_service(work, out, sources):
+def simulator_service(work, out, sources, research_mode=None):
     sdk=subprocess.check_output(['xcrun','--sdk','iphonesimulator','--show-sdk-path'],text=True).strip()
     app=work/'ShaderServiceTest.app';app.mkdir();exe=app/'ShaderServiceTest'
     service=ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm'
@@ -24,7 +24,8 @@ def simulator_service(work, out, sources):
     with (app/'Info.plist').open('wb') as f:
         plistlib.dump({'CFBundleIdentifier':bundle,'CFBundleExecutable':exe.name,'CFBundleName':'ShaderServiceTest',
                       'CFBundleVersion':'1','CFBundleShortVersionString':'1.0','CFBundlePackageType':'APPL',
-                      'MinimumOSVersion':'18.0','LSRequiresIPhoneOS':True,'UILaunchScreen':{},'UIDeviceFamily':[1,2]},f)
+                      'MinimumOSVersion':'18.0','LSRequiresIPhoneOS':True,'UILaunchScreen':{},'UIDeviceFamily':[1,2],
+                      **({'NeoSwapResearchMode':research_mode} if research_mode else {})},f)
     execute(['codesign','--force','--sign','-',str(app)],out,'shader-simulator-sign')
     runtimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','-j']))['runtimes']
     candidates=[x for x in runtimes if x.get('isAvailable') and x['identifier'].startswith('com.apple.CoreSimulator.SimRuntime.iOS-18')]
@@ -103,6 +104,7 @@ def main():
     tracked += [ROOT/'build-utils/configure_neoswap_storage.py',ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.h',ROOT/'packages/neo_swap/ios/Classes/NeoSwapStorageService.mm',ROOT/'packages/neo_swap/ios/Classes/StorageABI.h']
     tracked += [ROOT/'packages/neo_swap/ios/Classes/SourceABI.h']
     tracked += [ROOT/'packages/neo_swap/ios/Classes/NeoSwapSourceWork.h']
+    tracked += [ROOT/'packages/neo_swap/ios/Classes/NeoSwapExperiment.h']
     result['inputSHA256']={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(set(tracked))}
     result['passed']=True
     (out/'shader-integration.json').write_text(json.dumps(result,indent=2)+'\n')

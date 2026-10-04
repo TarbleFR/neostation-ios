@@ -170,12 +170,14 @@ class DonorContractTests(unittest.TestCase):
                      'NeoSwap_LiveBytes(', 'NeoSwap_HostSnapshot(', 'NeoSwap_RegisterClient('):
             self.assertIn(call, bridge)
         self.assertNotIn('NeoSwapRelay_Start(', bridge)
-        self.assertIn('NeoSwapRelay_Start();', plugin)
+        self.assertNotIn('NeoSwapRelay_Start();', plugin)
+        service = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapRelayService.mm').read_text()
+        self.assertIn('[self start];', service.split('- (int)waitReady:(uint32_t)timeout {', 1)[1])
         self.assertIn("'_NeoSwapRelay_Start' not in undefined", validator)
         self.assertIn("'_NeoSwapRelay_Start'", validator)
         self.assertIn("'_NeoSwap_GetRelayAPI'", validator)
 
-    def test_rpcs3_requires_ready_relay_and_uses_session_scoped_adaptive_pool(self):
+    def test_rpcs3_waits_before_first_map_and_uses_session_scoped_adaptive_pool(self):
         bridge = (ROOT / 'packages/rpcs3_internal_bridge/ios/Classes/Rpcs3InternalBridgePlugin.mm').read_text()
         plugin = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapPlugin.mm').read_text()
         host = (ROOT / 'packages/neo_swap/ios/Classes/NeoSwapHost.h').read_text()
@@ -187,6 +189,9 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('NeoSwapRelay_WaitReady(10000)', bridge)
         self.assertIn('relayReady != NEOSWAP_RELAY_OK', bridge)
         self.assertIn('RPCS3_NEOSWAP_NOT_READY', bridge)
+        self.assertIn('if (swapResult != NEOSWAP_OK || relayResult != NEOSWAP_RELAY_OK)', bridge)
+        self.assertIn('neoswap_relay_fallback', bridge)
+        self.assertNotIn('swapResult != NEOSWAP_OK || relayReady !=', bridge)
         self.assertLess(bridge.index('NeoSwapRelay_WaitReady(10000)'),
                         bridge.index('NeoSwap_RegisterClient(NEOSWAP_RPCS3)'))
         self.assertIn('NeoSwap_SetOwnerSessionActive(NEOSWAP_RPCS3, 1)', bridge)
@@ -243,7 +248,7 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('NSMutableIndexSet* donorPendingIndexes', plugin)
         self.assertIn('timeout:60', plugin)
         self.assertIn('@"donationTargetBytes":@(adaptiveTarget)', plugin)
-        self.assertIn('@"donationWarmFloorBytes":@(kDonationWarmFloorBytes)', plugin)
+        self.assertIn('@"donationWarmFloorBytes":@(NeoSwapExperimentProfile().configured ? 16*kMiB : kDonationWarmFloorBytes)', plugin)
         self.assertIn('bytes > neostation::donation::max_chunk_bytes', ipc)
         self.assertIn('maximum > neostation::donation::max_chunk_bytes', handler)
         self.assertIn('processResidentBytes', header)
@@ -261,7 +266,8 @@ class DonorContractTests(unittest.TestCase):
         self.assertIn('kDonationPrimaryChunkBytes == neostation::donation::max_chunk_bytes', plugin)
         self.assertIn('systemCyanColor', overlay)
         self.assertIn('systemOrangeColor', overlay)
-        self.assertIn('NeoSwap_SetCPUBufferExperiment(NeoSwapCPUBufferTitle', bridge)
+        self.assertIn('NeoSwap_SetCPUBufferExperiment(NeoSwapExperimentProfile().donors() &&', bridge)
+        self.assertIn('NeoSwapCPUBufferTitle(titleId.UTF8String', bridge)
         self.assertIn('cpuBufferExperiment', plugin)
         self.assertIn('NeoSwap_SetCPUBufferPressure(self.cpuBufferPressureRaised', plugin)
         self.assertIn('DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL', plugin)

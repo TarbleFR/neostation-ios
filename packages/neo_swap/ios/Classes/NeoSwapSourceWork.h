@@ -61,15 +61,23 @@ private:
 class VideoMemoryNeed final {
 public:
     static constexpr uint64_t enter_bytes=1ULL<<30,leave_bytes=3ULL<<29;
-    void update(uint64_t available,bool valid,bool warned) noexcept {
-        if(!valid){needed_=false;return;}
-        if(warned){needed_=true;return;}
-        if(available<=enter_bytes)needed_=true;
-        else if(available>=leave_bytes)needed_=false;
+    void update(uint64_t available,bool valid,bool warned,uint64_t physical=0) noexcept {
+        enter_=physical?std::clamp<uint64_t>(physical/8,1ULL<<29,enter_bytes):enter_bytes;
+        leave_=enter_+enter_/2;
+        if(!valid){needed_=false;reason_="available_memory_unknown";return;}
+        if(warned){needed_=true;reason_="system_memory_warning_admission_paused";return;}
+        if(available<=enter_){needed_=true;reason_="measured_low_process_headroom";}
+        else if(available>=leave_){needed_=false;reason_="process_headroom_recovered";}
+        else reason_=needed_?"retain_low_headroom_strategy_hysteresis":"retain_ram_strategy_hysteresis";
     }
     bool needed() const noexcept {return needed_;}
+    const char* reason() const noexcept {return reason_;}
+    uint64_t enter_threshold() const noexcept {return enter_;}
+    uint64_t leave_threshold() const noexcept {return leave_;}
 private:
     bool needed_=false;
+    uint64_t enter_=enter_bytes,leave_=leave_bytes;
+    const char* reason_="not_sampled";
 };
 struct ReadTiming final {
     std::atomic<uint64_t> requests{0},ram_reads{0},queue_us{0},read_us{0},queue_max_us{0},read_max_us{0};

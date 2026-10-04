@@ -2,7 +2,7 @@ name: NeoSwap storage-backed prototype validation
 on:
   workflow_dispatch:
   push:
-    branches: [experimental]
+    branches: [experimental, swap]
 permissions:
   contents: read
 # Independent checks: no global concurrency group and no changes to Core/IPA.

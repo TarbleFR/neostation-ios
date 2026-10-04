@@ -34,6 +34,7 @@ HARNESS = r'''
 #import <UIKit/UIKit.h>
 #import "NeoSwapPageRelay.h"
 #import "NeoSwapRelayService.h"
+#include "NeoSwapHost.h"
 #include "Backend.h"
 #include "Broker.h"
 #include <atomic>
@@ -210,6 +211,7 @@ bool isReadOnly(void* address) {
 - (void)exerciseManager {
   self.session = nil;
   CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
+  NeoSwap_SetOwnerSessionActive(0, 1);
   NeoSwapRelay_Start();
   (void)NeoSwapRelay_WaitReady(10000);
   if (CFAbsoluteTimeGetCurrent() - started > 0.5) {
@@ -250,7 +252,32 @@ bool isReadOnly(void* address) {
         [after[@"aliasCount"] unsignedLongLongValue] || [after[@"pendingCleanupEntries"] unsignedLongLongValue]) {
       fail(@"production_manager_release_loan_counts", after); return;
     }
+    NeoSwapRelay_Maintain();
+    [NSThread sleepForTimeInterval:0.05];
+    NeoSwap_SetOwnerSessionActive(0, 0);
+    NeoSwapRelay_Maintain();
+    const CFAbsoluteTime idleDeadline = CFAbsoluteTimeGetCurrent() + 2;
+    NSDictionary* idle = nil;
+    do {
+      idle = NeoSwapRelay_Diagnostics();
+      if (![idle[@"retainedCapacityBytes"] unsignedLongLongValue]) break;
+      [NSThread sleepForTimeInterval:0.01];
+    } while (CFAbsoluteTimeGetCurrent() < idleDeadline);
+    if ([idle[@"retainedCapacityBytes"] unsignedLongLongValue] ||
+        [idle[@"ready"] boolValue] || [idle[@"preparationRunning"] boolValue]) {
+      fail(@"production_manager_idle_retires_rpcs3_capacity", idle); return;
+    }
+    const uint64_t idleGeneration = [idle[@"generation"] unsignedLongLongValue];
+    NeoSwapRelay_Maintain();
+    [NSThread sleepForTimeInterval:0.05];
+    idle = NeoSwapRelay_Diagnostics();
+    if ([idle[@"retainedCapacityBytes"] unsignedLongLongValue] ||
+        [idle[@"preparationRunning"] boolValue] ||
+        [idle[@"generation"] unsignedLongLongValue] != idleGeneration) {
+      fail(@"production_manager_idle_never_prepares_another_helper", idle); return;
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
+      self.evidence[@"productionManagerIdleDoesNotRestart"] = @YES;
       self.evidence[@"productionManagerPassed"] = @YES;
       self.evidence[@"productionManagerMainThreadNonblocking"] = @YES;
       self.evidence[@"productionManagerCapacityBytes"] = @(8ULL * 1024 * 1024 * 1024);
@@ -329,7 +356,7 @@ def validate_optional_mach_imports(undefined_symbols: str) -> None:
 
 def source_hashes() -> dict[str, str]:
     sources = list(RELAY.glob('*')) + [DONATION / 'Broker.cpp', DONATION / 'Broker.h',
-        PUBLIC / 'NeoSwapRelay.h', PUBLIC / 'NeoSwapRelayService.h', PUBLIC / 'NeoSwapRelayService.mm',
+        PUBLIC / 'NeoSwapRelay.h', PUBLIC / 'NeoSwapRelayService.h', PUBLIC / 'NeoSwapRelayService.mm', PUBLIC / 'NeoSwapExperiment.h', PUBLIC / 'NeoSwap.cpp', PUBLIC / 'NeoSwap.h', PUBLIC / 'NeoSwapHost.h',
         Path(__file__).resolve(),
         ROOT / 'build-utils/configure_neoswap_relay.py', ROOT / 'test/neoswap_donor_simulator_test.py',
         ROOT / 'build-utils/embed_rpcs3_host_entitlements.py']
@@ -350,7 +377,7 @@ def build(work: Path, sdk: str, report: dict, *, device: bool = False) -> Path:
         shutil.copyfile(DONATION / name, canonical / 'native/neoswap-donation' / name)
     host = canonical / 'packages/neo_swap/ios/Classes'
     host.mkdir(parents=True)
-    for name in ('NeoSwapRelay.h', 'NeoSwapRelayService.h', 'NeoSwapRelayService.mm'):
+    for name in ('NeoSwapRelay.h', 'NeoSwapRelayService.h', 'NeoSwapRelayService.mm', 'NeoSwapExperiment.h', 'NeoSwap.cpp', 'NeoSwap.h', 'NeoSwapHost.h'):
         shutil.copyfile(PUBLIC / name, host / name)
     (host / 'Donation').mkdir()
     shutil.copyfile(DONATION / 'Broker.h', host / 'Donation/Broker.h')
@@ -367,7 +394,7 @@ def build(work: Path, sdk: str, report: dict, *, device: bool = False) -> Path:
               '-target', f'{architecture}-apple-ios18.0{suffix}',
               '-I', str(host / 'Relay'), '-I', str(DONATION), '-I', str(host), '-framework', 'Foundation']
     host_sources = [host / 'Relay/Backend.cpp', host / 'Relay/NeoSwapPageRelay.mm',
-                    host / 'NeoSwapRelayService.mm', DONATION / 'Broker.cpp', harness]
+                    host / 'NeoSwapRelayService.mm', host / 'NeoSwap.cpp', DONATION / 'Broker.cpp', harness]
     extension_sources = [generated / name for name in ('NeoSwapPageRelay.mm', 'NeoSwapPageRelayHandler.mm', 'Broker.cpp')]
     run(common + ['-framework', 'UIKit'] + list(map(str, host_sources)) + ['-o', str(app / 'NeoSwapRelaySimulator')], timeout=180)
     run(common + ['-DNEOSWAP_RELAY_EXTENSION=1', '-fapplication-extension', '-Wl,-e,_NSExtensionMain'] +
