@@ -14,10 +14,13 @@ const fixtureSha256 = createHash('sha256').update(fixtureBytes).digest('hex');
 const receiver = await createReceiver({port:0, host:'127.0.0.1', advertise:false});
 let browser, sender;
 try {
-  browser = await chromium.launch({channel:process.env.NEOPLAY_BROWSER || 'msedge', headless:true});
+  // CI runs Edge on Windows; NEOPLAY_BROWSER_PATH points a local reproduction at any Chromium build.
+  browser = await chromium.launch(process.env.NEOPLAY_BROWSER_PATH ? {executablePath:process.env.NEOPLAY_BROWSER_PATH, headless:true, args:['--no-sandbox']} : {channel:process.env.NEOPLAY_BROWSER || 'msedge', headless:true});
   const page = await browser.newPage({viewport:{width:1920,height:1080}});
   const failures = [];
   page.on('pageerror', error => failures.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') failures.push(`console: ${message.text()}`); });
+  const status = () => page.evaluate(() => `${document.querySelector('#status').textContent} | error: ${window.neoplayDebug?.error ?? null}`).catch(() => null);
   await page.goto(`http://127.0.0.1:${receiver.port}`);
   await page.click('#ready');
   await page.waitForFunction(() => /^\d{6}$/.test(document.querySelector('#pin').textContent));
@@ -34,7 +37,8 @@ try {
   const response = await fetch(`http://127.0.0.1:${receiver.port}/v1/pair`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({v:1,pin:receiver.pin})});
   assert.equal(response.status,200); const grant = await response.json();
   sender = new WebSocket(`ws://127.0.0.1:${receiver.port}/v1/sender`,{headers:{Authorization:`Bearer ${grant.token}`}});
-  let acknowledged = false;
+  let acknowledged = false, senderClosed = null;
+  sender.on('close', (code, reason) => { senderClosed = {code, reason: reason.toString()}; });
   sender.on('message', bytes => { const message = JSON.parse(bytes); if(message.type==='playback' && message.playing) acknowledged = true; });
   await once(sender,'open');
   // frames.json (v2, one packet per picture + PCM) is paced by its packet end
@@ -49,9 +53,15 @@ try {
     for (const part of fixture) {
       const packet = Buffer.from(part.data,'base64');
       if (part.kind !== 3) { if (origin === null) origin = Date.now(); const due = origin + Math.max(0, part.end - 0.05) * 1000; const wait = due - Date.now(); if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait)); }
+      if (senderClosed) throw new Error(`sender closed during ${part.kind} at ${part.end}s: ${JSON.stringify(senderClosed)} status=${await status()} failures=${JSON.stringify(failures)}`);
       await new Promise((resolve,reject) => sender.send(packet, error => error?reject(error):resolve()));
     }
-    await page.waitForFunction(() => (window.neoplayDebug?.stats()?.presented ?? 0) > 60, null, {timeout:15000});
+    try { await page.waitForFunction(() => (window.neoplayDebug?.stats()?.presented ?? 0) > 60, null, {timeout:15000}); }
+    catch (error) { // the page's own counters explain a stall better than a timeout
+      const state = await page.evaluate(() => ({ status: document.querySelector('#status').textContent, error: window.neoplayDebug?.error ?? null, audio: window.neoplayDebug?.audio ?? null, stats: window.neoplayDebug?.stats() ?? null })).catch(e => ({ evaluate: e.message }));
+      console.error('NEOPLAY_SMOKE_STALL', JSON.stringify({ state, senderClosed, failures }));
+      throw error;
+    }
     measured = await page.evaluate(() => { const s = window.neoplayDebug.stats(); const c = document.querySelector('canvas'); return {mode: window.neoplayDebug.mode, width: c.width, height: c.height, frames: s.presented, decoded: s.decoded, droppedLate: s.droppedLate, freeRun: s.freeRun, keyRequests: s.keyRequests, reconfigures: s.reconfigures, recoveries: s.recoveries, underruns: s.clock.stats?.underruns ?? null, preroll: s.clock.stats?.preroll ?? null, skips: s.clock.stats?.skips ?? null, jumps: s.clock.stats?.jumps ?? null, gaps: s.clock.stats?.gaps ?? null, played: s.clock.stats?.played ?? null, cushionTargetMs: Math.round((s.clock.targetSeconds ?? 0) * 1000), audioRms: window.peakRms2 ?? 0, fit: getComputedStyle(c).objectFit, error: s.decodeErrors ? 'decode errors' : null, elapsedMs: 0}; });
     measured.elapsedMs = Date.now() - started;
     const configs = fixture.filter(part => part.kind === 3).length;

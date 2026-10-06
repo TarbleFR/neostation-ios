@@ -8,7 +8,8 @@ const say = text => { status.textContent = text; };
 const framesCapable = typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined' && typeof AudioWorkletNode !== 'undefined' && typeof AudioContext !== 'undefined';
 const segmentsCapable = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E02A, mp4a.40.2"');
 let socket, engine = null, audioContext = null, workletReady = null;
-const debug = { stats: () => engine?.stats() ?? null, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; } };
+const debug = { error: null, stats: () => engine?.stats() ?? null, get audioNode() { return engine?.audioNode ?? null; }, get mode() { return engine?.mode ?? null; }, get audio() { return audioContext ? { state: audioContext.state, sampleRate: audioContext.sampleRate, baseLatency: audioContext.baseLatency, outputLatency: audioContext.outputLatency } : null; } };
+const fail = error => { debug.error = error?.message ?? String(error); say(debug.error); };
 window.neoplayDebug = debug;
 function closeMedia() { engine?.close(); engine = null; }
 function report() {
@@ -202,8 +203,8 @@ document.querySelector('#ready').onclick = () => {
       if (packet[0] === KIND.INIT || packet[0] === KIND.CONFIG) { closeMedia(); engine = packet[0] === KIND.CONFIG ? createFramesEngine() : createSegmentsEngine(); }
       if (!engine) return;
       const current = engine;
-      chain = chain.then(() => current.receive(packet)).catch(error => { say(error.message); socket?.close(); closeMedia(); });
-    } catch (error) { say(error.message); socket.close(); closeMedia(); }
+      chain = chain.then(() => current.receive(packet)).catch(error => { fail(error); socket?.close(); closeMedia(); });
+    } catch (error) { fail(error); socket.close(); closeMedia(); }
   };
   socket.onclose = () => { closeMedia(); say('Receiver disconnected. Click Ready to restart.'); };
   socket.onerror = () => say('Cannot reach local NeoPlay Receiver.');

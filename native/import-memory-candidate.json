@@ -299,7 +299,7 @@
     "tools/neoplay-receiver/index.html": "09bfd5c417b835f4b6657a3d9266ffad3e4572a868b5cf3899372bfca8246fc7",
     "tools/neoplay-receiver/package-lock.json": "6423622c5f5f813ed38a6538f0f73c6a23230823ca02cf8d1a141aec9b0bcf04",
     "tools/neoplay-receiver/package.json": "607813400e0407821c7a6dd7f3e7b0425fae638897dfe3abe6626309a2afbf38",
-    "tools/neoplay-receiver/player.mjs": "4f7576f71b04f38cfe1ccc8163a50d69814e336547e252a64d07b41a81a59b39",
+    "tools/neoplay-receiver/player.mjs": "51f5a5c57f418620ae756bcc8ddf15b6b41615924c00a5cdfc650a6d54eaba77",
     "tools/neoplay-receiver/presenter.mjs": "ae3003ee877da31dbe9c4dcf17e49e31ba0e3df5279eedd12eaa7e9badeea58f",
     "tools/neoplay-receiver/protocol.mjs": "0eb33923a5cb3e1ccae2a4bd878df0856d7d40ecf2c712030ce4450c1083d5da",
     "tools/neoplay-receiver/server.mjs": "d0338c290e329f922fb91cd3038524a2c2af96c08a2f40e0709e6cd7cc9632e8"
@@ -690,7 +690,7 @@
     "test/single_ipa_distribution_test.py": "1fc29fc48038b42549588c28a5cfc2a4d3881dc347257a3ee49faacf39218d77",
     "test/stikjit_scoped_host_test.py": "d5a397c7c17453a5584cac5ecb2390f099b2f2edd35649cb8522a9bba74e4717",
     "tools/compare_neoswap_sessions.py": "6772265dd1112da9c7a53582f6bbccfa9fed68578eb46882fe23d2dba1f2ca81",
-    "tools/neoplay-receiver/playback-smoke.mjs": "ff03cd73ba35ceee6eebbb94f65c17e630e8b8c26daa24f9fbc2532ff27c043d",
+    "tools/neoplay-receiver/playback-smoke.mjs": "8c68287fc40629a636eb0d38d1d042bcdf3627b69c39c0e0057f52eda9def1f7",
     "tools/neoplay-receiver/test/audio-ring.test.mjs": "a578b84033d4c7731473c4e2e7df93aaa6b573575d027461cfe43b7b4411049f",
     "tools/neoplay-receiver/test/packets.mjs": "68a2ddf3a0033c025f31564edf94606250f75d69b612da25d36eabfcf1e8dc91",
     "tools/neoplay-receiver/test/presenter.test.mjs": "efe79d5c51f6fab825580d41fda608ef7bd002baf822aa7d928c0b30c5a4f289",
