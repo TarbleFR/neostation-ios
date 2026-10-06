@@ -52,10 +52,13 @@ try {
       await new Promise((resolve,reject) => sender.send(packet, error => error?reject(error):resolve()));
     }
     await page.waitForFunction(() => (window.neoplayDebug?.stats()?.presented ?? 0) > 60, null, {timeout:15000});
-    measured = await page.evaluate(() => { const s = window.neoplayDebug.stats(); const c = document.querySelector('canvas'); return {mode: window.neoplayDebug.mode, width: c.width, height: c.height, frames: s.presented, decoded: s.decoded, droppedLate: s.droppedLate, underruns: s.clock.stats?.underruns ?? null, gaps: s.clock.stats?.gaps ?? null, played: s.clock.stats?.played ?? null, audioRms: window.peakRms2 ?? 0, fit: getComputedStyle(c).objectFit, error: s.decodeErrors ? 'decode errors' : null, elapsedMs: 0}; });
+    measured = await page.evaluate(() => { const s = window.neoplayDebug.stats(); const c = document.querySelector('canvas'); return {mode: window.neoplayDebug.mode, width: c.width, height: c.height, frames: s.presented, decoded: s.decoded, droppedLate: s.droppedLate, freeRun: s.freeRun, keyRequests: s.keyRequests, reconfigures: s.reconfigures, recoveries: s.recoveries, underruns: s.clock.stats?.underruns ?? null, preroll: s.clock.stats?.preroll ?? null, skips: s.clock.stats?.skips ?? null, jumps: s.clock.stats?.jumps ?? null, gaps: s.clock.stats?.gaps ?? null, played: s.clock.stats?.played ?? null, cushionTargetMs: Math.round((s.clock.targetSeconds ?? 0) * 1000), audioRms: window.peakRms2 ?? 0, fit: getComputedStyle(c).objectFit, error: s.decodeErrors ? 'decode errors' : null, elapsedMs: 0}; });
     measured.elapsedMs = Date.now() - started;
-    assert.equal(measured.mode,'frames'); assert.equal(measured.width,640); assert.equal(measured.height,480); assert.equal(measured.fit,'contain'); assert.equal(measured.error,null);
-    assert.ok(measured.frames>60, 'presented pictures'); assert.ok(measured.played>48000, 'played audio frames'); assert.ok(measured.audioRms>0.01, 'audible PCM'); assert.ok(acknowledged);
+    const configs = fixture.filter(part => part.kind === 3).length;
+    const last = configs > 1 ? {width: 320, height: 240} : {width: 640, height: 480}; // the iOS harness ends with a tier change to 320x240
+    assert.equal(measured.mode,'frames'); assert.equal(measured.width,last.width); assert.equal(measured.height,last.height); assert.equal(measured.fit,'contain'); assert.equal(measured.error,null);
+    assert.equal(measured.reconfigures, configs - 1, 'every later configuration reconfigures in place'); assert.equal(measured.recoveries, 0);
+    assert.ok(measured.frames>60, 'presented pictures'); assert.ok(measured.droppedLate < measured.frames * 0.1, `late ${measured.droppedLate} of ${measured.frames}`); assert.ok(measured.played>48000, 'played audio frames'); assert.ok(measured.audioRms>0.01, 'audible PCM'); assert.ok(acknowledged);
     // Continuity: the receiver never seeks; the ring reports underruns only while the fixture is still prerolling.
     assert.ok(measured.underruns < 48000 * 0.5, `underruns ${measured.underruns}`);
     await page.setViewportSize({width:3440,height:1440});

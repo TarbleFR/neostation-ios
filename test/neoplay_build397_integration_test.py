@@ -35,12 +35,12 @@ REVIEWED_NEOPLAY_DISCOVERY_POSTIMAGES = {
 # other bridge file stays byte-identical to the v2 revision. Regenerate with
 # the reviewed sources, never by hand.
 BUILD410_STREAM_POSTIMAGES = {
-    'packages/neoplay_bridge/ios/Classes/NPCapture.swift': '70a89bb3c17342fb69fe6384b6d52502d6b954fd79794f4aba8d657db438bd90',
-    'packages/neoplay_bridge/ios/Classes/NPController.swift': 'b42e222c14f66bc84a4e6d131f73f0d85def6a793e96e1ed1a9a4df11d083ea3',
-    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': 'd626aa8d1ce14c1c26a66bdf6f6763bbfa23fea8968b40f0752612cf2663c64d',
-    'packages/neoplay_bridge/ios/Classes/NPMuxer.swift': '8f7b8e3743b35abc2f2c6c0433f2091899a1889ec23c8c42bb36fbd8bca5c13c',
+    'packages/neoplay_bridge/ios/Classes/NPCapture.swift': 'e4bd1abeeb0be3a85f97f27692cacdf5bf22ed2c1d679878404afeba0d266770',
+    'packages/neoplay_bridge/ios/Classes/NPController.swift': '29fd025c399f594076c970ec39c67e25c8e8fb3e5a12bdbea135270981f1f812',
+    'packages/neoplay_bridge/ios/Classes/NPFrameEncoder.swift': 'd5ed9345892a89ded6c78244b2a4e815600eaaf1a318df196e6657ef69ee6bb7',
+    'packages/neoplay_bridge/ios/Classes/NPMuxer.swift': 'a0f9e95eba35c257f919b7ac9fa7630ff8fda0d2262eb1bb118dcfbc8119d8eb',
     'packages/neoplay_bridge/ios/Classes/NPPolicy.swift': 'd7c15740f20af31a2ab3e6f0220eeb2165534b3afc97ee799064f322b83b6200',
-    'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '3c5227066028ca1788727e8f26bc63fdd973bc9aec511a83a257eb47777662bd',
+    'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift': '49459ae9a7ec85b4a2fee0ff607f56214a28c02a78ede247e5f730e5a7298fd4',
 }
 REVIEWED_RPCS3_HOST_POSTIMAGES = {
     # Build409 postimage: relay-or-donor CPU buffer admission for every title
@@ -256,20 +256,23 @@ class Build398Integration(unittest.TestCase):
         self.assertIn('kVTCompressionPropertyKey_AllowFrameReordering: false', encoder)
         self.assertNotIn('NSLocalizedString', encoder)
         self.assertIn('func requestKeyFrame()', encoder)
-        self.assertIn('created.sampleRateConverterQuality = .max', encoder)
+        self.assertIn('created.sampleRateConverterQuality = AVAudioQuality.max.rawValue', encoder)
         capture = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPCapture.swift').read_text()
         self.assertIn('DispatchQueue(label: "neoplay.audio", qos: .userInteractive)', capture)
-        self.assertIn('audioSlots.wait(timeout: .now()) == .success else { self.audioDropped += 1', capture)
+        self.assertIn('audioSlots.wait(timeout: .now()) == .success else { self.state.lock(); self.audioDropped += 1', capture)
         policy = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPPolicy.swift').read_text()
         self.assertIn('struct NPLinkAdapter', policy)
         self.assertIn('static let nativeCap = NPSize(width: 7680, height: 4320)', policy)
         transport = (ROOT / 'packages/neoplay_bridge/ios/Classes/NPWindowsTransport.swift').read_text()
         self.assertIn('Self.size(object, "maxWidth", "maxHeight", fallback: NPPolicy.legacyCap)', transport)
-        self.assertIn('if kind == 4 || (kind == 5 && audioQueued >= Self.maxQueuedAudio)', transport)
-        for name, needle in (('protocol.mjs', "frames ? 7680 : 1920"), ('player.mjs', "new AudioWorkletNode(audio, 'neoplay-audio'"), ('audio-ring.mjs', 'class AudioRing'), ('server.mjs', 'isInitialization(kind)')):
+        self.assertIn('if kind == 4 && (bytesFull || packets.count >= Self.maxQueuedPackets) || (kind == 5 && audioQueued >= Self.maxQueuedAudio)', transport)
+        self.assertIn('onShed?(1, kind); return', transport)
+        self.assertIn('case "keyframe": onKeyRequest?()', transport)  # a viewer behind its decoder gets a key picture
+        for name, needle in (('protocol.mjs', "frames ? 7680 : 1920"), ('player.mjs', "new AudioWorkletNode(audio, 'neoplay-audio'"), ('player.mjs', "import { audioTime, isLive, choose, overflow } from './presenter.mjs'"), ('presenter.mjs', 'export function audioTime(clock, now, latencyUs = 0)'), ('audio-ring.mjs', 'class AudioRing'), ('audio-ring.mjs', 'if (!this.primed) {'), ('server.mjs', 'isInitialization(kind)'), ('server.mjs', "if (message.type === 'keyframe') send(sender, {type:'keyframe'})")):
             self.assertIn(needle, (ROOT / 'tools/neoplay-receiver' / name).read_text(), name)
         workflow = (ROOT / '.github/workflows/neoplay-check.yml').read_text()
         self.assertIn('node playback-smoke.mjs ../../build/neoplay-fixtures/frames.json', workflow)
+        self.assertIn("'frames.json'} <= set(manifest['files'])", (ROOT / 'build-utils/neoplay/collect_fixtures.py').read_text())
         self.assertIn('python3 test/neoplay_pod_graph_test.py', workflow)
         self.assertIn('build/neoplay-native/pod-graph.json', workflow)
     def test_discovery_restart_does_not_disconnect_or_start_a_cast_session(self):

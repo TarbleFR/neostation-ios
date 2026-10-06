@@ -45,8 +45,10 @@ final class NPController {
         if id.hasPrefix("windows:"), let service = discovery.services[id], let host = service.hostName {
             let transport = NPWindowsTransport(); windows = transport; transport.onError = fail; transport.onPlayback = playing
             transport.onReady = { [weak self, weak transport] size in DispatchQueue.main.async { self?.startCapture(token: token, size: size, castRoute: false, stopLabel: stopLabel, frames: transport?.framesSupported == true, receiverMax: transport?.receiverMax ?? NPPolicy.legacyCap) } }
-            // A shed picture asks for a key picture at once; repeated sheds lower the tier.
-            transport.onShed = { [weak self] count in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.capture?.linkShed(); if let tier = self.adapter.shed(at: Date().timeIntervalSinceReferenceDate, count: count) { NPLog.record("link.tier", ["tier": tier.rawValue, "dropped": count]); self.capture?.setTier(tier) } } }
+            // A shed picture, or a receiver that cannot decode fast enough, asks for a key picture at once; repeated ones lower the tier.
+            let congested: (Int) -> Void = { [weak self] count in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.capture?.linkShed(); if let tier = self.adapter.shed(at: Date().timeIntervalSinceReferenceDate, count: count) { NPLog.record("link.tier", ["tier": tier.rawValue, "dropped": count]); self.capture?.setTier(tier) } } }
+            transport.onShed = { count, kind in if kind == 4 { congested(count) } }
+            transport.onKeyRequest = { NPLog.record("receiver.keyframe"); congested(1) }
             transport.onDisplay = { [weak self] size in DispatchQueue.main.async { guard let self, self.fence.accepts(token) else { return }; self.capture?.updateDisplay(size) } }
             transport.connect(host: host, port: service.port, pin: pin)
         } else if id.hasPrefix("cast:") {

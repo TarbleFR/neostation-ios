@@ -32,3 +32,8 @@ test('audio packets decode interleaved little-endian PCM frames', () => {
   assert.equal(audio.pts, 1_000_000); assert.equal(audio.frames, 3); assert.deepEqual(Array.from(audio.samples), [-1234, -1234, -1234, -1234, -1234, -1234]);
   assert.throws(() => parseAudio(Uint8Array.from([5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6])));
 });
+test('a picture flagged as a discontinuity is reported to the player', () => {
+  const flagged = videoPacket(1000, false); flagged[9] |= 2;
+  assert.deepEqual([parseVideo(flagged).key, parseVideo(flagged).discontinuity], [false, true]);
+  assert.equal(parseVideo(videoPacket(1000, true)).discontinuity, false);
+});

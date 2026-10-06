@@ -64,6 +64,7 @@ export async function createReceiver({port = 17642, host = '0.0.0.0', advertise 
             if (message.type === 'display') { limits = displayLimits(message); ready = message.supported === true; send(sender, {type:'display', ...limits}); }
             if (message.type === 'new_pin' && !sender) { resetPin(); send(ws, uiState()); }
             if (message.type === 'playback') send(sender, {type:'playback', playing:message.playing === true});
+            if (message.type === 'keyframe') send(sender, {type:'keyframe'}); // the viewer fell behind: the sender sends a key picture
             if (message.type === 'stop') sender?.close(1000, 'receiver_stop');
           } catch { ws.close(1008); }
         });

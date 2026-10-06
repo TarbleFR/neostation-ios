@@ -431,6 +431,7 @@ PRODUCTION_FILES |= {
     'tools/neoplay-receiver/player.mjs',
     'tools/neoplay-receiver/audio-ring.mjs',
     'tools/neoplay-receiver/audio-worklet.mjs',
+    'tools/neoplay-receiver/presenter.mjs',
     'tools/neoplay-receiver/protocol.mjs',
     'tools/neoplay-receiver/server.mjs',
 }
@@ -446,6 +447,7 @@ SUPPORT_FILES |= {
     'test/neoplay/encoded_media_tests.swift',
     'test/neoplay/frame_encoder_tests.swift',
     'test/neoplay/stream_policy_tests.swift',
+    'test/neoplay/transport_tests.swift',
     'test/neoplay/native_tests.swift',
     'test/neoplay_build397_integration_test.py',
     'test/neoplay_companion_contract_test.py',
@@ -459,6 +461,7 @@ SUPPORT_FILES |= {
     'tools/neoplay-receiver/test/receiver.test.mjs',
     'tools/neoplay-receiver/test/audio-ring.test.mjs',
     'tools/neoplay-receiver/test/packets.mjs',
+    'tools/neoplay-receiver/test/presenter.test.mjs',
     'tools/neoplay-receiver/test/protocol.test.mjs',
 }
 

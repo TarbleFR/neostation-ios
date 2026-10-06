@@ -1,4 +1,5 @@
 import { mp4Mime, MAX_BUFFERED, displayLimits, KIND, parseConfig, parseVideo, parseAudio } from './protocol.mjs';
+import { audioTime, isLive, choose, overflow } from './presenter.mjs';
 const video = document.querySelector('#video'), canvas = document.querySelector('#canvas'), status = document.querySelector('#status');
 const say = text => { status.textContent = text; };
 // Two engines. `frames` (v2): WebCodecs pictures and PCM on one sample-accurate
@@ -21,55 +22,86 @@ async function ensureAudio() {
   if (!workletReady) workletReady = audioContext.audioWorklet.addModule('/audio-worklet.mjs');
   await workletReady;
   if (audioContext.state !== 'running') await audioContext.resume().catch(() => {});
+  if (audioContext.state !== 'running') { say('Click Ready again to allow audio playback.'); audioContext.onstatechange = () => { if (audioContext.state === 'running') say('Receiving…'); }; }
   return audioContext;
 }
 // ---- v2: frames engine ------------------------------------------------------
 function createFramesEngine() {
   let decoder = null, config = null, node = null, waitKey = true, acknowledged = false, raf = 0, closed = false;
   const queue = []; // decoded VideoFrames waiting for presentation, oldest first
-  const clock = { pts: null, updatedAt: 0, lastPts: null, fillSeconds: 0, ratio: 1, stats: null };
-  const counters = { pictures: 0, decoded: 0, presented: 0, droppedLate: 0, droppedQueue: 0, pcmPackets: 0, decodeErrors: 0 };
+  const clock = { pts: null, updatedAt: 0, lastPts: null, running: false, latencyUs: 0, fillSeconds: 0, targetSeconds: 0.08, ratio: 1, stats: null };
+  const counters = { pictures: 0, decoded: 0, presented: 0, freeRun: 0, droppedLate: 0, droppedQueue: 0, pcmPackets: 0, keyRequests: 0, decodeErrors: 0, recoveries: 0, reconfigures: 0, discontinuities: 0 };
+  let settings = null, lastKeyRequest = 0;
   const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
   video.hidden = true; canvas.hidden = false;
   function present() {
     raf = 0; if (closed) return;
     if (!queue.length) return;
-    // The audio clock leads presentation. If audio stalls (a menu without app
-    // sound) for 150 ms the newest picture is shown on its own pace.
-    const live = clock.pts !== null && performance.now() - clock.updatedAt < 150;
-    let index = queue.length - 1;
-    if (live) { index = -1; for (let i = 0; i < queue.length; i++) if (queue[i].timestamp <= clock.pts + 40000) index = i; if (index < 0) { raf = requestAnimationFrame(present); return; } }
-    for (let i = 0; i < index; i++) { queue[i].close(); counters.droppedLate++; }
+    // The audio clock, extrapolated between worklet posts and corrected by the
+    // output latency, leads presentation: the oldest due picture is shown, one
+    // per display refresh. If the sound stalls (a menu without app sound) for
+    // 150 ms, or the pictures run far ahead of the sound, the newest picture is
+    // shown on its own pace rather than discarded.
+    const now = performance.now();
+    let index = queue.length - 1, late = index;
+    if (isLive(clock, now)) {
+      const pts = audioTime(clock, now, clock.latencyUs), timestamps = queue.map(frame => frame.timestamp);
+      ({ index, late } = choose(timestamps, pts));
+      if (index < 0) {
+        if (timestamps[timestamps.length - 1] - pts <= 500_000) { raf = requestAnimationFrame(present); return; }
+        index = late = queue.length - 1; counters.freeRun++;
+      }
+    } else counters.freeRun++;
+    for (let i = 0; i < late; i++) { queue[i].close(); counters.droppedLate++; }
     const frame = queue[index]; queue.splice(0, index + 1);
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) { canvas.width = frame.displayWidth; canvas.height = frame.displayHeight; }
     context.drawImage(frame, 0, 0, canvas.width, canvas.height); frame.close(); counters.presented++;
     if (!acknowledged) { acknowledged = true; acknowledge(); }
     if (queue.length) raf = requestAnimationFrame(present);
   }
+  // A receiver that fell behind resumes at a key picture: it asks the sender for one (through the relay), at most twice a second.
+  function requestKey() {
+    const now = performance.now(); if (now - lastKeyRequest < 500 || socket?.readyState !== WebSocket.OPEN) return;
+    lastKeyRequest = now; counters.keyRequests++; socket.send(JSON.stringify({ type: 'keyframe' }));
+  }
   function schedule() { if (!raf) raf = requestAnimationFrame(present); }
-  async function configure(packet) {
-    config = parseConfig(packet);
-    const settings = { codec: config.codec, codedWidth: config.width, codedHeight: config.height, description: config.avcC, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' };
-    const support = await VideoDecoder.isConfigSupported(settings);
-    if (!support.supported) { settings.hardwareAcceleration = 'no-preference'; if (!(await VideoDecoder.isConfigSupported(settings)).supported) throw new Error(`Codec unavailable: ${config.codec}`); }
-    if (closed) return;
-    decoder?.close();
-    decoder = new VideoDecoder({ output: frame => { counters.decoded++; queue.push(frame); while (queue.length > 6) { queue.shift().close(); counters.droppedQueue++; } schedule(); }, error: error => { counters.decodeErrors++; say(`Decode failed: ${error.message}`); } });
+  function createDecoder() {
+    try { decoder?.close(); } catch {}
+    decoder = new VideoDecoder({
+      output: frame => { counters.decoded++; queue.push(frame); const drop = overflow(queue.map(f => f.timestamp)); for (let i = 0; i < drop; i++) { queue.shift().close(); counters.droppedQueue++; } schedule(); },
+      // A broken reference chain (a shed picture) closes the decoder: rebuild it
+      // from the stored configuration and wait for the next key picture.
+      error: error => { counters.decodeErrors++; say(`Decode failed: ${error.message}`); if (!closed && settings) { counters.recoveries++; createDecoder(); } },
+    });
     decoder.configure(settings); waitKey = true;
+  }
+  async function configure(packet) {
+    const next = parseConfig(packet);
+    const candidate = { codec: next.codec, codedWidth: next.width, codedHeight: next.height, description: next.avcC, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' };
+    const support = await VideoDecoder.isConfigSupported(candidate);
+    if (!support.supported) { candidate.hardwareAcceleration = 'no-preference'; if (!(await VideoDecoder.isConfigSupported(candidate)).supported) throw new Error(`Codec unavailable: ${next.codec}`); }
+    if (closed) return;
+    // A later configuration (a link tier change) reconfigures in place: the
+    // audio ring and its clock continue, only the picture decoder restarts.
+    if (config) counters.reconfigures++;
+    config = next; settings = candidate;
+    for (const frame of queue) frame.close(); queue.length = 0;
+    createDecoder();
     canvas.width = config.width; canvas.height = config.height;
     const audio = await ensureAudio(); if (closed) return;
     if (!node) {
       node = new AudioWorkletNode(audio, 'neoplay-audio', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-      node.port.onmessage = ({ data }) => { if (data.type !== 'clock') return; if (data.pts !== null && data.pts !== clock.lastPts) { clock.updatedAt = performance.now(); clock.lastPts = data.pts; } clock.pts = data.pts; clock.fillSeconds = data.fillSeconds; clock.ratio = data.ratio; clock.stats = data.stats; schedule(); };
+      node.port.onmessage = ({ data }) => { if (data.type !== 'clock') return; if (data.pts !== null && data.pts !== clock.lastPts) { clock.updatedAt = performance.now(); clock.lastPts = data.pts; } clock.pts = data.pts; clock.running = data.running === true; clock.latencyUs = ((audio.outputLatency || 0) + (audio.baseLatency || 0)) * 1e6; clock.fillSeconds = data.fillSeconds; clock.targetSeconds = data.targetSeconds ?? clock.targetSeconds; clock.ratio = data.ratio; clock.stats = data.stats; schedule(); };
       node.connect(audio.destination);
     }
     node.port.postMessage({ type: 'configure', sampleRate: config.sampleRate, channels: config.channels });
   }
   function picture(packet) {
     if (!decoder || decoder.state !== 'configured') return;
-    const { pts, key, data } = parseVideo(packet); counters.pictures++;
+    const { pts, key, discontinuity, data } = parseVideo(packet); counters.pictures++;
+    if (discontinuity) { counters.discontinuities++; if (!key) waitKey = true; }
     if (waitKey && !key) return; waitKey = false;
-    if (decoder.decodeQueueSize > 8) { if (!key) { waitKey = true; counters.droppedQueue++; return; } }
+    if (decoder.decodeQueueSize > 8) { if (!key) { waitKey = true; counters.droppedQueue++; requestKey(); return; } }
     decoder.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: pts, data }));
   }
   function sound(packet) {
@@ -77,7 +109,7 @@ function createFramesEngine() {
     const { pts, samples } = parseAudio(packet, config.channels); counters.pcmPackets++;
     node.port.postMessage({ type: 'pcm', pts, samples }, [samples.buffer]);
   }
-  const timer = setInterval(() => { if (config) say(`Receiving · frames · ${config.width}×${config.height} · audio cushion ${(clock.fillSeconds * 1000).toFixed(0)} ms · rate ${clock.ratio.toFixed(3)} · late ${counters.droppedLate} · underruns ${clock.stats?.underruns ?? 0}`); }, 500);
+  const timer = setInterval(() => { if (config) say(`Receiving · frames · ${config.width}×${config.height} · audio cushion ${(clock.fillSeconds * 1000).toFixed(0)}/${(clock.targetSeconds * 1000).toFixed(0)} ms · rate ${clock.ratio.toFixed(3)} · late ${counters.droppedLate} · underruns ${clock.stats?.underruns ?? 0} · skips ${clock.stats?.skips ?? 0} · recoveries ${counters.recoveries}`); }, 500);
   return {
     mode: 'frames',
     get audioNode() { return node; },
@@ -91,7 +123,7 @@ function createFramesEngine() {
       closed = true; clearInterval(timer); if (raf) cancelAnimationFrame(raf);
       for (const frame of queue) frame.close(); queue.length = 0;
       try { decoder?.close(); } catch {} decoder = null;
-      node?.port.postMessage({ type: 'reset' }); node?.disconnect(); node = null;
+      node?.port.postMessage({ type: 'close' }); node?.disconnect(); node = null; // the processor ends itself: no leaked clock
       canvas.hidden = true; video.hidden = false;
     },
   };

@@ -63,7 +63,7 @@ export function parseConfig(bytes) {
   if (width < 2 || height < 2 || sampleRate < 8000 || sampleRate > 192000 || channels < 1 || channels > 2) throw new Error('Invalid configuration');
   return { width, height, sampleRate, channels, avcC, codec: avcCodecString(avcC) };
 }
-// 4 video : u64 pts µs, u8 flags (bit0 key), AVCC access unit (4-byte NAL lengths)
+// 4 video : u64 pts µs, u8 flags (bit0 key, bit1 discontinuity: pictures were shed before this one), AVCC access unit (4-byte NAL lengths)
 export function parseVideo(bytes) {
   const { b, dv } = view(bytes);
   if (validatePacket(b) !== KIND.VIDEO) throw new Error('Not a picture packet');
@@ -71,7 +71,7 @@ export function parseVideo(bytes) {
   let at = 0;
   while (at + 4 <= data.length) { const size = new DataView(data.buffer, data.byteOffset + at, 4).getUint32(0); if (size === 0) throw new Error('Invalid access unit'); at += 4 + size; }
   if (at !== data.length) throw new Error('Invalid access unit');
-  return { pts: microseconds(dv, 1), key: (b[9] & 1) === 1, data };
+  return { pts: microseconds(dv, 1), key: (b[9] & 1) === 1, discontinuity: (b[9] & 2) === 2, data };
 }
 // 5 audio : u64 pts µs, interleaved s16le PCM
 export function parseAudio(bytes, channels = 2) {

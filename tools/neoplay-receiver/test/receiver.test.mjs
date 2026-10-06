@@ -42,6 +42,8 @@ test('authenticated pairing, live media relay, disconnect and restart', async t 
   const resized = JSON.parse((await display).data); assert.equal(resized.type,'display'); assert.equal(resized.width,3440);
   const playback = message(sender); viewer.send(JSON.stringify({type:'playback',playing:true}));
   assert.equal(JSON.parse((await playback).data).playing,true);
+  const keyframe = message(sender); viewer.send(JSON.stringify({type:'keyframe'})); // a viewer behind its decoder asks the sender for a key picture
+  assert.deepEqual(JSON.parse((await keyframe).data),{type:'keyframe'});
   const closed=once(sender,'close'); viewer.send(JSON.stringify({type:'stop'})); await closed;
   assert.equal((await (await fetch(base+'/v1/info')).json()).available,true);
 });

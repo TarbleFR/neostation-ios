@@ -12,13 +12,16 @@ final class NPWindowsTransport {
     var onDisplay: ((NPSize) -> Void)?
     var onError: ((NPError) -> Void)?
     var onPlayback: (() -> Void)?
-    // Called on the transport queue with the number of packets just shed.
-    var onShed: ((Int) -> Void)?
+    // Called on the transport queue with the number of packets just shed and their kind.
+    var onShed: ((Int, UInt8) -> Void)?
+    // The receiver fell behind its decoder and resumes at the next key picture.
+    var onKeyRequest: (() -> Void)?
     private(set) var framesSupported = false // the receiver accepts the v2 frame protocol
     // Largest picture the receiver decodes (its `ready` maxWidth/maxHeight);
     // receivers that do not advertise one are MediaSource receivers at 1080p.
     private(set) var receiverMax = NPPolicy.legacyCap
     private(set) var dropped = 0
+    private var discontinuity = false // transport queue: a picture was shed since the last one sent
     static let maxQueuedPackets = 16
     static let maxQueuedAudio = 24
     init() {
@@ -57,18 +60,23 @@ final class NPWindowsTransport {
                 guard !self.stopped else { return }
                 guard case .success(.string(let text)) = result, let data = text.data(using: .utf8),
                       let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { self.onError?(.network); return }
-                if object["type"] as? String == "ready", object["v"] as? Int == 1 {
-                    self.framesSupported = object["frames"] as? Bool == true
-                    self.receiverMax = self.framesSupported ? Self.size(object, "maxWidth", "maxHeight", fallback: NPPolicy.legacyCap) : NPPolicy.legacyCap
-                    NPLog.record("receiver.ready", ["frames": self.framesSupported, "maxWidth": self.receiverMax.width, "maxHeight": self.receiverMax.height])
-                    self.onReady?(Self.size(object, "width", "height", fallback: NPSize(width: 1280, height: 720))); self.onReady = nil
-                }
-                if object["type"] as? String == "display" {
-                    self.onDisplay?(Self.size(object, "width", "height", fallback: NPSize(width: 1280, height: 720)))
-                }
-                if object["type"] as? String == "playback", object["playing"] as? Bool == true { self.onPlayback?() }
+                self.handle(object)
                 self.receive()
             }
+        }
+    }
+    // One receiver message (the transport queue). Internal so the harness drives it without a socket.
+    func handle(_ object: [String: Any]) {
+        switch object["type"] as? String ?? "" {
+        case "ready" where object["v"] as? Int == 1:
+            framesSupported = object["frames"] as? Bool == true
+            receiverMax = framesSupported ? Self.size(object, "maxWidth", "maxHeight", fallback: NPPolicy.legacyCap) : NPPolicy.legacyCap
+            NPLog.record("receiver.ready", ["frames": framesSupported, "maxWidth": receiverMax.width, "maxHeight": receiverMax.height])
+            onReady?(Self.size(object, "width", "height", fallback: NPSize(width: 1280, height: 720))); onReady = nil
+        case "display": onDisplay?(Self.size(object, "width", "height", fallback: NPSize(width: 1280, height: 720)))
+        case "playback" where object["playing"] as? Bool == true: onPlayback?()
+        case "keyframe": onKeyRequest?()
+        default: break
         }
     }
     func send(_ data: Data, initial: Bool) {
@@ -86,16 +94,21 @@ final class NPWindowsTransport {
     func sendPacket(_ packet: Data) {
         queue.async { [self] in
             guard !stopped, let kind = packet.first else { return }
-            guard packet.count <= NPPolicy.maxPacket, bytes + packet.count <= NPPolicy.maxQueuedBytes else { onError?(.backpressure); return }
-            if packets.count >= Self.maxQueuedPackets {
-                let audioQueued = packets.reduce(0) { $0 + ($1.first == 5 ? 1 : 0) }
-                if kind == 4 || (kind == 5 && audioQueued >= Self.maxQueuedAudio) {
-                    dropped += 1
-                    if dropped % 60 == 1 { NPLog.record("frames.shed", ["dropped": dropped, "kind": Int(kind)]) }
-                    onShed?(1); return
-                }
+            guard packet.count <= NPPolicy.maxPacket else { onError?(.backpressure); return }
+            let bytesFull = bytes + packet.count > NPPolicy.maxQueuedBytes
+            let audioQueued = packets.count >= Self.maxQueuedPackets ? packets.reduce(0) { $0 + ($1.first == 5 ? 1 : 0) } : 0
+            // A congested link sheds pictures (count, byte or queue limit); a shed
+            // picture is a link signal. Sound is shed only when sound alone fills
+            // the queue and is never a key-picture request. Configuration is never shed.
+            if kind == 4 && (bytesFull || packets.count >= Self.maxQueuedPackets) || (kind == 5 && audioQueued >= Self.maxQueuedAudio) {
+                dropped += 1; if kind == 4 { discontinuity = true }
+                if dropped % 60 == 1 { NPLog.record("frames.shed", ["dropped": dropped, "kind": Int(kind)]) }
+                onShed?(1, kind); return
             }
-            packets.append(packet); bytes += packet.count; pump()
+            guard !bytesFull else { onError?(.backpressure); return }
+            var outgoing = packet
+            if kind == 4 && discontinuity && outgoing.count > 9 { outgoing[9] |= 2; discontinuity = false } // bit1: pictures were shed before this one
+            packets.append(outgoing); bytes += outgoing.count; pump()
         }
     }
     private func pump() {
@@ -106,5 +119,5 @@ final class NPWindowsTransport {
             self.queue.async { self.bytes -= packet.count; self.sending = false; if error != nil && !self.stopped { self.onError?(.network) }; if !self.stopped { self.pump() } }
         }
     }
-    func stop() { queue.async { [self] in stopped = true; onReady = nil; onDisplay = nil; onError = nil; onPlayback = nil; onShed = nil; socket?.cancel(with: .normalClosure, reason: nil); socket = nil; packets.removeAll(); session.invalidateAndCancel() } }
+    func stop() { queue.async { [self] in stopped = true; onReady = nil; onDisplay = nil; onError = nil; onPlayback = nil; onShed = nil; onKeyRequest = nil; socket?.cancel(with: .normalClosure, reason: nil); socket = nil; packets.removeAll(); session.invalidateAndCancel() } }
 }

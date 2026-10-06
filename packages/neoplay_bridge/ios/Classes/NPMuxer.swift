@@ -17,6 +17,7 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let lock = NSLock()
     private var origin: CMTime?            // lock
+    private var cancelled = false          // lock
     private var lastVideo = CMTime.invalid // capture queue
     private var lastAudio = CMTime.invalid // audio queue
     private var lastAudioEnd = CMTime.invalid // audio queue
@@ -27,9 +28,12 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
     private let interval: Double
     static let maxPendingAudio = 64
     static let silenceGap = 0.08 // seconds without app audio before the track is padded
-    static let maxSilence = 2.0  // longest single padding, keeps a paused game bounded
+    static let maxSilence = 2.0  // longest single padding chunk
+    static let maxSilenceChunks = 15 // a gap beyond 30 s (a paused game) is closed by one re-anchored buffer
+    private var formatRecorded = false // audio queue
     var onSegment: ((Data, Bool, Double) -> Void)?
     var onError: ((NPError) -> Void)?
+    private func fail(_ error: NPError) { lock.lock(); let sink = cancelled ? nil : onError; lock.unlock(); sink?(error) }
 
     convenience init(source: NPSize, display: NPSize, cast: Bool) throws {
         try self.init(source: source, display: display, cast: cast, cap: cast ? NPSize(width: 1280, height: 720) : NPPolicy.legacyCap)
@@ -69,7 +73,9 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
         return time >= .zero ? time : nil
     }
     func append(_ sample: CMSampleBuffer, video isVideo: Bool) {
-        guard writer.status == .writing else { NPLog.error("encoder.status", writer.error); onError?(.encoder); return }
+        lock.lock(); let live = !cancelled; lock.unlock()
+        guard live else { return }
+        guard writer.status == .writing else { NPLog.error("encoder.status", writer.error); fail(.encoder); return }
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
         guard timestamp.isNumeric, let time = relative(timestamp, video: isVideo) else { return }
         if isVideo { appendVideo(sample, time: time) } else { appendAudio(sample, time: time) }
@@ -78,13 +84,13 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
         guard video.isReadyForMoreMediaData, !lastVideo.isNumeric || CMTimeGetSeconds(CMTimeSubtract(time, lastVideo)) >= 1.0/61.0,
               let image = Self.image(sample), let pool = adaptor.pixelBufferPool else { return }
         var pixel: CVPixelBuffer?
-        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixel) == kCVReturnSuccess, let pixel else { onError?(.encoder); return }
+        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixel) == kCVReturnSuccess, let pixel else { fail(.encoder); return }
         let bounds = CGRect(x: 0, y: 0, width: output.width, height: output.height)
         let scale = min(bounds.width / image.extent.width, bounds.height / image.extent.height)
         let normalized = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let centered = normalized.transformed(by: CGAffineTransform(translationX: (bounds.width - normalized.extent.width)/2, y: (bounds.height - normalized.extent.height)/2))
         context.render(centered.composited(over: CIImage(color: .black).cropped(to: bounds)), to: pixel, bounds: bounds, colorSpace: CGColorSpaceCreateDeviceRGB())
-        if adaptor.append(pixel, withPresentationTime: time) { lastVideo = time } else { NPLog.error("encoder.video", writer.error); onError?(.encoder) }
+        if adaptor.append(pixel, withPresentationTime: time) { lastVideo = time } else { NPLog.error("encoder.video", writer.error); fail(.encoder) }
     }
     // Sound: never dropped for a busy writer (deferred, in order), gaps longer
     // than silenceGap padded with silence of the exact length so the AAC
@@ -92,8 +98,17 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
     private func appendAudio(_ sample: CMSampleBuffer, time: CMTime) {
         guard lastAudio.isNumeric == false || time > lastAudio else { audioDropped += 1; if audioDropped % 50 == 1 { NPLog.record("audio.nonmonotonic", ["count": audioDropped]) }; return }
         guard let adjusted = Self.retimed(sample, to: time) else { return }
-        if lastAudioEnd.isNumeric, CMTimeGetSeconds(CMTimeSubtract(time, lastAudioEnd)) > Self.silenceGap, let silence = Self.silence(like: sample, from: lastAudioEnd, to: time) {
-            audioSilence += CMSampleBufferGetNumSamples(silence); enqueue(silence)
+        if !formatRecorded, let format = CMSampleBufferGetFormatDescription(sample), let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee {
+            formatRecorded = true
+            NPLog.record("audio.format", ["sampleRate": asbd.mSampleRate, "channels": Int(asbd.mChannelsPerFrame), "interleaved": asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0, "float": asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0, "frames": CMSampleBufferGetNumSamples(sample)])
+        }
+        if lastAudioEnd.isNumeric, CMTimeGetSeconds(CMTimeSubtract(time, lastAudioEnd)) > Self.silenceGap {
+            var from = lastAudioEnd, chunks = 0
+            while CMTimeGetSeconds(CMTimeSubtract(time, from)) > 0.001, chunks < Self.maxSilenceChunks, let silence = Self.silence(like: sample, from: from, to: time) {
+                let frames = CMSampleBufferGetNumSamples(silence); audioSilence += frames; enqueue(silence); chunks += 1
+                let duration = CMSampleBufferGetDuration(silence)
+                from = CMTimeAdd(from, CMTimeMultiply(duration, multiplier: Int32(frames)))
+            }
         }
         enqueue(adjusted)
         lastAudio = time
@@ -108,7 +123,7 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
     private func flushAudio() {
         while !pendingAudio.isEmpty, audio.isReadyForMoreMediaData {
             let buffer = pendingAudio.removeFirst()
-            if !audio.append(buffer) { NPLog.error("encoder.audio", writer.error); onError?(.encoder); return }
+            if !audio.append(buffer) { NPLog.error("encoder.audio", writer.error); fail(.encoder); return }
         }
         if !pendingAudio.isEmpty { audioDeferred += 1 }
     }
@@ -147,10 +162,13 @@ final class NPMuxer: NSObject, AVAssetWriterDelegate {
         guard writer.status == .writing else { completion(); return }
         video.markAsFinished(); audio.markAsFinished(); writer.finishWriting(completionHandler: completion)
     }
-    func cancel() { onSegment = nil; onError = nil; writer.cancelWriting() }
+    // Called on the capture's audio queue (behind any in-flight sound append);
+    // pictures stop earlier because the capture dropped its reference first.
+    func cancel() { lock.lock(); cancelled = true; onSegment = nil; onError = nil; lock.unlock(); writer.cancelWriting() }
     func assetWriter(_ writer: AVAssetWriter, didOutputSegmentData data: Data, segmentType: AVAssetSegmentType, segmentReport: AVAssetSegmentReport?) {
         let initial = segmentType == .initialization
         let duration = segmentReport?.trackReports.map { CMTimeGetSeconds($0.duration) }.filter { $0.isFinite && $0 > 0 }.max() ?? interval
-        onSegment?(data, initial, duration)
+        lock.lock(); let sink = cancelled ? nil : onSegment; lock.unlock()
+        sink?(data, initial, duration)
     }
 }

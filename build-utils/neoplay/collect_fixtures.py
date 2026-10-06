@@ -25,6 +25,6 @@ for directory in directories:
             raise ValueError('Conflicting fixtures for ' + name)
         shutil.copyfile(source, output / name)
         manifest['files'][name] = digest
-assert {'windows.json', 'windows.mp4', 'chromecast.json', 'chromecast.mp4'} <= set(manifest['files']), manifest
+assert {'windows.json', 'windows.mp4', 'chromecast.json', 'chromecast.mp4', 'frames.json'} <= set(manifest['files']), manifest
 (output / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
 print(json.dumps(manifest))
